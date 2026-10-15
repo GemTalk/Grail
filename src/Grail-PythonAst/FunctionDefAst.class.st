@@ -355,6 +355,52 @@ FunctionDefAst >> ___decoratorLineFor___: decoList index: anIndex [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___decoratorNameIsModuleGlobal___: aSymbol [
+	"Does the bare decorator name aSymbol mean the MODULE's binding -- to be
+	read through the module instance -- rather than a local?  Only when the
+	module body binds it AND no local shadows it: a local of an enclosing
+	function, or, from a class nested in a function, a local of a function
+	beyond that class.  CPython resolves those before the global; testing
+	only the module's names applied the global decorator wherever a local
+	reused its name, silently (#1605)."
+
+	| sym |
+	sym := aSymbol asSymbol.
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifFalse: [^ false].
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(CallAst classBeingCompiled notNil
+		and: [self ___headerLocalBeyondClass___: sym]) ifTrue: [^ false].
+	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___decoratorNameIsUnboundInModule___: aSymbol [
+	"Outside a doit, would a bare identifier for this decorator name fail to
+	compile, because nothing static binds it: no enclosing function's local,
+	no module-body variable or def, no class attribute of the class being
+	built, no resolvable global?  False whenever any of those might, and
+	outside module code, so a working decorator keeps its bare identifier;
+	the doit case is ___decoratorNameNeedsRuntimeLookup___:'s."
+
+	| sym |
+	ModuleAst compilingDoitScope notNil ifTrue: [^ false].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ false].
+	sym := aSymbol asSymbol.
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifTrue: [^ false].
+	(CallAst moduleFunctionNames notNil
+		and: [CallAst moduleFunctionNames includes: sym]) ifTrue: [^ false].
+	(CallAst classAttrNames notNil
+		and: [CallAst classAttrNames includes: sym]) ifTrue: [^ false].
+	(NameAst isResolvableSymbol: sym) ifTrue: [^ false].
+	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___decoratorNameNeedsRuntimeLookup___: aSymbol [
 	"Would a bare Smalltalk identifier for this decorator name fail to
 	COMPILE?  Mirrors the four things NameAst's doit fallback accepts as
@@ -438,6 +484,32 @@ FunctionDefAst >> ___decoratorRealisedByReclass___: deco [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___decoratorRootName___: deco [
+	"The name an attribute / call chain decorator starts from -- ``foo'' for
+	``@foo.setter'', ``@foo.classlevel'', ``@foo.register(int)'' -- or nil.
+
+	Any decorator rooted at the def's own name READS the earlier binding, not
+	only the three accessor spellings: SQLAlchemy's rw_hybridproperty is
+	``@__doc__.setter'' then ``@__doc__.classlevel'', and its hybridmethod is
+	``@m.classlevel''.  Counted as a rebind, the first def's decorator was
+	deferred past the body, so ``__doc__.classlevel'' read the bare function
+	(InstrumentedAttribute, at sqlalchemy.orm import)."
+
+	| node |
+	node := deco.
+	[node notNil] whileTrue: [
+		(node isKindOf: NameAst) ifTrue: [^ node id asSymbol].
+		(node isKindOf: AttributeAst)
+			ifTrue: [node := node value]
+			ifFalse: [
+				(node isKindOf: CallAst)
+					ifTrue: [node := node function]
+					ifFalse: [^ nil]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___defaultedKeywordOnlyParams___ [
 	"{ paramName . defaultNode } for each KEYWORD-ONLY parameter that has a
 	default, in declaration order.  Empty when the def has none.
@@ -490,9 +562,14 @@ FunctionDefAst >> ___defaultOwnerClassName___ [
 	"The class this def is being compiled INTO, or nil when there is none.  It
 	qualifies the side-table key a class-body method's def-time default is stored
 	under, so it has to be the same name ClassDefAst used when it emitted the
-	store.  Nil for a module-level def (which has its own module-keyed memo) and
-	for a @staticmethod, whose body has no receiver for the lookup to walk out
-	from -- both of those keep the default expression inline.
+	store.  Nil for a module-level def, which has its own module-keyed memo.
+
+	A @staticmethod has an owner too.  It compiles onto the METACLASS, so its
+	Smalltalk receiver is the class it was reached through, and the lookup walks
+	out from there like a @classmethod's.  It used to answer nil here and keep
+	the default inline, which re-evaluated it on every call -- so
+	``def f(acc=[])'' got a new list each time -- and left __defaults__ None,
+	because the key table had no entry to read (#1575).
 
 	Read through classBeingCompiled rather than from a scope stack because this
 	runs while the class's OWN methods are emitted, one at a time, which is
@@ -502,9 +579,7 @@ FunctionDefAst >> ___defaultOwnerClassName___ [
 	read have to agree on the spelling or the read simply misses and the default
 	is recomputed, which looks like nothing wrong."
 
-	^ (self isKindOf: StaticFunctionDefAst)
-		ifTrue: [nil]
-		ifFalse: [CallAst classBeingCompiled ifNotNil: [:c | c asString]]
+	^ CallAst classBeingCompiled ifNotNil: [:c | c asString]
 
 ]
 
@@ -520,7 +595,10 @@ FunctionDefAst >> ___docString___ [
 	and this supplies the real text when there is one.
 
 	Gated on CharacterCollection rather than String so a docstring holding
-	non-Latin-1 text (a Unicode16/32 literal) is still recognised."
+	non-Latin-1 text (a Unicode16/32 literal) is still recognised.
+
+	Cleaned as CPython 3.13's compiler cleans it (AbstractNode class >>
+	___cleanDoc___:)."
 
 	| stmts first inner |
 	body isNil ifTrue: [^ nil].
@@ -530,8 +608,14 @@ FunctionDefAst >> ___docString___ [
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"Not the ``...'' marker: the parser records an Ellipsis literal as the
+	Symbol #'...', and a Symbol IS a CharacterCollection, so ``class E(str,
+	Enum): ...'' had Ellipsis for its __doc__ and ``def m(self): ...'' had
+	'...' -- pydantic's cleandoc then failed on the enum
+	(FastAPI's test_schema_compat_pydantic_v2)."
+	inner value == #'...' ifTrue: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner value]
+		ifTrue: [AbstractNode ___cleanDoc___: inner value]
 		ifFalse: [nil]
 
 ]
@@ -842,8 +926,7 @@ FunctionDefAst >> ___emitIRDecoratorValue___: deco on: aBuilder [
 	expression decorator is emitted as a value."
 
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___emitIRValueOn___: aBuilder].
-	(CallAst moduleVariableNames notNil
-		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [
 			^ aBuilder
 				send: #'___moduleAttrLoad___:'
 				to: (aBuilder
@@ -2099,7 +2182,20 @@ FunctionDefAst >> ___emitModuleDefaultsBlockOn___: aStream [
 		lf;
 		nextPutAll: 'self @env0:___setFunctionDefaults___: ''';
 		nextPutAll: name;
-		nextPutAll: ''' block: [{ {'.
+		nextPutAll: ''' keys: #( #('.
+	"The memo KEYS too, in ___methodDefaultKeysTable___'s shape, so that
+	``f.__defaults__ = t'' can write THROUGH to what a call binds (module >>
+	___writeFunctionDefaults___:value:kw:) instead of landing in an attribute
+	the call never reads (#1228)."
+	pos do: [:pair |
+		aStream nextPutAll: ' #'''; nextPutAll: (self ___moduleDefaultKeyFor___:
+			(self transportParamName: (pair at: 1))); nextPut: $'].
+	aStream nextPutAll: ' ) #('.
+	kw do: [:pair |
+		aStream nextPutAll: ' '''; nextPutAll: (pair at: 1) asString;
+			nextPutAll: ''' #'''; nextPutAll: (self ___moduleDefaultKeyFor___: (pair at: 1));
+			nextPut: $'].
+	aStream nextPutAll: ' ) ) block: [{ {'.
 	pos doWithIndex: [:pair :i |
 		i > 1 ifTrue: [aStream nextPut: $.].
 		aStream space.
@@ -2733,11 +2829,9 @@ FunctionDefAst >> ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder 
 	no Python name can be spelled that way."
 	(aBuilder leafFor: ('___default_' , pname asString , '___') asSymbol)
 		ifNotNil: [:l | ^ aBuilder var: l].
-	"A @staticmethod (cut 67): the text's module-form generator, run under a
-	class context, emits NO memo -- the default expression is evaluated inline
-	on every call that needs it (the third of the three default paths the
-	``defaults are recreated per call'' note records).  Mirrored, not improved:
-	the two paths must agree."
+	"A @staticmethod (cut 67) reads the class side table like a method: its
+	receiver is the class it was reached through, and the text's module-form
+	generator emits the same probe (___defaultOwnerClassName___, #1575)."
 	"EVERY default expression below is emitted with the method's local table
 	suppressed, because a default is evaluated at def time in the scope ENCLOSING
 	the def: a name in it resolves as a module / builtins global even when this
@@ -2745,19 +2839,22 @@ FunctionDefAst >> ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder 
 	default through module name resolution, not the method's -- and without the
 	suppression the emit would answer the very temp the binding is about to
 	fill (`def __getattr__(self, name, getattr=getattr)', the codecs idiom)."
-	(self ___irMethodMode___ and: [self ___irStripsReceiver___ not]) ifTrue: [
-		^ aBuilder withoutLocalsDo: [aDefaultNode ___emitIRValueOn___: aBuilder]].
-	owner := self ___irStripsReceiver___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
+	owner := self ___irMethodMode___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
 	owner notNil ifTrue: [
-		| probe |
+		| probe privateName |
 		key := (self ___classDefaultKeyFor___: pname className: owner) asSymbol.
+		privateName := self ___privateClassBodyNameIn___: aDefaultNode owner: owner.
 		aBuilder atNode: self.
-		probe := aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
-			with: { aBuilder obj: key } env: 0.
+		probe := privateName isNil
+			ifTrue: [aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
+				with: { aBuilder obj: key } env: 0]
+			ifFalse: [aBuilder send: #'___grailClassDefault___:orClassBodyName:'
+				to: aBuilder selfNode
+				with: { aBuilder obj: key. aBuilder obj: privateName asSymbol } env: 0].
 		^ aBuilder ifNilValue: probe
 			then: [aBuilder add: (aBuilder withoutLocalsDo: [
 				aDefaultNode ___emitIRValueOn___: aBuilder])]].
-	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
+	key := (self ___moduleDefaultKeyFor___: pname) asSymbol.
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (aBuilder withoutLocalsDo: [
 			aDefaultNode ___emitIRValueOn___: aBuilder])].
@@ -3556,7 +3653,8 @@ FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
 	"printDecoratorReceiverOn:deco:'s branches, in ITS order: a bare-name
 	decorator (the parser records those as Symbols) that names a class-body
 	sibling is refused (the class-attribute load is not emitted here); a
-	module variable loads through the module instance; otherwise the bare
+	module variable no local shadows loads through the module instance
+	(___decoratorNameIsModuleGlobal___:); otherwise the bare
 	identifier -- an enclosing local, or a resolvable global -- unless a doit
 	would need the runtime NameError lookup.  An expression decorator is judged
 	as a value of the enclosing scope."
@@ -3564,8 +3662,7 @@ FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___irEligibleValueLocals___: localNames].
 	(CallAst classBodyDecoratorScope notNil
 		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
-	(CallAst moduleVariableNames notNil
-		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [^ true].
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ true].
 	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
 	(localNames includes: deco asString) ifTrue: [^ true].
 	^ NameAst isResolvableSymbol: deco asSymbol
@@ -4286,6 +4383,27 @@ FunctionDefAst >> ___isPropertyDef___ [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___keepsThePropertyDocstring___ [
+	"True when the outermost decorator is ``@<expr>.setter'' or
+	``@<expr>.deleter'': CPython's property.setter / .deleter carry the
+	property's __doc__ over, so this def does not replace the docstring a
+	class's ___methodDocTable___ holds for the name (ClassDefAst >>
+	emitMethodDocTableOn:className:) -- test_property's
+	``spam.__doc__ == 'BaseClass.getter''' after an undocumented setter and
+	deleter.  Read off the syntax, not ___propertyAccessorKind___: a
+	subclass's ``@spam.setter'' over ``@BaseClass.spam.getter'' names a
+	property this class body does not declare with @property."
+
+	| first |
+	decorator_list isNil ifTrue: [^ false].
+	decorator_list isEmpty ifTrue: [^ false].
+	first := decorator_list at: 1.
+	(first isKindOf: AttributeAst) ifFalse: [^ false].
+	^ first attr asString = 'setter' or: [first attr asString = 'deleter']
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___kwonlyParamNameStrings___ [
 	"The keyword-only parameter names, as Strings."
 
@@ -4361,6 +4479,17 @@ FunctionDefAst >> ___methodTempsSafeFor___: allLocals [
 	ivNames := CallAst classBackingInstVarNames.
 	ivNames isNil ifTrue: [^ false].
 	^ (allLocals anySatisfy: [:each | ivNames includes: each asSymbol]) not
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___moduleDefaultKeyFor___: aParamName [
+	"The module-keyed memo entry a module-level def's default for aParamName is
+	held under (module >> ___moduleDefaultAt:compute:).  One spelling for the
+	three places that need it -- the text and IR call paths, and the key table
+	``f.__defaults__ = t'' writes through -- so they cannot drift apart."
+
+	^ '___default_' , self name asString , '__' , aParamName asString , '___'
 
 ]
 
@@ -4580,14 +4709,26 @@ FunctionDefAst >> ___printDecoratorNameOn___: aStream name: aSymbol [
 				nextPutAll: aSymbol asString;
 				nextPutAll: '___'')'.
 			^ self].
-	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol)
-		ifFalse: [
-			aStream nextPutAll: aSymbol asString.
-			^ self].
-	aStream
-		nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
-		nextPutAll: aSymbol asString;
-		nextPutAll: ''')'
+	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol) ifTrue: [
+		aStream
+			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
+			nextPutAll: aSymbol asString;
+			nextPutAll: ''')'.
+		^ self].
+	"Compiled module code has the same hole (#1517): a name bound nowhere the
+	compiler can see -- undefined, or bound only at run time through
+	globals() -- made the WHOLE MODULE fail to compile.  It reads the module's
+	globals then builtins at run time instead, raising NameError on a miss,
+	which is NameAst's late module-name binding for an ordinary read."
+	(self ___decoratorNameIsUnboundInModule___: aSymbol) ifTrue: [
+		aStream
+			nextPutAll: '(';
+			nextPutAll: CallAst moduleClassBeingCompiled name;
+			nextPutAll: ' @env0:___instance___ @env1:___moduleAttrLoad___: #''';
+			nextPutAll: aSymbol asString;
+			nextPutAll: ''')'.
+		^ self].
+	aStream nextPutAll: aSymbol asString
 
 ]
 
@@ -4645,6 +4786,36 @@ FunctionDefAst >> ___printWithPreEvaluatedDecoratorsOn___: aStream [
 		i > 1 ifTrue: [aStream nextPutAll: '. '].
 		self printDecoratorReceiverOn: aStream deco: deco].
 	aStream nextPutAll: ' }.'
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___privateClassBodyNameIn___: aDefaultNode owner: ownerClassName [
+	"The MANGLED name when aDefaultNode is a bare private name -- ``__marker'',
+	read as ``_MutableMapping__marker'' -- else nil.  Such a default can only
+	mean the class-body binding, so when the stored default is missing (a
+	deployed class: see Object >> ___grailClassDefault___:orClassBodyName:)
+	the class attribute answers it.  Both emit arms ask this.
+
+	Mangled from ownerClassName when the node answers its name unmangled: the
+	IR arm builds a method after the class context that NameAst mangles
+	through has moved on (collections.abc's MutableMapping.pop is IR-built)."
+
+	| id mangled stem |
+	(aDefaultNode isKindOf: NameAst) ifFalse: [^ nil].
+	"The SOURCE spelling decides privacy: the parser has usually mangled ``id''
+	already (``_C__x''), keeping ``__x'' in writtenId."
+	id := aDefaultNode writtenId asString.
+	((id size > 2) and: [(id copyFrom: 1 to: 2) = '__'
+		and: [(id size >= 4 and: [(id copyFrom: id size - 1 to: id size) = '__']) not]])
+			ifFalse: [^ nil].
+	mangled := aDefaultNode id asString.
+	mangled = id ifTrue: [mangled := aDefaultNode ___mangledId___ asString].
+	(mangled = id and: [ownerClassName notNil]) ifTrue: [
+		stem := ownerClassName asString.
+		[stem notEmpty and: [stem first = $_]] whileTrue: [stem := stem copyFrom: 2 to: stem size].
+		mangled := '_' , stem , id].
+	^ mangled
 
 ]
 
@@ -4735,15 +4906,16 @@ FunctionDefAst >> ___reachableStatements___: stmts [
 
 { #category : 'Grail-code generation' }
 FunctionDefAst >> ___readsEarlierBindingOf___: aSymbol [
-	"Whether one of this def's decorators is a foreign accessor on aSymbol --
-	``@foo.setter'' over a non-property ``foo'' -- and so READS the earlier
-	binding rather than simply replacing it.  See ClassDefAst >>
-	___isRebindLaterInBody___:."
+	"Whether one of this def's decorators is rooted at aSymbol --
+	``@foo.setter'' over a non-property ``foo'', ``@foo.classlevel'' -- and so
+	READS the earlier binding rather than simply replacing it.  A declarative
+	property's own accessors are not: the property machinery assembles those.
+	See ClassDefAst >> ___isRebindLaterInBody___:."
 
 	decorator_list isNil ifTrue: [^ false].
 	^ decorator_list anySatisfy: [:deco |
-		(self ___isForeignAccessorDecorator___: deco)
-			and: [deco value id asSymbol == aSymbol]]
+		(self isPropertyAccessorDecorator: deco) not
+			and: [(self ___decoratorRootName___: deco) == aSymbol]]
 
 ]
 
@@ -5207,6 +5379,18 @@ FunctionDefAst >> args [
 { #category : 'Grail-printing' }
 FunctionDefAst >> args: newValue [
 	args := newValue
+
+]
+
+{ #category : 'Grail-Module Method Compilation' }
+FunctionDefAst >> argumentDefaultsContainYield: anArgumentsAst [
+	"Does a default value -- positional or keyword-only -- of a nested def or
+	lambda contain a yield?  Those are evaluated in the enclosing function.
+	kw_defaults holds nil for a keyword-only parameter with no default."
+
+	anArgumentsAst isNil ifTrue: [^ false].
+	^ (self bodyContainsYieldExceptNestedDefs: anArgumentsAst defaults)
+		or: [self bodyContainsYieldExceptNestedDefs: anArgumentsAst kw_defaults]
 
 ]
 
@@ -5738,31 +5922,33 @@ FunctionDefAst >> emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStre
 	  * class-body method -- the class side table ClassDefAst filled while the
 	    class body ran, ``ifNil:'' back to the inline expression so a shape the
 	    store does not cover behaves exactly as it did before;
-	  * @staticmethod -- inline, as before: its body has no receiver for the
-	    lookup to walk out from.
+	  * @staticmethod -- the same class side table: its receiver is the class
+	    it was reached through (see ___defaultOwnerClassName___).
 
 	The closure (nested-def) generators do NOT come here.  They already wrap the
 	def in an outer block that binds the default at def time, which is the one
 	form that was right all along."
 
-	| ownerClassName |
+	| ownerClassName privateName |
 	self isModuleLevelDef ifTrue: [
 		aStream
-			nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
-			nextPutAll: self name asString;
-			nextPutAll: '__';
-			nextPutAll: aParamName asString;
-			nextPutAll: '___'' compute: ['.
+			nextPutAll: '(self @env0:___moduleDefaultAt: #''';
+			nextPutAll: (self ___moduleDefaultKeyFor___: aParamName);
+			nextPutAll: ''' compute: ['.
 		aDefaultNode printSmalltalkOn: aStream.
 		aStream nextPutAll: '])'.
 		^ self].
 	ownerClassName := self ___defaultOwnerClassName___.
 	ownerClassName isNil ifTrue: [^ aDefaultNode printSmalltalkOn: aStream].
+	privateName := self ___privateClassBodyNameIn___: aDefaultNode owner: ownerClassName.
 	aStream
 		nextPutAll: '((self @env0:___grailClassDefault___: #';
 		nextPut: $';
 		nextPutAll: (self ___classDefaultKeyFor___: aParamName className: ownerClassName);
-		nextPut: $';
+		nextPut: $'.
+	privateName notNil ifTrue: [
+		aStream nextPutAll: ' orClassBodyName: #'''; nextPutAll: privateName; nextPut: $'].
+	aStream
 		nextPutAll: ') ifNil: ['.
 	aDefaultNode printSmalltalkOn: aStream.
 	aStream nextPutAll: '])'
@@ -7774,8 +7960,17 @@ FunctionDefAst >> nodeContainsYieldExceptNestedDefs: node [
 	node isNil ifTrue: [^false].
 	(node isKindOf: YieldAst) ifTrue: [^true].
 	(node isKindOf: YieldFromAst) ifTrue: [^true].
-	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-		ifTrue: [^false].
+	"A nested def's or lambda's BODY is its own scope, but its default values
+	and its decorators are evaluated HERE, when the def or lambda is created:
+	``def f(): lambda x=(yield): 1'' makes f a generator.  Skipping the whole
+	node left f an ordinary function whose yield then named an unbound
+	___gen___, a Smalltalk CompileError rather than a generator
+	(test_generators' coroutine doctest)."
+	(node isKindOf: LambdaAst)
+		ifTrue: [^ self argumentDefaultsContainYield: node args].
+	(node isKindOf: FunctionDefAst) ifTrue: [
+		^ (self bodyContainsYieldExceptNestedDefs: node decoratorList)
+			or: [self argumentDefaultsContainYield: node args]].
 	"Walk all instVars of this AST node; recurse into AbstractNode
 	children and SequenceableCollection containers.  Skip the
 	``parent`` back-pointer to avoid cycling up the tree."
@@ -8250,8 +8445,7 @@ FunctionDefAst >> printDecoratorReceiverOn: aStream deco: deco [
 					nextPutAll: deco asString;
 					nextPutAll: ''')'.
 				^ self].
-		(CallAst moduleVariableNames notNil
-			and: [CallAst moduleVariableNames includes: deco asSymbol])
+		(self ___decoratorNameIsModuleGlobal___: deco)
 			ifTrue: [
 				aStream
 					nextPutAll: '((';
@@ -9481,8 +9675,7 @@ FunctionDefAst >> printSmalltalkOn: aStream [
 						compile-fail with ``undefined symbol''.  Route via
 						``___moduleAttrLoad___:'' so top-level defs lazy-wrap
 						as BoundMethods (the typical decorator case)."
-						(CallAst moduleVariableNames notNil
-							and: [CallAst moduleVariableNames includes: deco asSymbol])
+						(self ___decoratorNameIsModuleGlobal___: deco)
 							ifTrue: [
 								aStream
 									nextPutAll: '((';

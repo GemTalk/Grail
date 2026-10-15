@@ -64,7 +64,7 @@ ReceiverlessClassCallTestCase >> testAClassBodyCallsItsOwnHelpers [
 
 	self
 		assert: (self ___classBodyHelperFixture___ @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '16 checks, 0 disagreeing [], keys match: True'
+		equals: '17 checks, 0 disagreeing [], keys match: True'
 
 ]
 
@@ -83,26 +83,6 @@ ReceiverlessClassCallTestCase >> testAPackedDefTakesASpecialFirstArgument [
 	(#1426).  It was a known divergence until then."
 
 	self assertMatchesCPython: 'packed_int_receiver'
-
-]
-
-{ #category : 'Grail-Tests' }
-ReceiverlessClassCallTestCase >> testAReboundNameInADefaultStillReadsItsLastValue [
-	"PINNED: ``v = 1; def f(x, d=v); v = 2'' in a class body.  CPython reads
-	1; Grail emits every store of a rebound class attribute at its LAST
-	assignment and so reads 2 -- the answer it always gave, and since #1426
-	still without raising.  Closing it is welcome; the fixture's
-	KNOWN_DIVERGENCES entry then moves to EXPECTED."
-
-	| fixture actual |
-	fixture := self ___classBodyHelperFixture___.
-	actual := (fixture @env1:___pyAttrLoad___: #r)
-		@env1:__getitem__: 'default_is_fixed_at_the_def'.
-	self
-		deny: (actual @env1:__eq__: ((fixture @env1:___pyAttrLoad___: #KNOWN_DIVERGENCES)
-			@env1:__getitem__: 'default_is_fixed_at_the_def')) == true
-		description: 'default_is_fixed_at_the_def now matches CPython; move it to EXPECTED'.
-	self assert: (actual @env1:__eq__: (self eval: '(2, 2)')) == true
 
 ]
 

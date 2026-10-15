@@ -1201,6 +1201,65 @@ builtins >> ___evalScopeFor___: moduleOrNil locals: localsDict [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+builtins >> ___execScopeFor___: aDict [
+	"The doit scope exec() runs in for globals aDict: the one an earlier exec()
+	into the same dict left behind, or a new one.
+
+	Kept on the dict itself, so it lives exactly as long as the namespace does
+	and no registry has to be swept.  The link names the dict it was made for:
+	a COPY of the dict carries the dynamic instVar along, and must not share
+	the original's scope, so a link to some other dict is ignored.
+
+	A reused scope is re-seeded by the caller.  Here it only forgets the
+	bindings the dict no longer has -- the reflect-back would otherwise write a
+	``del g['x']'' straight back -- keeping the handles and the unbound (nil)
+	slots compiled code may still reference.  The dict is hung on the scope for
+	NameError >> ___resolveDoitGlobal___:scope:, which reads it once the exec
+	is over."
+
+	| link scope stale |
+	link := [aDict @env0:dynamicInstVarAt: #'___grailExecScope___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((link @env0:isKindOf: Array)
+		@env0:and: [(link @env0:size @env0:>= 2) @env0:and: [(link @env0:at: 1) @env0:== aDict]])
+		ifTrue: [
+			scope := link @env0:at: 2.
+			"WRITES MADE SINCE THE LAST exec FIRST.  A ``global n'' assignment in a
+			function this scope's code defined lands in the SCOPE, and reaches the
+			dict only through an exec's reflect-back -- so a call made between two
+			execs left it in the scope alone, where the re-seed below would
+			overwrite it with the dict's older value.  Anything not identical to
+			what the last reflect-back left is such a write, and goes to the dict."
+			(link @env0:size @env0:>= 3) ifTrue: [ | snapshot |
+				snapshot := link @env0:at: 3.
+				scope @env0:keysAndValuesDo: [:key :value |
+					((value @env0:~~ nil)
+						@env0:and: [(snapshot @env0:at: key otherwise: nil) @env0:~~ value])
+							@env0:ifTrue: [
+								((key @env0:== #'___pyGlobals___') @env0:or: [key @env0:== #'___pyGlobalsView___'])
+									@env0:ifFalse: [
+										self ___storeReflected___: value
+											at: (NameAst @env0:doitScopeNameToPythonName: key)
+											into: aDict]]]].
+			stale := OrderedCollection @env0:new.
+			scope @env0:keysAndValuesDo: [:key :value |
+				((value @env0:~~ nil)
+					@env0:and: [((key @env0:== #'___pyGlobals___') @env0:or: [key @env0:== #'___pyGlobalsView___']) @env0:not])
+						@env0:ifTrue: [
+							([aDict @env1:__contains__: (NameAst @env0:doitScopeNameToPythonName: key) @env0:asString]
+								@env0:on: AbstractException do: [:ex | ex @env0:return: true]) ___isTruthy___
+									@env0:ifFalse: [stale @env0:add: key]]].
+			stale @env0:do: [:key | scope @env0:removeKey: key].
+			^ scope].
+	scope := SymbolDictionary @env0:new.
+	[scope @env0:dynamicInstVarAt: #'___grailExecGlobals___' put: aDict.
+	 aDict @env0:dynamicInstVarAt: #'___grailExecScope___' put: (Array @env0:with: aDict with: scope)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ scope
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 builtins >> ___execWithClosure___: aCode globals: globalsDict closure: aClosure [
 	"``exec(code, globals, closure=cells)'' -- run a def's body with the given
 	free-variable cells.
@@ -2409,7 +2468,8 @@ builtins >> ___isInstance___: anObject of: aClassOrTuple depth: aDepth [
 					ifTrue: [^ true]].
 		^ false
 	].
-	^ self ___isInstanceSingle___: anObject of: cls
+	(self ___isInstanceSingle___: anObject of: cls) ifTrue: [^ true].
+	^ self ___isInstanceViaDunderClass___: anObject of: cls
 
 ]
 
@@ -2430,7 +2490,15 @@ builtins >> ___isInstanceSingle___: anObject of: aClass [
 	numpy._utils.set_module does ``isinstance(func, type)'' to tell a decorated
 	class from a function, and test_subclassinit asserts it for a class built
 	by ``type(name, bases, ns)''."
-	(aClass == type) @env0:ifTrue: [^ anObject @env0:isKindOf: Behavior].
+	"A TYPE A C EXTENSION DEFINED is a class too, though it reaches Grail as a
+	proxy: Cython registers its cdef classes with ABCs at import
+	(``ISeedSequence.register(SeedSequence)'' in numpy.random), and
+	ABCMeta.register refused one with ``Can only register classes''.  The
+	proxy answers issubclass of itself in C, nil when it is not a type."
+	(aClass == type) @env0:ifTrue: [
+		(anObject @env0:isKindOf: Behavior) ifTrue: [^ true].
+		^ (anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:')
+			and: [(anObject ___grailForeignTypeCheck___: anObject subclass: true) @env0:notNil]].
 	"CPython PyObject_IsInstance: after the exact-type fast path it looks up
 	__instancecheck__ on TYPE(cls) and, when the metaclass supplies one,
 	DELEGATES to it entirely.  That is the whole ABC mechanism -- what makes
@@ -2485,6 +2553,15 @@ builtins >> ___isInstanceSingle___: anObject of: aClass [
 				(anObject @env1:___pyAttrLoad___: #'__class__')
 			of: aClass depth: 0].
 	result := anObject isKindOf: aClass.
+	"A C EXTENSION'S OBJECT is an instance of what its C type's MRO names, as
+	PyObject_TypeCheck reads it: numpy.float64 subclasses float, and
+	isinstance(np.float64(1), float) was False."
+	(result not and: [anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:']) ifTrue: [
+		| t |
+		t := [anObject ___pyAttrLoad___: #'__class__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(t @env0:notNil and: [t ~~ anObject])
+			ifTrue: [result := self ___isSubclass___: t of: aClass depth: 1]].
 	"CPython's object_isinstance: when the real type check FAILS it still reads
 	``inst.__class__'' and re-tests, so an object that declares its own
 	__class__ is judged by what it CLAIMS to be.  Two consequences the tests
@@ -2606,6 +2683,34 @@ builtins >> ___isInstanceSingle___: anObject of: aClass [
 		baCls := Python @env0:at: #bytearray otherwise: nil.
 		(baCls @env0:notNil and: [anObject isKindOf: baCls]) ifTrue: [result := false]].
 	^ result
+
+]
+
+{ #category : 'Python-Built-in Functions' }
+builtins >> ___isInstanceViaDunderClass___: anObject of: cls [
+	"CPython's isinstance second chance: when type(obj) is not a subclass, it
+	asks ``obj.__class__'', and a class that overrides __class__ -- asyncpg's
+	pgproto.UUID answers uuid.UUID -- passes through it (FastAPI's
+	test_inherited_custom_class).  Only for an instance whose own Python class
+	overrides __class__, so an ordinary failed isinstance pays one method
+	lookup and nothing else."
+
+	| real owner dc |
+	(anObject @env0:isKindOf: Behavior) ifTrue: [^ false].
+	(cls @env0:isKindOf: Behavior) ifFalse: [^ false].
+	real := anObject @env0:class.
+	real ___grailIsPythonClass___ ifFalse: [^ false].
+	owner := real @env0:whichClassIncludesSelector: #'__class__' environmentId: 1.
+	(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifFalse: [^ false].
+	dc := [anObject ___pyAttrLoad___: #'__class__']
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(dc == nil or: [dc == real or: [(dc @env0:isKindOf: Behavior) @env0:not]]) ifTrue: [^ false].
+	^ [(self issubclass: dc _: cls) ___isTruthy___]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
 
 ]
 
@@ -2762,7 +2867,10 @@ builtins >> ___isSubclassSingle___: sub of: target [
 		is CPython's ``arg 1 must be a class'', not False."
 		(sub @env0:isKindOf: Behavior) ifFalse: [
 			self ___abstractClassCheck___: sub
-				argMessage: 'issubclass() arg 1 must be a class'].
+				argMessage: 'issubclass() arg 1 must be a class'.
+			"A C extension's METACLASS reaches type through its __bases__
+			(numpy's _DTypeMeta); it answered False."
+			^ self ___abstractIsSubclass___: sub of: type depth: 0].
 		^ (sub == type)
 			or: [(sub @env0:isKindOf: Behavior)
 				and: [(sub @env0:inheritsFrom: type)
@@ -3009,8 +3117,8 @@ builtins >> ___minOrMax___: positional kw: kwargs lessThan: pickSmaller [
 				gotAny := true
 			] @env0:ifTrue: [
 				isBetter := pickSmaller
-					@env0:ifTrue: [itemKey ___cmpLt___: bestKey]
-					@env0:ifFalse: [itemKey ___cmpGt___: bestKey].
+					@env0:ifTrue: [(itemKey ___cmpLt___: bestKey) ___isTruthy___]
+					@env0:ifFalse: [(itemKey ___cmpGt___: bestKey) ___isTruthy___].
 				isBetter @env0:ifTrue: [best := item. bestKey := itemKey]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
@@ -3073,6 +3181,27 @@ builtins >> ___normalizeUnionMember___: aMember [
 
 	aMember == None ifTrue: [^ NoneType].
 	^ aMember
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+builtins >> ___noteExecScopeReflected___: aScope for: aDict [
+	"Record what an exec()'s reflect-back left in its reused scope, so the next
+	exec into aDict can tell a write made since -- by a ``global'' assignment in
+	one of the scope's functions -- from a value the dict already has.  See
+	___execScopeFor___:.  A scope that is not aDict's reused one is left alone."
+
+	| link snapshot |
+	link := [aDict @env0:dynamicInstVarAt: #'___grailExecScope___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((link @env0:isKindOf: Array)
+		@env0:and: [(link @env0:size @env0:>= 2) @env0:and: [(link @env0:at: 2) @env0:== aScope]])
+			ifFalse: [^ self].
+	snapshot := IdentityKeyValueDictionary @env0:new.
+	aScope @env0:keysAndValuesDo: [:key :value | snapshot @env0:at: key put: value].
+	[aDict @env0:dynamicInstVarAt: #'___grailExecScope___'
+		put: (Array @env0:with: aDict with: aScope with: snapshot)]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 
 ]
 
@@ -4627,25 +4756,31 @@ builtins >> ___validateSlots___: namespace bases: bases [
 	iterates to INTEGERS, which the per-item string check below refuses with
 	the message CPython uses for exactly that input -- ``__slots__ items must
 	be strings, not 'int'''.  An earlier draft named the bytes class
-	explicitly and was both redundant and wrong about the class's name."
+	explicitly and was both redundant and wrong about the class's name.
+
+	The iteration is PYTHON's, through list(): a dict __slots__ (statistics'
+	NormalDist, typing's tests) names its KEYS -- the values are docstrings --
+	where Smalltalk's withAll: of a dict answers its values.  It also raises
+	CPython's own complaint for something not iterable at all, ``'int' object
+	is not iterable'', since the fault is the object's rather than
+	__slots__'s."
 	names := (slots @env0:isKindOf: CharacterCollection)
 		ifTrue: [{ slots }]
-		ifFalse: [[Array @env0:withAll: slots]
-			@env0:on: Error do: [:ex | ex @env0:return: nil]].
-	"NOT ITERABLE AT ALL is a different complaint, and CPython words it as one
-	-- ``'int' object is not iterable'' -- because the fault is the object's
-	rather than __slots__'s."
-	names @env0:isNil ifTrue: [
-		^ TypeError ___signal___: '''' @env0:,
-			(slots ___pyTypeNameForError___) @env0:asString
-			@env0:, ''' object is not iterable'].
-	"A SLOT ON A BUILT-IN-STORAGE BASE has nowhere to live: the instance's
-	storage is the primitive one, so CPython refuses rather than producing an
-	object whose slot writes go nowhere."
+		ifFalse: [Array @env0:withAll: (list @env1:__new__: slots)].
+	"A SLOT ON A VARIABLE-SIZED BASE has nowhere to live: CPython refuses
+	nonempty __slots__ over a type whose instances carry their items inline --
+	int, bytes, tuple and type, and anything derived from them.
+
+	Nothing else is refused.  type() used to refuse a slot over ANY base with
+	built-in storage (list, dict, str, float, ...), because a class it built
+	there had nowhere to keep one; a declared slot without a position is now
+	kept per object (object >> ___pyAttrStore___:put:), so both a class
+	statement and type() accept exactly what CPython accepts (#1693)."
 	(Array @env0:withAll: bases) @env0:do: [:b |
 		((b @env0:isKindOf: Behavior)
-			@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b)
-			@env0:and: [names @env0:isEmpty @env0:not]]) ifTrue: [
+			@env0:and: [(names @env0:isEmpty @env0:not)
+			@env0:and: [{ int. bytes. tuple. type } @env0:anySatisfy: [:v |
+					(self issubclass: b _: v) == true]]]) ifTrue: [
 				^ TypeError ___signal___: 'nonempty __slots__ not supported for subtype of '''
 					@env0:, (b @env1:__name__) @env0:asString @env0:, '''']].
 	names @env0:do: [:each |
@@ -4663,7 +4798,15 @@ builtins >> ___validateSlots___: namespace bases: bases [
 				''' in __slots__ conflicts with class variable']].
 	"__dict__ AND __weakref__ are slots a class gets at most once.  Listing
 	either twice, or listing one a base already supplies, is CPython's
-	``...slot disallowed: we already got one''."
+	``...slot disallowed: we already got one''.
+
+	WHETHER A BASE SUPPLIES IT is ___grailProvidesInstanceSlot___:'s answer,
+	the one C.__dict__ and x.__weakref__ already read: a dict-ful Python class
+	or one whose __slots__ names it does, object and a class with empty
+	__slots__ do not.  This refused every base without built-in storage,
+	object included, so ``type(name, (object,), {'__slots__':
+	('__weakref__',)})'' raised -- which is how attrs builds every
+	``slots=True'' class, and protobuf every message class (#1428)."
 	#('__dict__' '__weakref__') @env0:do: [:special |
 		| count |
 		count := 0.
@@ -4676,7 +4819,7 @@ builtins >> ___validateSlots___: namespace bases: bases [
 					' slot disallowed: we already got one'].
 			(Array @env0:withAll: bases) @env0:do: [:b |
 				((b @env0:isKindOf: Behavior)
-					@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b) @env0:not]) ifTrue: [
+					@env0:and: [(b @env1:___grailProvidesInstanceSlot___: special) == true]) ifTrue: [
 						^ TypeError ___signal___: special @env0:,
 							' slot disallowed: we already got one']]]].
 	^ self
@@ -5294,6 +5437,13 @@ builtins >> _eval: positional kw: kwargs [
 		ifTrue: [nil]
 		ifFalse: [globalsDict].
 	scope := SymbolDictionary @env0:new.
+	"A lambda the expression makes reads its free names through the globals
+	dict once eval() is over (NameError >> ___resolveDoitGlobal___:scope:), so
+	``f = eval('lambda: w', g); g['w'] = 9; f()'' is 9 as in CPython.  No
+	scope reuse here: an expression binds nothing a later eval could share."
+	((liveGlobals @env0:isNil) @env0:and: [localsDict @env0:== globalsDict]) ifTrue: [
+		[scope @env0:dynamicInstVarAt: #'___grailExecGlobals___' put: globalsDict]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	seeded := liveGlobals @env0:isNil
 		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
 		ifFalse: [KeyValueDictionary @env0:new].
@@ -5490,7 +5640,17 @@ builtins >> _exec: positional kw: kwargs [
 	liveGlobals := (self ___isPlainCopyableMapping___: globalsDict)
 		ifTrue: [nil]
 		ifFalse: [globalsDict].
-	scope := SymbolDictionary @env0:new.
+	"ONE SCOPE PER GLOBALS DICT, reused by every exec() into it.  A function an
+	exec defines reads the scope it was compiled against, for as long as it
+	lives -- so with a fresh scope per call, ``m235 = LazyList(m235())'' in one
+	exec rebound a COPY the generator defined by the previous exec never saw,
+	and it went on calling the function (test_generators' doctests; every
+	doctest example is its own exec).  Reused, each exec binds into the scope
+	the earlier code reads.  Only for a plain dict that is both namespaces:
+	the three-argument and live-mapping forms keep a fresh scope each call."
+	scope := ((liveGlobals @env0:isNil) @env0:and: [localsDict @env0:== globalsDict])
+		ifTrue: [self ___execScopeFor___: globalsDict]
+		ifFalse: [SymbolDictionary @env0:new].
 	seeded := liveGlobals @env0:isNil
 		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
 		ifFalse: [KeyValueDictionary @env0:new].
@@ -5552,10 +5712,26 @@ builtins >> _exec: positional kw: kwargs [
 		"A code object compiled in ``single'' mode shows the value of each
 		expression statement through sys.displayhook, as the REPL does and
 		doctest relies on; everything else runs as plain exec."
-		ModuleAst @env0:evaluateSource: source usingModuleScope: scope
+		"AN EXCEPTION LEAVING THE BODY still delivers what the body bound before
+		it: CPython's exec writes into the dict as it goes, so after ``exec('x
+		= 1\nraise ValueError', g)'' the caller's except clause sees g['x'].
+		Grail reflects the scope into the dict when the exec returns, which a
+		raise never does (#1695).  So the reflect runs here, in the handler --
+		BEFORE the stack unwinds, because a Smalltalk handler runs on top of the
+		signal, and the caller's except body would otherwise already be running
+		when an ensure: block got its turn.  The exception is passed on
+		untouched.  A resumable signal that comes back simply reflects again
+		at the end; the yellow-zone warning gets no extra work."
+		[ModuleAst @env0:evaluateSource: source usingModuleScope: scope
 			as: (((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
 					@env0:= #'single') ifTrue: [#single] ifFalse: [#exec])
-			globalNamesInto: globalNames
+			globalNamesInto: globalNames]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifFalse: [
+					self ___reflectDoitScope___: scope seeded: seeded into: localsDict
+						globalNames: globalNames globals: globalsDict.
+					self ___noteExecScopeReflected___: scope for: globalsDict].
+				ex @env0:pass]
 	] @env0:ensure: [
 		SessionTemps @env0:current @env0:removeKey: #'GrailPendingLineMap' ifAbsent: [].
 		CallAst @env0:sourcePath: savedPath.
@@ -5568,6 +5744,7 @@ builtins >> _exec: positional kw: kwargs [
 		self ___grailOptimizeLevel___: savedOpt].
 	self ___reflectDoitScope___: scope seeded: seeded into: localsDict
 		globalNames: globalNames globals: globalsDict.
+	self ___noteExecScopeReflected___: scope for: globalsDict.
 	^ None
 
 ]
@@ -7083,7 +7260,7 @@ builtins >> max: anIterable [
 				maxVal := item.
 				first := false
 			] ifFalse: [
-				(item ___cmpGt___: maxVal) ifTrue: [maxVal := item]
+				(item ___cmpGt___: maxVal) ___isTruthy___ ifTrue: [maxVal := item]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
@@ -7101,7 +7278,7 @@ builtins >> max: a _: b [
 	"Python builtin max(a, b) — 2-arg fast path.  See min:_: for why the
 	comparison goes through ___cmpGt___ and not __gt__."
 
-	^ (a ___cmpGt___: b) ifTrue: [a] ifFalse: [b]
+	^ (a ___cmpGt___: b) ___isTruthy___ ifTrue: [a] ifFalse: [b]
 
 ]
 
@@ -7145,7 +7322,7 @@ builtins >> min: anIterable [
 				minVal := item.
 				first := false
 			] ifFalse: [
-				(item ___cmpLt___: minVal) ifTrue: [minVal := item]
+				(item ___cmpLt___: minVal) ___isTruthy___ ifTrue: [minVal := item]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
@@ -7169,9 +7346,15 @@ builtins >> min: a _: b [
 	Boolean'' where CPython raises TypeError.  The operator level is what turns
 	the sentinel into the reflected call and then into that TypeError, and it is
 	what CPython's min/max use (PyObject_RichCompare).
+
+	The comparison's RESULT is then tested for truth, as CPython's
+	PyObject_RichCompareBool does: a rich comparison may answer any object,
+	and numpy's answers numpy.bool, so ``min(5, np.int64(3))'' died with an
+	uncatchable ``Expected numpy.bool to be a Boolean'' (np.load's chunk
+	loop calls exactly that).
 	"
 
-	^ (a ___cmpLt___: b) ifTrue: [a] ifFalse: [b]
+	^ (a ___cmpLt___: b) ___isTruthy___ ifTrue: [a] ifFalse: [b]
 
 ]
 
@@ -7673,6 +7856,14 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 	asking for it when a base already declares it is a no-op."
 	newClass := storageBase ___subclass___: nameSym instVarNames: #()
 		classInstVarNames: #('___dynInstVars___').
+	"The mark object >> ___grailIsPythonClass___ reads for a class type()
+	built, as ___pyDefinedClass___ is for a class statement's.  It used to
+	infer one from the metaclass's OWN ___dynInstVars___ accessor, which a
+	class over a Python base inherits instead -- so ``type('V', (B,), {})''
+	read as a built-in: its __class__ could not be assigned, and dir(V)
+	missed its own __dict__."
+	newClass ___compileMethod: '___pyTypeBuiltClass___
+	^ true' category: 'Grail-Slots'.
 	"Symbols: ___inheritClassAttrs___ compares against ``allInstVarNames'',
 	which answers symbols."
 	ownAttrNames := IdentitySet @env0:new.
@@ -7841,9 +8032,22 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 			and: [newClass ___pyStrictSlotsAllowed___]) ifTrue: [
 				newClass ___compileMethod: '___pySlotsStrict___
 	^ true' category: 'Grail-Slots'].
+		"Naming __dict__ asks for one outright, so a strict marker inherited
+		from a slotted base is overridden, as a class statement does (#1658)."
+		((declared @env0:includes: #'__dict__') and: [newClass ___pyInheritsStrictSlots___]) ifTrue: [
+			newClass ___compileMethod: '___pySlotsStrict___
+	^ false' category: 'Grail-Slots'].
 		declared @env0:isEmpty ifFalse: [
 			newClass ___grailInstallInferredSlots___: #() declared: declared
 				properties: #() indexed: false]].
+	"...and with no __slots__ at all a class has a __dict__ whatever its bases
+	declare -- the class statement's mirror rule (ClassDefAst), which type()
+	did not apply: ``type('U', (Empty,), {})'' over ``__slots__ = ()'' could
+	take no attribute (#1658)."
+	((namespace isNil or: [((namespace @env1:__contains__: '__slots__') ___isTruthy___) @env0:not])
+		and: [newClass ___pyInheritsStrictSlots___]) ifTrue: [
+			newClass ___compileMethod: '___pySlotsStrict___
+	^ false' category: 'Grail-Slots'].
 	"PEP 487, WHICH type() RUNS AND THIS DID NOT.  CPython fires both halves
 	from type.__new__ -- __set_name__ over the namespace, then
 	__init_subclass__ on the nearest base that defines one -- so a class built
@@ -7909,6 +8113,16 @@ builtins >> vars: anObject [
 		or: [(anObject isKindOf: CharacterCollection)
 		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
 		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+	"A WHEEL'S OWN OBJECT OR TYPE answers __dict__ in C -- a type's is a
+	read-only view of its own entries -- and one with none is CPython's
+	TypeError.  It fell to the instance-variable scan below, which listed
+	the proxy's Smalltalk slots (cPtr, typeName, ...)."
+	(anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [ | missing found |
+		missing := false.
+		found := [anObject ___pyAttrLoad___: #'__dict__']
+			@env0:on: AttributeError do: [:ex | missing := true. ex @env0:return: nil].
+		missing ifTrue: [TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+		^ found].
 	"A Python class that defines __dict__ ITSELF -- a property, typically --
 	is asked for it: CPython's vars() is ``obj.__dict__'' through the
 	attribute protocol, so the property runs (and may raise).  FastAPI's
@@ -7966,6 +8180,16 @@ builtins >> vars: anObject [
 	stack included, where CPython answers only what Python code stored.
 	BaseException >> __dict__ is that view."
 	(anObject isKindOf: BaseException) ifTrue: [^ anObject __dict__].
+	"AN INSTANCE OF A PYTHON CLASS answers the LIVE view ``obj.__dict__''
+	answers, because vars(obj) IS obj.__dict__.  The snapshot below dropped
+	every write made through it: ``vars(self).update(name=...)'' is how a
+	class whose __setattr__ refuses stores initialises itself
+	(importlib.metadata's EntryPoint), and ``vars(res).update(vars(orig))''
+	how one copies another's state (its _adapters.Message) -- both were
+	silently lost (#1657).  The walk stays for kernel objects, which have no
+	such view."
+	(anObject @env0:class ___grailIsPythonClass___) ifTrue: [
+		^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |

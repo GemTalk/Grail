@@ -196,6 +196,65 @@ ClassDefAst >> ___boundTargetNames___ [
 
 ]
 
+{ #category : 'Grail-other' }
+ClassDefAst >> ___buildsIntoBlockTemp___ [
+	"Is this class built in a block temp of its own and bound to its name only
+	at the end?  True for a class whose name is a LOCAL of the enclosing def.
+
+	CPython binds the class name once, after the body has run, the metaclass
+	has built the class and every decorator has been applied (the STORE_NAME
+	or STORE_FAST after the call to __build_class__).  If any of that raises,
+	the name keeps whatever it held before: the previous value, or nothing.
+
+	A module-scope class already worked that way, because its name is a module
+	attribute and the class is built in a block temp first.  Inside a def the
+	name IS a Smalltalk temp, and the emit used it as the build variable, so
+	the half-built class was bound from the first line of the build onward:
+
+	    def f():
+	        L = 'prev'
+	        try:
+	            class L:
+	                raise ValueError
+	        except ValueError:
+	            pass
+	        return L        # CPython 'prev'; Grail text answered <class L>
+
+	It also made a class-body read of the name see the class being built,
+	where CPython reads the enclosing binding.  (#1696)
+
+	Not for a module-scope class, whose binding is the module store and whose
+	block is opened for that already.  Not for a class nested in another
+	class body: its name is a class
+	attribute, bound by the outer class's own emit, and that path already
+	declares its own block temp.
+
+	The IR arm's class helper (___irHelperSourceWithSelector___:carrying:)
+	is this same text, so it builds the same way: its own temp for the name
+	is the BINDING, a carried copy of the enclosing local when the class
+	reads it, and is assigned at the end like the def's temp would be."
+
+	"A class at the TOP of source compiled with no module class -- the body
+	of an exec -- is the third shape.  Its name is a bare variable of the
+	doit's scope, assigned the same way, and builtins >> _exec:kw: reflects
+	that scope back into the caller's globals even when the source raises
+	(#1695), so it needs the same build-then-bind to leave the name alone:
+	``exec('class E: raise ValueError', g)'' must not leave g['E'] bound."
+
+	| node |
+	self ___bindsClassNameToModule___ ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		(node isKindOf: FunctionDefAst) ifTrue: [^ true].
+		node := node parent].
+	"Asked of the module class, not of ___bindsClassNameToModule___ above: that
+	reads classBeingCompiled, which this class sets to ITSELF while its own
+	body is emitted, so a module-scope class reaches this line mid-emit too."
+	^ CallAst moduleClassBeingCompiled isNil
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___cellReaderSourceFor___: aSymbol [
 	"The Smalltalk source of the cell READER's body for captured name aSymbol.
@@ -295,6 +354,43 @@ ClassDefAst >> ___classBodyBindsAsDefinition___: aSymbol [
 
 ]
 
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___classBodyBindsHashConditionally___ [
+	"True when a class-body ``if'' (at any depth of if/elif/else) binds
+	__hash__ by def or by a non-None assignment in a branch that can run.  The
+	branch an ``if TYPE_CHECKING:'' guards cannot -- it exists for type
+	checkers -- so only its else is read; a def there is the stub that
+	documents the hash, not the hash.  Any other test may go either way and
+	the binding counts: an emitted unhashable __hash__ would overwrite it."
+
+	| found walk |
+	found := false.
+	walk := nil.
+	walk := [:suite |
+		(suite notNil and: [suite body notNil]) ifTrue: [
+			suite body do: [:stmt |
+				(stmt isKindOf: IfAst) ifTrue: [
+					(self ___isTypeCheckingTest___: stmt test)
+						ifFalse: [walk value: stmt body].
+					walk value: stmt orelse].
+				((stmt isKindOf: FunctionDefAst)
+					and: [stmt name asSymbol == #'__hash__']) ifTrue: [found := true].
+				"``__hash__ = None'' does not count: under an if, as at top
+				level, it opts out -- and absent, __eq__ opts out anyway."
+				((stmt isKindOf: AssignAst)
+					and: [(stmt targets anySatisfy: [:t |
+						(t isKindOf: NameAst) and: [t id asSymbol == #'__hash__']])
+					and: [((stmt value isKindOf: ConstantAst) and: [stmt value value isNil]) not]])
+					ifTrue: [found := true]]]].
+	body body do: [:stmt |
+		(stmt isKindOf: IfAst) ifTrue: [
+			(self ___isTypeCheckingTest___: stmt test)
+				ifFalse: [walk value: stmt body].
+			walk value: stmt orelse]].
+	^ found
+
+]
+
 { #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___classBodyCanBindDynamically___ [
 	"True when this class body can bind a name that NO statement in it names --
@@ -380,6 +476,8 @@ ClassDefAst >> ___classBodyConditionalNames___ [
 					collect value: h body]]].
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
 			names add: stmt name asSymbol].
+		(stmt isKindOf: ClassDefAst) ifTrue: [
+			names add: (stmt ___manglePrivate___: stmt name) asSymbol].
 		"Per TARGET rather than only when every target is a plain name: Python
 		binds each name in each target, so ``a, b = pair'' inside a class-body
 		loop binds both -- and the old all-or-nothing test collected NEITHER,
@@ -937,6 +1035,25 @@ ClassDefAst >> ___classHeaderTemps___ [
 
 ]
 
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___codeTableKeyFor___: aDef [
+	"The ___methodCodeTable___ key for aDef: the selector its UnboundMethod
+	looks itself up by.  A property's setter and deleter compile under their own
+	selectors -- ``x:'', or ``___propSetter_x'' / ``___propDeleter_x'' when
+	redirected -- and keyed by the bare name instead, a setter's entry overwrote
+	its getter's and was then never found: ``C.p.fset.__code__'' raised, so
+	inspect.isfunction refused the def a setter's inner decorator receives
+	(SQLAlchemy's ``@p.setter @util.deprecated(...)'', at sqlalchemy.orm
+	import), and ``C.p.fget.__code__'' was the setter's."
+
+	(aDef isDeleterDecorated or: [self ___isRedirectedPropertySetter___: aDef])
+		ifTrue: [^ self ___redirectedAccessorNameFor___: aDef].
+	aDef ___propertyAccessorKind___ == #setter
+		ifTrue: [^ aDef ___mangledName___ asString , ':'].
+	^ aDef name asString
+
+]
+
 { #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___collectClassBodyWalrusNamesIn___: aNode into: names [
 	"Depth-first walk of aNode collecting NamedExprAst name targets, stopping
@@ -1180,6 +1297,22 @@ ClassDefAst >> ___defsDecoratedAtTheirPosition___ [
 
 ]
 
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___directlyEnclosingClassDef___ [
+	"The class whose BODY this class statement sits in -- through any if /
+	try / for / while / with -- or nil when the nearest enclosing scope is a
+	function, a lambda or the module."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ nil].
+		(node isKindOf: ClassDefAst) ifTrue: [^ node].
+		node := node parent].
+	^ nil
+
+]
+
 { #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___docString___ [
 	"The class's docstring node -- the leading bare string-literal statement
@@ -1198,8 +1331,20 @@ ClassDefAst >> ___docString___ [
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"A NEW node holding the cleaned text (AbstractNode class >>
+	___cleanDoc___:, as CPython 3.13's compiler cleans it): the tree keeps
+	the literal, which ast.parse answers."
+	"Not the ``...'' marker: the parser records an Ellipsis literal as the
+	Symbol #'...', and a Symbol IS a CharacterCollection, so ``class E(str,
+	Enum): ...'' had Ellipsis for its __doc__ and ``def m(self): ...'' had
+	'...' -- pydantic's cleandoc then failed on the enum
+	(FastAPI's test_schema_compat_pydantic_v2)."
+	inner value == #'...' ifTrue: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner]
+		ifTrue: [ConstantAst new
+			value: (AbstractNode ___cleanDoc___: inner value);
+			kind: inner kind;
+			yourself]
 		ifFalse: [nil]
 
 ]
@@ -1285,7 +1430,22 @@ ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: sav
 				captured set (savedCapturedNames) so its own classdef emits the
 				next forward; the recursion terminates at the scope that binds
 				`cap` as a real temp, where the bare name is emitted.  Otherwise
-				`cap` is a reachable temp here (the single-level case): bare."
+				`cap` is a reachable temp here (the single-level case): bare.
+
+				The class's OWN name is the exception: its cell is also the one
+				``__class__'' and zero-argument super() read (keyed by the class
+				name), so it holds the CLASS -- the variable it is built in --
+				not the enclosing binding, which a class bound to a def local
+				does not get until the class is complete
+				(___buildsIntoBlockTemp___).  A method that runs during class
+				construction (a metaclass mro() hook, Enum's member __init__)
+				needs __class__ already.  The cost is that a method reading the
+				class NAME during construction also sees the class, where CPython
+				reads the enclosing binding -- the two would need separate
+				cells."
+				cap asString = name asString
+					ifTrue: [aStream nextPutAll: clsName]
+					ifFalse: [
 				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
 					and: [savedCapturedNames notNil])
 					ifTrue: [
@@ -1295,7 +1455,7 @@ ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: sav
 							nextPutAll: '___'''.
 						savedCapturedNames add: cap asSymbol]
 					ifFalse: [aStream
-						nextPutAll: (self ___cellReaderSourceFor___: cap asSymbol)].
+						nextPutAll: (self ___cellReaderSourceFor___: cap asSymbol)]].
 				aStream nextPutAll: '].'; lf]].
 	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
 	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
@@ -1855,8 +2015,7 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 			((own includes: n) not
 				and: [(globals includes: n) not
 					and: [(localNames includes: n asString)
-						and: [n asString ~= (self ___manglePrivate___: name) asString
-							and: [n asString ~= recv]]]])
+						and: [n asString ~= recv]]])
 				ifTrue: [free add: n asString]].
 		"THE PARSER'S SET HAS ONE HOLE: an f-string replacement field is parsed
 		by a CHILD parser, so a name mentioned only inside one never reaches
@@ -1884,10 +2043,8 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 		and that direction only costs coverage."
 		self ___irCollectInnerBindingsOf___: b into: boundInside.
 		raw do: [:n |
-			((boundInside includes: n asString)
-				or: [(n asString = (self ___manglePrivate___: name) asString)
-					or: [n asString = recv]])
-						ifFalse: [free add: n asString]]].
+			((boundInside includes: n asString) or: [n asString = recv])
+				ifFalse: [free add: n asString]]].
 	^ free
 
 ]
@@ -2151,7 +2308,15 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 			out nextPutAll: base;
 				nextPutAll: ': ___irCaptured___ setters: ___irSetters___'].
 	out lf.
-	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
+	"The class's own NAME, which the emit below assigns once the class is
+	complete (___buildsIntoBlockTemp___) and the helper answers.  When the
+	class reads that name, it is also a carried capture, whose identifier temp
+	below already declares it -- holding the enclosing binding until the
+	class is bound, as CPython's class body sees it."
+	out tab; nextPutAll: '|'.
+	(carriedNames anySatisfy: [:c |
+		(self ___enclosingScopeIdentifierFor___: c asSymbol) = self ___stBindName___])
+			ifFalse: [out space; nextPutAll: self ___stBindName___].
 	carriedNames doWithIndex: [:c :i |
 		out space; nextPutAll: '___irCell_'; print: i; nextPutAll: '___';
 			space; nextPutAll: '___irSetter_'; print: i; nextPutAll: '___';
@@ -2222,7 +2387,7 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 	emit's own stream, and the prologue moves all of them."
 	shift := out contents size.
 	out nextPutAll: emitted.
-	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stVarName___ asString.
+	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stBindName___.
 	stream ifNotNil: [out nextPutAll: (stream mapCommentShiftedBy: shift)].
 	^ out contents
 
@@ -2676,10 +2841,21 @@ ClassDefAst >> ___isClassBodyRuntimeStatement___: aStatement [
 	constant is excluded with it, since evaluating one can have no effect."
 	(aStatement isKindOf: ExprAst) ifTrue: [
 		^ (aStatement value isKindOf: ConstantAst) not].
+	"``raise'' and ``assert'' bind nothing either, and were dropped the same
+	way -- silently, which is the worst of it: ``class C: raise X'' built C,
+	bound it, and carried on, so a class body that refuses to define itself
+	(a platform check, a version guard) defined itself anyway.  At the top of
+	the body and inside an ``if'' branch, which asks this same question
+	(#1696).  A ``match'' and a ``type X = ...'' alias were dropped likewise,
+	with every name they bind."
 	^ (aStatement isKindOf: TryAst)
 		or: [(aStatement isKindOf: ForAst)
 		or: [(aStatement isKindOf: WhileAst)
-		or: [aStatement isKindOf: WithAst]]]
+		or: [(aStatement isKindOf: WithAst)
+		or: [(aStatement isKindOf: RaiseAst)
+		or: [(aStatement isKindOf: AssertAst)
+		or: [(aStatement isKindOf: MatchAst)
+		or: [aStatement isKindOf: TypeAliasAst]]]]]]]
 
 ]
 
@@ -2752,6 +2928,23 @@ ClassDefAst >> ___isRedirectedPropertySetter___: aDef [
 
 	^ aDef ___propertyAccessorKind___ == #setter
 		and: [self ___decoratedPropertyNames___ includes: aDef name asSymbol]
+
+]
+
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___isTypeCheckingTest___: aTest [
+	"``TYPE_CHECKING'', ``<module>.TYPE_CHECKING'' or an alias ending in it
+	(``from typing import TYPE_CHECKING as _TYPE_CHECKING'') -- false at run
+	time."
+
+	| nm |
+	nm := (aTest isKindOf: NameAst)
+		ifTrue: [aTest id asString]
+		ifFalse: [(aTest isKindOf: AttributeAst)
+			ifTrue: [aTest attr asString]
+			ifFalse: [^ false]].
+	^ nm size >= 13
+		and: [(nm copyFrom: nm size - 12 to: nm size) = 'TYPE_CHECKING']
 
 ]
 
@@ -2863,23 +3056,6 @@ ClassDefAst >> ___methodAttributeAssigns___ [
 				and: [seen includes: st targets first value id asSymbol]]]])
 			ifTrue: [result add: st]].
 	^ result
-
-]
-
-{ #category : 'Grail-code generation' }
-ClassDefAst >> ___namesReadByDefaultsOf___: def [
-	"Every name any of def's parameter defaults mentions, positional and
-	keyword-only.  An over-approximation -- a name bound inside a lambda in
-	a default counts too -- which can only delay the store, never misplace it."
-
-	| names |
-	names := IdentitySet new.
-	(def ___defaultedPositionalParams___ asArray
-		, def ___defaultedKeywordOnlyParams___ asArray) do: [:pair |
-		(pair at: 2) ___anyDescendantSatisfies___: [:n |
-			(n isKindOf: NameAst) ifTrue: [names add: n id asSymbol].
-			false]].
-	^ names
 
 ]
 
@@ -3010,6 +3186,20 @@ ClassDefAst >> ___readsModuleNameAtRunTime___ [
 
 ]
 
+{ #category : 'Grail-Class Compilation' }
+ClassDefAst >> ___readsRebindableModuleName___ [
+	"True when this module-level class's ``__module__'' must be read from the
+	module's ``__name__'' as the class statement runs, because the module
+	rebinds that name (ModuleAst >> ___rebindsName___): _pydecimal's classes
+	are decimal.Decimal, not _pydecimal.Decimal, which statistics' doctests
+	print.  Module level only, where the emit runs in the module's initialize
+	and ``self'' is the module; a nested class keeps the literal."
+
+	self isModuleLevelClassDef ifFalse: [^ false].
+	^ parent parent ___rebindsName___
+
+]
+
 { #category : 'Grail-code generation' }
 ClassDefAst >> ___redirectedAccessorNameFor___: aDef [
 	"The private selector base a property accessor that must not claim the
@@ -3061,19 +3251,54 @@ ClassDefAst >> ___staticAttributeNames___ [
 
 ]
 
+{ #category : 'Grail-other' }
+ClassDefAst >> ___stBindName___ [
+	"The Smalltalk IDENTIFIER of the BINDING this class statement assigns when
+	the class is complete: the enclosing def's temp, spelled as FunctionDefAst
+	declared it -- PRIVATE-MANGLED (``class __P'' in a method of ``Host'' is
+	the local ``_Host__P'') and under the reserved-name transport (``super''
+	-> ``___super___'').
+
+	The mangled spelling is what the def declares and every read of the name
+	emits, so the class statement assigning the bare ``__P'' named an undefined
+	symbol and the whole method failed to compile (a codegen-gap stub on the
+	text arm).  Asked only outside the class's own emit, where
+	classBeingCompiled names the ENCLOSING class, which is what mangles."
+
+	^ self ___buildsIntoBlockTemp___
+		ifTrue: [NameAst ___transportIdentifierFor___: (self ___manglePrivate___: name) asSymbol]
+		ifFalse: [self ___stVarName___]
+
+]
+
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___storePositionOf___: aName in: storePositions seen: storesSeen [
+	"The body position of the NEXT store of aName, counting the calls made
+	so far in storesSeen, or nil when the scan recorded none (an injected
+	``__doc__'').  Past the last recorded store it keeps answering the last
+	one, so a pair the scan did not see can only be emitted late, never
+	early."
+
+	| positions n |
+	positions := storePositions at: aName ifAbsent: [^ nil].
+	n := (storesSeen at: aName ifAbsent: [0]) + 1.
+	storesSeen at: aName put: n.
+	^ positions at: (n min: positions size)
+
+]
+
 { #category : 'Grail-code generation' }
 ClassDefAst >> ___storesDefaultsFor___: aStmt [
 	"Does this class-body statement get per-class default stores: a def with a
-	positional or keyword-only default that is neither an overload stub nor a
-	staticmethod?  The selection emitMethodDefaultStoresOn:className:except:
-	always made; FunctionDefAst >> ___defaultOwnerClassName___ makes the same
-	exclusions on the read side."
+	positional or keyword-only default that is not an overload stub?  A
+	staticmethod included (#1575).  The selection
+	emitMethodDefaultStoresOn:className:except: and the key table both make;
+	FunctionDefAst >> ___defaultOwnerClassName___ is the read side."
 
 	^ (aStmt isKindOf: FunctionDefAst)
 		and: [aStmt isOverloadStub not
-		and: [(aStmt isKindOf: StaticFunctionDefAst) not
 		and: [aStmt ___defaultedPositionalParams___ notEmpty
-			or: [aStmt ___defaultedKeywordOnlyParams___ notEmpty]]]]
+			or: [aStmt ___defaultedKeywordOnlyParams___ notEmpty]]]
 
 ]
 
@@ -3103,8 +3328,14 @@ ClassDefAst >> ___stVarName___ [
 
 	Deliberately NOT applied where ``name'' is the PYTHON name: the
 	___asSmalltalkClassName___ argument, the canonical-class probe key, the
-	attribute symbol a class is stored under, and printOn:."
+	attribute symbol a class is stored under, and printOn:.
 
+	For a class bound to a LOCAL of the enclosing def it is not the binding
+	at all but a block temp of its own (___buildsIntoBlockTemp___), so the
+	name is bound only once the class is complete."
+
+	self ___buildsIntoBlockTemp___ ifTrue: [
+		^ '___classBuild_' , name asString , '___'].
 	^ NameAst ___transportIdentifierFor___: name asSymbol
 
 ]
@@ -3151,6 +3382,12 @@ ClassDefAst >> ___unhashableByClassBody___ [
 		"``__hash__ = None'' opts out; ``__hash__ = anything_else'' is a real
 		hash function and must not be overwritten."
 		^ (hashAttr value isKindOf: ConstantAst) and: [hashAttr value value isNil]].
+	"A __hash__ bound under a class-body ``if'' is decided when the body RUNS,
+	so the implicit rule must not pre-empt it.  SQLAlchemy's ColumnOperators
+	keeps its hash with ``if TYPE_CHECKING: def __hash__ ... else: __hash__ =
+	Operators.__hash__'' beside its __eq__; read as no __hash__ at all, every
+	column element -- the Null singleton first, at import -- was unhashable."
+	self ___classBodyBindsHashConditionally___ ifTrue: [^ false].
 	"No __hash__ in the body at all -- unhashable iff __eq__ is there, whether
 	as a def or as an assignment (CPython only asks whether the name is in the
 	class namespace)."
@@ -3456,12 +3693,30 @@ ClassDefAst >> emitClassBodyIfBranch: aSuite on: aStream [
 		(self ___isClassBodyRuntimeStatement___: stmt) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
-			CallAst classBodyRuntimeClass: name.
+			CallAst classBodyRuntimeClass: self ___stVarName___.
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
 			self emitClassBodyIfDef: stmt on: aStream].
+		"A nested CLASS in a branch: the top-level nested-class emit (see the
+		attr-init section), stored through the definitional store like every
+		other branch binding.  It was dropped, so the class was never bound at
+		all -- SQLAlchemy's SelectState defines ``default_select_compile_options''
+		in the else of an ``if TYPE_CHECKING:'', and selectable.py read it a few
+		hundred lines later, at import."
+		(stmt isKindOf: ClassDefAst) ifTrue: [
+			aStream nextPutAll: '[ | '; nextPutAll: stmt ___stVarName___;
+				nextPutAll: ' |'; lf.
+			stmt printSmalltalkOn: aStream.
+			aStream lf;
+				nextPutAll: self ___stVarName___;
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+				nextPutAll: (stmt ___manglePrivate___: stmt name) asString;
+				nextPutAll: ''' put: ';
+				nextPutAll: stmt ___stVarName___;
+				nextPutAll: '.'; lf;
+				nextPutAll: ' ] @env0:value.'; lf].
 		((stmt isKindOf: AssignAst)
 			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			stmt targets do: [:t |
@@ -3483,7 +3738,20 @@ ClassDefAst >> emitClassBodyIfBranch: aSuite on: aStream [
 			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) not]) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
-			CallAst classBodyRuntimeClass: name.
+			CallAst classBodyRuntimeClass: self ___stVarName___.
+			[stmt printSmalltalkOn: aStream]
+				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+			aStream lf].
+		"A ``del'' or an ``import'' in a branch: dropped the same way, so ``if
+		flag: import os'' left no C.os and ``if flag: del x'' left C.x in place
+		(#1696).  The top-level forms have emits of their own, which is why
+		they are not in ___isClassBodyRuntimeStatement___:; in a branch they
+		take the verbatim emit everything else there does."
+		(((stmt isKindOf: DeleteAst) or: [stmt isKindOf: ImportAst])
+			or: [stmt isKindOf: ImportFromAst]) ifTrue: [
+			| savedRuntimeClass |
+			savedRuntimeClass := CallAst classBodyRuntimeClass.
+			CallAst classBodyRuntimeClass: self ___stVarName___.
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
@@ -3627,20 +3895,13 @@ ClassDefAst >> emitInstantiationMethodFor: classVarName initSelector: initSelect
 		ifTrue: [
 			self firstBaseIsStr
 				ifTrue: [
-					"str subclass: route through CharacterCollection>>__new__:
-					(self-typed).  Forward a SECOND and THIRD positional to the
-					``__new__:_:'' / ``__new__:_:_:'' arities -- ``str'' takes
-					(object, encoding, errors), and passing only the first meant
-					``S(b'x', 'ascii')'' silently stringified the bytes OBJECT
-					instead of decoding it, yielding the 4 characters b'x'."
+					"str subclass: CharacterCollection class >>
+					___grailStrSubclassNew___:kw: builds the self-typed string --
+					``str''s (object, encoding, errors), positionally or by
+					keyword.  It is shared with the runtime allocator a class
+					built by type() reaches (#1706)."
 					src
-						nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0';
-						nextPutAll: ' ifTrue: [self @env1:__new__: '''']';
-						nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 1';
-						nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)]';
-						nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 2';
-						nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2)]';
-						nextPutAll: ' ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2) _: (___pos___ @env0:at: 3)]]].';
+						nextPutAll: 'instance := self @env1:___grailStrSubclassNew___: ___pos___ kw: ___kw___.';
 						nextPutAll: lf ]
 				ifFalse: [
 					"bytes/bytearray subclass: bytes>>__new__: is self-typed, so
@@ -3981,7 +4242,7 @@ ClassDefAst >> emitMethodCodeTableOn: aStream className: aClassName [
 	entries := OrderedCollection new.
 	defs do: [:def | | src |
 		src := WriteStream on: String new.
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: (self ___codeTableKeyFor___: def); nextPutAll: ''' put: '.
 		def emitPyCodeExprOn: src qualname: aClassName , '.' , def name asString.
 		src nextPut: $;.
 		entries add: src contents].
@@ -4004,15 +4265,11 @@ ClassDefAst >> emitMethodDefaultKeysTableOn: aStream className: aClassName [
 	compile in a separate class-side method, and would take every method's
 	entry with it.  The store holds the evaluated values already.
 
-	Exactly the defs that store does (no static methods, no overload stubs),
-	keyed by the same ___classDefaultKeyFor___:className: spelling."
+	Exactly the defs that store does (___storesDefaultsFor___:), keyed by the
+	same ___classDefaultKeyFor___:className: spelling."
 
 	| defs entries |
-	defs := self ___allFunctionDefs___ select: [:def |
-		def isOverloadStub not
-			and: [(def isKindOf: StaticFunctionDefAst) not
-			and: [def ___defaultedPositionalParams___ notEmpty
-				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
+	defs := self ___allFunctionDefs___ select: [:def | self ___storesDefaultsFor___: def].
 	defs isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
 	defs do: [:def | | src |
@@ -4051,13 +4308,13 @@ ClassDefAst >> emitMethodDefaultStoresOn: aStream className: aClassName except: 
 	HTTPConnection -- raised ``NameError: name 'default_socket_options' is not
 	defined'' on every call.  The keyword-only half of this store is what fixes that.
 
-	SKIPPED for a def with no defaults at all, and for a STATIC method, whose body
-	has no receiver to walk outward from; a staticmethod keeps the inline default it
-	has always had rather than acquiring a lookup that cannot resolve.
+	SKIPPED for a def with no defaults at all and for an overload stub.  A STATIC
+	method is stored like any other (#1575): it compiles onto the metaclass, so its
+	receiver is the class and the read walks out from there.
 	FunctionDefAst >> ___defaultOwnerClassName___ -- which both the positional and
-	the keyword-only read consult -- makes the same two exclusions, and the two must
-	agree: a store with no matching read is dead weight, and a read with no store
-	silently recomputes, which is the bug this fixes wearing a disguise."
+	the keyword-only read consult -- must agree with this selection: a store with no
+	matching read is dead weight, and a read with no store silently recomputes,
+	which is the bug this fixes wearing a disguise."
 
 	(self ___allFunctionDefs___ select: [:def |
 		(self ___storesDefaultsFor___: def) and: [(aSet includes: def) not]])
@@ -4080,18 +4337,35 @@ ClassDefAst >> emitMethodDocTableOn: aStream className: aClassName [
 	Same shape as the annotations and signature tables, and for the same
 	reason.  Overload stubs stay out: the stub is not the implementation.
 
-	No-op when no method has a docstring, so only classes that need it pay
-	for the extra class-side method."
+	An UNDOCUMENTED def is recorded too, as nil, and that entry is what stops
+	the readers' superclass walk here (BoundMethod >> ___methodDocForClass___:
+	name:, UnboundMethod >> ___tableEntryFor___:table:).  With documented defs
+	only, an override without a docstring had no entry, the walk went on to
+	the base, and the override reported the BASE method's docstring where
+	CPython says None -- which google-auth's ``copy_docstring'' decorator reads
+	as ``Method already has a docstring'' and raises on (#1650).  So the table
+	is compiled for every class body that has a def, not only a documented
+	one: whether a base documents the same name is not known until the bases
+	are."
 
-	| documented entries |
-	documented := self ___allFunctionDefs___ select: [:def |
-		def isOverloadStub not and: [def ___docString___ notNil]].
-	documented isEmpty ifTrue: [^ self].
+	| last entries |
+	"The LAST def of a name is the method, so its docstring -- or its lack of
+	one -- is the one: a documented def followed by an undocumented def of
+	the same name has __doc__ None, and the first def's entry used to
+	survive.  Except a property's setter or deleter, which keeps the
+	property's docstring (FunctionDefAst >> ___keepsThePropertyDocstring___)."
+	last := Dictionary new.
+	(self ___allFunctionDefs___ reject: [:def |
+		def isOverloadStub or: [def ___keepsThePropertyDocstring___]])
+			do: [:def | last at: def ___mangledName___ asString put: def].
+	last isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
-	documented do: [:def | | src |
+	last values do: [:def | | src |
 		src := WriteStream on: String new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
-		def emitStringLiteral: def ___docString___ on: src.
+		def ___docString___ isNil
+			ifTrue: [src nextPutAll: 'nil']
+			ifFalse: [def emitStringLiteral: def ___docString___ on: src].
 		src nextPut: $;.
 		entries add: src contents].
 	self ___emitTable___: '___methodDocTable___' entries: entries category: 'Grail-Docstrings' onStream: aStream
@@ -4742,7 +5016,27 @@ ClassDefAst >> printSmalltalkOn: aStream [
 	allows.  It cost test_scope two tests the first time it was written."
 	self ___builtinsAreOverridden___ ifTrue: [
 		aStream nextPutAll: '(NameError @env0:___requireBuildClass___). '].
-	^self printSmalltalkRuntimeOn: aStream
+	"A CLASS NESTED IN A CLASS-BODY try / for / while / with.  Those
+	statements are emitted verbatim under the class-body runtime class, and a
+	class among them assigned its name as a bare variable that nothing
+	declares -- an UNDEFINED SYMBOL, so the whole module failed to compile
+	(uncatchable at module scope; a codegen-gap SystemError under exec).  The
+	if-branch emit already builds such a class in a block temp and stores it
+	into the enclosing class; this is the same emit, for the same reason."
+	CallAst classBodyRuntimeClass notNil ifTrue: [
+		(self ___directlyEnclosingClassDef___) ifNotNil: [:outer |
+			aStream nextPutAll: '[ | '; nextPutAll: self ___stVarName___; nextPutAll: ' |'; lf.
+			self printSmalltalkRuntimeOn: aStream.
+			aStream lf;
+				nextPutAll: outer ___stVarName___;
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+				nextPutAll: (self ___manglePrivate___: name) asString;
+				nextPutAll: ''' put: ';
+				nextPutAll: self ___stVarName___;
+				nextPutAll: '.'; lf;
+				nextPutAll: ' ] @env0:value.'; lf.
+			^ self]].
+	^ self printSmalltalkRuntimeOn: aStream
 
 ]
 
@@ -4873,10 +5167,15 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	so it rides the existing getter+setter value-attr path -- and so a
 	subclass with no docstring stamps its OWN None slot (classInstVars are
 	per-class), shadowing a documented base exactly as CPython does.  Skipped
-	when the body already assigns __doc__ itself.  A ConstantAst holding nil
+	when the body already assigns __doc__ itself -- or DEFINES it: a ``def
+	__doc__'' is the later binding in CPython, docstring or not, and the
+	injected one made the body's own reads answer the string, so
+	SQLAlchemy's ``@__doc__.setter'' / ``@__doc__.classlevel'' hybrid
+	(InstrumentedAttribute) raised at import.  A ConstantAst holding nil
 	emits as the ``None'' singleton; a string ConstantAst emits an escaped
 	literal."
-	(classAttrs anySatisfy: [:p | p key == #'__doc__']) ifFalse: [
+	((classAttrs anySatisfy: [:p | p key == #'__doc__'])
+		or: [self ___classBodyDefines___: #'__doc__']) ifFalse: [
 		| docNode |
 		docNode := self ___docString___ ifNil: [
 			ConstantAst new 
@@ -5212,6 +5511,23 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 					def generateMethodSourceOn: s.
 					s writeMapAsComment.
 					classMethodSources add: def ___mangledName___ asString -> s contents.
+					"And the varargs ``_m:kw:'' entry an instance method gets, so a
+					KEYWORD call through ``cls'' -- ``cls.m(x, a=1)'', which compiles
+					to that send -- binds by name.  A classmethod compiled only its
+					fixed-arity form, and the send was an uncatchable
+					MessageNotUnderstood on the class: pydantic-settings'
+					``cls.settings_customise_sources(cls, init_settings=..., ...)''
+					left every BaseSettings model empty.
+
+					Not for a def whose only parameter is ``cls'' -- the forwarder
+					would bind nothing -- and never for __init_subclass__, whose
+					``___init_subclass__:kw:'' is the packed body the subclass hook
+					machinery (object class >> ___grailInitSubclass___:) calls."
+					(def needsVarargsForwarder
+						and: [def allParameterNames size > 1
+						and: [def name asString ~= '__init_subclass__']]) ifTrue: [
+						classMethodSources add: ('_' , def ___mangledName___ asString)
+							-> def generateInstanceVarargsForwarderSource].
 					"IR seam for @classmethods (cut 61), as for instance methods
 					above: judged and registered HERE, with selfParameterName
 					switched to the def's own receiver, so the snapshot the
@@ -5355,9 +5671,12 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	declare, even when the class name itself needs no temp -- a class nested
 	in a function or in another class body reaches this the same way, and
 	Smalltalk block temps are visible to the nested blocks the body emits."
-	(self ___bindsClassNameToModule___ or: [self ___classBlockNeedsTemps___]) ifTrue: [
+	"A class bound to a local of the enclosing def is built in a block temp of
+	its own too, and bound only at the end (___buildsIntoBlockTemp___)."
+	(self ___bindsClassNameToModule___ or: [self ___classBlockNeedsTemps___
+		or: [self ___buildsIntoBlockTemp___]]) ifTrue: [
 		aStream nextPutAll: '[| '.
-		self ___bindsClassNameToModule___ ifTrue: [
+		(self ___bindsClassNameToModule___ or: [self ___buildsIntoBlockTemp___]) ifTrue: [
 			aStream nextPutAll: self ___stVarName___; nextPutAll: ' '].
 		self ___classBodyHelperTemps___ do: [:each |
 			aStream nextPutAll: each asString; nextPutAll: ' '].
@@ -5610,7 +5929,11 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	Gated at class-creation time on whether anything above actually
 	implements the marker, so the ordinary class (nothing slotted anywhere
 	in its chain) pays one selector lookup and compiles no extra method."
-	self slotsValueAst isNil ifTrue: [
+	"So does a class whose own __slots__ NAMES ``__dict__'': it asks for the
+	__dict__ outright.  It declared __slots__, so the test above skipped it,
+	and over a slotted base (``class Empty: __slots__ = ()'') it inherited the
+	strict marker and had no __dict__ after all (#1658)."
+	(self slotsValueAst isNil or: [self slotsDeclareDict]) ifTrue: [
 		aStream nextPutAll: '('; nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___pyInheritsStrictSlots___) ifTrue: ['; lf.
 		self
@@ -6161,12 +6484,18 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		ignored the globals exec() was handed (GemTalk/Grail#1170).  CPython's
 		class body opens with ``__module__ = __name__'', a run-time read of
 		the globals, so a doit's class reads its ``__name__'' when it runs.
-		Still a string, so the reachability constraint holds."
+		Still a string, so the reachability constraint holds.
+
+		And in a module that REBINDS ``__name__'' at top level, which reads it
+		too (___readsRebindableModuleName___)."
 		aStream nextPutAll: self ___stVarName___; nextPutAll: ' __module__: '.
 		self ___readsModuleNameAtRunTime___
 			ifTrue: [aStream nextPutAll:
 				'(((Python @env0:at: #builtins) @env0:___instance___) ___doitModuleName___: ___pyGlobals___)']
-			ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream].
+			ifFalse: [
+				self ___readsRebindableModuleName___
+					ifTrue: [aStream nextPutAll: '(self @env1:___moduleAttrLoad___: #''__name__'')']
+					ifFalse: [self printQuotedString: self ___enclosingModuleName___ on: aStream]].
 		aStream nextPutAll: '.'; lf.
 	].
 
@@ -6348,11 +6677,12 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		so NameAst falls back to module scope for later siblings
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
-		| firstBinding attrAssignPos pendingStmts flushPendingBefore defaultsEmitted
+		| firstBinding storePositions storesSeen pendingStmts flushPendingBefore defaultsEmitted
 		  pendingDefaults flushDefaultsBefore |
 		firstBinding := IdentityKeyValueDictionary new.
 		defaultsEmitted := IdentitySet new.
-		attrAssignPos := IdentityKeyValueDictionary new.
+		storePositions := IdentityKeyValueDictionary new.
+		storesSeen := IdentityKeyValueDictionary new.
 		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
 		which attribute values it yields (classBodyAttributePairs); this scan
 		only assigns positions.  A new binding form therefore becomes visible
@@ -6369,14 +6699,23 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 				stmt ___boundTargetNames___ do: [:nm |
 					(firstBinding includesKey: nm) ifFalse: [
 						firstBinding at: nm put: pos]]].
-			"Last assignment wins — that's the statement the classAttrs pair
-			came from (``args_check = staticmethod(args_check)'' rebinding a
-			sibling def must see the def as already bound).  Driven by the
-			attribute pairs, not by the bound names, because a ``def'' or a
-			nested ``class'' binds a name but yields no attribute value and so
-			must not move the position."
+			"EVERY store's position, in source order, so each one goes out at
+			its own statement (``args_check = staticmethod(args_check)''
+			rebinding a sibling def must see the def as already bound).
+			Driven by the attribute pairs, not by the bound names, because a
+			``def'' or a nested ``class'' binds a name but yields no attribute
+			value and so must not move the position.
+
+			One position per name -- the LAST store's -- is what this kept
+			until #1677, and it emitted every store of a name assigned twice
+			together, at the second one: ``D = 9; print(D); D = 10'' ran the
+			print before either store and raised NameError.  classAttrs is
+			collected from these same statements in this same order, so the
+			Nth pair for a name is the Nth position recorded here
+			(___storePositionOf___:in:seen:)."
 			stmt classBodyAttributePairs do: [:pair |
-				attrAssignPos at: pair key put: pos].
+				(storePositions at: pair key asSymbol ifAbsentPut: [OrderedCollection new])
+					add: pos].
 		].
 		"emittedChainValues: value-AST object -> the FIRST target key that
 		emitted it.  A class-body chained assignment ``a = b = expr'' makes
@@ -6407,24 +6746,16 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		body, as they were, the call found nothing, and the inline fallback --
 		evaluated in the METHOD's scope -- raised NameError for the class-body name.
 
-		Not exactly AT the def, though: a class attribute bound more than once has
-		all its stores emitted together at its LAST assignment (see attrAssignPos),
-		so a default reading ``v'' in ``v = 1; def f(x, d=v); v = 2'' would run
-		before ``v'' existed.  Each def's stores therefore go just after the later of
-		the def and the last store of every class-body name its defaults read --
-		half a position on, so after that statement and before the next.  For that
-		pathological body the default reads 2 where CPython reads 1, which is what
-		Grail always answered; for every other body it is the def's own position.
-		The names a default sees are still the ones bound BEFORE the def."
+		Half a position on from the def, so after that statement and before the
+		next.  Every attribute store goes out at its own statement, so by then each
+		store above the def has run and none below it has: ``v = 1; def f(x, d=v);
+		v = 2'' stores 1 as the default, as CPython does.  (While a name's stores
+		all went out together at its last assignment, a default reading it had to
+		wait for that one and read 2 -- #1677.)"
 		pendingDefaults := OrderedCollection new.
 		body body doWithIndex: [:stmt :pos |
 			(self ___storesDefaultsFor___: stmt) ifTrue: [
-				| at |
-				at := pos.
-				(self ___namesReadByDefaultsOf___: stmt) do: [:nm |
-					(firstBinding at: nm ifAbsent: [pos]) < pos ifTrue: [
-						at := at max: (attrAssignPos at: nm ifAbsent: [pos])]].
-				pendingDefaults add: (at + (1/2)) -> (pos -> stmt)]].
+				pendingDefaults add: (pos + (1/2)) -> (pos -> stmt)]].
 		pendingDefaults := (pendingDefaults asSortedCollection: [:a :b | a key <= b key])
 			asOrderedCollection.
 		flushDefaultsBefore := [:limit |
@@ -6460,7 +6791,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 						savedRuntimeClass := CallAst classBodyRuntimeClass.
 						((stmt isKindOf: DeleteAst)
 							or: [self ___isClassBodyRuntimeStatement___: stmt])
-								ifTrue: [CallAst classBodyRuntimeClass: name].
+								ifTrue: [CallAst classBodyRuntimeClass: self ___stVarName___].
 						[ | nonlocalTargets |
 						nonlocalTargets := self ___classBodyNonlocalTargetNames___: stmt.
 						nonlocalTargets isEmpty not
@@ -6520,15 +6851,15 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 						aStream lf].
 			flushDefaultsBefore value: limit].
 		[:emittedChainValues |
-		classAttrs do: [:pair |
+		classAttrs do: [:pair | | pairPos |
 			"Any pending statement that stands BEFORE this attribute in the
 			source goes out first, so the attribute's value expression reads
 			what that statement left.  An attribute whose position is unknown
 			flushes nothing -- the ordering can only be honoured against a
 			position."
-			(attrAssignPos at: pair key asSymbol
-				ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]])
-					ifNotNil: [:attrPos | flushPendingBefore value: attrPos].
+			pairPos := (self ___storePositionOf___: pair key asSymbol in: storePositions
+				seen: storesSeen) ifNil: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
+			pairPos ifNotNil: [:attrPos | flushPendingBefore value: attrPos].
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
@@ -6561,8 +6892,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 					ifFalse: [
 						| myPos bound |
 						emittedChainValues at: pair value put: pair key.
-						myPos := attrAssignPos at: pair key asSymbol
-							ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
+						myPos := pairPos.
 						bound := IdentitySet new.
 						myPos ifNotNil: [
 							firstBinding keysAndValuesDo: [:nm :pos |
@@ -7260,7 +7590,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 			nextPutAll: tgt attr asString;
 			nextPutAll: ''' _: ('.
 		savedRuntimeClass := CallAst classBodyRuntimeClass.
-		CallAst classBodyRuntimeClass: name.
+		CallAst classBodyRuntimeClass: self ___stVarName___.
 		[stmt value printSmalltalkOn: aStream]
 			ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 		aStream nextPutAll: ').'; lf].
@@ -7461,6 +7791,25 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		and, like them, it is looked up along the superclass chain so an
 		inherited method reports what it closed over where it was DEFINED."
 		self emitMethodClassCellNamesOn: aStream].
+	"__slots__, validated as type() validates them, once the body has bound
+	every name and before the metaclass sees the class or the name is bound
+	(object class >> ___grailValidateStatementSlots___:, #1658).  Only for a
+	body that assigns __slots__, so every other class pays nothing.
+
+	The names passed are what the body BINDS, which is what ``conflicts with
+	class variable'' is about.  A bare annotation binds nothing -- ``x: int''
+	puts x in __annotations__, not in the namespace -- and werkzeug's
+	LocalProxy declares exactly that beside a slot of the same name, so it is
+	left out here although ___boundTargetNames___ (which scoping reads, where
+	an annotation does make a name local) answers it."
+	(self classBodyAttributes anySatisfy: [:pair | pair key asSymbol == #'__slots__']) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailValidateStatementSlots___: #('.
+		body body do: [:stmt |
+			((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifFalse: [
+				stmt ___boundTargetNames___ do: [:nm |
+					aStream nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $']]].
+		aStream nextPutAll: ' ).'; lf].
 	aStream nextPutAll: self ___stVarName___; nextPutAll: ' := '; nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___pyClassDefined___: { '.
 	self classBodyAttributes
@@ -7700,10 +8049,20 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 			nextPutAll: ''' put: '; nextPutAll: self ___stVarName___;
 			nextPutAll: '.] @env0:value.'; lf.
 	] ifFalse: [
-		"No module binding, but the block was still opened above to declare
-		this body's codegen helper temps -- close it."
-		self ___classBlockNeedsTemps___ ifTrue: [
-			aStream nextPutAll: '] @env0:value.'; lf].
+		self ___buildsIntoBlockTemp___
+			ifTrue: [
+				"The class is complete: bind the enclosing def's local, and only
+				now, so a body, metaclass or decorator that raised left it as it
+				was."
+				aStream
+					nextPutAll: self ___stBindName___;
+					nextPutAll: ' := '; nextPutAll: self ___stVarName___;
+					nextPutAll: '.] @env0:value.'; lf]
+			ifFalse: [
+				"No binding of its own, but the block was still opened above to
+				declare this body's codegen helper temps -- close it."
+				self ___classBlockNeedsTemps___ ifTrue: [
+					aStream nextPutAll: '] @env0:value.'; lf]].
 	].
 
 ]
@@ -7768,8 +8127,11 @@ ClassDefAst >> printSuperclassOn: aStream [
 		Unicode16 is not enough."
 		((only isKindOf: NameAst) and: [only id asString = 'str'])
 			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
-		"The value printClassHeaderOn: evaluated, not the expression again."
-		^ aStream nextPutAll: '(___hdrBases___ @env0:at: 1)'].
+		"The value printClassHeaderOn: evaluated, not the expression again --
+		widened as the literal ``str'' above is, since a base held in a
+		variable (``base = str; class K(base)'') is the same Unicode7, and a
+		subclass of it lost its identity on the first non-ASCII value (#1706)."
+		^ aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___widenStrBase___: (___hdrBases___ @env0:at: 1))'].
 	"The bases were evaluated and resolved ONCE by printClassHeaderOn:; this
 	reads the result.  Handing the storage-base choice the RESOLVED list is
 	exactly what it computed for itself before: its own resolve step is a no-op
@@ -7980,6 +8342,27 @@ ClassDefAst >> slotNames [
 					((k isKindOf: ConstantAst) and: [k value isKindOf: String])
 						ifTrue: [addName value: k value]]]].
 	^ names
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+ClassDefAst >> slotsDeclareDict [
+	"True when the class declares __slots__ as a recognized literal that
+	names ``__dict__'' -- the string itself, or a member of a tuple, list or
+	dict of constant strings.  slotsDeclaredStrict's other half: a computed
+	value answers false for both."
+
+	| valueAst elts |
+	valueAst := self slotsValueAst.
+	valueAst ifNil: [^ false].
+	(valueAst isKindOf: ConstantAst) ifTrue: [^ valueAst value = '__dict__'].
+	((valueAst isKindOf: TupleAst) or: [(valueAst isKindOf: ListAst)
+			or: [valueAst isKindOf: DictAst]]) ifFalse: [^ false].
+	elts := (valueAst isKindOf: DictAst)
+		ifTrue: [valueAst keys ifNil: [#()]]
+		ifFalse: [valueAst elts].
+	^ elts anySatisfy: [:elt |
+		(elt isKindOf: ConstantAst) and: [elt value = '__dict__']]
 
 ]
 

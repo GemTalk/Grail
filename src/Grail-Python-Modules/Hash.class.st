@@ -42,6 +42,10 @@ Hash >> _digestBytes [
 	(self dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_256SumBytes].
 	(self dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_384SumBytes].
 	(self dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_512SumBytes].
+	"SHA-224 and SHA-384 have no kernel primitive: they are computed by
+	_grail_sha2, in Python (PyJWT's ES384 / RS384 / HS384 sign with SHA-384)."
+	((self dynamicInstVarAt: #algo) == #sha224 or: [(self dynamicInstVarAt: #algo) == #sha384])
+		ifTrue: [^ self _pythonDigest: ((self dynamicInstVarAt: #algo) asString , '_digest')].
 	ValueError @env1:___signal___:
 		'unsupported hash algorithm ''' , (self dynamicInstVarAt: #algo) asString , ''''
 
@@ -60,5 +64,17 @@ self dynamicInstVarAt: #buffer put: ByteArray new.
 			self dynamicInstVarAt: #buffer put: ((self dynamicInstVarAt: #buffer) , someBytes asByteArray)
 		]
 	].
+
+]
+
+{ #category : 'Grail-Private' }
+Hash >> _pythonDigest: aFunctionName [
+	"The buffer's digest by a function of _grail_sha2."
+
+	| mod |
+	mod := (Python at: #builtins) @env1:instance
+		@env1:___import__: { '_grail_sha2' } kw: nil.
+	^ (mod @env1:___pyAttrLoad___: aFunctionName asSymbol)
+		@env1:___pyCallValue___: { self dynamicInstVarAt: #buffer } kw: nil
 
 ]

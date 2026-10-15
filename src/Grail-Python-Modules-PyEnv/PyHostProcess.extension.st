@@ -1,5 +1,20 @@
 Extension { #name : 'PyHostProcess' }
 
+{ #category : 'Grail-Private' }
+PyHostProcess class >> ___hostProcessText___: aString [
+	"aString as GsHostProcess accepts it -- a one-byte String or a Utf8 -- and
+	as CPython passes it to execve: its UTF-8 bytes.  So every string is
+	encoded, not just a wide one: a one-byte String holding Latin-1 past 127
+	(``é'') would pass the check but reach the child as Latin-1.  The kernel's
+	test is _isOneByteString, which a Unicode16 is not although it IS a
+	String."
+
+	(aString @env0:isKindOfClass: Utf8) ifTrue: [^ aString].
+	(aString @env0:isKindOf: CharacterCollection) ifTrue: [^ aString @env0:encodeAsUTF8].
+	^ aString
+
+]
+
 { #category : 'Grail-Spawning' }
 PyHostProcess class >> ___spawn___: argvList _: cwdOrNone _: envPairsOrNone _: modesList [
 	"Fork a child and answer the PyHostProcess watching it.
@@ -69,6 +84,12 @@ PyHostProcess class >> ___spawn___: argvList _: cwdOrNone _: envPairsOrNone _: m
 			args := OrderedCollection @env0:new.
 			2 @env0:to: argv @env0:size do: [:i | args @env0:add: (argv @env0:at: i)]].
 
+	"GsHostProcess takes a String or a Utf8, and a Python str holding anything
+	past Latin-1 is a Unicode16/32: ``git commit -m '🌐 Update ...''' was
+	``argument must be a String or Utf8'' (FastAPI's test_translate).  Such an
+	argument goes as its UTF-8 bytes, which is what CPython hands execve."
+	cmdLine := self ___hostProcessText___: cmdLine.
+	args := args @env0:collect: [:a | self ___hostProcessText___: a].
 	proc := GsHostProcess @env0:new.
 	proc @env0:commandLine: cmdLine.
 	args @env0:isEmpty ifFalse: [proc @env0:args: (args @env0:asArray)].

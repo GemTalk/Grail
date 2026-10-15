@@ -117,8 +117,10 @@ BytesIO >> __next__ [
 
 { #category : 'Grail-Private' }
 BytesIO >> _checkOpen [
+	"CPython's BytesIO ends this message with a period; its StringIO does not."
+
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
-		ValueError ___signal___: 'I/O operation on closed file'
+		ValueError ___signal___: 'I/O operation on closed file.'
 	]
 
 ]
@@ -198,13 +200,32 @@ BytesIO >> flush [
 
 { #category : 'Grail-State' }
 BytesIO >> getbuffer [
-	"Return a view of the buffer.  CPython returns a memoryview;
-	Grail has no memoryview yet, so return a bytes copy that callers
-	can pass through ``bytes(buf.getbuffer())'' (the most common
-	idiom; the round-trip is functionally identical when no in-place
-	mutation is involved)."
+	"A WRITABLE memoryview over the stream's own buffer, as CPython's is:
+	``.nbytes'' is the stream's size, and ``v[0] = 0x7A'' changes what
+	getvalue() answers.  It used to answer a bytes copy, which had no
+	``nbytes'' -- Werkzeug's send_file sizes an in-memory file with
+	``file.getbuffer().nbytes'', so ``flask.send_file(BytesIO(...))''
+	answered 500 (#1637).
 
-	^ (self @env0:dynamicInstVarAt: #_buffer) @env0:copy
+	``readonly'' is set by hand because the buffer is a bytes-class
+	ByteArray, which memoryview reads as immutable; the stream owns it and
+	nothing outside it holds a reference (__new__: copies the initial
+	value, and every reader copies out).
+
+	NOT MODELLED: CPython refuses write/truncate/close with BufferError
+	while a view is alive.  Liveness there is a refcount, and Grail cannot
+	tell a view still in use from a ``getbuffer().nbytes'' already thrown
+	away, so refusing would break the common case.  A write that GROWS the
+	stream replaces the buffer, leaving an older view on the old bytes --
+	the state CPython's BufferError exists to prevent."
+
+	| view |
+	self _checkOpen.
+	view := memoryview
+		___over___: (self @env0:dynamicInstVarAt: #_buffer)
+		format: 'B'.
+	view @env0:dynamicInstVarAt: #'readonly' put: false.
+	^ view
 
 ]
 

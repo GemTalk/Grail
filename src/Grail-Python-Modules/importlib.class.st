@@ -734,6 +734,46 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 			] on: CompileWarning do: [:ex | ex resume].
 		].
 
+		"The DEFS' docstrings, as a class's are (ClassDefAst >>
+		emitMethodDocTableOn:className:): a module-level def compiles to a
+		METHOD of the module class, so it cannot carry the def-time stamp a
+		nested def's __doc__ rides on, and BoundMethod >> __doc__ looks for a
+		___methodDocTable___ on the class -- which modules never had.  Every
+		module-level function answered __doc__ None, and numpy.ma, which edits
+		np.fromfunction's docstring as it imports, failed.  The LAST def of a
+		name is the function, so its docstring or its lack of one is the one.
+		Emitted only when a def has one; a table too large to compile leaves
+		the docstrings out rather than the module."
+		[:documented |
+			documented isEmpty ifFalse: [
+				| tblSrc |
+				tblSrc := WriteStream on: String new.
+				tblSrc nextPutAll: '___methodDocTable___'; nextPutAll: lf;
+					nextPutAll: '	^ ((KeyValueDictionary @env0:new)'.
+				documented do: [:def |
+					tblSrc nextPutAll: ' @env0:at: '''; nextPutAll: def name asString;
+						nextPutAll: ''' put: '.
+					moduleAst emitStringLiteral: def ___docString___ on: tblSrc.
+					tblSrc nextPut: $;].
+				tblSrc nextPutAll: ' @env0:yourself)'.
+				traceDir ifNotNil: [
+					debugStream
+						nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
+						nextPutAll: 'classmethod: '; nextPutAll: debugClassName; lf.
+					self ___writeMethodSource: tblSrc contents on: debugStream.
+					debugStream nextPutAll: '%'; lf; lf].
+				[[moduleClass class compileMethod: tblSrc contents
+					dictionaries: sl
+					category: 'Grail-Python Metadata'
+					environmentId: 1.
+				] on: CompileWarning do: [:ex | ex resume]]
+					on: CompileError do: [:ex | ex return: nil]]]
+			value: ([:last |
+					(topLevelDefs reject: [:stmt | stmt isOverloadStub])
+						do: [:stmt | last at: stmt name asString put: stmt].
+					last values select: [:stmt | stmt ___docString___ notNil]]
+				value: Dictionary new).
+
 		"Generate the module body as Smalltalk source for the initialize method.
 		Top-level defs emit BoundMethod assignments; calls emit self-sends."
 		stream := PrettyWriteStream on: Unicode7 new.
@@ -1876,6 +1916,44 @@ importlib class >> ___committedInstanceToRebuild___: moduleName class: moduleCla
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___committedModuleWithFile___: aPath [
+	"The COMMITTED module instance whose __file__ is aPath, in any namespace
+	this session reads, or nil.  For PyFrame >> f_globals, after sys.modules
+	and the session's adopted instances have missed.
+
+	A warm bind does not run a module's body, so it does not run the body's
+	imports either: pluggy._manager's ``from ._callers import _multicall''
+	binds the committed function, and pluggy._callers itself is never
+	imported this session.  Its code still runs -- on its committed instance,
+	which is what that instance's globals ARE -- but nothing has registered or
+	adopted it until the code reads a global.  So a frame of it found no
+	module, answered f_globals None, and pytest's unittest support ended the
+	session with an INTERNALERROR.
+
+	READ-ONLY.  It neither adopts nor registers what it finds: a frame
+	attribute read is not an import.  When the code later reads a global,
+	module class >> instance adopts this same committed instance, so the
+	identity holds.  The registry is read with ``at:otherwise:'' and never
+	created -- ___canonicalModules___ would create it, and a read must not
+	write."
+
+	| found |
+	aPath isNil ifTrue: [^ nil].
+	found := nil.
+	self ___grailSessionNamespacesDo___: [:ns | | reg |
+		found isNil ifTrue: [
+			reg := ns at: #'GrailCanonicalModules' otherwise: nil.
+			reg isNil ifFalse: [
+				reg keysAndValuesDo: [:aName :inst |
+					(found isNil
+						and: [inst isCommitted
+						and: [((inst dynamicInstVarAt: #'__file__') = aPath) == true]])
+							ifTrue: [found := inst]]]]].
+	^ found
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___compilationSymbolList___ [
 	"Symbol list used as the `dictionaries:` argument for compileMethod
@@ -1935,7 +2013,8 @@ importlib class >> ___copyDecoratorRebinding___: aSelector from: aBase to: aClas
 			on: Error do: [:e | holder := nil]].
 	holder isNil ifTrue: [^ self].
 	([holder dynamicInstVarAt: pyName] on: Error do: [:e | nil]) isNil ifTrue: [
-		[holder dynamicInstVarAt: pyName put: deco] on: Error do: [:e | nil]].
+		[holder dynamicInstVarAt: pyName put: deco.
+		 holder ___noteInherited___: pyName] on: Error do: [:e | nil]].
 	^ self
 
 ]
@@ -5235,6 +5314,11 @@ importlib class >> ___isHiddenBase___: k of: aClass [
 	| ba |
 	k == aClass ifTrue: [^ false].
 	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
+	"A third kind, named because nothing exposes it: PyGeneratorBase, the
+	machinery generators, coroutines and async generators share.  CPython's
+	three are siblings under object, so type(coro).__mro__ is (coroutine,
+	object), and the base is no part of any of their Python ancestries."
+	k == (Python @env0:at: #PyGeneratorBase otherwise: nil) ifTrue: [^ true].
 	ba := Python @env0:at: #bytearray otherwise: nil.
 	^ ba notNil
 		and: [k == ba superclass
@@ -5949,7 +6033,8 @@ importlib class >> ___mergeSecondaryBases___: aClass bases: secondaryBases resol
 					leftmost base); gap-fill guards against the whole
 					primary chain."
 					shouldCopy := overrideMode
-						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
+						ifTrue: [(ownMd isNil or: [(ownMd includesKey: sel) not])
+							and: [(self ___mroDefinerOf___: sel forClass: aClass precedes: walker) not]]
 						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass mergingFrom: walker) not].
 					"Never copy a base's SLOT machinery: its ___pySlotIndexFor___:
 					table holds the BASE's instVar indices, and its inferred-slot
@@ -6064,7 +6149,10 @@ importlib class >> ___mergeSecondaryBases___: aClass bases: secondaryBases resol
 									on: Error do: [:e | nil]
 							].
 							(holder dynamicInstVarAt: sel) isNil ifTrue: [
-								holder dynamicInstVarAt: sel put: v
+								holder dynamicInstVarAt: sel put: v.
+								"A COPY, not the class's own: __dict__ must not list it
+								(GrailClassAttrHolder >> ___noteInherited___:)."
+								[holder ___noteInherited___: sel] on: Error do: [:e | nil]
 							]
 						]
 					].
@@ -6186,6 +6274,14 @@ importlib class >> ___metaChainProvides___: aSelector forClass: aClass mergingFr
 	owner := aClass class whichClassIncludesSelector: aSelector environmentId: 1.
 	owner isNil ifTrue: [^ false].
 	owner == aClass class ifTrue: [^ true].
+	"The UNIVERSAL ROOTS' class-side defaults are overridable by a secondary
+	base, as the instance-side twin's are: a Python class anywhere in the MRO
+	beats them.  Counted as provided, ``Object class >> __class_getitem__:''
+	refused SQLAlchemy's Visitable.__class_getitem__ (``return cls'') to every
+	class that reaches Visitable through a secondary base -- ClauseElement, and
+	so Select -- and ``Select[...]'' went to typing, which refused it as not
+	generic (sqlmodel's _expression_select_cls, at import)."
+	(owner == Object class or: [owner == PythonInstance class]) ifTrue: [^ false].
 	owner isMeta ifFalse: [^ true].
 	(owner thisClass includesSelector: #'___pyDefinedClass___' environmentId: 1)
 		ifFalse: [^ true].
@@ -6506,6 +6602,51 @@ importlib class >> ___moduleSpecClass___ [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___mroDefinerOf___: aSelector forClass: aClass precedes: aWalker [
+	"In OVERRIDE mode -- a base written LEFT of the storage base -- does a
+	Python class that DEFINES aSelector's name come before aWalker in aClass's
+	MRO?  Then aWalker's method is not the one CPython finds, and copying it
+	over would be wrong.
+
+	Override mode copies a left base's methods past the primary chain because
+	that base precedes the chain in the MRO -- but the walk climbs the base's
+	whole ancestry, and an ancestor deep enough can come AFTER classes of the
+	primary chain.  SQLAlchemy's Select lists HasSyntaxExtensions[...] (a
+	Generic) left of its storage base, so Generic.__class_getitem__ was copied
+	onto Select over Visitable.__class_getitem__, which the MRO puts first
+	(index 41 to Generic's 42): ``Select[...]'' went to typing and was refused
+	as not generic (sqlmodel, at import).
+
+	The definer is the first class in the MRO after aClass whose OWN methods
+	include the name: a merge COPY (Grail-MI-Inherited) or a protocol forwarder
+	does not define it, so a copy's position in the MRO cannot stand in for
+	its origin's.  Only a definer written in PYTHON counts, for the reason
+	___primaryChainProvides___:forClass:mergingFrom: gives -- the linearization
+	is exact only for those, and a Smalltalk-written stand-in keeps override
+	mode's old answer."
+
+	| mro family walkerIdx |
+	mro := [self ___mroOf___: aClass] on: Error do: [:e | e return: #()].
+	walkerIdx := mro indexOf: aWalker.
+	walkerIdx <= 1 ifTrue: [^ false].
+	family := self ___pythonNameFamilyOf___: aSelector.
+	2 to: walkerIdx - 1 do: [:i | | c md |
+		c := mro at: i.
+		((c isKindOf: Behavior)
+			and: [c includesSelector: #'___pyDefinedClass___' environmentId: 1]) ifTrue: [
+			md := c methodDictForEnv: 1.
+			(md notNil and: [family anySatisfy: [:sel |
+				(md includesKey: sel)
+					and: [| cat |
+						cat := c categoryOfSelector: sel environmentId: 1.
+						cat ~= #'Grail-MI-Inherited'
+							and: [cat ~= #'Grail-Protocol Forwarders']]]])
+				ifTrue: [^ true]]].
+	^ false
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___mroOf___: aClass [
 	"aClass's method resolution order as an Array.  Registered
 	(multiple-inheritance) classes answer their stored C3
@@ -6766,7 +6907,12 @@ importlib class >> ___primaryChainProvides___: aSelector forClass: aClass mergin
 	linearization the rules above decide, as before.
 
 	Only for an ancestor written in PYTHON (ClassDefAst's ___pyDefinedClass___
-	marker, on the class itself).  The linearization is exact for those, being
+	marker, on the class itself) -- or a built-in EXCEPTION, whose Smalltalk
+	classes are CPython's own single-inheritance chain, so the linearization is
+	exact for them too.  Without that, ``class NewFirst(WithNew, WithInit)''
+	over OSError never got WithInit's __init__: BaseException's own
+	``___init__:kw:'' blocked the copy, where CPython's MRO puts BaseException
+	after WithInit (test_exception_hierarchy test_init_new_overridden).  The linearization is exact for those, being
 	built from class statements; for Grail's Smalltalk-written stand-ins it is
 	not -- ``class HelloEnum(EnumMixin, StrEnum)'' linearizes as HelloEnum,
 	EnumMixin, Enum, StrEnum, str where CPython has StrEnum, str, ReprEnum,
@@ -6799,7 +6945,8 @@ importlib class >> ___primaryChainProvides___: aSelector forClass: aClass mergin
 				ifFalse: [
 					(sourceIdx > 0
 						and: [(mro indexOf: walker) > sourceIdx
-						and: [walker includesSelector: #'___pyDefinedClass___' environmentId: 1]])
+						and: [(walker includesSelector: #'___pyDefinedClass___' environmentId: 1)
+							or: [walker == BaseException or: [walker inheritsFrom: BaseException]]]])
 						ifTrue: [false]
 						ifFalse: [
 							((aSource isKindOf: Behavior)
@@ -9335,6 +9482,12 @@ importlib class >> loadDynamicModuleNamed: moduleName fromPath: pathString [
 	moduleInstance := [CPythonShim loadDynamicModule: moduleName fromPath: pathString]
 		on: GrailShimError
 		do: [:ex |
+			"A failed load leaves nothing in sys.modules, as CPython's
+			_load_unlocked removes the entry: a Cython module puts ITSELF
+			there as its exec starts, and numpy.random's ``from .mtrand import
+			*'' found that C module's proxy after mtrand failed."
+			[(self @env1:modules) @env0:removeKey: moduleName asString ifAbsent: [nil]]
+				on: Error do: [:e | e return: nil].
 			ImportError @env0:___signalExtensionLoadFailed___: ex messageText
 				name: moduleName
 				path: pathString].

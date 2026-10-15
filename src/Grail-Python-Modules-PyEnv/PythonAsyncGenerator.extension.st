@@ -69,6 +69,20 @@ PythonAsyncGenerator >> ___pyKindWords___ [
 
 ]
 
+{ #category : 'Grail-Async Generator Protocol' }
+PythonAsyncGenerator >> ___readOnlyGetsetNames___ [
+	"See PythonGenerator >> ___refuseReadOnlyAttr___:."
+
+	^ #('ag_await' 'ag_code' 'ag_frame' 'ag_suspended')
+
+]
+
+{ #category : 'Grail-Async Generator Protocol' }
+PythonAsyncGenerator >> ___readOnlyMemberNames___ [
+	^ #('ag_running')
+
+]
+
 { #category : 'Grail-Private' }
 PythonAsyncGenerator >> ___runFinalizer___: aHook [
 	"This generator was collected -- its FinalizerEphemeron mourned it and
@@ -93,55 +107,8 @@ PythonAsyncGenerator >> ___setAsendOwner___: anASendOrNil [
 
 ]
 
-{ #category : 'Grail-Async Generator Protocol' }
-PythonAsyncGenerator >> __aiter__ [
-	"An async generator is its own async iterator, exactly as a generator is its
-	own iterator."
-
-	^ self
-
-]
-
-{ #category : 'Grail-Async Generator Protocol' }
-PythonAsyncGenerator >> __anext__ [
-	"Answer an AWAITABLE that advances this generator to its next ``yield''.
-	asend(None), spelled the way ``async for'' asks for it."
-
-	^ PyAsyncGenASend @env0:___on___: self kind: #'send' arg: None
-
-]
-
-{ #category : 'Grail-Protocol Refusal' }
-PythonAsyncGenerator >> __iter__ [
-	<grailProtocolRefusal>
-	"CPython: an async generator is not SYNC-iterable -- ``async for'' is its
-	loop, __aiter__ its protocol.  The inherited generator ``^ self'' was the
-	dangerous kind of wrong (isgenerator's docstring already called it that):
-	an async generator answers send() happily, so ``for v in agen()'' iterated
-	without complaint, binding the internal PyAsyncYield carrier objects as if
-	they were items.  Message measured from CPython 3.14:
-	``'async_generator' object is not iterable''."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not iterable')
-
-]
-
-{ #category : 'Grail-Protocol Refusal' }
-PythonAsyncGenerator >> __next__ [
-	<grailProtocolRefusal>
-	"next(agen) -- ``TypeError: 'async_generator' object is not an iterator''
-	(measured).  anext() is the async spelling and goes through __anext__."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not an iterator')
-
-]
-
 { #category : 'Grail-Private' }
-PythonAsyncGenerator >> _signalEscapedException [
+PythonAsyncGenerator >> ___signalEscapedException___ [
 	"PEP 479's ASYNC twin, which the inherited path cannot express:
 	StopAsyncIteration is deliberately OUTSIDE the StopIteration hierarchy,
 	so the generator machinery lets it escape raw -- but one escaping an
@@ -168,7 +135,25 @@ PythonAsyncGenerator >> _signalEscapedException [
 		err ___args___: { msg }.
 		err ___setCause___: ex context: ex.
 		^ err ___signal___: msg].
-	^ super _signalEscapedException
+	^ super ___signalEscapedException___
+
+]
+
+{ #category : 'Grail-Async Generator Protocol' }
+PythonAsyncGenerator >> __aiter__ [
+	"An async generator is its own async iterator, exactly as a generator is its
+	own iterator."
+
+	^ self
+
+]
+
+{ #category : 'Grail-Async Generator Protocol' }
+PythonAsyncGenerator >> __anext__ [
+	"Answer an AWAITABLE that advances this generator to its next ``yield''.
+	asend(None), spelled the way ``async for'' asks for it."
+
+	^ PyAsyncGenASend @env0:___on___: self kind: #'send' arg: None
 
 ]
 
@@ -207,7 +192,7 @@ PythonAsyncGenerator >> ag_code [
 PythonAsyncGenerator >> ag_frame [
 	"Python's ``agen.ag_frame'' -- the async-generator spelling of gi_frame."
 
-	^ self gi_frame
+	^ self ___genFrame___
 
 ]
 
@@ -229,7 +214,7 @@ PythonAsyncGenerator >> ag_suspended [
 	a plain coroutine an async generator genuinely reaches here: asend drives
 	the body one yield at a time."
 
-	^ self gi_suspended
+	^ self ___genSuspended___
 
 ]
 
@@ -266,6 +251,6 @@ PythonAsyncGenerator >> athrow: aType _: aValue [
 { #category : 'Grail-Async Generator Protocol' }
 PythonAsyncGenerator >> athrow: aType _: aValue _: aTb [
 	self ___warnLegacySignatureOf___: 'athrow'.
-	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue)
+	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
 
 ]

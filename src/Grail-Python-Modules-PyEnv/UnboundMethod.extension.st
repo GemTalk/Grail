@@ -547,10 +547,18 @@ UnboundMethod >> ___grailPinnedMethodFor___: aMethod receiver: obj [
 	___grailObjectEq___:."
 	((aMethod @env0:selector == #'__eq__:') and: [aMethod @env0:inClass == Object])
 		ifTrue: [^ Object @env0:compiledMethodAt: #'___grailObjectEq___:' environmentId: 1].
-	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector.
-	pinnedAt == nil ifTrue: [^ aMethod].
+	(BoundMethod ___grailPinnedAt___: aMethod @env0:selector) == nil ifTrue: [^ aMethod].
 	shadow := ('___grailOrig_' @env0:, aMethod @env0:selector @env0:asString)
 		@env0:asSymbol.
+	"Resolved from the same root the method itself came from, so a shadow on an
+	unrelated class carrying the same selector cannot be picked up -- and the
+	stamp is compared with THAT class's pin, not the selector's latest on any
+	class (see BoundMethod >> ___pinnedSelectorFor___:receiver:)."
+	owner := (self @env0:_resolutionRootFor: obj)
+		@env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner == nil ifTrue: [^ aMethod].
+	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector in: owner.
+	pinnedAt == nil ifTrue: [^ aMethod].
 	"A stamp above this session's current generation was made by another
 	session (BoundMethod class >> ___grailSessionPinHolder___): it predates
 	every pin here as far as this session can know, so it redirects.
@@ -563,17 +571,12 @@ UnboundMethod >> ___grailPinnedMethodFor___: aMethod receiver: obj [
 	___pinnedSelectorFor___:receiver:, which makes the same call."
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
 		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
-			ifTrue: [
-				owner := aMethod @env0:inClass.
-				(owner ~~ nil and: [(owner @env0:whichClassIncludesSelector: shadow
-						environmentId: 1) == owner])
+			ifTrue: [ | home |
+				home := aMethod @env0:inClass.
+				(home ~~ nil and: [(home @env0:whichClassIncludesSelector: shadow
+						environmentId: 1) == home])
 					ifFalse: [^ aMethod].
-				^ owner @env0:compiledMethodAt: shadow environmentId: 1].
-	"Resolved from the same root the method itself came from, so a shadow on an
-	unrelated class carrying the same selector cannot be picked up."
-	owner := (self @env0:_resolutionRootFor: obj)
-		@env0:whichClassIncludesSelector: shadow environmentId: 1.
-	owner == nil ifTrue: [^ aMethod].
+				^ home @env0:compiledMethodAt: shadow environmentId: 1].
 	^ owner @env0:compiledMethodAt: shadow environmentId: 1
 
 ]
@@ -618,6 +621,48 @@ UnboundMethod >> ___grailPropertyOrSelf___ [
 	prop := PropertyDescriptor __new__: self _: fset _: fdel.
 	per @env0:at: selector put: (Array @env0:with: getter with: prop).
 	^ prop
+
+]
+
+{ #category : 'Grail-Python Metadata' }
+UnboundMethod >> ___grailRebindDefaults___: value kw: isKw [
+	"A method's defaults written in a shape its compiled prologue cannot carry:
+	rebind its calls in this session, on the class that defines it (Behavior
+	>> ___grailRebind___:code:receiverOffset:value:kw:initial:, #1714).  The
+	caller still stores the value as an attribute, which is what the read
+	answers.  False when the method cannot be rebound."
+
+	| owner code |
+	owner := self ___grailReboundOwner___.
+	owner == nil ifTrue: [^ false].
+	code := [self __code__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ owner ___grailRebind___: self ___grailVarargsSelector___ code: code receiverOffset: 1
+		value: value kw: isKw
+		initial: [{ self __defaults__ . self __kwdefaults__ }]
+
+]
+
+{ #category : 'Grail-Python Metadata' }
+UnboundMethod >> ___grailReboundOwner___ [
+	"The class that DEFINES this method's ``_name:kw:'' -- where a rebind goes,
+	so that ``Sub.m'' for an inherited m rebinds the base's function, which in
+	CPython is the same function object.  nil for a class-side method (a
+	@classmethod or @staticmethod, whose defining class is a metaclass), which
+	is not rebound."
+
+	definingClass == nil ifTrue: [^ nil].
+	definingClass @env0:isMeta ifTrue: [^ nil].
+	^ definingClass @env0:whichClassIncludesSelector: self ___grailVarargsSelector___
+		environmentId: 1
+
+]
+
+{ #category : 'Grail-Python Metadata' }
+UnboundMethod >> ___grailVarargsSelector___ [
+	"``_name:kw:'', the entry point every call that could need a default
+	reaches."
+
+	^ ('_' @env0:, selector @env0:asString @env0:, ':kw:') @env0:asSymbol
 
 ]
 
@@ -1227,8 +1272,9 @@ UnboundMethod >> ___tableEntryFor___: aClass table: aTableSelector [
 	reference would be a forward one.  Falls back to the plain superclass chain
 	when it is absent, which is the whole answer under single inheritance."
 
-	| chain |
+	| chain absent |
 	aClass == nil ifTrue: [^ nil].
+	absent := Object @env0:new.
 	chain := self ___lookupChainFrom___: aClass.
 	chain @env0:do: [:each |
 		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
@@ -1238,11 +1284,54 @@ UnboundMethod >> ___tableEntryFor___: aClass table: aTableSelector [
 				| tbl v |
 				tbl := [each @env0:perform: aTableSelector env: 1]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				"Stop at a table that HAS the name, even with a nil entry: that
+				 is how the doc table records an undocumented def, so an
+				 override without a docstring answers None rather than its
+				 base's (#1650).  No other table stores nil."
 				tbl == nil ifFalse: [
-					v := [tbl @env0:at: selector @env0:asString otherwise: nil]
-						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-					v == nil ifFalse: [^ v]]]].
+					v := [(tbl @env0:includesKey: selector @env0:asString)
+							ifTrue: [tbl @env0:at: selector @env0:asString]
+							ifFalse: [absent]]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: absent].
+					v == absent ifFalse: [^ v]]]].
 	^ nil
+
+]
+
+{ #category : 'Grail-Python Metadata' }
+UnboundMethod >> ___writeDefaultsThrough___: name value: value [
+	"``Cls.m.__defaults__ = t'' / ``Cls.m.__kwdefaults__ = d'', written into
+	the class-body default store the method's calls bind from -- the
+	method-side twin of BoundMethod >> ___writeDefaultsThrough___:value:,
+	which says why (#1228).  The keys come from the defining class's
+	___methodDefaultKeysTable___, the same entry __defaults__ reads through.
+	False for any other name, a method with no stored defaults (a
+	@staticmethod's are inline), or a shape the store cannot carry."
+
+	| sym isKw cls entry |
+	sym := name @env0:asSymbol.
+	isKw := sym == #'__kwdefaults__'.
+	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
+	cls := self ___metadataClass___.
+	cls == nil ifTrue: [^ false].
+	"Once REBOUND, every later write goes to the rebound record -- see
+	BoundMethod >> ___writeDefaultsThrough___:value:."
+	(self ___grailReboundOwner___ ~~ nil and: [(self ___grailReboundOwner___
+			___grailReboundRecordAt___: self ___grailVarargsSelector___) ~~ nil]) ifTrue: [
+		self ___grailRebindDefaults___: value kw: isKw.
+		^ false].
+	entry := self ___tableEntryFor___: cls table: #'___methodDefaultKeysTable___'.
+	(entry == nil or: [(module @env0:___writeDefaults: value entry: entry kw: isKw
+		into: [:key :v | module @env0:___storeClassDefaultOwnedBy: cls at: key put: v]) @env0:not])
+			ifTrue: [
+				self ___grailRebindDefaults___: value kw: isKw.
+				^ false].
+	attrDict @env0:isNil ifFalse: [
+		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
+			attrDict @env1:__delitem__: name @env0:asString]].
+	[self @env0:removeDynamicInstVar: sym]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ true
 
 ]
 
@@ -1406,6 +1495,10 @@ UnboundMethod >> __delattr__: name [
 			AttributeError ___signal___:
 				('attribute ''' @env0:, name @env0:asString
 					@env0:, ''' of ''function'' objects is not writable')].
+	"``del Cls.m.__defaults__'' sets None in CPython -- see BoundMethod >>
+	__delattr__: (#1714)."
+	((name @env0:asSymbol == #'__defaults__') or: [name @env0:asSymbol == #'__kwdefaults__'])
+		ifTrue: [^ self __setattr__: name _: ExecBlock @env0:___pyNone___].
 	attrDict @env0:isNil ifFalse: [
 		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
 			attrDict @env1:__delitem__: name @env0:asString.
@@ -1774,6 +1867,8 @@ UnboundMethod >> __setattr__: name _: value [
 	just as quietly."
 
 	BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+	(self ___writeDefaultsThrough___: name value: value)
+		ifTrue: [^ ExecBlock @env0:___pyNone___].
 	name @env0:asSymbol == #'__dict__' ifTrue: [
 		"INSTALL it, rather than storing a dynamic instVar that happens to be
 		spelled __dict__ -- which is what happened before, leaving the real
@@ -1856,7 +1951,7 @@ UnboundMethod >> value: positional value: kwargs [
 		emitReceiverlessMethodTableOn:className:."
 		^ self ___callReceiverless___: #() kw: kwargs orSignal: nil
 	].
-	obj := positional @env0:at: 1.
+	obj := (positional @env0:at: 1) ___unboundSelfFor: definingClass.
 	rest := (positional @env0:size @env0:> 1)
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
 		ifFalse: [#()].

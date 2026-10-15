@@ -85,6 +85,12 @@ hashlib >> _sha1: positional kw: kwargs [
 ]
 
 { #category : 'Grail-Constructors' }
+hashlib >> _sha224: positional kw: kwargs [
+	^ self ___hashFor___: #sha224 positional: positional kw: kwargs from: 'openssl_sha224'
+
+]
+
+{ #category : 'Grail-Constructors' }
 hashlib >> _sha256: positional kw: kwargs [
 	^ self ___hashFor___: #sha256 positional: positional kw: kwargs from: 'openssl_sha256'
 
@@ -115,6 +121,12 @@ hashlib >> _sha3_512: positional kw: kwargs [
 ]
 
 { #category : 'Grail-Constructors' }
+hashlib >> _sha384: positional kw: kwargs [
+	^ self ___hashFor___: #sha384 positional: positional kw: kwargs from: 'openssl_sha384'
+
+]
+
+{ #category : 'Grail-Constructors' }
 hashlib >> _sha512: positional kw: kwargs [
 	^ self ___hashFor___: #sha512 positional: positional kw: kwargs from: 'openssl_sha512'
 
@@ -135,7 +147,7 @@ hashlib >> algorithms_guaranteed [
 { #category : 'Grail-Initialization' }
 hashlib >> initialize [
 	| names |
-	names := #(#md5 #sha1 #sha256 #sha512 #sha3_224 #sha3_256 #sha3_384 #sha3_512).
+	names := #(#md5 #sha1 #sha224 #sha256 #sha384 #sha512 #sha3_224 #sha3_256 #sha3_384 #sha3_512).
 	self @env0:at: #algorithms_guaranteed put: names @env0:asSet.
 	self @env0:at: #algorithms_available put: names @env0:asSet.
 
@@ -178,6 +190,18 @@ hashlib >> sha1 [
 { #category : 'Grail-Constructors' }
 hashlib >> sha1: data [
 	^ Hash algo: #sha1 data: data
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+hashlib >> sha224 [
+	^ Hash algo: #sha224 data: nil
+
+]
+
+{ #category : 'Grail-Constructors' }
+hashlib >> sha224: data [
+	^ Hash algo: #sha224 data: data
 
 ]
 
@@ -238,6 +262,18 @@ hashlib >> sha3_512 [
 { #category : 'Grail-Constructors' }
 hashlib >> sha3_512: data [
 	^ Hash algo: #sha3_512 data: data
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+hashlib >> sha384 [
+	^ Hash algo: #sha384 data: nil
+
+]
+
+{ #category : 'Grail-Constructors' }
+hashlib >> sha384: data [
+	^ Hash algo: #sha384 data: data
 
 ]
 

@@ -1,5 +1,19 @@
 Extension { #name : 'BaseException' }
 
+{ #category : 'Grail-Initialization' }
+BaseException class >> ___allocateForNew: args kw: kwargs [
+	"CPython's BaseException_new: an instance of the receiver holding args.
+	Keywords are ignored here -- BaseException_init is what refuses them -- and
+	___classForArgs___: still decides the class, so OSError.__new__(OSError,
+	2, 'x') is a FileNotFoundError and a bare group narrows, as in CPython."
+
+	| inst |
+	inst := (self ___classForArgs___: args) ___new___.
+	inst ___args___: args.
+	^ inst
+
+]
+
 { #category : 'Grail-Raise Validation' }
 BaseException class >> ___applyCause___: aCause to: anException [
 	"Wire up ``raise anException from aCause''.  CPython sets __cause__, and
@@ -128,6 +142,47 @@ BaseException class >> ___exceptionFromClass___: cls [
 		((b repr: cls) @env0:asString) @env0:,
 		' should have returned an instance of BaseException, not ' @env0:,
 		((b repr: (b type: inst)) @env0:asString)
+
+]
+
+{ #category : 'Grail-Initialization' }
+BaseException class >> ___excStaticNew: positional kw: kwargs [
+	"CPython's ``Exc.__new__(cls, *args)'' -- __new__ called EXPLICITLY, with the
+	class to build as its first argument: ``Exception.__new__(cls, m)'' and
+	``super().__new__(cls, m)'' in a subclass's own __new__.
+
+	The class-side ``__new__:'' family cannot serve that call.  It is the
+	CONSTRUCTOR the class-call fast path emits -- ``ValueError('m')'' is
+	``ValueError __new__: 'm''' -- so its receiver is the class and every
+	argument is a constructor argument, and an explicit call reached it with
+	``cls'' as the first ARGUMENT: ``Exception.__new__(C, 'm')'' built an
+	Exception whose args were (C, 'm').  A subclass's __init__ resetting
+	``args'' hid that for every class but OSError, whose __init__ CPython makes
+	a no-op once __new__ is overridden (test_exception_hierarchy's
+	test_new_overridden and test_init_new_overridden).
+
+	So the __new__ a class READ answers for a built-in exception (BoundMethod
+	class >> ___forAttrRead___:selector:) and the one super() resolves to
+	(SuperBoundMethod >> value:value:) both come here.  The receiver is the
+	class whose __new__ was read, which is what CPython's messages name.  No
+	__init__ runs: CPython's type call runs it, an explicit __new__ does not."
+
+	| cls |
+	(positional @env0:isNil or: [positional @env0:isEmpty]) ifTrue: [
+		^ TypeError ___signal___: self @env0:name @env0:asString
+			@env0:, '.__new__(): not enough arguments'].
+	cls := positional @env0:at: 1.
+	(cls @env0:isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___: self @env0:name @env0:asString
+			@env0:, '.__new__(X): X is not a type object ('
+			@env0:, (bytes ___pyTypeNameOf___: cls) @env0:, ')'].
+	((cls == self) or: [cls @env0:inheritsFrom: self]) ifFalse: [
+		^ TypeError ___signal___: self @env0:name @env0:asString
+			@env0:, '.__new__(' @env0:, (cls ___pyAttrLoad___: #'__name__') @env0:asString
+			@env0:, '): ' @env0:, (cls ___pyAttrLoad___: #'__name__') @env0:asString
+			@env0:, ' is not a subtype of ' @env0:, self @env0:name @env0:asString].
+	^ cls ___allocateForNew: (positional @env0:copyFrom: 2 to: positional @env0:size)
+		kw: kwargs
 
 ]
 
@@ -303,7 +358,7 @@ BaseException class >> ___pyRaise___: excValue cause: aCause [
 			was trying to construct instead of the one construction actually threw
 			-- and only when nothing happened to be in flight, which is why it
 			survived so long (test_raise test_erroneous_exception)."
-			((BaseException @env0:___currentException___) isNil
+			((BaseException @env0:___handledException___) isNil
 				and: [(excValue @env0:___hasUserInit___) not])
 					ifTrue: [^ excValue @env0:signal].
 			^ excValue ___signalNew___: (Array @env0:new) kw: nil cause: nil].
@@ -414,6 +469,26 @@ BaseException class >> ___pyRaiseNew___: cls args: positional kw: kwargs cause: 
 		^ self ___pyRaise___: (cls @env1:value: positional value: kwargs)
 			cause: aCause].
 	^ cls ___signalNew___: positional kw: kwargs cause: aCause
+
+]
+
+{ #category : 'Grail-Initialization' }
+BaseException class >> ___pythonClassDefines: aName [
+	"Does a Python-defined class on the receiver's chain, at or below the
+	built-in it rests on, define aName itself (instance or class side)?  A
+	merged secondary base's methods are compiled into the subclass, so they
+	count as its own."
+
+	| c family |
+	family := importlib @env0:___pythonNameFamilyOf___: aName.
+	c := self.
+	[c ~~ nil and: [(c @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
+			environmentId: 1) ~~ nil]] whileTrue: [
+		((c ___grailOwnsPythonDef___: aName family: family forwarders: true)
+			or: [c @env0:class ___grailOwnsPythonDef___: aName family: family forwarders: true])
+				ifTrue: [^ true].
+		c := c @env0:superclass].
+	^ false
 
 ]
 
@@ -777,8 +852,9 @@ BaseException >> ___applyImplicitContext___ [
 	cause=Y and context=Y there, with the flag on so only the cause renders.
 
 	The exception being handled is the one TryAst records in
-	___currentException___ on handler entry (and restores on exit), so no new
-	bookkeeping is needed.
+	___currentException___ on handler entry (and restores on exit), or, in a
+	generator body with no handler of its own running, the one it inherited
+	from its resumer -- ___handledException___ answers whichever applies.
 
 	It must not overwrite a context already set -- an explicit one, or this
 	exception being re-raised -- and must not chain an exception to itself.
@@ -793,7 +869,7 @@ BaseException >> ___applyImplicitContext___ [
 
 	| current probe next |
 	(self ___rawContext___) isNil ifFalse: [^ self].
-	current := BaseException @env0:___currentException___.
+	current := BaseException @env0:___handledException___.
 	current isNil ifTrue: [^ self].
 	current == self ifTrue: [^ self].
 	probe := current.
@@ -1383,7 +1459,7 @@ BaseException >> ___signal___: message [
 	Idempotent and memoised in SessionTemps, so after the first exception it is
 	one dictionary probe on a path that already does one."
 	BaseException @env0:___ensureStackCapture___.
-	(BaseException @env0:___currentException___) isNil ifFalse: [
+	(BaseException @env0:___handledException___) isNil ifFalse: [
 		self ___applyImplicitContext___].
 	self ___captureFrameLocalsIfSuggestible___.
 	^ self @env0:signal: message

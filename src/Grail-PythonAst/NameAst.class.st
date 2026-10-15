@@ -1103,21 +1103,31 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 		and: [CallAst classBeingCompiled notNil
 			and: [CallAst moduleClassBeingCompiled isNil
 			and: [CallAst inClassBodyValueEmit
-			and: [self ___inNestedScopeWithinClassBody___ not
-			and: [CallAst classBodyBoundNames isNil
-				or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]]])
+			and: [self ___inNestedScopeWithinClassBody___ not]]]])
 		ifTrue: [
+			| boundBefore |
 			"Sibling method -> receiver-less BoundMethod (call protocol pops
 			positional[1] as the receiver); sibling @staticmethod -> BoundMethod
 			on the class; nested class -> the per-class dynamic store.  None of
 			these needs a module instance, so they mirror the module block
-			exactly."
-			(CallAst classFunctionNames notNil
-				and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			exactly.
+
+			So does the POSITION GATE.  Every branch but the conditional one
+			reads the name only once a statement BEFORE this one bound it; the
+			conditional one reads the per-class dynamic store whenever it is
+			set, because a loop target or an ``if'' binding is read inside the
+			very statement that binds it -- ``for i in xs: j = i''.  The gate
+			used to sit on this whole block, so that read fell through to a
+			bare doit identifier and the exec failed to compile: ``undefined
+			symbol i'' (#1683)."
+			boundBefore := CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol].
+			(boundBefore and: [CallAst classFunctionNames notNil
+				and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				self ___printSiblingFunctionOn___: aStream.
 				^self].
-			(CallAst classStaticFunctionNames notNil
-				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			(boundBefore and: [CallAst classStaticFunctionNames notNil
+				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				aStream
 					nextPutAll: '(BoundMethod receiver: ';
 					nextPutAll: CallAst ___classBeingCompiledVar___;
@@ -1125,8 +1135,8 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ')'.
 				^self].
-			(CallAst classNestedClassNames notNil
-				and: [CallAst classNestedClassNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			(boundBefore and: [CallAst classNestedClassNames notNil
+				and: [CallAst classNestedClassNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				aStream
 					nextPutAll: '(';
 					nextPutAll: CallAst ___classBeingCompiledVar___;
@@ -1163,8 +1173,8 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 			each ``<Class> <attr>: value'' store, so a later value expression
 			reads the earlier attr with a plain getter send.  nil means ``not
 			bound yet'' (Grail's nil-as-absent rule) -> enclosing scope."
-			(CallAst classAttrNames notNil
-				and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			(boundBefore and: [CallAst classAttrNames notNil
+				and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				aStream
 					nextPutAll: '((';
 					nextPutAll: CallAst ___classBeingCompiledVar___;
@@ -2645,6 +2655,22 @@ NameAst >> emitDoitEnclosingScopeLoad: aSymbol on: aStream [
 	Longstanding -- the previous ___signalUndefined___: emit had the same shape
 	and merged the same way."
 
+	"IN AN exec()'s SCOPE THE NAME IS RESOLVED THROUGH THAT SCOPE, at run time.
+	A free name has no slot when it is compiled, and a function the exec
+	defines keeps reading the doit's scope long after the exec returned -- so
+	``def g(): return next(me)'' followed by ``me = g()'' in a SEPARATE exec
+	(every doctest example is one) found nothing: the builtins-only resolver
+	cannot see the exec's namespace at all once the exec is over.  CPython's
+	LOAD_GLOBAL reads the globals dict as the function runs.  The scope is
+	named by its ``___pyGlobals___'' handle, which ensureModuleScope: binds; a
+	doit compiled against some other symbol list (a class body nested in a
+	function) has none and keeps the builtins resolver."
+	((ModuleAst compilingDoitScope) notNil
+		and: [((ModuleAst compilingDoitScope) resolveSymbol: #'___pyGlobals___') notNil])
+			ifTrue: [
+				aStream nextPutAll: '(NameError @env0:___resolveDoitGlobal___: '; nextPut: $'.
+				aStream nextPutAll: aSymbol; nextPutAll: ''' scope: ___pyGlobals___)'.
+				^ self].
 	aStream nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: '; nextPut: $'.
 	aStream nextPutAll: aSymbol; nextPut: $'.
 	aStream nextPut: $)

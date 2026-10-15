@@ -804,7 +804,10 @@ ExecBlockAttrs class >> at: aBlock attr: aName put: aValue [
 	___writeDefaultsFor___:value:.  When it takes effect nothing is stored
 	here, so the read recomputes the live values; when the shape cannot carry
 	it, the value falls through to the table as before."
+	"Type-checked FIRST: a Python list is a SequenceableCollection, so the
+	write-through accepted ``f.__defaults__ = [1]'' that CPython refuses."
 	(aName asString = '__defaults__') ifTrue: [
+		self ___checkFunctionWrite___: aName value: aValue.
 		(self ___writeDefaultsFor___: aBlock value: aValue) ifTrue: [^ aValue]].
 	"``func.__dict__ = d'' REPLACES the mapping; every other name is an entry IN
 	it.  Intercepted here rather than in ExecBlock>>__setattr__ (which is where

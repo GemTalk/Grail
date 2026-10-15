@@ -24,6 +24,28 @@ ExecLocalsTestCase >> assertResults: expectations [
 
 ]
 
+{ #category : 'Grail-Tests' }
+ExecLocalsTestCase >> testCodeAnExecDefinesReadsTheGlobalsDictAsItRuns [
+	"exec(src, g) ran in a scope seeded from g, and a function it defined kept
+	reading that copy: a name a later exec bound was NameError and one it
+	rebound kept its old value, so every doctest whose function reads a name a
+	later example binds failed (test_generators fun and pep, test_setcomps).
+	Each exec into one dict now reuses the scope, and a free name is read from
+	the dict at run time.  tests/python/exec_shared_globals.py holds the
+	checks, each agreeing with CPython 3.14 but for three pinned gaps of the
+	copy-back."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'exec_shared_globals' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exec_shared_globals.py')
+		name: 'exec_shared_globals'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '12 checks, 0 disagreeing [], keys match: True'
+
+]
+
 { #category : 'Grail-Tests - builtins' }
 ExecLocalsTestCase >> testEvalTakesLocalsOnTheSameTerms [
 	"eval() had the identical gap and the identical shape, so it got the

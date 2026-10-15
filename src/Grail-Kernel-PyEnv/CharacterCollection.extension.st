@@ -21,6 +21,32 @@ CharacterCollection class >> ___allocateStringLike___: source [
 
 ]
 
+{ #category : 'Grail-Initialization' }
+CharacterCollection class >> ___grailStrSubclassNew___: positional kw: keywords [
+	"The content of a NEW INSTANCE of a str subclass with no __new__ of its
+	own: CPython's ``str.__new__(cls, *args, **kw)'' -- (object, encoding,
+	errors), positionally or by keyword -- answered self-typed.  Both ways a
+	str subclass is constructed come here: the value:value: ClassDefAst
+	writes for a class statement naming ``str'', and object >>
+	___allocateInstance___:kw: for one built by type() or over a base held
+	in a variable, which used to answer an EMPTY string (#1706).  One method,
+	so the two cannot drift: the class statement's copy ignored keywords
+	(``S(b'x', encoding='ascii')'' answered the bytes' repr)."
+
+	| n |
+	(keywords @env0:notNil @env0:and: [keywords @env0:isEmpty @env0:not]) ifTrue: [
+		^ self _new: positional kw: keywords].
+	n := positional @env0:size.
+	n @env0:> 3 ifTrue: [
+		^ TypeError ___signal___: 'str() takes at most 3 arguments ('
+			@env0:, n @env0:printString @env0:, ' given)'].
+	n @env0:= 0 ifTrue: [^ self __new__: ''].
+	n @env0:= 1 ifTrue: [^ self __new__: (positional @env0:at: 1)].
+	n @env0:= 2 ifTrue: [^ self __new__: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	^ self __new__: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)
+
+]
+
 { #category : 'Grail-String Methods' }
 CharacterCollection class >> ___maketransKey___: aKey [
 	"One key of a maketrans table, as the CODEPOINT that ``translate:'' looks up.
@@ -54,25 +80,13 @@ CharacterCollection class >> ___percentOperandIsMapping___: args forBytes: forBy
 	refusal methods that exist only to raise CPython's TypeError, every Python
 	instance inherits PythonInstance's, a builtin function's BoundMethod
 	subscripts as a PEP 585 pass-through, and a module is a SymbolDictionary.
-	None of those is a mapping to CPython, so each is excluded by name."
+	None of those is a mapping to CPython: object>>___hasOwnGetitem___
+	excludes them."
 
-	| defCls meth |
 	(args @env0:isKindOf: Array) ifTrue: [^ false].
 	(args @env0:isKindOf: CharacterCollection) ifTrue: [^ false].
 	(forBytes @env0:and: [args @env0:isKindOf: ByteArray]) ifTrue: [^ false].
-	((args @env0:isKindOf: BoundMethod) @env0:or: [args @env0:isKindOf: module])
-		ifTrue: [^ false].
-	defCls := (args @env0:class)
-		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
-	defCls @env0:isNil ifTrue: [
-		defCls := (args @env0:class)
-			@env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1.
-		defCls @env0:isNil ifTrue: [^ false].
-		^ defCls ~~ PythonInstance].
-	defCls == PythonInstance ifTrue: [^ false].
-	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
-	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
-		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+	^ args ___hasOwnGetitem___
 
 ]
 
@@ -354,6 +368,18 @@ CharacterCollection class >> _new: positional kw: kwargs [
 	wording CPython 3.14 uses."
 
 	| args obj encoding errors |
+	"MORE THAN THREE POSITIONALS is an arity error, in CPython's two
+	wordings: the vectorcall one for positionals alone, the tp_new one --
+	counting the keywords too -- when there are any.  Grail read the fourth
+	and later as nothing and the second and third as an encoding, and so
+	answered ``decoding to str: need a bytes-like object''."
+	positional @env0:size @env0:> 3 ifTrue: [
+		^ TypeError ___signal___: ((kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty])
+			ifTrue: ['str expected at most 3 arguments, got '
+				@env0:, positional @env0:size @env0:printString]
+			ifFalse: ['str() takes at most 3 arguments ('
+				@env0:, (positional @env0:size @env0:+ kwargs @env0:size) @env0:printString
+				@env0:, ' given)'])].
 	args := OrderedCollection @env0:withAll: positional.
 	kwargs @env0:keysDo: [:k |
 		(#('object' 'encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
@@ -2039,7 +2065,7 @@ CharacterCollection >> __dict__ [
 	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
 		environmentId: 1) @env0:isNil ifTrue: [
 			^ AttributeError ___signal___: '''str'' object has no attribute ''__dict__'''].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 
 ]
 

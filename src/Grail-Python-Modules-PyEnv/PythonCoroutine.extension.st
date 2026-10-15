@@ -240,6 +240,7 @@ PythonCoroutine >> ___finalizeUnawaited___ [
 
 	(started == true or: [done == true]) ifTrue: [^ self].
 	done := true.
+	self @env0:___releaseBody___.
 	self ___warnNeverAwaited___
 
 ]
@@ -292,6 +293,20 @@ PythonCoroutine >> ___qualnameForWarning___ [
 	q := self @env0:dynamicInstVarAt: #'__qualname__'.
 	(q @env0:isKindOf: CharacterCollection) ifFalse: [^ '?'].
 	^ q @env0:asString
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> ___readOnlyGetsetNames___ [
+	"See PythonGenerator >> ___refuseReadOnlyAttr___:."
+
+	^ #('cr_await' 'cr_code' 'cr_frame' 'cr_running' 'cr_suspended')
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> ___readOnlyMemberNames___ [
+	^ #('cr_origin')
 
 ]
 
@@ -380,27 +395,6 @@ PythonCoroutine >> __await__ [
 
 ]
 
-{ #category : 'Grail-Protocol Refusal' }
-PythonCoroutine >> __iter__ [
-	<grailProtocolRefusal>
-	"CPython: a coroutine is NOT iterable -- iter(), for, list(), sum(), a
-	comprehension all refuse before running any of the body.  Grail inherited
-	the generator's ``^ self'' here, so ``list(coro)'' DROVE the coroutine:
-	its body ran, its StopIteration was PEP-479'd into 'coroutine raised
-	StopIteration', and test_func_4 saw a RuntimeError where CPython promises
-	a TypeError and an untouched body.
-
-	The refusal lives at the PYTHON protocol boundary only: the internal
-	delegation paths (await's ___yieldFrom___:, do:, send:) never consult
-	__iter__, so awaiting -- and the @types.coroutine ``yield from coro''
-	pattern -- are untouched."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not iterable')
-
-]
-
 { #category : 'Grail-Coroutine Protocol' }
 PythonCoroutine >> __name__ [
 	"The coroutine's own __name__ (a per-object value, set at call time and
@@ -415,26 +409,18 @@ PythonCoroutine >> __name__ [
 
 ]
 
-{ #category : 'Grail-Protocol Refusal' }
-PythonCoroutine >> __next__ [
-	<grailProtocolRefusal>
-	"next(coro) -- CPython's spelling of the same refusal, measured:
-	``TypeError: 'coroutine' object is not an iterator''.  do: no longer
-	routes through __next__ (it drives send: directly), so this only fires
-	on genuine Python-protocol iteration."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not an iterator')
-
-]
-
 { #category : 'Grail-Coroutine Protocol' }
 PythonCoroutine >> __qualname__ [
 	"As __name__, for the qualified name (``qualified name of the
 	coroutine'')."
 
 	^ (self @env0:dynamicInstVarAt: #'__qualname__') @env0:ifNil: [super __qualname__]
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> close [
+	^ self ___close___
 
 ]
 
@@ -467,7 +453,7 @@ PythonCoroutine >> cr_frame [
 	until the body finishes, None afterwards.  test_cr_frame_after_close pins
 	exactly that flip."
 
-	^ self gi_frame
+	^ self ___genFrame___
 
 ]
 
@@ -484,7 +470,7 @@ PythonCoroutine >> cr_origin [
 PythonCoroutine >> cr_running [
 	"Python's ``coro.cr_running'' -- the coroutine spelling of gi_running."
 
-	^ self gi_running
+	^ self ___genRunning___
 
 ]
 
@@ -496,6 +482,37 @@ PythonCoroutine >> cr_suspended [
 	straight through on its first send, CREATED -> CLOSED, never suspended --
 	the no-event-loop semantics, not an accident."
 
-	^ self gi_suspended
+	^ self ___genSuspended___
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> send: aValue [
+	"coroutine.send() -- the generator's, from the shared machinery
+	(PyGeneratorBase >> ___send___:).  A coroutine has send / throw / close in
+	CPython, as a generator does; an async generator does not."
+
+	^ self ___send___: aValue
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> throw: anException [
+	^ self ___throw___: anException
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> throw: aType _: aValue [
+	"The deprecated multi-arg signature -- see PyGeneratorBase >>
+	___throwLegacy___:value:."
+
+	^ self ___throwLegacy___: aType value: aValue
+
+]
+
+{ #category : 'Grail-Coroutine Protocol' }
+PythonCoroutine >> throw: aType _: aValue _: aTb [
+	^ self ___throwLegacy___: aType value: aValue tb: aTb
 
 ]

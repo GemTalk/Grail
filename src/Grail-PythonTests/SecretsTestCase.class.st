@@ -51,3 +51,22 @@ SecretsTestCase >> testIndependentOfRandomSeed [
 	self deny: t1 = t2.
 
 ]
+
+{ #category : 'Grail-Tests - Random Ints' }
+SecretsTestCase >> testRandbitsAndRandbelowPastTwoToThe32 [
+	"randbits(k) and randbelow(n) past 2**32, which the kernel's
+	integerBetween:and: refuses (``Intervals > 2**32 not yet supported'').
+	numpy.random's SeedSequence() asks for randbits(128).  Each value is in
+	range, and the high bits are used: over 50 draws, randbits(33) reaches
+	2**32 and randbits(128) reaches 2**100 (each fails with probability
+	below 2**-49)."
+
+	self assert: (self eval: 'import secrets
+ks = (1, 31, 32, 33, 64, 128, 200)
+ok = all(0 <= secrets.randbits(k) < 2**k for k in ks for _ in range(20))
+below = all(0 <= secrets.randbelow(2**40 + 3) < 2**40 + 3 for _ in range(50))
+high33 = any(secrets.randbits(33) >= 2**32 for _ in range(50))
+high128 = any(secrets.randbits(128) >= 2**100 for _ in range(50))
+repr((ok, below, high33, high128, secrets.randbelow(1), secrets.randbits(0)))') equals: '(True, True, True, True, 0, 0)'
+
+]

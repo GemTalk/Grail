@@ -61,6 +61,17 @@ OrderedCollection class >> __new__: iterable [
 	     behaviour for classes that lack __iter__."
 
 	| result iter done cls hasIter hasGetitem ic |
+	"``X.__new__(cls)'' -- CPython's first argument to a type's __new__ is the
+	TARGET CLASS, not the contents: a class that inherits from the receiver
+	can only be that.  Built as a plain constructor argument it was
+	iterated -- ``'type' object is not iterable'' -- which is what
+	SQLAlchemy's ``ImmutableDictBase.__new__(cls)'' (FacadeDict) raised at
+	MetaData() construction.  A STRICT subclass only: ``list(list)'' reaches
+	here too and must raise as CPython's does, and a class that does not
+	inherit from the receiver stays an iterable (``list(SomeEnum)'')."
+	((iterable @env0:isKindOf: Behavior)
+		@env0:and: [iterable @env0:inheritsFrom: self])
+			@env0:ifTrue: [^ iterable ___new___].
 	result := self ___new___.
 	"Strings are SequenceableCollections, but ``at:'' yields Characters, not
 	the 1-char Python strings CPython's ``list(str)'' produces.  Route
@@ -410,7 +421,7 @@ OrderedCollection >> __dict__ [
 		^ AttributeError ___signal___:
 			'''list'' object has no attribute ''__dict__'''
 	].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 
 ]
 
@@ -446,14 +457,19 @@ OrderedCollection >> __iadd__: other [
 	reflected add is absent or punts (NotImplemented) does CPython fall back to
 	extending in place.  Mirror that: if other's class defines its OWN __radd__:,
 	try other.__radd__(self) and honour a non-NotImplemented result; otherwise
-	extend in place.  ``lst += 5'' still reaches the ``not iterable'' TypeError via
-	extend (int.__radd__ punts on a list); ``lst += [..]/(..)/'..''' stay in-place
+	extend in place.  ``lst += 5'' reaches the ``not iterable'' TypeError via
+	extend (see below for int's __radd__); ``lst += [..]/(..)/'..''' stay in-place
 	(list/tuple/str define no __radd__).  test_userlist test_mixed_iadd asserts
 	``list += UserList'' yields a UserList."
 
+	"Only a __radd__ a PYTHON class defines.  A built-in's own (int's, float's)
+	is CPython's nb_add, which answers NotImplemented for a list; Grail's
+	raises the binary TypeError instead, so ``lst += 5'' said ``can only
+	concatenate'' / ``unsupported operand'' where CPython reaches extend and
+	says ``'int' object is not iterable'' (#1688)."
 	| owner ni result |
 	owner := other @env0:class @env0:whichClassIncludesSelector: #'__radd__:' environmentId: 1.
-	owner ~~ nil ifTrue: [
+	(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifTrue: [
 		ni := Python @env0:at: #NotImplemented otherwise: nil.
 		result := other @env0:perform: #'__radd__:' env: 1 withArguments: { self }.
 		result ~~ ni ifTrue: [^ result]].

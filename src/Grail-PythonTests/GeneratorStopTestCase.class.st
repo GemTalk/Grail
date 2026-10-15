@@ -37,7 +37,7 @@ GeneratorStopTestCase >> testBareReraiseInBodyReachesConsumer [
 { #category : 'Grail-Tests-PEP479' }
 GeneratorStopTestCase >> testConversionAlsoAppliesOnTheSendPath [
 	"send: and throw: had the same re-signal code duplicated; both now route
-	through _signalEscapedException, so the wrapping is not next()-only."
+	through ___signalEscapedException___, so the wrapping is not next()-only."
 
 	self
 		assertResult: 'convert_via_send'

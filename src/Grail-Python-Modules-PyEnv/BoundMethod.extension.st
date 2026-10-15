@@ -56,6 +56,13 @@ BoundMethod class >> ___forAttrRead___: aReceiver selector: aSymbol [
 	(aSymbol == #'__new__' and: [aReceiver @env0:isKindOf: Behavior])
 		ifFalse: [^ self receiver: aReceiver selector: aSymbol].
 	aReceiver == object ifTrue: [^ self receiver: aReceiver selector: aSymbol].
+	"A BUILT-IN EXCEPTION'S __new__ takes the class to build first, as every
+	__new__ does in CPython; the class-side ``__new__:'' family it would
+	otherwise bind is the class-call CONSTRUCTOR.  Unless Python code on the
+	chain defines its own __new__, which is then what the read answers."
+	(((aReceiver == BaseException) or: [aReceiver @env0:inheritsFrom: BaseException])
+		and: [(aReceiver ___pythonClassDefines: #'__new__') not])
+			ifTrue: [^ self @env0:new @env0:_setStaticExceptionNewOn: aReceiver].
 	objectMeta := object @env0:class.
 	fromObject := false.
 	#(#'__new__' #'__new__:' #'__new__:_:' #'__new__:_:_:' #'__new__:_:_:_:'
@@ -85,19 +92,42 @@ BoundMethod class >> ___grailPinGeneration___ [
 
 { #category : 'Grail-Dynamic Rebinding' }
 BoundMethod class >> ___grailPinnedAt___: aSelector [
-	"The generation aSelector was pinned at, or nil when it was never pinned.
-	For UnboundMethod, which carries the same stamp and needs the same answer
-	but cannot see this class's class variables."
+	"The generation aSelector was most recently pinned at, on any class, or nil
+	when it was never pinned."
 
+	| pins latest |
 	GrailPinnedSelectors == nil ifTrue: [^ nil].
-	^ GrailPinnedSelectors @env0:at: aSelector otherwise: nil
+	pins := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pins == nil ifTrue: [^ nil].
+	pins @env0:do: [:g | (latest == nil or: [g @env0:> latest]) ifTrue: [latest := g]].
+	^ latest
 
 ]
 
 { #category : 'Grail-Dynamic Rebinding' }
-BoundMethod class >> ___grailPinSelector___: aSelector [
-	"Record that aSelector has a ``___grailOrig_'' shadow, so a BoundMethod
-	handed out before the change still reaches the original.
+BoundMethod class >> ___grailPinnedAt___: aSelector in: aClass [
+	"The generation aSelector was pinned at ON aClass -- the class owning its
+	``___grailOrig_'' shadow -- or nil.  For UnboundMethod, which carries the
+	same stamp and needs the same answer but cannot see this class's class
+	variables."
+
+	| pins |
+	GrailPinnedSelectors == nil ifTrue: [^ nil].
+	pins := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pins == nil ifTrue: [^ nil].
+	^ pins @env0:at: aClass otherwise: nil
+
+]
+
+{ #category : 'Grail-Dynamic Rebinding' }
+BoundMethod class >> ___grailPinSelector___: aSelector in: aClass [
+	"Record that aSelector has a ``___grailOrig_'' shadow on aClass, so a
+	BoundMethod handed out before the change still reaches the original.
+
+	PER CLASS: the generation is kept per (selector, class), and a reader
+	compares a handle's stamp with the pin of the class whose shadow it would
+	run.  One generation per selector let a pin on any class re-date every
+	capture of that selector on every other (___pinnedSelectorFor___:receiver:).
 
 	PER SESSION.  A pin goes with a shadow, and the shadows are transient
 	session methods (Behavior >> ___compileSessionMethod:category:), so the
@@ -115,14 +145,19 @@ BoundMethod class >> ___grailPinSelector___: aSelector [
 	persistent readers, whose class variables are now never set -- nothing is
 	pinned, at the cost of one nil test."
 
-	| holder gen |
+	| holder gen pins byClass |
 	holder := self ___grailSessionPinHolder___.
 	gen := (holder @env0:at: #'___grailSessionPinGeneration___') @env0:+ 1.
 	holder @env0:at: #'___grailSessionPinGeneration___' put: gen.
 	"The generation the pin happened at.  A BoundMethod stamped with an EARLIER
 	one predates the change and redirects; one stamped later was looked up
 	afterwards and must see the change."
-	(holder @env0:at: #'___grailSessionPins___') @env0:at: aSelector @env0:asSymbol put: gen.
+	pins := holder @env0:at: #'___grailSessionPins___'.
+	byClass := pins @env0:at: aSelector @env0:asSymbol otherwise: nil.
+	byClass == nil ifTrue: [
+		byClass := IdentityKeyValueDictionary @env0:new.
+		pins @env0:at: aSelector @env0:asSymbol put: byClass].
+	byClass @env0:at: aClass put: gen.
 	"EVICT THE INTERNED UNBOUND HANDLES for this selector.  ``Cls.m'' is
 	interned per (class, selector), so without this there is only ever ONE
 	handle and the generation stamp cannot separate a capture taken before the
@@ -171,6 +206,7 @@ BoundMethod class >> ___grailSessionPinHolder___ [
 	temps @env0:at: #'GrailPinHolder' put: holder.
 	{ { self @env0:class. #'___grailPinGeneration___'. 1 }.
 	  { self @env0:class. #'___grailPinnedAt___:'. 1 }.
+	  { self @env0:class. #'___grailPinnedAt___:in:'. 1 }.
 	  { self. #'___pinnedSelectorFor___:receiver:'. 1 }.
 	  { self. #'_setReceiver:selector:'. 0 } } @env0:do: [:each | | cls sel env src |
 		cls := each @env0:at: 1.
@@ -384,6 +420,22 @@ BoundMethod >> ___classSideArityMessageFor___: aReceiver given: nGiven [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+BoundMethod >> ___grailRebindDefaults___: value kw: isKw [
+	"A module-level function's defaults written in a shape its compiled
+	prologue cannot carry: rebind its calls in this session (Behavior >>
+	___grailRebind___:code:receiverOffset:value:kw:initial:, #1714).  The
+	caller still stores the value as an attribute, which is what the read
+	answers.  False when the function cannot be rebound."
+
+	| code |
+	code := [self __code__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ receiver @env0:class ___grailRebind___: selVarargs code: code receiverOffset: 0
+		value: value kw: isKw
+		initial: [{ self __defaults__ . self __kwdefaults__ }]
+
+]
+
 { #category : 'Grail-Private' }
 BoundMethod >> ___instanceSideArityMessageFor___: aReceiver given: nGiven [
 	"CPython's TypeError text for calling this INSTANCE-bound Python def with
@@ -422,6 +474,28 @@ BoundMethod >> ___instanceSideArityMessageFor___: aReceiver given: nGiven [
 		@env0:, ' positional argument' @env0:, ((argc @env0:= 1) ifTrue: [''] ifFalse: ['s'])
 		@env0:, ' but ' @env0:, given @env0:printString
 		@env0:, ((given @env0:= 1) ifTrue: [' was given'] ifFalse: [' were given'])
+
+]
+
+{ #category : 'Grail-Private' }
+BoundMethod >> ___instanceSideDefinerIn___: aClass [
+	"The nearest class from aClass up whose INSTANCE side defines this
+	method's name in any arity, or nil.  Non-nil means this handle is an
+	instance method read through a class -- ``object.__setattr__'' -- rather
+	than a classmethod, which lives on the metaclass only."
+
+	| family c |
+	family := importlib @env0:___pythonNameFamilyOf___: selector.
+	c := aClass.
+	[c == nil] @env0:whileFalse: [ | md |
+		md := c @env0:methodDictForEnv: 1.
+		md @env0:notNil ifTrue: [
+			(md @env0:includesKey: selector) ifTrue: [^ c].
+			family @env0:notNil ifTrue: [
+				family @env0:do: [:sel |
+					(sel @env0:notNil and: [md @env0:includesKey: sel]) ifTrue: [^ c]]]].
+		c := c @env0:superclass].
+	^ nil
 
 ]
 
@@ -601,15 +675,20 @@ BoundMethod >> ___methodDocForClass___: aClass name: aName [
 	"First ___methodDocTable___ entry named aName along the lookup chain
 	(see ___methodLookupChainFor___:), or nil.  Mirrors ___methodSignatureForClass___:name:, including the env-1
 	probe -- the table is compiled in environment 1, so an env-0
-	``canUnderstand:'' would never see it."
+	``canUnderstand:'' would never see it.
 
-	| tbl v |
+	The walk stops at the first table that HAS the name, even when the entry
+	is nil: ClassDefAst records an undocumented def as nil, so an override
+	without a docstring answers None rather than its base's docstring (#1650).
+	A table without the name -- a hand-written one such as Flag's -- still
+	passes the read on to the next class."
+
+	| tbl |
 	aClass == nil ifTrue: [^ nil].
 	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
 		((c @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
 			tbl := c ___methodDocTable___.
-			v := tbl @env0:at: aName otherwise: nil.
-			v == nil ifFalse: [^ v]]].
+			(tbl @env0:includesKey: aName) ifTrue: [^ tbl @env0:at: aName]]].
 	^ nil
 
 ]
@@ -720,7 +799,7 @@ BoundMethod >> ___pinnedSelectorFor___: aSelector receiver: actualReceiver [
 	variable.  A program that pins nothing pays one identity compare and one
 	class-variable read."
 
-	| pinned shadow pinnedAt cls owner |
+	| pinned shadow pinnedAt cls owner pins |
 	(actualReceiver == (builtins @env0:___instance___)) ifTrue: [
 		pinned := SessionTemps @env0:current
 			@env0:at: #GrailBuiltinPinnedSelectors otherwise: nil.
@@ -744,8 +823,8 @@ BoundMethod >> ___pinnedSelectorFor___: aSelector receiver: actualReceiver [
 	alongside compiling a shadow method onto a class, and neither should outlive
 	the session that did it."
 	GrailPinnedSelectors == nil ifTrue: [^ aSelector].
-	pinnedAt := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
-	pinnedAt == nil ifTrue: [^ aSelector].
+	pins := GrailPinnedSelectors @env0:at: aSelector otherwise: nil.
+	pins == nil ifTrue: [^ aSelector].
 	"A selector pinned on ONE class must not redirect a same-named send to an
 	unrelated one; the shadow existing is the proof that this receiver is the
 	one that was pinned.  Only pinned selectors pay for the check."
@@ -753,6 +832,15 @@ BoundMethod >> ___pinnedSelectorFor___: aSelector receiver: actualReceiver [
 	cls := actualReceiver @env0:class.
 	owner := cls @env0:whichClassIncludesSelector: shadow environmentId: 1.
 	owner == nil ifTrue: [^ aSelector].
+	"THE GENERATION OF THE SHADOW'S OWN PIN, not the selector's latest.  A pin
+	was per SELECTOR, so pinning ``__iter__'' on one class re-dated every
+	capture of ``__iter__'' everywhere: asyncio's ``Future.__iter__ =
+	__await__'' made pydantic's captured ``Interval.__iter__'' predate a pin,
+	and it ran the shadow its base class had -- annotated_types'
+	``def __iter__(self): ...'', answering None (FastAPI's
+	test_multi_body_errors)."
+	pinnedAt := pins @env0:at: owner otherwise: nil.
+	pinnedAt == nil ifTrue: [^ aSelector].
 	"A CAPTURE OLDER THAN THE PIN REDIRECTS, whatever the change was."
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
 		and: [pinGeneration @env0:<= GrailPinGeneration]])
@@ -934,6 +1022,24 @@ BoundMethod >> ___receiverTypeName___ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+BoundMethod >> ___shimFunctionAttr___: aName [
+	"aName read off the C function object of a C extension's module function
+	(CPythonShim>>___functionObjectFor:), as an Association, or nil for any
+	other BoundMethod.  The shim's builtin_function_or_method answers
+	``__doc__'' and ``__text_signature__'' from its ml_doc as CPython splits
+	it, and numpy's add_docstring writes the signature into it."
+
+	| shim view |
+	(receiver @env0:class @env0:class @env0:includesSelector: #'___shimModuleName___')
+		ifFalse: [^ nil].
+	shim := CPythonShim @env0:current.
+	view := shim @env0:___functionObjectFor: self.
+	view @env0:isNil ifTrue: [^ nil].
+	^ aName @env0:-> (shim @env0:foreignGetAttr: view @env0:memoryAddress name: aName)
+
+]
+
 { #category : 'Grail-Class Compilation' }
 BoundMethod >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames [
 	"``class M(type)`` uses the canonical `type` singleton (a BoundMethod) as
@@ -969,6 +1075,43 @@ BoundMethod >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames
 	this message, naming the same class."
 	^ super @env1:___subclass___: aSymbol
 		instVarNames: ivarNames classInstVarNames: classIvarNames
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+BoundMethod >> ___writeDefaultsThrough___: name value: value [
+	"``f.__defaults__ = t'' / ``f.__kwdefaults__ = d'' on a MODULE-LEVEL
+	function, written into the memo its calls bind from, so the assignment
+	changes what the next call does.  Answers false for any other name or
+	receiver, and for a shape the memo cannot carry (module class >>
+	___writeDefaults:entry:kw:into:); the caller then stores the value as an
+	attribute, as before.
+
+	Before, every such write took that attribute route: the read answered the
+	new value and the call went on binding the def-time one -- a default that
+	reads back but is not in effect (#1228).  A closure already wrote through
+	(ExecBlockAttrs >> ___writeDefaultsFor___:value:).  When this one takes
+	effect, any attribute an earlier, uncarried write left behind is dropped,
+	so the read is computed from the memo again."
+
+	| sym isKw cls |
+	sym := name @env0:asSymbol.
+	isKw := sym == #'__kwdefaults__'.
+	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
+	(receiver @env0:isKindOf: module) ifFalse: [^ false].
+	"Once REBOUND, every later write goes to the rebound record, whatever its
+	shape: the session entry point binds from there, not from the memo."
+	cls := receiver @env0:class.
+	(cls ___grailReboundRecordAt___: selVarargs) == nil ifFalse: [
+		self ___grailRebindDefaults___: value kw: isKw.
+		^ false].
+	(receiver @env0:___writeFunctionDefaults___: selector @env0:asString
+		value: value kw: isKw) ifFalse: [
+			self ___grailRebindDefaults___: value kw: isKw.
+			^ false].
+	[self @env0:removeDynamicInstVar: sym]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ true
 
 ]
 
@@ -1221,6 +1364,10 @@ BoundMethod >> __delattr__: name [
 				AttributeError ___signal___:
 					('attribute ''' @env0:, name @env0:asString
 						@env0:, ''' of ''function'' objects is not writable')].
+		"``del f.__defaults__'' sets None in CPython, and so stops a call
+		binding them -- the write a None assignment makes (#1714)."
+		((name @env0:asSymbol == #'__defaults__') or: [name @env0:asSymbol == #'__kwdefaults__'])
+			ifTrue: [^ self __setattr__: name _: ExecBlock @env0:___pyNone___].
 		^ super @env1:__delattr__: name].
 	name @env0:asSymbol == #'__class__' ifTrue: [
 		TypeError ___signal___: 'can''t delete __class__ attribute'].
@@ -1303,6 +1450,8 @@ BoundMethod >> __doc__ [
 	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
 	self ___isPythonBoundMethod___ ifTrue: [
 		^ self __func__ ___pyAttrLoad___: #'__doc__'].
+	"A C extension's function: its ml_doc, without the signature line."
+	(self ___shimFunctionAttr___: '__doc__') @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
 	cls := (receiver == nil and: [definingClass @env0:notNil])
 		ifTrue: [definingClass]
 		ifFalse: [
@@ -1416,10 +1565,51 @@ BoundMethod >> __get__: obj _: objtype [
 	(``self._func.__get__(obj, self._cls)'') to re-bind the saved
 	function to the still-alive instance — exercised by Django's signal
 	dispatch once Signal.connect receives its true receiver argument
-	(see the NameAst LEGB guard)."
+	(see the NameAst LEGB guard).
 
+	WHAT obj IS BOUND TO DEPENDS ON WHICH PYTHON OBJECT THIS IS (#1418).  It
+	used to answer ``BoundMethod receiver: obj selector: selector'' for every
+	one, which RE-SENDS the selector to obj -- right only when obj's class
+	resolves that name to this very method:
+
+	  * ``object.__setattr__.__get__(obj)'' is a slot wrapper bound to obj, and
+	    runs object's implementation.  Re-sent, it ran obj's own override, so a
+	    class that freezes itself with ``__setattr__'' and initialises through
+	    the bound form -- attrs' Attribute.__init__ does exactly that -- raised
+	    on its own __init__.  The class-read instance method goes through
+	    UnboundMethod, whose binding is non-virtual.
+	  * a FUNCTION (a module-level def, or a staticmethod read through its
+	    class) binds obj as its first argument; re-sent, ``g.__get__(c)()''
+	    looked for a method ``g'' on c.
+	  * a METHOD -- bound to an instance, or a classmethod bound to its class
+	    -- is already bound, and CPython's method.__get__ answers it unchanged."
+
+	| definer |
 	obj == None ifTrue: [^ self].
-	^ BoundMethod receiver: obj selector: selector
+	"A module function bound to ITS OWN MODULE is itself.  CPython functions
+	 have no __self__, but Grail's answer the module, so code that takes them
+	 for bound methods round-trips them: Django's Signal.connect wraps
+	 ``reset_queries'' in a weakref.WeakMethod, whose call is
+	 ``__func__.__get__(__self__)''.  Binding the module as an argument there
+	 made every request's signal raise ``takes 0 positional arguments''."
+	(receiver @env0:isKindOf: module) ifTrue: [
+		obj == receiver ifTrue: [^ self].
+		^ MethodBinding instance: obj callable: self].
+	(receiver @env0:isKindOf: Behavior) ifFalse: [^ self].
+	(self ___isStaticMethodOnClass___: receiver name: self __name__) ifTrue: [
+		^ MethodBinding instance: obj callable: self].
+	"An implicit classmethod (a class-defined __init_subclass__) is compiled
+	 instance-side on its class, so the definer test below would take it for
+	 an instance method; it is bound to the class already."
+	definingClass == receiver ifTrue: [^ self].
+	definer := self ___instanceSideDefinerIn___: receiver.
+	definer == nil ifTrue: [^ self].
+	(obj @env0:isKindOf: definer) ifFalse: [
+		^ TypeError ___signal___: 'descriptor ''' @env0:, selector @env0:asString
+			@env0:, ''' for ''' @env0:, (definer ___pyTypeNameForError___) @env0:asString
+			@env0:, ''' objects doesn''t apply to a '''
+			@env0:, (obj ___pyTypeNameForError___) @env0:asString @env0:, ''' object'].
+	^ (UnboundMethod definingClass: definer selector: selector) __get__: obj _: objtype
 
 ]
 
@@ -1765,6 +1955,8 @@ BoundMethod >> __setattr__: name _: value [
 	closure, which is where those rules live (ExecBlock)."
 	self ___isPythonBoundMethod___ ifFalse: [
 		BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+		(self ___writeDefaultsThrough___: name value: value)
+			ifTrue: [^ ExecBlock @env0:___pyNone___].
 		^ super @env1:__setattr__: name _: value].
 	"``__class__'' is the one name that is a TYPE error rather than an attribute
 	one, and the difference is not cosmetic: CPython's method type defines no
@@ -1822,6 +2014,19 @@ BoundMethod >> __signature_spec__ [
 	singledispatchmethod reports through ``__wrapped__'' and the raw def's own
 	spec instead, which is why test_method_signatures still sees ``self''."
 	^ spec ifNil: [ExecBlock @env0:___pyNone___]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+BoundMethod >> __text_signature__ [
+	"A C function's signature as its docstring declares it -- what
+	inspect.signature reads for a builtin.  Only a C extension's function has
+	one here; for anything else the attribute is missing, as it is for a
+	Python function."
+
+	(self ___shimFunctionAttr___: '__text_signature__') @env0:ifNotNil: [:assoc |
+		^ assoc @env0:value].
+	^ AttributeError @env0:___signalMissing___: '__text_signature__' on: self
 
 ]
 

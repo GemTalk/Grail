@@ -10,6 +10,19 @@ GrailBuiltinImporter >> __repr__ [
 ]
 
 { #category : 'Grail-Import' }
+GrailBuiltinImporter >> _find_distributions: positional kw: kwargs [
+	"``finder.find_distributions(context=...)''.  The work is Python's, in the
+	importlib package beside _search_roots, whose root order it uses."
+
+	| pkg |
+	pkg := ((Python @env0:at: #builtins) @env1:instance)
+		@env1:___import__: { 'importlib' } kw: nil.
+	^ (pkg @env1:___pyAttrLoad___: #'_grail_find_distributions')
+		@env1:___pyCallValue___: positional kw: kwargs
+
+]
+
+{ #category : 'Grail-Import' }
 GrailBuiltinImporter >> create_module: aSpec [
 	"PEP 451 create_module(spec).  Grail's loader compiles a module class and
 	mints its instance in one step, so the module is BUILT here and exec_module
@@ -25,6 +38,24 @@ GrailBuiltinImporter >> exec_module: aModule [
 	module body, because Grail's loader does not separate the two."
 
 	^ None
+
+]
+
+{ #category : 'Grail-Import' }
+GrailBuiltinImporter >> find_distributions [
+	"importlib.metadata's discovery hook, ``finder.find_distributions()''.
+	CPython's PathFinder answers it; Grail's meta_path has no PathFinder, so
+	this finder does, through importlib._grail_find_distributions (#1657)."
+
+	^ self _find_distributions: #() kw: nil
+
+]
+
+{ #category : 'Grail-Import' }
+GrailBuiltinImporter >> find_distributions: aContext [
+	"``finder.find_distributions(context)'' -- how Distribution.discover asks."
+
+	^ self _find_distributions: { aContext } kw: nil
 
 ]
 

@@ -24,6 +24,51 @@ Class {
 }
 
 { #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___cleanDoc___: aString [
+	"aString as CPython 3.13+ stores a docstring (_PyCompile_CleanDoc): tabs
+	expanded to 8, the first line's leading spaces removed, and the margin
+	common to every later non-blank line removed from each later line.  The
+	compiler does this to the value it puts in __doc__, while the AST keeps
+	the literal, so ast.parse is unaffected.  Grail kept the indentation, so
+	every indented docstring -- most of them -- differed from CPython's.
+
+	Answers aString itself when there is nothing to remove."
+
+	| text lines margin first out |
+	text := self ___expandTabs___: aString.
+	lines := OrderedCollection new.
+	[ | nl |
+		nl := text indexOf: Character lf.
+		nl = 0
+			ifTrue: [lines add: text. false]
+			ifFalse: [
+				lines add: (text copyFrom: 1 to: nl - 1).
+				text := text copyFrom: nl + 1 to: text size.
+				true]] whileTrue.
+	margin := nil.
+	2 to: lines size do: [:i | | line indent |
+		line := lines at: i.
+		indent := 0.
+		[indent < line size and: [(line at: indent + 1) == $ ]] whileTrue: [indent := indent + 1].
+		indent < line size ifTrue: [
+			margin := margin isNil ifTrue: [indent] ifFalse: [margin min: indent]]].
+	margin isNil ifTrue: [margin := 0].
+	first := lines first.
+	((first isEmpty or: [first first ~~ $ ]) and: [margin = 0]) ifTrue: [^ aString].
+	out := WriteStream on: aString species new.
+	[first notEmpty and: [first first == $ ]] whileTrue: [first := first copyFrom: 2 to: first size].
+	out nextPutAll: first.
+	2 to: lines size do: [:i | | line skip |
+		line := lines at: i.
+		skip := 0.
+		[skip < margin and: [skip < line size and: [(line at: skip + 1) == $ ]]]
+			whileTrue: [skip := skip + 1].
+		out nextPut: Character lf; nextPutAll: (line copyFrom: skip + 1 to: line size)].
+	^ out contents
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 AbstractNode class >> ___currentModuleSource___ [
 	"The source text of the module now being parsed and emitted, or nil.
 
@@ -38,6 +83,27 @@ AbstractNode class >> ___currentModuleSource___ [
 { #category : 'Grail-codegen helpers' }
 AbstractNode class >> ___currentModuleSource___: aString [
 	SessionTemps current at: #'GrailCurrentModuleSource' put: aString
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___expandTabs___: aString [
+	"str.expandtabs(8): each tab to the next multiple of 8 columns, counting
+	from the last newline or carriage return."
+
+	| out col |
+	(aString includes: Character tab) ifFalse: [^ aString].
+	out := WriteStream on: aString species new.
+	col := 0.
+	aString do: [:ch |
+		ch == Character tab
+			ifTrue: [ | n | n := 8 - (col \\ 8). n timesRepeat: [out nextPut: $ ]. col := col + n]
+			ifFalse: [
+				out nextPut: ch.
+				(ch == Character lf or: [ch == Character cr])
+					ifTrue: [col := 0]
+					ifFalse: [col := col + 1]]].
+	^ out contents
 
 ]
 

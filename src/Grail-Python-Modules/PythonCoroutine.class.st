@@ -1,9 +1,10 @@
 "What calling an ``async def`` answers.
 
 Calling a coroutine function must NOT run its body -- it answers an object that
-runs when driven.  That is the same contract PythonGenerator already implements
-(fork the body, park it, resume on send:), so this IS a PythonGenerator, with
-Python's coroutine names on top.  The one behavioural difference upstream --
+runs when driven.  That is the same contract the generator machinery already
+implements (fork the body, park it, resume on send:), so this shares it: it is a
+PyGeneratorBase, a SIBLING of PythonGenerator as CPython's coroutine is of its
+generator, with Python's coroutine names on top.  The one behavioural difference upstream --
 send() on a coroutine that never suspends runs it to completion and raises
 StopIteration carrying the return value -- is exactly what the generator
 machinery already does when a body contains no yield.
@@ -24,7 +25,7 @@ workarounds:
     distinct type Grail does not model.  It answers a coroutine here."
 Class {
 	#name : 'PythonCoroutine',
-	#superclass : 'PythonGenerator',
+	#superclass : 'PyGeneratorBase',
 	#category : 'Grail-Modules'
 }
 
@@ -77,8 +78,8 @@ PythonCoroutine class >> ___grailAwait___: anObject [
 	synchronously.  Turning those into a TypeError would break working paths to
 	enforce a rule nothing here can benefit from."
 
-	(anObject @env0:isKindOf: PythonGenerator) @env0:ifFalse: [^ anObject].
-	^ [anObject @env1:send: None. None]
+	(anObject @env0:isKindOf: PyGeneratorBase) @env0:ifFalse: [^ anObject].
+	^ [anObject @env1:___send___: None. None]
 		@env0:on: StopIteration
 		do: [:e | e @env0:return: (e @env1:value)]
 

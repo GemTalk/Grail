@@ -357,11 +357,15 @@ BaseException class >> ___curPosPositionsFromSource___: src [
 
 { #category : 'Grail-Current Exception' }
 BaseException class >> ___currentException___ [
-	"The exception currently being HANDLED in this session -- what CPython
-	sys.exc_info() / sys.exception() report -- or nil outside any active except
-	block.  Session-local via SessionTemps (never committed).  TryAst codegen
-	sets it on except-handler entry and restores the prior value on exit, so
-	nested handlers stack correctly."
+	"The exception the RUNNING CODE'S OWN handlers are handling, or nil outside
+	any active except block.  Session-local via SessionTemps (never committed).
+	TryAst codegen sets it on except-handler entry and restores the prior value
+	on exit, so nested handlers stack correctly.
+
+	This is the raw slot that the save/restore pairs read and write.  What
+	sys.exception() reports, and what implicit chaining reads, is
+	___handledException___, which falls back to the exception a resumed
+	generator body inherited from whoever resumed it."
 
 	^ (SessionTemps current) at: #'GrailCurrentException' ifAbsent: [nil]
 
@@ -710,7 +714,7 @@ BaseException class >> ___ensureFinally___: protectedBlock finally: finallyBlock
 				below.  Both keep the exception propagating, but an exception
 				that was passed retains a handler frame, and the VM refuses to
 				signal one of those again -- so every later re-raise has to
-				work on a COPY (PythonGenerator >> _resignalable:), and the
+				work on a COPY (PythonGenerator >> ___resignalable___:), and the
 				object's IDENTITY is lost.  Returning pops the frames, so the
 				re-signal below is the same object the raise site created.
 				That matters wherever Python compares exceptions by identity:
@@ -988,12 +992,12 @@ BaseException class >> ___generatorOwningStack___: triples [
 				ex return: meth]].
 		(home notNil and: [home selector == #'_forkBody']) ifTrue: [
 			rcvr := triples at: i + 2.
-			cand := (rcvr isKindOf: PythonGenerator)
+			cand := (rcvr isKindOf: PyGeneratorBase)
 				ifTrue: [rcvr]
 				ifFalse: [[rcvr selfValue] on: Error do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: nil]].
-			(cand isKindOf: PythonGenerator) ifTrue: [^ cand]].
+			(cand isKindOf: PyGeneratorBase) ifTrue: [^ cand]].
 		i := i + 3].
 	^ nil
 
@@ -1007,6 +1011,27 @@ BaseException class >> ___generatorStackFor___: anException [
 	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
 	reg isNil ifTrue: [^ nil].
 	^ reg at: anException otherwise: nil
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___handledException___ [
+	"The exception currently being HANDLED -- what CPython sys.exc_info() /
+	sys.exception() report, and what a raise takes as its implicit __context__.
+
+	It is the running code's own (___currentException___) when there is one,
+	and otherwise the one inherited from whoever resumed the generator body this
+	is running in (___inheritedException___).  That is CPython's exc_info
+	chain, two links deep: each generator has its own handled-exception slot,
+	stacked on the resumer's while it runs, and a lookup walks down to the
+	first one that is set.  So a generator resumed from inside ``except
+	ValueError'' sees ValueError, and stops seeing it once a later resume comes
+	from outside any handler -- the second half is what a single shared slot
+	could not do, because the body's own except clauses restore what they
+	saved, and what they saved was the resumer's (test_generators
+	test_except_gen_except)."
+
+	^ self ___currentException___ ifNil: [self ___inheritedException___]
 
 ]
 
@@ -1144,6 +1169,15 @@ BaseException class >> ___hasUserNew___ [
 		c := c superclass.
 	].
 	^ false
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___inheritedException___ [
+	"The resumer's handled exception, installed while a generator body runs --
+	see ___handledException___.  nil outside a generator body."
+
+	^ (SessionTemps current) at: #'GrailInheritedException' ifAbsent: [nil]
 
 ]
 
@@ -2907,7 +2941,7 @@ BaseException class >> ___miSubclassHandles___: anException among: aSet [
 BaseException class >> ___moveGeneratorStack___: oldException to: newException [
 	"Follow the stash when PythonGenerator has to re-signal a COPY (an exception
 	that was passed on its way out keeps live handler frames and cannot be
-	signalled again -- PythonGenerator >> _resignalable:).  Also clears the copy's
+	signalled again -- PythonGenerator >> ___resignalable___:).  Also clears the copy's
 	_gsStack, which `copy' brought along with the other named instVars."
 
 	| reg st |
@@ -4203,7 +4237,7 @@ BaseException class >> ___reRaise___: lexicalException [
 	correct than either alone."
 
 	| cur |
-	cur := self ___currentException___.
+	cur := self ___handledException___.
 	cur isNil ifTrue: [cur := lexicalException].
 	cur isNil ifTrue: [
 		"CPython spells it ``reraise'', unhyphenated.  Grail had ``re-raise'',
@@ -4238,7 +4272,7 @@ BaseException class >> ___resignalable___: anException [
 
 	A last resort, not the default -- Python propagates the identical object,
 	and the frame test keeps the copy to the cases that cannot avoid it.  This
-	is PythonGenerator >> _resignalable:'s rule, applied at the other site that
+	is PythonGenerator >> ___resignalable___:'s rule, applied at the other site that
 	re-raises a caught exception."
 
 	| ovf |
@@ -4312,6 +4346,19 @@ BaseException class >> ___setCurrentException___: anExceptionOrNil [
 	anExceptionOrNil isNil
 		ifTrue: [ (SessionTemps current) removeKey: #'GrailCurrentException' ifAbsent: [] ]
 		ifFalse: [ (SessionTemps current) at: #'GrailCurrentException' put: anExceptionOrNil ].
+	^ anExceptionOrNil
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___setInheritedException___: anExceptionOrNil [
+	"Set (nil clears) the exception a resumed generator body inherits.  Set by
+	PythonGenerator on each resume, and saved and restored with the rest of each
+	side's exception state."
+
+	anExceptionOrNil isNil
+		ifTrue: [ (SessionTemps current) removeKey: #'GrailInheritedException' ifAbsent: [] ]
+		ifFalse: [ (SessionTemps current) at: #'GrailInheritedException' put: anExceptionOrNil ].
 	^ anExceptionOrNil
 
 ]

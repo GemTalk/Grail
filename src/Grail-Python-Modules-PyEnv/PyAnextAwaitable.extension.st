@@ -11,7 +11,7 @@ PyAnextAwaitable >> ___inner___ [
 		aw := anextResult.
 		inner := ((aw @env0:isKindOf: PythonCoroutine)
 			@env0:or: [bareGenOk == true
-				@env0:and: [aw @env0:isKindOf: PythonGenerator]])
+				@env0:and: [aw @env0:isKindOf: PyGeneratorBase]])
 			ifTrue: [aw]
 			ifFalse: [
 				(aw ___respondsTo___: #'__await__')
@@ -94,8 +94,8 @@ PyAnextAwaitable >> send: aValue [
 
 	| in |
 	in := self ___inner___.
-	^ [(in @env0:isKindOf: PythonGenerator)
-			ifTrue: [in send: aValue]
+	^ [(in @env0:isKindOf: PyGeneratorBase)
+			ifTrue: [in ___send___: aValue]
 			ifFalse: [aValue == None
 				ifTrue: [in @env1:__next__]
 				ifFalse: [in @env1:send: aValue]]]

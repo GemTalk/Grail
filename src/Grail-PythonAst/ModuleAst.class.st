@@ -31,6 +31,26 @@ Class {
 }
 
 { #category : 'Grail-parsing' }
+ModuleAst class >> ___bindsReservedSelectorName___: aStatement inClassBody: inClassBody [
+	"Does aStatement bind a reserved name in the way that compiles a method
+	named after it?  A def or a class anywhere; in a class body, an
+	assignment too.  (A module's assignment is a global, not a method.)"
+
+	((aStatement isKindOf: FunctionDefAst) or: [aStatement isKindOf: ClassDefAst])
+		ifTrue: [^ self ___nameIsReservedSelector___: aStatement name].
+	inClassBody ifFalse: [^ false].
+	(aStatement isKindOf: AssignAst) ifTrue: [
+		^ aStatement targets anySatisfy: [:t | self ___targetBindsReservedName___: t]].
+	(aStatement isKindOf: AnnAssignAst) ifTrue: [
+		^ aStatement value notNil
+			and: [self ___targetBindsReservedName___: aStatement target]].
+	(aStatement isKindOf: AugAssignAst) ifTrue: [
+		^ self ___targetBindsReservedName___: aStatement target].
+	^ false
+
+]
+
+{ #category : 'Grail-parsing' }
 ModuleAst class >> ___boundNamesOf___: aBody [
 	"The names a function scope binds, as Symbols, from the BlockAst the
 	parser built for it: its locals and parameters, and its own nonlocals
@@ -109,6 +129,30 @@ ModuleAst class >> ___isDoitMethod___: aMethod [
 	reg := SessionTemps current at: #GrailDoitScopes ifAbsent: [nil].
 	reg isNil ifTrue: [^ false].
 	^ reg includesKey: aMethod
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___nameIsReservedSelector___: aName [
+	"Is aName -- or aName with one argument, ``aName:'' -- a selector the
+	compiler will not let a method have?  Those are the two Grail compiles
+	for a binding: a getter or a no-argument call, and a setter or a
+	one-argument call.  Names with more arguments add ``_:'' keywords, which
+	nothing reserves.
+
+	Two sources, because the compiler has two reasons.  It INLINES the
+	control selectors (comparse.c), which no table lists; the measured set,
+	from compiling every unary and one-argument selector of Object, Boolean,
+	ExecBlock, Number and the collections, is the literal below.  And it has
+	a special bytecode for the sends in GsComSelectorLeaf's SpecialObjectSends
+	(isNil, yourself, isKindOf:, the _is* tests), which
+	reimplementationAllowed:inEnv: answers.  A Symbol that does not exist yet
+	cannot be either, so it is looked up, never created."
+
+	| str |
+	aName isNil ifTrue: [^ false].
+	str := aName asString.
+	^ (self ___selectorIsReserved___: str) or: [self ___selectorIsReserved___: str , ':']
 
 ]
 
@@ -208,6 +252,24 @@ ModuleAst class >> ___rememberDoitScope: aSymbolList for: aMethod [
 
 ]
 
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___reservedBindingWrapperFor___: aStatement [
+	"``if True:'' around aStatement, spanning its lines."
+
+	| wrapper |
+	wrapper := IfAst new
+		test: (ConstantAst new value: true; kind: nil; yourself);
+		body: (SuiteAst new body: { aStatement }; yourself);
+		orelse: (SuiteAst new body: #(); yourself);
+		wrapsReservedBinding: true;
+		yourself.
+	(aStatement isKindOf: AbstractLocationNode) ifTrue: [
+		wrapper beginLine: aStatement beginLine; beginPosition: aStatement beginPosition;
+			endLine: aStatement endLine; endPosition: aStatement endPosition].
+	^ wrapper
+
+]
+
 { #category : 'Grail-evaluation' }
 ModuleAst class >> ___resignalSyntaxError___: ex [
 	"Re-signal a parser SyntaxError as a Python one, KEEPING its location.
@@ -252,6 +314,19 @@ ModuleAst class >> ___resignalSyntaxError___: ex [
 ]
 
 { #category : 'Grail-parsing' }
+ModuleAst class >> ___selectorIsReserved___: aString [
+	| sym |
+	sym := Symbol _existingWithAll: aString.
+	sym isNil ifTrue: [^ false].
+	(#( #repeat #whileTrue #whileFalse #untilTrue #untilFalse
+		#whileTrue: #whileFalse: #untilTrue: #untilFalse: #timesRepeat:
+		#ifTrue: #ifFalse: #ifNil: #ifNotNil: #and: #or: #_and: #_or:
+		#_leaveProtectedMode ) includes: sym) ifTrue: [^ true].
+	^ (GsComSelectorLeaf reimplementationAllowed: sym inEnv: 1) not
+
+]
+
+{ #category : 'Grail-parsing' }
 ModuleAst class >> ___syntaxError___: aMessage node: aNode [
 	"A SyntaxError CPython's compiler raises after the parse, located at the
 	node it is about: the statement for ``'return' outside function'', the
@@ -263,6 +338,17 @@ ModuleAst class >> ___syntaxError___: aMessage node: aNode [
 	(src isNil or: [aNode position isNil]) ifTrue: [^ SyntaxError signal: aMessage].
 	^ PythonParser ___signal___: SyntaxError message: aMessage in: src
 		from: aNode position to: (aNode endPosition ifNil: [aNode position]) + 1
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___targetBindsReservedName___: aTarget [
+	(aTarget isKindOf: NameAst) ifTrue: [^ self ___nameIsReservedSelector___: aTarget id].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		^ aTarget elts anySatisfy: [:e | self ___targetBindsReservedName___: e]].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___targetBindsReservedName___: aTarget value].
+	^ false
 
 ]
 
@@ -450,7 +536,11 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		^ self].
 	((node isKindOf: YieldAst) or: [node isKindOf: YieldFromAst]) ifTrue: [
 		(#(#module #class) includes: fnSym) ifTrue: [
-			^ self ___syntaxError___: '''yield'' outside function' node: node]].
+			"CPython names the form: ``'yield from' outside function''."
+			^ self ___syntaxError___: ((node isKindOf: YieldFromAst)
+					ifTrue: ['''yield from'' outside function']
+					ifFalse: ['''yield'' outside function'])
+				node: node]].
 	(node isKindOf: NonlocalAst) ifTrue: [
 		fnSym == #module ifTrue: [
 			^ self ___syntaxError___: 'nonlocal declaration not allowed at module level'
@@ -517,6 +607,72 @@ ModuleAst class >> ___validateStarredTarget___: aTarget [
 		(each isKindOf: StarredAst)
 			ifTrue: [self ___validateStarredTarget___: each value]
 			ifFalse: [self ___validateStarredTarget___: each]]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___wrapReservedBindings___: statements inClassBody: inClassBody [
+	"statements, each one that binds a reserved name under its own synthetic
+	``if True:''.  Answers the receiver's own collection when nothing changes."
+
+	| out changed |
+	(statements isKindOf: SequenceableCollection) ifFalse: [^ statements].
+	changed := false.
+	out := statements collect: [:stmt |
+		(self ___bindsReservedSelectorName___: stmt inClassBody: inClassBody)
+			ifTrue: [changed := true. self ___reservedBindingWrapperFor___: stmt]
+			ifFalse: [stmt]].
+	changed ifFalse: [^ statements].
+	^ (statements isKindOf: OrderedCollection) ifTrue: [out] ifFalse: [out asArray]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___wrapReservedClassBodiesUnder___: aNode [
+	"Every class body anywhere below aNode, nested in a function or a class."
+
+	aNode isNil ifTrue: [^ self].
+	((aNode isKindOf: Array) or: [aNode isKindOf: OrderedCollection]) ifTrue: [
+		aNode do: [:each | self ___wrapReservedClassBodiesUnder___: each].
+		^ self].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ self].
+	(aNode isKindOf: ClassDefAst) ifTrue: [ | container |
+		container := aNode body.
+		(container respondsTo: #body) ifTrue: [
+			container body: (self ___wrapReservedBindings___: container body inClassBody: true)]].
+	2 to: aNode class instSize do: [:i |
+		self ___wrapReservedClassBodiesUnder___: (aNode instVarAt: i)]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___wrapReservedSelectorBindingsIn___: aModule [
+	"Put each statement that binds a name GemStone will not compile as a
+	selector under a synthetic ``if True:'', in every class body and at
+	module level.
+
+	Grail compiles a class body's def or attribute as methods named after
+	it -- ``repeat'' for an attribute or a no-argument def, ``ifTrue:'' for
+	a one-argument def or a setter -- and a module's def likewise.  The
+	compiler refuses a few selectors outright (``You may not compile a
+	method for this selector''): those it inlines (repeat, whileTrue,
+	ifTrue:, timesRepeat:, ...) and those with a special bytecode (isNil,
+	yourself, isKindOf:, _isInteger, ...), which no send would ever reach.
+	numpy.ma's MaskedArray has ``repeat = _arraymethod('repeat')'', so the
+	whole class failed to define, numpy.ma lost masked_array and is_masked,
+	and np.unique and np.percentile failed with it.
+
+	A conditional binding already takes the path that compiles nothing named
+	after the binding -- the class's holder, the module's globals -- and every
+	read, rebind, inheritance and __dict__ view honours it; ``if True:'' is
+	how the source would say so.  ast.parse does not see the wrapper (IfAst >>
+	___asPythonAst___)."
+
+	| top |
+	top := aModule body.
+	(top respondsTo: #body) ifTrue: [
+		top body: (self ___wrapReservedBindings___: top body inClassBody: false)].
+	self ___wrapReservedClassBodiesUnder___: aModule
 
 ]
 
@@ -826,6 +982,7 @@ ModuleAst class >> parseSource: sourceString [
 	AbstractNode ___currentModuleSource___: sourceString.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #module.
+	self ___wrapReservedSelectorBindingsIn___: module.
 	^module
 
 ]
@@ -851,6 +1008,7 @@ ModuleAst class >> parseSource: sourceString allowTopLevelAwait: allowAwait [
 	AbstractNode ___currentModuleSource___: sourceString.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #async.
+	self ___wrapReservedSelectorBindingsIn___: module.
 	^ module
 
 ]
@@ -1010,8 +1168,20 @@ ModuleAst >> ___docString___ [
 	(first isKindOf: ExprAst) ifFalse: [^ nil].
 	inner := first value.
 	(inner isKindOf: ConstantAst) ifFalse: [^ nil].
+	"A NEW node holding the cleaned text (AbstractNode class >>
+	___cleanDoc___:, as CPython 3.13's compiler cleans it): the tree keeps
+	the literal, which ast.parse answers."
+	"Not the ``...'' marker: the parser records an Ellipsis literal as the
+	Symbol #'...', and a Symbol IS a CharacterCollection, so ``class E(str,
+	Enum): ...'' had Ellipsis for its __doc__ and ``def m(self): ...'' had
+	'...' -- pydantic's cleandoc then failed on the enum
+	(FastAPI's test_schema_compat_pydantic_v2)."
+	inner value == #'...' ifTrue: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
-		ifTrue: [inner]
+		ifTrue: [ConstantAst new
+			value: (AbstractNode ___cleanDoc___: inner value);
+			kind: inner kind;
+			yourself]
 		ifFalse: [nil]
 
 ]
@@ -1124,6 +1294,25 @@ ModuleAst >> ___moduleAnnotationStatements___ [
 
 	^ body body select: [:stmt |
 		(stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]]
+
+]
+
+{ #category : 'Grail-evaluation' }
+ModuleAst >> ___rebindsName___ [
+	"True when a top-level statement of the module assigns ``__name__''.
+	_pydecimal does (``__name__ = 'decimal'  # For pickling''), so CPython
+	stamps every class defined after it with __module__ 'decimal' -- a class
+	body opens with ``__module__ = __name__'', a run-time read.  Grail
+	compiles a module's class __module__ in as a literal, so such a module's
+	module-level classes read it at run time instead (ClassDefAst >>
+	___readsRebindableModuleName___).  Only the top level is looked at: a
+	rebinding inside a function or under an if is not seen."
+
+	body isNil ifTrue: [^ false].
+	^ (body body ifNil: [#()]) anySatisfy: [:stmt |
+		(stmt isKindOf: AssignAst) and: [
+			stmt targets anySatisfy: [:target |
+				(target isKindOf: NameAst) and: [target id asString = '__name__']]]]
 
 ]
 
@@ -1251,7 +1440,7 @@ ModuleAst >> executeWithScope: aSymbolList as: aKind [
 	what keeps ``run_tests.sh'' from flooding $TMP/codegen with a
 	___doit_<N>___ pair per executed statement."
 
-	| code traceDir seq tpzPath irPath compiledMethod result tpzSource |
+	| code traceDir seq tpzPath irPath compiledMethod result tpzSource gap |
 	code := ModuleAst whileCompilingDoitWithScope: aSymbolList do: [self smalltalkSource].
 	traceDir := importlib ___codegenTraceDir___.
 	traceDir ifNotNil: [
@@ -1275,12 +1464,23 @@ ModuleAst >> executeWithScope: aSymbolList as: aKind [
 			nextPutAll: tpzSource contents encodeAsUTF8;
 			close.
 	].
-	compiledMethod := code
+	"Source that parsed but whose generated Smalltalk does not compile is a
+	Grail codegen gap, not an error in the Python.  It surfaced as the
+	Smalltalk CompileError itself, which no Python ``except'' can catch, so
+	the whole process ended (#1683).  Raised as SystemError instead --
+	CPython's exception for a failure inside the interpreter -- and from
+	outside the handler, which only records the message."
+	compiledMethod := [code
 		_compileInContext: nil
 		symbolList: aSymbolList
 		oldLitVars: nil
 		environmentId: 1
-		flags: 0 .
+		flags: 0]
+			on: CompileError
+			do: [:ex | gap := ex messageText asString. ex return: nil].
+	gap ifNotNil: [
+		^ SystemError @env1:___signal___:
+			'Grail could not compile this code (codegen gap): ' , gap].
   " Add   on: AbstractException do:[:ex| self pause ]  here if you want to debug compile errors here "
 	"Snapshot IR for the freshly-compiled doit before any later
 	compile overwrites __sessionStateAt: 19."

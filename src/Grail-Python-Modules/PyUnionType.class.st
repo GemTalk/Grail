@@ -18,6 +18,7 @@ PyUnionType class >> ___pythonValueAttrs___ [
 		add: #'__name__';
 		add: #'__qualname__';
 		add: #'__module__';
+		add: #'__dict__';
 		yourself
 
 ]

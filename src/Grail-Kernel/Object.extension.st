@@ -276,6 +276,18 @@ Object class >> ___grailFastOverrideHolderFor___: aSymbol [
 ]
 
 { #category : 'Grail-Self-Send Overrides' }
+Object class >> ___grailFirstKeyword___: aSelectorString [
+	"aSelectorString up to (not including) its first colon -- all of it for a
+	unary selector."
+
+	| idx |
+	idx := aSelectorString @env0:indexOf: $:.
+	idx @env0:= 0 ifTrue: [^ aSelectorString].
+	^ aSelectorString @env0:copyFrom: 1 to: idx @env0:- 1
+
+]
+
+{ #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailFlushPendingSelfSendOverrides___ [
 	"Write every pair this session noted into the committed record, just
 	before a commit (GrailCommitCoordinator >> commit:, and the Python-visible
@@ -351,7 +363,7 @@ Object class >> ___grailInstallOneDispatcher___: aSelector definedIn: definingCl
 	place instead -- the store is still visible through the loader."
 	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
 		ifFalse: [^ self].
-	BoundMethod @env1:___grailPinSelector___: aSelector.
+	BoundMethod @env1:___grailPinSelector___: aSelector in: self.
 	"A VARARGS def ``_m: pos kw: kw'' ends in the forward ``^ self m: a b'' to its
 	fixed-arity twin.  In the shadow that forward must reach the twin's SHADOW,
 	not the dispatcher now answering to ``m:'' -- otherwise a decorator that
@@ -530,6 +542,8 @@ Object class >> ___grailInstallSelfSendDispatchers___: aSymbol [
 	pairs @env0:do: [:each |
 		self ___grailInstallOneDispatcher___: (each @env0:at: 1)
 			definedIn: (each @env0:at: 2) name: sym].
+	(self @env0:inheritsFrom: NativeModule) ifTrue: [
+		self ___grailRelinkNativeShadows___: pairs].
 	self ___grailRecordSelfSendOverride___: sym.
 	^ true
 
@@ -686,10 +700,25 @@ Object class >> ___grailModuleFunctionIsPatchable___: aSelector on: ownerClass [
 	BoundMethod for f, read back by the dispatcher's override probe, is not an
 	override (___grailSelfSendOverrideFor___:)."
 
+	(ownerClass @env0:inheritsFrom: module) ifFalse: [^ false].
+	"A NativeModule's functions are Smalltalk methods, but ``json.dumps = f''
+	(``mock.patch('starlette.responses.json.dumps')'') must reach the direct
+	send ``json dumps: x'' as surely as a .py module's, and with or without
+	GRAIL_DIRECT_CALLS, since a call to a NativeModule function compiles to
+	that send either way.  It reached none of them, so patching any
+	Grail-implemented module -- json, math, time, os -- was invisible to every
+	other module (FastAPI's test_dump_json_fast_path).
+	The selectors offered are only those spelling the Python name (dumps: and
+	_dumps:kw:), and a capture taken before the patch -- ``wraps=json.dumps''
+	-- reaches the shadow through the pin, not the dispatcher.
+
+	EXCEPT builtins, whose ``builtins.len = f'' was the 217-RecursionError
+	case: it has an override mechanism of its own (the pinned builtins
+	forwarders), which this must not stack a dispatcher on."
+	(ownerClass @env0:inheritsFrom: NativeModule) ifTrue: [
+		^ (ownerClass == builtins or: [ownerClass @env0:inheritsFrom: builtins]) @env0:not].
 	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib ___directCallsEnabled___]) == true
 		ifFalse: [^ false].
-	(ownerClass @env0:inheritsFrom: module) ifFalse: [^ false].
-	(ownerClass @env0:inheritsFrom: NativeModule) ifTrue: [^ false].
 	^ ((ownerClass @env0:categoryOfSelector: aSelector environmentId: 1) @env0:ifNil: ['']) @env0:asString @env0:= 'Grail-Methods'
 
 ]
@@ -764,6 +793,51 @@ Object class >> ___grailRecordSelfSendOverride___: aSymbol [
 		pending @env0:at: self put: names].
 	names @env0:add: aSymbol @env0:asSymbol.
 	^ self
+
+]
+
+{ #category : 'Grail-Self-Send Overrides' }
+Object class >> ___grailRelinkNativeShadows___: pairs [
+	"Point a NativeModule's shadows at each other.  Its functions are
+	hand-written Smalltalk, so the copier SHARES each one under its shadow key
+	rather than recompiling it -- and ``dumps: obj'' forwards with ``self
+	_dumps: ... kw: nil'', which then reached _dumps:kw:'s DISPATCHER.  With an
+	override that wraps the original -- ``mock.patch('json.dumps',
+	wraps=json.dumps)'' -- the captured original ran the shadow, the shadow
+	forwarded into the dispatcher, the dispatcher called the mock, and so on
+	to RecursionError.  So each shadow is recompiled from its own source with
+	its sends to the sibling selectors renamed to THEIR shadows, as the
+	installer already does for a generated varargs forward: an original only
+	ever calls originals.  A shadow that cannot be recompiled is left shared."
+
+	| shadowOf |
+	shadowOf := pairs @env0:collect: [:each | | sel |
+		sel := (each @env0:at: 1) @env0:asString.
+		sel -> ('___grailOrig_' @env0:, sel)].
+	pairs @env0:do: [:each | | sel shadowSel meth src |
+		sel := each @env0:at: 1.
+		shadowSel := ('___grailOrig_' @env0:, sel @env0:asString) @env0:asSymbol.
+		meth := self @env0:compiledMethodAt: shadowSel environmentId: 1 otherwise: nil.
+		src := meth @env0:ifNotNil: [:m | m @env0:sourceString].
+		"The copier recompiled a text source already prefixed; a shared method's
+		source still opens with the original pattern."
+		(src @env0:notNil and: [(self ___grailString___: src @env0:asString startsWith: '___grailOrig_') @env0:not])
+			ifTrue: [src := '___grailOrig_' @env0:, src @env0:asString].
+		(src @env0:notNil and: [self ___grailString___: src @env0:asString
+				startsWith: (self ___grailFirstKeyword___: shadowSel @env0:asString)])
+			ifTrue: [
+				src := src @env0:asString.
+				shadowOf @env0:do: [:assoc | | other kw |
+					other := assoc key.
+					other @env0:= sel @env0:asString ifFalse: [
+						kw := (other @env0:includes: $:)
+							ifTrue: [(self ___grailFirstKeyword___: other) @env0:, ':']
+							ifFalse: [other].
+						src := src @env0:copyReplaceAll: 'self ' @env0:, kw
+							with: 'self ___grailOrig_' @env0:, kw]].
+				[self @env1:___compileSessionMethod: src
+					category: 'Grail-Dynamic Rebinding Originals']
+					@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]]
 
 ]
 
@@ -934,6 +1008,15 @@ Object class >> ___grailStoredValueIsAProperty___: aValue [
 	exclusion 10)."
 
 	^ aValue @env0:isKindOf: AbstractPropertyDescriptor
+
+]
+
+{ #category : 'Grail-Self-Send Overrides' }
+Object class >> ___grailString___: aString startsWith: aPrefix [
+	"Whether aString opens with aPrefix."
+
+	^ aString @env0:size @env0:>= aPrefix @env0:size
+		and: [(aString @env0:copyFrom: 1 to: aPrefix @env0:size) @env0:= aPrefix]
 
 ]
 
@@ -1114,6 +1197,33 @@ Object >> ___grailClassDefault___: aSymbol [
 		owner isNil
 			ifTrue: [nil]
 			ifFalse: [module @env0:___classDefaultOwnedBy: owner at: aSymbol]]
+
+]
+
+{ #category : 'Grail-Method Defaults' }
+Object >> ___grailClassDefault___: aSymbol orClassBodyName: aName [
+	"___grailClassDefault___:, and when no default was stored, the CLASS
+	attribute aName -- for a default that is a bare PRIVATE class-body name
+	(``def pop(self, key, default=__marker)'', which reads
+	``_MutableMapping__marker'').
+
+	The store is session-local and filled while the class body runs, and a
+	DEPLOYED (canonical) class's body does not run again in a later session:
+	the miss then fell back to the inline expression, which resolves the name
+	as a module GLOBAL -- and a mangled private name never is one.  So
+	collections.abc's MutableMapping.pop(key) raised ``NameError: name
+	'_MutableMapping__marker' is not defined'' in every session after
+	run_tests.sh's framework deploy (every Flask/Starlette request path).  The
+	class still holds the attribute; reading it there is what the class-body
+	scope the default was written in means.  nil when neither answers, so the
+	caller still evaluates the expression and raises CPython's NameError."
+
+	| v cls |
+	v := self ___grailClassDefault___: aSymbol.
+	v isNil ifFalse: [^ v].
+	cls := (self isKindOf: Behavior) ifTrue: [self] ifFalse: [self class].
+	^ [cls @env1:___pyAttrLoad___: aName]
+		on: AbstractException do: [:e | e return: nil]
 
 ]
 

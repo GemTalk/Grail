@@ -93,7 +93,7 @@ PyAsyncGenASend >> ___step___: aValue [
 	agen ___fireFirstiterIfNeeded___.
 	self ___claimAgen___.
 	out := [[[started
-			@env0:ifTrue: [agen @env1:send: aValue]
+			@env0:ifTrue: [agen @env1:___send___: aValue]
 			ifFalse: [
 				started := true.
 				"A value sent into this step's FIRST drive reaches the
@@ -116,10 +116,10 @@ PyAsyncGenASend >> ___step___: aValue [
 						and the classification below decides how the story
 						ends: the exit escaping or the body returning is a
 						clean close, a yield is 'ignored GeneratorExit'."
-						agen @env1:throw: (GeneratorExit @env0:new)]
+						agen @env1:___throw___: (GeneratorExit @env0:new)]
 					ifFalse: [kind == #'throw'
-						ifTrue: [agen @env1:throw: arg]
-						ifFalse: [agen @env1:send: arg]]]]
+						ifTrue: [agen @env1:___throw___: arg]
+						ifFalse: [agen @env1:___send___: arg]]]]
 		@env0:on: StopIteration
 		do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
 		@env0:on: GeneratorExit
@@ -181,7 +181,7 @@ PyAsyncGenASend >> close [
 	| out |
 	finished @env0:ifTrue: [^ None].
 	started @env0:ifFalse: [finished := true. ^ None].
-	out := [[[[agen @env1:throw: (GeneratorExit @env0:new)]
+	out := [[[[agen @env1:___throw___: (GeneratorExit @env0:new)]
 			@env0:on: GeneratorExit
 			do: [:ex | ex @env0:return: #'___grailExitTookHold___']]
 			@env0:on: StopIteration
@@ -235,12 +235,12 @@ PyAsyncGenASend >> throw: anException [
 		@env0:and: [kind == #'close'
 		@env0:and: [___exc___ @env0:isKindOf: GeneratorExit]]) ifTrue: [
 			started := true.
-			agen @env1:close.
+			agen @env1:___close___.
 			agen ___setAsendOwner___: nil.
 			finished := true.
 			^ StopIteration @env1:___signalReturn___: None].
 	started := true.
-	out := [[[agen @env1:throw: ___exc___]
+	out := [[[agen @env1:___throw___: ___exc___]
 			@env0:on: StopIteration
 			do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
 		@env0:on: GeneratorExit

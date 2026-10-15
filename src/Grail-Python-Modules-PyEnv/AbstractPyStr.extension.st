@@ -51,7 +51,7 @@ AbstractPyStr >> __dict__ [
 	view list and bytes publish, minus ___pyHiddenStateNames___.  test_pickle's
 	newobj tests read it to compare a round-tripped object's attributes."
 
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 
 ]
 

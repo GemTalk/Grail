@@ -29,10 +29,21 @@ Class {
 	#instVars : [
 		'test',
 		'body',
-		'orelse'
+		'orelse',
+		'wrapsReservedBinding'
 	],
 	#category : 'Grail-Parser'
 }
+
+{ #category : 'Grail-AST export' }
+IfAst >> ___asPythonAst___ [
+	"ast.parse answers the source's tree: a wrapper the source did not write
+	is its one statement."
+
+	self wrapsReservedBinding ifTrue: [^ body body first ___asPythonAst___].
+	^ super ___asPythonAst___
+
+]
 
 { #category : 'Grail-IR Codegen' }
 IfAst >> ___emitIRStatementOn___: aBuilder [
@@ -166,5 +177,21 @@ IfAst >> test [
 { #category : 'Grail-printing' }
 IfAst >> test: newValue [
 	test := newValue
+
+]
+
+{ #category : 'Grail-accessing' }
+IfAst >> wrapsReservedBinding [
+	"Is this ``if True:'' not in the source -- added by ModuleAst
+	class>>___wrapReservedSelectorBindingsIn___: around a statement that binds
+	a name GemStone will not compile as a selector?"
+
+	^ wrapsReservedBinding == true
+
+]
+
+{ #category : 'Grail-accessing' }
+IfAst >> wrapsReservedBinding: aBoolean [
+	wrapsReservedBinding := aBoolean
 
 ]

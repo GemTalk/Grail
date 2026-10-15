@@ -275,6 +275,27 @@ importlib class >> ___findViaMetaPath___: aName [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___grailBundledRoots___ [
+	"The root holding the THIRD-PARTY packages Grail ships -- flask, werkzeug,
+	jinja2, markupsafe, django and the rest, each with its dist-info -- searched
+	AFTER sys.path, like a lowest-priority site-packages.
+
+	They used to sit in src/python/stdlib, which made them part of Grail's own
+	roots: searched before sys.path and answered by the pinned importer, so a
+	user's own copy (a later version, or a modified one) could never import --
+	the package census reported them as SHADOWED.  Here they are a FALLBACK:
+	what imports when the user has no copy of their own (#1713).  Still under
+	grailDir/src/python/, so ___grailSharedSource___: keeps deploying them into
+	the shared base and ___bundledRuntimeSource___: keeps their layout."
+
+	| gd |
+	gd := self @env0:grailDir.
+	gd == nil ifTrue: [^ #()].
+	^ Array @env0:with: (gd @env0:, '/src/python/bundled')
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___grailOwnedPathFor___: aName [
 	"The source path for aName IF Grail itself ships it, else nil.  Same probe
 	as ___moduleNameToPath___:, restricted to ___grailOwnRoots___."
@@ -287,7 +308,9 @@ importlib class >> ___grailOwnedPathFor___: aName [
 importlib class >> ___grailOwnRoots___ [
 	"The two roots holding modules GRAIL ITSELF ships: the checkout and its
 	ported stdlib.  Everything else on the search path -- extraSearchRoots,
-	sys.path -- was put there by the caller.
+	sys.path -- was put there by the caller, and the bundled third-party
+	packages (___grailBundledRoots___) are deliberately NOT here: they are a
+	fallback, not part of Grail.
 
 	The distinction is what the pinned meta-path importer is built on: Grail's
 	own tree is its equivalent of CPython's builtin + frozen modules, and its own
@@ -328,7 +351,8 @@ importlib class >> ___importFromMiss___: aName of: aModule [
 { #category : 'Grail-Module Loading' }
 importlib class >> ___importSearchRoots___ [
 	"Every directory the resolver searches, in order: Grail's own two roots,
-	then extraSearchRoots, then ``sys.path''.  One list, read by both
+	then extraSearchRoots, then ``sys.path'', then the bundled third-party
+	packages (___grailBundledRoots___).  One list, read by both
 	___moduleNameToPath___: and ___namespacePortionsFor___:, which have to agree
 	about where modules live or PEP 420's ``a real module anywhere on the path
 	beats a namespace package'' rule would be decided on two different paths."
@@ -340,6 +364,7 @@ importlib class >> ___importSearchRoots___ [
 		@env0:addAll: self ___grailOwnRoots___;
 		@env0:addAll: self extraSearchRoots;
 		@env0:addAll: self ___sysPathRoots___;
+		@env0:addAll: self ___grailBundledRoots___;
 		@env0:yourself
 
 ]
@@ -747,13 +772,18 @@ importlib class >> ___moduleNameToPath___: aName [
 	Search order: grailDir, grailDir/src/python/stdlib (the bundled stdlib
 	ports), then the extra search roots (a sys.path-like list -- see
 	extraSearchRoots / addSearchRoot:, used to point Grail at third-party
-	package trees such as NumPy's site-packages), and finally ``sys.path''.
+	package trees such as NumPy's site-packages), then ``sys.path'', and last
+	grailDir/src/python/bundled, the third-party packages Grail ships.
 	For each root, check name.py before name/__init__.py.
 
-	sys.path comes LAST, a deliberate deviation from CPython where it IS the whole
-	search path.  Grail's ported stdlib under grailDir has to win: a directory a
-	caller adds to sys.path must not be able to shadow Grail's own ``os'' or
-	``traceback'' with a same-named file, which searching sys.path first allows.
+	sys.path comes after Grail's own roots, a deliberate deviation from CPython
+	where it IS the whole search path.  Grail's ported stdlib under grailDir has
+	to win: a directory a caller adds to sys.path must not be able to shadow
+	Grail's own ``os'' or ``traceback'' with a same-named file, which searching
+	sys.path first allows.  The bundled THIRD-PARTY packages are the opposite
+	case and come after it (___grailBundledRoots___): a user's own flask or
+	jinja2 -- a later version, or a modified one -- wins, as it does in CPython,
+	and the bundled copy is what imports when there is none (#1713).
 
 	The first two roots -- GRAIL'S OWN -- are also available on their own, as
 	___grailOwnedPathFor___:.  That is what the pinned GrailBuiltinImporter at
@@ -816,6 +846,7 @@ importlib class >> ___moduleNameToSoPath___: aName [
 		@env0:add: (gd @env0:, '/src/python/stdlib');
 		@env0:addAll: self extraSearchRoots;
 		@env0:addAll: self ___sysPathRoots___;
+		@env0:addAll: self ___grailBundledRoots___;
 		@env0:yourself.
 	result := nil.
 	searchRoots @env0:do: [:root | | base dir entries |

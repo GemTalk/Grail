@@ -2031,7 +2031,7 @@ ByteArray >> __dict__ [
 		ifTrue: [
 			^ AttributeError ___signal___: ('''' @env0:, (bytes ___pyTypeNameOf___: self)
 				@env0:, ''' object has no attribute ''__dict__''')].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 
 ]
 

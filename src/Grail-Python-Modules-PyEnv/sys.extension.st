@@ -252,13 +252,21 @@ sys >> ___callUnraisableHook___: anException object: obj errMsg: errMsg [
 	An exception raised by the HOOK ITSELF is swallowed.  There is by
 	construction no one to report it to -- the caller is already unwinding for
 	another reason -- and letting it out would replace the exception the caller
-	IS propagating with one from the reporting machinery."
+	IS propagating with one from the reporting machinery.
 
-	| args hook |
+	An exception with NO traceback is reported with one for the frame running
+	now, as CPython's format_unraisable does: an exception a finalizer catches
+	at the Smalltalk level never passed a Python ``except'' and so never had a
+	traceback built -- close() refusing a generator that ignored GeneratorExit
+	is one -- where CPython's reaches the hook with exc_traceback set."
+
+	| args hook tb |
+	tb := [anException @env1:__traceback__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	(tb @env0:isNil or: [tb == None]) ifTrue: [tb := self ___currentFrameTraceback___].
 	args := PyUnraisableHookArgs @env0:excType: (anException @env0:class)
 		excValue: anException
-		excTraceback: ([anException @env1:__traceback__]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: None])
+		excTraceback: tb
 		errMsg: (errMsg @env0:isNil ifTrue: [None] ifFalse: [errMsg])
 		object: (obj @env0:isNil ifTrue: [None] ifFalse: [obj]).
 	hook := [self @env1:___pyAttrLoad___: #'unraisablehook']
@@ -267,6 +275,30 @@ sys >> ___callUnraisableHook___: anException object: obj errMsg: errMsg [
 		ifTrue: [self @env1:unraisablehook: args]
 		ifFalse: [hook @env1:value: { args } value: nil]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: None]
+
+]
+
+{ #category : 'Grail-Private' }
+sys >> ___currentFrameTraceback___ [
+	"A one-node traceback for the innermost Python frame running now, or None
+	when there is none to name -- what ___callUnraisableHook___:object:errMsg:
+	reports for an exception that has no traceback of its own."
+
+	| frame |
+	frame := [self @env1:_getframe: 0]
+		@env0:on: AbstractException
+		do: [:ex |
+			((ex @env0:isKindOf: AlmostOutOfStack) or: [ex @env0:isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(frame @env0:isNil or: [frame == None]) ifTrue: [^ None].
+	^ [PyTraceback @env1:__new__: None _: frame _: 0
+			_: (frame @env1:___pyAttrLoad___: #'f_lineno')]
+		@env0:on: AbstractException
+		do: [:ex |
+			((ex @env0:isKindOf: AlmostOutOfStack) or: [ex @env0:isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex @env0:pass].
+			ex @env0:return: None]
 
 ]
 
@@ -609,11 +641,24 @@ sys >> _breakpointhook: positional kw: kwargs [
 sys >> _clear_type_descriptors: aType [
 	"_clear_type_descriptors(type) -> None.  CPython 3.14's dataclasses calls
 	it from _add_slots, on the class it is about to REPLACE with a slotted
-	copy, to drop that class's __dict__ / __weakref__ getset descriptors so
-	they stop referencing it.  Grail has no such descriptors to clear, so this
-	is the whole of it -- but without the name, ``@dataclass(slots=True)''
-	raised AttributeError."
+	copy, to drop that class's __dict__ / __weakref__ getset descriptors --
+	before it copies the class's namespace into the new one.
 
+	Grail's class __dict__ LISTS those descriptors (object >>
+	___grailGetSetDescriptor___:), so they rode into the slotted copy's
+	namespace and type() stored ``__dict__'' as an ordinary class attribute:
+	every ``@dataclass(slots=True)'' instance answered hasattr(o, '__dict__')
+	true (FastAPI's test_derived_values_are_not_stored_on_dependant).  So the
+	class is recorded, for the session, as having had them cleared, and its
+	__dict__ stops listing them -- what deleting them does in CPython."
+
+	| st set |
+	st := SessionTemps @env0:current.
+	set := st @env0:at: #GrailClearedTypeDescriptors otherwise: nil.
+	set == nil ifTrue: [
+		set := IdentitySet @env0:new.
+		st @env0:at: #GrailClearedTypeDescriptors put: set].
+	set @env0:add: aType.
 	^ None
 
 ]
@@ -846,7 +891,7 @@ sys >> exc_info [
 	lands."
 
 	| e |
-	e := BaseException @env0:___currentException___.
+	e := BaseException @env0:___handledException___.
 	e ifNil: [ ^ tuple @env0:withAll: {None. None. None} ].
 	^ tuple @env0:withAll: { e @env0:class. e. e @env1:__traceback__ }
 
@@ -871,7 +916,7 @@ sys >> exception [
 	"exception() -> the exception instance currently being handled (CPython
 	3.11+), or None outside any except block."
 
-	^ (BaseException @env0:___currentException___) ifNil: [ None ]
+	^ (BaseException @env0:___handledException___) ifNil: [ None ]
 
 ]
 

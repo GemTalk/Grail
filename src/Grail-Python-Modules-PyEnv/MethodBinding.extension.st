@@ -75,6 +75,18 @@ MethodBinding >> __call__: positional [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+MethodBinding >> __class__ [
+	"``type(m)'' is types.MethodType, as __repr__ above already says and as
+	BoundMethod >> __class__ answers for its own bound methods: CPython has one
+	method type.  It answered the Smalltalk class, so ``type(B.f.__get__(b))''
+	read <class 'MethodBinding'>, and so did ``object.__setattr__.__get__(o)''
+	once that bound through here (#1418)."
+
+	^ (BoundMethod ___callableTypeNamed___: 'method') ifNil: [self @env0:class]
+
+]
+
 { #category : 'Grail-Reflection' }
 MethodBinding >> __defaults__ [
 	"The callable's -- binding a first argument does not change which trailing

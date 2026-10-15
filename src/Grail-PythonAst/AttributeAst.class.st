@@ -97,6 +97,11 @@ AttributeAst >> ___emitIRValueOn___: aBuilder [
 		aBuilder atNode: self.
 		(self ___irSelfInferredSlotAccessor___) ifNotNil: [:acc |
 			^ aBuilder send: acc to: aBuilder selfNode with: #() env: 1].
+		"The text's own-@property exclusion (#1660)."
+		self ___isOwnClassPropertyRead___ ifTrue: [
+			^ aBuilder
+				send: #'___pyAttrLoad___:' to: aBuilder selfNode
+				with: { aBuilder obj: self ___mangledAttr___ asSymbol } env: 1].
 		^ aBuilder
 			send: #dynamicInstVarAt:ifAbsent:
 			to: aBuilder selfNode
@@ -178,6 +183,13 @@ AttributeAst >> ___emitSmalltalkOn___: aStream [
 		      the class method dict, wraps callables as BoundMethods,
 		      handles class-level dunders, and raises AttributeError
 		      on miss."
+		"A name the class body declares a @property skips step (1): the property
+		is a data descriptor and outranks a same-named stored value, which the
+		probe would answer (#1660).  ___pyAttrLoad___ runs the getter."
+		self ___isOwnClassPropertyRead___ ifTrue: [
+			aStream nextPutAll: '(self @env1:___pyAttrLoad___: #''';
+				nextPutAll: self ___mangledAttr___; nextPutAll: ''')'.
+			^ self].
 		aStream
 			nextPutAll: '(self @env0:dynamicInstVarAt: #''';
 			nextPutAll: self ___mangledAttr___;
@@ -245,6 +257,19 @@ AttributeAst >> ___irSelfInferredSlotAccessor___ [
 { #category : 'Grail-IR Codegen' }
 AttributeAst >> ___irStampChild___ [
 	^ value
+
+]
+
+{ #category : 'Grail-Code Generation' }
+AttributeAst >> ___isOwnClassPropertyRead___ [
+	"Whether this ``self.attr'' names a @property of the class whose body is
+	being compiled (CallAst classPropertyNames).  Such a read must not take the
+	dynamic-instVar shortcut: a stored value of the same name -- ImportError's
+	``name'' under a subclass property -- would beat the getter."
+
+	| names |
+	names := CallAst classPropertyNames.
+	^ names notNil and: [names includes: self ___mangledAttr___ asSymbol]
 
 ]
 

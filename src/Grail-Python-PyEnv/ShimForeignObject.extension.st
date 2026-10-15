@@ -75,6 +75,11 @@ ShimForeignObject >> ___grailForeignTypeCheck___: aCandidate subclass: aBoolean 
 	ptr := (aCandidate @env0:isKindOf: ShimForeignObject)
 		ifTrue: [aCandidate @env0:cPtr]
 		ifFalse: [0].
+	"An instance of a Python subclass of a C type is its body, typed by the
+	class's subtype mirror, whose tp_base chain reaches the C type."
+	((ptr @env0:= 0) and: [aCandidate @env0:isKindOf: ShimForeignSubclass]) ifTrue: [
+		aCandidate @env0:___grailForeignBody___ @env0:ifNotNil: [:body |
+			ptr := body @env0:memoryAddress]].
 	"A Grail class built on a foreign type (ShimForeignSubclass) is a subclass
 	of every type its foreign base is."
 	(aBoolean == true and: [(ptr @env0:= 0) and: [aCandidate @env0:isBehavior]]) ifTrue: [
@@ -106,6 +111,11 @@ ShimForeignObject >> ___pyAttrLoad___: aSym [
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
+	"type's methods of a C TYPE, which C leaves to the proxy rather than
+	answer object's bound to object."
+	((aSym == #mro or: [aSym == #'__subclasses__'])
+		and: [(self ___grailForeignTypeCheck___: self subclass: true) @env0:notNil])
+			ifTrue: [^ super ___pyAttrLoad___: aSym].
 	"``__hash__'' that C does not answer is object's: a PyO3 class inherits
 	tp_hash, which no dict carries, and CPython's dataclasses reads
 	``default.__class__.__hash__'' for every field (pydantic's defaults are
@@ -141,6 +151,18 @@ ShimForeignObject >> ___pyAttrStore___: aName put: aValue [
 ]
 
 { #category : 'Grail-Python Protocol' }
+ShimForeignObject >> ___pyCallValue___: positional kw: kwargs [
+	"A call through a module global that a def's name was rebound to --
+	CallAst's probe-then-branch path -- is the call above.  It fell to
+	object's ``'ShimForeignObject' object is not callable'': numpy's
+	``allclose'' calls ``isclose'', a def in the same module that
+	@array_function_dispatch rebinds to a dispatcher."
+
+	^ self value: positional value: kwargs
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 ShimForeignObject >> ___pyMetaclass___ [
 	"type(proxy) -- the object's C type (Py_TYPE), as a proxy, not the Smalltalk
 	class ShimForeignObject.  Proxies are canonical per pointer, so
@@ -165,6 +187,23 @@ ShimForeignObject >> ___subclass___: aSymbol instVarNames: ivarNames classInstVa
 		instVarNames: ivarNames classInstVarNames: classIvarNames.
 	(ShimForeignSubclass @env0:___foreignBases) @env0:at: newCls put: self.
 	^ newCls
+
+]
+
+{ #category : 'Grail-Calling' }
+ShimForeignObject >> ___unboundSelfFor: aClass [
+	"The receiver as ``self'' for ``aClass.method(self, ...)'' (UnboundMethod>>
+	value:value:).  An instance of a wheel's str subtype is a str, and str's
+	methods read its characters -- ``str.upper(np.str_(''ab''))'' is ''AB'' in
+	CPython, and np.char calls str's methods so on every element -- so a str
+	method runs on its text.  Anything else is itself."
+
+	| v |
+	(aClass @env0:isBehavior and: [aClass @env0:isSubclassOf: CharacterCollection])
+		ifFalse: [^ self].
+	v := [(CPythonShim @env0:current) @env0:foreignStrValue: cPtr]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ v == nil ifTrue: [self] ifFalse: [v]
 
 ]
 
@@ -206,6 +245,25 @@ ShimForeignObject >> __delitem__: key [
 
 ]
 
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> __dir__ [
+	"dir() of a wheel's object, as CPython's type.__dir__ and object.__dir__
+	build it: the names C finds -- a type's own and its C bases', or an
+	instance's dict keys and its type's (CPythonShim>>foreignDirNames:) --
+	then object's.  Grail's object.__dir__ listed the proxy's own Smalltalk
+	methods instead, so dir() and inspect.getmembers missed every C method."
+
+	| names cNames |
+	names := Set @env0:new.
+	cNames := [(CPythonShim @env0:current) @env0:foreignDirNames: cPtr]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cNames @env0:notNil ifTrue: [
+		cNames @env0:do: [:n | names @env0:add: n @env0:asString]].
+	object __dir__ @env0:do: [:n | names @env0:add: n @env0:asString].
+	^ names @env0:asArray
+
+]
+
 { #category : 'Grail-Python Operators' }
 ShimForeignObject >> __divmod__: other [
 	^ self ___foreignOp: '__divmod__' with: other with: nil
@@ -231,6 +289,24 @@ ShimForeignObject >> __float__ [
 { #category : 'Grail-Python Operators' }
 ShimForeignObject >> __floordiv__: other [
 	^ self ___foreignOp: '__floordiv__' with: other with: nil
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> __format__: aSpec [
+	"format(x, spec) of a wheel's object: its type's own __format__, found in
+	C (numpy's scalars define one, which formats np.float64 as a float).
+	format() sends this message, and object's answered for every C object:
+	an f-string of np.float64(1.5) with a spec raised ``unsupported format
+	string passed to ShimForeignObject.__format__''.  A type with none keeps
+	object's."
+
+	| found fn |
+	found := true.
+	fn := [self ___pyAttrLoad___: #'__format__']
+		@env0:on: AttributeError do: [:ex | found := false. ex @env0:return: nil].
+	found ifFalse: [^ super __format__: aSpec].
+	^ fn value: (Array @env0:with: aSpec) value: nil
 
 ]
 
@@ -600,6 +676,21 @@ ShimForeignObject >> __sub__: other [
 
 ]
 
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> __subclasses__ [
+	"``T.__subclasses__()'' of a C type: the Python classes built directly on
+	it (ShimForeignSubclass class>>___foreignBases), by name.  A C type
+	deriving from it is not listed: nothing records one.  It answered
+	object's subclasses, bound to object."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	(ShimForeignSubclass @env0:___foreignBases) @env0:keysAndValuesDo: [:cls :base |
+		base == self ifTrue: [out @env0:add: cls]].
+	^ list @env0:withAll: (out @env0:asSortedCollection: [:a :b | a @env0:name @env0:<= b @env0:name])
+
+]
+
 { #category : 'Grail-Python Operators' }
 ShimForeignObject >> __truediv__: other [
 	^ self ___foreignOp: '__truediv__' with: other with: nil
@@ -609,6 +700,26 @@ ShimForeignObject >> __truediv__: other [
 { #category : 'Grail-Python Operators' }
 ShimForeignObject >> __xor__: other [
 	^ self ___foreignOp: '__xor__' with: other with: nil
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> _grail_set_byte: anIndex _: aByte [
+	"memoryview's write hook (MemoryView.gs, __setitem__): byte anIndex of
+	this object's buffer, written in C.  A read-only buffer refuses, in
+	PyObject_GetBuffer."
+
+	(CPythonShim @env0:current) @env0:foreignBuffer: cPtr mode: 2 index: anIndex value: aByte.
+	^ None
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> mro [
+	"``T.mro()'' of a C type: its __mro__ as a list, as Behavior>>mro answers
+	a class's.  Reached from ___pyAttrLoad___:, for a type only."
+
+	^ list @env0:withAll: (self ___pyAttrLoad___: #'__mro__')
 
 ]
 

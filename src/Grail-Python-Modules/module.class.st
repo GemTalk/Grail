@@ -183,16 +183,38 @@ module class >> ___functionAnnotationsTable___ [
 ]
 
 { #category : 'Grail-Signatures' }
-module class >> ___functionDefaultsTable___ [
-	"Session-local module-instance -> (function-name -> defaults block); see
-	___functionSignatureTable___."
+module class >> ___functionDefaultKeysTable___ [
+	"Session-local module-instance -> (function-name -> key entry); see
+	___setFunctionDefaults___:keys:block:."
 
 	| st tbl |
 	st := SessionTemps current.
-	tbl := st at: #GrailModuleFunctionDefaults otherwise: nil.
+	tbl := st at: #GrailModuleFunctionDefaultKeys otherwise: nil.
 	tbl isNil ifTrue: [
 		tbl := IdentityKeyValueDictionary new.
-		st at: #GrailModuleFunctionDefaults put: tbl].
+		st at: #GrailModuleFunctionDefaultKeys put: tbl].
+	^ tbl
+
+]
+
+{ #category : 'Grail-Signatures' }
+module class >> ___functionDefaultsTable___ [
+	"Session-local module-instance -> (function-name -> defaults block); see
+	___functionSignatureTable___.
+
+	Its OWN SessionTemps key.  It shared #GrailModuleFunctionDefaults with
+	___moduleDefaultsTable___, so the two kept one inner dictionary per module,
+	and whichever table touched a module first chose its kind.  When the memo
+	came first, that was an IDENTITY dictionary, and a later ``at: aName
+	asString'' (a fresh String every time) could never find the block it had
+	stored."
+
+	| st tbl |
+	st := SessionTemps current.
+	tbl := st at: #GrailModuleFunctionDefaultBlocks otherwise: nil.
+	tbl isNil ifTrue: [
+		tbl := IdentityKeyValueDictionary new.
+		st at: #GrailModuleFunctionDefaultBlocks put: tbl].
 	^ tbl
 
 ]
@@ -358,6 +380,29 @@ module class >> ___sessionInstances___ [
 
 ]
 
+{ #category : 'Grail-Signatures' }
+module class >> ___storeClassDefaultOwnedBy: aReceiver at: aSymbol put: aValue [
+	"Replace the stored class-body default for aSymbol, found by the walk
+	___classDefaultOwnedBy:at: reads it with.  False when no class in the
+	chain stores it."
+
+	| tbl cls |
+	aReceiver isNil ifTrue: [^ false].
+	tbl := module ___moduleDefaultsTable___.
+	cls := (aReceiver isKindOf: Behavior)
+		ifTrue: [aReceiver]
+		ifFalse: [aReceiver class].
+	[cls notNil] whileTrue: [
+		| inner |
+		inner := tbl at: cls otherwise: nil.
+		(inner notNil and: [inner includesKey: aSymbol]) ifTrue: [
+			inner at: aSymbol put: aValue.
+			^ true].
+		cls := [cls superclass] on: Error do: [:e | e return: nil]].
+	^ false
+
+]
+
 { #category : 'Grail-Session Globals' }
 module class >> ___withPersistentGlobalStores___: aBlock [
 	"Evaluate aBlock with stores to module globals going to the modules
@@ -376,6 +421,46 @@ module class >> ___withPersistentGlobalStores___: aBlock [
 		prior == nil
 			ifTrue: [temps removeKey: #'GrailPersistentGlobalStores' ifAbsent: []]
 			ifFalse: [temps at: #'GrailPersistentGlobalStores' put: prior]]
+
+]
+
+{ #category : 'Grail-Signatures' }
+module class >> ___writeDefaults: aValue entry: anEntry kw: isKw into: aStoreBlock [
+	"Write an assigned __defaults__ tuple (isKw false) or __kwdefaults__ dict
+	(isKw true) into the default stores anEntry names, through aStoreBlock
+	(``[:key :value | ... true]'', false when the key has no store).  Answers
+	true when every value was written.
+
+	ONLY THE DEF'S OWN SHAPE.  Every default is a store a call reads by key,
+	and whether a parameter HAS a default is compiled into the call path.  So
+	a tuple of the declared length and a dict with exactly the declared
+	keyword-only names can be written; None, another length, or a dict that
+	adds or drops a name cannot.  For those the caller rebinds the function's
+	calls instead (Behavior >> ___grailRebind___:code:receiverOffset:value:kw:
+	initial:, #1714); a nested def keeps the limit FunctionDefaultsTestCase
+	documents.  Validated against that shape BEFORE anything is written, so a
+	refused write changes nothing."
+
+	| keys n |
+	(aValue isNil or: [aValue == ExecBlock ___pyNone___]) ifTrue: [^ false].
+	isKw ifFalse: [
+		keys := anEntry at: 1.
+		keys isEmpty ifTrue: [^ false].
+		(aValue isKindOf: SequenceableCollection) ifFalse: [^ false].
+		aValue size = keys size ifFalse: [^ false].
+		1 to: keys size do: [:i |
+			(aStoreBlock value: (keys at: i) value: (aValue at: i)) ifFalse: [^ false]].
+		^ true].
+	keys := anEntry at: 2.
+	n := keys size // 2.
+	n = 0 ifTrue: [^ false].
+	(aValue @env1:__len__) = n ifFalse: [^ false].
+	1 to: keys size by: 2 do: [:i |
+		(aValue @env1:__contains__: (keys at: i) asString) ifFalse: [^ false]].
+	1 to: keys size by: 2 do: [:i |
+		(aStoreBlock value: (keys at: i + 1)
+			value: (aValue @env1:__getitem__: (keys at: i) asString)) ifFalse: [^ false]].
+	^ true
 
 ]
 
@@ -739,6 +824,25 @@ module >> ___setFunctionDefaults___: aName block: aBlock [
 ]
 
 { #category : 'Grail-Signatures' }
+module >> ___setFunctionDefaults___: aName keys: anEntry block: aBlock [
+	"___setFunctionDefaults___:block:, plus the memo KEYS each default is held
+	under: ``#( #( posKey ... ) #( 'kwName' kwKey ... ) )'', the shape a
+	method's ___methodDefaultKeysTable___ entry has.  They are what lets
+	``f.__defaults__ = t'' write through to what a call binds
+	(___writeFunctionDefaults___:value:kw:)."
+
+	| tbl inner |
+	tbl := module ___functionDefaultKeysTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [
+		inner := KeyValueDictionary new.
+		tbl at: self put: inner].
+	inner at: aName asString put: anEntry.
+	^ self ___setFunctionDefaults___: aName block: aBlock
+
+]
+
+{ #category : 'Grail-Signatures' }
 module >> ___setFunctionSignature___: aName spec: aSpec [
 	"Record a module-level function's inspect.signature parameter spec.
 	Keyed by the plain Python name -- the selector a lazily-wrapped
@@ -905,6 +1009,28 @@ module >> ___transientGlobals___ [
 		d := IdentityKeyValueDictionary new.
 		reg at: self class put: d].
 	^ d
+
+]
+
+{ #category : 'Grail-Signatures' }
+module >> ___writeFunctionDefaults___: aName value: aValue kw: isKw [
+	"``f.__defaults__ = aValue'' (isKw false) or ``f.__kwdefaults__ = aValue''
+	(isKw true) for a module-level function, written into the memo a call
+	binds from.  Answers true when it took effect, false when the shape cannot
+	be carried -- see module class >> ___writeDefaults:entry:kw:into:."
+
+	| tbl inner entry memo |
+	tbl := module ___functionDefaultKeysTable___.
+	inner := tbl at: self otherwise: nil.
+	inner isNil ifTrue: [^ false].
+	entry := inner at: aName asString otherwise: nil.
+	entry isNil ifTrue: [^ false].
+	memo := module ___moduleDefaultsTable___ at: self otherwise: nil.
+	memo isNil ifTrue: [
+		memo := IdentityKeyValueDictionary new.
+		module ___moduleDefaultsTable___ at: self put: memo].
+	^ module ___writeDefaults: aValue entry: entry kw: isKw
+		into: [:key :v | memo at: key put: v. true]
 
 ]
 

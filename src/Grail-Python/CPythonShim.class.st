@@ -40,6 +40,142 @@ Class {
 	#category : 'Grail-CPython'
 }
 
+{ #category : 'Grail-Dynamic Loading' }
+CPythonShim class >> ___buildDynamicModule: moduleName fromPath: pathString methodNames: methodNames [
+	"The Grail module for a loaded .so: its class, a method per C function,
+	its spec and its exported attributes.  methodNames is what shimDynLoad
+	answered, as a user action (loadDynamicModule:fromPath:) or called from C
+	(finishDynLoad:path:methodNames:)."
+
+	| moduleClass moduleInstance symbolList existing |
+	"ONE MODULE OBJECT PER EXTENSION, as in CPython, where a module is in
+	sys.modules while its exec runs and the same object is complete when it
+	ends.  A cycle of C imports (numpy.random's _generator, bit_generator,
+	_common) registers the module from the middle of its own exec
+	(finishDynLoad:path:methodNames:); building it again when the load ends
+	refreshes THAT object's attributes, so whoever got it mid-exec sees
+	everything its exec defined.  A fresh object left the first one a
+	snapshot without them -- cannot import name Generator."
+	existing := [importlib lookupModule: moduleName] on: Error do: [:e | e return: nil].
+	(existing notNil and: [existing class respondsTo: #'___shimModuleName___']) ifTrue: [
+		(existing class ___shimModuleName___ = moduleName) ifTrue: [
+			(self current moduleAttrs: moduleName) keysAndValuesDo: [:k :v |
+				existing dynamicInstVarAt: k put: v].
+			^ existing]].
+	"Create a module subclass for this C extension.  Named by a legal
+	IDENTIFIER derived from the module name, not by the name itself: an
+	in-package extension arrives dotted (pydantic_core._pydantic_core,
+	numpy._core._multiarray_umath), and GemStone 4.0 refuses that as a class
+	name with ArgumentError 2149 -- which is not a GrailShimError, so the
+	importer's handler could not turn it into an ImportError and the session
+	ended with no traceback at all.  Nothing looks this class up by name: the
+	C side is keyed by moduleName, and __name__ comes from the spec below."
+	moduleClass := module
+		subclass: (moduleName collect: [:c |
+			(c isLetter or: [c isDigit or: [c = $_]]) ifTrue: [c] ifFalse: [$_]])
+		instVarNames: #()
+		classVars: #()
+		classInstVars: #()
+		poolDictionaries: #()
+		inDictionary: UserGlobals
+		options: #().
+	"Compile env:1 methods for each C function. Two selector shapes are
+	generated: a `_name:kw:` varargs method (for first-class use and kw
+	arg call sites), plus fixed-arity forwarders for arities 0..3 (which
+	is the hot path — `mymod.func(x)` compiles to `(mymod) func: x`).
+	Fixed-arity forwarders delegate to the varargs form so there is one
+	place where the actual C call happens."
+	symbolList := System myUserProfile symbolList.
+	"The C module this class fronts, for wrap: -- a function read off the
+	module is a BoundMethod on it, and goes back to C as that module's
+	function object (___functionObjectFor:)."
+	moduleClass class
+		compileMethod: '___shimModuleName___
+	^ ' , moduleName printString
+		dictionaries: symbolList
+		category: 'Grail-C Extension'
+		environmentId: 0.
+	methodNames do: [:methName |
+		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
+		"Varargs form — actually invokes the C function. Keyword args
+		flow through the shimCallKw user action when present."
+		varargsSrc := '_' , methName , ': positional kw: keywords
+	^ (CPythonShim @env0:current) @env0:callModuleDynamic: ''' , moduleName , ''' method: ''' , methName , ''' args: positional kwargs: keywords'.
+		moduleClass
+			compileMethod: varargsSrc
+			dictionaries: symbolList
+			category: 'Grail-C Extension'
+			environmentId: 1.
+
+		"Fixed-arity forwarders 0..3 — delegate to the varargs form."
+		arity0Src := methName , '
+	^ self _' , methName , ': #() kw: nil'.
+		arity1Src := methName , ': a1
+	^ self _' , methName , ': { a1 } kw: nil'.
+		arity2Src := methName , ': a1 _: a2
+	^ self _' , methName , ': { a1 . a2 } kw: nil'.
+		arity3Src := methName , ': a1 _: a2 _: a3
+	^ self _' , methName , ': { a1 . a2 . a3 } kw: nil'.
+		{ arity0Src . arity1Src . arity2Src . arity3Src } do: [:src |
+			moduleClass
+				compileMethod: src
+				dictionaries: symbolList
+				category: 'Grail-C Extension'
+				environmentId: 1.
+		].
+	].
+	"Create and initialize the instance"
+	moduleInstance := moduleClass new.
+	"PEP 451, through importlib's shared seam, so a C-extension module carries a
+	real ``__spec__'' like every other module rather than None.
+
+	ORIGIN IS THE .so PATH when the caller knows it, and that is what makes
+	``__file__'' right here -- CPython gives an extension module the shared
+	library's path.  When the path is unknown the spec has no location and
+	__file__ comes out None, which is the built-in shape.
+
+	``__package__'' was nil, which is not None and not '' -- a raw Smalltalk nil
+	reaching Python.  The spec's ``parent'' replaces it with '' for a top-level
+	extension, which is what CPython reports."
+	importlib
+		___initModuleAttrsFrom___: (importlib
+			___specFor___: moduleName
+			origin: (pathString ifNil: ['built-in'])
+			loader: nil
+			locations: nil)
+		on: moduleInstance.
+	"Expose module-level constants (PyModule_AddIntConstant /
+	AddStringConstant / AddObjectRef) as dynamic instVars so Python
+	attribute reads (mymod.CONST) resolve through the
+	___pyAttrLoad___ dynamic-instVar probe."
+	(self current moduleAttrs: moduleName) keysAndValuesDo: [:k :v |
+		moduleInstance dynamicInstVarAt: k put: v.
+	].
+	^ moduleInstance
+
+]
+
+{ #category : 'Grail-Management' }
+CPythonShim class >> ___userActionActiveHere [
+	"Is the running process on top of C frames -- inside a user action, an FFI
+	call or an IntRecur -- where the VM refuses a process switch (``GsProcess
+	switch not allowed while FFI, UserAction or IntRecur call is active'',
+	uncontinuable)?  A Python generator started there cannot fork its body
+	(PythonGenerator >> ___mustRunInline___).
+
+	The VM's OWN test, read directly: it refuses the switch when the current
+	stack's entry count is above 1 (intloopsup.c, IntLpSupProcessSwitch), and
+	``System _vmStEntryCount'' answers that count.  The first two cuts kept a
+	record of user actions instead: by depth alone, a user action an exception
+	unwound past left an entry that made every later generator in the gem run
+	inline; checked against the entering frame with ``GsProcess
+	_frameContentsAt:'', it read every live entry as stale under native code
+	(Linux x86_64, CI), where frames are not introspectable that way."
+
+	^ System _vmStEntryCount > 1
+
+]
+
 { #category : 'Grail-Loading' }
 CPythonShim class >> builtinModuleNamed: aName [
 	"Return the shim built-in module singleton for aName, or nil for any
@@ -200,103 +336,20 @@ CPythonShim class >> loadDynamicModule: moduleName fromPath: pathString [
 	the attribute-call varargs fast path (see CallAst >>
 	attributeCallVarargsSelector)."
 
-	| methodNames moduleClass moduleInstance symbolList |
+	| methodNames |
 	self current.
+	"An import C asked for does the load in C, inside the user action already
+	in flight (GrailDynLoadRequest): handled, this does not return.  Signalled
+	only while such an import is on the stack -- a Notification still reaches
+	every broad handler, and SUnit's took it for a test error."
+	((SessionTemps current at: #'GrailCImportDepth' otherwise: 0) > 0) ifTrue: [
+		(GrailDynLoadRequest new moduleName: moduleName path: pathString) signal].
 	"Depth-track like ___shimUserAction:withArgs: -- a dynamic module's
 	init exec re-enters wrap: via server callbacks; a sweep mid-load
 	could reap in-flight wrappers (see wrap:)."
 	methodNames := self current ___duringCallDo: [
 		System userAction: #shimDynLoad withArgs: { pathString . moduleName }].
-	"Create a module subclass for this C extension.  Named by a legal
-	IDENTIFIER derived from the module name, not by the name itself: an
-	in-package extension arrives dotted (pydantic_core._pydantic_core,
-	numpy._core._multiarray_umath), and GemStone 4.0 refuses that as a class
-	name with ArgumentError 2149 -- which is not a GrailShimError, so the
-	importer's handler could not turn it into an ImportError and the session
-	ended with no traceback at all.  Nothing looks this class up by name: the
-	C side is keyed by moduleName, and __name__ comes from the spec below."
-	moduleClass := module
-		subclass: (moduleName collect: [:c |
-			(c isLetter or: [c isDigit or: [c = $_]]) ifTrue: [c] ifFalse: [$_]])
-		instVarNames: #()
-		classVars: #()
-		classInstVars: #()
-		poolDictionaries: #()
-		inDictionary: UserGlobals
-		options: #().
-	"Compile env:1 methods for each C function. Two selector shapes are
-	generated: a `_name:kw:` varargs method (for first-class use and kw
-	arg call sites), plus fixed-arity forwarders for arities 0..3 (which
-	is the hot path — `mymod.func(x)` compiles to `(mymod) func: x`).
-	Fixed-arity forwarders delegate to the varargs form so there is one
-	place where the actual C call happens."
-	symbolList := System myUserProfile symbolList.
-	"The C module this class fronts, for wrap: -- a function read off the
-	module is a BoundMethod on it, and goes back to C as that module's
-	function object (___functionObjectFor:)."
-	moduleClass class
-		compileMethod: '___shimModuleName___
-	^ ' , moduleName printString
-		dictionaries: symbolList
-		category: 'Grail-C Extension'
-		environmentId: 0.
-	methodNames do: [:methName |
-		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
-		"Varargs form — actually invokes the C function. Keyword args
-		flow through the shimCallKw user action when present."
-		varargsSrc := '_' , methName , ': positional kw: keywords
-	^ (CPythonShim @env0:current) @env0:callModuleDynamic: ''' , moduleName , ''' method: ''' , methName , ''' args: positional kwargs: keywords'.
-		moduleClass
-			compileMethod: varargsSrc
-			dictionaries: symbolList
-			category: 'Grail-C Extension'
-			environmentId: 1.
-
-		"Fixed-arity forwarders 0..3 — delegate to the varargs form."
-		arity0Src := methName , '
-	^ self _' , methName , ': #() kw: nil'.
-		arity1Src := methName , ': a1
-	^ self _' , methName , ': { a1 } kw: nil'.
-		arity2Src := methName , ': a1 _: a2
-	^ self _' , methName , ': { a1 . a2 } kw: nil'.
-		arity3Src := methName , ': a1 _: a2 _: a3
-	^ self _' , methName , ': { a1 . a2 . a3 } kw: nil'.
-		{ arity0Src . arity1Src . arity2Src . arity3Src } do: [:src |
-			moduleClass
-				compileMethod: src
-				dictionaries: symbolList
-				category: 'Grail-C Extension'
-				environmentId: 1.
-		].
-	].
-	"Create and initialize the instance"
-	moduleInstance := moduleClass new.
-	"PEP 451, through importlib's shared seam, so a C-extension module carries a
-	real ``__spec__'' like every other module rather than None.
-
-	ORIGIN IS THE .so PATH when the caller knows it, and that is what makes
-	``__file__'' right here -- CPython gives an extension module the shared
-	library's path.  When the path is unknown the spec has no location and
-	__file__ comes out None, which is the built-in shape.
-
-	``__package__'' was nil, which is not None and not '' -- a raw Smalltalk nil
-	reaching Python.  The spec's ``parent'' replaces it with '' for a top-level
-	extension, which is what CPython reports."
-	importlib
-		___initModuleAttrsFrom___: (importlib
-			___specFor___: moduleName
-			origin: (pathString ifNil: ['built-in'])
-			loader: nil
-			locations: nil)
-		on: moduleInstance.
-	"Expose module-level constants (PyModule_AddIntConstant /
-	AddStringConstant / AddObjectRef) as dynamic instVars so Python
-	attribute reads (mymod.CONST) resolve through the
-	___pyAttrLoad___ dynamic-instVar probe."
-	(self current moduleAttrs: moduleName) keysAndValuesDo: [:k :v |
-		moduleInstance dynamicInstVarAt: k put: v.
-	].
-	^ moduleInstance
+	^ self ___buildDynamicModule: moduleName fromPath: pathString methodNames: methodNames
 
 ]
 
@@ -424,6 +477,54 @@ CPythonShim >> ___buildForeignExceptionClass: nameStr base: base pointer: ptrInt
 ]
 
 { #category : 'Grail-Wrapping' }
+CPythonShim >> ___buildSubtypeMirrorFor: aClass [
+	"The C type of a Python class whose base is a wheel's own type --
+	``class memmap(ndarray)'' -- as CPython's heap type for it is: a copy of
+	the base's PyTypeObject, so every slot is the base's, with tp_base the
+	base, tp_name the class's, HEAPTYPE, and one more word of tp_basicsize for
+	the OOP of an instance's Grail half (none for a subclass of such a class,
+	whose base already has it).  tp_alloc makes both halves together
+	(PyType_AllocForeignSubclass:type:basicSize:), so numpy's own views and
+	results of a subclass instance are instances too.  The mirror magic and the
+	class OOP are where a type mirror keeps them, and the subtype marker in
+	tp_subclasses tells the shim a body from a wrapper (docs/
+	Shim_Foreign_Subclassing.md, option A)."
+
+	| lay size baseAddr base m nameBytes basicSize mro |
+	lay := self ___mirrorLayout.
+	size := lay at: 1.
+	baseAddr := aClass superclass == ShimForeignSubclass
+		ifTrue: [(ShimForeignSubclass ___foreignBaseOf: aClass) cPtr]
+		ifFalse: [(self typeObjectFor: aClass superclass) memoryAddress].
+	base := CByteArray fromCPointer: (CPointer forAddress: baseAddr) numBytes: size.
+	m := CByteArray gcMalloc: size.
+	0 to: size - 8 by: 8 do: [:off | m int64At: off put: (base int64At: off)].
+	m int64At: 0 put: 16r10000000.
+	nameBytes := self ___cStringFor: (self ___mirrorNameFor: aClass).
+	m int64At: (lay at: 2) put: nameBytes memoryAddress.
+	basicSize := base int64At: (lay at: 3).
+	(base int64At: (lay at: 13)) = (lay at: 16) ifFalse: [basicSize := basicSize + 8].
+	m int64At: (lay at: 3) put: basicSize.
+	m int64At: (lay at: 4) put: ((base int64At: (lay at: 4)) bitOr: ((1 bitShift: 9) bitOr: (1 bitShift: 10))).
+	m int64At: (lay at: 5) put: baseAddr.
+	m int64At: (lay at: 6) put: 16r524F5252494D4C47.
+	self storeOop: aClass asOop in: m at: (lay at: 7).
+	m int64At: (lay at: 11) put: (lay at: 14).
+	m int64At: (lay at: 12) put: (lay at: 15).
+	m int64At: (lay at: 13) put: (lay at: 16).
+	m int64At: (lay at: 17) put: (lay at: 19).
+	m int64At: (lay at: 18) put: (lay at: 20).
+	mro := self ___mroTupleFor: m base: baseAddr.
+	m int64At: (lay at: 21) put: mro memoryAddress.
+	"The name's bytes and the MRO tuple must live as long as the mirror."
+	(SessionTemps current
+		at: #'GrailTypeMirrorNames'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ]) at: aClass put: { nameBytes. mro }.
+	^ m
+
+]
+
+{ #category : 'Grail-Wrapping' }
 CPythonShim >> ___buildTypeMirrorFor: aClass [
 	"A full-size PyTypeObject standing for aClass in C: metatype type, tp_name
 	``module.qualname'' (what the shim's PyType_GetName/QualName/ModuleName
@@ -471,6 +572,21 @@ CPythonShim >> ___buildTypeMirrorFor: aClass [
 		c := Python at: assoc key otherwise: nil.
 		(c notNil and: [mro includes: c]) ifTrue: [flags := flags bitOr: (1 bitShift: assoc value)]].
 	m int64At: (lay at: 4) put: flags.
+	"tp_iter / tp_iternext for a class that iterates or is an iterator, as
+	CPython''s type slots have them: a wheel calls them INLINE -- Cython''s
+	``next(it)'' is ``Py_TYPE(it)->tp_iternext(it)'', and numpy.random''s
+	SeedSequence.generate_state answered NULL with no error on a Grail
+	itertools.cycle.  Only a class that really defines the method: a
+	tp_iternext is also what the inline PyIter_Check tests."
+	(self ___classDefinesReal: #'__iter__' in: aClass) ifTrue: [
+		m int64At: (lay at: 23) put: (lay at: 25)].
+	(self ___classDefinesReal: #'__next__' in: aClass) ifTrue: [
+		m int64At: (lay at: 24) put: (lay at: 26)].
+	"tp_descr_get for a class whose instances bind -- a function, an
+	UnboundMethod, a descriptor class: Cython binds a special method it looked
+	up on the type through it (``with lock:'' in numpy.random)."
+	(self ___classDefinesReal: #'__get__:_:' in: aClass) ifTrue: [
+		m int64At: (lay at: 27) put: (lay at: 28)].
 	"tp_new: the shim's trampoline into cls.__new__(cls) (PyType_GenericNew:)."
 	m int64At: (lay at: 9) put: (lay at: 10).
 	m int64At: (lay at: 6) put: 16r524F5252494D4C47.
@@ -480,6 +596,45 @@ CPythonShim >> ___buildTypeMirrorFor: aClass [
 		at: #'GrailTypeMirrorNames'
 		ifAbsentPut: [ IdentityKeyValueDictionary new ]) at: aClass put: nameBytes.
 	^ m
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___cBufferHolding: aByteObject [
+	"A gcMalloc'd copy of aByteObject's bytes with a NUL after them."
+
+	| b |
+	b := CByteArray gcMalloc: aByteObject size + 1.
+	self ___copyBytesOf: aByteObject into: b.
+	b uint8At: aByteObject size put: 0.
+	^ b
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___classDefinesReal: aSelector in: aClass [
+	"Does aClass define the env-1 method aSelector as its CPython type would
+	have it -- not PythonInstance''s, nor a <grailProtocolRefusal> that exists
+	only to raise (see object>>___hasOwnGetitem___)?"
+
+	| defCls meth |
+	aClass isBehavior ifFalse: [^ false].
+	defCls := aClass whichClassIncludesSelector: aSelector environmentId: 1.
+	(defCls isNil or: [defCls == PythonInstance]) ifTrue: [^ false].
+	meth := defCls compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
+	^ (meth notNil and: [meth pragmas anySatisfy: [:p | p keyword == #grailProtocolRefusal]]) not
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___copyBytesOf: aByteObject into: aCByteArray [
+	"Copy every byte, NULs included: copyBytesFrom:from:to:into: alone has C
+	string semantics and refuses a zero byte (ArgumentError, ``code point zero
+	in source data'')."
+
+	aByteObject size > 0 ifTrue: [
+		aCByteArray copyBytesFrom: aByteObject from: 1 to: aByteObject size
+			into: 0 allowCodePointZero: true]
 
 ]
 
@@ -557,6 +712,10 @@ CPythonShim >> ___functionObjectFor: aBoundMethod [
 		System userAction: #shimFunctionObject
 			withArgs: { rcvClass ___shimModuleName___ . name }].
 	addr isNil ifTrue: [^ nil].
+	"Kept for the way back (foreignProxyForPointer:typeName:ops:): the first
+	BoundMethod to cross for each C function object stands for it."
+	(SessionTemps current at: #'GrailFunctionObjects' ifAbsentPut: [IntegerKeyValueDictionary new])
+		at: addr ifAbsentPut: [aBoundMethod].
 	^ CByteArray fromCPointer: (CPointer forAddress: addr) numBytes: 64
 
 ]
@@ -615,6 +774,50 @@ CPythonShim >> ___mirrorLayout [
 	(shimTypeMirrorLayout) -- and then the mirror tp_new's address."
 
 	^ typeAddresses at: #'___mirrorLayout___'
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___mirrorNameFor: aClass [
+	"The class's __name__ -- a mirror's tp_name, bare as a CPython heap
+	type's is (``'%s' % Py_TYPE(self)->tp_name'' reads 'Sub', not
+	'__main__.Sub').  The shim's PyType_GetQualName / GetModuleName ask the
+	class for the rest."
+
+	| name |
+	name := [aClass @env1:___pyAttrLoad___: #'__name__'] on: AbstractException do: [:e | e return: nil].
+	^ (name isKindOf: CharacterCollection)
+		ifTrue: [name asString]
+		ifFalse: [aClass name asString]
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___mroTupleFor: aMirror base: baseAddr [
+	"A subtype mirror's tp_mro: a tuple in CPython's layout -- refcount,
+	PyTuple_Type, size, the 3.14 hash cache, then the items inline -- holding
+	the mirror and each type along its tp_base chain.  numpy reads it inline
+	for a subclass of one of its scalar types (_descr_from_subtype takes item
+	1), and the shim's PyType_Ready computes no tp_mro, so the copy of the
+	base's was NULL and np.dtype(F) for ``class F(np.float64)'' crashed the
+	gem."
+
+	| lay size chain addr t |
+	lay := self ___mirrorLayout.
+	size := lay at: 1.
+	chain := OrderedCollection with: aMirror memoryAddress.
+	addr := baseAddr.
+	[addr ~= 0] whileTrue: [
+		chain add: addr.
+		addr := (CByteArray fromCPointer: (CPointer forAddress: addr) numBytes: size)
+			int64At: (lay at: 5)].
+	t := CByteArray gcMalloc: 32 + (8 * chain size).
+	t int64At: 0 put: 16r10000000.
+	t int64At: 8 put: (lay at: 22).
+	t int64At: 16 put: chain size.
+	t int64At: 24 put: -1.
+	chain doWithIndex: [:a :i | t int64At: 24 + (8 * i) put: a].
+	^ t
 
 ]
 
@@ -751,6 +954,130 @@ CPythonShim >> ___notImplemented [
 
 ]
 
+{ #category : 'Grail-CPython API' }
+CPythonShim >> ___pendingDynLoad [
+	"{ path. moduleName } of the load PyImport_ImportModuleLevel:... handed
+	back to C, taken once."
+
+	^ SessionTemps current removeKey: #'GrailPendingDynLoad' ifAbsent: [nil]
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___prefixBlock: bodySize for: aValue [
+	"{ block. body } for a prefixed wrapper of aValue: a zeroed gcMalloc block
+	of 16 + bodySize bytes, the prefix -- GRAILPX1 and aValue''s OOP -- written,
+	the body''s refcount 1, and a view of the body.  The block is kept in
+	#GrailShimWrapperBlocks under aValue until the wrapper is swept."
+
+	| block body |
+	block := CByteArray gcMalloc: 16 + bodySize.
+	block int64At: 0 put: 16r475241494C505831.
+	self storeOop: aValue asOop in: block at: 8.
+	body := CByteArray fromCPointer: (CPointer forAddress: block memoryAddress + 16) numBytes: bodySize.
+	body int64At: 0 put: 1.
+	(SessionTemps current at: #'GrailShimWrapperBlocks' ifAbsentPut: [IdentityKeyValueDictionary new])
+		at: aValue put: block.
+	^ { block. body }
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___prefixedWrapperFor: aValue [
+	"An exact int, str, bytes or complex in CPython 3.14''s OWN layout, or nil for
+	anything else.  A Cython module reads both INLINE -- an int''s lv_tag and digits, a
+	str''s length, hash, state and data -- and a 32-byte wrapper keeps the OOP
+	at offset 16, which Cython read as an int''s sign (every SmallInteger came
+	out negative) and a str''s length.
+
+	The OOP goes in a hidden PREFIX, [magic][oop] in the 16 bytes BEFORE the
+	object, as CPython hides its PyGC_Head (docs/Shim_Object_Model.md, section
+	2); the C side recognises it by ob_type first (has_grail_prefix in
+	cpython.cc), so it never reads in front of a wheel''s own object.  One
+	gcMalloc block holds prefix and body; what the wrapper map holds is a VIEW
+	of the body, whose memoryAddress is the PyObject* -- so every caller''s
+	(self wrap: x) memoryAddress is unchanged -- and the block itself is kept
+	in #GrailShimWrapperBlocks, swept with the wrapper."
+
+	| block body size |
+	((aValue class == SmallInteger) or: [aValue class == LargeInteger]) ifTrue: [
+		| mag digits |
+		mag := aValue abs.
+		digits := OrderedCollection new.
+		[mag > 0] whileTrue: [
+			digits add: (mag bitAnd: 16r3FFFFFFF).
+			mag := mag bitShift: -30].
+		size := 24 + (4 * (digits size max: 1)).
+		size := size + 7 // 8 * 8.
+		block := self ___prefixBlock: size for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #int).
+		body int64At: 16 put: (aValue = 0
+			ifTrue: [1]
+			ifFalse: [(digits size bitShift: 3) + (aValue < 0 ifTrue: [2] ifFalse: [0])]).
+		digits doWithIndex: [:d :i | body uint32At: 20 + (4 * i) put: d].
+		^ body].
+	((aValue isKindOf: CharacterCollection)
+			and: [(aValue isKindOf: AbstractPyStr) not
+			and: [(self typeAddrFor: aValue) = (typeAddresses at: #str ifAbsent: [nil])]]) ifTrue: [
+		| u n kind ascii hdr |
+		u := aValue class == Unicode7 ifTrue: [aValue] ifFalse: [aValue asUnicodeString].
+		n := u size.
+		ascii := u class == Unicode7.
+		kind := ascii
+			ifTrue: [1]
+			ifFalse: [u class == Unicode32
+				ifTrue: [4]
+				ifFalse: [(u detect: [:c | c codePoint > 255] ifNone: [nil]) isNil
+					ifTrue: [1] ifFalse: [2]]].
+		hdr := ascii ifTrue: [40] ifFalse: [56].
+		size := hdr + (n + 1 * kind).
+		size := size + 7 // 8 * 8.
+		block := self ___prefixBlock: size for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #str).
+		body int64At: 16 put: n.
+		body int64At: 24 put: -1.
+		body uint32At: 32 put: ((kind bitShift: 2) bitOr: (16r20 bitOr: (ascii ifTrue: [16r40] ifFalse: [0]))).
+		kind = 1
+			ifTrue: [
+				ascii
+					ifTrue: [n > 0 ifTrue: [body copyBytesFrom: u from: 1 to: n into: hdr allowCodePointZero: true]]
+					ifFalse: [1 to: n do: [:i | body uint8At: hdr + i - 1 put: (u at: i) codePoint]]]
+			ifFalse: [kind = 2
+				ifTrue: [1 to: n do: [:i | body uint16At: hdr + (2 * (i - 1)) put: (u at: i) codePoint]]
+				ifFalse: [1 to: n do: [:i | body uint32At: hdr + (4 * (i - 1)) put: (u at: i) codePoint]]].
+		^ body].
+	"bytes, not bytearray, whose contents can change after they crossed:
+	[ob_size@16][ob_shash@24][data@32], NUL-terminated."
+	((aValue isKindOf: ByteArray)
+			and: [(aValue isKindOf: (Python at: #bytearray)) not
+			and: [(self typeAddrFor: aValue) = (typeAddresses at: #bytes ifAbsent: [nil])]]) ifTrue: [
+		| n |
+		n := aValue size.
+		size := 32 + n + 1.
+		size := size + 7 // 8 * 8.
+		block := self ___prefixBlock: size for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #bytes).
+		body int64At: 16 put: n.
+		body int64At: 24 put: -1.
+		n > 0 ifTrue: [body copyBytesFrom: aValue from: 1 to: n into: 32 allowCodePointZero: true].
+		^ body].
+	"An exact complex: [cval.real@16][cval.imag@24], as numpy reads it
+	(PyComplexObject)."
+	(aValue class == (Python at: #complex otherwise: nil)
+			and: [(typeAddresses at: #complex otherwise: 0) ~= 0]) ifTrue: [
+		block := self ___prefixBlock: 32 for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #complex).
+		body doubleAt: 16 put: (aValue dynamicInstVarAt: #real) asFloat.
+		body doubleAt: 24 put: (aValue dynamicInstVarAt: #imag) asFloat.
+		^ body].
+	^ nil
+
+]
+
 { #category : 'Grail-Calling' }
 CPythonShim >> ___pythonNameForSmalltalkErrorNamed: aName [
 	"The Python exception name for a Smalltalk exception class name, or nil.
@@ -787,6 +1114,16 @@ CPythonShim >> ___pythonNameForSmalltalkErrorNamed: aName [
 		(cls == baseExc) or: [cls inheritsFrom: baseExc]]])
 			ifTrue: [^ aName].
 	^ nil
+
+]
+
+{ #category : 'Grail-CPython API' }
+CPythonShim >> ___removeModule: modules named: aName [
+	"sys.modules without aName, after an extension load C did itself failed
+	(the shim's _grail_import_level), as CPython removes a failed load."
+
+	^ [modules @env0:removeKey: aName asString ifAbsent: [nil]. true]
+		on: Error do: [:e | e return: false]
 
 ]
 
@@ -880,6 +1217,27 @@ CPythonShim >> ___shimUserAction: selector withArgs: argsArray [
 
 ]
 
+{ #category : 'Grail-CPython API' }
+CPythonShim >> ___sliceIndex: anObject [
+	"CPython's _PyEval_SliceIndex: nil for None, else the object's __index__
+	clamped to a Py_ssize_t.  A bound was handed to C as it stood, and C read
+	it with GciOopToI64, so a numpy integer -- ``a[i:i + np.int64(3)]'', which
+	np.load's chunk loop does -- died with an uncatchable ArgumentError 2163."
+
+	| n |
+	anObject == None ifTrue: [^ nil].
+	(anObject isKindOf: SmallInteger) ifTrue: [^ anObject].
+	n := (anObject isKindOf: Integer)
+		ifTrue: [anObject]
+		ifFalse: [
+			(((builtins @env1:instance) @env1:hasattr: anObject _: '__index__') @env1:___isTruthy___) ifFalse: [
+				(Python at: #TypeError) @env1:___signal___:
+					'slice indices must be integers or None or have an __index__ method'].
+			anObject @env1:__index__].
+	^ (n max: -9223372036854775808) min: 9223372036854775807
+
+]
+
 { #category : 'Grail-Wrapping' }
 CPythonShim >> ___staticExceptionNames [
 	"The exception types the shim defines statically (cpython.cc), by name."
@@ -891,7 +1249,7 @@ CPythonShim >> ___staticExceptionNames [
 		'ImportError' 'NameError' 'BufferError' 'EOFError' 'KeyboardInterrupt'
 		'UnicodeError' 'UnicodeDecodeError' 'UnicodeEncodeError' 'AssertionError'
 		'BaseExceptionGroup' 'DeprecationWarning' 'FutureWarning' 'RuntimeWarning'
-		'UserWarning')
+		'UserWarning' 'GeneratorExit' 'UnboundLocalError')
 
 ]
 
@@ -902,7 +1260,7 @@ CPythonShim >> ___staticTypeObjectFor: aClass [
 
 	| addr |
 	#(#float #int #bool #str #bytes #list #dict #tuple #object #type #NoneType
-		#set #frozenset) do: [:n |
+		#set #frozenset #complex) do: [:n |
 		(addr isNil and: [(Python at: n otherwise: nil) == aClass])
 			ifTrue: [addr := typeAddresses at: n otherwise: nil]].
 	addr isNil ifTrue: [
@@ -916,12 +1274,13 @@ CPythonShim >> ___staticTypeObjectFor: aClass [
 { #category : 'Grail-Calling' }
 CPythonShim >> ___takeCallbackError [
 	"{ Python name of the nearest shim exception type. message. the C instance
-	of a wheel's own exception it carries, or 0 } for the exception
+	of a wheel's own exception it carries, or 0. the C type object of its own
+	class, or 0 } for the exception
 	___guardCallback: recorded -- the shim's take_callback_error installs it as
 	C's pending error.  The exception itself is kept, should C hand the error
 	back unhandled (___noteReraiseCallbackException)."
 
-	| ex base cls text fo ptr |
+	| ex base cls text fo ptr typ |
 	ex := SessionTemps current at: #'GrailShimCallbackException' otherwise: nil.
 	SessionTemps current removeKey: #'GrailShimCallbackException' ifAbsent: [nil].
 	ex isNil ifTrue: [^ { 'RuntimeError'. 'a Grail callback raised'. 0 }].
@@ -935,7 +1294,13 @@ CPythonShim >> ___takeCallbackError [
 	text := [(ex @env1:__str__) asString] on: Error do: [:e | e return: ''].
 	fo := [ex dynamicInstVarAt: #'___grailForeign___'] on: Error do: [:e | e return: nil].
 	ptr := (fo isKindOf: ShimForeignObject) ifTrue: [fo cPtr] ifFalse: [0].
-	^ { base ifNil: ['Exception']. text. ptr }
+	"The exception's OWN class as C sees it -- a builtin's static type, any
+	other class's type mirror -- so C can match it.  The nearest builtin alone
+	made ``decimal.InvalidOperation'' an ArithmeticError: pydantic_core's
+	decimal validator, which catches InvalidOperation to report
+	decimal_parsing, let ``Decimal('five')'''s escape instead."
+	typ := [(self typeObjectFor: ex class) memoryAddress] on: Error do: [:e | e return: 0].
+	^ { base ifNil: ['Exception']. text. ptr. typ }
 
 ]
 
@@ -1028,6 +1393,13 @@ CPythonShim >> ___ug_PyContextVar_Set: aVar value: aValue [
 	setter := aVar @env1:___pyAttrLoad___: #'set'.
 	^ (self wrap: (setter perform: #'value:value:' env: 1
 		withArguments: { { aValue } . nil })) memoryAddress
+
+]
+
+{ #category : 'Grail-CPython API' }
+CPythonShim >> ___ug_PyDict_GetItem: aDictionary key: aKey [
+	(aDictionary includesKey: aKey) ifFalse: [ ^ 0 ].
+	^ (self wrap: (aDictionary at: aKey)) memoryAddress
 
 ]
 
@@ -1142,7 +1514,13 @@ CPythonShim >> ___ug_PyObject_IsSubclass: aClass cls: aClassOrTuple [
 
 { #category : 'Grail-CPython API' }
 CPythonShim >> ___ug_PyObject_Length: obj [
-	^ obj @env1:__len__
+	"Python's len(), not a bare __len__ send: an object with none -- a wheel's
+	own iterator, which pydantic_core asks for a length hint while serialising
+	an ``Iterable[Model]'' -- is CPython's TypeError, which the guard makes
+	C's error.  The bare send was an uncatchable MessageNotUnderstood inside
+	the callback."
+
+	^ (builtins @env0:___instance___) @env1:len: obj
 
 ]
 
@@ -1208,6 +1586,18 @@ CPythonShim >> ___ug_PyObject_SetItem: obj key: aKey value: aValue [
 { #category : 'Grail-CPython API' }
 CPythonShim >> ___ug_PyObject_Str: obj [
 	^ (self wrap: (obj @env1:__str__)) memoryAddress
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___wrapperBuffers [
+	"The C buffers that live as long as a WRAPPER does, keyed by the wrapped
+	object as the wrapper map is: a str's UTF-8 form, a bytes object's data.
+	sweep drops an entry when it drops the wrapper."
+
+	^ SessionTemps current
+		at: #'GrailShimWrapperBuffers'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ]
 
 ]
 
@@ -1644,6 +2034,68 @@ CPythonShim >> classForStaticTypeNamed: aTpName [
 
 ]
 
+{ #category : 'Grail-CPython API' }
+CPythonShim >> finishDynLoad: moduleName path: pathString methodNames: methodNames [
+	"The rest of an extension load C did itself (see
+	PyImport_ImportModuleLevel:...): the Grail module, registered as
+	importlib>>loadDynamicModuleNamed:fromPath: registers one.  A module
+	whose exec is still running -- bit_generator, which _common imports
+	while bit_generator imports _common -- is built and registered here
+	too, as CPython has it in sys.modules during its exec; it is built again
+	when its own load finishes, with every attribute its exec added."
+
+	^ self ___guardCallback: [ | mod |
+		mod := CPythonShim
+			___buildDynamicModule: moduleName asString
+			fromPath: pathString asString
+			methodNames: methodNames.
+		importlib registerModule: moduleName asString with: mod.
+		(self wrap: mod) memoryAddress]
+
+]
+
+{ #category : 'Grail-Calling' }
+CPythonShim >> foreignBuffer: cPtr mode: mode index: anIndex value: aByte [
+	"A wheel's object's buffer, for memoryview (shimForeignBuffer): mode 0
+	its metadata, ''format itemsize readonly ndim shape...''; mode 1 its
+	bytes, C-contiguous; mode 2 sets byte anIndex to aByte.  Raises what
+	PyObject_GetBuffer raised -- a TypeError for an object with no buffer."
+
+	^ self ___shimUserAction: #shimForeignBuffer withArgs: { cPtr . mode . anIndex . aByte }
+
+]
+
+{ #category : 'Grail-Calling' }
+CPythonShim >> foreignDataDescriptorNames: typePtr [
+	"The names typePtr (a C type) and its C bases answer with a DATA
+	descriptor, as a Set of Symbols, cached per type for the session: an
+	attribute store on an instance of a Python subclass of the type goes to C
+	for these and stays in Grail for the rest
+	(ShimForeignSubclass>>___pyAttrStore___:put:)."
+
+	| cache |
+	cache := SessionTemps current
+		at: #'GrailForeignDataDescriptors'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ].
+	^ cache at: typePtr ifAbsent: [ | names |
+		names := IdentitySet new.
+		((self ___shimUserAction: #shimDataDescriptorNames withArgs: { typePtr })
+			subStrings: ' ') do: [:n | n isEmpty ifFalse: [names add: n asSymbol]].
+		cache at: typePtr put: names.
+		names]
+
+]
+
+{ #category : 'Grail-Calling' }
+CPythonShim >> foreignDirNames: cPtr [
+	"The names dir() finds in C for a wheel's object (shimForeignDirNames): a
+	type's own and its C bases', or an instance's dict keys and its type's.
+	A list, or nil when the pointer is not a plausible object."
+
+	^ self ___shimUserAction: #shimForeignDirNames withArgs: { cPtr }
+
+]
+
 { #category : 'Grail-Wrapping' }
 CPythonShim >> foreignExceptionTypeForPointer: ptrInt typeName: nameStr baseName: baseName isShimType: isShim [
 	"As ...classMethods:, for a caller with no class-method names to give:
@@ -1747,6 +2199,11 @@ CPythonShim >> foreignProxyForPointer: ptrInt typeName: nameStr ops: anInteger [
 	foreign_proxy_oop computes it as the object first crosses."
 
 	| p |
+	"A module function's C object (___functionObjectFor:) comes back as the
+	function Grail reads off the module, so ``mod.f is f'' holds across a
+	round trip through C, as pickle's save_global checks."
+	(SessionTemps current at: #'GrailFunctionObjects' otherwise: nil) ifNotNil: [:fns |
+		(fns at: ptrInt otherwise: nil) ifNotNil: [:fn | ^ fn]].
 	p := self foreignProxyForPointer: ptrInt typeName: nameStr.
 	p ___compareHashBits: anInteger.
 	^ p
@@ -1777,6 +2234,38 @@ CPythonShim >> foreignStr: cPtr repr: aBoolean [
 ]
 
 { #category : 'Grail-Calling' }
+CPythonShim >> foreignStrValue: cPtr [
+	"The text of a wheel's str subtype instance (numpy.str_), read from its
+	CPython layout, as a str; nil for any other object."
+
+	^ self ___shimUserAction: #shimForeignStrValue withArgs: { cPtr }
+
+]
+
+{ #category : 'Grail-CPython API' }
+CPythonShim >> foreignSubclassGetAttr: anObject name: aString [
+	"What the PYTHON classes of a Python subclass of a C type define for
+	aString -- anObject is an instance's Grail half or the class itself --
+	with the fall back to the C base turned off, so C reads the base's part
+	itself (the shim's subtype_python_attr): the address of the value, or
+	false for a miss.  Turned off for this one receiver and name only, so a
+	property's own reads still reach the base."
+
+	^ self ___guardCallback: [ | key previous missed v |
+		key := anObject -> aString asSymbol.
+		previous := SessionTemps current at: #'GrailForeignNoFallback' otherwise: nil.
+		SessionTemps current at: #'GrailForeignNoFallback' put: key.
+		missed := false.
+		[v := [anObject @env1:___pyAttrLoad___: key value]
+			on: AttributeError do: [:ex | missed := true. ex return: nil]]
+			ensure: [SessionTemps current at: #'GrailForeignNoFallback' put: previous].
+		missed
+			ifTrue: [false]
+			ifFalse: [(self wrap: v) memoryAddress]]
+
+]
+
+{ #category : 'Grail-Calling' }
 CPythonShim >> foreignTypeCheck: objPtr type: typePtr subclass: aBoolean [
 	"isinstance (aBoolean false) / issubclass (true) against a wheel's own TYPE
 	typePtr, for the candidate objPtr -- 0 for a Grail object.  nil when
@@ -1784,6 +2273,19 @@ CPythonShim >> foreignTypeCheck: objPtr type: typePtr subclass: aBoolean [
 
 	^ self ___shimUserAction: #shimForeignTypeCheck
 		withArgs: { objPtr . typePtr . aBoolean == true }
+
+]
+
+{ #category : 'Grail-CPython API' }
+CPythonShim >> foreignTypeHasNew: typeAddr [
+	"Whether the C type at typeAddr has a tp_new -- a type without one cannot
+	be instantiated, nor can a Python subclass of it that defines no __new__
+	(ShimForeignSubclass class>>___grailMetaclassCall___:kw:)."
+
+	| lay type |
+	lay := self ___mirrorLayout.
+	type := CByteArray fromCPointer: (CPointer forAddress: typeAddr) numBytes: (lay at: 1).
+	^ (type int64At: (lay at: 9)) ~= 0
 
 ]
 
@@ -1819,7 +2321,7 @@ CPythonShim >> initTypeAddresses [
 	| addr |
 	typeAddresses := Dictionary new.
 	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType'
-		'set' 'frozenset' 'slice')
+		'set' 'frozenset' 'slice' 'complex')
 		do: [:name |
 			typeAddresses at: name asSymbol put: (System userAction: #shimTypeAddr with: name).
 		].
@@ -1837,6 +2339,11 @@ CPythonShim >> initTypeAddresses [
 			addr := typeAddresses at: n.
 			typeAddresses at: cls put: addr.
 			cls allSubclasses do: [:each | typeAddresses at: each put: addr]]].
+	"An exact complex only, which crosses in CPython's layout
+	(___prefixedWrapperFor:); a Python subclass of complex keeps its own
+	type."
+	((Python at: #complex otherwise: nil) notNil and: [(typeAddresses at: #complex otherwise: 0) ~= 0])
+		ifTrue: [typeAddresses at: (Python at: #complex) put: (typeAddresses at: #complex)].
 	"Map Float and all subclasses"
 	addr := typeAddresses at: #float.
 	typeAddresses at: Float put: addr.
@@ -1975,6 +2482,53 @@ CPythonShim >> PyByteArray_FromStringAndSize: aByteArray [
 ]
 
 { #category : 'Grail-CPython API' }
+CPythonShim >> PyBytes_Buffer: aByteObject [
+	"{ address. size. writable } of aByteObject's bytes, NUL-terminated, in gcMalloc'd
+	memory that lives as long as its WRAPPER does -- the shim's
+	PyBytes_AsString and PyObject_GetBuffer answer it, as PyUnicode_UTF8Buffer:
+	does for a str.
+
+	CPython's bytes data is IN the object, so a pointer from PyBytes_AsString
+	or a buffer view is valid while the caller holds a reference, and numpy's
+	frombuffer keeps exactly that: the array's data is the view's buf and its
+	base holds the bytes.  The shim answered a copy from the per-call cache,
+	freed when the call returned, so np.frombuffer(b'abcd', 'u1') read freed
+	memory -- [115, 244, 43, 130].
+
+	A bytearray (and every ByteArray that is not a Python bytes) is mutable, so
+	its copy is refreshed on every request: rewritten in place while the size
+	is unchanged, so an earlier pointer sees the current bytes as it would in
+	CPython; at a new size a new block, the old ones kept until the sweep,
+	because a holder may still point into them.  A change made on either side
+	AFTER C took the pointer is not seen by the other -- the bytes are a copy,
+	as a list crossing to C is.  writable is that mutability: PyObject_GetBuffer
+	refuses a WRITABLE view of a bytes, as CPython does."
+
+	| map entry size mutable |
+	map := self ___wrapperBuffers.
+	entry := map at: aByteObject otherwise: nil.
+	size := aByteObject size.
+	mutable := (Python @env0:at: #bytearray otherwise: nil)
+		ifNil: [false]
+		ifNotNil: [:ba | aByteObject isKindOf: ba].
+	entry isNil ifTrue: [
+		entry := { self ___cBufferHolding: aByteObject. size. nil }.
+		map at: aByteObject put: entry.
+		^ { (entry at: 1) memoryAddress. size. mutable }].
+	mutable ifTrue: [
+		size = (entry at: 2)
+			ifTrue: [
+				self ___copyBytesOf: aByteObject into: (entry at: 1)]
+			ifFalse: [
+				(entry at: 3) ifNil: [entry at: 3 put: OrderedCollection new].
+				(entry at: 3) add: (entry at: 1).
+				entry at: 1 put: (self ___cBufferHolding: aByteObject).
+				entry at: 2 put: size]].
+	^ { (entry at: 1) memoryAddress. entry at: 2. mutable }
+
+]
+
+{ #category : 'Grail-CPython API' }
 CPythonShim >> PyBytes_FromStringAndSize: aByteArray [
 	^ (self wrap: aByteArray) memoryAddress
 
@@ -2046,7 +2600,9 @@ CPythonShim >> PyDict_Clear: aDictionary [
 
 { #category : 'Grail-CPython API' }
 CPythonShim >> PyDict_Contains: aDictionary key: aKey [
-	^ aDictionary includesKey: aKey
+	"Guarded, as PyDict_GetItem:key: is: an unhashable key is C's TypeError."
+
+	^ self ___guardCallback: [aDictionary includesKey: aKey]
 
 ]
 
@@ -2078,8 +2634,13 @@ CPythonShim >> PyDict_DelItem: aDictionary key: aKey [
 
 { #category : 'Grail-CPython API' }
 CPythonShim >> PyDict_GetItem: aDictionary key: aKey [
-	(aDictionary includesKey: aKey) ifFalse: [ ^ 0 ].
-	^ (self wrap: (aDictionary at: aKey)) memoryAddress
+	"Guarded: an unhashable key raises TypeError, which must become C's
+	pending error -- see ___guardCallback:.  Unguarded, the TypeError searched
+	Grail's handlers from inside pydantic_core's Literal validator (which
+	tolerates it as a miss): a script's own ``except'' caught it on top of the
+	C frames and the unwind was refused."
+
+	^ self ___guardCallback: [self ___ug_PyDict_GetItem: aDictionary key: aKey]
 
 ]
 
@@ -2218,6 +2779,14 @@ CPythonShim >> PyDict_Values: aDictionary [
 ]
 
 { #category : 'Grail-CPython API' }
+CPythonShim >> PyDictProxy_New: aMapping [
+	"types.MappingProxyType(aMapping): a read-only view of the live mapping."
+
+	^ (self wrap: (mappingproxy @env1:___on: aMapping)) memoryAddress
+
+]
+
+{ #category : 'Grail-CPython API' }
 CPythonShim >> PyFloat_AsDouble: anObject [
 	"CPython's PyFloat_AsDouble for what the C side does not decode itself
 	(SmallInteger, SmallDouble, Float, bool): nb_float, then nb_index.
@@ -2296,6 +2865,39 @@ CPythonShim >> PyImport_ImportModule: aName [
 	mod := (Python at: #importlib) loadModuleFromPath: path name: nameStr.
 	mod isNil ifTrue: [^ 0].
 	^ (self wrap: mod) memoryAddress
+
+]
+
+{ #category : 'Grail-CPython API' }
+CPythonShim >> PyImport_ImportModuleLevel: name globals: globals locals: locals fromlist: fromlist level: level [
+	"``__import__(name, globals, locals, fromlist, level)'' for C -- the shim's
+	PyImport_ImportModuleLevelObject, which Cython's ``import'' and
+	``cimport'' compile to.  Grail's whole import, so a package's .so
+	submodule is found as it is from Python.
+
+	EXCEPT THE .so LOAD.  C is already running inside a user action, and
+	loading an extension is another one whose exec slot may import a third
+	(numpy.random: _bounded_integers -> bit_generator -> _common), past
+	GemStone's two in flight.  So the load is handed back
+	(GrailDynLoadRequest): the request is kept for ___pendingDynLoad, -1 tells
+	C to run shimDynLoad itself and call finishDynLoad:path:methodNames:,
+	and C asks again, when the module is registered.  Guarded: the import
+	runs Python code."
+
+	^ self ___guardCallback: [ | fn r temps depth |
+		fn := (builtins @env1:instance) @env1:___pyAttrLoad___: #'__import__'.
+		temps := SessionTemps current.
+		depth := temps at: #'GrailCImportDepth' otherwise: 0.
+		temps at: #'GrailCImportDepth' put: depth + 1.
+		r := [[fn @env1:value: { name. globals. locals. fromlist. level } value: nil]
+				on: GrailDynLoadRequest
+				do: [:req |
+					temps at: #'GrailPendingDynLoad' put: { req path. req moduleName }.
+					req return: -1]]
+			ensure: [temps at: #'GrailCImportDepth' put: depth].
+		r == -1
+			ifTrue: [-1]
+			ifFalse: [(self wrap: r) memoryAddress]]
 
 ]
 
@@ -2517,9 +3119,15 @@ CPythonShim >> PyObject_GetIter: obj [
 
 { #category : 'Grail-CPython API' }
 CPythonShim >> PyObject_HasAttrString: obj name: nameString [
-	"AttributeError too: under GRAIL_DIRECT_CALLS a PythonInstance's DNU hook
-	reports a miss through the loader's AttributeError."
-	^ [obj perform: nameString asSymbol env: 1. true]
+	"Python's hasattr: the attribute READ, false on any error, as
+	PyObject_HasAttrString is in CPython.  It used to SEND the name as a
+	message -- which ran a no-argument method to see whether it existed, and
+	answered false for an attribute that is not a method (a C descriptor's
+	``__get__'', numpy's test for a class property).  AttributeError too:
+	under GRAIL_DIRECT_CALLS a PythonInstance's DNU hook reports a miss
+	through the loader's AttributeError."
+
+	^ [obj @env1:___pyAttrLoad___: nameString asSymbol. true]
 		on: MessageNotUnderstood, Error, (Python at: #AttributeError)
 		do: [:e | false]
 
@@ -2616,6 +3224,25 @@ CPythonShim >> PyObject_Str: obj [
 ]
 
 { #category : 'Grail-CPython API' }
+CPythonShim >> PySequence_Check: obj [
+	"CPython's rule for an object whose C type the shim has no slots for: a
+	sequence when its type has __getitem__ (a class defining it gets sq_item)
+	and is not a dict.  numpy's array coercion asks it of everything that is
+	not a scalar, an array or a buffer, and answering 0 made a range a 0-d
+	object array: np.array(range(4)) answered range(0, 4).
+
+	Not hasattr: Grail's int and None carry a __getitem__ that only raises,
+	so hasattr(int, '__getitem__') is true here and 5 would read as a
+	sequence -- object>>___hasOwnGetitem___ tells a real one.  A predicate
+	cannot fail in CPython, so an error answers false."
+
+	^ [(obj @env1:___hasOwnGetitem___)
+			and: [((obj isKindOf: KeyValueDictionary) or: [obj isKindOf: PyInstanceDict]) not]]
+		on: AbstractException do: [:e | e return: false]
+
+]
+
+{ #category : 'Grail-CPython API' }
 CPythonShim >> PySequence_Contains: seq item: anItem [
 	"item in seq via __contains__."
 
@@ -2696,13 +3323,10 @@ CPythonShim >> PySlice_Unpack: aSlice [
 	are applied on the C side so the PY_SSIZE_T sentinel values never
 	round-trip through Smalltalk. Returns nil for a non-slice."
 
-	| s |
 	(aSlice isKindOf: slice) ifFalse: [^ nil].
-	s := Array new: 3.
-	s at: 1 put: ((aSlice @env1:start) == None ifTrue: [nil] ifFalse: [aSlice @env1:start]).
-	s at: 2 put: ((aSlice @env1:stop) == None ifTrue: [nil] ifFalse: [aSlice @env1:stop]).
-	s at: 3 put: ((aSlice @env1:step) == None ifTrue: [nil] ifFalse: [aSlice @env1:step]).
-	^ s
+	^ self ___guardCallback: [
+		{ aSlice @env1:start. aSlice @env1:stop. aSlice @env1:step }
+			collect: [:each | self ___sliceIndex: each]]
 
 ]
 
@@ -2756,6 +3380,28 @@ CPythonShim >> PyTuple_New: size [
 { #category : 'Grail-CPython API' }
 CPythonShim >> PyTuple_SetItem: anArray at: zeroBasedIndex put: aValue [
 	anArray at: zeroBasedIndex + 1 put: aValue.
+
+]
+
+{ #category : 'Grail-CPython API' }
+CPythonShim >> PyType_AllocForeignSubclass: aClass type: typeAddr basicSize: basicSize [
+	"tp_alloc of a subtype mirror (the shim's grail_subtype_alloc): a new
+	instance of aClass with no __init__ run, as CPython runs none at
+	allocation, and its C body -- basicSize zeroed bytes in the base's layout,
+	refcount 1, ob_type the mirror, this half's OOP in the last word.  The
+	half holds the body; the wrapper map holds the half while C counts the
+	body, exactly as for a wrapper."
+
+	^ self ___guardCallback: [ | half body |
+		half := aClass new.
+		body := CByteArray gcMalloc: basicSize.
+		body memset: 0 from: 0 to: basicSize - 1.
+		body int64At: 0 put: 1.
+		body int64At: 8 put: typeAddr.
+		self storeOop: half asOop in: body at: basicSize - 8.
+		half ___grailForeignBody___: body.
+		self valueToPyObject at: half put: body.
+		body memoryAddress]
 
 ]
 
@@ -2861,19 +3507,14 @@ CPythonShim >> PyUnicode_UTF8Buffer: aString [
 	buffer exactly when it drops the wrapper -- which a holder's reference
 	prevents."
 
-	| map entry utf b |
-	map := SessionTemps current
-		at: #'GrailShimUtf8Buffers'
-		ifAbsentPut: [ IdentityKeyValueDictionary new ].
+	| map entry utf |
+	map := self ___wrapperBuffers.
 	entry := map at: aString otherwise: nil.
 	entry isNil ifTrue: [
 		utf := (aString respondsTo: #encodeAsUTF8)
 			ifTrue: [aString encodeAsUTF8]
 			ifFalse: [aString].
-		b := CByteArray gcMalloc: utf size + 1.
-		utf size > 0 ifTrue: [b copyBytesFrom: utf from: 1 to: utf size into: 0].
-		b uint8At: utf size put: 0.
-		entry := { b. utf size }.
+		entry := { self ___cBufferHolding: utf. utf size }.
 		map at: aString put: entry].
 	^ { (entry at: 1) memoryAddress. entry at: 2 }
 
@@ -2909,10 +3550,13 @@ CPythonShim >> sweep [
 		].
 	].
 	toRemove do: [:key | map removeKey: key].
-	"A swept string's UTF-8 buffer goes with its wrapper -- see
-	PyUnicode_UTF8Buffer:."
-	(SessionTemps current at: #'GrailShimUtf8Buffers' otherwise: nil) ifNotNil: [:utf8 |
-		toRemove do: [:key | utf8 removeKey: key ifAbsent: [nil]]].
+	"A swept object's C buffer goes with its wrapper -- see
+	PyUnicode_UTF8Buffer: and PyBytes_Buffer:."
+	(SessionTemps current at: #'GrailShimWrapperBuffers' otherwise: nil) ifNotNil: [:bufs |
+		toRemove do: [:key | bufs removeKey: key ifAbsent: [nil]]].
+	"So does a prefixed wrapper's block, which its view does not hold."
+	(SessionTemps current at: #'GrailShimWrapperBlocks' otherwise: nil) ifNotNil: [:blocks |
+		toRemove do: [:key | blocks removeKey: key ifAbsent: [nil]]].
 
 ]
 
@@ -2978,7 +3622,12 @@ CPythonShim >> typeObjectFor: aClass [
 	obj := map at: aClass otherwise: nil.
 	obj notNil ifTrue: [^ obj].
 	obj := self ___staticTypeObjectFor: aClass.
-	obj isNil ifTrue: [obj := self ___buildTypeMirrorFor: aClass].
+	obj isNil ifTrue: [
+		obj := ((aClass isBehavior and: [aClass isMeta not])
+				and: [(aClass inheritsFrom: ShimForeignSubclass)
+				and: [(ShimForeignSubclass ___foreignBaseOf: aClass) notNil]])
+			ifTrue: [self ___buildSubtypeMirrorFor: aClass]
+			ifFalse: [self ___buildTypeMirrorFor: aClass]].
 	map at: aClass put: obj.
 	^ obj
 
@@ -3041,6 +3690,14 @@ CPythonShim >> wrap: aValue [
 	"A reverse proxy round-trips straight back to its original foreign
 	PyObject* — numpy must get its own DType pointer again, not a wrapper."
 	(aValue isKindOf: ShimForeignObject) ifTrue: [ ^ aValue pyObjectView ].
+	"An instance of a Python subclass of a C type goes as its body, re-entered
+	in the wrapper map and revived as a wrapper is below."
+	(aValue isKindOf: ShimForeignSubclass) ifTrue: [
+		pyObj := aValue ___grailForeignBody___.
+		pyObj notNil ifTrue: [
+			(pyObj int64At: 0) <= 0 ifTrue: [pyObj int64At: 0 put: 1].
+			self valueToPyObject at: aValue put: pyObj.
+			^ pyObj]].
 	"A function of a C module goes back as its builtin_function_or_method,
 	not as a wrapper of the BoundMethod Grail reads it as."
 	aValue class == BoundMethod ifTrue: [
@@ -3091,6 +3748,12 @@ CPythonShim >> wrap: aValue [
 		sweep-bait while in flight; reset to 1 so it survives until the
 		C side is done with it again."
 		(pyObj int64At: 0) <= 0 ifTrue: [pyObj int64At: 0 put: 1].
+		^ pyObj].
+	"An exact int or str crosses in CPython's own layout, its OOP in a hidden
+	prefix (___prefixedWrapperFor:)."
+	pyObj := self ___prefixedWrapperFor: aValue.
+	pyObj notNil ifTrue: [
+		self valueToPyObject at: aValue put: pyObj.
 		^ pyObj].
 	pyObj := CByteArray gcMalloc: 32.
 	pyObj int64At: 0 put: 1.

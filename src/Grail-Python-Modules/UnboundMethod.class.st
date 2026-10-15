@@ -232,6 +232,12 @@ UnboundMethod >> _resolutionRootFor: obj [
 			boxed := System @env0:myUserProfile @env0:symbolList
 				@env0:objectNamed: #'AbstractPyFloat'.
 			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	"A C TYPE reaches Grail as a ShimForeignObject, not a Behavior, and
+	answers the class reflection methods itself (ShimForeignObject>>
+	__subclasses__): ``type.__subclasses__(T)'' ran Behavior's on the proxy,
+	whose ``subclasses'' was an uncatchable MessageNotUnderstood."
+	(definingClass == Behavior and: [obj @env0:isKindOf: ShimForeignObject])
+		ifTrue: [^ ShimForeignObject].
 	^ definingClass
 
 ]

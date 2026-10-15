@@ -175,30 +175,30 @@ symList := System myUserProfile symbolList .
 	yourself.
 Transcript show: ''Forward references created for Python dictionary''.
 '.
-	"src/smalltalk/install.gs:535"
+	"src/smalltalk/install.gs:538"
 	'(System myUserProfile symbolList objectNamed: #''PythonAst'')
 	yourself.
 Transcript show: ''Forward references created for PythonAst dictionary''.
 '.
-	"src/smalltalk/install.gs:670"
+	"src/smalltalk/install.gs:673"
 	'(System myUserProfile symbolList objectNamed: #''PythonTests'')
 	yourself.
 Transcript show: ''Forward references created for PythonTests dictionary''.
 '.
-	"src/smalltalk/install.gs:1607"
+	"src/smalltalk/install.gs:1650"
 	'(System myUserProfile symbolList objectNamed: #''EmbeddedPython'')
 	yourself.
 Transcript show: ''Forward references created for EmbeddedPython dictionary''.
 '.
-	"src/smalltalk/install.gs:1622"
+	"src/smalltalk/install.gs:1665"
 	'(System myUserProfile symbolList objectNamed: #''EmbeddedPythonTests'')
 	yourself.
 Transcript show: ''Forward references created for EmbeddedPythonTests dictionary''.
 '.
-	"src/smalltalk/install.gs:1634"
+	"src/smalltalk/install.gs:1677"
 	'Transcript show: ''Step 2 complete: All forward references created''.
 '.
-	"src/smalltalk/install.gs:1655"
+	"src/smalltalk/install.gs:1698"
 	'(System myUserProfile symbolList objectNamed: #''Python'')
   "Python names that map to existing GemStone globals"
 	at: #''True''                       put: true;
@@ -218,7 +218,7 @@ Transcript show: ''Forward references created for EmbeddedPythonTests dictionary
 	yourself.
 Transcript show: ''Step 3 complete: Python type mappings created''.
 '.
-	"src/smalltalk/install.gs:1682"
+	"src/smalltalk/install.gs:1725"
 	'Transcript show: ''Step 4: Loading Python built-in type classes...''.
 '
 } do: [ :step | step evaluate ]

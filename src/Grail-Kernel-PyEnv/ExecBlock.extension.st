@@ -100,7 +100,12 @@ ExecBlock >> __annotations__ [
 	cur := attrs @env0:slotAt: self attr: '__annotations__'.
 	cur == nil ifFalse: [^ cur].
 	annotate := attrs @env0:slotAt: self attr: '__annotate__'.
-	annotate == nil ifTrue: [
+	"``__annotate__ = None'' -- what functools.update_wrapper copies from a
+	wrapped callable that has none (3.14 lists __annotate__ in
+	WRAPPER_ASSIGNMENTS) -- means no annotations, as unset does; it was
+	CALLED, and the nil MNU escaped every Python handler (SQLAlchemy's
+	schema module, at import)."
+	(annotate == nil @env0:or: [annotate == ExecBlock @env0:___pyNone___]) ifTrue: [
 		^ attrs @env0:slotAt: self attr: '__annotations__'
 			put: (KeyValueDictionary @env0:new)].
 	^ attrs @env0:slotAt: self attr: '__annotations__'
@@ -219,6 +224,37 @@ ExecBlock >> __doc__ [
 
 	^ ((ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__doc__')
 		ifNil: [ExecBlock @env0:___pyNone___]
+
+]
+
+{ #category : 'Grail-Descriptor Protocol' }
+ExecBlock >> __get__: obj [
+	"``f.__get__(obj)'' -- the owner argument is optional."
+
+	^ self __get__: obj _: (ExecBlock @env0:___pyNone___)
+
+]
+
+{ #category : 'Grail-Descriptor Protocol' }
+ExecBlock >> __get__: obj _: objtype [
+	"Function-descriptor binding, ``f.__get__(obj, type)'' -- every CPython
+	function has it.  A nested def or a lambda is an ExecBlock, and had none,
+	so binding one by hand raised AttributeError (#1656); a module-level def is
+	a BoundMethod and already did.  Accessed through the class (obj None) the
+	function answers itself; otherwise a MethodBinding calls it with obj first,
+	as UnboundMethod >> __get__:_: does.
+
+	object >> ___descriptorGet___: binds a class attribute through this, which
+	is what makes ``m = lambda self: ...'' bind on a subclass of a BUILT-IN
+	(Exception, list) -- the accessor-pair read for a plain class already bound
+	an ExecBlock, and this path, having no __get__ to ask, did not.  Both
+	classes are resolved from the calling session's symbol list (file header)."
+
+	| none |
+	none := ExecBlock @env0:___pyNone___.
+	(obj == nil or: [obj == none]) ifTrue: [^ self].
+	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'MethodBinding')
+		instance: obj callable: self
 
 ]
 

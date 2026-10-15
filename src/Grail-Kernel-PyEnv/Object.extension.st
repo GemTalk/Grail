@@ -1,5 +1,21 @@
 Extension { #name : 'Object' }
 
+{ #category : 'Grail-Augmented Assignment' }
+Object class >> ___binaryOpStringFor___: bSel [
+	"The operator a binary dunder selector implements: #'__add__:' -> '+'."
+
+	| pairs i |
+	pairs := #( #'__add__:' '+' #'__sub__:' '-' #'__mul__:' '*' #'__matmul__:' '@'
+		#'__truediv__:' '/' #'__floordiv__:' '//' #'__mod__:' '%' #'__pow__:' '**'
+		#'__lshift__:' '<<' #'__rshift__:' '>>' #'__and__:' '&' #'__or__:' '|'
+		#'__xor__:' '^' ).
+	i := pairs @env0:indexOf: bSel.
+	^ i @env0:= 0
+		ifTrue: [bSel @env0:asString]
+		ifFalse: [pairs @env0:at: i @env0:+ 1]
+
+]
+
 { #category : 'Grail-Class Namespace' }
 Object class >> ___classBodyNamespaceValue___: aSym [
 	"What a class-body METHOD DECORATOR reads for aSym, a name the body binds:
@@ -3444,6 +3460,19 @@ Object class >> ___grailOwnClassCellValue___ [
 
 ]
 
+{ #category : 'Grail-Class Attrs' }
+Object class >> ___grailOwnPropertyNames___ [
+	"No @property declared here.  ClassDefAst compiles a class-side override
+	listing the names for each class body that declares one, and a subclass
+	inherits it; so the answer is the NEAREST declaring class's list, and empty
+	means no class on the chain declares a property.  ___pyAttrLoad___: asks
+	this before letting a stored value beat a property (#1660); the consumers
+	that need a class's OWN list ask includesSelector: first."
+
+	^ #()
+
+]
+
 { #category : 'Grail-Instantiation' }
 Object class >> ___grailOwnsInit___ [
 	"Does this class (or a Python ancestor) define __init__ with a def --
@@ -4606,6 +4635,32 @@ Object class >> ___grailTransientNamesFrom___: aValue [
 
 ]
 
+{ #category : 'Grail-Initialization' }
+Object class >> ___grailValidateStatementSlots___: boundNames [
+	"A class statement's __slots__, checked as type() checks them
+	(builtins >> ___validateSlots___:bases:) -- items that are strings and
+	identifiers, none that is also a name the body binds, and no __dict__ /
+	__weakref__ a base already supplies (#1658).  A class statement never
+	reached that check, so ``__slots__ = (1,)'' and the rest were accepted.
+
+	ClassDefAst emits this before the metaclass hook and before the class is
+	bound to its name, so a refusal leaves the name unbound, as CPython's
+	does.  boundNames is the body's own bindings -- its assignments, defs,
+	nested classes and imports, but not a bare annotation -- which is what
+	``conflicts with class variable'' is about."
+
+	| slots ns |
+	slots := self ___classBodyValueAt___: #'__slots__'.
+	slots == nil ifTrue: [^ self].
+	ns := dict @env0:new.
+	boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None].
+	ns @env1:__setitem__: '__slots__' _: slots.
+	((Python @env0:at: #builtins) @env0:___instance___)
+		___validateSlots___: ns bases: (self ___pyAttrLoad___: #'__bases__').
+	^ self
+
+]
+
 { #category : 'Grail-Instantiation' }
 Object class >> ___hasUserInit___ [
 	"True if this class defines its OWN Python __init__ (any arity), as
@@ -4740,6 +4795,11 @@ Object class >> ___moduleAttrIdentityTable___ [
 		as types.TracebackType -- so Grail's ``PyTraceback'' spelling leaked into
 		every repr and every ``type(tb).__name__''."
 		t @env0:at: #'PyTraceback' put: #('traceback' 'builtins').
+		"The frame object, the same way: ``<class 'frame'>'', __module__
+		'builtins', reachable from Python only as types.FrameType.  The repr
+		already said ``frame''; __name__ said ``PyFrame'' and __module__ was
+		missing (test_generators' email doctest reads type(g.gi_frame))."
+		t @env0:at: #'PyFrame' put: #('frame' 'builtins').
 
 		"``list[int]'' and ``int | str''.  CPython's are ``types.GenericAlias'' and
 		``types.UnionType'' -- reprs, pickling (``Can't pickle <class
@@ -4924,6 +4984,21 @@ Object class >> ___pyChangeClassOf: anObject to: newClass [
 	otherwise, which surfaces as CPython's ``__class__ assignment ... layout''
 	TypeError.  Returns None (test_sort test_unsafe_object_compare)."
 
+	| oldClass bothModules values idx |
+	"A class whose __slots__ names ``__class__'' has a real per-instance slot
+	by that name, and its descriptor shadows object's __class__ setter: the
+	assignment STORES there and changes no class -- whatever the value is
+	(dir_slots_and_traceback.py).  Written raw, as the reader reads it
+	(___grailRawSlotValue___:)."
+	(anObject ___declaresOwnSlotNamed___: '__class__') ifTrue: [
+		idx := anObject ___pySlotIndexFor___: #'__class__'.
+		idx @env0:> 0
+			ifTrue: [anObject @env0:instVarAt: idx put: newClass]
+			ifFalse: [
+				idx @env0:negated @env0:> anObject @env0:_basicSize
+					ifTrue: [anObject @env0:size: idx @env0:negated].
+				anObject @env0:at: idx @env0:negated put: newClass].
+		^ None].
 	(newClass isKindOf: Behavior) ifFalse: [
 		^ TypeError ___signal___:
 			'__class__ must be set to a class, not ''' @env0:,
@@ -4943,6 +5018,25 @@ Object class >> ___pyChangeClassOf: anObject to: newClass [
 	reproduce it (measured: ``C().__class__ = int'' then an import survives
 	the old handler), so this is defence: a kernel error is answered, not
 	re-raised from under the kernel."
+	oldClass := anObject @env0:class.
+	"CPython's two refusals, before anything is touched (#1574).
+	changeClassTo: alone accepts any class with a compatible SMALLTALK
+	format, so ``o.__class__ = dict'' and ``= list'' went through, and so
+	did a __slots__ class.  Both types must be mutable -- classes a class
+	statement or type() built -- unless both are module types; and their
+	layouts must match (___grailSameInstanceLayoutAs___:)."
+	bothModules := (anObject @env0:isKindOf: module)
+		and: [newClass == module or: [newClass @env0:inheritsFrom: module]].
+	bothModules ifFalse: [
+		(oldClass ___grailIsPythonClass___ and: [newClass ___grailIsPythonClass___]) ifFalse: [
+			^ TypeError ___signal___:
+				'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+		(oldClass ___grailSameInstanceLayoutAs___: newClass) ifFalse: [
+			^ TypeError ___signal___:
+				'__class__ assignment: ''' @env0:, newClass ___grailPyNameForError___
+					@env0:, ''' object layout differs from '''
+					@env0:, oldClass ___grailPyNameForError___ @env0:, '''']].
+	values := oldClass ___grailSlotValuesOf___: anObject.
 	([anObject @env0:changeClassTo: newClass. true]
 		@env0:on: Error
 		do: [:ex | ex @env0:return: false]) ifFalse: [
@@ -4951,6 +5045,7 @@ Object class >> ___pyChangeClassOf: anObject to: newClass [
 				(newClass @env0:name @env0:asString) @env0:,
 				''' object layout differs from ''' @env0:,
 				(anObject @env0:class @env0:name @env0:asString) @env0:, ''''].
+	newClass ___grailRestoreSlotValues___: values into: anObject from: oldClass.
 	^ None
 
 ]
@@ -5224,10 +5319,8 @@ Object class >> ___pyStrictSlotsAllowed___ [
 
 	Reaching PythonInstance means nothing above this class declared slots
 	of its own, which is CPython's `object' case and IS allowed to be
-	strict.  A non-PythonInstance base that is not itself strict -- a
-	builtin like dict or Exception -- answers false, which is the LENIENT
-	direction and matches the documented fallback for a __slots__ value
-	Grail cannot read at compile time."
+	strict.  A built-in base allows it too unless its instances carry a
+	__dict__ (exceptions do; list, dict, str do not)."
 
 	| sup |
 	sup := self @env0:superclass.
@@ -5244,9 +5337,17 @@ Object class >> ___pyStrictSlotsAllowed___ [
 		class -- the marker it shares with declared slots only says where
 		values live."
 		((sup @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1)
-			@env0:== sup) ifTrue: [
-			((sup @env0:whichClassIncludesSelector: #'___pyDeclaresSlots___' environmentId: 1)
-				@env0:== sup) ifFalse: [^ false]].
+			@env0:== sup)
+			ifTrue: [
+				((sup @env0:whichClassIncludesSelector: #'___pyDeclaresSlots___' environmentId: 1)
+					@env0:== sup) ifFalse: [^ false]]
+			ifFalse: [
+				"...except a built-in whose instances DO carry a __dict__ --
+				every BaseException, as CPython's table has it
+				(___grailProvidesInstanceSlot___:) -- which a slotted subclass
+				keeps: ``class E(Exception): __slots__ = ('a',)'' still stores
+				``e.zz'' (#1693)."
+				(sup ___grailProvidesInstanceSlot___: '__dict__') ifTrue: [^ false]].
 		sup := sup @env0:superclass].
 	^ true
 
@@ -6119,6 +6220,16 @@ Object >> ___allocateInstance___: positional kw: keywords [
 			^ positional @env0:isEmpty
 				ifTrue: [self @env1:__new__]
 				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
+		"A str subclass is built the same way: CharacterCollection's class-side
+		``__new__:'' makes a self-typed string carrying the content, and plain
+		#new makes an EMPTY one.  A class STATEMENT naming ``str'' literally
+		takes ClassDefAst's firstBaseIsStr path and never gets here; one built
+		by ``type(name, (str,), ns)'', or over a base held in a variable,
+		came through with every instance empty -- ``K('xy')'' was '' (#1706).
+		Both now go through the one constructor, CharacterCollection class >>
+		___grailStrSubclassNew___:kw:."
+		(self @env0:inheritsFrom: CharacterCollection) ifTrue: [
+			^ self @env1:___grailStrSubclassNew___: positional kw: keywords].
 		"CPython's object_new: with neither __new__ nor __init__ of its own
 		anywhere in the class's lineage, nothing can consume an argument, so
 		any argument is an error -- ``A() takes no arguments''.  Grail allocated
@@ -6243,6 +6354,50 @@ Object >> ___asyncContextManagerProtocolError___: missingSelector [
 
 { #category : 'Grail-Augmented Assignment' }
 Object >> ___augmentedOp___: other inplace: iSel binary: bSel [
+	"``a OP= b'' -- ___augmentedOpTry___:inplace:binary:, with CPython's
+	TypeError when neither operand handles it: ``unsupported operand type(s)
+	for +=: 'H' and 'int''', the IN-PLACE operator (#1688).
+
+	The binary dunder the try falls back to raises that TypeError itself, in
+	the binary spelling, before anything here sees a NotImplemented.  So the
+	handler recognises exactly that refusal -- the binary message for THESE
+	two operands -- and the in-place one is signalled after it returns.  Any
+	other TypeError (a str's ``can only concatenate'', a list's
+	``'int' object is not iterable'' from extend, one raised inside a
+	user's __iadd__) passes unchanged.  When both sides decline by answering
+	NotImplemented, which used to be STORED as the result, it is the same
+	TypeError."
+
+	| declined result cls |
+	"Two SmallIntegers, or two SmallDoubles under an arithmetic operator: the
+	binary dunder, directly.  Neither type has an in-place dunder, and the
+	pair cannot be refused (int has no ``@''; float has no ``@'' and no
+	bitwise ones), so neither the probing nor the handler is needed -- the
+	handler alone cost ``n += 1'' about 80ns, 11%."
+	cls := self @env0:class.
+	(cls == other @env0:class
+		@env0:and: [(cls == SmallInteger @env0:and: [bSel ~~ #'__matmul__:'])
+			@env0:or: [cls == SmallDouble @env0:and: [#( #'__add__:' #'__sub__:'
+				#'__mul__:' #'__truediv__:' #'__floordiv__:' #'__mod__:' #'__pow__:' )
+					@env0:includesIdentical: bSel]]])
+		@env0:ifTrue: [^ self @env0:perform: bSel env: 1 withArguments: { other }].
+	declined := false.
+	result := [self ___augmentedOpTry___: other inplace: iSel binary: bSel]
+		@env0:on: TypeError do: [:ex |
+			((ex @env0:messageText) @env0:= (self ___binOpMessage___: other
+				op: (object ___binaryOpStringFor___: bSel)))
+					@env0:ifFalse: [ex @env0:pass].
+			declined := true.
+			ex @env0:return: nil].
+	(declined @env0:or: [result @env0:== NotImplemented]) @env0:ifTrue: [
+		^ TypeError ___signal___: (self ___binOpMessage___: other
+			op: (object ___binaryOpStringFor___: bSel) @env0:, '=')].
+	^ result
+
+]
+
+{ #category : 'Grail-Augmented Assignment' }
+Object >> ___augmentedOpTry___: other inplace: iSel binary: bSel [
 	"CPython augmented-assignment (``a OP= b'') semantics for a simple
 	(local Name) target: use the in-place dunder (``__iadd__'' etc.) when
 	the receiver's class defines one, honouring a NotImplemented return by
@@ -6331,7 +6486,14 @@ Object >> ___augmentedOp___: other inplace: iSel binary: bSel [
 				to: bSel @env0:asString @env0:size)) @env0:asSymbol.
 			(other ___respondsTo___: refSel) ifTrue: [
 				result := other @env0:perform: refSel env: 1 withArguments: { self }.
-				result == niSingleton ifFalse: [^ result]]].
+				result == niSingleton ifFalse: [^ result]].
+			"A BUILT-IN with no such dunder -- int and ``@'' -- has no runtime
+			class attribute the backstop below could find either, so the perform
+			was a doesNotUnderstand Python could not catch: ``x = 1; x @= 2''
+			ended the process.  Declining instead lets ___augmentedOp___ raise
+			CPython's TypeError.  A Python class still takes the perform: its
+			dunder may be a class attribute assigned at run time."
+			(self @env0:class ___grailIsPythonClass___) ifFalse: [^ niSingleton]].
 	"DECLINING IS NOT THE SAME AS NOT HAVING ONE, and only the second was
 	handled.  The block above tries the right operand's reflected dunder when
 	self has no forward binary dunder AT ALL; a receiver that HAS one and
@@ -6448,6 +6610,18 @@ Object >> ___binOpFallback___: other op: opString reflected: refSelector [
 		to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
 	fwdBase := ('__' @env0:, (refBase @env0:asString @env0:copyFrom: 4
 		to: refBase @env0:asString @env0:size)) @env0:asSymbol.
+	"A CLASS operand's operator is its METACLASS's, as for the comparisons
+	(___grailMetaclassCmp___:with:, which is generic in the dunder): ``A +
+	d'' runs M.__add__(A, d).  Never consulted, so SQLAlchemy's
+	``QueryContext.default_load_options + {...}'' (an Options metaclass's
+	__add__) raised TypeError at sqlalchemy.orm import.  Forward on self,
+	then reflected on other; NotImplemented answers nil and falls through."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		result := self ___grailMetaclassCmp___: fwdBase with: other.
+		result == nil ifFalse: [^ result]].
+	(other @env0:isKindOf: Behavior) ifTrue: [
+		result := other ___grailMetaclassCmp___: refBase with: self.
+		result == nil ifFalse: [^ result]].
 	fn := self ___classAttrDunder___: fwdBase.
 	fn == nil ifFalse: [
 		result := self ___callTypeAttr___: fn with: { other }.
@@ -6552,6 +6726,20 @@ Object >> ___binOpMatMul___: other [
 	(r @env0:== NotImplemented) ifTrue: [
 		^ self ___binOpFallback___: other op: '@' reflected: #'__rmatmul__:'].
 	^ r
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+Object >> ___binOpMessage___: other op: opString [
+	"``unsupported operand type(s) for <op>: 'A' and 'B''', receiver first.
+	``**'' reads ``** or pow()'', as CPython names both spellings of the
+	operation.  ___augmentedOp___:inplace:binary: compares a TypeError's text
+	with this to tell its own operands' failure from any other."
+
+	^ 'unsupported operand type(s) for '
+		@env0:, ((opString @env0:= '**') ifTrue: ['** or pow()'] ifFalse: [opString])
+		@env0:, ': ''' @env0:, (self ___pyTypeNameForError___)
+		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, ''''
 
 ]
 
@@ -6684,11 +6872,14 @@ Object >> ___binOpTrueDiv___: other [
 { #category : 'Grail-Arithmetic' }
 Object >> ___binOpTypeError___: other op: opString [
 	"CPython's ``unsupported operand type(s) for +: 'A' and 'B''' -- see
-	___binOpFallback___ for why the names come from ___pyTypeNameForError___."
+	___binOpFallback___ for why the names come from ___pyTypeNameForError___.
 
-	^ TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
-		@env0:, ': ''' @env0:, (self ___pyTypeNameForError___)
-		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
+	A str, list or tuple on the left of ``+'', or a sequence on either side of
+	``*'', gets its own wording instead, as CPython's sequence protocol gives
+	it once both operands have declined (#1688)."
+
+	^ TypeError ___signal___: ((self ___sequenceOpMessage___: other op: opString)
+		ifNil: [self ___binOpMessage___: other op: opString])
 
 ]
 
@@ -7583,9 +7774,14 @@ Object >> ___classDict___ [
 				because a class's Smalltalk name and its Python name are two
 				things -- showed up in every ``type(name, bases, ns)'' class's
 				__dict__."
+				"A value the MRO merge COPIED from a secondary base is the
+				base's attribute, not this class's (GrailClassAttrHolder >>
+				___noteInherited___:)."
 				(v == nil @env0:or: [
-					(nm @env0:size @env0:>= 3)
-						@env0:and: [(nm @env0:copyFrom: 1 to: 3) @env0:= '___']])
+					((nm @env0:size @env0:>= 3)
+						@env0:and: [(nm @env0:copyFrom: 1 to: 3) @env0:= '___'])
+					@env0:or: [[holder @env0:___isInherited___: (pairs @env0:at: i)]
+						@env0:on: AbstractException do: [:e | e @env0:return: false]]])
 					ifFalse: [d @env0:at: nm put: v]]]].
 	"(c)/(b) shared: collapse a selector to its Python name and store an
 	UnboundMethod wrapper unless a data value already claimed the name.
@@ -7930,13 +8126,10 @@ Object >> ___classDict___ [
 	a class whose only ``x'' is an unset slot still satisfies a protocol
 	requiring ``x'' (test_typing test_protocols_isinstance___slots__)."
 	((self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)) ifTrue: [
-		[ | mdt |
-		mdt := ((importlib @env0:___instance___) @env1:import_module: 'types')
-			@env1:___pyAttrLoad___: #'MemberDescriptorType'.
-		self ___pyDeclaredSlotNames___ @env0:do: [:sym | | nm |
+		[self ___pyDeclaredSlotNames___ @env0:do: [:sym | | nm |
 			nm := sym @env0:asString.
 			((d @env1:__contains__: nm) ___isTruthy___) ifFalse: [
-				d @env0:at: nm put: (mdt @env1:value: { nm. self } value: nil)]]]
+				d @env0:at: nm put: (self ___grailMemberDescriptor___: nm)]]]
 			@env0:on: AbstractException do: [:ex |
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 				ex @env0:return: nil]].
@@ -7953,13 +8146,22 @@ Object >> ___classDict___ [
 			((d @env0:at: nm otherwise: nil) isKindOf: UnboundMethod)
 				ifTrue: [d @env0:removeKey: nm].
 			((d @env0:includesKey: nm) @env0:not
-				and: [self ___grailIntroducesInstanceSlot___: nm])
+				and: [(self ___grailTypeDescriptorsCleared___) @env0:not
+				and: [self ___grailIntroducesInstanceSlot___: nm]])
 				ifTrue: [ | desc |
 					desc := [self ___grailGetSetDescriptor___: nm]
 						@env0:on: AbstractException do: [:ex |
 							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 							ex @env0:return: nil].
 					desc == nil ifFalse: [d @env0:at: nm put: desc]]]].
+	"type's OWN ``__dict__'' entry is CPython's getset_descriptor -- what every
+	class's ``cls.__dict__'' is read through -- not the wrap of the kernel
+	method that implements it, which bound as a method: its ``__get__(C)''
+	answered a bound method where CPython answers C's mappingproxy.  wrapt's
+	pure-Python fallback reads exactly ``type.__dict__['__dict__'].__get__(
+	cls)'' (#1428)."
+	(self == type and: [d @env0:includesKey: '__dict__']) ifTrue: [
+		d @env0:at: '__dict__' put: (self ___grailGetSetDescriptor___: '__dict__')].
 	"SOURCE ORDER for a class a class statement built.  The sections above
 	read the holder, then the instance-side method dictionary, then the
 	metaclass's -- two of them hash-ordered -- so ``z = 1; def b; a = 2''
@@ -8289,6 +8491,18 @@ Object >> ___cmpUnorderable___: other op: opString [
 		('''' @env0:, opString @env0:, ''' not supported between instances of '''
 			@env0:, (self ___pyTypeNameForError___)
 			@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+Object >> ___concatSequenceName___ [
+	"'str', 'list' or 'tuple' when the receiver is one (or a subclass), else
+	nil -- the sequences whose concatenation error names the built-in."
+
+	(self @env0:___isPyStr___) ifTrue: [^ 'str'].
+	(self @env0:isKindOf: list) ifTrue: [^ 'list'].
+	(self @env0:isKindOf: tuple) ifTrue: [^ 'tuple'].
+	^ nil
 
 ]
 
@@ -9618,6 +9832,24 @@ Object >> ___grailInstallProtocolForwarder___: aName value: aValue [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+Object >> ___grailInstanceDictView___ [
+	"``obj.__dict__'' for an instance of a subclass of a BUILT-IN (dict, list,
+	str, float, ...): the live view of its per-object attributes -- unless its
+	class has strict __slots__, which gives instances no __dict__ at all.
+	PythonInstance >> __dict__ always refused there; each built-in's own
+	__dict__ answered an empty view, so ``hasattr(d, '__dict__')'' was True
+	for a slotted dict subclass and for defaultdict itself (#1693)."
+
+	((self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil
+		and: [self ___pySlotsStrict___]) ifTrue: [
+			^ AttributeError ___signal___:
+				'''' @env0:, self ___pyTypeNameForError___ @env0:asString @env0:,
+					''' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
+
+]
+
 { #category : 'Grail-Slots' }
 Object >> ___grailInstanceOwnAttributeNames___ [
 	"The instance's OWN attribute names, sorted -- what __dir__ is left with
@@ -9717,12 +9949,34 @@ Object >> ___grailIsFixedAritySelector___: aString from: firstColon [
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___grailIsPythonClass___ [
 	"A class a class statement OR type() built: the first carries the
-	___pyDefinedClass___ marker, the second only its own attribute holder."
+	___pyDefinedClass___ marker, the second ___pyTypeBuiltClass___ (builtins >>
+	type:_:_:kw:).  The metaclass's own ___dynInstVars___ accessor stays as the
+	test for a type()-built class from before that marker, but it is not
+	enough alone: a class over a PYTHON base inherits the accessor rather
+	than defining it."
 
 	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
 	self == object ifTrue: [^ false].
 	^ (self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
-		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]
+		or: [(self @env0:includesSelector: #'___pyTypeBuiltClass___' environmentId: 1)
+		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailLayoutBase___ [
+	"The receiver class, or the nearest ancestor that adds instance layout:
+	a Python class with no __slots__ of its own that introduces neither
+	__dict__ nor __weakref__ adds nothing, so CPython compares its base."
+
+	| cls |
+	cls := self.
+	[cls ___grailIsPythonClass___
+		and: [cls ___grailOwnDeclaredSlotNames___ @env0:isEmpty
+		and: [(cls ___grailIntroducesInstanceSlot___: '__dict__') @env0:not
+		and: [(cls ___grailIntroducesInstanceSlot___: '__weakref__') @env0:not]]]]
+			whileTrue: [cls := cls @env0:superclass].
+	^ cls
 
 ]
 
@@ -9750,6 +10004,28 @@ Object >> ___grailMayStandInForABuiltin___: aValue [
 	((file @env0:indexOfSubCollection: '/src/python/stdlib/') @env0:= 0)
 		ifTrue: [^ false].
 	^ (file @env0:indexOfSubCollection: '/src/python/stdlib/test/') @env0:= 0
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailMemberDescriptor___: aName [
+	"The ``member_descriptor'' this class's __dict__ lists for its declared
+	slot aName, and what ``Cls.aName'' answers -- built once per class and
+	session, so ``K.a is K.__dict__['a']'' as in CPython (#1694).
+	Instances never consult it: a slot is an instVar reached by index."
+
+	| cache per desc |
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailMemberDescriptors'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := cache @env0:at: self ifAbsentPut: [KeyValueDictionary @env0:new].
+	desc := per @env0:at: aName otherwise: nil.
+	desc == nil ifFalse: [^ desc].
+	desc := (((importlib @env0:___instance___) @env1:import_module: 'types')
+		@env1:___pyAttrLoad___: #'MemberDescriptorType')
+			@env1:value: { aName. self } value: nil.
+	per @env0:at: aName put: desc.
+	^ desc
 
 ]
 
@@ -9929,6 +10205,25 @@ Object >> ___grailMetaclassDefines___: baseSym [
 		(o @env0:notNil and: [o ~~ Object and: [o ~~ object
 				and: [o ~~ (Python @env0:at: #type)]]]) ifTrue: [^ true]].
 	^ (meta ___classChainAttrLookup___: baseSym) @env0:notNil
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailMetaclassGetattr___: aName [
+	"The recorded metaclass's own __getattr__, run for a class receiver whose
+	attribute read missed, as an Association holding its answer -- or nil when
+	the metaclass defines none below type and object, so the miss goes on.
+	The read-side counterpart of ___grailMetaclassSetattr___:value:, and like
+	it only the class-body ``def __getattr__(cls, name)'' form is seen."
+
+	| meta owner m |
+	meta := self ___grailMetaclass___.
+	(meta @env0:notNil and: [meta @env0:isKindOf: Behavior]) ifFalse: [^ nil].
+	owner := meta @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1.
+	(owner @env0:isNil or: [owner == object or: [owner == (Python @env0:at: #type)]])
+		ifTrue: [^ nil].
+	m := owner @env0:compiledMethodAt: #'__getattr__:' environmentId: 1.
+	^ #'value' @env0:-> (self @env0:with: aName @env0:asString performMethod: m)
 
 ]
 
@@ -10369,6 +10664,16 @@ Object >> ___grailObjectEq___: other [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailOwnDeclaredSlotNames___ [
+	"This class's OWN declared __slots__ names, as an Array of Symbols."
+
+	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+		ifFalse: [^ #()].
+	^ (self ___pyDeclaredSlotNames___ @env0:collect: [:n | n @env0:asSymbol]) @env0:asArray
+
+]
+
 { #category : 'Grail-Metaclass' }
 Object >> ___grailOwnMetaclass___ [
 	"The metaclass THIS class recorded for itself, without the inheriting walk
@@ -10405,6 +10710,32 @@ Object >> ___grailOwnsCommittedAttr___: aClass name: aSym [
 	holder == nil ifTrue: [^ false].
 	^ ([holder @env0:dynamicInstVarAt: aSym]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailPropertyOwns___: aSym [
+	"Whether the nearest class that defines ``aSym'' on the instance side
+	declared it a @property (its class-side ___grailOwnPropertyNames___, recorded
+	at class build) -- the test Super >> ___bindHolderValue___ makes too.  The
+	NEAREST definer decides, so a subclass's plain ``def x'' over a base's
+	property is a method again, as in CPython."
+
+	| owner raw |
+	(self ___respondsTo___: aSym) ifFalse: [^ false].
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ false].
+	(owner @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___' environmentId: 1)
+		ifFalse: [^ false].
+	((owner ___grailOwnPropertyNames___) @env0:includes: aSym) ifFalse: [^ false].
+	"A value STORED as a class attribute between the receiver's class and the
+	property's owner -- ``Sub.version = 'plain'' over a base @property -- is
+	nearer in the MRO, and CPython stops at it: a plain value or non-data
+	descriptor there lets the instance value win, a data descriptor still
+	outranks it.  Asked only on this rare path."
+	raw := self ___nearestStoredClassAttrFrom___: self @env0:class through: owner name: aSym.
+	raw == nil ifTrue: [^ true].
+	^ self ___isDataDescriptorValue___: raw
 
 ]
 
@@ -10582,6 +10913,15 @@ Object >> ___grailPyDefinedAccessorPair___: getterSym setter: setterSym [
 ]
 
 { #category : 'Grail-Attribute Access' }
+Object >> ___grailPyNameForError___ [
+	"A class's Python __name__, as CPython's tp_name prints it in a message."
+
+	^ [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: self @env0:name @env0:asString]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 Object >> ___grailPythonClassNameForError___ [
 	"The class's Python name for an AttributeError message."
 
@@ -10755,6 +11095,86 @@ Object >> ___grailRawSlotValue___: aName [
 	pos := idx @env0:negated.
 	pos @env0:> (self @env0:_basicSize) ifTrue: [^ nil].
 	^ self @env0:at: pos
+
+]
+
+{ #category : 'Grail-Argument Binding' }
+Object >> ___grailReboundCall___: aSelector pos: aPos kw: aKw [
+	"A call of a function whose defaults were REBOUND to another shape
+	(Behavior >> ___grailRebind___:code:receiverOffset:value:kw:initial:): bind
+	CPython's way against the record's defaults, then run the original
+	``_name:kw:'' with every parameter supplied, so its own compiled defaults
+	are never consulted.
+
+	The positional defaults are the LAST n positional parameters, as CPython
+	aligns them -- a tuple longer than the parameters supplies the last ones.
+	A missing defaulted parameter is passed by keyword, except a
+	positional-only one, which can only be appended in order.  A missing
+	parameter with no default is CPython's TypeError, all of them named, the
+	positional ones before the keyword-only ones.  The caller's keyword dict
+	is copied before anything is added to it."
+
+	| rec names posonly kwonly defs kdefs qn offset varargs pos kw copied
+	  nPos nDefs m given missing addKw |
+	rec := self @env0:class ___grailReboundRecordFor___: aSelector.
+	names := rec @env0:at: 2.
+	posonly := rec @env0:at: 3.
+	kwonly := rec @env0:at: 4.
+	defs := rec @env0:at: 5.
+	kdefs := rec @env0:at: 6.
+	qn := rec @env0:at: 7.
+	offset := rec @env0:at: 8.
+	varargs := rec @env0:at: 9.
+	pos := aPos == nil ifTrue: [Array @env0:new] ifFalse: [aPos].
+	kw := aKw.
+	copied := false.
+	addKw := [:k :v |
+		copied ifFalse: [ | fresh |
+			fresh := PyDict @env0:new.
+			kw == nil ifFalse: [kw @env0:keysAndValuesDo: [:k2 :v2 | fresh @env0:at: k2 put: v2]].
+			kw := fresh.
+			copied := true].
+		kw @env0:at: k put: v].
+	nPos := names @env0:size.
+	nDefs := defs == nil ifTrue: [0] ifFalse: [defs @env0:size].
+	m := nPos @env0:- nDefs.
+	given := pos @env0:size.
+	(varargs @env0:not and: [given @env0:> nPos]) ifTrue: [ | lo |
+		lo := (m @env0:max: 0) @env0:+ offset.
+		^ TypeError ___signal___: (((((qn @env0:asString @env0:, '() takes ')
+			@env0:, (lo @env0:= (nPos @env0:+ offset)
+				ifTrue: [lo @env0:printString]
+				ifFalse: ['from ' @env0:, lo @env0:printString @env0:, ' to '
+					@env0:, (nPos @env0:+ offset) @env0:printString]))
+			@env0:, ((nPos @env0:+ offset) @env0:= 1
+				ifTrue: [' positional argument but ']
+				ifFalse: [' positional arguments but ']))
+			@env0:, (given @env0:+ offset) @env0:printString)
+			@env0:, ((given @env0:+ offset) @env0:= 1 ifTrue: [' was given'] ifFalse: [' were given']))].
+	missing := OrderedCollection @env0:new.
+	(given @env0:+ 1) to: nPos do: [:i | | nm |
+		nm := names @env0:at: i.
+		((i @env0:> posonly) and: [kw ~~ nil and: [kw @env0:includesKey: nm]]) ifFalse: [
+			i @env0:> m
+				ifTrue: [ | v |
+					v := defs @env0:at: i @env0:- m.
+					i @env0:<= posonly
+						ifTrue: [missing @env0:isEmpty ifTrue: [
+							pos := pos @env0:, (Array @env0:with: v)]]
+						ifFalse: [addKw @env0:value: nm value: v]]
+				ifFalse: [missing @env0:add: nm]]].
+	missing @env0:isEmpty ifFalse: [
+		^ TypeError ___signalMissingArguments___: missing @env0:asArray
+			kind: 'positional' qualifiedName: qn].
+	kwonly @env0:do: [:nm |
+		(kw ~~ nil and: [kw @env0:includesKey: nm]) ifFalse: [
+			(kdefs ~~ nil and: [(kdefs @env1:__contains__: nm) == true])
+				ifTrue: [addKw @env0:value: nm value: (kdefs @env1:__getitem__: nm)]
+				ifFalse: [missing @env0:add: nm]]].
+	missing @env0:isEmpty ifFalse: [
+		^ TypeError ___signalMissingArguments___: missing @env0:asArray
+			kind: 'keyword-only' qualifiedName: qn].
+	^ self @env0:with: pos with: kw performMethod: (rec @env0:at: 1)
 
 ]
 
@@ -11013,6 +11433,59 @@ Object >> ___grailResetClassNamespace___ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailRestoreSlotValues___: values into: anInstance from: oldClass [
+	"Put the values ___grailSlotValuesOf___: took, by NAME, where this class
+	-- anInstance's class now -- keeps them.  Two Python classes with a
+	__dict__ give the same attribute different positions (``class A'' sets x,
+	``class B'' sets y), so after ``a.__class__ = B'' A's position for x read
+	as B's y and a.x was gone (#1574).  A name this class has no position
+	for becomes a per-object attribute, as a store of it would."
+
+	| idx pos |
+	self ___grailSlotLayoutArray___ @env0:= oldClass ___grailSlotLayoutArray___
+		ifTrue: [^ self].
+	anInstance @env0:_basicSize @env0:> 0 ifTrue: [anInstance @env0:size: 0].
+	values @env0:do: [:assoc |
+		idx := anInstance ___pySlotIndexFor___: assoc @env0:key.
+		idx @env0:= 0
+			ifTrue: [anInstance @env0:dynamicInstVarAt: assoc @env0:key put: assoc @env0:value]
+			ifFalse: [
+				idx @env0:> 0
+					ifTrue: [anInstance @env0:instVarAt: idx put: assoc @env0:value]
+					ifFalse: [
+						pos := idx @env0:negated.
+						pos @env0:> anInstance @env0:_basicSize ifTrue: [anInstance @env0:size: pos].
+						anInstance @env0:at: pos put: assoc @env0:value]]].
+	^ self
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailSameInstanceLayoutAs___: otherClass [
+	"CPython's compatible_for_assignment for two Python classes.  Each side is
+	walked up past every class that adds no layout of its own; if that lands
+	both on one class they match, and otherwise the two classes reached must
+	share a base and add the same layout: the same own __slots__, in order,
+	and the same __dict__ / __weakref__ storage.  So ``class C'' and ``class
+	C2'' match (each adds __dict__ and __weakref__ to object), a __slots__
+	class matches only one with the same slots, and a list subclass matches
+	only another list subclass."
+
+	| a b |
+	a := self ___grailLayoutBase___.
+	b := otherClass ___grailLayoutBase___.
+	a == b ifTrue: [^ true].
+	(a ___grailIsPythonClass___ and: [b ___grailIsPythonClass___]) ifFalse: [^ false].
+	a @env0:superclass == b @env0:superclass ifFalse: [^ false].
+	^ (a ___grailOwnDeclaredSlotNames___ @env0:= b ___grailOwnDeclaredSlotNames___)
+		and: [(a ___grailIntroducesInstanceSlot___: '__dict__')
+				== (b ___grailIntroducesInstanceSlot___: '__dict__')
+			and: [(a ___grailIntroducesInstanceSlot___: '__weakref__')
+				== (b ___grailIntroducesInstanceSlot___: '__weakref__')]]
+
+]
+
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailSelectorOfPattern___: aPattern [
 	"The selector a method pattern such as ``__eq__: a1'' or ``__add__: a1 _: a2''
@@ -11094,6 +11567,36 @@ Object >> ___grailShadowRuntimeDunder___: aName [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailSlotLayoutArray___ [
+	"This class's full indexed slot layout (inherited positions first), or an
+	empty Array when it has none."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+		ifTrue: [^ #()].
+	^ (self @env0:perform: #'___pySlotLayout___' env: 1) @env0:asArray
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailSlotMemberDescriptorFor___: aSym [
+	"For a CLASS receiver, the member descriptor of the class that declares
+	aSym in its __slots__ -- this one or the nearest superclass -- or nil.
+	A slot lives in the layout, so the Smalltalk superclass chain is the one
+	to walk: a slot can only be inherited along it."
+
+	| c |
+	c := self.
+	[c ~~ nil] @env0:whileTrue: [
+		((c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+			and: [c ___pyDeclaredSlotNames___ @env0:anySatisfy: [:n |
+				n @env0:asString @env0:= aSym @env0:asString]])
+			ifTrue: [^ c ___grailMemberDescriptor___: aSym @env0:asString].
+		c := c @env0:superclass].
+	^ nil
+
+]
+
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___grailSlotsNameTheDirective___: aName [
 	"Whether this class's OWN __slots__ value names ``__dict__'' /
@@ -11110,6 +11613,24 @@ Object >> ___grailSlotsNameTheDirective___: aName [
 		@env0:on: AbstractException do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 			ex @env0:return: false]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailSlotValuesOf___: anInstance [
+	"name -> value for every SET indexed slot of anInstance, an instance of
+	this class -- what has to move when its class changes to one whose
+	layout puts the names at other positions."
+
+	| layout values |
+	layout := self ___grailSlotLayoutArray___.
+	values := OrderedCollection @env0:new.
+	layout @env0:doWithIndex: [:e :pos |
+		((object ___grailSlotIsTombstone___: e) @env0:not
+			and: [pos @env0:<= anInstance @env0:_basicSize]) ifTrue: [
+				(anInstance @env0:at: pos) ifNotNil: [:v |
+					values @env0:add: (e @env0:asSymbol @env0:-> v)]]].
+	^ values
 
 ]
 
@@ -11164,6 +11685,19 @@ Object >> ___grailSynthesizedDunderSelectors___: aString [
 			^ #( #'__delitem__:' #'___delitem__:kw:' )].
 		^ nil].
 	^ nil
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailTypeDescriptorsCleared___ [
+	"Has sys._clear_type_descriptors removed this class's __dict__ /
+	__weakref__ getset descriptors?  dataclasses does it before copying the
+	class's namespace into a slotted replacement; see sys >>
+	_clear_type_descriptors:."
+
+	| set |
+	set := SessionTemps @env0:current @env0:at: #GrailClearedTypeDescriptors otherwise: nil.
+	^ set ~~ nil and: [set @env0:includes: self]
 
 ]
 
@@ -11223,6 +11757,38 @@ Object >> ___hasIndexDunder___ [
 		or: [(self ___respondsTo___: #'___index__:kw:')
 		or: [(self @env0:isKindOf: PythonInstance)
 			and: [(self ___typeDunder___: #'__index__') ~~ nil]]]
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___hasOwnGetitem___ [
+	"Does this object's class define a REAL __getitem__ -- one its CPython
+	type would have, giving it sq_item and mp_subscript -- rather than one
+	Grail adds only to raise?
+
+	It cannot be asked of hasattr: Grail gives int and None refusal methods
+	(<grailProtocolRefusal>) that exist only to raise CPython's TypeError,
+	every Python instance inherits PythonInstance's, a builtin function's
+	BoundMethod subscripts as a PEP 585 pass-through, and a module is a
+	SymbolDictionary.  None of those subscripts in CPython.  Asked by
+	%-formatting's mapping test (CharacterCollection
+	class>>___percentOperandIsMapping___:forBytes:) and the C shim's
+	PySequence_Check (CPythonShim>>PySequence_Check:)."
+
+	| defCls meth |
+	((self @env0:isKindOf: BoundMethod) @env0:or: [self @env0:isKindOf: module])
+		ifTrue: [^ false].
+	defCls := (self @env0:class)
+		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
+	defCls @env0:isNil ifTrue: [
+		defCls := (self @env0:class)
+			@env0:whichClassIncludesSelector: #'___getitem__:kw:' environmentId: 1.
+		defCls @env0:isNil ifTrue: [^ false].
+		^ defCls ~~ PythonInstance].
+	defCls == PythonInstance ifTrue: [^ false].
+	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
+	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
 
 ]
 
@@ -12651,6 +13217,23 @@ Object >> ___pyAttrDelete___: aName [
 		sym @env0:== #'__type_params__' ifTrue: [
 			^ TypeError ___signal___: 'cannot delete ''__type_params__'' attribute of '
 				@env0:, self ___grailPythonClassNameForError___].
+		"``del Cls.__dict__'' is the store's refusal (see ___pyAttrStore___:put:):
+		type's __dict__ getset has no setter, and CPython words a delete the
+		same way (#1699)."
+		(sym @env0:== #'__dict__' and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+			^ AttributeError ___signal___:
+				'attribute ''__dict__'' of ''type'' objects is not writable'].
+		"A BUILT-IN class takes no deletes, as it takes no stores: CPython's
+		refusal is the same immutable-type TypeError for both (``del int.foo'',
+		``del int.__dict__'').  Grail answered an AttributeError that named the
+		GemStone class -- ``type object 'Integer' has no attribute 'foo''' --
+		inviting a fallback where no retry can help.  The test is the store's:
+		no per-class attribute holder means not a Python class."
+		(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+			^ TypeError ___signal___:
+				'cannot set ''' @env0:, aName @env0:asString @env0:,
+					''' attribute of immutable type ''' @env0:,
+					self @env0:___pyClassNameForError___ @env0:, ''''].
 		"Enum members are undeletable: ``del Color.RED'' raises AttributeError
 		(CPython EnumType.__delattr__), the mirror of the reassignment guard in
 		__setattr__:_:.  Needed HERE now that a member is a holder entry like
@@ -12768,7 +13351,7 @@ Object >> ___pyAttrDelete___: aName [
 					== self) ifFalse: [
 					importlib @env0:___copyMethod___: sel from: self to: self
 						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
-				  BoundMethod @env1:___grailPinSelector___: sel ]
+				  BoundMethod @env1:___grailPinSelector___: sel in: self ]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				self @env1:___removeSelector: sel environmentId: 1].
 			^ self].
@@ -12821,6 +13404,17 @@ Object >> ___pyAttrDelete___: aName [
 			'''' @env0:, aName @env0:asString @env0:, ''''
 	].
 	self @env0:removeDynamicInstVar: sym
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___pyAttrForeignBaseLoad___: aSym [
+	"aSym read off a C base type this object's class descends from, as an
+	Association whose value is the attribute, or nil when there is none --
+	nil for every object but an instance of a Python subclass of a C type
+	(ShimForeignSubclass), which ___pyAttrLoad___: asks just before its miss."
+
+	^ nil
 
 ]
 
@@ -12944,7 +13538,21 @@ Object >> ___pyAttrLoad___: aSym [
 		dynValue := self ___pySlotAt___: slotIdx.
 		dynValue == nil ifFalse: [^ dynValue]].
 	dynValue := self @env0:dynamicInstVarAt: aSym.
-	dynValue == nil ifFalse: [^ dynValue].
+	"A stored value is the answer unless a @property owns the name: CPython's
+	property is a DATA descriptor, so it outranks the instance dict whether or
+	not it has a setter (#1660).  ImportError.__init__ stores ``name'' on every
+	instance, which is how importlib.metadata's PackageNotFoundError, whose
+	``name'' is a property, read None.  The first test is an ordinary,
+	method-cached send answering the nearest declaring class's list -- object
+	class >> ___grailOwnPropertyNames___ answers #() -- so a class whose chain
+	declares no property keeps the cheap exit it had.  NOT ``___respondsTo___:''
+	of that selector: the primitive caches only a HIT, so a miss re-walks the
+	whole metaclass chain, and on an exception class that nearly doubled every
+	attribute read (235 -> 430 ns).  The property case falls through to the
+	accessor-pair branch below, which runs the getter."
+	dynValue == nil ifFalse: [
+		((self @env0:class ___grailOwnPropertyNames___) @env0:isEmpty
+			or: [(self ___grailPropertyOwns___: aSym) not]) ifTrue: [^ dynValue]].
 	s := aSym @env0:asString.
 	"The eight selectors one attribute name can compile to.  Building them is
 	seven concatenations and seven SYMBOL INTERNINGS -- a symbol-table hash
@@ -13189,6 +13797,17 @@ Object >> ___pyAttrLoad___: aSym [
 			does land in the namespace, so both homes are consulted, namespace
 			first."
 			hook := self @env0:at: #'__getattr__' otherwise: nil.
+			"A hook STORED as data -- ``globals()['__getattr__'] = fn'', or
+			through ``sys._getframe(1).f_globals'' as anyio's lazy importer
+			does -- is a dynamic instVar of the module (PyInstanceDict), the
+			home every such store gets.  It was never consulted, so anyio.abc
+			exported nothing once inspect.getsource could read its source and
+			the lazy importer engaged: ``from anyio.abc import
+			ObjectReceiveStream'' failed and FastAPI did not import.  Ahead of
+			the compiled method, so a later rebinding wins, as in CPython's one
+			namespace."
+			hook @env0:isNil ifTrue: [
+				hook := self @env0:dynamicInstVarAt: #'__getattr__'].
 			(hook @env0:isNil
 				and: [self ___respondsTo___: #'__getattr__:'])
 					ifTrue: [hook := BoundMethod
@@ -14228,6 +14847,22 @@ Object >> ___pyAttrLoad___: aSym [
 	``def __getattr__'' and not the ``__getattr__ = fn'' class-attribute form, so
 	django's LazyObject never set itself up and recursed until the gem ran out of
 	memory."
+	"A FOREIGN BASE TYPE comes before __getattr__, as a base's type dict does in
+	CPython: an instance of ``class memmap(ndarray)'' reads ndarray's ``shape''
+	and ``sum'' off its C body (ShimForeignSubclass)."
+	(self ___pyAttrForeignBaseLoad___: aSym) @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
+	"A CLASS's slot name reads as its member descriptor -- ``K.a'' is
+	``<member 'a' of 'K' objects>'' -- found in the class dict before any
+	metaclass __getattr__ is asked, as type.__getattribute__ finds it.  Here,
+	at the miss, so no successful read pays for it (#1694)."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		(self ___grailSlotMemberDescriptorFor___: aSym) @env0:ifNotNil: [:md | ^ md]].
+	"A CLASS's miss falls back to its METACLASS's __getattr__: ``Cls.x'' is
+	type(Cls).__getattribute__(Cls, 'x'), and the slot that runs __getattr__
+	is the metaclass's.  ___pyAttrHasGetattr___ below looks at the class's
+	own class side, which a Python metaclass's methods are not on (#1702)."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		(self ___grailMetaclassGetattr___: s) @env0:ifNotNil: [:assoc | ^ assoc @env0:value]].
 	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
@@ -14339,6 +14974,16 @@ Object >> ___pyAttrStore___: aName put: aValue [
 				self @env0:with: aValue performMethod: (___po @env0:compiledMethodAt:
 					(aName @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1).
 				^ aValue].
+		"``Cls.__dict__ = d'' is refused: type's __dict__ getset has no setter,
+		so CPython never replaces a class's namespace wholesale.  Grail stored
+		the value in the class holder, where the class-side read never looked,
+		and the assignment vanished without a word (#1699).  A Python class
+		only: a built-in one falls through to the immutable-type TypeError
+		below, which CPython raises first."
+		((aName @env0:size == 8 and: [aName @env0:asString @env0:= '__dict__'])
+			and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+			^ AttributeError ___signal___:
+				'attribute ''__dict__'' of ''type'' objects is not writable'].
 		"Installing __hash__ on a class at runtime has to become visible to
 		hash(), which reaches Object >> __hash__ by an ordinary message send and
 		so cannot see a dynamic class attribute.  Record that one exists; that
@@ -14537,8 +15182,14 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		__slots__ of its own overrides it with false (CPython gives such a
 		class a __dict__ even under a slotted base), and a presence test
 		cannot see that override."
+		"A DECLARED slot with no position is still a slot: over a base whose
+		instances cannot carry one -- a byte-format str or bytearray, a
+		fixed-layout complex or exception -- the layout has no room, and the
+		value is kept per object below instead.  The strict refusal is for
+		names the class did not declare (#1693)."
 		(self ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
-			self ___pySlotsStrict___ ifTrue: [
+			(self ___pySlotsStrict___
+				and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]) ifTrue: [
 				^ AttributeError ___signal___:
 					'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
 						''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
@@ -14858,6 +15509,12 @@ Object >> ___pyInstanceDescriptorDelete___: aName [
 	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
 	(self ___respondsTo___: delSym)
 		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
+	"A decorator @property with NO deleter refuses, as CPython's does: it is a
+	data descriptor, so ``del obj.x'' reaches it rather than the instance dict
+	(#1660).  cached_property is not in ___grailOwnPropertyNames___, so its
+	``del'' still drops the cached value."
+	(self ___grailPropertyOwns___: aName @env0:asString @env0:asSymbol)
+		ifTrue: [^ self ___raiseUndeletableProperty___: aName].
 	descr := self ___instanceDataDescriptorFor___: aName.
 	descr ~~ nil ifTrue: [self ___descriptorDelete___: descr. ^ true].
 	^ false
@@ -14949,6 +15606,30 @@ Object >> ___pyKwargsSplatFor___: aCallee [
 	runtime builds keywords in (datetime's replace() hands a Dictionary), and
 	the live __dict__ / globals() views -- are what callees already read
 	keywords from."
+	self @env0:class == dict ifTrue: [^ self].
+	"An instance of a PYTHON subclass of dict becomes a plain dict, as CPython
+	always hands the callee.  Passed through, the callee's binding copied it
+	with its class and instVars, so an OrderedDict's kwargs SHARED the
+	caller's _order list: a ``kwargs.pop(k)'' in the callee took k out of the
+	caller's order, and the next ``f(**od)'' popping k raised ValueError.
+	botocore builds every endpoint rule with ``RuleCreator.create(**rule)''
+	over cached OrderedDicts, so each client after a process's first failed.
+	The copy follows CPython's dict_merge: through keys() and __getitem__
+	when the class overrides __iter__ (OrderedDict does, for its order), and
+	from the raw entries otherwise, even when keys() is overridden."
+	((self @env0:isKindOf: dict)
+		and: [self @env0:class ___grailIsPythonClass___]) ifTrue: [
+			| d iterOwner |
+			d := dict @env0:new.
+			iterOwner := self @env0:class
+				@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1.
+			(iterOwner ~~ nil and: [iterOwner ___grailIsPythonClass___])
+				ifTrue: [
+					(list @env1:__new__: self keys) @env0:do: [:k |
+						d @env0:at: k put: (self __getitem__: k)]]
+				ifFalse: [
+					self @env0:keysAndValuesDo: [:k :v | d @env0:at: k put: v]].
+			^ d].
 	((self @env0:isKindOf: AbstractDictionary)
 		or: [self @env0:isKindOf: PyInstanceDict]) ifTrue: [^ self].
 	"Any other MAPPING is copied into a dict, which is what CPython hands the
@@ -15014,7 +15695,17 @@ Object >> ___pyMetaclass___ [
 	answer is Integer.  Going straight to ``self class'' made type(1) answer
 	SmallInteger and broke eleven test_enum tests; __class__ has always been
 	what the type() builtin asked, and still is."
-	(self isKindOf: Behavior) ifFalse: [^ self __class__].
+	"...EXCEPT a __class__ a Python class defines for itself.  CPython's type()
+	is the object's real type, whatever ``__class__'' a class reports -- a
+	``@property def __class__'' (asyncpg's pgproto.UUID claims uuid.UUID) made
+	type(x) answer the claim.  The override is the user's, so the receiver's
+	own class is the answer."
+	(self isKindOf: Behavior) ifFalse: [
+		(self @env0:class ___grailIsPythonClass___ and: [
+			(self @env0:class @env0:whichClassIncludesSelector: #'__class__' environmentId: 1)
+				@env0:ifNil: [false] ifNotNil: [:owner | owner ___grailIsPythonClass___]])
+			ifTrue: [^ self @env0:class].
+		^ self __class__].
 	declared := self ___grailDeclaredMetaclassOrNil___.
 	declared == nil ifFalse: [^ declared].
 	"@env0: -- ___mroOf___ is an env-0 classmethod, and an env-1 send of it
@@ -15267,7 +15958,7 @@ Object >> ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass [
 	to ask for a category per hit; only the metaclass path calls it, so the cost
 	does not land on classes that have no metaclass."
 
-	| walker dict metaDict |
+	| walker dict |
 	walker := aClass.
 	[walker == nil] whileFalse: [
 		"A class whose body defines the name CLASS-side -- a @classmethod or
@@ -15277,13 +15968,17 @@ Object >> ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass [
 		instance-side def -- the shape a classmethod SUBCLASS such as abc's
 		abstractclassmethod compiles to -- and answered an UnboundMethod for
 		the subclass's own classmethod, so ``D.foo()'' raised 'must be called
-		with an instance' (test_abc TestLegacyAPI, with a Python metaclass)."
-		metaDict := walker @env0:class @env0:methodDictForEnv: 1.
-		(metaDict ~~ nil
-			and: [(metaDict @env0:includesKey: aSym)
-			and: [self ___isPythonSourceMethodCategory___:
-				(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)]])
-					ifTrue: [^ false].
+		with an instance' (test_abc TestLegacyAPI, with a Python metaclass).
+
+		In ANY ARITY: a classmethod that takes an argument compiles to ``f:'',
+		not ``f'', so asking for the unary selector alone missed every one of
+		them.  ``class N(M): @classmethod def f(cls, c)'' over an instance
+		``M.f'' then read as M's function under any metaclass -- importlib.
+		metadata's MetadataPathFinder.find_distributions, a classmethod
+		overriding an abstract method of an ABCMeta class, is the case that
+		found it (#1657)."
+		(walker @env0:class ___grailOwnsPythonDef___: aSym family: family forwarders: false)
+			ifTrue: [^ false].
 		dict := walker @env0:methodDictForEnv: 1.
 		dict == nil ifFalse: [
 			((dict @env0:includesKey: aSym)
@@ -15340,6 +16035,22 @@ Object >> ___raiseReadOnlyProperty___: aName [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object >> ___raiseUndeletableProperty___: aName [
+	"``del obj.x'' where ``x'' is a @property with no @x.deleter -- CPython's
+	text, worded as ___raiseReadOnlyProperty___: words the setter case:
+
+	  property 'x' of 'C' object has no deleter"
+
+	| owner |
+	owner := [(self @env0:class ___pyAttrLoad___: #'__qualname__') @env0:asString]
+		@env0:on: AbstractException do: [:e | self @env0:class @env0:name @env0:asString].
+	^ AttributeError ___signal___:
+		'property ''' @env0:, aName @env0:asString @env0:, ''' of ''' @env0:, owner
+			@env0:, ''' object has no deleter'
+
+]
+
 { #category : 'Grail-Hashability' }
 Object >> ___raiseUnhashableType___ [
 	"Raise CPython's ``TypeError: unhashable type: 'X''' for the RECEIVER's own
@@ -15381,10 +16092,10 @@ Object >> ___rbinOpFallback___: other op: opString [
 	-- and the message names the operands in evaluation order
 	(other OP self)."
 
-	"Python type names, for the reason ___binOpFallback___ gives."
-	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
-		@env0:, ': ''' @env0:, (other ___pyTypeNameForError___)
-		@env0:, ''' and ''' @env0:, (self ___pyTypeNameForError___) @env0:, '''')
+	"Python type names, for the reason ___binOpFallback___ gives; the
+	sequence wording too, for a sequence on the right of ``*''."
+	TypeError ___signal___: ((other ___sequenceOpMessage___: self op: opString)
+		ifNil: [other ___binOpMessage___: self op: opString])
 
 ]
 
@@ -15710,6 +16421,59 @@ Object >> ___selectorFamilyFor___: aSym string: aString [
 		family := self ___buildSelectorFamily___: aString.
 		reg @env0:at: aSym put: family].
 	^ family
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+Object >> ___sequenceOpMessage___: other op: opString [
+	"CPython's sequence-protocol message for ``self <op> other'', or nil.
+
+	``+'' with a str, list or tuple on the LEFT: ``can only concatenate list
+	(not ""int"") to list'' -- the built-in's own name even for a subclass,
+	because the text is a literal in its concat slot.  Only the left operand:
+	``1 + 'a''' keeps the ordinary message.  ``*'' with one of them on EITHER
+	side: ``can't multiply sequence by non-int of type 'float''', naming the
+	other operand.  bytes and bytearray already say ``can't concat''.
+
+	A Python class that defines __add__ has no concat slot, and one that
+	defines __mul__ or __rmul__ has no repeat slot, so its instances take the
+	ordinary message: ``3 * N('b')'' for a str subclass whose __rmul__
+	declines is ``unsupported operand type(s) for *: 'int' and 'N'''."
+
+	| name |
+	opString @env0:= '+' ifTrue: [
+		name := (self ___sequenceSlotDefinedBy___: #( #'__add__:' ))
+			ifTrue: [nil]
+			ifFalse: [self ___concatSequenceName___].
+		^ name == nil
+			ifTrue: [nil]
+			ifFalse: ['can only concatenate ' @env0:, name @env0:, ' (not "'
+				@env0:, (other ___pyTypeNameForError___) @env0:, '") to ' @env0:, name]].
+	opString @env0:= '*' ifTrue: [
+		(self ___concatSequenceName___ ~~ nil
+			and: [(self ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]) ifTrue: [
+			^ 'can''t multiply sequence by non-int of type '''
+				@env0:, (other ___pyTypeNameForError___) @env0:, ''''].
+		(other ___concatSequenceName___ ~~ nil
+			and: [(other ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]) ifTrue: [
+			^ 'can''t multiply sequence by non-int of type '''
+				@env0:, (self ___pyTypeNameForError___) @env0:, '''']].
+	^ nil
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+Object >> ___sequenceSlotDefinedBy___: selectors [
+	"Does a PYTHON class in the receiver's lineage define one of these
+	dunders?  Then CPython leaves the type no sequence slot for that
+	operation (see ___sequenceOpMessage___:op:)."
+
+	| cls owner |
+	cls := self @env0:class.
+	selectors @env0:do: [:sel |
+		owner := cls @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifTrue: [^ true]].
+	^ false
 
 ]
 
@@ -16227,6 +16991,16 @@ Object >> ___unboundMethodClosure___: aSym [
 
 ]
 
+{ #category : 'Grail-Calling' }
+Object >> ___unboundSelfFor: aClass [
+	"The receiver as ``self'' for ``aClass.method(self, ...)''
+	(UnboundMethod>>value:value:): itself.  A wheel's str subtype instance
+	answers its text (ShimForeignObject)."
+
+	^ self
+
+]
+
 { #category : 'Grail-Convenience Methods' }
 Object >> ___unpackByIteration___: nBefore star: hasStar after: nAfter [
 	"CPython's unpack_iterable, for a value that is not a sequence: take
@@ -16701,8 +17475,11 @@ Object >> __dir__ [
 			its Smalltalk selectors, which the scan above already reports, and it
 			carries kernel names too -- ``new'' made dir(list) no longer a subset
 			of dir(UserList) (test_collections test_list_protocol)."
+			"A type()-built class counts too: it has no ___pyDefinedClass___
+			marker, so dir() of one missed what only its __dict__ holds, such
+			as the __weakref__ descriptor (#1658)."
 			((k @env0:isKindOf: Behavior)
-				and: [k @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]) ifTrue: [
+				and: [k ___grailIsPythonClass___]) ifTrue: [
 				[((k @env1:___pyAttrLoad___: #'__dict__') @env1:keys) @env0:do: [:key |
 					(key @env0:isKindOf: CharacterCollection) ifTrue: [
 						(names @env0:includes: key @env0:asString) ifFalse: [

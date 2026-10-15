@@ -29,7 +29,9 @@ Hash >> block_size [
 
 	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ 64].
 	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha224 ifTrue: [^ 64].
 	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha384 ifTrue: [^ 128].
 	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ 128].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ 144].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ 136].
@@ -70,7 +72,9 @@ Hash >> digest_size [
 
 	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ 16].
 	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ 20].
+	(self @env0:dynamicInstVarAt: #algo) == #sha224 ifTrue: [^ 28].
 	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ 32].
+	(self @env0:dynamicInstVarAt: #algo) == #sha384 ifTrue: [^ 48].
 	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ 64].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ 28].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ 32].

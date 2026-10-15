@@ -55,7 +55,7 @@ frozenset >> __dict__ [
 		environmentId: 1) @env0:isNil ifTrue: [
 		^ AttributeError ___signal___:
 			'''frozenset'' object has no attribute ''__dict__'''].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 
 ]
 
