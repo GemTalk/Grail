@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 55 | 6 | 29 | 90 |
-| P2 | 19 | 3 | 12 | 34 |
-| P3 | 15 | 1 | 40 | 56 |
+| P1 | 57 | 4 | 29 | 90 |
+| P2 | 21 | 1 | 12 | 34 |
+| P3 | 16 | 0 | 40 | 56 |
 | P4 | 14 | 2 | 59 | 75 |
-| **In-scope** | **103** | **12** | **140** | **255** |
+| **In-scope** | **108** | **7** | **140** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **103 of those score OK**.
+Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **108 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,11 +136,11 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 61 | 3169 | 375 | 2727 | 12% |
-| P2 | 22 | 4056 | 554 | 3492 | 14% |
-| P3 | 16 | 2583 | 402 | 2179 | 16% |
-| P4 | 20 | 1618 | 129 | 1475 | 8% |
-| **all** | **119** | **11426** | **1460** | **9873** | **13%** |
+| P1 | 61 | 3169 | 375 | 2755 | 12% |
+| P2 | 22 | 4056 | 554 | 3494 | 14% |
+| P3 | 16 | 2583 | 402 | 2181 | 16% |
+| P4 | 20 | 1618 | 128 | 1482 | 8% |
+| **all** | **119** | **11426** | **1459** | **9912** | **13%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_decimal` 200 of 368 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30.
 <!-- /test-tally -->
@@ -206,7 +206,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_dynamic` | Dynamic name binding / exec (language). |
 | ✅ | `test_enumerate` | enumerate builtin (language). |
 |  | `test_eof` | Parser EOF handling (language). |
-| ❗ | `test_except_star` | except* / PEP 654 (language). |
+| ✅ | `test_except_star` | except* / PEP 654 (language). |
 | ✅ | `test_exception_group` | ExceptionGroup (language). |
 | ❗ | `test_exception_hierarchy` | Built-in exception hierarchy (language). |
 | ✅ | `test_exception_variations` | try/except/finally variations (language). |
@@ -269,7 +269,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_types` | types module — built-in type objects (language). |
 | ✅ | `test_unary` | Unary operators (language). |
 |  | `test_unicode_identifiers` | Unicode identifier support (language). |
-| ❗ | `test_unpack` | Sequence unpacking (language). |
+| ✅ | `test_unpack` | Sequence unpacking (language). |
 |  | `test_unpack_ex` | Extended (starred) unpacking (language). |
 |  | `test_utf8source` | UTF-8 source files (parser). |
 | ✅ | `test_with` | with statement / context managers (language). |
@@ -300,14 +300,14 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ✅ | `test_heapq` | heapq — core (in harness). |
 | ✅ | `test_itertools` | itertools — core (in harness). |
 |  | `test_keyword` | keyword module — language keyword set. |
-| ❗ | `test_math` | math — core (in harness). |
+| ✅ | `test_math` | math — core (in harness). |
 |  | `test_math_property` | math invariants — pure. |
 |  | `test_numeric_tower` | Numeric coercion tower (language/numbers). |
 | ✅ | `test_operator` | operator — core (in harness). |
 |  | `test_ordered_dict` | OrderedDict. |
 | ❗ | `test_random` | random — Mersenne Twister PRNG. CPython's random.py over a native `_random`; wired 2026-10-04 at 114t 0F/14E. |
 | ✅ | `test_re` | re — core (in harness). |
-| ❗ | `test_statistics` | statistics — pure Python. |
+| ✅ | `test_statistics` | statistics — pure Python. |
 | ✅ | `test_string` | string module (vendored) — Formatter/Template (pure). |
 |  | `test_strtod` | String→double conversion (float parsing). |
 | ✅ | `test_textwrap` | textwrap — core (in harness). |
@@ -337,7 +337,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_context` | contextvars — pure-Python context state. |
 | ✅ | `test_contextlib` | contextlib — pure Python. |
 | ✅ | `test_contextlib_async` | async contextlib — pure Python. |
-| ❗ | `test_copyreg` | copyreg — pickle/copy registry. |
+| ✅ | `test_copyreg` | copyreg — pickle/copy registry. |
 |  | `test_csv` | csv — reader/writer (pure semantics). |
 |  | `test_dataclasses` | dataclasses — pure-Python codegen over classes. |
 | ✅ | `test_difflib` | difflib — pure Python. |
@@ -775,20 +775,15 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**12 of the 119 rows on the committed board are not OK.**
+**7 of the 119 rows on the committed board are not OK.**
 
-- `test.test_math` FAIL, 89 tests: 1 failed, 0 errors, 5 skipped
-- `test.test_unpack` FAIL, 2 tests: 1 failed, 0 errors, 0 skipped
 - `test.test_setcomps` FAIL, 2 tests: 1 failed, 0 errors, 0 skipped
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
-- `test.test_statistics` FAIL, 375 tests: 1 failed, 0 errors, 6 skipped
-- `test.test_except_star` ERROR, 60 tests: 10 failed, 10 errors, 0 skipped
 - `test.test_generators` ERROR, 59 tests: 17 failed, 9 errors, 1 skipped
-- `test.test_long` ERROR, 47 tests: 6 failed, 8 errors, 7 skipped
-- `test.test_exception_hierarchy` ERROR, 16 tests: 2 failed, 3 errors, 1 skipped
-- `test.test_copyreg` FAIL, 6 tests: 2 failed, 0 errors, 0 skipped
+- `test.test_long` ERROR, 47 tests: 4 failed, 5 errors, 7 skipped
+- `test.test_exception_hierarchy` ERROR, 16 tests: 1 failed, 2 errors, 1 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 8 errors, 5 skipped
-- `test.test_uuid` ERROR, 120 tests: 4 failed, 10 errors, 73 skipped
+- `test.test_uuid` FAIL, 120 tests: 8 failed, 0 errors, 73 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
