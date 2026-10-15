@@ -1007,8 +1007,7 @@ printSmalltalkOn: aStream
 						compile-fail with ``undefined symbol''.  Route via
 						``___moduleAttrLoad___:'' so top-level defs lazy-wrap
 						as BoundMethods (the typical decorator case)."
-						(CallAst moduleVariableNames notNil
-							and: [CallAst moduleVariableNames includes: deco asSymbol])
+						(self ___decoratorNameIsModuleGlobal___: deco)
 							ifTrue: [
 								aStream
 									nextPutAll: '((';
@@ -2141,6 +2140,27 @@ ___preEvaluatedDecoratorIndexOf___: deco
 
 category: 'Grail-code generation'
 method: FunctionDefAst
+___decoratorNameIsModuleGlobal___: aSymbol
+	"Does the bare decorator name aSymbol mean the MODULE's binding -- to be
+	read through the module instance -- rather than a local?  Only when the
+	module body binds it AND no local shadows it: a local of an enclosing
+	function, or, from a class nested in a function, a local of a function
+	beyond that class.  CPython resolves those before the global; testing
+	only the module's names applied the global decorator wherever a local
+	reused its name, silently (#1605)."
+
+	| sym |
+	sym := aSymbol asSymbol.
+	(CallAst moduleVariableNames notNil
+		and: [CallAst moduleVariableNames includes: sym]) ifFalse: [^ false].
+	(self ___pythonLocalInEnclosingFunctions___: sym) ifTrue: [^ false].
+	(CallAst classBeingCompiled notNil
+		and: [self ___headerLocalBeyondClass___: sym]) ifTrue: [^ false].
+	^ true
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
 printDecoratorReceiverOn: aStream deco: deco
 	"Emit the decorator expression as the receiver of a
 	___pyCallValue___:kw: send.  A bare-Symbol module-scope
@@ -2174,8 +2194,7 @@ printDecoratorReceiverOn: aStream deco: deco
 					nextPutAll: deco asString;
 					nextPutAll: ''')'.
 				^ self].
-		(CallAst moduleVariableNames notNil
-			and: [CallAst moduleVariableNames includes: deco asSymbol])
+		(self ___decoratorNameIsModuleGlobal___: deco)
 			ifTrue: [
 				aStream
 					nextPutAll: '((';
@@ -8631,7 +8650,8 @@ ___irNestedDecoratorEligible___: deco locals: localNames
 	"printDecoratorReceiverOn:deco:'s branches, in ITS order: a bare-name
 	decorator (the parser records those as Symbols) that names a class-body
 	sibling is refused (the class-attribute load is not emitted here); a
-	module variable loads through the module instance; otherwise the bare
+	module variable no local shadows loads through the module instance
+	(___decoratorNameIsModuleGlobal___:); otherwise the bare
 	identifier -- an enclosing local, or a resolvable global -- unless a doit
 	would need the runtime NameError lookup.  An expression decorator is judged
 	as a value of the enclosing scope."
@@ -8639,8 +8659,7 @@ ___irNestedDecoratorEligible___: deco locals: localNames
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___irEligibleValueLocals___: localNames].
 	(CallAst classBodyDecoratorScope notNil
 		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
-	(CallAst moduleVariableNames notNil
-		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [^ true].
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ true].
 	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
 	(localNames includes: deco asString) ifTrue: [^ true].
 	^ NameAst isResolvableSymbol: deco asSymbol
@@ -9473,8 +9492,7 @@ ___emitIRDecoratorValue___: deco on: aBuilder
 	expression decorator is emitted as a value."
 
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___emitIRValueOn___: aBuilder].
-	(CallAst moduleVariableNames notNil
-		and: [CallAst moduleVariableNames includes: deco asSymbol]) ifTrue: [
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [
 			^ aBuilder
 				send: #'___moduleAttrLoad___:'
 				to: (aBuilder
