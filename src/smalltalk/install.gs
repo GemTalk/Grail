@@ -1060,6 +1060,7 @@ run
 	at: #'FutureWarningTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
+	at: #'GeneratorApiTestCase' put: nil;
 	at: #'GeneratorCloseTestCase' put: nil;
 	at: #'GeneratorDetectionTestCase' put: nil;
 	at: #'GeneratorExceptionContextTestCase' put: nil;
@@ -2646,6 +2647,7 @@ input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/FutureWarningTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/GeneratorApiTestCase.gs
 input src/smalltalk/PythonTests/GeneratorCloseTestCase.gs
 input src/smalltalk/PythonTests/GeneratorDetectionTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExceptionContextTestCase.gs

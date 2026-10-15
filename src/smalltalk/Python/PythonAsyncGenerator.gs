@@ -843,7 +843,7 @@ category: 'Grail-Async Generator Protocol'
 method: PythonAsyncGenerator
 athrow: aType _: aValue _: aTb
 	self ___warnLegacySignatureOf___: 'athrow'.
-	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue)
+	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
 %
 
 category: 'Grail-Async Generator Protocol'

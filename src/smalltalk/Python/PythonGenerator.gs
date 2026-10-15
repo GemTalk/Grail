@@ -866,12 +866,13 @@ throw: aType _: aValue
 category: 'Grail-Generator Protocol'
 method: PythonGenerator
 throw: aType _: aValue _: aTb
-	"The deprecated three-arg signature.  The traceback argument is accepted
-	and ignored -- CPython attaches it to the raised exception, but the
-	exception's own travel through the generator machinery rebuilds the
-	traceback either way."
+	"The deprecated three-arg signature.  The traceback argument is checked
+	(___normalizedLegacyExc___:value:tb:) and otherwise ignored -- CPython
+	attaches it to the raised exception, but the exception's own travel
+	through the generator machinery rebuilds the traceback either way."
 
-	^ self ___throwLegacy___: aType value: aValue
+	self ___warnLegacySignatureOf___: 'throw'.
+	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
 %
 
 category: 'Grail-Private'
@@ -880,9 +881,8 @@ ___throwLegacy___: aType value: aValue
 	"``gen.throw(type, value, tb)'' -- the pre-3.12 spelling, still honoured
 	by CPython with a DeprecationWarning (measured, 3.14: 'the (type, exc,
 	tb) signature of throw() is deprecated, use the single-arg signature
-	instead.').  Normalisation is CPython's: value None means construct the
-	type bare; an exception INSTANCE is thrown as-is; anything else becomes
-	the type's argument.
+	instead.').  Normalisation is CPython's -- see
+	___normalizedLegacyExc___:value:.
 
 	The warning goes through the vendored warnings machinery UNGUARDED, so
 	assertWarns sees it (test_func_10) and -- just as important -- a
@@ -931,16 +931,84 @@ ___warnLegacySignatureOf___: aMethodName
 category: 'Grail-Private'
 method: PythonGenerator
 ___normalizedLegacyExc___: aType value: aValue
-	"CPython's normalisation for the deprecated multi-arg signatures: value
-	None constructs the type bare, an exception INSTANCE travels as-is,
-	anything else becomes the type's argument."
+	"CPython's normalisation for the deprecated multi-arg signatures
+	(_gen_throw, then PyErr_NormalizeException).
 
-	^ aValue == None
-		ifTrue: [aType @env1:___pyCallValue___: { } kw: nil]
-		ifFalse: [
-			(aValue @env0:isKindOf: BaseException)
-				ifTrue: [aValue]
-				ifFalse: [aType @env1:___pyCallValue___: { aValue } kw: nil]]
+	An exception INSTANCE travels as-is, and may not come with a value of its
+	own.  An exception CLASS is called: with no arguments for value None, with
+	the elements of a tuple value, and with the value as its one argument
+	otherwise -- unless the value is ALREADY an instance of that class, which
+	travels as-is.  An instance of some OTHER exception class is just an
+	argument: ``throw(ValueError, TypeError(1))'' raises ValueError(TypeError(1)).
+	Anything else is the single-arg form's TypeError."
+
+	^ self ___normalizedLegacyExc___: aType value: aValue tb: None
+%
+
+category: 'Grail-Private'
+method: PythonGenerator
+___normalizedLegacyExc___: aType value: aValue tb: aTb
+	"___normalizedLegacyExc___:value:, after CPython's first check: a
+	traceback argument must be None or a traceback.  CPython makes it after
+	the deprecation warning, so the callers warn first."
+
+	(aTb == None or: [aTb @env0:isKindOf: PyTraceback]) ifFalse: [
+		^ TypeError ___signal___: 'throw() third argument must be a traceback object'].
+	(aType @env0:isKindOf: BaseException) ifTrue: [
+		aValue == None ifFalse: [
+			^ TypeError ___signal___: 'instance exception may not have a separate value'].
+		^ aType].
+	((aType @env0:isKindOf: Behavior)
+		@env0:and: [aType @env0:inheritsFrom: BaseException])
+			ifFalse: [^ self ___coercedThrowArg___: aType].
+	aValue == None ifTrue: [^ aType @env1:___pyCallValue___: { } kw: nil].
+	(aValue @env0:isKindOf: aType) ifTrue: [^ aValue].
+	(aValue @env0:isKindOf: tuple) ifTrue: [
+		^ aType @env1:___pyCallValue___: (Array @env0:withAll: aValue) kw: nil].
+	^ aType @env1:___pyCallValue___: { aValue } kw: nil
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___pyAttrStore___: aName put: aValue
+	"__name__ and __qualname__ are getsets in CPython, and their setter takes
+	only a string: ``gen.__name__ = 123'' is a TypeError.  Grail keeps them as
+	dynamic instVars, so the write was accepted, and a delete removed the name
+	altogether, after which reading it was an AttributeError
+	(test_generators test_name).  The size test keeps every other store at one
+	compare."
+
+	((aName @env0:size @env0:between: 8 and: 12)
+		and: [self ___isNameAttr___: aName])
+			ifTrue: [
+				(aValue @env0:isKindOf: CharacterCollection) ifFalse: [
+					^ TypeError ___signal___:
+						aName @env0:asString @env0:, ' must be set to a string object']].
+	^ super ___pyAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___pyAttrDelete___: aName
+	"CPython routes ``del gen.__name__'' through the same setter with no value,
+	so it is refused with the setter's own message.  See ___pyAttrStore___:put:."
+
+	((aName @env0:size @env0:between: 8 and: 12)
+		and: [self ___isNameAttr___: aName])
+			ifTrue: [
+				^ TypeError ___signal___:
+					aName @env0:asString @env0:, ' must be set to a string object'].
+	^ super ___pyAttrDelete___: aName
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___isNameAttr___: aName
+	"Is aName ``__name__'' or ``__qualname__''?"
+
+	| n |
+	n := aName @env0:asString.
+	^ (n @env0:= '__name__') or: [n @env0:= '__qualname__']
 %
 
 category: 'Grail-Generator Protocol'

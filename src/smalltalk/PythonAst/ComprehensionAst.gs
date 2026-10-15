@@ -288,12 +288,15 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock outerSou
 	"___iterN___ := iter __iter__.  The outermost iterable was already evaluated
 	into srcTemp in the enclosing scope above; inner generators evaluate here."
 	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
-	(anIndex = 1 and: [outerSourceOrNil notNil and: [isAsyncClause]])
+	(anIndex = 1 and: [outerSourceOrNil notNil])
 		ifTrue: [
-			"The async-genexp emission aiter'd the outermost iterable at
-			CREATION (GeneratorExpAst explains why); srcTemp already holds
-			the async iterator, and a second __aiter__ would be a protocol
-			violation for a one-shot iterable."
+			"A generator expression acquired its outermost iterator at
+			CREATION (GeneratorExpAst explains why), so srcTemp already holds
+			it.  Acquiring it again is not free even for the synchronous form:
+			an iterator need not have __iter__ at all, only __next__, and
+			CPython calls __iter__ on the iterable once
+			(test_genexpr_only_calls_dunder_iter_once).  For the async form a
+			second __aiter__ would be a protocol violation outright."
 			aStream nextPutAll: srcTemp; nextPutAll: '.'; lf]
 		ifFalse: [
 			isAsyncClause ifTrue: [
@@ -639,7 +642,7 @@ ___emitIRGenerators___: generators from: anIndex on: aBuilder innerBody: aBlock 
 				ifFalse: [outerSourceBlockOrNil value])).
 			self ___emitIRClause___: generators at: anIndex
 				source: [aBuilder var: srcLeaf]
-				alreadyAcquired: (outerSourceBlockOrNil notNil and: [gen is_async = 1])
+				alreadyAcquired: outerSourceBlockOrNil notNil
 				on: aBuilder innerBody: aBlock].
 		aBuilder atNode: gen iter.
 		aBuilder add: (aBuilder send: #value to: srcBlk with: { } env: 0)].
@@ -666,15 +669,15 @@ ___emitIRClauseIterator___: gen source: srcNode alreadyAcquired: alreadyAcquired
 	an uncatchable MessageNotUnderstood -- ``[x async for x in [1, 2]]'' is an
 	ordinary mistake."
 
+	"ALREADY ACQUIRED: a generator expression acquired its outermost iterator
+	at CONSTRUCTION (GeneratorExpAst explains why), so srcNode already holds
+	it.  Neither form may acquire it again: a second __aiter__ is a protocol
+	violation for a one-shot async iterable, and a second __iter__ fails on an
+	iterator that has only __next__, where CPython calls __iter__ once
+	(test_genexpr_only_calls_dunder_iter_once)."
+	alreadyAcquired ifTrue: [^ srcNode].
 	gen is_async = 1 ifFalse: [
 		^ aBuilder send: #'__iter__' to: srcNode with: { } env: 1].
-	"ALREADY ACQUIRED: the async-genexp emission aiter'd the outermost iterable
-	at CONSTRUCTION (GeneratorExpAst explains why), so srcNode already holds the
-	async iterator and a second __aiter__ would be a protocol violation for a
-	one-shot iterable.  The sync side can be careless here -- ``iter(iter(x))''
-	is ``iter(x)'' -- and the text's sync path duly sends __iter__ twice; the
-	async side cannot."
-	alreadyAcquired ifTrue: [^ srcNode].
 	^ aBuilder
 		send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
 		with: { srcNode } env: 1
