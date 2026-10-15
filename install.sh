@@ -264,7 +264,18 @@ echo "Kernel-class extensions: PER-USER session methods"
 # SystemUser step.  The extent-global base (Unicode comparison mode + the base
 # marker) is already in place by now -- either it was there, or the guard above
 # ran ./install_base.sh.
-LC_ALL=C topaz -lq -S src/smalltalk/install.gs
+# GRAIL_INSTALL=rowan loads the Grail Rowan project (rowan/, src/Grail-*) through Rowan
+# instead of filing in the topaz sources with src/smalltalk/install.gs. Both produce the
+# same image. A Rowan load compiles the whole project as ONE patch set, far past the
+# default temporary object space; GEM_TEMPOBJ_CACHE_SIZE is a ceiling the gem grows
+# into, not a reservation.
+case "${GRAIL_INSTALL:-topaz}" in
+    rowan) INSTALL_SCRIPT=scripts/install_rowan.gs ;;
+    topaz) INSTALL_SCRIPT=src/smalltalk/install.gs ;;
+    *) echo "Error: GRAIL_INSTALL must be 'topaz' or 'rowan', not '$GRAIL_INSTALL'."; exit 1 ;;
+esac
+echo "Installing with: $INSTALL_SCRIPT"
+LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CACHE_SIZE=1000000;" -S "$INSTALL_SCRIPT"
 
 if [ $? -ne 0 ]; then
     echo ""
