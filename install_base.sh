@@ -29,9 +29,9 @@
 # simply be folded into install.sh's own topaz login: the split is about
 # PRIVILEGE, not about idempotency (this script is idempotent).
 #
-# REQUIRES a 4.0 build of 2026-07-29 or later.  An older 4.0 lacks one or more of
-# the three fixes above and ./install.sh will fail while filing the kernel
-# extensions -- upgrade the product rather than reinstating the removed
+# REQUIRES a 4.0 build of 2026-07-29 or later for the three fixes above, and
+# ./install.sh requires 4.0.0.a5 (built 2026-10-15) or later for the Rowan that
+# loads Grail -- upgrade the product rather than reinstating the removed
 # capability probes.
 #
 # Every step logs in as SystemUser, so this script does NOT require the per-user
@@ -88,7 +88,7 @@ case "$GS_VERSION" in
     3.*)
         echo ""
         echo "Error: GemStone $GS_VERSION is not supported."
-        echo "  Grail requires GemStone 4.0 (build 2026-07-29 or later)."
+        echo "  Grail requires GemStone 4.0.0.a5 (build 2026-10-15) or later."
         echo "  Support for 3.7.x was removed; point \$GEMSTONE (in ./.setenv) at a 4.0 product."
         exit 1
         ;;

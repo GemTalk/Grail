@@ -71,11 +71,29 @@ case "$GS_VERSION" in
     3.*)
         echo ""
         echo "Error: GemStone $GS_VERSION is not supported."
-        echo "  Grail requires GemStone 4.0 (build 2026-07-29 or later)."
+        echo "  Grail requires GemStone 4.0.0.a5 (build 2026-10-15) or later."
         echo "  Support for 3.7.x was removed; point \$GEMSTONE (in ./.setenv) at a 4.0 product."
         exit 1
         ;;
 esac
+
+# ---------------------------------------------------------------------------
+# Guard: a 4.0 build whose Rowan can load Grail -- 4.0.0.a5 (built 2026-10-15) or later.
+# ---------------------------------------------------------------------------
+# Grail is a Rowan project, loaded from the product's extent0.rowan3.dbf, and it
+# needs Rowan masterV4 7d50ec0c8 or later (shadowsGlobals, unicodeSource,
+# gs_superclassDictionary, per-user session-method extensions of kernel classes),
+# which builds from 2026-10-15 ship. An older Rowan fails deep in the load with an
+# error that does not say so, and Rowan cannot yet check a project's required
+# version itself (https://github.com/GemTalk/Rowan/issues/977) -- so refuse here.
+GS_BUILD_DATE=$(grep -oE 'Build: [0-9]{4}-[0-9]{2}-[0-9]{2}' "$GEMSTONE/version.txt" 2>/dev/null | head -1 | cut -c8-)
+if [ -z "$GS_BUILD_DATE" ] || [[ "$GS_BUILD_DATE" < "2026-10-15" ]] || [ ! -f "$GEMSTONE/bin/extent0.rowan3.dbf" ]; then
+    echo ""
+    echo "Error: GemStone $GS_VERSION (build ${GS_BUILD_DATE:-unknown}) cannot load Grail."
+    echo "  Grail requires GemStone 4.0.0.a5 (build 2026-10-15) or later, whose"
+    echo "  bin/extent0.rowan3.dbf carries the Rowan that Grail is loaded with."
+    exit 1
+fi
 
 # ---------------------------------------------------------------------------
 # Guard: the ./.topazini login account must exist.
@@ -112,12 +130,12 @@ echo "Installing as: ${TOPAZINI_USER#GRAIL_TOPAZINI_USER=}"
 # ---------------------------------------------------------------------------
 # install.sh is the PER-USER layer: it logs in as an ordinary (non-SystemUser)
 # .topazini user, so it cannot create the SystemUser-owned base within its OWN
-# session.  If the base is missing, install.gs would otherwise die deep in module
+# session.  If the base is missing, the install would otherwise die deep in module
 # init with a cryptic SecurityError (a per-user session cannot modify the
 # policy-1 kernel method dictionaries).  So probe for the base marker here --
 # before the shim build -- and shell out to ./install_base.sh when it is absent.
 # Only a POSITIVE "absent" triggers that; an inconclusive probe (login/stone
-# failure, etc.) steps aside and lets install.gs surface that error itself.
+# failure, etc.) steps aside and lets the install surface that error itself.
 echo "Checking for the shared Grail base..."
 BASE_PROBE=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_base_installed.gs" 2>/dev/null)
 if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
@@ -149,7 +167,7 @@ if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
 
     # Re-probe rather than assume.  install_base.sh writes its marker LAST, so a
     # base that is still absent here means a step failed without a non-zero exit
-    # -- better caught now than as a SecurityError deep inside install.gs.
+    # -- better caught now than as a SecurityError deep inside the install.
     BASE_PROBE=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_base_installed.gs" 2>/dev/null)
     if printf '%s\n' "$BASE_PROBE" | grep -q 'GRAIL_BASE=absent'; then
         echo ""
@@ -237,17 +255,12 @@ echo "PYTHON_PACKAGE_PATH = $PYTHON_PACKAGE_PATH"
 # ---------------------------------------------------------------------------
 # Grail's extensions to the shared kernel classes (GsNMethod / System /
 # SymbolDictionary / ExecBlock + Object's ___new___ bridge allocators) are filed
-# PER-USER as session methods by install.gs, so several users can each install
-# their own Grail on one stone without overwriting each other.  MR #6 permits
-# env-1 session methods on the restricted classes and the 2/3/4-arg
-# with:...performMethod: variants are kernel-native, so no SystemUser step files
-# any of it.
-#
-# This used to be a generated include (out/gen/kernel_class_extensions.gs),
-# because on 3.7.x the same files had to be filed as SHARED SystemUser methods by
-# install_base37.gs and the per-user include had to be EMPTY.  With 3.7.x
-# dropped there is only one answer, so install.gs inputs
-# scripts/kernel_class_extensions.gs directly.
+# PER-USER as session methods (the Grail-Kernel and Grail-Kernel-PyEnv packages,
+# which Rowan loads as session methods into the user's GrailSessionMethods
+# dictionary), so several users can each install their own Grail on one stone
+# without overwriting each other.  MR #6 permits env-1 session methods on the
+# restricted classes and the 2/3/4-arg with:...performMethod: variants are
+# kernel-native, so no SystemUser step files any of it.
 #
 # Report the product anyway: the three-part version no longer branches, but the
 # rest of version.txt identifies the BINARY, which the version alone cannot.  CI
@@ -264,18 +277,11 @@ echo "Kernel-class extensions: PER-USER session methods"
 # SystemUser step.  The extent-global base (Unicode comparison mode + the base
 # marker) is already in place by now -- either it was there, or the guard above
 # ran ./install_base.sh.
-# GRAIL_INSTALL=rowan loads the Grail Rowan project (rowan/, src/Grail-*) through Rowan
-# instead of filing in the topaz sources with src/smalltalk/install.gs. Both produce the
-# same image. A Rowan load compiles the whole project as ONE patch set, far past the
-# default temporary object space; GEM_TEMPOBJ_CACHE_SIZE is a ceiling the gem grows
-# into, not a reservation.
-case "${GRAIL_INSTALL:-topaz}" in
-    rowan) INSTALL_SCRIPT=scripts/install_rowan.gs ;;
-    topaz) INSTALL_SCRIPT=src/smalltalk/install.gs ;;
-    *) echo "Error: GRAIL_INSTALL must be 'topaz' or 'rowan', not '$GRAIL_INSTALL'."; exit 1 ;;
-esac
-echo "Installing with: $INSTALL_SCRIPT"
-LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CACHE_SIZE=1000000;" -S "$INSTALL_SCRIPT"
+# Rowan loads the Grail project (rowan/specs/Grail.ston: the Tonel packages in
+# src/Grail-*, with the pre-/post-load doits in rowan/components/doits). A Rowan load
+# compiles the whole project as ONE patch set, far past the default temporary object
+# space; GEM_TEMPOBJ_CACHE_SIZE is a ceiling the gem grows into, not a reservation.
+LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CACHE_SIZE=1000000;" -S scripts/install_rowan.gs
 
 if [ $? -ne 0 ]; then
     echo ""
@@ -296,7 +302,7 @@ fi
 # Deploying here makes that import a warm BIND instead: measured 0 modified
 # objects against 8 for the cold path.
 #
-# It has to run AFTER src/smalltalk/install.gs, not before: install.gs recreates
+# It has to run AFTER the Rowan load, not before: the load recreates
 # the Python runtime classes and bumps GrailRuntimeGeneration, which invalidates
 # every existing deployment (docs/Persistent_Modules_and_Classes.md §5 D7).  A
 # deploy from before the bump would be discarded by the generation guard on the
@@ -332,7 +338,7 @@ fi
 # _ucd.Database (~0.55s, ~0.42s more for the 3.2.0 one stringprep and IDNA
 # use), cached in a module global -- so every session paid it again, and was
 # left with something to commit.  Built and committed here, a fresh session's
-# first call costs milliseconds and writes nothing.  After install.gs for the
+# first call costs milliseconds and writes nothing.  After the Rowan load for the
 # same reason as gemdb above; idempotent likewise.
 #
 # A failure here is a WARNING, not an install failure: Grail works without
