@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Regenerate src/smalltalk/Python/unicode_names.gs from the Unicode
-Character Database that the running CPython carries.
+"""Regenerate the unicode_names module's data (src/Grail-Python-Modules/
+unicode_names.class.st) from the Unicode Character Database that the running
+CPython carries.
 
 WHY THIS EXISTS.  Grail resolved ``\\N{NAME}`` against a HAND-CURATED table
 of 33 names, in TWO places -- PythonTokenizer >> ___unicodeNameToCodePoint___:
@@ -17,7 +18,7 @@ Egyptian hieroglyphs, ...), or a Hangul syllable composed from jamo -- and
 CPython computes those rather than storing them too.  So does the generated
 module: this script emits the explicit table plus the RANGES of each
 algorithmic family, read out of the UCD rather than written down here, and
-unicode_names.gs does the arithmetic.
+the unicode_names module does the arithmetic.
 
 ENCODING.  Unicode names use only ``A-Z``, ``0-9``, space and hyphen, so a
 chunk is one Smalltalk string literal of ``NAME=HEX;NAME=HEX;...`` needing no
@@ -30,11 +31,16 @@ Run with the SAME CPython version Grail vendors (3.14.x):
 """
 import io
 import itertools
+import os
 import re
 import sys
 import unicodedata
 
-GS = 'src/smalltalk/Python/unicode_names.gs'
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__))))
+from tonel_methods import Method, remove_methods, set_class_comment, set_methods  # noqa: E402
+
+TONEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..',
+                     'src', 'Grail-Python-Modules', 'unicode_names.class.st')
 CHUNK = 1000
 
 # A name ending in "-<hex of this code point>" is algorithmic.  Matched
@@ -208,30 +214,12 @@ def main():
     verify(lead, vowel, trail)
 
     chunks = [explicit[i:i + CHUNK] for i in range(0, len(explicit), CHUNK)]
-    out = io.StringIO()
-    w = out.write
-
-    w("! ------------------- Superclass check\n"
-      "run\n"
-      "NativeModule ifNil: [self error: 'NativeModule is not defined. Check file ordering.'].\n"
-      "%\n\n")
-    w("! ------- unicode_names (GENERATED -- see scripts/generate_unicode_names.py)\n"
-      "expectvalue /Class\n"
-      "doit\n"
-      "NativeModule subclass: 'unicode_names'\n"
-      "  instVarNames: #()\n"
-      "  classVars: #( NameToCp CpToName )\n"
-      "  classInstVars: #()\n"
-      "  poolDictionaries: #()\n"
-      "  inDictionary: Python\n"
-      "  options: #()\n%\n\n")
-    w("expectvalue /Class\ndoit\nunicode_names comment:\n'")
-    w("Unicode character names, GENERATED from the UCD.\n\n"
+    comment = ("Unicode character names, GENERATED from the UCD.\n\n"
       "DO NOT EDIT: regenerate with scripts/generate_unicode_names.py, which\n"
-      "documents why this exists.  In short, ``\\N{NAME}'''' used to resolve\n"
+      "documents why this exists.  In short, ``\\N{NAME}\'\' used to resolve\n"
       "against a hand-curated table of 33 names kept in TWO places, and a name\n"
       "outside it was a SyntaxError -- so one unremarkable literal,\n"
-      "``\"\\N{EMPTY SET}\"'''', cost a whole 5300-line test module.\n\n"
+      "``\"\\N{EMPTY SET}\"\'\', cost a whole 5300-line test module.\n\n"
       "%d names are stored here, plus %d name ALIASES kept apart -- every\n"
       "category of NameAliases.txt, since CPython accepts them all and code\n"
       "spells them (\\N{BYTE ORDER MARK}).  The other %d that the UCD names are\n"
@@ -239,65 +227,61 @@ def main():
       "jamo, and %d code points whose name is a fixed prefix plus their own\n"
       "hex.  CPython does exactly this split, for the same reason -- storing\n"
       "them would quadruple the table to say nothing new.\n\n"
-      "Unicode version: %s.'\n%%\n\n"
+      "Unicode version: %s."
       % (len(explicit), len(aliases),
          sum(len(v) for v in algo.values()) + (HANGUL_LAST - HANGUL_BASE + 1),
          HANGUL_LAST - HANGUL_BASE + 1,
          sum(len(v) for v in algo.values()),
          unicodedata.unidata_version))
-    w("expectvalue /Class\ndoit\nunicode_names category: 'Grail-Modules'\n%\n\n")
-    w("expectvalue /Metaclass3\ndoit\n"
-      "unicode_names removeAllMethods: 0.\n"
-      "unicode_names class removeAllMethods: 0.\n%\n\n")
-    w("set compile_env: 0\n\n")
 
+    def gen(source):
+        return Method(meta=True, category='Grail-Generated Data', source=source)
+
+    methods = []
     # ---- the explicit table, one literal per chunk ----------------------
     for i, chunk in enumerate(chunks, 1):
         body = ';'.join('%s=%X' % (n, cp) for n, cp in chunk)
-        w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
-        w("___nameChunk%d\n\t\"%d entries, %s .. %s.\"\n\n\t^ %s\n%%\n\n"
-          % (i, len(chunk), chunk[0][0], chunk[-1][0], literal(body)))
+        methods.append(gen("___nameChunk%d\n\t\"%d entries, %s .. %s.\"\n\n\t^ %s\n"
+                           % (i, len(chunk), chunk[0][0], chunk[-1][0], literal(body))))
 
     # Aliases live APART from the names, because they are lookup-only.
     # unicodedata.name(chr(0)) raises in CPython even though
     # unicodedata.lookup('NULL') answers -- an alias names a code point
     # that HAS no name -- so only the forward map may see these.
-    w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
-    w("___aliasData\n"
+    methods.append(gen("___aliasData\n"
       "\t\"%d name aliases.  LOOKUP-ONLY: they are merged into the\n"
       "\tname-to-code-point map and deliberately NOT into its inverse, because\n"
       "\tan alias is not a name -- unicodedata.name(chr(0)) raises in CPython\n"
       "\twhile unicodedata.lookup('NULL') answers 0, and name(chr(0xFEFF)) is\n"
-      "\tZERO WIDTH NO-BREAK SPACE, never BYTE ORDER MARK.\"\n\n\t^ %s\n%%\n\n"
-      % (len(aliases), literal(';'.join('%s=%X' % (n, cp) for n, cp in aliases))))
+      "\tZERO WIDTH NO-BREAK SPACE, never BYTE ORDER MARK.\"\n\n\t^ %s\n"
+      % (len(aliases), literal(';'.join('%s=%X' % (n, cp) for n, cp in aliases)))))
 
-    w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
-    w("___chunkCount\n\t\"Number of ___nameChunkN methods above.\"\n\n\t^ %d\n%%\n\n"
-      % len(chunks))
+    methods.append(gen("___chunkCount\n\t\"Number of ___nameChunkN methods above.\"\n\n\t^ %d\n"
+                       % len(chunks)))
 
     # ---- algorithmic families ------------------------------------------
     parts = []
     for prefix in sorted(algo):
         for lo, hi in ranges(algo[prefix]):
             parts.append("\t\t{ '%s'. 16r%X. 16r%X }." % (prefix, lo, hi))
-    w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
-    w("___algorithmicRanges\n"
+    methods.append(gen("___algorithmicRanges\n"
       "\t\"Families whose name is PREFIX-<own hex>.  Read out of the UCD by the\n"
       "\tgenerator, so a new range in a later Unicode version arrives by\n"
-      "\tregenerating rather than by editing code.\"\n\n\t^ {\n%s\n\t}\n%%\n\n"
-      % '\n'.join(parts))
+      "\tregenerating rather than by editing code.\"\n\n\t^ {\n%s\n\t}\n"
+      % '\n'.join(parts)))
 
     for nm, tbl in (('Lead', lead), ('Vowel', vowel), ('Trail', trail)):
-        w("category: 'Grail-Generated Data'\nclassmethod: unicode_names\n")
-        w("___hangul%s\n\t\"Jamo name parts, derived from real syllables.\"\n\n\t^ #( %s )\n%%\n\n"
-          % (nm, ' '.join("'%s'" % p for p in tbl)))
+        methods.append(gen("___hangul%s\n\t\"Jamo name parts, derived from real syllables.\"\n\n\t^ #( %s )\n"
+                           % (nm, ' '.join("'%s'" % p for p in tbl))))
 
-    io.open(GS, 'w', encoding='utf-8').write(out.getvalue())
+    # a later Unicode version may need fewer chunks: drop the stale ones
+    remove_methods(TONEL, lambda meta, sel: not (meta and re.fullmatch(r'___nameChunk(\d+)', sel)
+                                                 and int(sel[len('___nameChunk'):]) > len(chunks)))
+    set_methods(TONEL, 'unicode_names', methods)
+    set_class_comment(TONEL, comment)
     print('%s: %d explicit names in %d chunks, %d algorithmic ranges'
-          % (GS, len(explicit), len(chunks), len(parts)))
-    print('Unicode %s; file is %.2f MB'
-          % (unicodedata.unidata_version,
-             len(out.getvalue().encode('utf-8')) / 1048576))
+          % (os.path.relpath(TONEL), len(explicit), len(chunks), len(parts)))
+    print('Unicode %s' % unicodedata.unidata_version)
 
 
 if __name__ == '__main__':

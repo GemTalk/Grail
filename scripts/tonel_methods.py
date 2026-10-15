@@ -106,3 +106,36 @@ def set_methods(path, class_name, methods):
             blocks.insert(i, [method.meta, sel, new])
     with open(path, 'w', encoding='utf-8') as f:
         f.write(header + ''.join('\n' + blk[2] for blk in blocks))
+
+
+def remove_methods(path, keep_if):
+    """Remove the methods for which keep_if(meta, selector) is false."""
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+    starts = [m.start() for m in _BLOCK_START.finditer(text)]
+    if not starts:
+        return
+    header = text[:starts[0] - 1]
+    kept = []
+    for i, a in enumerate(starts):
+        b = starts[i + 1] - 1 if i + 1 < len(starts) else len(text)
+        block = text[a:b]
+        m = _BLOCK_START.match(block)
+        bracket = block.index(' [', m.end())
+        if keep_if(bool(m.group(2)), selector_of(block[m.end():bracket] + '\n')):
+            kept.append(block)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(header + ''.join('\n' + blk for blk in kept))
+
+
+def set_class_comment(path, comment):
+    """Set the class comment of a Tonel class file. Rowan's reader trims one line ending (and
+    spaces and tabs) from each end of a comment, so a comment that itself starts or ends with
+    whitespace is padded with a newline there."""
+    with open(path, encoding='utf-8') as f:
+        text = f.read()
+    at = text.index('Class {')
+    lead = '\n' if comment[:1].isspace() else ''
+    trail = '\n' if comment[-1:].isspace() else ''
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write('"' + lead + comment.replace('"', '""') + trail + '"\n' + text[at:])
