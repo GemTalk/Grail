@@ -951,6 +951,20 @@ ag_suspended
 
 category: 'Grail-Async Generator Protocol'
 method: PythonAsyncGenerator
+___readOnlyGetsetNames___
+	"See PythonGenerator >> ___refuseReadOnlyAttr___:."
+
+	^ #('ag_await' 'ag_code' 'ag_frame' 'ag_suspended')
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+___readOnlyMemberNames___
+	^ #('ag_running')
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
 ag_code
 	"Python's ``agen.ag_code'' -- the async-generator spelling of gi_code."
 
