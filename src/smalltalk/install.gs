@@ -477,6 +477,7 @@ run
 	at: #'set' put: nil;
 	at: #'set_iterator' put: nil;
 	at: #'ShimForeignObject' put: nil;
+	at: #'ShimForeignSubclass' put: nil;
 	at: #'slice' put: nil;
 	at: #'StopAsyncIteration' put: nil;
 	at: #'StopIteration' put: nil;

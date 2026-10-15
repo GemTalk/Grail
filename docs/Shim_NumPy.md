@@ -991,11 +991,8 @@ fix's control fails it.
    array or dtype, an override's `__array_function__`, a ufunc calling a
    Python `__array_ufunc__`, and any callback that reads a wheel object two
    deep.
-2. **A Python subclass of `ndarray` cannot be instantiated** ("Grail cannot
-   yet make an instance of a Python subclass of the C extension type"):
-   `np.matrix`, `ndarray.view(Sub)`, and `numpy.ma` (whose `MaskedArray`
-   import fails part-way, so `np.ma.masked_array` and `np.ma.is_masked` are
-   missing -- and `np.percentile` uses the latter).
+2. ~~**A Python subclass of `ndarray` cannot be instantiated**~~: fixed in
+   stage 7, below.
 3. **`numpy.random` -- Cython.**  Its modules are Cython-generated, and
    between them import ~50 CPython symbols the shim does not export
    (`nm -u` over numpy's `.so` files against `libcpython_ua`): Cython's
@@ -1013,8 +1010,8 @@ fix's control fails it.
    (`len`, `==`); a `numpy.str_` is built zeroed.
 6. **Session-killers**: `np.save`/`np.load` (error 2085, "Expected
    numpy.bool to be a Boolean"); `np.savetxt`/`np.loadtxt` (core dump).
-7. **`np.unique`**: a codegen CompileError 1001 ("You may not compile a
-   method for this selector").
+7. ~~**`np.unique`**: a codegen CompileError 1001~~: fixed by #1639
+   (reserved selector names).
 8. Smaller: `np.allclose` ("'ShimForeignObject' object is not callable"),
    `format(np.float64(1.5), '.1f')`, `pickle`/`copy.deepcopy` of an array
    ("issubclass() arg 1 must be a class"), `memoryview(ndarray)` and the
@@ -1022,6 +1019,47 @@ fix's control fails it.
    `np.char.upper` (AlmostOutOfStack), and `np.array.__doc__` (C docstrings
    are not read back).
 9. **A Grail generator cannot be iterated from C.**
+
+## Stage 7 (2026-10-15): Python subclasses of ndarray make instances
+
+Frontier item 2 above is closed by option A of
+[Shim_Foreign_Subclassing.md](Shim_Foreign_Subclassing.md) (§8 there says
+what was built). A subclass instance is a C body of a per-class subtype mirror plus a
+Grail half. The census now agrees with CPython on these, with the sanity and
+mac checks skipped as before:
+* `np.matrix`: creation, `*` and `.T`;
+* ndarray subclassing and `view(Sub)`;
+* `np.recarray` field access;
+* `numpy.ma`: import, `sum`, `filled` and `masked`;
+* `np.unique` and `np.percentile`.
+
+`numpy.ma` also needs module-level function docstrings (#1646). It rewrites
+`np.fromfunction.__doc__` and asserts that the text it replaces is there.
+
+The subclass work exposed these general shim defects, now fixed:
+
+* **`PyErr_Format` lost its error.** It set the exception before
+  formatting, and a `%R` that called back into Grail cleared it. It now
+  formats first.
+* **`PyObject_HasAttrString` sent a message instead of reading the
+  attribute**, so `np.dtype(V)` for a class with a `dtype` attribute
+  answered nil. It now reads, and answers in C for a wheel's own objects.
+* **`PyObject_IsInstance` / `IsSubclass` against a C type** answer in C,
+  which also saves a user action on numpy's hot paths.
+* **`iter()` on a C object with only `sq_item`** falls back to
+  `PySeqIter_New`, as CPython does.
+* **A C function's `__doc__` and `__text_signature__`** are split from its
+  internal doc as CPython's `find_signature` splits them. `inspect.signature`
+  reads `__text_signature__` for builtins.
+
+Still open on this front:
+* `matrix.I`, which is Python code inside a C callback reading a base
+  attribute, so it is three user actions deep (frontier item 1);
+* `memmap`, which needs an `mmap` module.
+
+`np.loadtxt` and `np.save`/`np.load` still kill the session (frontier
+item 6), so the census runs with
+`NP_SKIP=savetxt/loadtxt,np.save/load`.
 
 ## Repro
 

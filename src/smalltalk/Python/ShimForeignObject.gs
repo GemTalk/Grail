@@ -45,7 +45,7 @@ CPythonShim>>foreignProxyForPointer:typeName:.'
 expectvalue /Class
 doit
 PythonInstance subclass: 'ShimForeignSubclass'
-  instVarNames: #()
+  instVarNames: #(grailForeignBody grailBodyProxy)
   classVars: #()
   classInstVars: #()
   poolDictionaries: #()
@@ -60,13 +60,13 @@ ShimForeignSubclass comment:
 own type -- ``class memmap(ndarray)'' -- built by ShimForeignObject>>
 ___subclass___:instVarNames:classInstVarNames:.
 
-A STOPGAP (docs/Shim_Foreign_Subclassing.md, option C).  An instance of such
-a class needs a C body in the base''s layout, and Grail cannot make one yet,
-so the class statement succeeds -- the class can be imported, inspected,
-subclassed and named in issubclass -- and calling it refuses with CPython''s
-``cannot create ''X'' instances'', before any __new__ can hand C a type it
-cannot allocate.  The Python-visible bases name the foreign type, not this
-class.'
+An instance is two halves (docs/Shim_Foreign_Subclassing.md, option A, and
+its section 8): a C body in the base''s layout, allocated through the
+class''s subtype mirror (CPythonShim>>___buildSubtypeMirrorFor:), and an
+instance of the Python class -- this one''s subclass -- which holds the body
+in grailForeignBody.  A name the Python classes do not define is the C
+base''s, read through the body.  The Python-visible bases name the foreign
+type, not this class.'
 %
 
 ! ------------------- env:0 accessors (set by the server) -----------------------
@@ -205,18 +205,26 @@ set compile_env: 1
 category: 'Grail-Foreign Subclassing'
 classmethod: ShimForeignSubclass
 ___grailMetaclassCall___: positional kw: kwargs
-	"``cls(...)'' -- refused, with CPython's message for a class it cannot
-	instantiate and the reason.  This is the first thing every class's
-	synthesized instantiation method asks, so the refusal comes before any
-	__new__ runs: numpy's memmap.__new__ would otherwise call
-	ndarray.__new__(memmap, ...), handing numpy a type it cannot allocate."
+	"``cls(...)'' -- type_call for a class whose base is a C type: its __new__
+	(a Python one, or the base's tp_new through ``base.__new__'', which
+	allocates through the class's subtype mirror: CPythonShim>>
+	PyType_AllocForeignSubclass:type:basicSize:), then a Python __init__ when
+	a class below the base defines one and the result is an instance."
 
-	| base |
-	base := ShimForeignSubclass @env0:___foreignBaseOf: self.
-	^ TypeError ___signal___: ((('cannot create ''' @env0:, self @env0:name @env0:asString)
-		@env0:, ''' instances: Grail cannot yet make an instance of a Python subclass of the C extension type ''')
-		@env0:, (base @env0:isNil ifTrue: ['?'] ifFalse: [base @env0:typeName]))
-		@env0:, ''''
+	| newFn obj base |
+	"A C base with no tp_new cannot make instances, and no subtype of it can
+	unless Python supplies a __new__: CPython's type_call refuses with the
+	SUBTYPE's name, which it inherits a NULL tp_new along with."
+	(self ___grailDefinesBelowForeignBase___: '__new__') ifFalse: [
+		base := ShimForeignSubclass @env0:___foreignBaseOf: self.
+		(base @env0:notNil and: [(CPythonShim @env0:current @env0:foreignTypeHasNew: base @env0:cPtr) not])
+			ifTrue: [^ TypeError ___signal___:
+				('cannot create ''' @env0:, (self ___pyAttrLoad___: #'__name__') @env0:asString @env0:, ''' instances')]].
+	newFn := self ___pyAttrLoad___: #'__new__'.
+	obj := newFn value: ((Array @env0:with: self) @env0:, positional) value: kwargs.
+	((obj @env0:isKindOf: self) and: [self ___grailDefinesBelowForeignBase___: '__init__'])
+		ifTrue: [(obj ___pyAttrLoad___: #'__init__') value: positional value: kwargs].
+	^ obj
 %
 
 category: 'Grail-Foreign Subclassing'
@@ -353,6 +361,11 @@ ___grailForeignTypeCheck___: aCandidate subclass: aBoolean
 	ptr := (aCandidate @env0:isKindOf: ShimForeignObject)
 		ifTrue: [aCandidate @env0:cPtr]
 		ifFalse: [0].
+	"An instance of a Python subclass of a C type is its body, typed by the
+	class's subtype mirror, whose tp_base chain reaches the C type."
+	((ptr @env0:= 0) and: [aCandidate @env0:isKindOf: ShimForeignSubclass]) ifTrue: [
+		aCandidate @env0:___grailForeignBody___ @env0:ifNotNil: [:body |
+			ptr := body @env0:memoryAddress]].
 	"A Grail class built on a foreign type (ShimForeignSubclass) is a subclass
 	of every type its foreign base is."
 	(aBoolean == true and: [(ptr @env0:= 0) and: [aCandidate @env0:isBehavior]]) ifTrue: [
@@ -887,6 +900,536 @@ __repr__
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	r == nil ifTrue: [^ self @env0:printString].
 	^ r
+%
+
+
+! ------- ShimForeignSubclass instances: a Grail half and its C body ----------
+set compile_env: 0
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+___grailForeignBody___
+	"The C body of this instance: a gcMalloc'd block in the foreign base's
+	layout whose ob_type is the class's subtype mirror and whose last word is
+	this object's OOP (CPythonShim>>PyType_AllocForeignSubclass:type:basicSize:).
+	nil for an instance no allocator made."
+
+	^ grailForeignBody
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+___grailForeignBody___: aCByteArray
+	grailForeignBody := aCByteArray
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+___grailBodyProxy___
+	"A ShimForeignObject over the body: what the base type does -- its
+	attributes, operators and C protocol -- is asked of it.  Its pointer is the
+	body's, so whatever it hands C is the body again, and whatever C answers
+	that is a body of a subclass instance comes back as its Grail half."
+
+	grailBodyProxy isNil ifTrue: [
+		grailBodyProxy := ShimForeignObject new
+			setCPtr: grailForeignBody memoryAddress
+			typeName: self class name asString].
+	^ grailBodyProxy
+%
+
+category: 'Grail-Foreign Subclassing'
+classmethod: ShimForeignSubclass
+___grailNoFallbackFor: anObject name: aSym
+	"Is the fall back to the C base turned off for this read, because C is
+	asking and reads the base's part itself (CPythonShim>>
+	foreignSubclassGetAttr:name:)?"
+
+	| key |
+	key := SessionTemps current at: #'GrailForeignNoFallback' otherwise: nil.
+	^ key notNil and: [key key == anObject and: [key value == aSym]]
+%
+
+category: 'Grail-Foreign Subclassing'
+classmethod: ShimForeignSubclass
+___grailForeignBaseProxy___
+	"The proxy of the C type this class descends from (see ___foreignBaseOf:)."
+
+	^ ShimForeignSubclass ___foreignBaseOf: self
+%
+
+set compile_env: 1
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+___pyAttrForeignBaseLoad___: aSym
+	"What the Python classes and the instance do not define is the base type's,
+	read off the body -- ndarray's ``shape'', ``sum'', ``T'' on a memmap --
+	before __getattr__ and the AttributeError (object>>___pyAttrLoad___:).
+	CPython's order differs only for a base DATA descriptor shadowed by an
+	instance attribute of the same name."
+
+	| found v |
+	grailForeignBody @env0:isNil ifTrue: [^ nil].
+	(ShimForeignSubclass @env0:___grailNoFallbackFor: self name: aSym) ifTrue: [^ nil].
+	found := true.
+	v := [self @env0:___grailBodyProxy___ ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError do: [:ex | found := false. ex @env0:return: nil].
+	found ifFalse: [^ nil].
+	^ aSym @env0:-> v
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__add__: other
+	^ self @env0:___grailBodyProxy___ __add__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__radd__: other
+	^ self @env0:___grailBodyProxy___ __radd__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__sub__: other
+	^ self @env0:___grailBodyProxy___ __sub__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rsub__: other
+	^ self @env0:___grailBodyProxy___ __rsub__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__mul__: other
+	^ self @env0:___grailBodyProxy___ __mul__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rmul__: other
+	^ self @env0:___grailBodyProxy___ __rmul__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__matmul__: other
+	^ self @env0:___grailBodyProxy___ __matmul__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rmatmul__: other
+	^ self @env0:___grailBodyProxy___ __rmatmul__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__truediv__: other
+	^ self @env0:___grailBodyProxy___ __truediv__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rtruediv__: other
+	^ self @env0:___grailBodyProxy___ __rtruediv__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__floordiv__: other
+	^ self @env0:___grailBodyProxy___ __floordiv__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rfloordiv__: other
+	^ self @env0:___grailBodyProxy___ __rfloordiv__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__mod__: other
+	^ self @env0:___grailBodyProxy___ __mod__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rmod__: other
+	^ self @env0:___grailBodyProxy___ __rmod__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__divmod__: other
+	^ self @env0:___grailBodyProxy___ __divmod__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rdivmod__: other
+	^ self @env0:___grailBodyProxy___ __rdivmod__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__lshift__: other
+	^ self @env0:___grailBodyProxy___ __lshift__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rlshift__: other
+	^ self @env0:___grailBodyProxy___ __rlshift__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rshift__: other
+	^ self @env0:___grailBodyProxy___ __rshift__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rrshift__: other
+	^ self @env0:___grailBodyProxy___ __rrshift__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__and__: other
+	^ self @env0:___grailBodyProxy___ __and__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rand__: other
+	^ self @env0:___grailBodyProxy___ __rand__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__or__: other
+	^ self @env0:___grailBodyProxy___ __or__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ror__: other
+	^ self @env0:___grailBodyProxy___ __ror__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__xor__: other
+	^ self @env0:___grailBodyProxy___ __xor__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rxor__: other
+	^ self @env0:___grailBodyProxy___ __rxor__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__pow__: other
+	^ self @env0:___grailBodyProxy___ __pow__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__pow__: other _: modulus
+	^ self @env0:___grailBodyProxy___ __pow__: other _: modulus
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__rpow__: other
+	^ self @env0:___grailBodyProxy___ __rpow__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__iadd__: other
+	^ self @env0:___grailBodyProxy___ __iadd__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__isub__: other
+	^ self @env0:___grailBodyProxy___ __isub__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__imul__: other
+	^ self @env0:___grailBodyProxy___ __imul__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__imatmul__: other
+	^ self @env0:___grailBodyProxy___ __imatmul__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__itruediv__: other
+	^ self @env0:___grailBodyProxy___ __itruediv__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ifloordiv__: other
+	^ self @env0:___grailBodyProxy___ __ifloordiv__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__imod__: other
+	^ self @env0:___grailBodyProxy___ __imod__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ipow__: other
+	^ self @env0:___grailBodyProxy___ __ipow__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ilshift__: other
+	^ self @env0:___grailBodyProxy___ __ilshift__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__irshift__: other
+	^ self @env0:___grailBodyProxy___ __irshift__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__iand__: other
+	^ self @env0:___grailBodyProxy___ __iand__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ior__: other
+	^ self @env0:___grailBodyProxy___ __ior__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ixor__: other
+	^ self @env0:___grailBodyProxy___ __ixor__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__lt__: other
+	^ self @env0:___grailBodyProxy___ __lt__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__le__: other
+	^ self @env0:___grailBodyProxy___ __le__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__eq__: other
+	^ self @env0:___grailBodyProxy___ __eq__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ne__: other
+	^ self @env0:___grailBodyProxy___ __ne__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__gt__: other
+	^ self @env0:___grailBodyProxy___ __gt__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__ge__: other
+	^ self @env0:___grailBodyProxy___ __ge__: other
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__neg__
+	^ self @env0:___grailBodyProxy___ __neg__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__pos__
+	^ self @env0:___grailBodyProxy___ __pos__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__abs__
+	^ self @env0:___grailBodyProxy___ __abs__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__invert__
+	^ self @env0:___grailBodyProxy___ __invert__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__len__
+	^ self @env0:___grailBodyProxy___ __len__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__iter__
+	^ self @env0:___grailBodyProxy___ __iter__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__next__
+	^ self @env0:___grailBodyProxy___ __next__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__float__
+	^ self @env0:___grailBodyProxy___ __float__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__int__
+	^ self @env0:___grailBodyProxy___ __int__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__index__
+	^ self @env0:___grailBodyProxy___ __index__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__bool__
+	^ self @env0:___grailBodyProxy___ __bool__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__hash__
+	^ self @env0:___grailBodyProxy___ __hash__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__getitem__: key
+	^ self @env0:___grailBodyProxy___ __getitem__: key
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__setitem__: key _: value
+	^ self @env0:___grailBodyProxy___ __setitem__: key _: value
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__delitem__: key
+	^ self @env0:___grailBodyProxy___ __delitem__: key
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__contains__: value
+	^ self @env0:___grailBodyProxy___ __contains__: value
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__str__
+	^ self @env0:___grailBodyProxy___ __str__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+__repr__
+	^ self @env0:___grailBodyProxy___ __repr__
+%
+
+category: 'Grail-Foreign Subclassing'
+method: ShimForeignSubclass
+___pyAttrStore___: aName put: aValue
+	"A DATA descriptor of the C base -- ndarray's ``shape'' (numpy's matrix
+	sets ``self.shape'' in __array_finalize__), ``dtype'' -- is the base's to
+	set, through the body; every other name is this half's own attribute, as
+	it would be the instance dict's in CPython.  The base's descriptor names
+	are fetched once per type (CPythonShim>>foreignDataDescriptorNames:), so an
+	ordinary store needs no call into C."
+
+	| shim body |
+	body := grailForeignBody.
+	body @env0:notNil ifTrue: [
+		shim := CPythonShim @env0:current.
+		((shim @env0:foreignDataDescriptorNames: (body @env0:int64At: 8))
+				@env0:includes: aName @env0:asSymbol)
+			ifTrue: [
+				(shim @env0:foreignSetAttr: body @env0:memoryAddress
+					name: aName @env0:asString value: aValue) == true ifTrue: [^ aValue]]].
+	^ super ___pyAttrStore___: aName put: aValue
+%
+
+category: 'Grail-Foreign Subclassing'
+classmethod: ShimForeignSubclass
+___pyAttrLoad___: aSym
+	"A class attribute the Python classes do not define is the foreign base's:
+	``memmap.sum'', and the ``__array_finalize__'' numpy reads off the TYPE and
+	compares with ndarray's own.  ``__new__'' too, unless a Python class below
+	the base defines it: object's would make an instance with no body."
+
+	| found v noFallback |
+	noFallback := ShimForeignSubclass @env0:___grailNoFallbackFor: self name: aSym.
+	(aSym == #'__new__' and: [noFallback not]) ifTrue: [
+		(self ___grailDefinesBelowForeignBase___: '__new__') ifFalse: [
+			^ self @env0:___grailForeignBaseProxy___ ___pyAttrLoad___: aSym]].
+	found := true.
+	v := [super ___pyAttrLoad___: aSym]
+		@env0:on: AttributeError do: [:ex | found := false. ex @env0:return: nil].
+	found ifTrue: [^ v].
+	noFallback ifTrue: [^ super ___pyAttrLoad___: aSym].
+	^ self @env0:___grailForeignBaseProxy___ ___pyAttrLoad___: aSym
+%
+
+category: 'Grail-Foreign Subclassing'
+classmethod: ShimForeignSubclass
+___grailDefinesBelowForeignBase___: aName
+	"Does a Python class between this one and the foreign base define aName
+	in its own __dict__?"
+
+	| c |
+	c := self.
+	[c @env0:notNil and: [c ~~ ShimForeignSubclass]] whileTrue: [
+		((c ___pyAttrLoad___: #'__dict__') __contains__: aName) == true ifTrue: [^ true].
+		c := c @env0:superclass].
+	^ false
 %
 
 set compile_env: 0
