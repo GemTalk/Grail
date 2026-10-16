@@ -810,6 +810,7 @@ run
 	at: #'ClassBodyNestedDefBindingTestCase' put: nil;
 	at: #'ClassBodyNonlocalTestCase' put: nil;
 	at: #'ClassBodyRebindingAndInstanceDictTestCase' put: nil;
+	at: #'ClassBodyRebindingOrderTestCase' put: nil;
 	at: #'ClassBodyRebindingTestCase' put: nil;
 	at: #'ClassBodySourceOrderTestCase' put: nil;
 	at: #'ClassBodyTempsTestCase' put: nil;
@@ -2403,6 +2404,7 @@ input src/smalltalk/PythonTests/ClassBodyNamespaceTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNestedDefBindingTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyNonlocalTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyRebindingAndInstanceDictTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyRebindingOrderTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyRebindingTestCase.gs
 input src/smalltalk/PythonTests/ClassBodySourceOrderTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyTempsTestCase.gs

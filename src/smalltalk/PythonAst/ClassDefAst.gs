@@ -1738,11 +1738,12 @@ printSmalltalkRuntimeOn: aStream
 		so NameAst falls back to module scope for later siblings
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
-		| firstBinding attrAssignPos pendingStmts flushPendingBefore defaultsEmitted
+		| firstBinding storePositions storesSeen pendingStmts flushPendingBefore defaultsEmitted
 		  pendingDefaults flushDefaultsBefore |
 		firstBinding := IdentityKeyValueDictionary new.
 		defaultsEmitted := IdentitySet new.
-		attrAssignPos := IdentityKeyValueDictionary new.
+		storePositions := IdentityKeyValueDictionary new.
+		storesSeen := IdentityKeyValueDictionary new.
 		"Each statement ANNOUNCES what it binds (___boundTargetNames___) and
 		which attribute values it yields (classBodyAttributePairs); this scan
 		only assigns positions.  A new binding form therefore becomes visible
@@ -1759,14 +1760,23 @@ printSmalltalkRuntimeOn: aStream
 				stmt ___boundTargetNames___ do: [:nm |
 					(firstBinding includesKey: nm) ifFalse: [
 						firstBinding at: nm put: pos]]].
-			"Last assignment wins — that's the statement the classAttrs pair
-			came from (``args_check = staticmethod(args_check)'' rebinding a
-			sibling def must see the def as already bound).  Driven by the
-			attribute pairs, not by the bound names, because a ``def'' or a
-			nested ``class'' binds a name but yields no attribute value and so
-			must not move the position."
+			"EVERY store's position, in source order, so each one goes out at
+			its own statement (``args_check = staticmethod(args_check)''
+			rebinding a sibling def must see the def as already bound).
+			Driven by the attribute pairs, not by the bound names, because a
+			``def'' or a nested ``class'' binds a name but yields no attribute
+			value and so must not move the position.
+
+			One position per name -- the LAST store's -- is what this kept
+			until #1677, and it emitted every store of a name assigned twice
+			together, at the second one: ``D = 9; print(D); D = 10'' ran the
+			print before either store and raised NameError.  classAttrs is
+			collected from these same statements in this same order, so the
+			Nth pair for a name is the Nth position recorded here
+			(___storePositionOf___:in:seen:)."
 			stmt classBodyAttributePairs do: [:pair |
-				attrAssignPos at: pair key put: pos].
+				(storePositions at: pair key asSymbol ifAbsentPut: [OrderedCollection new])
+					add: pos].
 		].
 		"emittedChainValues: value-AST object -> the FIRST target key that
 		emitted it.  A class-body chained assignment ``a = b = expr'' makes
@@ -1797,24 +1807,16 @@ printSmalltalkRuntimeOn: aStream
 		body, as they were, the call found nothing, and the inline fallback --
 		evaluated in the METHOD's scope -- raised NameError for the class-body name.
 
-		Not exactly AT the def, though: a class attribute bound more than once has
-		all its stores emitted together at its LAST assignment (see attrAssignPos),
-		so a default reading ``v'' in ``v = 1; def f(x, d=v); v = 2'' would run
-		before ``v'' existed.  Each def's stores therefore go just after the later of
-		the def and the last store of every class-body name its defaults read --
-		half a position on, so after that statement and before the next.  For that
-		pathological body the default reads 2 where CPython reads 1, which is what
-		Grail always answered; for every other body it is the def's own position.
-		The names a default sees are still the ones bound BEFORE the def."
+		Half a position on from the def, so after that statement and before the
+		next.  Every attribute store goes out at its own statement, so by then each
+		store above the def has run and none below it has: ``v = 1; def f(x, d=v);
+		v = 2'' stores 1 as the default, as CPython does.  (While a name's stores
+		all went out together at its last assignment, a default reading it had to
+		wait for that one and read 2 -- #1677.)"
 		pendingDefaults := OrderedCollection new.
 		body body doWithIndex: [:stmt :pos |
 			(self ___storesDefaultsFor___: stmt) ifTrue: [
-				| at |
-				at := pos.
-				(self ___namesReadByDefaultsOf___: stmt) do: [:nm |
-					(firstBinding at: nm ifAbsent: [pos]) < pos ifTrue: [
-						at := at max: (attrAssignPos at: nm ifAbsent: [pos])]].
-				pendingDefaults add: (at + (1/2)) -> (pos -> stmt)]].
+				pendingDefaults add: (pos + (1/2)) -> (pos -> stmt)]].
 		pendingDefaults := (pendingDefaults asSortedCollection: [:a :b | a key <= b key])
 			asOrderedCollection.
 		flushDefaultsBefore := [:limit |
@@ -1910,15 +1912,15 @@ printSmalltalkRuntimeOn: aStream
 						aStream lf].
 			flushDefaultsBefore value: limit].
 		[:emittedChainValues |
-		classAttrs do: [:pair |
+		classAttrs do: [:pair | | pairPos |
 			"Any pending statement that stands BEFORE this attribute in the
 			source goes out first, so the attribute's value expression reads
 			what that statement left.  An attribute whose position is unknown
 			flushes nothing -- the ordering can only be honoured against a
 			position."
-			(attrAssignPos at: pair key asSymbol
-				ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]])
-					ifNotNil: [:attrPos | flushPendingBefore value: attrPos].
+			pairPos := (self ___storePositionOf___: pair key asSymbol in: storePositions
+				seen: storesSeen) ifNil: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
+			pairPos ifNotNil: [:attrPos | flushPendingBefore value: attrPos].
 			"pair value is nil for bare annotations (``x: int'' with no
 			assignment) — skip the init emit; the slot stays nil until
 			some later assignment fills it."
@@ -1951,8 +1953,7 @@ printSmalltalkRuntimeOn: aStream
 					ifFalse: [
 						| myPos bound |
 						emittedChainValues at: pair value put: pair key.
-						myPos := attrAssignPos at: pair key asSymbol
-							ifAbsent: [firstBinding at: pair key asSymbol ifAbsent: [nil]].
+						myPos := pairPos.
 						bound := IdentitySet new.
 						myPos ifNotNil: [
 							firstBinding keysAndValuesDo: [:nm :pos |
@@ -6379,19 +6380,18 @@ ___storesDefaultsFor___: aStmt
 
 category: 'Grail-code generation'
 method: ClassDefAst
-___namesReadByDefaultsOf___: def
-	"Every name any of def's parameter defaults mentions, positional and
-	keyword-only.  An over-approximation -- a name bound inside a lambda in
-	a default counts too -- which can only delay the store, never misplace it."
+___storePositionOf___: aName in: storePositions seen: storesSeen
+	"The body position of the NEXT store of aName, counting the calls made
+	so far in storesSeen, or nil when the scan recorded none (an injected
+	``__doc__'').  Past the last recorded store it keeps answering the last
+	one, so a pair the scan did not see can only be emitted late, never
+	early."
 
-	| names |
-	names := IdentitySet new.
-	(def ___defaultedPositionalParams___ asArray
-		, def ___defaultedKeywordOnlyParams___ asArray) do: [:pair |
-		(pair at: 2) ___anyDescendantSatisfies___: [:n |
-			(n isKindOf: NameAst) ifTrue: [names add: n id asSymbol].
-			false]].
-	^ names
+	| positions n |
+	positions := storePositions at: aName ifAbsent: [^ nil].
+	n := (storesSeen at: aName ifAbsent: [0]) + 1.
+	storesSeen at: aName put: n.
+	^ positions at: (n min: positions size)
 %
 
 category: 'Grail-code generation'
