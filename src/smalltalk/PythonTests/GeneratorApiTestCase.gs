@@ -100,3 +100,24 @@ testTheThreeGeneratorKindsAreSiblings
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
 		equals: '7 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests-Generators'
+method: GeneratorApiTestCase
+testDelegationCallsAttributeMethodsAndFinishedBodiesRelease
+	"tests/python/generator_delegation_and_release.py: ``yield from'' calls a
+	sub-iterator's throw / send even when it is written ``def throw(self,
+	*args)'' and so has no fixed-arity selector -- found by attribute lookup,
+	as PEP 380 says; and a generator that is closed, exhausted or closed
+	before it started lets go of its locals while the generator object itself
+	is still referenced.  The uncaught-throw case is pinned in the fixture:
+	the escaped exception's stashed stack keeps them."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'generator_delegation_and_release' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/generator_delegation_and_release.py')
+		name: 'generator_delegation_and_release'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '10 checks, 0 disagreeing [], keys match: True'
+%

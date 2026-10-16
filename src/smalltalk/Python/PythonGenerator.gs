@@ -249,8 +249,27 @@ _forkBody
 					ex return: nil]
 		] ensure: [
 			done := true.
+			self ___releaseBody___.
 			consumerSem signal]
 	] fork.
+%
+
+category: 'Grail-Private'
+method: PyGeneratorBase
+___releaseBody___
+	"Drop the body once it can never run again: finished, closed, thrown into
+	before it started, or cleared through its frame.
+
+	The body block's home context holds the call's arguments, and the process
+	that ran it holds whatever its last activation referred to.  Keeping either
+	after ``done'' kept every local the body ever bound alive for as long as the
+	generator object was -- a closed generator held its locals, which CPython
+	releases (gh-118272, test_close_releases_frame_locals).  Nothing reads
+	``block'' after the body has started, and ___unrootParkedProducer___ already
+	treats a nil ``proc'' as nothing to do."
+
+	block := nil.
+	proc := nil
 %
 
 category: 'Grail-Private'
@@ -554,7 +573,7 @@ ___finalizeFromFrameClear___
 	"_PyGen_Finalize for a generator that is not suspended: one never started
 	is closed; a finished one has nothing left to do."
 
-	started == true ifFalse: [done := true]
+	started == true ifFalse: [done := true. self @env0:___releaseBody___]
 %
 
 category: 'Grail-Docstrings'
@@ -685,6 +704,7 @@ ___runInline___
 			@env0:ensure: [
 				running := false.
 				done := true.
+				self @env0:___releaseBody___.
 				self ___restoreConsumerState___: savedState].
 	^ self ___nextInline___
 %
@@ -1145,6 +1165,7 @@ ___throw___: anException
 		"Throwing on a not-yet-started generator just raises in the
 		caller — the body hasn''t reached a yield point to inject at."
 		done := true.
+		self @env0:___releaseBody___.
 		^ self ___raiseThrownOnTop___: ___exc___
 	].
 	done ifTrue: [^ self ___resumeFinishedWith___: ___exc___].
@@ -1397,6 +1418,7 @@ ___close___
 	| ___savedState___ result |
 	started ifFalse: [
 		done := true.
+		self @env0:___releaseBody___.
 		^ None
 	].
 	done ifTrue: [^ None].
@@ -1435,7 +1457,16 @@ ___close___
 	_forkBody no longer discriminates, so the choice is made here."
 	escapedException @env0:isNil ifFalse: [
 		(escapedException @env0:isKindOf: GeneratorExit)
-			ifTrue: [escapedException := nil]
+			ifTrue: [
+				"Absorbed, so nothing will ever walk its traceback -- and the
+				body-side frames _forkBody stashed for it are keyed by the
+				exception in a session-wide registry, holding the body's block
+				as a frame receiver and through it every local.  Left there,
+				a closed generator kept its locals for the rest of the session
+				(test_close_releases_frame_locals)."
+				BaseException @env0:___dropGeneratorStack___:
+					(BaseException @env0:___payloadOf___: escapedException).
+				escapedException := nil]
 			ifFalse: [^ self ___signalEscapedException___]].
 	^ result
 %
@@ -1539,7 +1570,7 @@ ___yieldFrom___: anIterable
 	with no ``send'' raises AttributeError -- which is precisely
 	test_attempting_to_send_to_non_generator's contract."
 
-	| it y result finished sent raised |
+	| it y result finished sent raised thrower |
 	"TWO REFUSALS AT THE DELEGATION BOUNDARY, both measured against CPython
 	3.14 and both keyed on WHO is delegating:
 
@@ -1621,12 +1652,19 @@ ___yieldFrom___: anIterable
 					test_attempting_to_send_to_non_generator.  Raised
 					explicitly, because the bare env-1 send would otherwise
 					surface as an uncatchable MessageNotUnderstood."
-					(it ___respondsTo___: #'send:') @env0:ifFalse: [
-						self ___probeDelegationAttr___: it named: 'send'.
-						^ AttributeError ___signal___: '''' @env0:,
-							(bytes ___pyTypeNameOf___: it) @env0:,
-							''' object has no attribute ''send'''].
-					y := it @env1:send: sent]]
+					(it ___respondsTo___: #'send:')
+						ifTrue: [y := it @env1:send: sent]
+						ifFalse: [ | sender |
+							"Found only as an ATTRIBUTE -- a ``def send(self,
+							*args)'' compiles to no send: selector, and a
+							__getattr__ can supply one -- it is still the
+							method PEP 380 calls."
+							sender := self ___probeDelegationAttr___: it named: 'send'.
+							sender @env0:isNil ifTrue: [
+								^ AttributeError ___signal___: '''' @env0:,
+									(bytes ___pyTypeNameOf___: it) @env0:,
+									''' object has no attribute ''send'''].
+							y := sender @env1:value: { sent } value: nil]]]
 				@env0:on: StopIteration
 				do: [:ex |
 					finished := true.
@@ -1643,15 +1681,25 @@ ___yieldFrom___: anIterable
 			catches and yields again, that value becomes the next value we
 			yield; if it returns, the delegation ends with its return value; if
 			it does not catch, the exception propagates out of here."
+			thrower := nil.
 			(it ___respondsTo___: #'throw:') ifFalse: [
 				"PEP 380 looks ``throw'' up as an ATTRIBUTE and re-raises in the
 				delegator only when that lookup says AttributeError.  Consulting
 				the attribute protocol (rather than stopping at the Smalltalk
 				probe above) is what lets a __getattr__ hook run and its own
-				exception propagate -- test_broken_getattr_handling."
-				self ___probeDelegationAttr___: it named: 'throw'.
-				^ (self ___resignalable___: raised) @env0:signal].
-			[y := it @env1:throw: raised]
+				exception propagate -- test_broken_getattr_handling.
+
+				What the lookup FINDS is then the method to call.  It used to be
+				discarded and the exception re-raised here regardless, so a
+				sub-iterator whose throw is ``def throw(self, *args)'' -- no
+				throw: selector -- never saw it
+				(test_throw_with_yield_from_custom_generator)."
+				thrower := self ___probeDelegationAttr___: it named: 'throw'.
+				thrower @env0:isNil ifTrue: [
+					^ (self ___resignalable___: raised) @env0:signal]].
+			[y := thrower @env0:isNil
+				ifTrue: [it @env1:throw: raised]
+				ifFalse: [thrower @env1:value: { BaseException @env0:___payloadOf___: raised } value: nil]]
 				@env0:on: StopIteration
 				do: [:ex |
 					finished := true.
