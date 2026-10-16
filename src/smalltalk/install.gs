@@ -1039,6 +1039,7 @@ run
 	at: #'FractionTestCase' put: nil;
 	at: #'FrameEqualityTestCase' put: nil;
 	at: #'FrameFunctionIntrospectionTestCase' put: nil;
+	at: #'FrameGlobalsOutsideSysModulesTestCase' put: nil;
 	at: #'FrameLocalsCaptureTestCase' put: nil;
 	at: #'FrameLocalsLiveViewTestCase' put: nil;
 	at: #'FrameReceiverSuggestionTestCase' put: nil;
@@ -2628,6 +2629,7 @@ input src/smalltalk/PythonTests/FourArgAttrCallTestCase.gs
 input src/smalltalk/PythonTests/FractionTestCase.gs
 input src/smalltalk/PythonTests/FrameEqualityTestCase.gs
 input src/smalltalk/PythonTests/FrameFunctionIntrospectionTestCase.gs
+input src/smalltalk/PythonTests/FrameGlobalsOutsideSysModulesTestCase.gs
 input src/smalltalk/PythonTests/FrameLocalsCaptureTestCase.gs
 input src/smalltalk/PythonTests/FrameLocalsLiveViewTestCase.gs
 input src/smalltalk/PythonTests/FrameReceiverSuggestionTestCase.gs

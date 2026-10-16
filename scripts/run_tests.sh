@@ -400,6 +400,9 @@ timed "app-namespaces" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/r
 # __main__ in an app: persistent globals, a re-run that writes nothing,
 # __transient__, gemdb.root as the alias, abort (cut 3). Commits.
 timed "app-main" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runAppMainTest.gs < /dev/null || EXIT=$?
+# A frame of a deployed module the session never imported -- reached through
+# committed code after a warm bind -- still has its f_globals. Commits.
+timed "frame-globals-warm" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFrameGlobalsWarmTest.gs < /dev/null || EXIT=$?
 # Class-level __transient__: never committed, survives an abort, rebuilt by
 # __session_init__ in a new session (docs/App_Namespaces_Design.md §6.3). Commits.
 timed "class-transient" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runClassTransientTest.gs < /dev/null || EXIT=$?

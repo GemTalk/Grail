@@ -4565,6 +4565,44 @@ ___forgetCanonicalModule___: aModuleName
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___committedModuleWithFile___: aPath
+	"The COMMITTED module instance whose __file__ is aPath, in any namespace
+	this session reads, or nil.  For PyFrame >> f_globals, after sys.modules
+	and the session's adopted instances have missed.
+
+	A warm bind does not run a module's body, so it does not run the body's
+	imports either: pluggy._manager's ``from ._callers import _multicall''
+	binds the committed function, and pluggy._callers itself is never
+	imported this session.  Its code still runs -- on its committed instance,
+	which is what that instance's globals ARE -- but nothing has registered or
+	adopted it until the code reads a global.  So a frame of it found no
+	module, answered f_globals None, and pytest's unittest support ended the
+	session with an INTERNALERROR.
+
+	READ-ONLY.  It neither adopts nor registers what it finds: a frame
+	attribute read is not an import.  When the code later reads a global,
+	module class >> instance adopts this same committed instance, so the
+	identity holds.  The registry is read with ``at:otherwise:'' and never
+	created -- ___canonicalModules___ would create it, and a read must not
+	write."
+
+	| found |
+	aPath isNil ifTrue: [^ nil].
+	found := nil.
+	self ___grailSessionNamespacesDo___: [:ns | | reg |
+		found isNil ifTrue: [
+			reg := ns at: #'GrailCanonicalModules' otherwise: nil.
+			reg isNil ifFalse: [
+				reg keysAndValuesDo: [:aName :inst |
+					(found isNil
+						and: [inst isCommitted
+						and: [((inst dynamicInstVarAt: #'__file__') = aPath) == true]])
+							ifTrue: [found := inst]]]]].
+	^ found
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___canonicalInstanceForModuleClass___: aModuleClass
 	"LAZY FIRST-TOUCH bind (doc par.10.4): committed code can reach a
 	dependency module's globals through the session-singleton path
