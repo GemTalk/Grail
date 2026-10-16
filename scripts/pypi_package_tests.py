@@ -380,6 +380,7 @@ def report(rows):
 # --------------------------------------------------------------- main
 
 def main():
+    global NAMESPACE
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--venv", help="the venv the census installed")
     ap.add_argument("--only", help="comma-separated projects (default: the census list)")
@@ -391,8 +392,13 @@ def main():
                     help="longest a Grail session lives before it is recycled")
     ap.add_argument("--budget-minutes", type=int, default=45,
                     help="longest the Grail run of one project takes")
+    ap.add_argument("--namespace", default=NAMESPACE,
+                    help="the GemDB namespace Grail runs in (default: %(default)s). "
+                         "Pytest is deployed there once per venv path, so a venv "
+                         "rebuilt at a new path needs a new namespace")
     ap.add_argument("--report", action="store_true", help="re-print the last TSV")
     opts = ap.parse_args()
+    NAMESPACE = opts.namespace
     if opts.report:
         report(read_tsv())
         return 0

@@ -32,6 +32,7 @@ Setup:
 | shipping a C extension | 13 / 27 | **14 / 27** (+1 shadowed: markupsafe) |
 | everything measured | 60 / 100 | **71 / 100** |
 | **submodules, of those CPython imports** | 1,311 / 2,000 | **1,923 / 2,416** (79.6%) |
+| **own tests passed, of those CPython passes** (46 projects) | not measured | **18,342 / 182,774** (10.0%) |
 
 **The submodule totals are not like for like.** The denominator grew because
 11 more projects import at the top level, and their 370 modules now count.
@@ -72,121 +73,201 @@ failures (a 25th, newly reached, is #1413's `ctypes`):
   cryptography's Rust bindings, is later answered half-built:
   `module 'google.auth.crypt' has no attribute 'Signer'`.
 
-**The "tests" column is not here yet.** `scripts/pypi_package_tests.py` runs
-each project's own test suite under CPython and Grail. Its first run on this
-venv was stopped: one project's Grail session held a transaction for hours
-and stalled garbage collection on the shared stone. The runner now recycles a
-session after 15 minutes and stops a project at 45 (#1649). The column is
-added when that run completes.
+### The tests column (2026-10-16)
+
+`scripts/pypi_package_tests.py` runs each project's own test suite from its
+sdist under CPython and under Grail, with the same pytest and the same venv,
+and counts the tests that pass under both. The `Tests` column in the table
+below is Grail's passes over CPython's.
+
+Setup: Grail `main` at `9fb5d23a` (later than the import measurement above,
+and including #1661), `./install.sh`, then
+`./scripts/pypi_package_tests.py --venv <venv>` with the default bounds: a
+Grail session is recycled after 15 minutes and a project stops at 45.
+
+**Grail passes 18,342 of the 182,774 tests CPython passes (10.0%), over the
+46 projects where CPython passes any.** Three large suites where Grail passes
+almost none dominate that total: botocore (0 / 80,607, collection timed out),
+click (346 / 32,990, stopped at the budget) and sqlalchemy (0 / 26,954).
+Without those three it is **17,996 / 42,223 (42.6%)**. Per project, the
+median is 65%:
+- **All of CPython's passes:** 5 projects (iniconfig, httpcore, jmespath,
+  annotated-doc, tzdata).
+- **90% or more:** 14 projects, including idna (6,420 / 6,424),
+  charset-normalizer, pluggy, six, pycparser, typing-inspection and tenacity.
+- **None:** 13 projects. Most never get past collection:
+  - **A C extension or its stand-in is missing:**
+    - cffi: no `ctypes`, #1413.
+    - pyjwt: cryptography's Rust bindings.
+    - rpds-py: `execution of extension module rpds.rpds failed`.
+    - googleapis-common-protos: grpc's `cygrpc` fails to `dlopen`.
+    - pydantic-settings: `pydantic_core` has no `ArgsKwargs`.
+  - **A Grail bug at collection:**
+    - wrapt: `'MethodBinding' object is not subscriptable` (#1428).
+    - pytest's own suite: `'code' object has no attribute 'co_names'`.
+    - google-auth: `'Class' object has no attribute 'CollectError'`.
+    - sqlalchemy: `directly inherits TypingOnly but has additional
+      attributes {'_is_protocol'}`.
+    - importlib-metadata: a forward-reference annotation, `Symlink`.
+  - **Too slow or too big:**
+    - botocore's collection timed out.
+    - python-multipart runs out of memory in `parametrize_class`.
+    - pygments ran 117 tests in its 45 minutes, all failing.
+- **Stopped at the 45-minute budget**, with the rest scored as not run: 7
+  projects (pygments, pyyaml, click, s3transfer, tomlkit, pyasn1, pyparsing).
+  Their counts are a floor, not a measurement of the whole suite.
+
+**54 projects have no comparison**, and the column says why:
+- **30 have no tests in their sdist.** Many ship tests only in the git
+  repository (boto3, numpy, pandas, rich, pip, scipy).
+- **24 have a suite that CPython passes none of in this venv.** That is the
+  harness, not Grail: the venv holds the projects' runtime dependencies, not
+  their test ones.
+  - **13 need a test-only package:**
+    - `hypothesis`: attrs, pydantic-core.
+    - `trustme`: urllib3, anyio.
+    - one each: `moto` (aiobotocore), `trio` (httpx), `coverage`
+      (aiohttp), `blockbuster` (starlette), `pytest_asyncio` (openai),
+      `opentelemetry.sdk` (fastapi), `jaraco.*` (zipp),
+      `cryptography_vectors` (cryptography).
+    - pillow: `No module named 'tests'`.
+  - **4 configure a pytest plugin** that is not installed:
+    - pytest-asyncio's `asyncio_default_fixture_loop_scope` (filelock,
+      aiosignal);
+    - pytest-timeout's `timeout` (watchfiles);
+    - pytest-run-parallel's `thread_unsafe` marker (pydantic).
+  - **5 are lost to the runner itself:** uvicorn, multidict, yarl, propcache
+    and frozenlist. They set `faulthandler_timeout`, the runner passes
+    `-p no:faulthandler`, and their `filterwarnings = error` turns the
+    resulting `Unknown config option` warning into an INTERNALERROR. That
+    happens under CPython as well as Grail.
+  - **2 others:** python-dateutil has 6 collection errors; hatchling
+    collects no tests.
+
+  Installing those dependencies, and dropping `-p no:faulthandler` for a
+  project that configures it, would widen the comparison. Neither is done
+  here.
+
+**The run was interrupted and resumed.** At 04:00 a sweep of old files under
+`/private/tmp` emptied the venv the census had been using since 2026-10-11.
+The 38 projects after jinja2 then scored "CPython passes none" in a single
+second. The venv was rebuilt at the same 100 pinned versions, outside `/tmp`,
+and those 38 plus jinja2 were run again. jinja2 scored the same, 666 / 784,
+both times. pytest is deployed once per venv path in the runner's namespace,
+and importing it from the new path failed (`@pytest.fixture is being applied
+more than once`). So the rerun used a new namespace, through the runner's new
+`--namespace` option. The stale `pypi_package_tests` namespace is still on
+the stone.
 
 ### Every row
 
 `Submodules` is Grail's count over CPython's, for projects whose top level
 imports; `—` means a single-module wheel. `First blocker` is what stops the
-top-level import. A **bold** verdict changed since 2026-10-11.
+top-level import. `Tests` is the project's own tests that pass under Grail over those
+that pass under CPython (see above); "(budget)" means the run stopped at 45 minutes. A **bold** verdict changed since 2026-10-11.
 
-| # | Project | Version | Scope | Verdict | Submodules | First blocker |
-| ---: | --- | --- | --- | --- | ---: | --- |
-| 1 | boto3 | 1.43.106 | pure | **IMPORTS** | 37 / 37 |  |
-| 2 | packaging | 26.3 | pure | IMPORTS | 20 / 21 |  |
-| 3 | typing-extensions | 4.16.0 | pure | IMPORTS | — |  |
-| 4 | idna | 3.20 | pure | IMPORTS | 8 / 8 |  |
-| 5 | urllib3 | 2.8.0 | pure | IMPORTS | 27 / 27 |  |
-| 6 | certifi | 2026.7.22 | pure | IMPORTS | 1 / 1 |  |
-| 7 | requests | 2.34.2 | ext-dep | **IMPORTS** | 18 / 18 |  |
-| 8 | charset-normalizer | 3.5.2 | ext | IMPORTS | 9 / 9 |  |
-| 9 | cryptography | 50.0.2 | ext | IMPORTS | 17 / 77 |  |
-| 10 | setuptools | 84.0.0 | pure | FAILS |  | no `_osx_support` (#1429); #1523 is fixed |
-| 11 | cffi | 2.1.1 | ext | IMPORTS | 16 / 19 |  |
-| 12 | pygments | 2.21.0 | pure | IMPORTS | 340 / 340 |  |
-| 13 | pyyaml | 6.0.3 | ext | IMPORTS | 15 / 17 |  |
-| 14 | python-dateutil | 2.9.0.post0 | pure | IMPORTS | 15 / 15 |  |
-| 15 | six | 1.17.0 | pure | IMPORTS | — |  |
-| 16 | pluggy | 1.6.0 | pure | IMPORTS | 7 / 7 |  |
-| 17 | botocore | 1.43.106 | pure | IMPORTS | 73 / 73 |  |
-| 18 | pydantic | 2.14.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
-| 19 | pycparser | 3.11 | pure | IMPORTS | 6 / 6 |  |
-| 20 | click | 8.5.0 | pure | **IMPORTS** | 14 / 15 |  |
-| 21 | pydantic-core | 2.50.0 | ext | FAILS |  | #1414 (pydantic-core extension) |
-| 22 | anyio | 4.15.1 | pure | IMPORTS | 44 / 44 |  |
-| 23 | numpy | 2.5.4 | ext | **IMPORTS** | 125 / 166 |  |
-| 24 | pytest | 9.1.1 | pure | **IMPORTS** | 79 / 79 |  |
-| 25 | iniconfig | 2.3.1 | pure | **IMPORTS** | 3 / 3 |  |
-| 26 | annotated-types | 0.8.0 | pure | IMPORTS | 1 / 1 |  |
-| 27 | h11 | 0.16.0 | pure | IMPORTS | 10 / 10 |  |
-| 28 | typing-inspection | 0.4.4 | pure | IMPORTS | 2 / 2 |  |
-| 29 | attrs | 26.1.0 | pure | FAILS |  | #1418 (attrs) |
-| 30 | s3transfer | 0.19.2 | pure | **IMPORTS** | 14 / 14 |  |
-| 31 | aiobotocore | 3.9.2 | ext-dep | IMPORTS | 19 / 37 |  |
-| 32 | protobuf | 7.36.2 | ext | IMPORTS | 37 / 55 |  |
-| 33 | httpx | 0.28.1 | pure | IMPORTS | 21 / 22 |  |
-| 34 | markupsafe | 3.0.4 | ext | SHADOWED |  | Grail's bundled copy answers (G10) |
-| 35 | httpcore | 1.0.9 | pure | IMPORTS | 25 / 25 |  |
-| 36 | python-dotenv | 1.2.4 | pure | IMPORTS | 5 / 5 |  |
-| 37 | pyjwt | 2.15.1 | pure | FAILS |  | C extension (cryptography) |
-| 38 | platformdirs | 4.13.0 | pure | IMPORTS | 10 / 10 |  |
-| 39 | fsspec | 2026.9.0 | pure | FAILS |  | #1413 |
-| 40 | pandas | 3.0.6 | ext | FAILS |  | `NameError: __doc__` at import, now that numpy imports (not yet root-caused) |
-| 41 | jinja2 | 3.1.6 | ext-dep | SHADOWED |  | Grail's bundled copy answers (G10) |
-| 42 | jmespath | 1.1.0 | pure | IMPORTS | 7 / 7 |  |
-| 43 | pathspec | 1.1.1 | pure | IMPORTS | 30 / 30 |  |
-| 44 | filelock | 4.1.0 | pure | FAILS |  | #1413 |
-| 45 | starlette | 1.7.0 | pure | IMPORTS | 33 / 34 |  |
-| 46 | uvicorn | 0.54.0 | pure | FAILS |  | #1429 |
-| 47 | multidict | 6.9.1 | ext | IMPORTS | 3 / 3 |  |
-| 48 | jsonschema | 4.26.0 | ext-dep | FAILS |  | #1418 (attrs) |
-| 49 | rpds-py | 2026.9.1 | ext | FAILS |  | C extension |
-| 50 | yarl | 1.25.1 | ext | IMPORTS | 7 / 7 |  |
-| 51 | aiohttp | 3.14.5 | ext | FAILS |  | #1418 (attrs) |
-| 52 | rich | 15.0.0 | pure | IMPORTS | 68 / 75 |  |
-| 53 | tomlkit | 0.15.1 | pure | IMPORTS | 11 / 11 |  |
-| 54 | markdown-it-py | 4.2.0 | pure | IMPORTS | 65 / 65 |  |
-| 55 | propcache | 0.5.4 | ext | IMPORTS | 3 / 3 |  |
-| 56 | referencing | 0.37.0 | ext-dep | FAILS |  | #1418 (attrs) |
-| 57 | jsonschema-specifications | 2025.9.1 | ext-dep | FAILS |  | #1418 (attrs) |
-| 58 | mdurl | 0.1.2 | pure | IMPORTS | 5 / 5 |  |
-| 59 | pillow | 12.3.0 | ext | IMPORTS | 31 / 91 |  |
-| 60 | opentelemetry-api | 1.45.1 | pure | IMPORTS | 28 / 29 |  |
-| 61 | frozenlist | 1.8.0 | ext | IMPORTS | — |  |
-| 62 | tqdm | 4.70.1 | pure | IMPORTS | 22 / 24 |  |
-| 63 | pip | 26.2.1 | pure | IMPORTS | 169 / 383 |  |
-| 64 | googleapis-common-protos | 1.75.5 | ext-dep | FAILS |  | #1428 |
-| 65 | pyasn1 | 0.6.4 | pure | IMPORTS | 31 / 31 |  |
-| 66 | aiosignal | 1.4.0 | ext-dep | IMPORTS | — |  |
-| 67 | aiohappyeyeballs | 2.7.1 | pure | IMPORTS | 4 / 4 |  |
-| 68 | websockets | 17.2 | ext | IMPORTS | 44 / 44 |  |
-| 69 | annotated-doc | 0.0.5 | pure | IMPORTS | 1 / 1 |  |
-| 70 | wrapt | 2.5.0 | ext | FAILS |  | #1428 (`'MethodBinding' object is not subscriptable`) |
-| 71 | pytz | 2026.5 | pure | **IMPORTS** | 5 / 5 |  |
-| 72 | sniffio | 1.3.1 | pure | IMPORTS | 2 / 2 |  |
-| 73 | tzdata | 2026.5 | pure | IMPORTS | 21 / 21 |  |
-| 74 | fastapi | 0.143.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
-| 75 | google-auth | 2.61.0 | ext-dep | IMPORTS | 40 / 75 |  |
-| 76 | zipp | 4.1.1 | pure | IMPORTS | 6 / 6 |  |
-| 77 | greenlet | 3.5.6 | ext | FAILS |  | C extension |
-| 78 | importlib-metadata | 9.0.1 | pure | IMPORTS | 10 / 11 |  |
-| 79 | pydantic-settings | 2.15.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
-| 80 | wheel | 0.48.0 | pure | IMPORTS | 9 / 13 |  |
-| 81 | tenacity | 9.2.1 | pure | IMPORTS | 11 / 11 |  |
-| 82 | trove-classifiers | 2026.9.21.13 | pure | IMPORTS | — |  |
-| 83 | python-multipart | 0.0.32 | pure | IMPORTS | 7 / 7 |  |
-| 84 | pyasn1-modules | 0.4.2 | pure | IMPORTS | 131 / 131 |  |
-| 85 | grpcio-status | 1.84.0 | ext-dep | IMPORTS | 0 / 3 |  |
-| 86 | pyarrow | 26.0.0 | ext | FAILS |  | C extension |
-| 87 | sqlalchemy | 2.1.4 | ext | FAILS |  | #1428: its `TypingOnly` check sees attributes Grail adds to a class |
-| 88 | hatchling | 1.32.4 | pure | IMPORTS | 63 / 65 |  |
-| 89 | grpcio | 1.84.0 | ext | FAILS |  | C extension |
-| 90 | pyparsing | 3.3.3 | pure | **IMPORTS** | 14 / 14 |  |
-| 91 | lxml | 6.1.3 | ext | IMPORTS | 6 / 22 |  |
-| 92 | jiter | 0.17.0 | ext | IMPORTS | — |  |
-| 93 | regex | 2026.9.29 | ext | FAILS |  | C extension |
-| 94 | watchfiles | 1.3.0 | ext | FAILS |  | C extension |
-| 95 | s3fs | 2026.9.0 | ext-dep | FAILS |  | #1413 |
-| 96 | ruff | 0.17.0 | pure | IMPORTS | 1 / 1 |  |
-| 97 | scipy | 1.18.1 | ext | FAILS |  | `NameError: submodules` at import, now that numpy imports (not yet root-caused) |
-| 98 | soupsieve | 3.0.1 | pure | **IMPORTS** | 6 / 6 |  |
-| 99 | beautifulsoup4 | 4.15.0 | pure | **IMPORTS** | 11 / 13 |  |
-| 100 | openai | 3.28.0 | ext-dep | FAILS |  | #1414 (pydantic-core extension) |
+| # | Project | Version | Scope | Verdict | Submodules | Tests | First blocker |
+| ---: | --- | --- | --- | --- | ---: | ---: | --- |
+| 1 | boto3 | 1.43.106 | pure | **IMPORTS** | 37 / 37 | no tests |  |
+| 2 | packaging | 26.3 | pure | IMPORTS | 20 / 21 | 6,532 / 8,528 |  |
+| 3 | typing-extensions | 4.16.0 | pure | IMPORTS | — | no tests |  |
+| 4 | idna | 3.20 | pure | IMPORTS | 8 / 8 | 6,420 / 6,424 |  |
+| 5 | urllib3 | 2.8.0 | pure | IMPORTS | 27 / 27 | CPython 0 |  |
+| 6 | certifi | 2026.7.22 | pure | IMPORTS | 1 / 1 | no tests |  |
+| 7 | requests | 2.34.2 | ext-dep | **IMPORTS** | 18 / 18 | 183 / 414 |  |
+| 8 | charset-normalizer | 3.5.2 | ext | IMPORTS | 9 / 9 | 297 / 298 |  |
+| 9 | cryptography | 50.0.2 | ext | IMPORTS | 17 / 77 | CPython 0 |  |
+| 10 | setuptools | 84.0.0 | pure | FAILS |  | no tests | no `_osx_support` (#1429); #1523 is fixed |
+| 11 | cffi | 2.1.1 | ext | IMPORTS | 16 / 19 | 0 / 1,673 |  |
+| 12 | pygments | 2.21.0 | pure | IMPORTS | 340 / 340 | 0 / 5,337 (budget) |  |
+| 13 | pyyaml | 6.0.3 | ext | IMPORTS | 15 / 17 | 330 / 2,606 (budget) |  |
+| 14 | python-dateutil | 2.9.0.post0 | pure | IMPORTS | 15 / 15 | CPython 0 |  |
+| 15 | six | 1.17.0 | pure | IMPORTS | — | 166 / 182 |  |
+| 16 | pluggy | 1.6.0 | pure | IMPORTS | 7 / 7 | 123 / 124 |  |
+| 17 | botocore | 1.43.106 | pure | IMPORTS | 73 / 73 | 0 / 80,607 |  |
+| 18 | pydantic | 2.14.0 | ext-dep | FAILS |  | CPython 0 | #1414 (pydantic-core extension) |
+| 19 | pycparser | 3.11 | pure | IMPORTS | 6 / 6 | 174 / 180 |  |
+| 20 | click | 8.5.0 | pure | **IMPORTS** | 14 / 15 | 346 / 32,990 (budget) |  |
+| 21 | pydantic-core | 2.50.0 | ext | FAILS |  | CPython 0 | #1414 (pydantic-core extension) |
+| 22 | anyio | 4.15.1 | pure | IMPORTS | 44 / 44 | CPython 0 |  |
+| 23 | numpy | 2.5.4 | ext | **IMPORTS** | 125 / 166 | no tests |  |
+| 24 | pytest | 9.1.1 | pure | **IMPORTS** | 79 / 79 | 0 / 3,171 |  |
+| 25 | iniconfig | 2.3.1 | pure | **IMPORTS** | 3 / 3 | 54 / 54 |  |
+| 26 | annotated-types | 0.8.0 | pure | IMPORTS | 1 / 1 | 242 / 256 |  |
+| 27 | h11 | 0.16.0 | pure | IMPORTS | 10 / 10 | no tests |  |
+| 28 | typing-inspection | 0.4.4 | pure | IMPORTS | 2 / 2 | 93 / 96 |  |
+| 29 | attrs | 26.1.0 | pure | FAILS |  | CPython 0 | #1418 (attrs) |
+| 30 | s3transfer | 0.19.2 | pure | **IMPORTS** | 14 / 14 | 141 / 676 (budget) |  |
+| 31 | aiobotocore | 3.9.2 | ext-dep | IMPORTS | 19 / 37 | CPython 0 |  |
+| 32 | protobuf | 7.36.2 | ext | IMPORTS | 37 / 55 | no tests |  |
+| 33 | httpx | 0.28.1 | pure | IMPORTS | 21 / 22 | CPython 0 |  |
+| 34 | markupsafe | 3.0.4 | ext | SHADOWED |  | 54 / 79 | Grail's bundled copy answers (G10) |
+| 35 | httpcore | 1.0.9 | pure | IMPORTS | 25 / 25 | 26 / 26 |  |
+| 36 | python-dotenv | 1.2.4 | pure | IMPORTS | 5 / 5 | 205 / 242 |  |
+| 37 | pyjwt | 2.15.1 | pure | FAILS |  | 0 / 471 | C extension (cryptography) |
+| 38 | platformdirs | 4.13.0 | pure | IMPORTS | 10 / 10 | 682 / 733 |  |
+| 39 | fsspec | 2026.9.0 | pure | FAILS |  | no tests | #1413 |
+| 40 | pandas | 3.0.6 | ext | FAILS |  | no tests | `NameError: __doc__` at import, now that numpy imports (not yet root-caused) |
+| 41 | jinja2 | 3.1.6 | ext-dep | SHADOWED |  | 666 / 784 | Grail's bundled copy answers (G10) |
+| 42 | jmespath | 1.1.0 | pure | IMPORTS | 7 / 7 | 1 / 1 |  |
+| 43 | pathspec | 1.1.1 | pure | IMPORTS | 30 / 30 | 151 / 197 |  |
+| 44 | filelock | 4.1.0 | pure | FAILS |  | CPython 0 | #1413 |
+| 45 | starlette | 1.7.0 | pure | IMPORTS | 33 / 34 | CPython 0 |  |
+| 46 | uvicorn | 0.54.0 | pure | FAILS |  | CPython 0 | #1429 |
+| 47 | multidict | 6.9.1 | ext | IMPORTS | 3 / 3 | CPython 0 |  |
+| 48 | jsonschema | 4.26.0 | ext-dep | FAILS |  | no tests | #1418 (attrs) |
+| 49 | rpds-py | 2026.9.1 | ext | FAILS |  | 0 / 132 | C extension |
+| 50 | yarl | 1.25.1 | ext | IMPORTS | 7 / 7 | CPython 0 |  |
+| 51 | aiohttp | 3.14.5 | ext | FAILS |  | CPython 0 | #1418 (attrs) |
+| 52 | rich | 15.0.0 | pure | IMPORTS | 68 / 75 | no tests |  |
+| 53 | tomlkit | 0.15.1 | pure | IMPORTS | 11 / 11 | 265 / 1,051 (budget) |  |
+| 54 | markdown-it-py | 4.2.0 | pure | IMPORTS | 65 / 65 | no tests |  |
+| 55 | propcache | 0.5.4 | ext | IMPORTS | 3 / 3 | CPython 0 |  |
+| 56 | referencing | 0.37.0 | ext-dep | FAILS |  | no tests | #1418 (attrs) |
+| 57 | jsonschema-specifications | 2025.9.1 | ext-dep | FAILS |  | no tests | #1418 (attrs) |
+| 58 | mdurl | 0.1.2 | pure | IMPORTS | 5 / 5 | no tests |  |
+| 59 | pillow | 12.3.0 | ext | IMPORTS | 31 / 91 | CPython 0 |  |
+| 60 | opentelemetry-api | 1.45.1 | pure | IMPORTS | 28 / 29 | 168 / 256 |  |
+| 61 | frozenlist | 1.8.0 | ext | IMPORTS | — | CPython 0 |  |
+| 62 | tqdm | 4.70.1 | pure | IMPORTS | 22 / 24 | 111 / 173 |  |
+| 63 | pip | 26.2.1 | pure | IMPORTS | 169 / 383 | no tests |  |
+| 64 | googleapis-common-protos | 1.75.5 | ext-dep | FAILS |  | 0 / 9 | #1428 |
+| 65 | pyasn1 | 0.6.4 | pure | IMPORTS | 31 / 31 | 289 / 1,242 (budget) |  |
+| 66 | aiosignal | 1.4.0 | ext-dep | IMPORTS | — | CPython 0 |  |
+| 67 | aiohappyeyeballs | 2.7.1 | pure | IMPORTS | 4 / 4 | 16 / 18 |  |
+| 68 | websockets | 17.2 | ext | IMPORTS | 44 / 44 | no tests |  |
+| 69 | annotated-doc | 0.0.5 | pure | IMPORTS | 1 / 1 | 6 / 6 |  |
+| 70 | wrapt | 2.5.0 | ext | FAILS |  | 0 / 1,363 | #1428 (`'MethodBinding' object is not subscriptable`) |
+| 71 | pytz | 2026.5 | pure | **IMPORTS** | 5 / 5 | no tests |  |
+| 72 | sniffio | 1.3.1 | pure | IMPORTS | 2 / 2 | no tests |  |
+| 73 | tzdata | 2026.5 | pure | IMPORTS | 21 / 21 | 30 / 30 |  |
+| 74 | fastapi | 0.143.0 | ext-dep | FAILS |  | CPython 0 | #1414 (pydantic-core extension) |
+| 75 | google-auth | 2.61.0 | ext-dep | IMPORTS | 40 / 75 | 0 / 1,674 |  |
+| 76 | zipp | 4.1.1 | pure | IMPORTS | 6 / 6 | CPython 0 |  |
+| 77 | greenlet | 3.5.6 | ext | FAILS |  | no tests | C extension |
+| 78 | importlib-metadata | 9.0.1 | pure | IMPORTS | 10 / 11 | 0 / 56 |  |
+| 79 | pydantic-settings | 2.15.0 | ext-dep | FAILS |  | 0 / 535 | #1414 (pydantic-core extension) |
+| 80 | wheel | 0.48.0 | pure | IMPORTS | 9 / 13 | 30 / 70 |  |
+| 81 | tenacity | 9.2.1 | pure | IMPORTS | 11 / 11 | 168 / 179 |  |
+| 82 | trove-classifiers | 2026.9.21.13 | pure | IMPORTS | — | 15 / 18 |  |
+| 83 | python-multipart | 0.0.32 | pure | IMPORTS | 7 / 7 | 0 / 158 |  |
+| 84 | pyasn1-modules | 0.4.2 | pure | IMPORTS | 131 / 131 | 2 / 282 |  |
+| 85 | grpcio-status | 1.84.0 | ext-dep | IMPORTS | 0 / 3 | no tests |  |
+| 86 | pyarrow | 26.0.0 | ext | FAILS |  | no tests | C extension |
+| 87 | sqlalchemy | 2.1.4 | ext | FAILS |  | 0 / 26,954 | #1428: its `TypingOnly` check sees attributes Grail adds to a class |
+| 88 | hatchling | 1.32.4 | pure | IMPORTS | 63 / 65 | CPython 0 |  |
+| 89 | grpcio | 1.84.0 | ext | FAILS |  | no tests | C extension |
+| 90 | pyparsing | 3.3.3 | pure | **IMPORTS** | 14 / 14 | 10 / 2,028 (budget) |  |
+| 91 | lxml | 6.1.3 | ext | IMPORTS | 6 / 22 | no tests |  |
+| 92 | jiter | 0.17.0 | ext | IMPORTS | — | no tests |  |
+| 93 | regex | 2026.9.29 | ext | FAILS |  | no tests | C extension |
+| 94 | watchfiles | 1.3.0 | ext | FAILS |  | CPython 0 | C extension |
+| 95 | s3fs | 2026.9.0 | ext-dep | FAILS |  | no tests | #1413 |
+| 96 | ruff | 0.17.0 | pure | IMPORTS | 1 / 1 | no tests |  |
+| 97 | scipy | 1.18.1 | ext | FAILS |  | no tests | `NameError: submodules` at import, now that numpy imports (not yet root-caused) |
+| 98 | soupsieve | 3.0.1 | pure | **IMPORTS** | 6 / 6 | 346 / 391 |  |
+| 99 | beautifulsoup4 | 4.15.0 | pure | **IMPORTS** | 11 / 13 | no tests |  |
+| 100 | openai | 3.28.0 | ext-dep | FAILS |  | CPython 0 | #1414 (pydantic-core extension) |
 
 ### The gap list now, ranked
 
@@ -1036,13 +1117,18 @@ alone; the rest have a next blocker already named above. **If you want the wides
 ./scripts/pypi_package_census.py --report                            # last TSV
 ```
 
-The package test runner, for the coming "tests" column:
+The package test runner, for the "tests" column:
 
 ```bash
 ./scripts/pypi_package_tests.py --venv <venv> --only six,idna        # a subset
 ./scripts/pypi_package_tests.py --venv <venv>                         # the census list
 ./scripts/pypi_package_tests.py --report                              # last TSV
 ```
+
+Pass `--namespace <name>` when the venv has moved. pytest is deployed in
+the runner's namespace once per venv path, and the default namespace still
+holds the old path's copy. Keep the venv out of `/tmp`: a sweep there deletes
+files not accessed for a few days.
 
 It writes `out/pypi-tests/results.tsv` (one row per project) and a per-test
 TSV and two logs per project. It holds each Grail session for at most
