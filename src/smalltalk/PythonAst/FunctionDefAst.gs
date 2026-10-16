@@ -3358,7 +3358,20 @@ ___emitModuleDefaultsBlockOn___: aStream
 		lf;
 		nextPutAll: 'self @env0:___setFunctionDefaults___: ''';
 		nextPutAll: name;
-		nextPutAll: ''' block: [{ {'.
+		nextPutAll: ''' keys: #( #('.
+	"The memo KEYS too, in ___methodDefaultKeysTable___'s shape, so that
+	``f.__defaults__ = t'' can write THROUGH to what a call binds (module >>
+	___writeFunctionDefaults___:value:kw:) instead of landing in an attribute
+	the call never reads (#1228)."
+	pos do: [:pair |
+		aStream nextPutAll: ' #'''; nextPutAll: (self ___moduleDefaultKeyFor___:
+			(self transportParamName: (pair at: 1))); nextPut: $'].
+	aStream nextPutAll: ' ) #('.
+	kw do: [:pair |
+		aStream nextPutAll: ' '''; nextPutAll: (pair at: 1) asString;
+			nextPutAll: ''' #'''; nextPutAll: (self ___moduleDefaultKeyFor___: (pair at: 1));
+			nextPut: $'].
+	aStream nextPutAll: ' ) ) block: [{ {'.
 	pos doWithIndex: [:pair :i |
 		i > 1 ifTrue: [aStream nextPut: $.].
 		aStream space.
@@ -3400,11 +3413,9 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 	| ownerClassName |
 	self isModuleLevelDef ifTrue: [
 		aStream
-			nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
-			nextPutAll: self name asString;
-			nextPutAll: '__';
-			nextPutAll: aParamName asString;
-			nextPutAll: '___'' compute: ['.
+			nextPutAll: '(self @env0:___moduleDefaultAt: #''';
+			nextPutAll: (self ___moduleDefaultKeyFor___: aParamName);
+			nextPutAll: ''' compute: ['.
 		aDefaultNode printSmalltalkOn: aStream.
 		aStream nextPutAll: '])'.
 		^ self].
@@ -3418,6 +3429,17 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 		nextPutAll: ') ifNil: ['.
 	aDefaultNode printSmalltalkOn: aStream.
 	aStream nextPutAll: '])'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___moduleDefaultKeyFor___: aParamName
+	"The module-keyed memo entry a module-level def's default for aParamName is
+	held under (module >> ___moduleDefaultAt:compute:).  One spelling for the
+	three places that need it -- the text and IR call paths, and the key table
+	``f.__defaults__ = t'' writes through -- so they cannot drift apart."
+
+	^ '___default_' , self name asString , '__' , aParamName asString , '___'
 %
 
 category: 'Grail-code generation'
@@ -5121,7 +5143,7 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 		^ aBuilder ifNilValue: probe
 			then: [aBuilder add: (aBuilder withoutLocalsDo: [
 				aDefaultNode ___emitIRValueOn___: aBuilder])]].
-	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
+	key := (self ___moduleDefaultKeyFor___: pname) asSymbol.
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (aBuilder withoutLocalsDo: [
 			aDefaultNode ___emitIRValueOn___: aBuilder])].

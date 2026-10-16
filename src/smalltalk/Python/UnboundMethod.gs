@@ -1904,6 +1904,36 @@ __kwdefaults__
 
 category: 'Grail-Python Metadata'
 method: UnboundMethod
+___writeDefaultsThrough___: name value: value
+	"``Cls.m.__defaults__ = t'' / ``Cls.m.__kwdefaults__ = d'', written into
+	the class-body default store the method's calls bind from -- the
+	method-side twin of BoundMethod >> ___writeDefaultsThrough___:value:,
+	which says why (#1228).  The keys come from the defining class's
+	___methodDefaultKeysTable___, the same entry __defaults__ reads through.
+	False for any other name, a method with no stored defaults (a
+	@staticmethod's are inline), or a shape the store cannot carry."
+
+	| sym isKw cls entry |
+	sym := name @env0:asSymbol.
+	isKw := sym == #'__kwdefaults__'.
+	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
+	cls := self ___metadataClass___.
+	cls == nil ifTrue: [^ false].
+	entry := self ___tableEntryFor___: cls table: #'___methodDefaultKeysTable___'.
+	entry == nil ifTrue: [^ false].
+	(module @env0:___writeDefaults: value entry: entry kw: isKw
+		into: [:key :v | module @env0:___storeClassDefaultOwnedBy: cls at: key put: v])
+			ifFalse: [^ false].
+	attrDict @env0:isNil ifFalse: [
+		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
+			attrDict @env1:__delitem__: name @env0:asString]].
+	[self @env0:removeDynamicInstVar: sym]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ true
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
 ___rawDefaults___
 	| cls entry |
 	cls := self ___metadataClass___.
@@ -2025,6 +2055,8 @@ __setattr__: name _: value
 	just as quietly."
 
 	BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+	(self ___writeDefaultsThrough___: name value: value)
+		ifTrue: [^ ExecBlock @env0:___pyNone___].
 	name @env0:asSymbol == #'__dict__' ifTrue: [
 		"INSTALL it, rather than storing a dynamic instVar that happens to be
 		spelled __dict__ -- which is what happened before, leaving the real
