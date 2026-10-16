@@ -1340,6 +1340,7 @@ run
 	at: #'PrivateNameManglingTestCase' put: nil;
 	at: #'ProcessLookupErrorTestCase' put: nil;
 	at: #'PropertyAndIsinstanceTestCase' put: nil;
+	at: #'PropertyBeatsStoredValueTestCase' put: nil;
 	at: #'PropertyNotDynamicClassAttributeTestCase' put: nil;
 	at: #'PropertyReturnsFunctionTestCase' put: nil;
 	at: #'Py2PrintStatementTestCase' put: nil;
@@ -2934,6 +2935,7 @@ input src/smalltalk/PythonTests/PrivateMethodKeywordCallTestCase.gs
 input src/smalltalk/PythonTests/PrivateNameManglingTestCase.gs
 input src/smalltalk/PythonTests/ProcessLookupErrorTestCase.gs
 input src/smalltalk/PythonTests/PropertyAndIsinstanceTestCase.gs
+input src/smalltalk/PythonTests/PropertyBeatsStoredValueTestCase.gs
 input src/smalltalk/PythonTests/PropertyNotDynamicClassAttributeTestCase.gs
 input src/smalltalk/PythonTests/PropertyReturnsFunctionTestCase.gs
 input src/smalltalk/PythonTests/Py2PrintStatementTestCase.gs
