@@ -1004,6 +1004,7 @@ run
 	at: #'ExceptStarTestCase' put: nil;
 	at: #'ExecBareEvalTestCase' put: nil;
 	at: #'ExecBuiltinsMappingTestCase' put: nil;
+	at: #'ExecClassBodyLoopsTestCase' put: nil;
 	at: #'ExecClassBodyNamesTestCase' put: nil;
 	at: #'ExecClassDefinitionTestCase' put: nil;
 	at: #'ExecClassMethodScopeTestCase' put: nil;
@@ -2595,6 +2596,7 @@ input src/smalltalk/PythonTests/ExceptStarShapesTestCase.gs
 input src/smalltalk/PythonTests/ExceptStarTestCase.gs
 input src/smalltalk/PythonTests/ExecBareEvalTestCase.gs
 input src/smalltalk/PythonTests/ExecBuiltinsMappingTestCase.gs
+input src/smalltalk/PythonTests/ExecClassBodyLoopsTestCase.gs
 input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
 input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs
 input src/smalltalk/PythonTests/ExecClassMethodScopeTestCase.gs
