@@ -400,8 +400,11 @@ extern PyTypeObject PyFrozenSet_Type;
 
 /* Match CPython's ABI: modules reference the struct symbols directly. */
 extern PyObject _Py_NoneStruct;
-extern PyObject _Py_TrueStruct;   /* actually PyLongObject in CPython */
-extern PyObject _Py_FalseStruct;  /* actually PyLongObject in CPython */
+/* True and False are PyLongObjects, as in CPython 3.14: a wheel reads an
+   int's lv_tag and digit INLINE (Cython's PyLong internals), bool included. */
+typedef struct { PyObject ob_base; uintptr_t lv_tag; uint32_t ob_digit[2]; } _GrailLongSingleton;
+extern _GrailLongSingleton _Py_TrueStruct;
+extern _GrailLongSingleton _Py_FalseStruct;
 
 #define Py_None   (&_Py_NoneStruct)
 #define Py_True   ((PyObject *)&_Py_TrueStruct)
@@ -658,6 +661,8 @@ extern PyObject *PyExc_UnicodeEncodeError;
 extern PyObject *PyExc_RuntimeWarning;
 extern PyObject *PyExc_UserWarning;
 extern PyObject *PyExc_AssertionError;
+extern PyObject *PyExc_GeneratorExit;
+extern PyObject *PyExc_UnboundLocalError;
 extern PyObject *PyExc_BaseExceptionGroup;
 
 /* ========== Float API ========== */
@@ -682,6 +687,7 @@ PyObject *PyBool_FromLong(long v);
 /* ========== String (Unicode) API ========== */
 
 PyObject   *PyUnicode_FromString(const char *str);
+PyObject   *PyUnicode_FromOrdinal(int ordinal);
 const char *PyUnicode_AsUTF8(PyObject *obj);
 int         PyUnicode_Check(PyObject *obj);
 

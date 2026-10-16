@@ -678,21 +678,76 @@ PyObject *PyDescr_NewMember(PyTypeObject *type, PyMemberDef *m) {
  * with real exception instances.
  * ==================================================================== */
 
-#define GRAIL_RAISED_MAGIC 0x4752524149534544ULL   /* "GRRAISED" */
+#define GRAIL_RAISED_MAGIC 0x47524149u   /* "GRAI" */
 
+/* Laid out as CPython 3.14's PyBaseExceptionObject (72 bytes), because the
+   token is also what the thread state's current_exception slot holds
+   (cpython.cc, err_publish), and Cython reads that object INLINE: Py_TYPE
+   for matching and ``->traceback'' (offset 40) on every fetch and restore.
+   The magic sits in the padding after suppress_context, inside the 72 bytes
+   every exception object has, so testing any exception for it stays in
+   bounds; args (offset 24) stays NULL, never GRAIL_WRAP_MAGIC. */
 typedef struct {
     Py_ssize_t    ob_refcnt;
     PyTypeObject *ob_type;           /* the exception type */
-    uint64_t      pad;               /* keeps offset 24 off GRAIL_WRAP_MAGIC */
-    uint64_t      magic;             /* GRAIL_RAISED_MAGIC */
+    PyObject     *dict;
+    PyObject     *args;
+    PyObject     *notes;
+    PyObject     *traceback;
+    PyObject     *context;
     PyObject     *cause;
+    char          suppress_context;
+    char          pad[3];
+    uint32_t      magic;             /* GRAIL_RAISED_MAGIC, at offset 68 */
     int           from_grail;        /* raised by a Grail callback */
     char          msg[1024];
 } GrailRaisedException;
 
 static GrailRaisedException *as_raised(PyObject *o) {
+    if (o == NULL || o->ob_type == NULL) return NULL;
+    if (!(o->ob_type->tp_flags & Py_TPFLAGS_BASE_EXC_SUBCLASS)) return NULL;
     GrailRaisedException *r = (GrailRaisedException *)o;
-    return (o != NULL && r->magic == GRAIL_RAISED_MAGIC) ? r : NULL;
+    return r->magic == GRAIL_RAISED_MAGIC ? r : NULL;
+}
+
+/* A token for the indicator (type, message, from-Grail), reusing one the
+   indicator dropped while it still sat in the thread state's slot -- Cython
+   never took that one, so nothing holds it (_grail_raised_token_recycle). */
+static GrailRaisedException *g_raised_free = NULL;
+
+PyObject *_grail_raised_token(PyObject *type, const char *msg, int from_grail) {
+    GrailRaisedException *r = g_raised_free;
+    if (r != NULL) {
+        g_raised_free = (GrailRaisedException *)r->context;
+        memset(r, 0, sizeof(*r));
+    } else {
+        r = (GrailRaisedException *)calloc(1, sizeof(GrailRaisedException));
+        if (r == NULL) return NULL;
+    }
+    r->ob_refcnt = 1;
+    r->ob_type = (PyTypeObject *)type;
+    r->magic = GRAIL_RAISED_MAGIC;
+    r->from_grail = from_grail;
+    snprintf(r->msg, sizeof(r->msg), "%s", msg ? msg : "");
+    return (PyObject *)r;
+}
+
+/* The indicator a token carries; 0 for anything that is not one. */
+int _grail_raised_token_read(PyObject *o, PyObject **type, const char **msg, int *from_grail) {
+    GrailRaisedException *r = as_raised(o);
+    if (r == NULL) return 0;
+    *type = (PyObject *)r->ob_type;
+    *msg = r->msg;
+    *from_grail = r->from_grail;
+    return 1;
+}
+
+void _grail_raised_token_recycle(PyObject *o) {
+    GrailRaisedException *r = as_raised(o);
+    if (r == NULL) return;
+    r->magic = 0;
+    r->context = (PyObject *)g_raised_free;
+    g_raised_free = r;
 }
 
 /* cpython.cc's error indicator: the wheel's own exception instance behind
@@ -702,54 +757,30 @@ PyObject *_grail_err_instance(void);
 void _grail_foreign_exc_text(PyObject *v, char *buf, size_t cap);
 int  _grail_err_from_grail(void);
 void _grail_err_set_from_grail(int v);
+PyObject *_grail_err_take_published(void);
+void _grail_err_set_published(PyObject *exc);
 
+/* The pending exception as the object the thread state holds -- a wheel's
+   own instance, or a token for the (type, message) pair -- so PyO3 and
+   Cython see one and the same object.  The caller owns it; the indicator is
+   cleared. */
 PyObject *PyErr_GetRaisedException(void) {
-    PyObject *type = PyErr_Occurred();
-    if (type == NULL) return NULL;
-    /* A real instance behind the indicator (a pyclass exception the wheel
-       raised, now being taken back by PyO3) goes back as itself. */
-    PyObject *inst = _grail_err_instance();
-    if (inst != NULL) {
-        Py_INCREF(inst);
-        PyErr_Clear();
-        return inst;
-    }
-    int from_grail = _grail_err_from_grail();
-    PyObject *ptype = NULL, *pvalue = NULL, *ptb = NULL;
-    PyErr_Fetch(&ptype, &pvalue, &ptb);
-    /* A value that already IS a raised exception (Set -> Fetch round trip)
-       goes back unchanged. */
-    if (as_raised(pvalue)) return pvalue;
-    GrailRaisedException *r = (GrailRaisedException *)calloc(1, sizeof(GrailRaisedException));
-    if (r == NULL) return NULL;
-    r->ob_refcnt = 1;
-    r->ob_type = (PyTypeObject *)ptype;
-    r->magic = GRAIL_RAISED_MAGIC;
-    r->from_grail = from_grail;
-    const char *m = pvalue ? PyUnicode_AsUTF8(pvalue) : NULL;
-    if (m) snprintf(r->msg, sizeof(r->msg), "%s", m);
-    if (getenv("GRAIL_SHIM_DIAG")) {
+    if (PyErr_Occurred() == NULL) return NULL;
+    PyObject *exc = _grail_err_take_published();
+    if (exc != NULL && getenv("GRAIL_SHIM_DIAG")) {
+        GrailRaisedException *r = as_raised(exc);
         fprintf(stderr, "SHIM-DIAG: PyErr_GetRaisedException -> %s: %s\n",
-                tp_name_of((PyTypeObject *)ptype), r->msg);
+                tp_name_of(exc->ob_type), r ? r->msg : "(instance)");
         fflush(stderr);
     }
-    return (PyObject *)r;
+    return exc;
 }
 
+/* The indicator becomes exc: a token's pair, or a wheel's own exception
+   object with its type and str() (cpython.cc, err_adopt). */
 void PyErr_SetRaisedException(PyObject *exc) {
     if (exc == NULL) { PyErr_Clear(); return; }
-    GrailRaisedException *r = as_raised(exc);
-    if (r) {
-        PyErr_SetString((PyObject *)r->ob_type, r->msg);
-        if (r->from_grail) _grail_err_set_from_grail(1);
-        return;
-    }
-    /* An instance of one of the wheel's own exception classes: keep the
-       OBJECT, with its type and str() as the indicator's pair. */
-    char text[1024];
-    _grail_foreign_exc_text(exc, text, sizeof(text));
-    PyErr_SetString((PyObject *)exc->ob_type, text);
-    _grail_err_set_instance(exc);
+    _grail_err_set_published(exc);
 }
 
 /* The message of one of the tokens above, or NULL for anything else --
@@ -765,8 +796,16 @@ PyObject *PyException_GetCause(PyObject *exc) {
     return NULL;
 }
 
+/* A C-level exception object (a token, or a wheel's own instance) keeps its
+   traceback in the struct, where Cython reads it; the shim makes none, so
+   this answers what was stored, usually NULL. */
+int _grail_is_c_exception(PyObject *o);
 PyObject *PyException_GetTraceback(PyObject *exc) {
-    (void)exc;
+    if (exc != NULL && _grail_is_c_exception(exc)) {
+        PyObject *tb = ((GrailRaisedException *)exc)->traceback;
+        Py_XINCREF(tb);
+        return tb;
+    }
     return NULL;
 }
 
@@ -938,25 +977,22 @@ int PyUnicode_EqualToUTF8AndSize(PyObject *u, const char *s, Py_ssize_t size) {
 }
 
 /* Interning is an identity optimisation; leaving the object as it is keeps
-   every equality answer right. */
+   every equality answer right.  But an interned str carries its hash, which
+   Cython's keyword matching reads (cpython.cc, grail_inline_hash). */
+Py_hash_t _grail_inline_hash_if_str(PyObject *obj);
 void PyUnicode_InternInPlace(PyObject **p) {
-    (void)p;
+    if (p != NULL && *p != NULL) (void)_grail_inline_hash_if_str(*p);
 }
 
-/* A fresh str whose buffer the CALLER then writes (jiter builds decoded JSON
-   strings this way).  That needs a real-layout str -- W5 in the plan -- so for
-   now it fails with an error rather than handing out a buffer nothing reads. */
-PyObject *PyUnicode_New(Py_ssize_t size, Py_UCS4 maxchar) {
-    (void)size; (void)maxchar;
-    STUBLOG("PyUnicode_New");
-    PyErr_SetString(PyExc_SystemError, "PyUnicode_New: writable str buffers are not supported by the Grail shim");
-    return NULL;
-}
-
+/* PyUnicode_New, PyUnicode_CopyCharacters and PyUnicode_Resize live in
+   cpython.cc, with the shim's CPython-layout strs; PyUnicode_DATA (a function
+   in 3.14's stable surface) answers from there too. */
+void *_grail_str_data_in_layout(PyObject *u);
+#ifdef PyUnicode_DATA
+#undef PyUnicode_DATA
+#endif
 void *PyUnicode_DATA(PyObject *u) {
-    (void)u;
-    STUBLOG("PyUnicode_DATA");
-    return NULL;
+    return _grail_str_data_in_layout(u);
 }
 
 /* --- PyUnicodeWriter: an appendable UTF-8 buffer, finished into a str ---- */

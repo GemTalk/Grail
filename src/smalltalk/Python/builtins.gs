@@ -5414,7 +5414,15 @@ ___isInstanceSingle___: anObject of: aClass
 	numpy._utils.set_module does ``isinstance(func, type)'' to tell a decorated
 	class from a function, and test_subclassinit asserts it for a class built
 	by ``type(name, bases, ns)''."
-	(aClass == type) @env0:ifTrue: [^ anObject @env0:isKindOf: Behavior].
+	"A TYPE A C EXTENSION DEFINED is a class too, though it reaches Grail as a
+	proxy: Cython registers its cdef classes with ABCs at import
+	(``ISeedSequence.register(SeedSequence)'' in numpy.random), and
+	ABCMeta.register refused one with ``Can only register classes''.  The
+	proxy answers issubclass of itself in C, nil when it is not a type."
+	(aClass == type) @env0:ifTrue: [
+		(anObject @env0:isKindOf: Behavior) ifTrue: [^ true].
+		^ (anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:')
+			and: [(anObject ___grailForeignTypeCheck___: anObject subclass: true) @env0:notNil]].
 	"CPython PyObject_IsInstance: after the exact-type fast path it looks up
 	__instancecheck__ on TYPE(cls) and, when the metaclass supplies one,
 	DELEGATES to it entirely.  That is the whole ABC mechanism -- what makes

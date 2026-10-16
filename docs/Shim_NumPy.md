@@ -1061,6 +1061,67 @@ Still open on this front:
 item 6), so the census runs with
 `NP_SKIP=savetxt/loadtxt,np.save/load`.
 
+## Stage 8 (2026-10-15): `numpy.random`'s Cython modules load
+
+`numpy.random` is nine Cython 3.3 modules. Cython bypasses the C API far more
+than numpy's own C does. All nine now load and initialise. `SeedSequence`,
+`generate_state` and `pool` agree with CPython.
+
+The import still fails at `mtrand`. Its module body creates a `RandomState()`,
+and that nests three user actions:
+1. `MT19937.__init__` is user action 1.
+2. It calls `generate_state`, which numpy wraps in a Python `errstate`
+   decorator (a callback into Grail).
+3. The wrapper calls the C method, which is user action 2.
+4. That method iterates a Grail `itertools.cycle` over an ndarray, which is
+   user action 3, and the VM refuses it.
+
+This is frontier item 1 again, and it needs the VM's limit raised.
+
+What it took (each now has a `_grail_demo` test, in the `Grail-Tests - Cython`
+category of `CPythonShimTestCase`):
+
+* **Inline reads of Grail ints, strs and bytes.** These three now cross in
+  CPython's layout, with the OOP in a hidden prefix
+  ([Shim_Object_Model.md](Shim_Object_Model.md) §5). True and False have the
+  int layout. Strs and bytes carry a hash computed in C, because Cython
+  matches keyword names by comparing hash fields.
+* **The pending exception lives in the thread state.** Cython reads and
+  writes `tstate->current_exception` directly. The shim's indicator is now
+  mirrored there in both directions (`err_publish`/`err_adopt`). A Grail
+  exception that C writes into the slot used to crash the gem, because it was
+  read as a C struct.
+* **Type slots called directly:**
+  * `tp_as_number` of int, bool and float;
+  * `tp_iternext`/`tp_iter` on a Grail class's type mirror;
+  * `tp_bases`, `tp_mro` and `tp_dict` filled by `PyType_Ready`;
+  * CPython 3.14's `tp_basicsize`, which Cython checks when it imports a type.
+
+  `__bases__`, `__mro__` and `__base__` of a C type now answer those tuples.
+* **Spec-built types:**
+  * a tuple of bases;
+  * the descriptor, attribute and vectorcall slots;
+  * the `__vectorcalloffset__` member, so a Cython function is called through
+    vectorcall rather than its `tp_call`, which reads a keyword dict inline;
+  * an inherited `tp_alloc`, which was NULL.
+* **`T.__init__(self, ...)`** on a C type runs T's `tp_init` with a real tuple.
+* **Nested extension loads.** A Cython module's exec slot imports its
+  siblings, and each load was a user action. An import C asks for now loads
+  the `.so` in C, inside the user action already in flight
+  (`GrailDynLoadRequest`). `_grail_nest1`..`3` test it three deep. A failed
+  load is removed from `sys.modules`.
+* **Missing C API symbols:** 54, plus 2 `PyUnicode` stubs. They include
+  inert code, frame and traceback objects for Cython's tracebacks, the
+  module-dict functions, `PyImport_ImportModuleLevelObject`, and
+  `PyType_FromMetaclass`. `Py_BuildValue` gained `B`, `H` and `C`, and its
+  `c` builds a bytes as CPython's does.
+* **Grail fixes:**
+  * `isinstance(C type, type)` is true, so `ABCMeta.register` accepts one.
+  * `secrets.randbits` and `randbelow` work past 2**32.
+
+Still open: a dict read inline (`PyDict_GET_SIZE`), and a C type's `repr`,
+which reads `<ShimForeignObject ...>` rather than `<class '...'>`.
+
 ## Repro
 
 ```
