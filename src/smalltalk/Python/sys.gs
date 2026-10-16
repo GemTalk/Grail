@@ -1139,6 +1139,30 @@ _clear_type_descriptors: aType
 	^ None
 %
 
+category: 'Grail-Private'
+method: sys
+___currentFrameTraceback___
+	"A one-node traceback for the innermost Python frame running now, or None
+	when there is none to name -- what ___callUnraisableHook___:object:errMsg:
+	reports for an exception that has no traceback of its own."
+
+	| frame |
+	frame := [self @env1:_getframe: 0]
+		@env0:on: AbstractException
+		do: [:ex |
+			((ex @env0:isKindOf: AlmostOutOfStack) or: [ex @env0:isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(frame @env0:isNil or: [frame == None]) ifTrue: [^ None].
+	^ [PyTraceback @env1:__new__: None _: frame _: 0
+			_: (frame @env1:___pyAttrLoad___: #'f_lineno')]
+		@env0:on: AbstractException
+		do: [:ex |
+			((ex @env0:isKindOf: AlmostOutOfStack) or: [ex @env0:isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex @env0:pass].
+			ex @env0:return: None]
+%
+
 category: 'Grail-Built-in Functions'
 method: sys
 _getframe
@@ -1454,13 +1478,21 @@ ___callUnraisableHook___: anException object: obj errMsg: errMsg
 	An exception raised by the HOOK ITSELF is swallowed.  There is by
 	construction no one to report it to -- the caller is already unwinding for
 	another reason -- and letting it out would replace the exception the caller
-	IS propagating with one from the reporting machinery."
+	IS propagating with one from the reporting machinery.
 
-	| args hook |
+	An exception with NO traceback is reported with one for the frame running
+	now, as CPython's format_unraisable does: an exception a finalizer catches
+	at the Smalltalk level never passed a Python ``except'' and so never had a
+	traceback built -- close() refusing a generator that ignored GeneratorExit
+	is one -- where CPython's reaches the hook with exc_traceback set."
+
+	| args hook tb |
+	tb := [anException @env1:__traceback__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: None].
+	(tb @env0:isNil or: [tb == None]) ifTrue: [tb := self ___currentFrameTraceback___].
 	args := PyUnraisableHookArgs @env0:excType: (anException @env0:class)
 		excValue: anException
-		excTraceback: ([anException @env1:__traceback__]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: None])
+		excTraceback: tb
 		errMsg: (errMsg @env0:isNil ifTrue: [None] ifFalse: [errMsg])
 		object: (obj @env0:isNil ifTrue: [None] ifFalse: [obj]).
 	hook := [self @env1:___pyAttrLoad___: #'unraisablehook']
