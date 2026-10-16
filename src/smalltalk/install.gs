@@ -1003,6 +1003,7 @@ run
 	at: #'ExceptStarShapesTestCase' put: nil;
 	at: #'ExceptStarTestCase' put: nil;
 	at: #'ExecBareEvalTestCase' put: nil;
+	at: #'ExecblockGetTestCase' put: nil;
 	at: #'ExecBuiltinsMappingTestCase' put: nil;
 	at: #'ExecClassBodyNamesTestCase' put: nil;
 	at: #'ExecClassDefinitionTestCase' put: nil;
@@ -2594,6 +2595,7 @@ input src/smalltalk/PythonTests/ExceptStarReraisePositionTestCase.gs
 input src/smalltalk/PythonTests/ExceptStarShapesTestCase.gs
 input src/smalltalk/PythonTests/ExceptStarTestCase.gs
 input src/smalltalk/PythonTests/ExecBareEvalTestCase.gs
+input src/smalltalk/PythonTests/ExecblockGetTestCase.gs
 input src/smalltalk/PythonTests/ExecBuiltinsMappingTestCase.gs
 input src/smalltalk/PythonTests/ExecClassBodyNamesTestCase.gs
 input src/smalltalk/PythonTests/ExecClassDefinitionTestCase.gs

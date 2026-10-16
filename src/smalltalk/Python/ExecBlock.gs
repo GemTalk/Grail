@@ -26,6 +26,37 @@ ExecBlock class removeAllMethods: 1.
 
 set compile_env: 1
 
+category: 'Grail-Descriptor Protocol'
+method: ExecBlock
+__get__: obj _: objtype
+	"Function-descriptor binding, ``f.__get__(obj, type)'' -- every CPython
+	function has it.  A nested def or a lambda is an ExecBlock, and had none,
+	so binding one by hand raised AttributeError (#1656); a module-level def is
+	a BoundMethod and already did.  Accessed through the class (obj None) the
+	function answers itself; otherwise a MethodBinding calls it with obj first,
+	as UnboundMethod >> __get__:_: does.
+
+	object >> ___descriptorGet___: binds a class attribute through this, which
+	is what makes ``m = lambda self: ...'' bind on a subclass of a BUILT-IN
+	(Exception, list) -- the accessor-pair read for a plain class already bound
+	an ExecBlock, and this path, having no __get__ to ask, did not.  Both
+	classes are resolved from the calling session's symbol list (file header)."
+
+	| none |
+	none := ExecBlock @env0:___pyNone___.
+	(obj == nil or: [obj == none]) ifTrue: [^ self].
+	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'MethodBinding')
+		instance: obj callable: self
+%
+
+category: 'Grail-Descriptor Protocol'
+method: ExecBlock
+__get__: obj
+	"``f.__get__(obj)'' -- the owner argument is optional."
+
+	^ self __get__: obj _: (ExecBlock @env0:___pyNone___)
+%
+
 category: 'Grail-Callable'
 method: ExecBlock
 __call__: args
