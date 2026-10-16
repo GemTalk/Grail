@@ -991,11 +991,8 @@ fix's control fails it.
    array or dtype, an override's `__array_function__`, a ufunc calling a
    Python `__array_ufunc__`, and any callback that reads a wheel object two
    deep.
-2. **A Python subclass of `ndarray` cannot be instantiated** ("Grail cannot
-   yet make an instance of a Python subclass of the C extension type"):
-   `np.matrix`, `ndarray.view(Sub)`, and `numpy.ma` (whose `MaskedArray`
-   import fails part-way, so `np.ma.masked_array` and `np.ma.is_masked` are
-   missing -- and `np.percentile` uses the latter).
+2. ~~**A Python subclass of `ndarray` cannot be instantiated**~~: fixed in
+   stage 7, below.
 3. **`numpy.random` -- Cython.**  Its modules are Cython-generated, and
    between them import ~50 CPython symbols the shim does not export
    (`nm -u` over numpy's `.so` files against `libcpython_ua`): Cython's
@@ -1013,8 +1010,8 @@ fix's control fails it.
    (`len`, `==`); a `numpy.str_` is built zeroed.
 6. **Session-killers**: `np.save`/`np.load` (error 2085, "Expected
    numpy.bool to be a Boolean"); `np.savetxt`/`np.loadtxt` (core dump).
-7. **`np.unique`**: a codegen CompileError 1001 ("You may not compile a
-   method for this selector").
+7. ~~**`np.unique`**: a codegen CompileError 1001~~: fixed by #1639
+   (reserved selector names).
 8. Smaller: `np.allclose` ("'ShimForeignObject' object is not callable"),
    `format(np.float64(1.5), '.1f')`, `pickle`/`copy.deepcopy` of an array
    ("issubclass() arg 1 must be a class"), `memoryview(ndarray)` and the
@@ -1022,6 +1019,125 @@ fix's control fails it.
    `np.char.upper` (AlmostOutOfStack), and `np.array.__doc__` (C docstrings
    are not read back).
 9. **A Grail generator cannot be iterated from C.**
+
+## Stage 7 (2026-10-15): Python subclasses of ndarray make instances
+
+Frontier item 2 above is closed by option A of
+[Shim_Foreign_Subclassing.md](Shim_Foreign_Subclassing.md) (§8 there says
+what was built). A subclass instance is a C body of a per-class subtype mirror plus a
+Grail half. The census now agrees with CPython on these, with the sanity and
+mac checks skipped as before:
+* `np.matrix`: creation, `*` and `.T`;
+* ndarray subclassing and `view(Sub)`;
+* `np.recarray` field access;
+* `numpy.ma`: import, `sum`, `filled` and `masked`;
+* `np.unique` and `np.percentile`.
+
+`numpy.ma` also needs module-level function docstrings (#1646). It rewrites
+`np.fromfunction.__doc__` and asserts that the text it replaces is there.
+
+The subclass work exposed these general shim defects, now fixed:
+
+* **`PyErr_Format` lost its error.** It set the exception before
+  formatting, and a `%R` that called back into Grail cleared it. It now
+  formats first.
+* **`PyObject_HasAttrString` sent a message instead of reading the
+  attribute**, so `np.dtype(V)` for a class with a `dtype` attribute
+  answered nil. It now reads, and answers in C for a wheel's own objects.
+* **`PyObject_IsInstance` / `IsSubclass` against a C type** answer in C,
+  which also saves a user action on numpy's hot paths.
+* **`iter()` on a C object with only `sq_item`** falls back to
+  `PySeqIter_New`, as CPython does.
+* **A C function's `__doc__` and `__text_signature__`** are split from its
+  internal doc as CPython's `find_signature` splits them. `inspect.signature`
+  reads `__text_signature__` for builtins.
+
+Still open on this front:
+* `matrix.I`, which is Python code inside a C callback reading a base
+  attribute, so it is three user actions deep (frontier item 1);
+* `memmap`, which needs an `mmap` module.
+
+`np.loadtxt` and `np.save`/`np.load` still kill the session (frontier
+item 6), so the census runs with
+`NP_SKIP=savetxt/loadtxt,np.save/load`.
+
+## Stage 8 (2026-10-15): `numpy.random`'s Cython modules load
+
+`numpy.random` is nine Cython 3.3 modules. Cython bypasses the C API far more
+than numpy's own C does. All nine now load and initialise. `SeedSequence`,
+`generate_state` and `pool` agree with CPython.
+
+The import still fails at `mtrand`. Its module body creates a `RandomState()`,
+and that nests three user actions:
+1. `MT19937.__init__` is user action 1.
+2. It calls `generate_state`, which numpy wraps in a Python `errstate`
+   decorator (a callback into Grail).
+3. The wrapper calls the C method, which is user action 2.
+4. That method iterates a Grail `itertools.cycle` over an ndarray, which is
+   user action 3, and the VM refuses it.
+
+This is frontier item 1 again, and it needs the VM's limit raised.
+
+What it took (each now has a `_grail_demo` test, in the `Grail-Tests - Cython`
+category of `CPythonShimTestCase`):
+
+* **Inline reads of Grail ints, strs and bytes.** These three now cross in
+  CPython's layout, with the OOP in a hidden prefix
+  ([Shim_Object_Model.md](Shim_Object_Model.md) §5). True and False have the
+  int layout. Strs and bytes carry a hash computed in C, because Cython
+  matches keyword names by comparing hash fields.
+* **The pending exception lives in the thread state.** Cython reads and
+  writes `tstate->current_exception` directly. The shim's indicator is now
+  mirrored there in both directions (`err_publish`/`err_adopt`). A Grail
+  exception that C writes into the slot used to crash the gem, because it was
+  read as a C struct.
+* **Type slots called directly:**
+  * `tp_as_number` of int, bool and float;
+  * `tp_iternext`/`tp_iter` on a Grail class's type mirror;
+  * `tp_bases`, `tp_mro` and `tp_dict` filled by `PyType_Ready`;
+  * CPython 3.14's `tp_basicsize`, which Cython checks when it imports a type.
+
+  `__bases__`, `__mro__` and `__base__` of a C type now answer those tuples.
+* **Spec-built types:**
+  * a tuple of bases;
+  * the descriptor, attribute and vectorcall slots;
+  * the `__vectorcalloffset__` member, so a Cython function is called through
+    vectorcall rather than its `tp_call`, which reads a keyword dict inline;
+  * an inherited `tp_alloc`, which was NULL.
+* **`T.__init__(self, ...)`** on a C type runs T's `tp_init` with a real tuple.
+* **Nested extension loads.** A Cython module's exec slot imports its
+  siblings, and each load was a user action. An import C asks for now loads
+  the `.so` in C, inside the user action already in flight
+  (`GrailDynLoadRequest`). `_grail_nest1`..`3` test it three deep. A failed
+  load is removed from `sys.modules`.
+* **Missing C API symbols:** 54, plus 2 `PyUnicode` stubs. They include
+  inert code, frame and traceback objects for Cython's tracebacks, the
+  module-dict functions, `PyImport_ImportModuleLevelObject`, and
+  `PyType_FromMetaclass`. `Py_BuildValue` gained `B`, `H` and `C`, and its
+  `c` builds a bytes as CPython's does.
+* **Grail fixes:**
+  * `isinstance(C type, type)` is true, so `ABCMeta.register` accepts one.
+  * `secrets.randbits` and `randbelow` work past 2**32.
+
+Still open: a dict read inline (`PyDict_GET_SIZE`).
+
+A C type now introspects as CPython's does (category `Grail-Tests - C Type
+Introspection`). It used to fall back to the proxy's own Smalltalk answers.
+* **`repr`/`str`** are `<class 'numpy.ndarray'>`, not
+  `<ShimForeignObject ...>`.
+* **`__dict__`** is a mappingproxy of its own entries.
+  `PyDictProxy_New` now makes a real mappingproxy, where it used to answer
+  the dict itself.
+* **`__doc__`** is the type's own doc.
+* **`dir()`** lists its C methods, members and getsets, so
+  `inspect.getmembers` sees them. It used to list only the proxy's own
+  methods.
+* **`vars()`** reads `__dict__`. It used to list the proxy's Smalltalk
+  slots.
+* **`mro()`** works.
+* **`__subclasses__()`** lists the Python classes built on the type, in both
+  the bound spelling and `type.__subclasses__(T)`. It used to list
+  `object`'s subclasses, and the unbound spelling crashed the session.
 
 ## Repro
 

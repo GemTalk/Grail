@@ -112,6 +112,12 @@ _resolutionRootFor: obj
 			boxed := System @env0:myUserProfile @env0:symbolList
 				@env0:objectNamed: #'AbstractPyFloat'.
 			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	"A C TYPE reaches Grail as a ShimForeignObject, not a Behavior, and
+	answers the class reflection methods itself (ShimForeignObject>>
+	__subclasses__): ``type.__subclasses__(T)'' ran Behavior's on the proxy,
+	whose ``subclasses'' was an uncatchable MessageNotUnderstood."
+	(definingClass == Behavior and: [obj @env0:isKindOf: ShimForeignObject])
+		ifTrue: [^ ShimForeignObject].
 	^ definingClass
 %
 
@@ -1850,8 +1856,9 @@ ___tableEntryFor___: aClass table: aTableSelector
 	reference would be a forward one.  Falls back to the plain superclass chain
 	when it is absent, which is the whole answer under single inheritance."
 
-	| chain |
+	| chain absent |
 	aClass == nil ifTrue: [^ nil].
+	absent := Object @env0:new.
 	chain := self ___lookupChainFrom___: aClass.
 	chain @env0:do: [:each |
 		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
@@ -1861,10 +1868,16 @@ ___tableEntryFor___: aClass table: aTableSelector
 				| tbl v |
 				tbl := [each @env0:perform: aTableSelector env: 1]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				"Stop at a table that HAS the name, even with a nil entry: that
+				 is how the doc table records an undocumented def, so an
+				 override without a docstring answers None rather than its
+				 base's (#1650).  No other table stores nil."
 				tbl == nil ifFalse: [
-					v := [tbl @env0:at: selector @env0:asString otherwise: nil]
-						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-					v == nil ifFalse: [^ v]]]].
+					v := [(tbl @env0:includesKey: selector @env0:asString)
+							ifTrue: [tbl @env0:at: selector @env0:asString]
+							ifFalse: [absent]]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: absent].
+					v == absent ifFalse: [^ v]]]].
 	^ nil
 %
 
@@ -1893,6 +1906,36 @@ __kwdefaults__
 
 	^ ExecBlock @env0:___pyKwDefaultsDict___:
 		(self ___rawDefaults___ ifNotNil: [:r | r @env0:at: 2])
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___writeDefaultsThrough___: name value: value
+	"``Cls.m.__defaults__ = t'' / ``Cls.m.__kwdefaults__ = d'', written into
+	the class-body default store the method's calls bind from -- the
+	method-side twin of BoundMethod >> ___writeDefaultsThrough___:value:,
+	which says why (#1228).  The keys come from the defining class's
+	___methodDefaultKeysTable___, the same entry __defaults__ reads through.
+	False for any other name, a method with no stored defaults (a
+	@staticmethod's are inline), or a shape the store cannot carry."
+
+	| sym isKw cls entry |
+	sym := name @env0:asSymbol.
+	isKw := sym == #'__kwdefaults__'.
+	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
+	cls := self ___metadataClass___.
+	cls == nil ifTrue: [^ false].
+	entry := self ___tableEntryFor___: cls table: #'___methodDefaultKeysTable___'.
+	entry == nil ifTrue: [^ false].
+	(module @env0:___writeDefaults: value entry: entry kw: isKw
+		into: [:key :v | module @env0:___storeClassDefaultOwnedBy: cls at: key put: v])
+			ifFalse: [^ false].
+	attrDict @env0:isNil ifFalse: [
+		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
+			attrDict @env1:__delitem__: name @env0:asString]].
+	[self @env0:removeDynamicInstVar: sym]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ true
 %
 
 category: 'Grail-Python Metadata'
@@ -2018,6 +2061,8 @@ __setattr__: name _: value
 	just as quietly."
 
 	BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+	(self ___writeDefaultsThrough___: name value: value)
+		ifTrue: [^ ExecBlock @env0:___pyNone___].
 	name @env0:asSymbol == #'__dict__' ifTrue: [
 		"INSTALL it, rather than storing a dynamic instVar that happens to be
 		spelled __dict__ -- which is what happened before, leaving the real

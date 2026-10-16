@@ -150,6 +150,37 @@ find_spec: aName _: aPath _: aTarget
 
 category: 'Grail-Import'
 method: GrailBuiltinImporter
+find_distributions
+	"importlib.metadata's discovery hook, ``finder.find_distributions()''.
+	CPython's PathFinder answers it; Grail's meta_path has no PathFinder, so
+	this finder does, through importlib._grail_find_distributions (#1657)."
+
+	^ self _find_distributions: #() kw: nil
+%
+
+category: 'Grail-Import'
+method: GrailBuiltinImporter
+find_distributions: aContext
+	"``finder.find_distributions(context)'' -- how Distribution.discover asks."
+
+	^ self _find_distributions: { aContext } kw: nil
+%
+
+category: 'Grail-Import'
+method: GrailBuiltinImporter
+_find_distributions: positional kw: kwargs
+	"``finder.find_distributions(context=...)''.  The work is Python's, in the
+	importlib package beside _search_roots, whose root order it uses."
+
+	| pkg |
+	pkg := ((Python @env0:at: #builtins) @env1:instance)
+		@env1:___import__: { 'importlib' } kw: nil.
+	^ (pkg @env1:___pyAttrLoad___: #'_grail_find_distributions')
+		@env1:___pyCallValue___: positional kw: kwargs
+%
+
+category: 'Grail-Import'
+method: GrailBuiltinImporter
 find_module: aName
 	"PEP 302 find_module(fullname).  Deprecated upstream and removed in CPython
 	3.12, kept because a finder is also asked this way by older third-party

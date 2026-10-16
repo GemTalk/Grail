@@ -1382,6 +1382,17 @@ test_math and test___all__ timed out beside the SUnit suite and are OK alone;
 `check_python_fixtures.sh` 667 fixtures agree with CPython.
 
 
+**Merged with `origin/main` a third time (2026-10-15)**, 25 commits
+(#1645-#1664, among them main's own CPython `importlib.metadata`).  One
+conflict: `inspect.py`, where this branch's `_signature_get_partial` and
+main's `_signature_from_text` were added at the same place -- independent
+helpers, both kept.  Gates after the merge: `run_tests.sh` **8151 run, 8151
+passed**, 8 of 8 shards; the CPython conformance gate **0 regressions, 4
+improvements** (test_setcomps, test_generators, test_exception_hierarchy,
+test_uuid) -- test_math, test_pickle and test___all__ timed out beside the
+SUnit suite and are OK alone; `check_python_fixtures.sh` 674 fixtures agree
+with CPython.
+
 ### Phase 6, part 3 -- FastAPI's tutorial tests *(2026-10-15)*
 
 On `jmason/fastapi7`, after #1654.  `tests/test_tutorial/` -- 252 modules,
@@ -1398,9 +1409,9 @@ general Grail bug, each pinned by a check in `tests/python/fastapi_walls.py`:
 
 | wall | symptom in the tutorials | fix |
 |---|---|---|
-| `importlib.metadata` was a stub | `version()` of an installed distribution raised; pydantic's email/settings paths asked | CPython 3.14's package; a vendored-module version table for the stdlib-shipped frameworks |
-| a `@classmethod` with a default overriding a base instance method under a metaclass | MessageNotUnderstood | the metaclass-side source-chain check also asks the selector family |
-| `vars(cls)` was a snapshot | `vars(C).update(...)` lost the write | the live view |
+| `importlib.metadata` was a stub | `version()` of an installed distribution raised; pydantic's email/settings paths asked | landed on main independently as #1657 (CPython's package, `.dist-info` for the vendored frameworks); main's version kept in the merge |
+| a `@classmethod` with a default overriding a base instance method under a metaclass | MessageNotUnderstood | likewise #1657 (`___grailOwnsPythonDef___:family:forwarders:` on the metaclass side); main's kept |
+| `vars(obj)` was a snapshot | `vars(o).update(...)` lost the write | likewise #1657; main's kept |
 | `from ....x import y` | a four-dot relative import did not parse | dots read as `.` and `...` tokens alike |
 | no `hashlib.sha224` / `sha384` | 70 OAuth2/JWT setups failed (`HS384` tables) | pure-Python `_grail_sha2`, verified against CPython |
 | a keyword call to a classmethod through `cls` | `cls.m(x, a=1)` was an MNU: pydantic-settings' `settings_customise_sources` left every `BaseSettings` empty | classmethods get the varargs forwarder instance methods have (not for a `cls`-only def, nor `__init_subclass__`) |

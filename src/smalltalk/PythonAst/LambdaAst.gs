@@ -611,15 +611,26 @@ printSmalltalkOn: aStream
 			nextPutAll: '; @env0:___pyQualname___: ''';
 			nextPutAll: qualified;
 			nextPutAll: ''''].
+	"With the qualname, co_flags and co_varnames a def's code object carries
+	(FunctionDefAst >> emitCodeExtrasOn:nested:).  Without them a lambda's
+	co_varnames was an AttributeError, its co_flags 0 and a nested lambda's
+	co_qualname the bare '<lambda>' (#1228)."
 	aStream
-		nextPutAll: '; @env0:___pyCode___: (PyCode @env0:name: ''<lambda>'' filename: '.
+		nextPutAll: '; @env0:___pyCode___: (((PyCode @env0:name: ''<lambda>'' qualname: ''';
+		nextPutAll: qualified asString;
+		nextPutAll: ''' filename: '.
 	self emitSourceFilenameLiteralOn: aStream.
 	aStream
 		nextPutAll: ' firstlineno: '; nextPutAll: (self beginLine ifNil: [0]) printString;
 		nextPutAll: ' argcount: '; nextPutAll: (posArgs size) printString;
 		nextPutAll: ' posonlyargcount: '; nextPutAll: (args posonlyargs ifNil: [#()]) size printString;
 		nextPutAll: ' kwonlyargcount: '; nextPutAll: (args kwonlyargs ifNil: [#()]) size printString;
-		nextPutAll: ')'.
+		nextPutAll: ') @env0:___setFlags___: ';
+		nextPutAll: (self ___coFlagsFor___: qualified) printString;
+		nextPutAll: ') @env0:___setVarnames___: #('.
+	self ___coVarnames___ do: [:each |
+		aStream nextPutAll: ' '''; nextPutAll: each; nextPutAll: ''''].
+	aStream nextPutAll: ' ))'.
 	"And the PARAMETER SPEC inspect.signature builds from, the def's own
 	``___pySig___:'' stamp.  A lambda had none, so every lambda's signature was
 	``()'' whatever it declared -- and pydantic, which decides from it whether
@@ -956,16 +967,22 @@ ___emitIRLambdaBlockOn___: aBuilder
 	qual = '<lambda>' ifFalse: [
 		specs add: { #'___pyQualname___:'. { aBuilder obj: qual asString }. 0 }].
 	code := aBuilder
-		send: #'name:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:'
+		send: #'name:qualname:filename:firstlineno:argcount:posonlyargcount:kwonlyargcount:'
 		to: (aBuilder globalNamed: #PyCode)
 		with: {
 			aBuilder obj: '<lambda>'.
+			aBuilder obj: qual asString.
 			aBuilder obj: self ___irFileName___ asString.
 			aBuilder obj: (self beginLine ifNil: [0]).
 			aBuilder obj: (args posonlyargs ifNil: [#()]) size + (args args ifNil: [#()]) size.
 			aBuilder obj: (args posonlyargs ifNil: [#()]) size.
 			aBuilder obj: (args kwonlyargs ifNil: [#()]) size }
 		env: 0.
+	"co_flags and co_varnames, as the text path stamps them."
+	code := aBuilder send: #'___setFlags___:' to: code
+		with: { aBuilder obj: (self ___coFlagsFor___: qual) } env: 0.
+	code := aBuilder send: #'___setVarnames___:' to: code
+		with: { aBuilder obj: self ___coVarnames___ } env: 0.
 	specs add: { #'___pyCode___:'. { code }. 0 }.
 	"The parameter spec, as the text path stamps it (printSmalltalkOn:)."
 	[ | specDef |
@@ -1104,4 +1121,35 @@ ___emitIRLambdaPrologueOn___: aBuilder pos: posLeaf kw: kwLeaf
 		((args args ifNil: [#()]) , (args kwonlyargs ifNil: [#()])) do: [:each |
 			aBuilder add: (aBuilder send: #removeKey:ifAbsent: to: (aBuilder var: leaf)
 				with: { aBuilder obj: each name asString. aBuilder inBlockDo: [] } env: 0)]]
+%
+
+category: 'Grail-code generation'
+method: LambdaAst
+___coVarnames___
+	"``co_varnames'' for this lambda: its parameters, in the order a def's are
+	reported (FunctionDefAst >> ___coVarnames___, which this delegates to so
+	the two cannot drift).  A lambda body is one expression, so there are no
+	other locals to leave out."
+
+	^ (FunctionDefAst new args: args; yourself) ___coVarnames___
+%
+
+category: 'Grail-code generation'
+method: LambdaAst
+___coFlagsFor___: aQualname
+	"``co_flags'' for this lambda: OPTIMIZED | NEWLOCALS (3), VARARGS (4),
+	VARKEYWORDS (8), and NESTED (16) when a function encloses it -- which its
+	qualname shows as a ``<locals>'' step, and which CPython sets for a
+	lambda in a class body only when that class is itself inside a function.
+	The kind bits do not arise: a lambda cannot be ``async'', and a generator
+	lambda (``lambda: (yield)'') is not distinguished here."
+
+	| flags |
+	flags := 3.
+	args notNil ifTrue: [
+		args vararg notNil ifTrue: [flags := flags + 4].
+		args kwarg notNil ifTrue: [flags := flags + 8]].
+	((aQualname asString findString: '<locals>' startingAt: 1) > 0)
+		ifTrue: [flags := flags + 16].
+	^ flags
 %

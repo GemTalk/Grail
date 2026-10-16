@@ -5228,6 +5228,12 @@ loadDynamicModuleNamed: moduleName fromPath: pathString
 	moduleInstance := [CPythonShim loadDynamicModule: moduleName fromPath: pathString]
 		on: GrailShimError
 		do: [:ex |
+			"A failed load leaves nothing in sys.modules, as CPython's
+			_load_unlocked removes the entry: a Cython module puts ITSELF
+			there as its exec starts, and numpy.random's ``from .mtrand import
+			*'' found that C module's proxy after mtrand failed."
+			[(self @env1:modules) @env0:removeKey: moduleName asString ifAbsent: [nil]]
+				on: Error do: [:e | e return: nil].
 			ImportError @env0:___signalExtensionLoadFailed___: ex messageText
 				name: moduleName
 				path: pathString].

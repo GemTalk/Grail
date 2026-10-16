@@ -398,7 +398,18 @@ extern "C" void PyGILState_Release(PyGILState_STATE) {
    with PyInterpreterState_Main(), and both were stubs answering NULL, so
    ``import numpy'' died on that read.  CPython 3.14's PyThreadState begins
    prev, next, interp; the blocks are far larger than either struct, so any
-   other field a wheel reads is zero (no frame, no exception, depth 0). */
+   other field a wheel reads is zero (no frame, depth 0).
+
+   Except the exception fields, which Cython reads and writes INLINE: with
+   CYTHON_FAST_THREAD_STATE (on for any CPython build) a pending error is
+   ``tstate->current_exception != NULL'', fetch and restore move that object
+   in and out of the slot directly, and an ``except'' block swaps
+   ``tstate->exc_info->exc_value''.  cpython.cc keeps the slot in step with
+   the shim's indicator (err_publish / err_adopt), and exc_info points at the
+   state's own exc_state, as in CPython.  Offsets measured against CPython
+   3.14.8's headers (offsetof(PyThreadState, ...)). */
+#define GRAIL_TSTATE_EXC_INFO_OFFSET  120
+#define GRAIL_TSTATE_EXC_STATE_OFFSET 256
 static union { char bytes[8192]; void *align; } g_shim_interp;
 static union {
     char bytes[8192];
@@ -406,6 +417,12 @@ static union {
 } g_shim_tstate = { .head = { NULL, NULL, &g_shim_interp } };
 extern "C" PyInterpreterState * PyInterpreterState_Main(void) {
     return (PyInterpreterState *)&g_shim_interp;
+}
+extern "C" char *_grail_tstate_bytes(void) {
+    char *b = g_shim_tstate.bytes;
+    void **exc_info = (void **)(b + GRAIL_TSTATE_EXC_INFO_OFFSET);
+    if (*exc_info == NULL) *exc_info = b + GRAIL_TSTATE_EXC_STATE_OFFSET;
+    return b;
 }
 /* PyList_GetItemRef implemented in cpython.cc (strong-ref PyList_GetItem). */
 /* PyLong_AsLongAndOverflow lives in cpython.cc. */
@@ -644,7 +661,11 @@ extern "C" PyObject * PySequence_Repeat(PyObject *o, Py_ssize_t count) {
 /* PySys_GetObject is implemented for real in cpython.cc (delegates to the
    Grail sys module via the server) — not stubbed here. */
 extern "C" PyThreadState * PyThreadState_Get(void) {
-    return (PyThreadState *)&g_shim_tstate;   /* see PyInterpreterState_Main */
+    return (PyThreadState *)_grail_tstate_bytes();   /* see PyInterpreterState_Main */
+}
+/* Cython's __Pyx_PyThreadState_Current on 3.13+. */
+extern "C" PyThreadState * PyThreadState_GetUnchecked(void) {
+    return (PyThreadState *)_grail_tstate_bytes();
 }
 extern "C" int PyTraceMalloc_Track(unsigned int domain, uintptr_t ptr, size_t size) {
     return 0;
@@ -856,4 +877,345 @@ extern "C" {
   PyObject _Py_EllipsisObject={1,0};
   static struct _object _exc_FPE={1,0}; PyObject *PyExc_FloatingPointError=&_exc_FPE;
   static struct _object _exc_IW={1,0}; PyObject *PyExc_ImportWarning=&_exc_IW;
+}
+
+/* ====================================================================
+ * What Cython-generated modules use (numpy.random: _common, bit_generator,
+ * _mt19937, _pcg64, _philox, _sfc64, _bounded_integers, _generator,
+ * mtrand -- Cython 3.3).  Each was a missing symbol: dlopen refused the
+ * data ones by name, and a function one would have been a NULL call.
+ * ==================================================================== */
+
+extern "C" PyObject *PyObject_Vectorcall(PyObject *, PyObject *const *, size_t, PyObject *);
+extern "C" int PyDict_GetItemRef(PyObject *, PyObject *, PyObject **);
+extern "C" int PyObject_GetOptionalAttr(PyObject *, PyObject *, PyObject **);
+extern "C" PyObject *PySys_GetObject(const char *);
+#include <limits.h>
+
+/* --- Data -------------------------------------------------------------- */
+
+/* CPython 3.14.8's PY_VERSION_HEX: Cython compares it with the version it
+   was built for. */
+extern "C" const unsigned long Py_Version = 0x030e08f0UL;
+
+/* The buffer of an empty bytearray: Cython's PyByteArray_AS_STRING of one. */
+extern "C" char _PyByteArray_empty_string[] = "";
+
+/* Types Cython tests identity against (PyMethod_Check, its range and
+   traceback checks).  Nothing Grail hands C has one of these as its type --
+   a bound method's fields are read INLINE once PyMethod_Check passes -- so
+   each check answers false and Cython takes its general path. */
+static PyTypeObject *grail_named_type(PyTypeObject *t, const char *name) {
+    if (t->tp_name == NULL) {
+        t->ob_base.ob_base.ob_refcnt = 1;
+        t->ob_base.ob_base.ob_type = &PyType_Type;
+        t->tp_name = name;
+        t->tp_basicsize = sizeof(PyObject);
+        t->tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
+        t->tp_base = &PyBaseObject_Type;
+    }
+    return t;
+}
+extern "C" PyTypeObject PyMethod_Type;
+extern "C" PyTypeObject PyRange_Type;
+extern "C" PyTypeObject PyTraceBack_Type;
+PyTypeObject PyMethod_Type;
+PyTypeObject PyRange_Type;
+PyTypeObject PyTraceBack_Type;
+static PyTypeObject GrailCode_Type;
+static PyTypeObject GrailFrame_Type;
+/* range(*args): Cython calls &PyRange_Type itself for ``range(n)'' it does
+   not turn into a C loop -- "cannot create 'range' instances" without this.
+   Grail's range is the answer (a Grail range's own type is its mirror, so
+   PyRange_Check stays false for it and Cython takes its general paths). */
+static PyObject *grail_range_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    (void)type;
+    PyObject *b = PyImport_ImportModule("builtins");
+    PyObject *range = b ? PyObject_GetAttrString(b, "range") : NULL;
+    Py_XDECREF(b);
+    if (range == NULL) return NULL;
+    PyObject *r = PyObject_Call(range, args, kwds);
+    Py_DECREF(range);
+    return r;
+}
+
+__attribute__((constructor)) static void grail_cython_types_init(void) {
+    grail_named_type(&PyMethod_Type, "method");
+    grail_named_type(&PyRange_Type, "range");
+    PyRange_Type.tp_new = grail_range_new;
+    grail_named_type(&PyTraceBack_Type, "traceback");
+    grail_named_type(&GrailCode_Type, "code");
+    grail_named_type(&GrailFrame_Type, "frame");
+}
+
+extern "C" void _Py_FatalErrorFunc(const char *func, const char *msg) {
+    fprintf(stderr, "Fatal Python error: %s: %s\n", func ? func : "?", msg ? msg : "");
+    fflush(stderr);
+    abort();
+}
+
+/* --- Code objects, frames, tracebacks --------------------------------- */
+
+/* Cython builds a code object per function (for __code__ and tracebacks)
+   and, when an exception passes through a Cython frame, a code object, a
+   frame for it, and a traceback entry -- writing the frame's f_lineno
+   INLINE.  The shim keeps no Python frames, so each is an inert, zeroed
+   object of its type, large enough for any field Cython touches, and
+   PyTraceBack_Here adds nothing: the traceback Grail shows is its own. */
+static PyObject *grail_inert_object(PyTypeObject *type) {
+    PyObject *o = (PyObject *)calloc(1, 512);
+    if (o == NULL) return PyErr_NoMemory();
+    o->ob_refcnt = 1;
+    o->ob_type = type;
+    return o;
+}
+extern "C" PyObject *PyCode_NewEmpty(const char *filename, const char *funcname, int firstlineno) {
+    /* Cython makes one of these as an exception first passes a line of its
+       code (__Pyx_AddTraceback), so it names where a C-level failure
+       started -- worth a line under GRAIL_SHIM_DIAG. */
+    if (getenv("GRAIL_SHIM_DIAG")) {
+        fprintf(stderr, "SHIM-DIAG: traceback entry %s (%s:%d)\n",
+                funcname ? funcname : "?", filename ? filename : "?", firstlineno);
+        fflush(stderr);
+    }
+    return grail_inert_object(&GrailCode_Type);
+}
+extern "C" PyObject *PyUnstable_Code_NewWithPosOnlyArgs(
+        int argcount, int posonlyargcount, int kwonlyargcount, int nlocals, int stacksize,
+        int flags, PyObject *code, PyObject *consts, PyObject *names, PyObject *varnames,
+        PyObject *freevars, PyObject *cellvars, PyObject *filename, PyObject *name,
+        PyObject *qualname, int firstlineno, PyObject *linetable, PyObject *exceptiontable) {
+    (void)argcount; (void)posonlyargcount; (void)kwonlyargcount; (void)nlocals;
+    (void)stacksize; (void)flags; (void)code; (void)consts; (void)names; (void)varnames;
+    (void)freevars; (void)cellvars; (void)filename; (void)name; (void)qualname;
+    (void)firstlineno; (void)linetable; (void)exceptiontable;
+    return grail_inert_object(&GrailCode_Type);
+}
+extern "C" PyObject *PyFrame_New(PyThreadState *tstate, PyObject *code, PyObject *globals, PyObject *locals) {
+    (void)tstate; (void)code; (void)globals; (void)locals;
+    return grail_inert_object(&GrailFrame_Type);
+}
+extern "C" int PyTraceBack_Here(PyObject *frame) {
+    (void)frame;
+    return 0;
+}
+/* No Python frame is executing as far as C can tell. */
+extern "C" PyObject *PyThreadState_GetFrame(PyThreadState *tstate) {
+    (void)tstate;
+    return NULL;
+}
+
+/* --- Interpreter, GC, locks -------------------------------------------- */
+
+extern "C" int64_t PyInterpreterState_GetID(PyInterpreterState *interp) {
+    (void)interp;
+    return 0;
+}
+/* The shim runs no cyclic GC; the switch is remembered so a disable /
+   enable pair answers as CPython's does. */
+static int g_gc_enabled = 1;
+extern "C" int PyGC_Disable(void) { int was = g_gc_enabled; g_gc_enabled = 0; return was; }
+extern "C" int PyGC_Enable(void)  { int was = g_gc_enabled; g_gc_enabled = 1; return was; }
+extern "C" int PyObject_GC_IsFinalized(PyObject *op) { (void)op; return 0; }
+extern "C" int PyObject_CallFinalizerFromDealloc(PyObject *self) { (void)self; return 0; }
+extern "C" int PyUnstable_Object_EnableDeferredRefcount(PyObject *op) { (void)op; return 0; }
+/* The gem runs one thread at a time, so a lock is a token. */
+typedef void *PyThread_type_lock;
+extern "C" PyThread_type_lock PyThread_allocate_lock(void) { return calloc(1, 16); }
+extern "C" void PyThread_free_lock(PyThread_type_lock lock) { free(lock); }
+
+/* --- Modules and imports ----------------------------------------------- */
+
+/* sys.modules, borrowed. */
+extern "C" PyObject *PyImport_GetModuleDict(void) {
+    return PySys_GetObject("modules");
+}
+/* sys.modules.get(name), as a new reference; NULL with no error when the
+   module is not loaded. */
+extern "C" PyObject *PyImport_GetModule(PyObject *name) {
+    PyObject *modules = PyImport_GetModuleDict();
+    if (modules == NULL) return NULL;
+    PyObject *m = PyObject_CallMethod(modules, "get", "O", name);
+    if (m == Py_None) { Py_DECREF(m); return NULL; }
+    return m;
+}
+/* The module of that name in sys.modules, or a new empty one put there --
+   CPython's AddModule, which never imports.  Cython asks for ``builtins''
+   and for its own ``cython_runtime'', where it keeps cline_in_traceback.
+   Grail cannot construct a module object (types.ModuleType is not
+   constructible: a module is a class of its own), so the new one is a
+   types.SimpleNamespace with the module's __name__, which is all Cython
+   reads and writes on it. */
+extern "C" PyObject *PyImport_AddModuleRef(const char *name) {
+    PyObject *key = PyUnicode_FromString(name);
+    if (key == NULL) return NULL;
+    PyObject *m = PyImport_GetModule(key);
+    if (m != NULL || PyErr_Occurred()) { Py_DECREF(key); return m; }
+    PyObject *types = PyImport_ImportModule("types");
+    PyObject *cls = types ? PyObject_GetAttrString(types, "SimpleNamespace") : NULL;
+    Py_XDECREF(types);
+    PyObject *kw = cls ? Py_BuildValue("{s:O}", "__name__", key) : NULL;
+    PyObject *empty = kw ? PyTuple_New(0) : NULL;
+    m = empty ? PyObject_Call(cls, empty, kw) : NULL;
+    Py_XDECREF(empty); Py_XDECREF(kw); Py_XDECREF(cls);
+    PyObject *modules = m ? PyImport_GetModuleDict() : NULL;
+    if (modules != NULL && PyObject_SetItem(modules, key, m) < 0) { Py_DECREF(m); m = NULL; }
+    Py_DECREF(key);
+    return m;
+}
+/* __import__(name, globals, locals, fromlist, level): Cython's ``import x''
+   and ``cimport''.  In Grail, with any .so load done here in C
+   (cpython.cc, _grail_import_level). */
+extern "C" PyObject *_grail_import_level(PyObject *, PyObject *, PyObject *, PyObject *, int);
+extern "C" PyObject *PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
+        PyObject *locals, PyObject *fromlist, int level) {
+    return _grail_import_level(name, globals, locals, fromlist, level);
+}
+/* module.__name__ as UTF-8.  The str is kept, as CPython's buffer lives as
+   long as the module. */
+extern "C" const char *PyModule_GetName(PyObject *module) {
+    PyObject *n = PyObject_GetAttrString(module, "__name__");
+    return n ? PyUnicode_AsUTF8(n) : NULL;
+}
+/* The shim makes no module objects of its own: a module def IS its module
+   (PyModuleDef_Init), and Py_mod_create is not run. */
+extern "C" PyObject *PyModule_NewObject(PyObject *name) {
+    (void)name;
+    PyErr_SetString(PyExc_SystemError, "PyModule_NewObject: the Grail shim does not create module objects");
+    return NULL;
+}
+
+/* --- Ints, sequences, dicts, calls ------------------------------------- */
+
+extern "C" int PyLong_AsInt(PyObject *obj) {
+    long v = PyLong_AsLong(obj);
+    if (v == -1 && PyErr_Occurred()) return -1;
+    if (v < INT_MIN || v > INT_MAX) {
+        PyErr_SetString(PyExc_OverflowError, "Python int too large to convert to C int");
+        return -1;
+    }
+    return (int)v;
+}
+/* int(str, base); *pend is set past the text, which int() consumed whole. */
+extern "C" PyObject *PyLong_FromString(const char *str, char **pend, int base) {
+    PyObject *r = grail_call_builtin("int", "si", str, base);
+    if (pend != NULL) *pend = (char *)str + (r ? strlen(str) : 0);
+    return r;
+}
+/* An int is immutable, so a copy may be the int itself. */
+extern "C" PyObject *_PyLong_Copy(PyObject *src) {
+    Py_INCREF(src);
+    return src;
+}
+extern "C" PyObject *PySequence_List(PyObject *o) {
+    return grail_call_builtin("list", "O", o);
+}
+extern "C" PyObject *_PyDict_NewPresized(Py_ssize_t minused) {
+    (void)minused;
+    return PyDict_New();
+}
+/* Borrowed, as CPython's; the hash is the dict's to work out. */
+extern "C" PyObject *_PyDict_GetItem_KnownHash(PyObject *mp, PyObject *key, Py_hash_t hash) {
+    (void)hash;
+    return PyDict_GetItemWithError(mp, key);
+}
+/* 3.13's pop: 1 and the value when key was there, 0 and NULL when not,
+   -1 on error. */
+extern "C" int PyDict_Pop(PyObject *dict, PyObject *key, PyObject **result) {
+    PyObject *v = NULL;
+    int rc = PyDict_GetItemRef(dict, key, &v);
+    if (rc == 1 && PyDict_DelItem(dict, key) < 0) { Py_DECREF(v); v = NULL; rc = -1; }
+    if (result != NULL) *result = v;
+    else Py_XDECREF(v);
+    return rc;
+}
+/* Every key of kw a str, or TypeError. */
+extern "C" int PyArg_ValidateKeywordArguments(PyObject *kw) {
+    if (!PyDict_Check(kw)) {
+        PyErr_SetString(PyExc_SystemError, "bad argument to internal function");
+        return 0;
+    }
+    PyObject *keys = PyDict_Keys(kw);
+    if (keys == NULL) return 0;
+    for (Py_ssize_t i = 0; i < PyList_Size(keys); i++) {
+        if (!PyUnicode_Check(PyList_GetItem(keys, i))) {
+            Py_DECREF(keys);
+            PyErr_SetString(PyExc_TypeError, "keywords must be strings");
+            return 0;
+        }
+    }
+    Py_DECREF(keys);
+    return 1;
+}
+/* callable(*args[:nargs], **kwdict). */
+extern "C" PyObject *PyObject_VectorcallDict(PyObject *callable, PyObject *const *args,
+        size_t nargsf, PyObject *kwdict) {
+    Py_ssize_t nargs = (Py_ssize_t)(nargsf & ~(1ULL << 63));
+    PyObject *tuple = PyTuple_New(nargs);
+    if (tuple == NULL) return NULL;
+    for (Py_ssize_t i = 0; i < nargs; i++) {
+        Py_INCREF(args[i]);
+        PyTuple_SET_ITEM(tuple, i, args[i]);
+    }
+    PyObject *r = PyObject_Call(callable, tuple, kwdict);
+    Py_DECREF(tuple);
+    return r;
+}
+/* hasattr, except that an error other than AttributeError is -1. */
+extern "C" int PyObject_HasAttrWithError(PyObject *obj, PyObject *name) {
+    PyObject *v = NULL;
+    int rc = PyObject_GetOptionalAttr(obj, name, &v);
+    Py_XDECREF(v);
+    return rc;
+}
+
+/* --- Types and instance dicts ------------------------------------------ */
+
+/* The attribute type would answer for name through its MRO, borrowed, or
+   NULL with no error.  The shim's types keep no populated tp_dict, so this
+   is the type's own attribute read. */
+extern "C" PyObject *_PyType_Lookup(PyTypeObject *type, PyObject *name) {
+    PyObject *v = PyObject_GetAttr((PyObject *)type, name);
+    if (v == NULL) { PyErr_Clear(); return NULL; }
+    Py_DECREF(v);
+    return v;
+}
+/* &obj->__dict__ for a C object with an instance dict at tp_dictoffset;
+   NULL for anything else, which sends Cython down its general path. */
+extern "C" PyObject **_PyObject_GetDictPtr(PyObject *obj) {
+    PyTypeObject *t = Py_TYPE(obj);
+    if (t == NULL || t->tp_dictoffset <= 0) return NULL;
+    return (PyObject **)((char *)obj + t->tp_dictoffset);
+}
+/* Managed dicts (Py_TPFLAGS_MANAGED_DICT) are not laid out by the shim. */
+extern "C" void PyObject_ClearManagedDict(PyObject *obj) { (void)obj; }
+extern "C" int PyObject_VisitManagedDict(PyObject *obj, visitproc visit, void *arg) {
+    (void)obj; (void)visit; (void)arg;
+    return 0;
+}
+/* PyType_FromModuleAndSpec under a metaclass: the type is built, then given
+   the metaclass as its type. */
+extern "C" PyObject *PyType_FromModuleAndSpec(PyObject *, PyType_Spec *, PyObject *);
+extern "C" PyObject *PyType_FromMetaclass(PyTypeObject *metaclass, PyObject *module,
+        PyType_Spec *spec, PyObject *bases) {
+    PyObject *t = PyType_FromModuleAndSpec(module, spec, bases);
+    if (t != NULL && metaclass != NULL) t->ob_type = metaclass;
+    return t;
+}
+
+/* --- str ---------------------------------------------------------------- */
+
+extern "C" PyObject *PyUnicode_FromOrdinal(int ordinal) {
+    return grail_call_builtin("chr", "i", ordinal);
+}
+/* 3.14: 1 when a and b are equal strs, 0 when not, -1 (TypeError) when
+   either is not a str. */
+extern "C" int PyUnicode_Equal(PyObject *a, PyObject *b) {
+    if (!PyUnicode_Check(a) || !PyUnicode_Check(b)) {
+        PyErr_Format(PyExc_TypeError, "first and second arguments must be str");
+        return -1;
+    }
+    int c = PyUnicode_Compare(a, b);
+    if (c == -1 && PyErr_Occurred()) return -1;
+    return c == 0;
 }

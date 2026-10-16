@@ -753,7 +753,11 @@ ___validateContext___: node fn: fnSym loop: inLoop scopes: scopes
 		^ self].
 	((node isKindOf: YieldAst) or: [node isKindOf: YieldFromAst]) ifTrue: [
 		(#(#module #class) includes: fnSym) ifTrue: [
-			^ self ___syntaxError___: '''yield'' outside function' node: node]].
+			"CPython names the form: ``'yield from' outside function''."
+			^ self ___syntaxError___: ((node isKindOf: YieldFromAst)
+					ifTrue: ['''yield from'' outside function']
+					ifFalse: ['''yield'' outside function'])
+				node: node]].
 	(node isKindOf: NonlocalAst) ifTrue: [
 		fnSym == #module ifTrue: [
 			^ self ___syntaxError___: 'nonlocal declaration not allowed at module level'

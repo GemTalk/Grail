@@ -780,6 +780,9 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         return r;
     }
     if (IS("unique_temporary")) return PyLong_FromLong(PyUnstable_Object_IsUniqueReferencedTemporary(a));
+    /* Py_BuildValue's small-integer and character units: B and H were
+       unsupported, and c built a str where CPython builds a bytes. */
+    if (IS("build_value")) return Py_BuildValue("(bBhHcC)", -3, 200, -300, 60000, 'x', 0x20ac);
 #undef IS
     PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
     return NULL;
@@ -911,6 +914,401 @@ static PyTypeObject Dispatcher_Type = {
 };
 #endif
 
+#ifndef GRAIL_SHIM
+/* ------------------------------------------------------------------ */
+/* Cell: a subclassable type with its own tp_new and struct, as        */
+/* ndarray is -- what ``class Sub(Cell)'' instances exercise          */
+/* (docs/Shim_Foreign_Subclassing.md).  tp_new allocates through       */
+/* type->tp_alloc, so a Python subclass's instance is a C body of the  */
+/* subtype; ``describe'' reads a Python attribute of self from C, as   */
+/* numpy reads __array_priority__ and __array_finalize__; ``is_cell''  */
+/* is PyObject_TypeCheck, which walks the subtype's tp_mro / tp_base.  */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    PyObject_HEAD
+    PyObject *value;
+} CellObject;
+
+static PyTypeObject Cell_Type;
+#define CELL_VALUE(o) (((CellObject *)(o))->value)
+
+static PyObject *cell_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    PyObject *value = Py_None;
+    static char *kwlist[] = {"value", NULL};
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|O:Cell", kwlist, &value))
+        return NULL;
+    CellObject *self = (CellObject *)type->tp_alloc(type, 0);
+    if (self == NULL) return NULL;
+    self->value = Py_NewRef(value);
+    return (PyObject *)self;
+}
+static void cell_dealloc(PyObject *self) {
+    Py_CLEAR(CELL_VALUE(self));
+    Py_TYPE(self)->tp_free(self);
+}
+static PyObject *cell_get(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    return Py_NewRef(CELL_VALUE(self));
+}
+static PyObject *cell_describe(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    PyObject *label = PyObject_GetAttrString(self, "label");
+    if (label == NULL) return NULL;
+    PyObject *out = PyUnicode_FromFormat("%s:%S", Py_TYPE(self)->tp_name, label);
+    Py_DECREF(label);
+    return out;
+}
+static PyObject *cell_add(PyObject *a, PyObject *b) {
+    if (PyObject_TypeCheck(a, &Cell_Type)) return PyNumber_Add(CELL_VALUE(a), b);
+    return PyNumber_Add(a, CELL_VALUE(b));
+}
+static PyNumberMethods cell_as_number = { .nb_add = cell_add };
+static PyMemberDef cell_members[] = {
+    {"value", Py_T_OBJECT_EX, offsetof(CellObject, value), Py_READONLY, NULL},
+    {NULL, 0, 0, 0, NULL}
+};
+static PyMethodDef cell_methods[] = {
+    {"get", cell_get, METH_NOARGS, "the value"},
+    {"describe", cell_describe, METH_NOARGS, "tp_name:self.label, read from C"},
+    {NULL, NULL, 0, NULL}
+};
+static PyTypeObject Cell_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Cell",
+    .tp_basicsize = sizeof(CellObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_new = cell_new,
+    .tp_dealloc = cell_dealloc,
+    .tp_members = cell_members,
+    .tp_methods = cell_methods,
+    .tp_as_number = &cell_as_number,
+};
+
+/* sig_demo: a function whose doc carries a text signature, as Argument
+   Clinic writes one -- ``__doc__'' is the text after the ``--'' line and
+   ``__text_signature__'' the signature, which inspect.signature reads. */
+static PyObject *
+grail_sig_demo(PyObject *mod, PyObject *const *args, Py_ssize_t nargs) {
+    (void)mod;
+    return PyLong_FromSsize_t(nargs);
+}
+
+static PyObject *
+grail_is_cell(PyObject *mod, PyObject *const *args, Py_ssize_t nargs) {
+    (void)mod;
+    if (nargs != 1) {
+        PyErr_SetString(PyExc_TypeError, "is_cell takes one argument");
+        return NULL;
+    }
+    return PyBool_FromLong(PyObject_TypeCheck(args[0], &Cell_Type));
+}
+
+/* ------------------------------------------------------------------ */
+/* cython(name, *args): what Cython-generated code does INLINE rather  */
+/* than through the C API -- the reads CYTHON_USE_PYLONG_INTERNALS,    */
+/* CYTHON_USE_UNICODE_INTERNALS and CYTHON_FAST_THREAD_STATE compile   */
+/* to, and the type slots it calls directly.  numpy.random's modules   */
+/* do every one of these.                                              */
+/* ------------------------------------------------------------------ */
+
+static PyObject *
+cy_int(PyObject *x)
+{
+    /* __Pyx_PyLong_Tag / _Sign / _DigitCount / _Digits */
+    uintptr_t tag = ((PyLongObject *)x)->long_value.lv_tag;
+    Py_ssize_t ndigits = (Py_ssize_t)(tag >> 3);
+    const digit *d = ((PyLongObject *)x)->long_value.ob_digit;
+    PyObject *digits = PyList_New(ndigits);
+    unsigned long long mag = 0;
+    for (Py_ssize_t i = ndigits - 1; i >= 0; i--) {
+        PyList_SET_ITEM(digits, i, PyLong_FromLong((long)d[i]));
+        if (ndigits <= 2) mag = (mag << PyLong_SHIFT) | d[i];
+    }
+    return Py_BuildValue("(inNK)", (int)(tag & 3), ndigits, digits, mag);
+}
+
+static PyObject *
+cy_str(PyObject *s)
+{
+    /* __Pyx_PyUnicode_GET_LENGTH / _KIND / _DATA / _READ */
+    Py_ssize_t n = PyUnicode_GET_LENGTH(s);
+    int kind = PyUnicode_KIND(s);
+    const void *data = PyUnicode_DATA(s);
+    PyObject *cps = PyList_New(n);
+    for (Py_ssize_t i = 0; i < n; i++)
+        PyList_SET_ITEM(cps, i, PyLong_FromLong((long)PyUnicode_READ(kind, data, i)));
+    return Py_BuildValue("(niON)", n, kind, PyUnicode_IS_ASCII(s) ? Py_True : Py_False, cps);
+}
+
+/* __Pyx_PyUnicode_Equals under CYTHON_USE_UNICODE_INTERNALS: a hash field
+   that is set on both sides and differs means unequal, without a look at
+   the characters.  Cython matches keyword names this way. */
+static int
+cy_unicode_equals(PyObject *a, PyObject *b)
+{
+    if (a == b) return 1;
+    Py_ssize_t n = PyUnicode_GET_LENGTH(a);
+    if (n != PyUnicode_GET_LENGTH(b)) return 0;
+    Py_hash_t ha = ((PyASCIIObject *)a)->hash, hb = ((PyASCIIObject *)b)->hash;
+    if (ha != hb && ha != -1 && hb != -1) return 0;
+    int kind = PyUnicode_KIND(a);
+    if (kind != PyUnicode_KIND(b)) return 0;
+    return memcmp(PyUnicode_DATA(a), PyUnicode_DATA(b), (size_t)(n * kind)) == 0;
+}
+
+static PyObject *
+cy_bytes(PyObject *b)
+{
+    /* PyBytes_GET_SIZE / PyBytes_AS_STRING, as Cython reads a capsule name
+       or a bytes argument */
+    Py_ssize_t n = PyBytes_GET_SIZE(b);
+    const unsigned char *p = (const unsigned char *)PyBytes_AS_STRING(b);
+    long sum = 0;
+    for (Py_ssize_t i = 0; i < n; i++) sum += p[i];
+    return Py_BuildValue("(nlB)", n, sum, p[n]);
+}
+
+static PyObject *
+cy_type_names(PyObject *tuple)
+{
+    if (tuple == NULL) Py_RETURN_NONE;
+    Py_ssize_t n = PyTuple_GET_SIZE(tuple);
+    PyObject *out = PyList_New(n);
+    for (Py_ssize_t i = 0; i < n; i++)
+        PyList_SET_ITEM(out, i, PyUnicode_FromString(((PyTypeObject *)PyTuple_GET_ITEM(tuple, i))->tp_name));
+    return out;
+}
+
+static PyObject *
+grail_cython(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
+{
+    (void)module;
+    if (nargs < 1 || !PyUnicode_Check(args[0])) {
+        PyErr_SetString(PyExc_TypeError, "cython() takes a name");
+        return NULL;
+    }
+    const char *n = PyUnicode_AsUTF8(args[0]);
+    PyObject *a = nargs > 1 ? args[1] : NULL, *b = nargs > 2 ? args[2] : NULL;
+    PyObject *c = nargs > 3 ? args[3] : NULL;
+#define IS(x) (strcmp(n, x) == 0)
+    if (IS("int")) return cy_int(a);
+    if (IS("str")) return cy_str(a);
+    if (IS("bytes")) return cy_bytes(a);
+    if (IS("str_eq")) {
+        /* Both hashed first, as a dict lookup or an interning would have. */
+        if (PyObject_Hash(a) == -1 || PyObject_Hash(b) == -1) return NULL;
+        return PyBool_FromLong(cy_unicode_equals(a, b));
+    }
+    if (IS("bytes_fill")) {
+        /* PyBytes_FromStringAndSize(NULL, n), then written in place */
+        Py_ssize_t len = PyLong_AsSsize_t(a);
+        PyObject *r = PyBytes_FromStringAndSize(NULL, len);
+        if (r == NULL) return NULL;
+        char *p = PyBytes_AS_STRING(r);
+        for (Py_ssize_t i = 0; i < len; i++) p[i] = (char)('a' + i % 26);
+        return r;
+    }
+    /* The pending exception, read and written in the thread state
+       (__Pyx_ErrFetchInState / __Pyx_ErrRestoreInState). */
+    if (IS("err_fetch")) {
+        PyObject *r = PyObject_CallNoArgs(a);
+        if (r != NULL) return r;
+        PyThreadState *ts = PyThreadState_GetUnchecked();
+        PyObject *exc = ts->current_exception;
+        ts->current_exception = NULL;
+        if (exc == NULL) Py_RETURN_NONE;
+        PyObject *out = Py_BuildValue("(sNO)", Py_TYPE(exc)->tp_name, PyObject_Str(exc),
+                                      PyErr_Occurred() == NULL ? Py_True : Py_False);
+        Py_DECREF(exc);
+        return out;
+    }
+    if (IS("err_restore")) {
+        PyThreadState *ts = PyThreadState_GetUnchecked();
+        PyObject *old = ts->current_exception;
+        ts->current_exception = Py_NewRef(a);
+        Py_XDECREF(old);
+        return NULL;
+    }
+    if (IS("err_seen")) {
+        PyThreadState *ts = PyThreadState_GetUnchecked();
+        PyErr_SetString(PyExc_ValueError, "set by the API");
+        int set = ts->current_exception != NULL;
+        PyObject *same = set ? PyObject_Str(ts->current_exception) : Py_NewRef(Py_None);
+        PyErr_Clear();
+        int cleared = ts->current_exception == NULL;
+        return Py_BuildValue("(ONO)", set ? Py_True : Py_False, same, cleared ? Py_True : Py_False);
+    }
+    /* A type's own slots, read as a Cython module reads the types it
+       imports: tp_basicsize for its size check, tp_bases and tp_mro for
+       __Pyx_PyType_Ready and isinstance, tp_dict for its vtable. */
+    if (IS("type")) {
+        PyTypeObject *t = (PyTypeObject *)a;
+        return Py_BuildValue("(sNNOnO)", t->tp_name, cy_type_names(t->tp_bases),
+                             cy_type_names(t->tp_mro),
+                             t->tp_dict != NULL && PyDict_Check(t->tp_dict) ? Py_True : Py_False,
+                             t->tp_basicsize,
+                             PyType_Check(a) ? Py_True : Py_False);
+    }
+    if (IS("basicsize")) {
+        PyTypeObject *t = (PyTypeObject *)a;
+        return Py_BuildValue("(nn)", t->tp_basicsize, t->tp_itemsize);
+    }
+    /* Number slots called directly (__Pyx_PyNumber_* fast paths). */
+    if (IS("nb")) {
+        PyNumberMethods *m = Py_TYPE(b)->tp_as_number;
+        const char *op = PyUnicode_AsUTF8(a);
+        binaryfunc f = NULL;
+        if (m == NULL) Py_RETURN_NONE;
+        if (strcmp(op, "and") == 0) f = m->nb_and;
+        else if (strcmp(op, "or") == 0) f = m->nb_or;
+        else if (strcmp(op, "xor") == 0) f = m->nb_xor;
+        else if (strcmp(op, "add") == 0) f = m->nb_add;
+        else if (strcmp(op, "mul") == 0) f = m->nb_multiply;
+        else if (strcmp(op, "lshift") == 0) f = m->nb_lshift;
+        else if (strcmp(op, "floordiv") == 0) f = m->nb_floor_divide;
+        if (f == NULL) Py_RETURN_NONE;
+        return f(b, c);
+    }
+    /* next(it) as __Pyx_PyIter_Next: tp_iternext, where NULL with no error
+       set means exhausted. */
+    if (IS("next")) {
+        iternextfunc f = Py_TYPE(a)->tp_iternext;
+        if (f == NULL) return PyUnicode_FromString("no tp_iternext");
+        PyObject *r = f(a);
+        if (r != NULL) return r;
+        if (PyErr_Occurred()) {
+            if (!PyErr_ExceptionMatches(PyExc_StopIteration)) return NULL;
+            PyErr_Clear();
+        }
+        return PyUnicode_FromString("exhausted");
+    }
+    if (IS("iter")) {
+        getiterfunc f = Py_TYPE(a)->tp_iter;
+        if (f == NULL) return PyUnicode_FromString("no tp_iter");
+        PyObject *it = f(a);
+        if (it == NULL) return NULL;
+        PyObject *r = Py_BuildValue("(OO)", it == a ? Py_True : Py_False,
+                                    Py_TYPE(it)->tp_iternext != NULL ? Py_True : Py_False);
+        Py_DECREF(it);
+        return r;
+    }
+    if (IS("std_exceptions")) {
+        return PyTuple_Pack(2, PyExc_GeneratorExit, PyExc_UnboundLocalError);
+    }
+#undef IS
+    PyErr_Format(PyExc_ValueError, "cython: unknown name %s", n);
+    return NULL;
+}
+
+/* match_kw(**kw): keyword names matched against interned ones the way a
+   Cython 3.3 def function matches them (__Pyx_MatchKeywordArg_str): the
+   key's hash, from its field or PyObject_Hash, against each interned
+   name's hash FIELD, then the text.  Answers (name, position in ("alpha",
+   "beta")) for each -- -1 for no match. */
+static PyObject *
+grail_match_kw(PyObject *module, PyObject *const *args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    (void)module; (void)args; (void)nargs;
+    static PyObject *names[2];
+    if (names[0] == NULL) {
+        names[0] = PyUnicode_InternFromString("alpha");
+        names[1] = PyUnicode_InternFromString("beta");
+    }
+    Py_ssize_t nk = kwnames == NULL ? 0 : PyTuple_GET_SIZE(kwnames);
+    PyObject *out = PyList_New(nk);
+    for (Py_ssize_t i = 0; i < nk; i++) {
+        PyObject *k = PyTuple_GET_ITEM(kwnames, i);
+        Py_hash_t key_hash = ((PyASCIIObject *)k)->hash;
+        if (key_hash == -1 && (key_hash = PyObject_Hash(k)) == -1) { Py_DECREF(out); return NULL; }
+        int pos = -1;
+        for (int j = 0; j < 2 && pos < 0; j++)
+            if (((PyASCIIObject *)names[j])->hash == key_hash && cy_unicode_equals(k, names[j]))
+                pos = j;
+        PyList_SET_ITEM(out, i, Py_BuildValue("(Oi)", k, pos));
+    }
+    return out;
+}
+
+/* Init: a type whose tp_init records its arguments, reached as
+   ``Init.__init__(self, ...)'' -- the slot wrapper -- the way a Cython
+   subclass's __init__ calls its base's (numpy.random's MT19937 calls
+   BitGenerator.__init__). */
+typedef struct {
+    PyObject_HEAD
+    PyObject *args;
+    PyObject *kw;
+} InitObject;
+
+static int init_init(PyObject *self, PyObject *args, PyObject *kwds) {
+    InitObject *o = (InitObject *)self;
+    Py_XSETREF(o->args, Py_NewRef(args));
+    Py_XSETREF(o->kw, Py_NewRef(kwds != NULL ? kwds : Py_None));
+    return 0;
+}
+static void init_dealloc(PyObject *self) {
+    Py_CLEAR(((InitObject *)self)->args);
+    Py_CLEAR(((InitObject *)self)->kw);
+    Py_TYPE(self)->tp_free(self);
+}
+static PyMemberDef init_members[] = {
+    {"args", _Py_T_OBJECT, offsetof(InitObject, args), Py_READONLY, NULL},
+    {"kw", _Py_T_OBJECT, offsetof(InitObject, kw), Py_READONLY, NULL},
+    {NULL, 0, 0, 0, NULL}
+};
+static PyTypeObject Init_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Init",
+    .tp_basicsize = sizeof(InitObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_new = PyType_GenericNew,
+    .tp_init = init_init,
+    .tp_dealloc = init_dealloc,
+    .tp_members = init_members,
+};
+
+/* Vec: a heap type from a spec with a tuple of bases, called through
+   vectorcall (its __vectorcalloffset__ member), as a Cython function is.
+   Its tp_call answers differently, so the answer says which one ran; a
+   Cython function's tp_call reads the keyword dict's size inline. */
+typedef struct {
+    PyObject_HEAD
+    vectorcallfunc vectorcall;
+} VecObject;
+
+static PyObject *vec_vectorcall(PyObject *self, PyObject *const *args, size_t nargsf, PyObject *kwnames) {
+    (void)self; (void)args;
+    return Py_BuildValue("(snO)", "vectorcall", PyVectorcall_NARGS(nargsf),
+                         kwnames != NULL ? kwnames : Py_None);
+}
+static PyObject *vec_call(PyObject *self, PyObject *args, PyObject *kwds) {
+    (void)self;
+    return Py_BuildValue("(snO)", "tp_call", PyTuple_GET_SIZE(args), kwds != NULL ? kwds : Py_None);
+}
+static PyObject *vec_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    (void)args; (void)kwds;
+    VecObject *self = (VecObject *)type->tp_alloc(type, 0);
+    if (self != NULL) self->vectorcall = vec_vectorcall;
+    return (PyObject *)self;
+}
+static PyMemberDef vec_members[] = {
+    {"__vectorcalloffset__", Py_T_PYSSIZET, offsetof(VecObject, vectorcall), Py_READONLY, NULL},
+    {NULL, 0, 0, 0, NULL}
+};
+static PyType_Slot vec_slots[] = {
+    {Py_tp_new, (void *)vec_new},
+    {Py_tp_call, (void *)vec_call},
+    {Py_tp_members, vec_members},
+    {0, NULL}
+};
+static PyType_Spec vec_spec = {
+    .name = "_grail_demo.Vec",
+    .basicsize = sizeof(VecObject),
+    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_VECTORCALL,
+    .slots = vec_slots,
+};
+#endif
+
 /* ------------------------------------------------------------------ */
 /* Module definition                                                   */
 /* ------------------------------------------------------------------ */
@@ -946,6 +1344,11 @@ static PyMethodDef grail_demo_methods[] = {
     {"setattr_in_c", (PyCFunction)(void *)grail_setattr_in_c, METH_FASTCALL, NULL},
     {"unicode_compare", (PyCFunction)(void *)grail_unicode_compare, METH_FASTCALL, NULL},
     {"capi", (PyCFunction)(void *)grail_capi, METH_FASTCALL, NULL},
+    {"is_cell", (PyCFunction)(void *)grail_is_cell, METH_FASTCALL, NULL},
+    {"sig_demo", (PyCFunction)(void *)grail_sig_demo, METH_FASTCALL,
+     "sig_demo($module, a, /, b=2, *, c=None)\n--\n\nA function with a text signature."},
+    {"cython", (PyCFunction)(void *)grail_cython, METH_FASTCALL, NULL},
+    {"match_kw", (PyCFunction)(void *)grail_match_kw, METH_FASTCALL | METH_KEYWORDS, NULL},
 #endif
     {NULL, NULL, 0, NULL}
 };
@@ -976,6 +1379,16 @@ grail_demo_exec(PyObject *mod) {
             || PyModule_AddObjectRef(mod, "NdLike", (PyObject *)&NdLike_Type) < 0
             || PyModule_AddObjectRef(mod, "OverLike", (PyObject *)&OverLike_Type) < 0)
         return -1;
+    if (PyType_Ready(&Cell_Type) < 0) return -1;
+    if (PyModule_AddObjectRef(mod, "Cell", (PyObject *)&Cell_Type) < 0) return -1;
+    if (PyType_Ready(&Init_Type) < 0) return -1;
+    if (PyModule_AddObjectRef(mod, "Init", (PyObject *)&Init_Type) < 0) return -1;
+    {
+        PyObject *bases = PyTuple_Pack(1, (PyObject *)&PyBaseObject_Type);
+        PyObject *vec = bases ? PyType_FromSpecWithBases(&vec_spec, bases) : NULL;
+        Py_XDECREF(bases);
+        if (vec == NULL || PyModule_Add(mod, "Vec", vec) < 0) return -1;
+    }
 #endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");

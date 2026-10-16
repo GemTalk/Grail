@@ -1604,10 +1604,10 @@ testDynLoadGrailDemo
 	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
 	self assert: (methodNames isKindOf: Array).
 	self assert: methodNames asSortedCollection asArray
-		equals: #('add' 'as_long_overflow' 'capi' 'descr_def_name' 'dict_values_inline' 'dot_product'
+		equals: #('add' 'as_long_overflow' 'capi' 'cython' 'descr_def_name' 'dict_values_inline' 'dot_product'
 			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
-			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
-			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline' 'unicode_compare').
+			'is_cell' 'make_box' 'make_nohash' 'make_plain' 'match_kw' 'optional_attr' 'same_object' 'scale'
+			'seq_fast_len' 'setattr_in_c' 'sig_demo' 'singletons' 'sum_inline' 'unicode_compare').
 %
 
 category: 'Grail-Tests - Dynamic Loading'
@@ -3477,9 +3477,10 @@ method: CPythonShimTestCase
 testAClassStatementMaySubclassAWheelType
 	"Step 1 of docs/Shim_Foreign_Subclassing.md (option C): ``class Sub(Box)'' succeeds,
 	its bases and MRO name the C type, issubclass reaches it, and calling it refuses with
-	CPython's ``cannot create'' -- which is also what CPython says here, since Box has no
-	tp_new.  It used to raise ``cannot subclass a non-class base (ShimForeignObject)''
-	(numpy's memmap, recarray, record and matrix)."
+	CPython's ``cannot create'' -- because Box has no tp_new: a static type on object that
+	sets none is DISALLOW_INSTANTIATION in CPython, and the shim's PyType_Ready gave it
+	object's (Box() answered a bare Box).  It used to raise ``cannot subclass a non-class
+	base (ShimForeignObject)'' (numpy's memmap, recarray, record and matrix)."
 
 	| soPath |
 	soPath := importlib grailDir , '/lib/_grail_demo.so'.
@@ -3495,7 +3496,131 @@ def make(cls):
         return ''created''
     except TypeError as e:
         return str(e).split('':'')[0]
-repr((Sub.extra, make(Sub), make(SubSub), issubclass(SubSub, d.Box), Sub.__bases__ == (d.Box,), SubSub.__mro__ == (SubSub, Sub, d.Box, object)))') equals: '(1, "cannot create ''Sub'' instances", "cannot create ''SubSub'' instances", True, True, True)'
+repr((Sub.extra, make(Sub), make(SubSub), make(d.Box), issubclass(SubSub, d.Box), Sub.__bases__ == (d.Box,), SubSub.__mro__ == (SubSub, Sub, d.Box, object)))') equals: '(1, "cannot create ''Sub'' instances", "cannot create ''SubSub'' instances", "cannot create ''_grail_demo.Box'' instances", True, True, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testACFunctionsDocAndTextSignatureSplitAsCPythonSplitsThem
+	"A C function's internal doc is ``name(sig)\n--\n\ndoc'' when Argument Clinic
+	wrote it: __doc__ is the text after the ``--'' line, __text_signature__ the
+	signature, and inspect.signature reads that, dropping ``$module'' (CPython's
+	find_signature / skip_signature).  A doc with no signature is all __doc__, and
+	__text_signature__ is None.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d, inspect
+repr((d.sig_demo.__doc__, d.sig_demo.__text_signature__, str(inspect.signature(d.sig_demo)), d.add.__doc__, d.add.__text_signature__))') equals: '(''A function with a text signature.'', ''($module, a, /, b=2, *, c=None)'', ''(a, /, b=2, *, c=None)'', ''Add two integers.'', None)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassMakesInstancesOfItself
+	"Step 2 of docs/Shim_Foreign_Subclassing.md (option A): ``class Sub(Cell)'' over a
+	type with its own tp_new makes instances -- a C body of Sub's subtype mirror, allocated
+	through tp_alloc, and a Grail half -- that are Subs and Cells, read the C member, and run
+	both Python and C methods.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+s = Sub(5)
+repr((type(s) is Sub, isinstance(s, Sub), isinstance(s, d.Cell), s.value, s.doubled(), s.get(), [c.__name__ for c in Sub.__mro__], d.Cell(7).value))') equals: '(True, True, True, 5, 10, 5, [''Sub'', ''Cell'', ''object''], 7)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testCReadsAWheelSubclassInstancesPythonAttributes
+	"C's PyObject_GetAttrString on a subclass instance's body finds what the PYTHON class
+	defines (the shim's subtype_python_attr), as numpy reads __array_priority__ and
+	__array_finalize__; and the mirror's tp_name is the bare class name, as a CPython heap
+	type's is."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+class SubSub(Sub):
+    label = ''subsub''
+repr((Sub(1).describe(), SubSub(2).describe(), SubSub(2).doubled()))') equals: '(''Sub:sub'', ''SubSub:subsub'', 4)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassInstanceIsItsCTypeInC
+	"PyObject_TypeCheck in C walks the subtype mirror to the base, and a C slot (nb_add)
+	runs on the body, forward and reflected."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+class SubSub(Sub):
+    pass
+s = Sub(5)
+repr((d.is_cell(s), d.is_cell(SubSub(1)), d.is_cell(5), s + 1, 1 + s))') equals: '(True, True, False, 6, 6)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassRunsItsInitAndNew
+	"``cls(...)'' runs __new__ then a Python __init__; a Python __new__ reaches the C
+	tp_new through ``super().__new__(cls, ...)'' -- object's, further up the Smalltalk
+	chain, made a half with no body (Super>>___pyAttrLoad___:) -- and keywords reach
+	tp_new too."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class WithInit(d.Cell):
+    def __init__(self, value):
+        self.extra = value + 1
+class WithNew(d.Cell):
+    def __new__(cls, value):
+        return super().__new__(cls, value * 10)
+w = WithInit(3)
+repr((w.value, w.extra, WithNew(4).value, type(WithNew(4)).__name__, WithInit(value=9).value))') equals: '(3, 4, 40, ''WithNew'', 9)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassInstanceStoresItsOwnAttributes
+	"A name the C type has no descriptor for is the instance's own; a C member is a DATA
+	descriptor even when read-only, so storing it is refused as CPython refuses it rather
+	than shadowed by the Grail half (shimDataDescriptorNames)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+s = Sub(5)
+s.note = ''x''
+try:
+    s.value = 1
+    refused = None
+except AttributeError as e:
+    refused = str(e)
+repr((s.note, refused, s.value))') equals: '(''x'', ''readonly attribute'', 5)'
 %
 
 category: 'Grail-Tests - NumPy Stage 3'
@@ -4230,5 +4355,408 @@ e1, e2, e3 = ValueError(''a''), KeyError(''b''), TypeError(''c'')
 r = t(''set_cause'', e1, e2, e3)
 lst = [1, 2]
 ascii(((t(''hash_double'', 1.5) == hash(1.5), t(''hash_double'', 2.0) == hash(2.0)), t(''capsule''), t(''unique_temporary'', [1]),))') equals: '((True, True), (1, 42, 7), 0)'
+%
+
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonReadsAnIntInline
+	"An int read as Cython reads one with CYTHON_USE_PYLONG_INTERNALS: lv_tag's sign
+	and digit count, and the 30-bit digits, straight from the struct.  A Grail int
+	crosses in CPython's layout (the GRAILPX1 prefix holds its OOP before the
+	object); a SmallInteger OOP's tag bits read as a negative sign, and uint64
+	values numpy.random seeds with came out wrong.  True and False have the same
+	layout.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([t(C, ''int'', x) for x in (0, 1, -5, 2**30, 2**31 + 5, -(2**40), 2**64 - 1, True, False)])') equals: '[(1, 0, [], 0), (0, 1, [1], 1), (2, 1, [5], 5), (0, 2, [0, 1], 1073741824), (0, 2, [5, 2], 2147483653), (2, 2, [0, 1024], 1099511627776), (0, 3, [1073741823, 1073741823, 15], 0), (0, 1, [1], 1), (1, 0, [], 0)]'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonReadsAStrInline
+	"A str read as Cython reads one: length, kind, ASCII flag and the code points
+	through PyUnicode_DATA, for each kind.  And Cython's string equality, which
+	says unequal when both hash fields are set and differ: the shim caches one
+	hash, computed in C, so a Grail String and Symbol of the same text agree.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr(([t(C, ''str'', s) for s in ('''', ''abc'', ''h\u00e9llo'', ''a\u20acb'', ''\U0001d11ex'')], [t(C, ''str_eq'', a, b) for a, b in ((''alpha'', ''al'' + ''pha''), (''alpha'', ''alphb''), (''\u20ac1'', ''\u20ac'' + ''1''), (''ab'', ''abc''))]))') equals: '([(0, 1, True, []), (3, 1, True, [97, 98, 99]), (5, 1, False, [104, 233, 108, 108, 111]), (3, 2, False, [97, 8364, 98]), (2, 4, False, [119070, 120])], [True, False, True, False])'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonMatchesKeywordNamesByHash
+	"Keyword names matched against interned ones as a Cython def function matches
+	them, hash field first.  numpy.random's SeedSequence(pool_size=...) did not
+	match before the shim computed str hashes itself.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((t(d.match_kw, alpha=1, beta=2, gamma=3), t(d.match_kw, **{''al'' + ''pha'': 1})))') equals: '([(''alpha'', 0), (''beta'', 1), (''gamma'', -1)], [(''alpha'', 0)])'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonReadsBytesInline
+	"A bytes read with PyBytes_GET_SIZE and PyBytes_AS_STRING, NUL terminator
+	included, as Cython reads a capsule's signature; and one made by
+	PyBytes_FromStringAndSize(NULL, n) then written in place, which crashed.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr(([t(C, ''bytes'', b) for b in (b'''', b''abc'', bytes(range(256)))], t(C, ''bytes_fill'', 30)))') equals: '([(0, 0, 0), (3, 294, 0), (256, 32640, 0)], b''abcdefghijklmnopqrstuvwxyzabcd'')'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonReadsAndWritesTheExceptionInTheThreadState
+	"Cython keeps the pending exception in tstate->current_exception and reads and
+	writes it there, not through PyErr_*.  A Grail exception raised in a callback
+	is in the slot for C to fetch, and taking it clears the indicator; an
+	exception C writes into the slot is what Grail raises -- a Grail exception
+	object there crashed the gem, reading it as a C struct; and an error set
+	through the API is in the slot until cleared.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+def boom():
+    raise KeyError(''k'')
+repr((t(C, ''err_fetch'', boom), t(C, ''err_fetch'', lambda: 5), t(C, ''err_restore'', ValueError(''from tstate'')), t(C, ''err_seen''), t(C, ''std_exceptions'') == (GeneratorExit, UnboundLocalError)))') equals: '((''KeyError'', "''k''", True), 5, (''raised'', ''ValueError'', ''from tstate''), (True, ''set by the API'', True), True)'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonReadsTypeSlots
+	"A readied type has the tp_bases and tp_mro tuples and tp_dict that Cython
+	reads inline, a metatype that passes PyType_Check, and the builtin types have
+	CPython 3.14's tp_basicsize and tp_itemsize, which Cython checks when it
+	imports them (''builtins.type size changed'').  __bases__ and __mro__ of a C
+	type answer those tuples, and a C type is an instance of type.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr(([t(C, ''type'', T) for T in (d.Cell, d.WithMeta, d.Init, d.Vec)], [t(C, ''basicsize'', T) for T in (type, object, int, bool, float, str, bytes, tuple, list, dict)], d.Cell.__bases__ == (object,), d.Cell.__mro__ == (d.Cell, object), d.Cell.__base__ is object, isinstance(d.Cell, type), isinstance(d.Vec, type), isinstance(d.add, type)))') equals: '([(''_grail_demo.Cell'', [''object''], [''_grail_demo.Cell'', ''object''], True, 24, True), (''_grail_demo.WithMeta'', [''object''], [''_grail_demo.WithMeta'', ''object''], True, 16, True), (''_grail_demo.Init'', [''object''], [''_grail_demo.Init'', ''object''], True, 32, True), (''_grail_demo.Vec'', [''object''], [''_grail_demo.Vec'', ''object''], True, 24, True)], [(936, 40), (16, 0), (24, 4), (24, 4), (24, 0), (64, 0), (33, 1), (32, 8), (40, 0), (48, 0)], True, True, True, True, True, False)'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonCallsNumberSlotsDirectly
+	"Number slots of int, bool and float called through tp_as_number, as Cython's
+	fast paths call them; int's were NULL, so ``a & b'' in numpy.random's
+	_bounded_integers raised TypeError.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([t(C, ''nb'', op, a, b) for op, a, b in ((''and'', 12, 10), (''or'', 12, 3), (''xor'', True, True), (''and'', True, False), (''add'', 1.5, 2.0), (''mul'', 2**40, 3), (''lshift'', 1, 70), (''floordiv'', 7, 2))])') equals: '[8, 15, False, False, 3.5, 3298534883328, 1180591620717411303424, 3]'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCythonCallsTpIternext
+	"next(it) as Cython compiles it: tp_iternext called directly, NULL with no
+	error meaning exhausted.  A Grail iterator's type mirror had none, so next()
+	of an itertools.cycle answered NULL without an error.  tp_iter answers the
+	iterator.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+import itertools
+class It:
+    def __init__(self): self.n = 0
+    def __iter__(self): return self
+    def __next__(self):
+        self.n += 1
+        if self.n > 2: raise StopIteration
+        return self.n
+class Iterable:
+    def __iter__(self): return It()
+it = It()
+cyc = itertools.cycle([7, 8])
+repr(([t(C, ''next'', it) for _ in range(3)], [t(C, ''next'', cyc) for _ in range(3)], t(C, ''iter'', it), t(C, ''iter'', Iterable())))') equals: '([1, 2, ''exhausted''], [7, 8, 7], (True, True), (False, True))'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testASlotWrapperInitReachesTheCTpInit
+	"``T.__init__(self, ...)'' on a C type runs its tp_init with the arguments as
+	a real tuple, as numpy.random's MT19937 calls BitGenerator.__init__; from a
+	Python subclass's __init__ too, which recursed when the slot wrapper took
+	tp_init from the instance's type rather than T.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+o = d.Init(1)
+first = (o.args, o.kw)
+d.Init.__init__(o, 2, 3, k=4)
+class Sub(d.Init):
+    def __init__(self, x):
+        d.Init.__init__(self, x, ''via sub'')
+s = Sub(5)
+repr((first, o.args, o.kw, s.args, s.kw, type(s).__name__))') equals: '(((1,), None), (2, 3), {''k'': 4}, (5, ''via sub''), None, ''Sub'')'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testASpecTypeIsCalledThroughVectorcall
+	"A type made by PyType_FromSpecWithBases with a tuple of bases, whose
+	instances are called through vectorcall (its __vectorcalloffset__ member),
+	as a Cython function is: keywords arrive as kwnames, not as a dict that
+	Cython's tp_call sizes inline.  Its tp_new's tp_alloc is inherited -- it was
+	NULL.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+v = d.Vec()
+repr((t(v, 1, 2), t(v, 1, k=2), type(v).__name__, d.Vec.__bases__ == (object,), d.Vec.__mro__ == (d.Vec, object)))') equals: '((''vectorcall'', 2, None), (''vectorcall'', 1, (''k'',)), ''Vec'', True, True)'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testExtensionsImportingExtensionsThreeDeep
+	"Three extension modules, each importing the next from its exec slot -- by
+	PyImport_ImportModuleLevelObject and by PyImport_ImportModule -- as
+	numpy.random's do.  Each load was a user action, and GemStone allows two in
+	flight; the nested ones now load in C.  The middle module calls the
+	bottom one's functions through __pyx_capi__, which the bottom one exports in
+	two batches into the dict PyModule_GetDict answers, and each module's dict
+	holds its __name__.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_nest3.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_nest3.so not built'].
+	self assert: (self eval: 'import sys
+import _grail_nest3 as n3
+repr((n3.depth, n3.inner.depth, n3.inner.inner.depth, n3.called, n3.inner.called, sorted(n3.inner.inner.__pyx_capi__), n3.name_in_dict, n3.inner.name_in_dict, n3.inner.inner.name_in_dict, ''_grail_nest1'' in sys.modules))') equals: '(3, 2, 1, (42, -5), (42, -5), [''doubled'', ''negated''], ''_grail_nest3'', ''_grail_nest2'', ''_grail_nest1'', True)'
+%
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testAFailedExtensionLoadLeavesSysModules
+	"An extension module whose exec slot fails is not left in sys.modules (a
+	second import used to find the half-built module), and importing it again
+	fails again.  Which exception it is differs deliberately -- ImportError.gs
+	explains why -- so only that both raise is compared.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_nestbad.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_nestbad.so not built'].
+	self assert: (self eval: 'import sys
+def fails():
+    try:
+        __import__(''_grail_nestbad'')
+        return False
+    except (ImportError, RuntimeError):
+        return True
+repr((fails(), ''_grail_nestbad'' in sys.modules, fails(), ''_grail_nest1'' in sys.modules))') equals: '(True, False, True, True)'
+%
+
+
+category: 'Grail-Tests - Cython'
+method: CPythonShimTestCase
+testCApiBuildValueSmallIntsAndCharacters
+	"Py_BuildValue's b, B, h, H, c and C units: B and H raised ''unsupported
+	format char'', and c built a str where CPython builds a bytes of length 1.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+ascii(t(d.capi, ''build_value''))') equals: '(-3, 200, -300, 60000, b''x'', ''\u20ac'')'
+%
+
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testACTypeReprsAsItsClass
+	"repr() and str() of a C type are CPython's type_repr, <class 'module.name'>,
+	for a static type, a spec-built one and one with its own metatype, alone and
+	inside a container.  They read ``<ShimForeignObject _grail_demo.Cell @0x...>''.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((repr(d.Cell), str(d.Vec), repr([d.Init]), repr(d.WithMeta), repr(type(d.Cell(1))), d.Cell.__name__, d.Cell.__qualname__, d.Cell.__module__))') equals: '("<class ''_grail_demo.Cell''>", "<class ''_grail_demo.Vec''>", "[<class ''_grail_demo.Init''>]", "<class ''_grail_demo.WithMeta''>", "<class ''_grail_demo.Cell''>", ''Cell'', ''Cell'', ''_grail_demo'')'
+%
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testACTypeDictIsAReadOnlyViewOfItsOwnEntries
+	"``T.__dict__'' of a C type is a mappingproxy of its own entries -- its
+	methods as method descriptors, its members -- and refuses a store; __doc__ is
+	the type's own doc (None when it sets none) and a method's doc is its ml_doc.
+	vars(T) is that mapping, and vars() of an instance with no __dict__ is
+	CPython's TypeError.  __dict__ and __doc__ were misses, and vars(T) listed the
+	proxy's Smalltalk slots (cPtr, typeName, ...).  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+def store():
+    d.Cell.__dict__[''x''] = 1
+D = d.Cell.__dict__
+repr((type(D).__name__, sorted(k for k in D if not k.startswith(''__'')), type(D[''get'']).__name__, D[''get''](d.Cell(4)), t(store)[:2], d.Cell.get.__doc__, d.Cell.__doc__, sorted(k for k in vars(d.Cell) if not k.startswith(''__'')), t(vars, d.Cell(1)), vars(d.make_box(1))))') equals: '(''mappingproxy'', [''describe'', ''get'', ''value''], ''method_descriptor'', 4, (''raised'', ''TypeError''), ''the value'', None, [''describe'', ''get'', ''value''], (''raised'', ''TypeError'', ''vars() argument must have __dict__ attribute''), {})'
+%
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testDirOfACTypeAndInstanceListsItsCNames
+	"dir() of a C type lists its methods, members and getsets with object's names,
+	and dir() of an instance adds its instance dict; inspect.getmembers follows.
+	dir() listed only names the Grail proxy class defines.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+import inspect
+b = d.make_box(1)
+b.label = ''x''
+want = (''get'', ''describe'', ''value'', ''__init__'', ''__repr__'', ''label'', ''tag'', ''count'')
+repr(([n for n in want if n in dir(d.Cell)], [n for n in want if n in dir(d.Cell(1))], [n for n in want if n in dir(b)], dir(d.Cell) == sorted(dir(d.Cell)), [n for n, _ in inspect.getmembers(d.Cell) if n in want]))') equals: '([''get'', ''describe'', ''value'', ''__init__'', ''__repr__''], [''get'', ''describe'', ''value'', ''__init__'', ''__repr__''], [''value'', ''__init__'', ''__repr__'', ''label'', ''tag'', ''count''], True, [''__init__'', ''__repr__'', ''describe'', ''get'', ''value''])'
+%
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testACTypeAnswersMroAndSubclasses
+	"``T.mro()'' and ``T.__subclasses__()'' of a C type, the latter also as
+	``type.__subclasses__(T)'': the Python classes built directly on it.  mro()
+	raised (object's, bound to object), __subclasses__() answered object's
+	subclasses, and the unbound spelling was an uncatchable
+	MessageNotUnderstood.  Only this test's classes are compared: CPython holds
+	subclasses weakly, while Grail's record keeps a class for the session, so
+	a second run in one session also lists the first run's.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class SubA(d.Init):
+    pass
+class SubB(d.Init):
+    pass
+class SubC(SubA):
+    pass
+repr((d.Vec.mro() == [d.Vec, object], d.Cell.mro() == list(d.Cell.__mro__), [c for c in d.Init.__subclasses__() if c in (SubA, SubB)] == [SubA, SubB], [c for c in type.__subclasses__(d.Init) if c in (SubA, SubB)] == [SubA, SubB], SubA.__subclasses__() == [SubC], d.Vec.__subclasses__()))') equals: '(True, True, True, True, True, [])'
 %
 

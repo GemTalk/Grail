@@ -1,5 +1,3 @@
-# GRAIL: CPython 3.14's importlib.metadata, adapted where marked GRAIL
-# (docs/Support_FastAPI.md, Phase 6).
 from __future__ import annotations
 
 import os
@@ -441,20 +439,11 @@ class Distribution(DeprecatedNonAbstract):
 
     @staticmethod
     def _discover_resolvers():
-        """Search the meta_path for resolvers (MetadataPathFinders).
-
-        GRAIL: Grail's import system offers no ``find_distributions'' on
-        sys.meta_path -- CPython's PathFinder provides it by delegating to
-        MetadataPathFinder -- so that finder is asked directly when no
-        meta-path finder answers.
-        """
-        declared = [
+        """Search the meta_path for resolvers (MetadataPathFinders)."""
+        declared = (
             getattr(finder, 'find_distributions', None) for finder in sys.meta_path
-        ]
-        declared = [d for d in declared if d is not None]
-        if not declared:
-            declared = [MetadataPathFinder.find_distributions]
-        return declared
+        )
+        return filter(None, declared)
 
     @property
     def metadata(self) -> _meta.PackageMetadata:
@@ -988,21 +977,6 @@ def metadata(distribution_name: str) -> _meta.PackageMetadata:
     return Distribution.from_name(distribution_name).metadata
 
 
-# GRAIL: the packages Grail VENDORS in its own stdlib (flask, werkzeug, ...)
-# are importable but carry no dist-info, so no finder knows them.  version()
-# keeps answering these for them, as the stub this module replaced did, and
-# only after the real lookup has missed.
-_GRAIL_VENDORED_VERSIONS = {
-    'flask': '3.1.0+grail',
-    'werkzeug': '3.1.5+grail',
-    'jinja2': '3.1.0+grail',
-    'click': '0+grail-stub',
-    'itsdangerous': '2.0+grail',
-    'blinker': '1.0+grail',
-    'markupsafe': '2.0+grail',
-}
-
-
 def version(distribution_name: str) -> str:
     """Get the version string for the named package.
 
@@ -1010,14 +984,7 @@ def version(distribution_name: str) -> str:
     :return: The version string for the package as defined in the package's
         "Version" metadata key.
     """
-    try:
-        return distribution(distribution_name).version
-    except PackageNotFoundError:
-        vendored = _GRAIL_VENDORED_VERSIONS.get(
-            distribution_name.lower().replace('-', '_').replace('.', '_'))
-        if vendored is None:
-            raise
-        return vendored
+    return distribution(distribution_name).version
 
 
 _unique = functools.partial(

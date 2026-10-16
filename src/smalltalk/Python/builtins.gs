@@ -4818,6 +4818,16 @@ vars: anObject
 		or: [(anObject isKindOf: CharacterCollection)
 		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
 		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+	"A WHEEL'S OWN OBJECT OR TYPE answers __dict__ in C -- a type's is a
+	read-only view of its own entries -- and one with none is CPython's
+	TypeError.  It fell to the instance-variable scan below, which listed
+	the proxy's Smalltalk slots (cPtr, typeName, ...)."
+	(anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [ | missing found |
+		missing := false.
+		found := [anObject ___pyAttrLoad___: #'__dict__']
+			@env0:on: AttributeError do: [:ex | missing := true. ex @env0:return: nil].
+		missing ifTrue: [TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+		^ found].
 	"A Python class that defines __dict__ ITSELF -- a property, typically --
 	is asked for it: CPython's vars() is ``obj.__dict__'' through the
 	attribute protocol, so the property runs (and may raise).  FastAPI's
@@ -4875,13 +4885,14 @@ vars: anObject
 	stack included, where CPython answers only what Python code stored.
 	BaseException >> __dict__ is that view."
 	(anObject isKindOf: BaseException) ifTrue: [^ anObject __dict__].
-	"AN INSTANCE OF A PYTHON CLASS answers its LIVE namespace -- the view
-	``obj.__dict__'' answers -- because vars(obj) IS obj.__dict__ in CPython,
-	and code writes through it: importlib.metadata's Message copies a parsed
-	email message with ``vars(res).update(vars(orig))'', and the snapshot this
-	built took the writes and dropped them, so every Distribution.metadata read
-	failed ('no attribute _headers') and no installed package had a version
-	(pydantic's EmailStr asks for email-validator's)."
+	"AN INSTANCE OF A PYTHON CLASS answers the LIVE view ``obj.__dict__''
+	answers, because vars(obj) IS obj.__dict__.  The snapshot below dropped
+	every write made through it: ``vars(self).update(name=...)'' is how a
+	class whose __setattr__ refuses stores initialises itself
+	(importlib.metadata's EntryPoint), and ``vars(res).update(vars(orig))''
+	how one copies another's state (its _adapters.Message) -- both were
+	silently lost (#1657).  The walk stays for kernel objects, which have no
+	such view."
 	(anObject @env0:class ___grailIsPythonClass___) ifTrue: [
 		^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
@@ -5413,7 +5424,15 @@ ___isInstanceSingle___: anObject of: aClass
 	numpy._utils.set_module does ``isinstance(func, type)'' to tell a decorated
 	class from a function, and test_subclassinit asserts it for a class built
 	by ``type(name, bases, ns)''."
-	(aClass == type) @env0:ifTrue: [^ anObject @env0:isKindOf: Behavior].
+	"A TYPE A C EXTENSION DEFINED is a class too, though it reaches Grail as a
+	proxy: Cython registers its cdef classes with ABCs at import
+	(``ISeedSequence.register(SeedSequence)'' in numpy.random), and
+	ABCMeta.register refused one with ``Can only register classes''.  The
+	proxy answers issubclass of itself in C, nil when it is not a type."
+	(aClass == type) @env0:ifTrue: [
+		(anObject @env0:isKindOf: Behavior) ifTrue: [^ true].
+		^ (anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:')
+			and: [(anObject ___grailForeignTypeCheck___: anObject subclass: true) @env0:notNil]].
 	"CPython PyObject_IsInstance: after the exact-type fast path it looks up
 	__instancecheck__ on TYPE(cls) and, when the metaclass supplies one,
 	DELEGATES to it entirely.  That is the whole ABC mechanism -- what makes
@@ -6448,7 +6467,15 @@ ___validateSlots___: namespace bases: bases
 				''' in __slots__ conflicts with class variable']].
 	"__dict__ AND __weakref__ are slots a class gets at most once.  Listing
 	either twice, or listing one a base already supplies, is CPython's
-	``...slot disallowed: we already got one''."
+	``...slot disallowed: we already got one''.
+
+	WHETHER A BASE SUPPLIES IT is ___grailProvidesInstanceSlot___:'s answer,
+	the one C.__dict__ and x.__weakref__ already read: a dict-ful Python class
+	or one whose __slots__ names it does, object and a class with empty
+	__slots__ do not.  This refused every base without built-in storage,
+	object included, so ``type(name, (object,), {'__slots__':
+	('__weakref__',)})'' raised -- which is how attrs builds every
+	``slots=True'' class, and protobuf every message class (#1428)."
 	#('__dict__' '__weakref__') @env0:do: [:special |
 		| count |
 		count := 0.
@@ -6461,7 +6488,7 @@ ___validateSlots___: namespace bases: bases
 					' slot disallowed: we already got one'].
 			(Array @env0:withAll: bases) @env0:do: [:b |
 				((b @env0:isKindOf: Behavior)
-					@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b) @env0:not]) ifTrue: [
+					@env0:and: [(b @env1:___grailProvidesInstanceSlot___: special) == true]) ifTrue: [
 						^ TypeError ___signal___: special @env0:,
 							' slot disallowed: we already got one']]]].
 	^ self

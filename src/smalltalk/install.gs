@@ -370,6 +370,7 @@ run
 	at: #'GrailBuiltinImporter' put: nil;
 	at: #'GrailClassAttrHolder' put: nil;
 	at: #'GrailCommitCoordinator' put: nil;
+	at: #'GrailDynLoadRequest' put: nil;
 	at: #'GrailShimError' put: nil;
 	at: #'Hash' put: nil;
 	at: #'hashlib' put: nil;
@@ -477,6 +478,7 @@ run
 	at: #'set' put: nil;
 	at: #'set_iterator' put: nil;
 	at: #'ShimForeignObject' put: nil;
+	at: #'ShimForeignSubclass' put: nil;
 	at: #'slice' put: nil;
 	at: #'StopAsyncIteration' put: nil;
 	at: #'StopIteration' put: nil;
@@ -1059,7 +1061,9 @@ run
 	at: #'FutureWarningTestCase' put: nil;
 	at: #'GemstoneContinuationTestCase' put: nil;
 	at: #'GemStoneTestCase' put: nil;
+	at: #'GeneratorApiTestCase' put: nil;
 	at: #'GeneratorCloseTestCase' put: nil;
+	at: #'GeneratorDetectionTestCase' put: nil;
 	at: #'GeneratorExceptionContextTestCase' put: nil;
 	at: #'GeneratorExitTestCase' put: nil;
 	at: #'GeneratorStackFrameTestCase' put: nil;
@@ -1104,6 +1108,7 @@ run
 	at: #'ImportFromlistTestCase' put: nil;
 	at: #'ImportlibFileOpenErrorTestCase' put: nil;
 	at: #'ImportlibFinderSurfaceTestCase' put: nil;
+	at: #'ImportlibMetadataDiscoveryTestCase' put: nil;
 	at: #'ImportlibReloadTestCase' put: nil;
 	at: #'ImportlibResourcesTestCase' put: nil;
 	at: #'ImportlibRunArgumentsTestCase' put: nil;
@@ -1222,6 +1227,7 @@ run
 	at: #'ModuleFrameTestCase' put: nil;
 	at: #'ModuleFromSpecTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
+	at: #'ModuleFunctionMetadataTestCase' put: nil;
 	at: #'ModuleFunctionsFirstClassTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
 	at: #'ModuleGlobalRebindStringsTestCase' put: nil;
@@ -1305,6 +1311,7 @@ run
 	at: #'OsZipfileSurfaceTestCase' put: nil;
 	at: #'OverflowErrorTestCase' put: nil;
 	at: #'OverrideDefaultArgTestCase' put: nil;
+	at: #'OverrideDocstringTestCase' put: nil;
 	at: #'PackageImportTestCase' put: nil;
 	at: #'PartialCallableAndCopyTestCase' put: nil;
 	at: #'PartialMethodDescriptorTestCase' put: nil;
@@ -1418,6 +1425,7 @@ run
 	at: #'SliceOmittedBoundsTestCase' put: nil;
 	at: #'SlotsInheritedDictTestCase' put: nil;
 	at: #'SlotsTestCase' put: nil;
+	at: #'SlotWrapperGetBindsImplementationTestCase' put: nil;
 	at: #'SmalltalkForwarderTestCase' put: nil;
 	at: #'SocketModuleTestCase' put: nil;
 	at: #'SpanEndTokenTestCase' put: nil;
@@ -1533,6 +1541,7 @@ run
 	at: #'TypeParamScopesTestCase' put: nil;
 	at: #'TypeParamsTestCase' put: nil;
 	at: #'TypePrepareDefaultTestCase' put: nil;
+	at: #'TypeSlotsWeakrefDictOverBaseTestCase' put: nil;
 	at: #'TypeThreeArgNamespaceTestCase' put: nil;
 	at: #'TypeThreeArgTestCase' put: nil;
 	at: #'TypeWithScalarMixinTestCase' put: nil;
@@ -1810,6 +1819,7 @@ input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/GrailShimError.gs
+input src/smalltalk/Python/GrailDynLoadRequest.gs
 input src/smalltalk/Python/GrailMainRestart.gs
 input src/smalltalk/Python/CPythonShim.gs
 input src/smalltalk/Python/ShimForeignObject.gs
@@ -2642,7 +2652,9 @@ input src/smalltalk/PythonTests/FunctoolsWrapsVarargsTestCase.gs
 input src/smalltalk/PythonTests/FutureWarningTestCase.gs
 input src/smalltalk/PythonTests/GemstoneContinuationTestCase.gs
 input src/smalltalk/PythonTests/GemStoneTestCase.gs
+input src/smalltalk/PythonTests/GeneratorApiTestCase.gs
 input src/smalltalk/PythonTests/GeneratorCloseTestCase.gs
+input src/smalltalk/PythonTests/GeneratorDetectionTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExceptionContextTestCase.gs
 input src/smalltalk/PythonTests/GeneratorExitTestCase.gs
 input src/smalltalk/PythonTests/GeneratorStackFrameTestCase.gs
@@ -2684,6 +2696,7 @@ input src/smalltalk/PythonTests/ImportErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportFromlistTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFileOpenErrorTestCase.gs
 input src/smalltalk/PythonTests/ImportlibFinderSurfaceTestCase.gs
+input src/smalltalk/PythonTests/ImportlibMetadataDiscoveryTestCase.gs
 input src/smalltalk/PythonTests/ImportlibReloadTestCase.gs
 input src/smalltalk/PythonTests/ImportlibResourcesTestCase.gs
 input src/smalltalk/PythonTests/ImportlibRunArgumentsTestCase.gs
@@ -2808,6 +2821,7 @@ input src/smalltalk/PythonTests/ModuleFixturesTestCase.gs
 input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/ModuleFromSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionMetadataTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionsFirstClassTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs
@@ -2891,6 +2905,7 @@ input src/smalltalk/PythonTests/OsWalkTestCase.gs
 input src/smalltalk/PythonTests/OsZipfileSurfaceTestCase.gs
 input src/smalltalk/PythonTests/OverflowErrorTestCase.gs
 input src/smalltalk/PythonTests/OverrideDefaultArgTestCase.gs
+input src/smalltalk/PythonTests/OverrideDocstringTestCase.gs
 input src/smalltalk/PythonTests/PackageImportTestCase.gs
 input src/smalltalk/PythonTests/ParseErrorLocationTestCase.gs
 input src/smalltalk/PythonTests/PartialCallableAndCopyTestCase.gs
@@ -3003,6 +3018,7 @@ input src/smalltalk/PythonTests/SliceBlockCopyTestCase.gs
 input src/smalltalk/PythonTests/SliceOmittedBoundsTestCase.gs
 input src/smalltalk/PythonTests/SlotsInheritedDictTestCase.gs
 input src/smalltalk/PythonTests/SlotsTestCase.gs
+input src/smalltalk/PythonTests/SlotWrapperGetBindsImplementationTestCase.gs
 input src/smalltalk/PythonTests/SmalltalkForwarderTestCase.gs
 input src/smalltalk/PythonTests/SocketModuleTestCase.gs
 input src/smalltalk/PythonTests/SpanEndTokenTestCase.gs
@@ -3119,6 +3135,7 @@ input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
 input src/smalltalk/PythonTests/TypeParamScopesTestCase.gs
 input src/smalltalk/PythonTests/TypeParamsTestCase.gs
 input src/smalltalk/PythonTests/TypePrepareDefaultTestCase.gs
+input src/smalltalk/PythonTests/TypeSlotsWeakrefDictOverBaseTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgNamespaceTestCase.gs
 input src/smalltalk/PythonTests/TypeThreeArgTestCase.gs
 input src/smalltalk/PythonTests/TypeWithScalarMixinTestCase.gs

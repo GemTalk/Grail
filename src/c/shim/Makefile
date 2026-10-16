@@ -105,7 +105,10 @@ PYTHON_INCLUDES := $(shell \
 		fi; \
 	fi)
 
-dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so
+NEST_MODS = $(GRAIL_LIB_DIR)/_grail_nest1.so $(GRAIL_LIB_DIR)/_grail_nest2.so \
+	$(GRAIL_LIB_DIR)/_grail_nest3.so $(GRAIL_LIB_DIR)/_grail_nestbad.so
+
+dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so $(NEST_MODS)
 
 $(GRAIL_LIB_DIR)/_grail_demo.so: _grail_demo.c
 	@if [ -z "$(PYTHON_INCLUDES)" ]; then \
@@ -118,6 +121,14 @@ $(GRAIL_LIB_DIR)/_grail_demo.so: _grail_demo.c
 	fi
 	@mkdir -p $(GRAIL_LIB_DIR)
 	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -o $@ _grail_demo.c $(UNDEF_ARGS)
+
+# _grail_nest.c, once per level: each level's exec slot imports the one below
+# (see the file's header).  Same headers as _grail_demo.so.
+$(GRAIL_LIB_DIR)/_grail_nest%.so: _grail_nest.c $(GRAIL_LIB_DIR)/_grail_demo.so
+	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -DNEST_LEVEL=$* -o $@ _grail_nest.c $(UNDEF_ARGS)
+
+$(GRAIL_LIB_DIR)/_grail_nestbad.so: _grail_nest.c $(GRAIL_LIB_DIR)/_grail_demo.so
+	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -DNEST_FAIL -o $@ _grail_nest.c $(UNDEF_ARGS)
 
 clean:
 	rm -f $(OBJECTS) $(LIB)

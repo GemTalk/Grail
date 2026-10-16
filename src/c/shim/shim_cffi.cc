@@ -45,8 +45,6 @@ PyVarObject *_PyObject_NewVar(PyTypeObject *type, Py_ssize_t nitems);
 /* What os.fsencode uses; Grail's filesystem encoding is UTF-8. */
 const char *Py_FileSystemDefaultEncoding = "utf-8";
 
-/* CPython's shared empty buffer for a zero-length bytearray. */
-char _PyByteArray_empty_string[] = "";
 
 /* ====================================================================
  * Modules
@@ -65,7 +63,6 @@ PyObject *PyModule_Create2(PyModuleDef *def, int apiver) {
  * Threads, the interpreter and the GIL
  * ==================================================================== */
 
-PyThreadState *PyThreadState_GetUnchecked(void) { return PyThreadState_Get(); }
 PyThreadState *PyGILState_GetThisThreadState(void) { return PyThreadState_Get(); }
 PyInterpreterState *PyThreadState_GetInterpreter(PyThreadState *ts) {
     (void)ts;
@@ -94,10 +91,9 @@ PyObject *PyInterpreterState_GetDict(PyInterpreterState *interp) {
 }
 
 /* Locks.  A user action runs one Python thread at a time, so a lock taken
-   inside it is never contended: acquire always succeeds at once. */
+   inside it is never contended: acquire always succeeds at once.  Allocation
+   and freeing live in shim_numpy.cc. */
 typedef void *PyThread_type_lock;
-PyThread_type_lock PyThread_allocate_lock(void) { return malloc(1); }
-void PyThread_free_lock(PyThread_type_lock lock) { free(lock); }
 int PyThread_acquire_lock(PyThread_type_lock lock, int waitflag) {
     (void)lock; (void)waitflag;
     return 1;                              /* PY_LOCK_ACQUIRED */
@@ -201,14 +197,6 @@ void PyErr_FormatUnraisable(const char *format, ...) {
     PyErr_WriteUnraisable(NULL);
 }
 
-/* Py_FatalError's out-of-line form: say where, then stop the process, as
-   CPython does. */
-void _Py_FatalErrorFunc(const char *func, const char *message) {
-    fprintf(stderr, "Fatal Python error: %s: %s\n", func ? func : "?",
-            message ? message : "");
-    fflush(stderr);
-    abort();
-}
 
 /* ====================================================================
  * Weak references -- through Grail's own weakref module

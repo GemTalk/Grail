@@ -166,10 +166,17 @@ method: secrets
 randbelow: n
 	"randbelow(n) - random int in [0, n).  Raises ValueError if n <= 0."
 
+	| k r |
 	n @env0:<= 0 ifTrue: [
 		ValueError ___signal___: 'Upper bound must be positive'
 	].
-	^ self _generator @env0:integerBetween: 0 and: n @env0:- 1
+	n @env0:<= 16r100000000 ifTrue: [
+		^ self _generator @env0:integerBetween: 0 and: n @env0:- 1].
+	"Past 2**32, which the kernel's integerBetween:and: does not take:
+	CPython's _randbelow_with_getrandbits, uniform by rejection."
+	k := (n @env0:- 1) @env0:highBit.
+	[r := self randbits: k. r @env0:>= n] whileTrue.
+	^ r
 %
 
 category: 'Grail-Random ints'
@@ -178,13 +185,21 @@ randbits: k
 	"randbits(k) - non-negative int with exactly k random bits.
 	Raises ValueError if k < 0."
 
+	| gen x chunks |
 	k @env0:< 0 ifTrue: [
 		ValueError ___signal___: 'k must be non-negative'
 	].
 	k @env0:= 0 ifTrue: [^ 0].
-	"integerBetween:and: with a 2^k-bit range gives a uniform value
-	in [0, 2^k)."
-	^ self _generator @env0:integerBetween: 0 and: (1 @env0:bitShift: k) @env0:- 1
+	"32 bits at a time, then the excess shifted off, as CPython's
+	getrandbits trims its bytes: the kernel's integerBetween:and: refuses an
+	interval over 2**32 (``Intervals > 2**32 not yet supported''), and
+	numpy.random's SeedSequence() asks for 128."
+	gen := self _generator.
+	chunks := (k @env0:+ 31) @env0:// 32.
+	x := 0.
+	chunks @env0:timesRepeat: [
+		x := (x @env0:bitShift: 32) @env0:+ (gen @env0:integerBetween: 0 and: 16rFFFFFFFF)].
+	^ x @env0:bitShift: (k @env0:- (chunks @env0:* 32))
 %
 
 ! ===============================================================================

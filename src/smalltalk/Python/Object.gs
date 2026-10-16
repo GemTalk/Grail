@@ -6257,6 +6257,11 @@ ___moduleAttrIdentityTable___
 		as types.TracebackType -- so Grail's ``PyTraceback'' spelling leaked into
 		every repr and every ``type(tb).__name__''."
 		t @env0:at: #'PyTraceback' put: #('traceback' 'builtins').
+		"The frame object, the same way: ``<class 'frame'>'', __module__
+		'builtins', reachable from Python only as types.FrameType.  The repr
+		already said ``frame''; __name__ said ``PyFrame'' and __module__ was
+		missing (test_generators' email doctest reads type(g.gi_frame))."
+		t @env0:at: #'PyFrame' put: #('frame' 'builtins').
 
 		"``list[int]'' and ``int | str''.  CPython's are ``types.GenericAlias'' and
 		``types.UnionType'' -- reprs, pickling (``Can't pickle <class
@@ -10209,7 +10214,7 @@ ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
 	to ask for a category per hit; only the metaclass path calls it, so the cost
 	does not land on classes that have no metaclass."
 
-	| walker dict metaDict |
+	| walker dict |
 	walker := aClass.
 	[walker == nil] whileFalse: [
 		"A class whose body defines the name CLASS-side -- a @classmethod or
@@ -10219,27 +10224,17 @@ ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
 		instance-side def -- the shape a classmethod SUBCLASS such as abc's
 		abstractclassmethod compiles to -- and answered an UnboundMethod for
 		the subclass's own classmethod, so ``D.foo()'' raised 'must be called
-		with an instance' (test_abc TestLegacyAPI, with a Python metaclass)."
-		"EVERY SPELLING, as the instance side below asks.  A classmethod with a
-		default argument compiles class-side to the varargs ``_fd:kw:'' and its
-		forwarders, not to a unary ``fd'', so asking for aSym alone missed it:
-		``class C(Base): @classmethod def fd(cls, context=None)'' under a Python
-		metaclass, over a base whose instance-side ``fd'' it overrides, read
-		``C.fd'' as that base's UnboundMethod, and ``C.fd(x)'' ran the
-		classmethod's body with x as the receiver -- an uncatchable
-		MessageNotUnderstood.  importlib.metadata's MetadataPathFinder (an
-		ABCMeta class) is exactly that shape."
-		metaDict := walker @env0:class @env0:methodDictForEnv: 1.
-		(metaDict ~~ nil
-			and: [((metaDict @env0:includesKey: aSym)
-					and: [self ___isPythonSourceMethodCategory___:
-						(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)])
-				or: [(1 @env0:to: 7) @env0:anySatisfy: [:i | | fsel |
-					fsel := family @env0:at: i.
-					(metaDict @env0:includesKey: fsel)
-						and: [self ___isPythonSourceMethodCategory___:
-							(walker @env0:class @env0:categoryOfSelector: fsel environmentId: 1)]]]])
-					ifTrue: [^ false].
+		with an instance' (test_abc TestLegacyAPI, with a Python metaclass).
+
+		In ANY ARITY: a classmethod that takes an argument compiles to ``f:'',
+		not ``f'', so asking for the unary selector alone missed every one of
+		them.  ``class N(M): @classmethod def f(cls, c)'' over an instance
+		``M.f'' then read as M's function under any metaclass -- importlib.
+		metadata's MetadataPathFinder.find_distributions, a classmethod
+		overriding an abstract method of an ABCMeta class, is the case that
+		found it (#1657)."
+		(walker @env0:class ___grailOwnsPythonDef___: aSym family: family forwarders: false)
+			ifTrue: [^ false].
 		dict := walker @env0:methodDictForEnv: 1.
 		dict == nil ifFalse: [
 			((dict @env0:includesKey: aSym)
@@ -12555,6 +12550,10 @@ ___pyAttrLoad___: aSym
 	``def __getattr__'' and not the ``__getattr__ = fn'' class-attribute form, so
 	django's LazyObject never set itself up and recursed until the gem ran out of
 	memory."
+	"A FOREIGN BASE TYPE comes before __getattr__, as a base's type dict does in
+	CPython: an instance of ``class memmap(ndarray)'' reads ndarray's ``shape''
+	and ``sum'' off its C body (ShimForeignSubclass)."
+	(self ___pyAttrForeignBaseLoad___: aSym) @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
 	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
@@ -19775,6 +19774,17 @@ ___hasOwnGetitem___
 	meth := defCls @env0:compiledMethodAt: #'__getitem__:' environmentId: 1 otherwise: nil.
 	^ (meth @env0:notNil @env0:and: [meth @env0:pragmas @env0:anySatisfy: [:p |
 		p @env0:keyword == #grailProtocolRefusal]]) @env0:not
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___pyAttrForeignBaseLoad___: aSym
+	"aSym read off a C base type this object's class descends from, as an
+	Association whose value is the attribute, or nil when there is none --
+	nil for every object but an instance of a Python subclass of a C type
+	(ShimForeignSubclass), which ___pyAttrLoad___: asks just before its miss."
+
+	^ nil
 %
 
 category: 'Grail-Match Protocol'

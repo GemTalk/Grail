@@ -1,7 +1,8 @@
 # Shim Object Model — current design, the "prefix OOP" proposal, and wall analysis
 
-Status: **analysis / design record** (2026-06-14).  No architecture change made
-yet; this captures the options and the data so we can revisit deliberately.
+Status: **analysis / design record** (2026-06-14).  The prefix of §2 was
+adopted for exact `int`, `str` and `bytes` on 2026-10-15, when Cython modules
+started reading those Grail values inline (§5).
 
 ## 1. The current hybrid object model
 
@@ -142,3 +143,43 @@ dominate the run: `numpy._DTypeMeta` ×1120, `numpy._ArrayMethod` ×508,
    types and prototype on one type (`str`) to measure materialization cost first.
 
 See `docs/Shim_NumPy.md` for the running numpy progress and the live frontier.
+
+## 5. The prefix adopted for int, str and bytes (2026-10-15)
+
+Recommendation 4's trigger arrived with `numpy.random`. Its modules are Cython
+3.3, which reads a Grail value's internals inline:
+* an int's `lv_tag` and 30-bit digits;
+* a str's length, hash, state and data;
+* a bytes object's size and data.
+
+Offset 16 of a kind-1 wrapper is the OOP, which Cython read as an int's sign
+and a str's length.
+
+So an exact `int`, `str` or `bytes` now crosses in CPython 3.14's own layout,
+with `[magic "GRAILPX1"][oop]` in the 16 bytes before the pointer, as §2
+proposed (`CPythonShim>>___prefixedWrapperFor:`).
+
+* **Detection reads `ob_type` first** (`has_grail_prefix` in `cpython.cc`).
+  The prefix is read only when the object's type is one of those three shim
+  types, so the bytes in front of a wheel's own object are never read. That
+  answers §2's static-type concern for these types without an address-range
+  check.
+* **An OOP of 0** marks a body C made itself, for example
+  `PyBytes_FromStringAndSize(NULL, n)` filled in place. It becomes a Grail
+  value when it crosses back.
+* **One `gcMalloc` block holds the prefix and the body.** The wrapper map
+  holds a view of the body, so `(wrap: x) memoryAddress` is still the
+  `PyObject*`. The block is kept in `#GrailShimWrapperBlocks` and swept with
+  the wrapper.
+* **The hash field is computed in C**: FNV-1a over the code points, cached in
+  the object. Cython compares hash fields to match keyword names, and Grail's
+  String and Symbol hashes differ for the same text.
+* **`True` and `False` are static, in the same int layout** (`cpython.h`).
+
+What it did not change: other Grail values (lists, dicts, floats and the rest)
+still cross as before. A dict read inline (`PyDict_GET_SIZE`) still reads the
+OOP. The workaround is calling a vectorcall type through vectorcall, so
+keywords travel as a tuple of names.
+
+Tested by `CPythonShimTestCase`'s `Grail-Tests - Cython` category, against
+`_grail_demo.cython()`, which does each inline read Cython compiles to.

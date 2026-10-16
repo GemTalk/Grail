@@ -37,6 +37,14 @@ SLEEPS="$SCRATCH/sleeps"
 sleep() { echo "$*" >> "$SLEEPS"; command sleep "$@"; }
 sleeps() { wc -l < "$SLEEPS" | tr -d ' '; }
 
+# Replace a stub file the gate may be reading at that moment.  ``echo v > f''
+# truncates f before it writes, so a read in between sees an EMPTY file, which
+# the gate takes as load 0 / no gems: it releases and reports the empty value,
+# and the check for the new one fails.  It did, in CI, on PR #1645
+# (``it launches once the load drops'').  A rename is atomic: a reader sees the
+# old contents or the new, never neither.
+put() { echo "$1" > "$2.tmp" && mv "$2.tmp" "$2"; }
+
 # shellcheck source=../../scripts/launch_gate.sh
 . "$ROOT/scripts/launch_gate.sh"
 
@@ -94,7 +102,7 @@ check "a quiet machine launches at once, silently" \
 
 # --- 4. held on load, released when it drops --------------------------------
 echo 14.50 > "$SCRATCH/load"; echo 2 > "$SCRATCH/gems"
-( command sleep 2; echo 6.00 > "$SCRATCH/load" ) &
+( command sleep 2; put 6.00 "$SCRATCH/load" ) &
 launch_gate "shard 3" 0 > "$SCRATCH/out4"
 wait
 check "load over the limit holds the launch, and says why" \
@@ -111,7 +119,7 @@ check "a load equal to the limit does not hold" '[ -z "$OUT" ]'
 
 # --- 5. held on gem count, though the load average still reads low ----------
 echo 2.00 > "$SCRATCH/load"; echo 16 > "$SCRATCH/gems"
-( command sleep 2; echo 9 > "$SCRATCH/gems" ) &
+( command sleep 2; put 9 "$SCRATCH/gems" ) &
 launch_gate "test.test_enum" 0 > "$SCRATCH/out5"
 wait
 check "16 test gems hold a launch while the lagging load average reads 2" \

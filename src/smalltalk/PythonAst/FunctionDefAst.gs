@@ -3385,7 +3385,20 @@ ___emitModuleDefaultsBlockOn___: aStream
 		lf;
 		nextPutAll: 'self @env0:___setFunctionDefaults___: ''';
 		nextPutAll: name;
-		nextPutAll: ''' block: [{ {'.
+		nextPutAll: ''' keys: #( #('.
+	"The memo KEYS too, in ___methodDefaultKeysTable___'s shape, so that
+	``f.__defaults__ = t'' can write THROUGH to what a call binds (module >>
+	___writeFunctionDefaults___:value:kw:) instead of landing in an attribute
+	the call never reads (#1228)."
+	pos do: [:pair |
+		aStream nextPutAll: ' #'''; nextPutAll: (self ___moduleDefaultKeyFor___:
+			(self transportParamName: (pair at: 1))); nextPut: $'].
+	aStream nextPutAll: ' ) #('.
+	kw do: [:pair |
+		aStream nextPutAll: ' '''; nextPutAll: (pair at: 1) asString;
+			nextPutAll: ''' #'''; nextPutAll: (self ___moduleDefaultKeyFor___: (pair at: 1));
+			nextPut: $'].
+	aStream nextPutAll: ' ) ) block: [{ {'.
 	pos doWithIndex: [:pair :i |
 		i > 1 ifTrue: [aStream nextPut: $.].
 		aStream space.
@@ -3427,11 +3440,9 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 	| ownerClassName privateName |
 	self isModuleLevelDef ifTrue: [
 		aStream
-			nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
-			nextPutAll: self name asString;
-			nextPutAll: '__';
-			nextPutAll: aParamName asString;
-			nextPutAll: '___'' compute: ['.
+			nextPutAll: '(self @env0:___moduleDefaultAt: #''';
+			nextPutAll: (self ___moduleDefaultKeyFor___: aParamName);
+			nextPutAll: ''' compute: ['.
 		aDefaultNode printSmalltalkOn: aStream.
 		aStream nextPutAll: '])'.
 		^ self].
@@ -3449,6 +3460,17 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 		nextPutAll: ') ifNil: ['.
 	aDefaultNode printSmalltalkOn: aStream.
 	aStream nextPutAll: '])'
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___moduleDefaultKeyFor___: aParamName
+	"The module-keyed memo entry a module-level def's default for aParamName is
+	held under (module >> ___moduleDefaultAt:compute:).  One spelling for the
+	three places that need it -- the text and IR call paths, and the key table
+	``f.__defaults__ = t'' writes through -- so they cannot drift apart."
+
+	^ '___default_' , self name asString , '__' , aParamName asString , '___'
 %
 
 category: 'Grail-code generation'
@@ -5187,7 +5209,7 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 		^ aBuilder ifNilValue: probe
 			then: [aBuilder add: (aBuilder withoutLocalsDo: [
 				aDefaultNode ___emitIRValueOn___: aBuilder])]].
-	key := ('___default_' , self name asString , '__' , pname asString , '___') asSymbol.
+	key := (self ___moduleDefaultKeyFor___: pname) asSymbol.
 	blk := aBuilder inBlockDo: [
 		aBuilder add: (aBuilder withoutLocalsDo: [
 			aDefaultNode ___emitIRValueOn___: aBuilder])].
@@ -7292,8 +7314,17 @@ nodeContainsYieldExceptNestedDefs: node
 	node isNil ifTrue: [^false].
 	(node isKindOf: YieldAst) ifTrue: [^true].
 	(node isKindOf: YieldFromAst) ifTrue: [^true].
-	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-		ifTrue: [^false].
+	"A nested def's or lambda's BODY is its own scope, but its default values
+	and its decorators are evaluated HERE, when the def or lambda is created:
+	``def f(): lambda x=(yield): 1'' makes f a generator.  Skipping the whole
+	node left f an ordinary function whose yield then named an unbound
+	___gen___, a Smalltalk CompileError rather than a generator
+	(test_generators' coroutine doctest)."
+	(node isKindOf: LambdaAst)
+		ifTrue: [^ self argumentDefaultsContainYield: node args].
+	(node isKindOf: FunctionDefAst) ifTrue: [
+		^ (self bodyContainsYieldExceptNestedDefs: node decoratorList)
+			or: [self argumentDefaultsContainYield: node args]].
 	"Walk all instVars of this AST node; recurse into AbstractNode
 	children and SequenceableCollection containers.  Skip the
 	``parent`` back-pointer to avoid cycling up the tree."
@@ -7311,6 +7342,18 @@ nodeContainsYieldExceptNestedDefs: node
 		]
 	].
 	^false
+%
+
+category: 'Grail-Module Method Compilation'
+method: FunctionDefAst
+argumentDefaultsContainYield: anArgumentsAst
+	"Does a default value -- positional or keyword-only -- of a nested def or
+	lambda contain a yield?  Those are evaluated in the enclosing function.
+	kw_defaults holds nil for a keyword-only parameter with no default."
+
+	anArgumentsAst isNil ifTrue: [^ false].
+	^ (self bodyContainsYieldExceptNestedDefs: anArgumentsAst defaults)
+		or: [self bodyContainsYieldExceptNestedDefs: anArgumentsAst kw_defaults]
 %
 
 category: 'Grail-Module Method Compilation'
