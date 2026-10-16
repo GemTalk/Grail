@@ -1102,21 +1102,31 @@ ___emitSmalltalkOn___: aStream
 		and: [CallAst classBeingCompiled notNil
 			and: [CallAst moduleClassBeingCompiled isNil
 			and: [CallAst inClassBodyValueEmit
-			and: [self ___inNestedScopeWithinClassBody___ not
-			and: [CallAst classBodyBoundNames isNil
-				or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol]]]]]])
+			and: [self ___inNestedScopeWithinClassBody___ not]]]])
 		ifTrue: [
+			| boundBefore |
 			"Sibling method -> receiver-less BoundMethod (call protocol pops
 			positional[1] as the receiver); sibling @staticmethod -> BoundMethod
 			on the class; nested class -> the per-class dynamic store.  None of
 			these needs a module instance, so they mirror the module block
-			exactly."
-			(CallAst classFunctionNames notNil
-				and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			exactly.
+
+			So does the POSITION GATE.  Every branch but the conditional one
+			reads the name only once a statement BEFORE this one bound it; the
+			conditional one reads the per-class dynamic store whenever it is
+			set, because a loop target or an ``if'' binding is read inside the
+			very statement that binds it -- ``for i in xs: j = i''.  The gate
+			used to sit on this whole block, so that read fell through to a
+			bare doit identifier and the exec failed to compile: ``undefined
+			symbol i'' (#1683)."
+			boundBefore := CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: self ___mangledId___ asSymbol].
+			(boundBefore and: [CallAst classFunctionNames notNil
+				and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				self ___printSiblingFunctionOn___: aStream.
 				^self].
-			(CallAst classStaticFunctionNames notNil
-				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			(boundBefore and: [CallAst classStaticFunctionNames notNil
+				and: [CallAst classStaticFunctionNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				aStream
 					nextPutAll: '(BoundMethod receiver: ';
 					nextPutAll: CallAst ___classBeingCompiledVar___;
@@ -1124,8 +1134,8 @@ ___emitSmalltalkOn___: aStream
 					nextPutAll: self ___mangledId___;
 					nextPutAll: ')'.
 				^self].
-			(CallAst classNestedClassNames notNil
-				and: [CallAst classNestedClassNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			(boundBefore and: [CallAst classNestedClassNames notNil
+				and: [CallAst classNestedClassNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				aStream
 					nextPutAll: '(';
 					nextPutAll: CallAst ___classBeingCompiledVar___;
@@ -1162,8 +1172,8 @@ ___emitSmalltalkOn___: aStream
 			each ``<Class> <attr>: value'' store, so a later value expression
 			reads the earlier attr with a plain getter send.  nil means ``not
 			bound yet'' (Grail's nil-as-absent rule) -> enclosing scope."
-			(CallAst classAttrNames notNil
-				and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol]) ifTrue: [
+			(boundBefore and: [CallAst classAttrNames notNil
+				and: [CallAst classAttrNames includes: self ___mangledId___ asSymbol]]) ifTrue: [
 				aStream
 					nextPutAll: '((';
 					nextPutAll: CallAst ___classBeingCompiledVar___;

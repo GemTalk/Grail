@@ -1136,7 +1136,7 @@ executeWithScope: aSymbolList as: aKind
 	what keeps ``run_tests.sh'' from flooding $TMP/codegen with a
 	___doit_<N>___ pair per executed statement."
 
-	| code traceDir seq tpzPath irPath compiledMethod result tpzSource |
+	| code traceDir seq tpzPath irPath compiledMethod result tpzSource gap |
 	code := ModuleAst whileCompilingDoitWithScope: aSymbolList do: [self smalltalkSource].
 	traceDir := importlib ___codegenTraceDir___.
 	traceDir ifNotNil: [
@@ -1160,12 +1160,23 @@ executeWithScope: aSymbolList as: aKind
 			nextPutAll: tpzSource contents encodeAsUTF8;
 			close.
 	].
-	compiledMethod := code
+	"Source that parsed but whose generated Smalltalk does not compile is a
+	Grail codegen gap, not an error in the Python.  It surfaced as the
+	Smalltalk CompileError itself, which no Python ``except'' can catch, so
+	the whole process ended (#1683).  Raised as SystemError instead --
+	CPython's exception for a failure inside the interpreter -- and from
+	outside the handler, which only records the message."
+	compiledMethod := [code
 		_compileInContext: nil
 		symbolList: aSymbolList
 		oldLitVars: nil
 		environmentId: 1
-		flags: 0 .
+		flags: 0]
+			on: CompileError
+			do: [:ex | gap := ex messageText asString. ex return: nil].
+	gap ifNotNil: [
+		^ SystemError @env1:___signal___:
+			'Grail could not compile this code (codegen gap): ' , gap].
   " Add   on: AbstractException do:[:ex| self pause ]  here if you want to debug compile errors here "
 	"Snapshot IR for the freshly-compiled doit before any later
 	compile overwrites __sessionStateAt: 19."
