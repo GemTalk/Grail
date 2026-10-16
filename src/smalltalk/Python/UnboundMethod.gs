@@ -1850,8 +1850,9 @@ ___tableEntryFor___: aClass table: aTableSelector
 	reference would be a forward one.  Falls back to the plain superclass chain
 	when it is absent, which is the whole answer under single inheritance."
 
-	| chain |
+	| chain absent |
 	aClass == nil ifTrue: [^ nil].
+	absent := Object @env0:new.
 	chain := self ___lookupChainFrom___: aClass.
 	chain @env0:do: [:each |
 		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
@@ -1861,10 +1862,16 @@ ___tableEntryFor___: aClass table: aTableSelector
 				| tbl v |
 				tbl := [each @env0:perform: aTableSelector env: 1]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+				"Stop at a table that HAS the name, even with a nil entry: that
+				 is how the doc table records an undocumented def, so an
+				 override without a docstring answers None rather than its
+				 base's (#1650).  No other table stores nil."
 				tbl == nil ifFalse: [
-					v := [tbl @env0:at: selector @env0:asString otherwise: nil]
-						@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-					v == nil ifFalse: [^ v]]]].
+					v := [(tbl @env0:includesKey: selector @env0:asString)
+							ifTrue: [tbl @env0:at: selector @env0:asString]
+							ifFalse: [absent]]
+						@env0:on: AbstractException do: [:ex | ex @env0:return: absent].
+					v == absent ifFalse: [^ v]]]].
 	^ nil
 %
 

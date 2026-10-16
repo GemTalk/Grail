@@ -1059,6 +1059,16 @@ def signature(obj, *args, **kwargs):
             return sig
         text = getattr(obj, '__text_signature__', None)
     else:
+        # A builtin's own __text_signature__, as CPython's
+        # _signature_from_builtin reads it -- a C extension's function carries
+        # one in its docstring (numpy.ma builds its wrappers from
+        # signature(np.arange).parameters).
+        if isbuiltin(obj):
+            text = getattr(obj, '__text_signature__', None)
+            if isinstance(text, str):
+                sig = _signature_from_text(text)
+                if sig is not None:
+                    return sig
         text = getattr(obj, '__call_signature__', None)
         if not isinstance(text, str):
             call = getattr(type(obj), '__call__', None)
@@ -1157,6 +1167,38 @@ def _signature_get_partial(wrapped_sig, partial, extra_args=()):
                 new_params.pop(param.name)
 
     return wrapped_sig.replace(parameters=new_params.values())
+
+
+def _signature_from_text(text):
+    """A Signature with real Parameters from a builtin's text signature --
+    ``(start_or_stop, /, stop=None, step=1, *, dtype=None)'' -- or None when
+    the text is not a parameter list Python can compile.
+
+    CPython parses it (_signature_fromstr); this compiles a function with that
+    parameter list and asks for ITS signature, which the def-time spec answers
+    with the names, kinds and defaults.  A leading ``$module'' / ``$self'' /
+    ``$type'' parameter is the bound receiver, which a bound builtin drops."""
+    s = text.strip()
+    if not (s.startswith('(') and s.endswith(')')):
+        return None
+    if s.startswith('($'):
+        comma = s.find(',')
+        if comma == -1:
+            s = '()'
+        else:
+            rest = s[comma + 1:].lstrip()
+            # ``($module, /, x)'': the '/' only marked $module positional.
+            if rest.startswith('/'):
+                rest = rest[1:].lstrip()
+                if rest.startswith(','):
+                    rest = rest[1:].lstrip()
+            s = '(' + rest
+    ns = {}
+    try:
+        exec('def _grail_text_signature' + s + ': pass', ns)
+    except Exception:
+        return None
+    return signature(ns['_grail_text_signature'])
 
 
 def _signature_eval_str(sig, func, globals=None, locals=None):

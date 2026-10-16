@@ -843,7 +843,7 @@ category: 'Grail-Async Generator Protocol'
 method: PythonAsyncGenerator
 athrow: aType _: aValue _: aTb
 	self ___warnLegacySignatureOf___: 'athrow'.
-	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue)
+	^ self athrow: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
 %
 
 category: 'Grail-Async Generator Protocol'
@@ -947,6 +947,20 @@ ag_suspended
 	the body one yield at a time."
 
 	^ self gi_suspended
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+___readOnlyGetsetNames___
+	"See PythonGenerator >> ___refuseReadOnlyAttr___:."
+
+	^ #('ag_await' 'ag_code' 'ag_frame' 'ag_suspended')
+%
+
+category: 'Grail-Async Generator Protocol'
+method: PythonAsyncGenerator
+___readOnlyMemberNames___
+	^ #('ag_running')
 %
 
 category: 'Grail-Async Generator Protocol'

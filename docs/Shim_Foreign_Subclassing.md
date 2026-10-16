@@ -1,8 +1,9 @@
 # Subclassing a C extension type from Python
 
-Status: **design proposal** (2026-10-13).  Steps 1 and 2 of §6 are
-implemented (2026-10-14; see Shim_NumPy.md, stage 3); steps 3 and 4, real
-subclass instances, are not.
+Status: **implemented** through step 3 of §6, with step 4 partly done.
+Steps 1 and 2 landed on 2026-10-14 (see Shim_NumPy.md, stage 3). Option A's subclass
+instances landed on 2026-10-15 and are described in §8. That section also
+lists what is still open.
 It is written for the numpy frontier in [Shim_NumPy.md](Shim_NumPy.md), stage 2,
 and builds on [Shim_Object_Model.md](Shim_Object_Model.md) and on the type
 mirrors of [Support_Pydantic.md](Support_Pydantic.md), Phase 5.
@@ -305,3 +306,58 @@ mainly gives information: how much of `import numpy` remains beyond this wall.
   then be collectable. Wrappers carry the same risk today.
 * **Cython types (pandas).** Cython extension types are ordinary static types,
   so the same model should apply. It has not been tried.
+
+## 8. As built (option A)
+
+The C side is in `src/c/shim/cpython.cc`; the server side is in
+`ShimForeignSubclass` (`ShimForeignObject.gs`) and in `CPythonShim>>___buildSubtypeMirrorFor:`.
+
+* **The subtype mirror** is a copy of the base's `PyTypeObject`, with these
+  changes:
+  * `tp_name` is the class's bare `__name__`, as for a CPython heap type.
+    `PyType_GetQualName` and `PyType_GetModuleName` ask the class for the rest.
+  * `HEAPTYPE|BASETYPE` are added to the flags.
+  * `tp_basicsize` grows by one word, which holds the OOP of the instance's Grail
+    half.
+  * `tp_alloc` is `grail_subtype_alloc`, and `tp_free` is a no-op.
+  * `tp_getattro` and `tp_setattro` are trampolines.
+  * `tp_mro` is a real tuple.
+  * The mirror magic sits in `tp_cache`, the class OOP in `tp_weaklist`, and a
+    subtype marker in `tp_subclasses`.
+* **An instance** is two halves. The body is `gcMalloc`'d with the base's
+  layout. The half is `aClass new`, and it holds the body in
+  `grailForeignBody`. `tp_alloc` makes both
+  (`CPythonShim>>PyType_AllocForeignSubclass:type:basicSize:`), so numpy's
+  own views and results of a subclass instance are instances too.
+  `pyobj_oop(body)` answers the half.
+* **Attribute reads:**
+  * Grail-side, a name the Python classes do not define falls back to the
+    base through the body (`___pyAttrForeignBaseLoad___:`, from `object`'s
+    miss path).
+  * C-side, `subtype_python_attr` asks the Python classes first, with the
+    fallback switched off, and then walks the C type.
+  * `super()` past the Python classes reaches the base. For an instance this
+    happens on a miss. For a class it happens at the MRO position the base
+    occupies, which is how `super().__new__(cls, ...)` reaches `tp_new`.
+* **Attribute stores** go to C for the base's data descriptors. Those are
+  every getset and every member, read-only ones included, which then refuse
+  the store as in CPython. Every other name stays on the half.
+* **Calling the class** runs the base's `tp_new` (through `T.__new__`, unless
+  Python defines `__new__`), then a Python `__init__`.
+* **Tests.** `_grail_demo.Cell` is a `BASETYPE` with its own `tp_new` and
+  struct. `CPythonShimTestCase`'s `testAWheelSubclass*` and
+  `testCReadsAWheelSubclassInstancesPythonAttributes` cover the points above
+  without numpy, with each value checked against CPython 3.14.
+
+**Measured on numpy 2.x** with `scripts/numpy_census.py`, comparing Grail
+with CPython:
+* `memmap` aside, these now agree: `np.matrix` creation, `*` and `.T`;
+  `np.recarray` field access; `numpy.ma` import, `sum`, `filled` and
+  `masked`; `np.unique`; `np.percentile`; ndarray subclasses.
+* **Still open:**
+  * `matrix.I` hits the VM's user-action limit. Python code running inside
+    a C callback reads a base attribute (see Shim_NumPy.md).
+  * `memmap` needs an `mmap` module.
+  * `str()` and `repr()` of arrays hit the same limit as for plain arrays.
+* **Not measured:** the trampoline's cost (§7).
+

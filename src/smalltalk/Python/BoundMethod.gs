@@ -376,6 +376,7 @@ ___pythonValueAttrs___
 		add: #'__defaults__';
 		add: #'__kwdefaults__';
 		add: #'__doc__';
+		add: #'__text_signature__';
 		add: #'__code__';
 		add: #'__closure__';
 		"``__globals__'' is a value for the same reason ``__closure__'' beside it
@@ -1495,10 +1496,73 @@ __get__: obj _: objtype
 	(``self._func.__get__(obj, self._cls)'') to re-bind the saved
 	function to the still-alive instance — exercised by Django's signal
 	dispatch once Signal.connect receives its true receiver argument
-	(see the NameAst LEGB guard)."
+	(see the NameAst LEGB guard).
 
+	WHAT obj IS BOUND TO DEPENDS ON WHICH PYTHON OBJECT THIS IS (#1418).  It
+	used to answer ``BoundMethod receiver: obj selector: selector'' for every
+	one, which RE-SENDS the selector to obj -- right only when obj's class
+	resolves that name to this very method:
+
+	  * ``object.__setattr__.__get__(obj)'' is a slot wrapper bound to obj, and
+	    runs object's implementation.  Re-sent, it ran obj's own override, so a
+	    class that freezes itself with ``__setattr__'' and initialises through
+	    the bound form -- attrs' Attribute.__init__ does exactly that -- raised
+	    on its own __init__.  The class-read instance method goes through
+	    UnboundMethod, whose binding is non-virtual.
+	  * a FUNCTION (a module-level def, or a staticmethod read through its
+	    class) binds obj as its first argument; re-sent, ``g.__get__(c)()''
+	    looked for a method ``g'' on c.
+	  * a METHOD -- bound to an instance, or a classmethod bound to its class
+	    -- is already bound, and CPython's method.__get__ answers it unchanged."
+
+	| definer |
 	obj == None ifTrue: [^ self].
-	^ BoundMethod receiver: obj selector: selector
+	"A module function bound to ITS OWN MODULE is itself.  CPython functions
+	 have no __self__, but Grail's answer the module, so code that takes them
+	 for bound methods round-trips them: Django's Signal.connect wraps
+	 ``reset_queries'' in a weakref.WeakMethod, whose call is
+	 ``__func__.__get__(__self__)''.  Binding the module as an argument there
+	 made every request's signal raise ``takes 0 positional arguments''."
+	(receiver @env0:isKindOf: module) ifTrue: [
+		obj == receiver ifTrue: [^ self].
+		^ MethodBinding instance: obj callable: self].
+	(receiver @env0:isKindOf: Behavior) ifFalse: [^ self].
+	(self ___isStaticMethodOnClass___: receiver name: self __name__) ifTrue: [
+		^ MethodBinding instance: obj callable: self].
+	"An implicit classmethod (a class-defined __init_subclass__) is compiled
+	 instance-side on its class, so the definer test below would take it for
+	 an instance method; it is bound to the class already."
+	definingClass == receiver ifTrue: [^ self].
+	definer := self ___instanceSideDefinerIn___: receiver.
+	definer == nil ifTrue: [^ self].
+	(obj @env0:isKindOf: definer) ifFalse: [
+		^ TypeError ___signal___: 'descriptor ''' @env0:, selector @env0:asString
+			@env0:, ''' for ''' @env0:, (definer ___pyTypeNameForError___) @env0:asString
+			@env0:, ''' objects doesn''t apply to a '''
+			@env0:, (obj ___pyTypeNameForError___) @env0:asString @env0:, ''' object'].
+	^ (UnboundMethod definingClass: definer selector: selector) __get__: obj _: objtype
+%
+
+category: 'Grail-Private'
+method: BoundMethod
+___instanceSideDefinerIn___: aClass
+	"The nearest class from aClass up whose INSTANCE side defines this
+	method's name in any arity, or nil.  Non-nil means this handle is an
+	instance method read through a class -- ``object.__setattr__'' -- rather
+	than a classmethod, which lives on the metaclass only."
+
+	| family c |
+	family := importlib @env0:___pythonNameFamilyOf___: selector.
+	c := aClass.
+	[c == nil] @env0:whileFalse: [ | md |
+		md := c @env0:methodDictForEnv: 1.
+		md @env0:notNil ifTrue: [
+			(md @env0:includesKey: selector) ifTrue: [^ c].
+			family @env0:notNil ifTrue: [
+				family @env0:do: [:sel |
+					(sel @env0:notNil and: [md @env0:includesKey: sel]) ifTrue: [^ c]]]].
+		c := c @env0:superclass].
+	^ nil
 %
 
 category: 'Grail-Attribute Access'
@@ -1763,6 +1827,8 @@ __doc__
 	(func.__func__)'' -- produced a wrapper whose __doc__ was None."
 	self ___isPythonBoundMethod___ ifTrue: [
 		^ self __func__ ___pyAttrLoad___: #'__doc__'].
+	"A C extension's function: its ml_doc, without the signature line."
+	(self ___shimFunctionAttr___: '__doc__') @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
 	cls := (receiver == nil and: [definingClass @env0:notNil])
 		ifTrue: [definingClass]
 		ifFalse: [
@@ -1958,15 +2024,20 @@ ___methodDocForClass___: aClass name: aName
 	"First ___methodDocTable___ entry named aName along the lookup chain
 	(see ___methodLookupChainFor___:), or nil.  Mirrors ___methodSignatureForClass___:name:, including the env-1
 	probe -- the table is compiled in environment 1, so an env-0
-	``canUnderstand:'' would never see it."
+	``canUnderstand:'' would never see it.
 
-	| tbl v |
+	The walk stops at the first table that HAS the name, even when the entry
+	is nil: ClassDefAst records an undocumented def as nil, so an override
+	without a docstring answers None rather than its base's docstring (#1650).
+	A table without the name -- a hand-written one such as Flag's -- still
+	passes the read on to the next class."
+
+	| tbl |
 	aClass == nil ifTrue: [^ nil].
 	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
 		((c @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
 			tbl := c ___methodDocTable___.
-			v := tbl @env0:at: aName otherwise: nil.
-			v == nil ifFalse: [^ v]]].
+			(tbl @env0:includesKey: aName) ifTrue: [^ tbl @env0:at: aName]]].
 	^ nil
 %
 
@@ -2248,6 +2319,37 @@ ___moduleOfClass___: aClass
 	^ [(aClass __module__) @env0:asString @env0:asUnicodeString]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: aClass @env0:name @env0:asString]
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___shimFunctionAttr___: aName
+	"aName read off the C function object of a C extension's module function
+	(CPythonShim>>___functionObjectFor:), as an Association, or nil for any
+	other BoundMethod.  The shim's builtin_function_or_method answers
+	``__doc__'' and ``__text_signature__'' from its ml_doc as CPython splits
+	it, and numpy's add_docstring writes the signature into it."
+
+	| shim view |
+	(receiver @env0:class @env0:class @env0:includesSelector: #'___shimModuleName___')
+		ifFalse: [^ nil].
+	shim := CPythonShim @env0:current.
+	view := shim @env0:___functionObjectFor: self.
+	view @env0:isNil ifTrue: [^ nil].
+	^ aName @env0:-> (shim @env0:foreignGetAttr: view @env0:memoryAddress name: aName)
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+__text_signature__
+	"A C function's signature as its docstring declares it -- what
+	inspect.signature reads for a builtin.  Only a C extension's function has
+	one here; for anything else the attribute is missing, as it is for a
+	Python function."
+
+	(self ___shimFunctionAttr___: '__text_signature__') @env0:ifNotNil: [:assoc |
+		^ assoc @env0:value].
+	^ AttributeError @env0:___signalMissing___: '__text_signature__' on: self
 %
 
 category: 'Grail-Printing'

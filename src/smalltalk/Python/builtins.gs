@@ -4875,6 +4875,16 @@ vars: anObject
 	stack included, where CPython answers only what Python code stored.
 	BaseException >> __dict__ is that view."
 	(anObject isKindOf: BaseException) ifTrue: [^ anObject __dict__].
+	"AN INSTANCE OF A PYTHON CLASS answers the LIVE view ``obj.__dict__''
+	answers, because vars(obj) IS obj.__dict__.  The snapshot below dropped
+	every write made through it: ``vars(self).update(name=...)'' is how a
+	class whose __setattr__ refuses stores initialises itself
+	(importlib.metadata's EntryPoint), and ``vars(res).update(vars(orig))''
+	how one copies another's state (its _adapters.Message) -- both were
+	silently lost (#1657).  The walk stays for kernel objects, which have no
+	such view."
+	(anObject @env0:class ___grailIsPythonClass___) ifTrue: [
+		^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |
@@ -6439,7 +6449,15 @@ ___validateSlots___: namespace bases: bases
 				''' in __slots__ conflicts with class variable']].
 	"__dict__ AND __weakref__ are slots a class gets at most once.  Listing
 	either twice, or listing one a base already supplies, is CPython's
-	``...slot disallowed: we already got one''."
+	``...slot disallowed: we already got one''.
+
+	WHETHER A BASE SUPPLIES IT is ___grailProvidesInstanceSlot___:'s answer,
+	the one C.__dict__ and x.__weakref__ already read: a dict-ful Python class
+	or one whose __slots__ names it does, object and a class with empty
+	__slots__ do not.  This refused every base without built-in storage,
+	object included, so ``type(name, (object,), {'__slots__':
+	('__weakref__',)})'' raised -- which is how attrs builds every
+	``slots=True'' class, and protobuf every message class (#1428)."
 	#('__dict__' '__weakref__') @env0:do: [:special |
 		| count |
 		count := 0.
@@ -6452,7 +6470,7 @@ ___validateSlots___: namespace bases: bases
 					' slot disallowed: we already got one'].
 			(Array @env0:withAll: bases) @env0:do: [:b |
 				((b @env0:isKindOf: Behavior)
-					@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b) @env0:not]) ifTrue: [
+					@env0:and: [(b @env1:___grailProvidesInstanceSlot___: special) == true]) ifTrue: [
 						^ TypeError ___signal___: special @env0:,
 							' slot disallowed: we already got one']]]].
 	^ self

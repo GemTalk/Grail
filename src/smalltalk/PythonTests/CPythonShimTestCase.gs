@@ -1606,8 +1606,8 @@ testDynLoadGrailDemo
 	self assert: methodNames asSortedCollection asArray
 		equals: #('add' 'as_long_overflow' 'capi' 'descr_def_name' 'dict_values_inline' 'dot_product'
 			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
-			'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
-			'seq_fast_len' 'setattr_in_c' 'singletons' 'sum_inline' 'unicode_compare').
+			'is_cell' 'make_box' 'make_nohash' 'make_plain' 'optional_attr' 'same_object' 'scale'
+			'seq_fast_len' 'setattr_in_c' 'sig_demo' 'singletons' 'sum_inline' 'unicode_compare').
 %
 
 category: 'Grail-Tests - Dynamic Loading'
@@ -3477,9 +3477,10 @@ method: CPythonShimTestCase
 testAClassStatementMaySubclassAWheelType
 	"Step 1 of docs/Shim_Foreign_Subclassing.md (option C): ``class Sub(Box)'' succeeds,
 	its bases and MRO name the C type, issubclass reaches it, and calling it refuses with
-	CPython's ``cannot create'' -- which is also what CPython says here, since Box has no
-	tp_new.  It used to raise ``cannot subclass a non-class base (ShimForeignObject)''
-	(numpy's memmap, recarray, record and matrix)."
+	CPython's ``cannot create'' -- because Box has no tp_new: a static type on object that
+	sets none is DISALLOW_INSTANTIATION in CPython, and the shim's PyType_Ready gave it
+	object's (Box() answered a bare Box).  It used to raise ``cannot subclass a non-class
+	base (ShimForeignObject)'' (numpy's memmap, recarray, record and matrix)."
 
 	| soPath |
 	soPath := importlib grailDir , '/lib/_grail_demo.so'.
@@ -3495,7 +3496,131 @@ def make(cls):
         return ''created''
     except TypeError as e:
         return str(e).split('':'')[0]
-repr((Sub.extra, make(Sub), make(SubSub), issubclass(SubSub, d.Box), Sub.__bases__ == (d.Box,), SubSub.__mro__ == (SubSub, Sub, d.Box, object)))') equals: '(1, "cannot create ''Sub'' instances", "cannot create ''SubSub'' instances", True, True, True)'
+repr((Sub.extra, make(Sub), make(SubSub), make(d.Box), issubclass(SubSub, d.Box), Sub.__bases__ == (d.Box,), SubSub.__mro__ == (SubSub, Sub, d.Box, object)))') equals: '(1, "cannot create ''Sub'' instances", "cannot create ''SubSub'' instances", "cannot create ''_grail_demo.Box'' instances", True, True, True)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testACFunctionsDocAndTextSignatureSplitAsCPythonSplitsThem
+	"A C function's internal doc is ``name(sig)\n--\n\ndoc'' when Argument Clinic
+	wrote it: __doc__ is the text after the ``--'' line, __text_signature__ the
+	signature, and inspect.signature reads that, dropping ``$module'' (CPython's
+	find_signature / skip_signature).  A doc with no signature is all __doc__, and
+	__text_signature__ is None.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d, inspect
+repr((d.sig_demo.__doc__, d.sig_demo.__text_signature__, str(inspect.signature(d.sig_demo)), d.add.__doc__, d.add.__text_signature__))') equals: '(''A function with a text signature.'', ''($module, a, /, b=2, *, c=None)'', ''(a, /, b=2, *, c=None)'', ''Add two integers.'', None)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassMakesInstancesOfItself
+	"Step 2 of docs/Shim_Foreign_Subclassing.md (option A): ``class Sub(Cell)'' over a
+	type with its own tp_new makes instances -- a C body of Sub's subtype mirror, allocated
+	through tp_alloc, and a Grail half -- that are Subs and Cells, read the C member, and run
+	both Python and C methods.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+s = Sub(5)
+repr((type(s) is Sub, isinstance(s, Sub), isinstance(s, d.Cell), s.value, s.doubled(), s.get(), [c.__name__ for c in Sub.__mro__], d.Cell(7).value))') equals: '(True, True, True, 5, 10, 5, [''Sub'', ''Cell'', ''object''], 7)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testCReadsAWheelSubclassInstancesPythonAttributes
+	"C's PyObject_GetAttrString on a subclass instance's body finds what the PYTHON class
+	defines (the shim's subtype_python_attr), as numpy reads __array_priority__ and
+	__array_finalize__; and the mirror's tp_name is the bare class name, as a CPython heap
+	type's is."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+class SubSub(Sub):
+    label = ''subsub''
+repr((Sub(1).describe(), SubSub(2).describe(), SubSub(2).doubled()))') equals: '(''Sub:sub'', ''SubSub:subsub'', 4)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassInstanceIsItsCTypeInC
+	"PyObject_TypeCheck in C walks the subtype mirror to the base, and a C slot (nb_add)
+	runs on the body, forward and reflected."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+class SubSub(Sub):
+    pass
+s = Sub(5)
+repr((d.is_cell(s), d.is_cell(SubSub(1)), d.is_cell(5), s + 1, 1 + s))') equals: '(True, True, False, 6, 6)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassRunsItsInitAndNew
+	"``cls(...)'' runs __new__ then a Python __init__; a Python __new__ reaches the C
+	tp_new through ``super().__new__(cls, ...)'' -- object's, further up the Smalltalk
+	chain, made a half with no body (Super>>___pyAttrLoad___:) -- and keywords reach
+	tp_new too."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class WithInit(d.Cell):
+    def __init__(self, value):
+        self.extra = value + 1
+class WithNew(d.Cell):
+    def __new__(cls, value):
+        return super().__new__(cls, value * 10)
+w = WithInit(3)
+repr((w.value, w.extra, WithNew(4).value, type(WithNew(4)).__name__, WithInit(value=9).value))') equals: '(3, 4, 40, ''WithNew'', 9)'
+%
+
+category: 'Grail-Tests - NumPy Stage 3'
+method: CPythonShimTestCase
+testAWheelSubclassInstanceStoresItsOwnAttributes
+	"A name the C type has no descriptor for is the instance's own; a C member is a DATA
+	descriptor even when read-only, so storing it is refused as CPython refuses it rather
+	than shadowed by the Grail half (shimDataDescriptorNames)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    label = ''sub''
+    def doubled(self):
+        return self.value * 2
+s = Sub(5)
+s.note = ''x''
+try:
+    s.value = 1
+    refused = None
+except AttributeError as e:
+    refused = str(e)
+repr((s.note, refused, s.value))') equals: '(''x'', ''readonly attribute'', 5)'
 %
 
 category: 'Grail-Tests - NumPy Stage 3'

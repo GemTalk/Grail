@@ -44,6 +44,9 @@ is_apple_mobile = sys.platform in {"ios", "tvos", "watchos"}
 is_apple = is_apple_mobile or sys.platform == "darwin"
 HAVE_PY_DOCSTRINGS = True
 MISSING_C_DOCSTRINGS = False
+# Upstream's expression over the two above.  test_generators' email doctest
+# imports it by name.
+HAVE_DOCSTRINGS = (HAVE_PY_DOCSTRINGS and not MISSING_C_DOCSTRINGS)
 # CPython sets this from a --with-pydebug build; Grail is never one, and the
 # tests that read it are asking about assertion-heavy C behaviour.
 Py_DEBUG = False

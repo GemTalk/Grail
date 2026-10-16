@@ -784,6 +784,14 @@ ___pyAttrLoad___: aSym
 	own collect the MRO puts first."
 	(self @env0:___classesAfterCls___) @env0:do: [:each |
 		walker := each.
+		"A CLASS over a C type, reached the C base: ShimForeignSubclass stands
+		where that type is in the MRO, so what follows is the base's -- above
+		all ``super().__new__(cls, ...)'', whose next __new__ is the C tp_new
+		(ShimForeignSubclass class>>___pyAttrLoad___: answers ``cls.__new__''
+		the same way).  object's, further up, makes a half with no C body."
+		(walker == ShimForeignSubclass and: [(obj @env0:isKindOf: Behavior)
+				and: [obj @env0:inheritsFrom: ShimForeignSubclass]]) ifTrue: [
+			^ obj @env0:___grailForeignBaseProxy___ ___pyAttrLoad___: aSym].
 		(walker @env0:_respondsTo: #___dynInstVars___ flags: 16r10001) ifTrue: [
 			holder := walker @env0:perform: #___dynInstVars___ env: 1.
 			holder == nil ifFalse: [
@@ -802,6 +810,17 @@ ___pyAttrLoad___: aSym
 		The compiled-method lookup below answers the nearer method."
 		(self @env0:___definesAnyFormOf___: aSym in: walker) ifTrue: [
 			^ self ___pyAttrLoadCompiled___: aSym]].
+	"PAST THE PYTHON CLASSES, A C BASE.  For an instance of a Python subclass
+	of a C type the MRO ends in that type -- ``super().dtype'' in numpy.ma's
+	MaskedArray is ndarray's -- so a miss of the compiled walk is read off the
+	instance's body (ShimForeignSubclass>>___pyAttrForeignBaseLoad___:).  The
+	AttributeError is raised after the handler, not from inside it."
+	(obj @env0:isKindOf: ShimForeignSubclass) ifTrue: [ | missed r |
+		missed := false.
+		r := [self ___pyAttrLoadCompiled___: aSym]
+			@env0:on: AttributeError do: [:ex | missed := true. ex @env0:return: nil].
+		missed ifFalse: [^ r].
+		(obj ___pyAttrForeignBaseLoad___: aSym) @env0:ifNotNil: [:assoc | ^ assoc @env0:value]].
 	^ self ___pyAttrLoadCompiled___: aSym
 %
 

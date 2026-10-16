@@ -154,6 +154,37 @@ static inline int is_type_mirror(PyObject *obj) {
     return (uint64_t)(uintptr_t)((PyTypeObject *)obj)->tp_cache == GRAIL_MIRROR_MAGIC;
 }
 
+/* A SUBTYPE MIRROR: the C type of a Grail class whose base is a wheel's own
+   type -- ``class memmap(ndarray)'' (docs/Shim_Foreign_Subclassing.md, option
+   A).  A copy of the base's PyTypeObject, so every slot is the base's, with
+   the mirror magic and the class's OOP as a type mirror has them, one more
+   word of tp_basicsize, and this second magic in tp_subclasses.  An instance
+   is a BODY in the base's layout (numpy reads its fields inline) whose last
+   word holds the OOP of its Grail half -- an instance of the Grail class --
+   both made together by grail_subtype_alloc, whoever asked: Python's
+   ``memmap(...)'' or numpy's own ``m[1:]''.  pyobj_oop answers the half. */
+#define GRAIL_SUBTYPE_MAGIC 0x50595442555347ULL    /* "GSUBTYP" */
+static inline int is_subtype_mirror(PyTypeObject *t) {
+    return t != NULL && (uint64_t)(uintptr_t)t->tp_subclasses == GRAIL_SUBTYPE_MAGIC
+        && (uint64_t)(uintptr_t)t->tp_cache == GRAIL_MIRROR_MAGIC;
+}
+/* For shim_pyo3.cc's PyType_GetQualName / GetModuleName: a subtype
+   mirror's tp_name is the bare class name, as a CPython heap type's is. */
+extern "C" int _grail_is_subtype_mirror(PyTypeObject *t) { return is_subtype_mirror(t); }
+static inline int is_subtype_body(PyObject *obj) {
+    if (is_grail_wrapper_magic(*(uint64_t *)((char *)obj + 24))) return 0;
+    PyTypeObject *t = obj->ob_type;
+    return t != NULL && plausible_pyobj(t) && is_subtype_mirror(t);
+}
+static inline PyTypeObject *subtype_real_base(PyTypeObject *t) {
+    while (t != NULL && is_subtype_mirror(t)) t = t->tp_base;
+    return t;
+}
+static PyObject *subtype_python_attr(OopType target, const char *name, int *found);
+static inline OopType subtype_body_oop(PyObject *obj) {
+    return *(OopType *)((char *)obj + obj->ob_type->tp_basicsize - 8);
+}
+
 static OopType notimpl_oop(void);                 /* Grail's NotImplemented */
 static OopType ellipsis_oop(void);                /* Grail's Ellipsis */
 extern "C" PyObject _Py_EllipsisObject;           /* shim_numpy.cc */
@@ -173,6 +204,9 @@ static inline OopType pyobj_oop(PyObject *obj) {
        boundary, where there is a return path. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("pyobj_oop", obj); return none_oop; }
     if (is_real_layout(obj)) return real_obj_to_oop(obj);
+    /* Before is_type_mirror: a body's ob_type IS a mirror, and that test reads
+       a type's fields far past the end of a body. */
+    if (is_subtype_body(obj)) return subtype_body_oop(obj);
     if (is_type_mirror(obj)) return (OopType)(uintptr_t)((PyTypeObject *)obj)->tp_weaklist;
     if (is_foreign(obj)) return foreign_proxy_oop(obj);
     if (*(uint64_t *)((char *)obj + 24) == GRAIL_FLOAT_MAGIC)
@@ -824,14 +858,22 @@ extern "C" void PyErr_SetString(PyObject *type, const char *message) {
 
 extern "C" void PyErr_Format(PyObject *type, const char *format, ...) {
     va_list args;
-    forget_saved_gs_error();
-    current_error_type = type;
+    char msg[sizeof(current_error_msg)];
     /* Use the shim format engine (not vsnprintf) so CPython object
        conversions like %R / %S are honored — numpy's error messages rely
-       on them, and a botched %R was what hid the offending object here. */
+       on them, and a botched %R was what hid the offending object here.
+
+       FORMAT FIRST, then set the indicator.  %R calls PyObject_Repr, which
+       may call into Grail, and a completed call clears the indicator: set
+       beforehand, numpy's ``ValueError: `.dtype` attribute %R is not a valid
+       dtype instance'' was gone by the time np.dtype() returned NULL, and
+       Grail saw a call answer nothing at all. */
     va_start(args, format);
-    shim_format_into(current_error_msg, sizeof(current_error_msg), format, args);
+    shim_format_into(msg, sizeof(msg), format, args);
     va_end(args);
+    forget_saved_gs_error();
+    current_error_type = type;
+    memcpy(current_error_msg, msg, sizeof(current_error_msg));
 }
 
 extern "C" PyObject *PyErr_Occurred(void) {
@@ -1926,6 +1968,8 @@ static int is_foreign(PyObject *obj) {
        caller gets a reportable error rather than a proxy for garbage. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
+    /* A subtype body IS a C object -- the base's slots, through its subtype
+       mirror -- though pyobj_oop answers its Grail half for it. */
     if (is_type_mirror(obj)) return 0;     /* a Grail class's type mirror */
     return !is_grail_wrapper_magic(*(uint64_t *)((char *)obj + 24));
 }
@@ -3081,7 +3125,7 @@ static int foreign_op_present(PyTypeObject *t, const ForeignOpDef *d) {
         case FOP_CMP:      return foreign_tp_richcompare(t) != NULL;
         case FOP_LEN:      return foreign_mp_length(t) != NULL || foreign_sq_length(t) != NULL;
         case FOP_HASH:     return foreign_tp_hash(t, &unhashable) != NULL;
-        case FOP_ITER:     return foreign_tp_iter(t) != NULL;
+        case FOP_ITER:     return foreign_tp_iter(t) != NULL || foreign_sq_item(t) != NULL;
         case FOP_NEXT:     return foreign_tp_iternext(t) != NULL;
         case FOP_GETITEM:  return foreign_mp_subscript(t) != NULL || foreign_sq_item(t) != NULL;
         case FOP_SETITEM:
@@ -3181,6 +3225,7 @@ static PyObject *float_subtype_op(PyObject *self, const ForeignOpDef *d, PyObjec
     return NULL;
 }
 
+extern "C" PyObject *PySeqIter_New(PyObject *seq);
 static PyObject *foreign_op_invoke(PyObject *self, const ForeignOpDef *d, PyObject *a, PyObject *b) {
     PyTypeObject *t = Py_TYPE(self);
     const char *tn = (t && t->tp_name) ? t->tp_name : "?";
@@ -3263,6 +3308,11 @@ static PyObject *foreign_op_invoke(PyObject *self, const ForeignOpDef *d, PyObje
         }
         case FOP_ITER: {
             getiterfunc f = (getiterfunc)foreign_tp_iter(t);
+            /* No tp_iter but sq_item: CPython's PyObject_GetIter answers a
+               sequence iterator over __getitem__ (numpy's _array_converter,
+               which np.unique unpacks). */
+            if (f == NULL && foreign_sq_item(t) != NULL)
+                return PySeqIter_New(self);
             if (f == NULL) {
                 PyErr_Format(PyExc_TypeError, "'%s' object is not iterable", tn);
                 return NULL;
@@ -3486,6 +3536,110 @@ static PyObject *new_method_wrapper(PyObject *self, const ForeignOpDef *op) {
     return (PyObject *)m;
 }
 
+/* ``T.__new__'' for a wheel's type with a tp_new: CPython's tp_new_wrapper,
+   which add_tp_new_wrapper puts in every such type's dict.  It takes the
+   class to make first -- ``ndarray.__new__(memmap, shape, ...)'', how numpy's
+   own subclasses build themselves -- checks that it is a subtype of T, and
+   calls T's tp_new with it. */
+static PyObject *grail_tp_new_wrapper(PyObject *self, PyObject *args, PyObject *kwds) {
+    PyTypeObject *type = (PyTypeObject *)self;
+    Py_ssize_t n = args ? PyTuple_Size(args) : 0;
+    if (n < 1) {
+        PyErr_Format(PyExc_TypeError, "%.200s.__new__(): not enough arguments", type->tp_name);
+        return NULL;
+    }
+    PyObject *arg0 = PyTuple_GetItem(args, 0);
+    if (arg0 == NULL) return NULL;
+    if (Py_TYPE(arg0) != &PyType_Type && !PyType_IsSubtype(Py_TYPE(arg0), &PyType_Type)) {
+        PyErr_Format(PyExc_TypeError, "%.200s.__new__(X): X is not a type object (%.200s)",
+                     type->tp_name, Py_TYPE(arg0)->tp_name);
+        return NULL;
+    }
+    PyTypeObject *subtype = (PyTypeObject *)arg0;
+    if (!PyType_IsSubtype(subtype, type)) {
+        PyErr_Format(PyExc_TypeError, "%.200s.__new__(%.200s): %.200s is not a subtype of %.200s",
+                     type->tp_name, subtype->tp_name, subtype->tp_name, type->tp_name);
+        return NULL;
+    }
+    if (type->tp_new == NULL) {
+        PyErr_Format(PyExc_TypeError, "cannot create '%.200s' instances", subtype->tp_name);
+        return NULL;
+    }
+    PyObject *rest = PyTuple_GetSlice(args, 1, n);
+    if (rest == NULL) return NULL;
+    return type->tp_new(subtype, rest, kwds);
+}
+static PyObject *foreign_generic_getattr(PyObject *obj, const char *name);
+/* ``T.__getattribute__'' for a wheel's type: object.__getattribute__ as the
+   type has it, the C walk of the instance's type -- what recarray's
+   ``ndarray.__getattribute__(self, 'dtype')'' asks of a subclass instance. */
+static PyObject *grail_getattribute_wrapper(PyObject *self, PyObject *args) {
+    (void)self;
+    if (args == NULL || PyTuple_Size(args) != 2) {
+        PyErr_SetString(PyExc_TypeError, "expected 2 arguments, got another number");
+        return NULL;
+    }
+    PyObject *obj = PyTuple_GetItem(args, 0);
+    PyObject *nameObj = PyTuple_GetItem(args, 1);
+    if (obj == NULL || nameObj == NULL) return NULL;
+    const char *name = PyUnicode_AsUTF8(nameObj);
+    if (name == NULL) return NULL;
+    PyObject *v = is_foreign(obj) ? foreign_generic_getattr(obj, name)
+                                  : PyObject_GetAttrString(obj, name);
+    if (v == NULL && !PyErr_Occurred())
+        PyErr_Format(PyExc_AttributeError, "'%.100s' object has no attribute '%.200s'",
+                     Py_TYPE(obj)->tp_name, name);
+    return v;
+}
+static PyMethodDef grail_getattribute_def = {
+    "__getattribute__", (PyCFunction)(void (*)(void))grail_getattribute_wrapper, METH_VARARGS,
+    "Return getattr(self, name)."
+};
+
+/* ``d.__get__(obj, type=None)'' / ``d.__set__(obj, value)'' on a C object
+   whose type has tp_descr_get / tp_descr_set: CPython's method-wrappers for
+   those slots.  numpy asks ``hasattr(T.dtype, '__get__')'' of the dtype
+   attribute of a void subclass -- numpy.record's is void's getset -- to tell
+   a class property from a bad dtype, and refused np.dtype(np.record). */
+static PyObject *grail_descr_get_wrapper(PyObject *self, PyObject *args) {
+    Py_ssize_t n = args ? PyTuple_Size(args) : 0;
+    if (n < 1 || n > 2) {
+        PyErr_SetString(PyExc_TypeError, "__get__(None, None) is invalid");
+        return NULL;
+    }
+    PyObject *obj = PyTuple_GetItem(args, 0);
+    PyObject *type = n > 1 ? PyTuple_GetItem(args, 1) : NULL;
+    if (obj == Py_None) obj = NULL;
+    if (type == Py_None) type = NULL;
+    if (obj == NULL && type == NULL) {
+        PyErr_SetString(PyExc_TypeError, "__get__(None, None) is invalid");
+        return NULL;
+    }
+    return Py_TYPE(self)->tp_descr_get(self, obj, type);
+}
+static PyObject *grail_descr_set_wrapper(PyObject *self, PyObject *args) {
+    if (args == NULL || PyTuple_Size(args) != 2) {
+        PyErr_SetString(PyExc_TypeError, "expected 2 arguments");
+        return NULL;
+    }
+    if (Py_TYPE(self)->tp_descr_set(self, PyTuple_GetItem(args, 0), PyTuple_GetItem(args, 1)) < 0)
+        return NULL;
+    Py_RETURN_NONE;
+}
+static PyMethodDef grail_descr_get_def = {
+    "__get__", (PyCFunction)(void (*)(void))grail_descr_get_wrapper, METH_VARARGS,
+    "Return an attribute of instance, which is of type owner."
+};
+static PyMethodDef grail_descr_set_def = {
+    "__set__", (PyCFunction)(void (*)(void))grail_descr_set_wrapper, METH_VARARGS,
+    "Set an attribute of instance to value."
+};
+
+static PyMethodDef grail_tp_new_def = {
+    "__new__", (PyCFunction)(void (*)(void))grail_tp_new_wrapper, METH_VARARGS | METH_KEYWORDS,
+    "Create and return a new object.  See help(type) for accurate signature."
+};
+
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     int is_type = is_foreign_type(obj);
     PyTypeObject *start = is_type ? (PyTypeObject *)obj : obj->ob_type;
@@ -3549,6 +3703,16 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
             return PyMember_GetOne((const char *)obj, m);
         }
     }
+    /* ``T.__new__'', on T itself only: its tp_new_wrapper, kept in T's dict
+       as CPython keeps it, so every read answers the same object. */
+    if (is_type && strcmp(name, "__new__") == 0 && start->tp_new != NULL)
+        return cache_type_descr(start, name, PyCMethod_New(&grail_tp_new_def, obj, NULL, NULL));
+    if (!is_type && strcmp(name, "__get__") == 0 && start->tp_descr_get != NULL)
+        return PyCMethod_New(&grail_descr_get_def, obj, NULL, NULL);
+    if (!is_type && strcmp(name, "__set__") == 0 && start->tp_descr_set != NULL)
+        return PyCMethod_New(&grail_descr_set_def, obj, NULL, NULL);
+    if (is_type && strcmp(name, "__getattribute__") == 0)
+        return cache_type_descr(start, name, PyCMethod_New(&grail_getattribute_def, obj, NULL, NULL));
     /* An operator dunder the type implements as a slot: its slot wrapper. */
     const ForeignOpDef *op = foreign_op_named(name);
     if (op != NULL && foreign_op_present(start, op)) {
@@ -3593,6 +3757,18 @@ extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
     CHECK_pyObj(obj, "PyObject_GetAttrString obj");
     diag_tick(&g_diag_getattr);
     if (is_shim_module(obj)) return shim_module_getattr(obj, name);
+    /* A subtype mirror -- the C type of ``class memmap(ndarray)'': its Python
+       classes, then the base type, read in C (see subtype_python_attr). */
+    if (is_type_mirror(obj) && is_subtype_mirror((PyTypeObject *)obj)) {
+        int found;
+        PyObject *v = subtype_python_attr(pyobj_oop(obj), name, &found);
+        if (found) return v;
+        v = foreign_generic_getattr((PyObject *)subtype_real_base((PyTypeObject *)obj), name);
+        if (v == NULL && !PyErr_Occurred())
+            PyErr_Format(PyExc_AttributeError, "type object '%.100s' has no attribute '%.200s'",
+                         ((PyTypeObject *)obj)->tp_name, name);
+        return v;
+    }
     /* A wheel's own object: answered in C where it can be (foreign_getattr_c),
        and only a miss with no error goes on to the Grail proxy below. */
     if (is_foreign(obj)) {
@@ -3613,6 +3789,14 @@ extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
         return 1;
     }
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
+    /* A wheel's own object: asked in C, as PyObject_GetAttrString would be.
+       numpy asks ``hasattr(descr, '__get__')'' of a getset, which the
+       server, sending the name as a message, answered false. */
+    if (is_foreign(obj)) {
+        PyObject *v = foreign_getattr_c(obj, name);
+        if (v != NULL) { Py_DECREF(v); return 1; }
+        if (PyErr_Occurred()) { PyErr_Clear(); return 0; }
+    }
     OopType result = GciPerform(server, "PyObject_HasAttrString:name:", args, 2);
     if (check_gci_error()) return 0;
     return result == OOP_TRUE ? 1 : 0;
@@ -4328,6 +4512,10 @@ static PyObject *call_foreign(PyObject *callable, PyObject *args,
        tp_call even though it subclasses type — hence this fallback. */
     if (mt && (mt == &PyType_Type || PyType_IsSubtype(mt, &PyType_Type))) {
         PyTypeObject *t = (PyTypeObject *)callable;
+        if (t->tp_new == NULL) {
+            PyErr_Format(PyExc_TypeError, "cannot create '%.200s' instances", t->tp_name);
+            return NULL;
+        }
         if (t->tp_new) {
             PyObject *obj = t->tp_new(t, real_args, kwargs);
             if (obj && t->tp_init && t->tp_init(obj, real_args, kwargs) < 0)
@@ -5945,7 +6133,17 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
     if (base != NULL && base != type) {
 #define INHERIT_SLOT(slot) if (type->slot == NULL) type->slot = base->slot
         INHERIT_SLOT(tp_alloc);
-        INHERIT_SLOT(tp_new);
+        /* tp_new as CPython's type_ready_set_new has it: a static type
+           directly on object that sets none cannot be instantiated
+           (DISALLOW_INSTANTIATION, "cannot create 'T' instances"), and a
+           type with that flag keeps a NULL tp_new; only the rest inherit.
+           Inheriting object's made such a type -- and every Python subclass
+           of it -- callable, answering a bare object. */
+        if (type->tp_new == NULL && base == &PyBaseObject_Type
+                && !(type->tp_flags & Py_TPFLAGS_HEAPTYPE))
+            type->tp_flags |= Py_TPFLAGS_DISALLOW_INSTANTIATION;
+        if (!(type->tp_flags & Py_TPFLAGS_DISALLOW_INSTANTIATION))
+            INHERIT_SLOT(tp_new);
         INHERIT_SLOT(tp_free);
         INHERIT_SLOT(tp_dealloc);
         INHERIT_SLOT(tp_getattro);
@@ -6654,6 +6852,13 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
     if (strcmp(name, "__class__") == 0) {
         v = (PyObject *)obj->ob_type;
         Py_INCREF(v);
+    } else if (is_subtype_body(obj)) {
+        /* Grail asks for the BASE's part of a subclass instance, having looked
+           in the Python classes itself: the C walk, not the subtype mirror's
+           tp_getattro, which would ask Grail again (recarray's
+           __getattribute__ ran round that loop until the user actions ran
+           out). */
+        v = foreign_generic_getattr(obj, name);
     } else {
         v = foreign_getattr_c(obj, name);
     }
@@ -6871,10 +7076,118 @@ static PyObject *grail_mirror_tp_new(PyTypeObject *subtype, PyObject *args, PyOb
     return addr_to_pyobj(r);
 }
 
+/* tp_alloc of a subtype mirror: the Grail half and the body together
+   (CPythonShim>>PyType_AllocForeignSubclass:type:basicSize:).  numpy makes
+   every array through ``subtype->tp_alloc(subtype, 0)'', so a view, a slice
+   or a ufunc result of a subclass instance comes back here too. */
+static PyObject *grail_subtype_alloc(PyTypeObject *t, Py_ssize_t nitems) {
+    if (t->tp_itemsize != 0 && nitems != 0) {
+        PyErr_Format(PyExc_TypeError,
+                     "Grail cannot yet make a variable-size instance of '%.200s'", t->tp_name);
+        return NULL;
+    }
+    OopType args[3] = { (OopType)(uintptr_t)t->tp_weaklist,
+                        GciI64ToOop((int64)(intptr_t)t),
+                        GciI64ToOop((int64)t->tp_basicsize) };
+    OopType r = GciPerform(server, "PyType_AllocForeignSubclass:type:basicSize:", args, 3);
+    if (check_gci_error() || r == OOP_NIL) return NULL;   /* nil: the guard set the error */
+    return addr_to_pyobj(r);
+}
+
+/* tp_free of a subtype mirror: nothing.  The body is gcMalloc'd memory its
+   Grail half holds; GemStone frees it with the half. */
+static void grail_subtype_free(void *p) { (void)p; }
+
+/* What the PYTHON classes of a subtype mirror's class define for name --
+   asked of the Grail half (or of the class, for a mirror) with the fall back
+   to the base type turned off (CPythonShim>>foreignSubclassGetAttr:name:), so
+   the base's part is read here, in C.  That keeps a C caller's attribute read
+   on a subclass instance -- numpy's __array_ufunc__ / __array_wrap__ /
+   __array_priority__ probes, made while it is itself inside a user action --
+   from needing another user action, which GemStone allows two of in flight.
+   *found is 0 for a miss. */
+static PyObject *subtype_python_attr(OopType target, const char *name, int *found) {
+    OopType args[2] = { target, GciNewString(name) };
+    OopType r = GciPerform(server, "foreignSubclassGetAttr:name:", args, 2);
+    *found = 1;
+    if (check_gci_error()) return NULL;
+    if (r == OOP_FALSE) { *found = 0; return NULL; }
+    if (r == OOP_NIL) {
+        if (!PyErr_Occurred())
+            PyErr_Format(PyExc_AttributeError, "attribute '%.200s' could not be read", name);
+        return NULL;
+    }
+    return addr_to_pyobj(r);
+}
+
+static PyObject *foreign_generic_getattr(PyObject *obj, const char *name);
+static int foreign_generic_setattr(PyObject *obj, const char *name, PyObject *value);
+static int foreign_has_data_descr(PyTypeObject *t, const char *name);
+
+/* tp_getattro of a subtype mirror: the Python classes and the half's own
+   attributes first, then the base type's, as CPython's MRO walk has them. */
+static PyObject *grail_subtype_getattro(PyObject *obj, PyObject *nameObj) {
+    const char *name = PyUnicode_AsUTF8(nameObj);
+    if (name == NULL) return NULL;
+    int found;
+    PyObject *v = subtype_python_attr(subtype_body_oop(obj), name, &found);
+    if (found) return v;
+    v = foreign_generic_getattr(obj, name);
+    if (v == NULL && !PyErr_Occurred())
+        PyErr_Format(PyExc_AttributeError, "'%.100s' object has no attribute '%.200s'",
+                     Py_TYPE(obj)->tp_name, name);
+    return v;
+}
+
+/* tp_setattro of a subtype mirror: a data descriptor of the base type
+   (ndarray's ``shape'') is the base's to set; anything else is an attribute
+   of the Grail half, as it would go to the instance dict in CPython. */
+static int grail_subtype_setattro(PyObject *obj, PyObject *nameObj, PyObject *value) {
+    const char *name = PyUnicode_AsUTF8(nameObj);
+    if (name == NULL) return -1;
+    if (foreign_has_data_descr(subtype_real_base(Py_TYPE(obj)), name))
+        return foreign_generic_setattr(obj, name, value);
+    OopType args[3] = { subtype_body_oop(obj), pyobj_oop(nameObj),
+                        value ? pyobj_oop(value) : OOP_NIL };
+    GciPerform(server, "PyObject_GenericSetAttr:name:value:", args, 3);
+    if (check_gci_error()) return -1;
+    return 0;
+}
+
+/* shimDataDescriptorNames: the names a C type and its bases (up to the
+   shim's own static types) answer with a DATA descriptor -- every getset
+   and every member, since CPython's getset_descriptor and member_descriptor
+   both define __set__ and a read-only one refuses the store ("readonly
+   attribute") rather than letting the instance dict shadow it --
+   space-separated.  An attribute store on an
+   instance of a Python subclass of the type goes to C for these (ndarray's
+   ``shape'', ``dtype''), and to the Grail half for every other name
+   (ShimForeignSubclass>>___pyAttrStore___:put:). */
+static OopType shimDataDescriptorNames(OopType typeOop)
+{
+    PyTypeObject *t = (PyTypeObject *)(intptr_t)GciOopToI64(typeOop);
+    char buf[8192];
+    size_t used = 0;
+    buf[0] = '\0';
+    for (; t != NULL && plausible_pyobj((PyObject *)t) && !is_shim_type(t); t = t->tp_base) {
+        for (PyGetSetDef *gs = t->tp_getset; gs && gs->name; gs++) {
+            int n = snprintf(buf + used, sizeof(buf) - used, "%s ", gs->name);
+            if (n < 0 || (size_t)n >= sizeof(buf) - used) break;
+            used += (size_t)n;
+        }
+        for (PyMemberDef *m = t->tp_members; m && m->name; m++) {
+            int n = snprintf(buf + used, sizeof(buf) - used, "%s ", m->name);
+            if (n < 0 || (size_t)n >= sizeof(buf) - used) break;
+            used += (size_t)n;
+        }
+    }
+    return GciNewString(buf);
+}
+
 /* The PyTypeObject geometry CPythonShim>>typeMirrorFor: builds a mirror
    with: { size. tp_name. tp_basicsize. tp_flags. tp_base. tp_cache.
    tp_weaklist. tp_doc. tp_new }, as offsets from the struct start, then the
-   address of grail_mirror_tp_new.  (The magic,
+   address of grail_mirror_tp_new, then what a subtype mirror adds.  (The magic,
    GRAIL_MIRROR_MAGIC, is a literal on the Smalltalk side: it is wider than a
    SmallInteger.) */
 static OopType shimTypeMirrorLayout(OopType ignored)
@@ -6891,6 +7204,24 @@ static OopType shimTypeMirrorLayout(OopType ignored)
         (int64)offsetof(PyTypeObject, tp_doc),
         (int64)offsetof(PyTypeObject, tp_new),
         (int64)(intptr_t)grail_mirror_tp_new,
+        /* For a subtype mirror (CPythonShim>>___buildSubtypeMirrorFor:base:):
+           11-13 tp_alloc / tp_free / tp_subclasses, 14-16 the allocator, the
+           free and the marker. */
+        (int64)offsetof(PyTypeObject, tp_alloc),
+        (int64)offsetof(PyTypeObject, tp_free),
+        (int64)offsetof(PyTypeObject, tp_subclasses),
+        (int64)(intptr_t)grail_subtype_alloc,
+        (int64)(intptr_t)grail_subtype_free,
+        (int64)GRAIL_SUBTYPE_MAGIC,
+        /* 17-20: tp_getattro / tp_setattro, and their trampolines. */
+        (int64)offsetof(PyTypeObject, tp_getattro),
+        (int64)offsetof(PyTypeObject, tp_setattro),
+        (int64)(intptr_t)grail_subtype_getattro,
+        (int64)(intptr_t)grail_subtype_setattro,
+        /* 21-22: tp_mro, and PyTuple_Type -- a subtype mirror's tp_mro is a
+           real-layout tuple numpy reads inline (_descr_from_subtype). */
+        (int64)offsetof(PyTypeObject, tp_mro),
+        (int64)(intptr_t)&PyTuple_Type,
     };
     int n = (int)(sizeof(vals) / sizeof(vals[0]));
     OopType sizeOop = GciI64ToOop(n);
@@ -6945,11 +7276,26 @@ extern "C" PyObject *PyObject_GenericGetDict(PyObject *obj, void *context) {
    cannot settle by type identity.  They were shim_numpy.cc stubs answering
    0.  Between C types (a wheel's own, the shim's statics, Grail-class
    mirrors) the tp_base chain answers; otherwise the server's builtins do. */
+/* Is t a type object C can answer subtype questions about by tp_base alone:
+   a wheel's own type, or the subtype mirror of a Python class built on one? */
+static int c_answers_subtype(PyObject *t) {
+    return t != NULL && (is_foreign_type(t)
+        || (is_type_mirror(t) && is_subtype_mirror((PyTypeObject *)t)));
+}
+
 extern "C" int PyObject_IsInstance(PyObject *obj, PyObject *cls) {
     if (obj == NULL || cls == NULL) return -1;
     if (cls->ob_type == &PyType_Type && (is_foreign(cls) || is_type_mirror(cls))
             && obj->ob_type != NULL && PyType_IsSubtype(obj->ob_type, (PyTypeObject *)cls))
         return 1;
+    /* A wheel's own type has a C metatype, so no Python __instancecheck__
+       can answer for it, and a Grail object is an instance of it only as the
+       body of a subclass instance, whose ob_type's tp_base chain reaches it:
+       the NO is C's to give too.  Asked of the server, Grail's isinstance
+       asked C again through another user action -- the third in flight, and
+       GemStone allows two (numpy's first ndarray.all() failed so). */
+    if (is_foreign_type(cls) && obj->ob_type != NULL)
+        return PyType_IsSubtype(obj->ob_type, (PyTypeObject *)cls);
     OopType args[2] = { pyobj_oop(obj), pyobj_oop(cls) };
     OopType r = GciPerform(server, "PyObject_IsInstance:cls:", args, 2);
     if (check_gci_error()) return -1;
@@ -6961,6 +7307,9 @@ extern "C" int PyObject_IsSubclass(PyObject *derived, PyObject *cls) {
     if (derived->ob_type == &PyType_Type && cls->ob_type == &PyType_Type
             && PyType_IsSubtype((PyTypeObject *)derived, (PyTypeObject *)cls))
         return 1;
+    /* Both C's to answer -- see PyObject_IsInstance. */
+    if (is_foreign_type(cls) && c_answers_subtype(derived))
+        return PyType_IsSubtype((PyTypeObject *)derived, (PyTypeObject *)cls);
     OopType args[2] = { pyobj_oop(derived), pyobj_oop(cls) };
     OopType r = GciPerform(server, "PyObject_IsSubclass:cls:", args, 2);
     if (check_gci_error()) return -1;
@@ -8777,6 +9126,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimCallKw", shimCallKw, 5);
     GCI_DECLARE_ACTION("shimCallObject", shimCallObject, 4);
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
+    GCI_DECLARE_ACTION("shimDataDescriptorNames", shimDataDescriptorNames, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
     GCI_DECLARE_ACTION("shimForeignSetAttr", shimForeignSetAttr, 3);
     GCI_DECLARE_ACTION("shimForeignOp", shimForeignOp, 4);
