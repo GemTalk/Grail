@@ -619,7 +619,7 @@ ___send___: aValue
 	Python rule: sending a non-None value to a just-started generator
 	is a TypeError — the first ``yield`` has nothing to return into."
 
-	| ___savedState___ |
+	| ___savedState___ first |
 	self ___checkNotRunning___.
 	___savedState___ := self ___captureConsumerState___.
 	"Recorded on EVERY resume, because the resumer can differ from one to the
@@ -641,6 +641,7 @@ ___send___: aValue
 					@env0:, self ___pyKindWords___)
 		].
 		self ___mustRunInline___ ifTrue: [^ self ___runInline___].
+		first := true.
 		running := true.
 		self @env0:_forkBody.
 	] ifTrue: [
@@ -655,7 +656,19 @@ ___send___: aValue
 	done ifTrue: [
 		escapedException == nil ifFalse: [^ self ___signalEscapedException___].
 		^ self ___signalExhausted___].
+	first == true ifTrue: [self ___noteFirstSuspension___].
 	^ value
+%
+
+category: 'Grail-Finalization'
+method: PyGeneratorBase
+___noteFirstSuspension___
+	"The body has just parked at its first yield.  Nothing to do for the
+	family as a whole: a coroutine is watched from creation for the
+	never-awaited warning, and an async generator is finalized through its
+	PEP 525 hook.  PythonGenerator watches for being abandoned here."
+
+	^ self
 %
 
 category: 'Grail-Private'
@@ -2047,6 +2060,58 @@ category: 'Grail-Generator Protocol'
 method: PythonGenerator
 gi_frame
 	^ self ___genFrame___
+%
+
+category: 'Grail-Finalization'
+method: PythonGenerator
+___noteFirstSuspension___
+	"Watch for this generator being dropped while still suspended, so that its
+	body's ``finally'' and ``except GeneratorExit'' run, as CPython's destructor
+	(_PyGen_Finalize) runs them by closing the generator.
+
+	Registered at the FIRST SUSPENSION and not at creation: a generator that
+	never started has no frame to close, and one that runs to completion
+	between two resumes never gets here.  The ephemeron is a clean block
+	with the generator in its key slot, so the watch does not keep the
+	generator alive (FinalizerEphemeron's class section); its hook runs at
+	the next safe point after the generator dies -- gc.collect(), or the next
+	registration."
+
+	FinalizerEphemeron @env0:on: self
+		do: [:aGen :unused | aGen ___finalizeAbandoned___]
+		with: nil
+%
+
+category: 'Grail-Finalization'
+method: PythonGenerator
+___finalizeAbandoned___
+	"The destructor of a generator collected while suspended: close it, so the
+	GeneratorExit runs its body's cleanup.  The generator is alive again for
+	the duration (PEP 442), and stays alive if that cleanup stores it
+	somewhere (test_generator_resurrect).
+
+	What close() raises cannot propagate -- this runs at whatever safe point
+	the collection reached -- so it goes to sys.unraisablehook with CPython's
+	wording: PyErr_FormatUnraisable, the message in err_msg and no object.
+	``generator ignored GeneratorExit'' is the usual one, from a body that
+	yields again in its handler.
+
+	A generator that finished after the watch was set is quiet: it has
+	nothing left to close."
+
+	(started == true and: [done ~~ true]) ifFalse: [^ self].
+	[self ___close___]
+		@env0:on: AbstractException
+		do: [:ex |
+			((ex @env0:isKindOf: AlmostOutOfStack)
+				or: [ex @env0:isKindOf: AlmostOutOfStackError])
+					ifTrue: [ex @env0:pass].
+			(sys instance)
+				@env1:___callUnraisableHook___: (BaseException @env0:___payloadOf___: ex)
+				object: nil
+				errMsg: ('Exception ignored while closing generator '
+					@env0:, (self ___safeReprOf___: self)).
+			ex @env0:return: nil]
 %
 
 category: 'Grail-Generator Protocol'
