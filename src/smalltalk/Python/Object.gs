@@ -7348,6 +7348,30 @@ ___pyKwargsSplatFor___: aCallee
 	runtime builds keywords in (datetime's replace() hands a Dictionary), and
 	the live __dict__ / globals() views -- are what callees already read
 	keywords from."
+	self @env0:class == dict ifTrue: [^ self].
+	"An instance of a PYTHON subclass of dict becomes a plain dict, as CPython
+	always hands the callee.  Passed through, the callee's binding copied it
+	with its class and instVars, so an OrderedDict's kwargs SHARED the
+	caller's _order list: a ``kwargs.pop(k)'' in the callee took k out of the
+	caller's order, and the next ``f(**od)'' popping k raised ValueError.
+	botocore builds every endpoint rule with ``RuleCreator.create(**rule)''
+	over cached OrderedDicts, so each client after a process's first failed.
+	The copy follows CPython's dict_merge: through keys() and __getitem__
+	when the class overrides __iter__ (OrderedDict does, for its order), and
+	from the raw entries otherwise, even when keys() is overridden."
+	((self @env0:isKindOf: dict)
+		and: [self @env0:class ___grailIsPythonClass___]) ifTrue: [
+			| d iterOwner |
+			d := dict @env0:new.
+			iterOwner := self @env0:class
+				@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1.
+			(iterOwner ~~ nil and: [iterOwner ___grailIsPythonClass___])
+				ifTrue: [
+					(list @env1:__new__: self keys) @env0:do: [:k |
+						d @env0:at: k put: (self __getitem__: k)]]
+				ifFalse: [
+					self @env0:keysAndValuesDo: [:k :v | d @env0:at: k put: v]].
+			^ d].
 	((self @env0:isKindOf: AbstractDictionary)
 		or: [self @env0:isKindOf: PyInstanceDict]) ifTrue: [^ self].
 	"Any other MAPPING is copied into a dict, which is what CPython hands the
