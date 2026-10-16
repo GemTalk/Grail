@@ -253,6 +253,16 @@ _new: positional kw: kwargs
 
 category: 'Grail-Descriptor Protocol'
 method: AbstractPropertyDescriptor
+__get__: instance
+	"``prop.__get__(obj)'' -- CPython's owner argument is optional in every
+	built-in __get__; the one-argument call raised ``takes a different number
+	of arguments'' (#1660)."
+
+	^ self __get__: instance _: None
+%
+
+category: 'Grail-Descriptor Protocol'
+method: AbstractPropertyDescriptor
 __get__: instance _: owner
 	"Run the getter -- the point of a property.  CPython''s
 	``property.__get__(None, owner)'' answers the property itself, so CLASS

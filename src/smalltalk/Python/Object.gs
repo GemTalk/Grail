@@ -11250,7 +11250,21 @@ ___pyAttrLoad___: aSym
 		dynValue := self ___pySlotAt___: slotIdx.
 		dynValue == nil ifFalse: [^ dynValue]].
 	dynValue := self @env0:dynamicInstVarAt: aSym.
-	dynValue == nil ifFalse: [^ dynValue].
+	"A stored value is the answer unless a @property owns the name: CPython's
+	property is a DATA descriptor, so it outranks the instance dict whether or
+	not it has a setter (#1660).  ImportError.__init__ stores ``name'' on every
+	instance, which is how importlib.metadata's PackageNotFoundError, whose
+	``name'' is a property, read None.  The first test is an ordinary,
+	method-cached send answering the nearest declaring class's list -- object
+	class >> ___grailOwnPropertyNames___ answers #() -- so a class whose chain
+	declares no property keeps the cheap exit it had.  NOT ``___respondsTo___:''
+	of that selector: the primitive caches only a HIT, so a miss re-walks the
+	whole metaclass chain, and on an exception class that nearly doubled every
+	attribute read (235 -> 430 ns).  The property case falls through to the
+	accessor-pair branch below, which runs the getter."
+	dynValue == nil ifFalse: [
+		((self @env0:class ___grailOwnPropertyNames___) @env0:isEmpty
+			or: [(self ___grailPropertyOwns___: aSym) not]) ifTrue: [^ dynValue]].
 	s := aSym @env0:asString.
 	"The eight selectors one attribute name can compile to.  Building them is
 	seven concatenations and seven SYMBOL INTERNINGS -- a symbol-table hash
@@ -17036,6 +17050,12 @@ ___pyInstanceDescriptorDelete___: aName
 	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
 	(self ___respondsTo___: delSym)
 		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
+	"A decorator @property with NO deleter refuses, as CPython's does: it is a
+	data descriptor, so ``del obj.x'' reaches it rather than the instance dict
+	(#1660).  cached_property is not in ___grailOwnPropertyNames___, so its
+	``del'' still drops the cached value."
+	(self ___grailPropertyOwns___: aName @env0:asString @env0:asSymbol)
+		ifTrue: [^ self ___raiseUndeletableProperty___: aName].
 	descr := self ___instanceDataDescriptorFor___: aName.
 	descr ~~ nil ifTrue: [self ___descriptorDelete___: descr. ^ true].
 	^ false
@@ -17127,6 +17147,61 @@ ___isDataDescriptorValue___: aValue
 		or: [(aValue ___respondsTo___: #'___set__:kw:')
 		or: [(aValue ___respondsTo___: #'__delete__:')
 		or: [aValue ___respondsTo___: #'___delete__:kw:']]]
+%
+
+category: 'Grail-Class Attrs'
+classmethod: object
+___grailOwnPropertyNames___
+	"No @property declared here.  ClassDefAst compiles a class-side override
+	listing the names for each class body that declares one, and a subclass
+	inherits it; so the answer is the NEAREST declaring class's list, and empty
+	means no class on the chain declares a property.  ___pyAttrLoad___: asks
+	this before letting a stored value beat a property (#1660); the consumers
+	that need a class's OWN list ask includesSelector: first."
+
+	^ #()
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailPropertyOwns___: aSym
+	"Whether the nearest class that defines ``aSym'' on the instance side
+	declared it a @property (its class-side ___grailOwnPropertyNames___, recorded
+	at class build) -- the test Super >> ___bindHolderValue___ makes too.  The
+	NEAREST definer decides, so a subclass's plain ``def x'' over a base's
+	property is a method again, as in CPython."
+
+	| owner raw |
+	(self ___respondsTo___: aSym) ifFalse: [^ false].
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	owner == nil ifTrue: [^ false].
+	(owner @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___' environmentId: 1)
+		ifFalse: [^ false].
+	((owner ___grailOwnPropertyNames___) @env0:includes: aSym) ifFalse: [^ false].
+	"A value STORED as a class attribute between the receiver's class and the
+	property's owner -- ``Sub.version = 'plain'' over a base @property -- is
+	nearer in the MRO, and CPython stops at it: a plain value or non-data
+	descriptor there lets the instance value win, a data descriptor still
+	outranks it.  Asked only on this rare path."
+	raw := self ___nearestStoredClassAttrFrom___: self @env0:class through: owner name: aSym.
+	raw == nil ifTrue: [^ true].
+	^ self ___isDataDescriptorValue___: raw
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___raiseUndeletableProperty___: aName
+	"``del obj.x'' where ``x'' is a @property with no @x.deleter -- CPython's
+	text, worded as ___raiseReadOnlyProperty___: words the setter case:
+
+	  property 'x' of 'C' object has no deleter"
+
+	| owner |
+	owner := [(self @env0:class ___pyAttrLoad___: #'__qualname__') @env0:asString]
+		@env0:on: AbstractException do: [:e | self @env0:class @env0:name @env0:asString].
+	^ AttributeError ___signal___:
+		'property ''' @env0:, aName @env0:asString @env0:, ''' of ''' @env0:, owner
+			@env0:, ''' object has no deleter'
 %
 
 category: 'Grail-Attribute Access'
