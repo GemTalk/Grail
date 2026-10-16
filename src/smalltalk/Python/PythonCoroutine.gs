@@ -597,6 +597,7 @@ ___finalizeUnawaited___
 
 	(started == true or: [done == true]) ifTrue: [^ self].
 	done := true.
+	self @env0:___releaseBody___.
 	self ___warnNeverAwaited___
 %
 
