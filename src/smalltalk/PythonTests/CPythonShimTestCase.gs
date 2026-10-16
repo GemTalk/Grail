@@ -4657,3 +4657,106 @@ def t(f, *a, **k):
 ascii(t(d.capi, ''build_value''))') equals: '(-3, 200, -300, 60000, b''x'', ''\u20ac'')'
 %
 
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testACTypeReprsAsItsClass
+	"repr() and str() of a C type are CPython's type_repr, <class 'module.name'>,
+	for a static type, a spec-built one and one with its own metatype, alone and
+	inside a container.  They read ``<ShimForeignObject _grail_demo.Cell @0x...>''.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((repr(d.Cell), str(d.Vec), repr([d.Init]), repr(d.WithMeta), repr(type(d.Cell(1))), d.Cell.__name__, d.Cell.__qualname__, d.Cell.__module__))') equals: '("<class ''_grail_demo.Cell''>", "<class ''_grail_demo.Vec''>", "[<class ''_grail_demo.Init''>]", "<class ''_grail_demo.WithMeta''>", "<class ''_grail_demo.Cell''>", ''Cell'', ''Cell'', ''_grail_demo'')'
+%
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testACTypeDictIsAReadOnlyViewOfItsOwnEntries
+	"``T.__dict__'' of a C type is a mappingproxy of its own entries -- its
+	methods as method descriptors, its members -- and refuses a store; __doc__ is
+	the type's own doc (None when it sets none) and a method's doc is its ml_doc.
+	vars(T) is that mapping, and vars() of an instance with no __dict__ is
+	CPython's TypeError.  __dict__ and __doc__ were misses, and vars(T) listed the
+	proxy's Smalltalk slots (cPtr, typeName, ...).  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+def store():
+    d.Cell.__dict__[''x''] = 1
+D = d.Cell.__dict__
+repr((type(D).__name__, sorted(k for k in D if not k.startswith(''__'')), type(D[''get'']).__name__, D[''get''](d.Cell(4)), t(store)[:2], d.Cell.get.__doc__, d.Cell.__doc__, sorted(k for k in vars(d.Cell) if not k.startswith(''__'')), t(vars, d.Cell(1)), vars(d.make_box(1))))') equals: '(''mappingproxy'', [''describe'', ''get'', ''value''], ''method_descriptor'', 4, (''raised'', ''TypeError''), ''the value'', None, [''describe'', ''get'', ''value''], (''raised'', ''TypeError'', ''vars() argument must have __dict__ attribute''), {})'
+%
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testDirOfACTypeAndInstanceListsItsCNames
+	"dir() of a C type lists its methods, members and getsets with object's names,
+	and dir() of an instance adds its instance dict; inspect.getmembers follows.
+	dir() listed only names the Grail proxy class defines.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+import inspect
+b = d.make_box(1)
+b.label = ''x''
+want = (''get'', ''describe'', ''value'', ''__init__'', ''__repr__'', ''label'', ''tag'', ''count'')
+repr(([n for n in want if n in dir(d.Cell)], [n for n in want if n in dir(d.Cell(1))], [n for n in want if n in dir(b)], dir(d.Cell) == sorted(dir(d.Cell)), [n for n, _ in inspect.getmembers(d.Cell) if n in want]))') equals: '([''get'', ''describe'', ''value'', ''__init__'', ''__repr__''], [''get'', ''describe'', ''value'', ''__init__'', ''__repr__''], [''value'', ''__init__'', ''__repr__'', ''label'', ''tag'', ''count''], True, [''__init__'', ''__repr__'', ''describe'', ''get'', ''value''])'
+%
+
+category: 'Grail-Tests - C Type Introspection'
+method: CPythonShimTestCase
+testACTypeAnswersMroAndSubclasses
+	"``T.mro()'' and ``T.__subclasses__()'' of a C type, the latter also as
+	``type.__subclasses__(T)'': the Python classes built directly on it.  mro()
+	raised (object's, bound to object), __subclasses__() answered object's
+	subclasses, and the unbound spelling was an uncatchable
+	MessageNotUnderstood.  Only this test's classes are compared: CPython holds
+	subclasses weakly, while Grail's record keeps a class for the session, so
+	a second run in one session also lists the first run's.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class SubA(d.Init):
+    pass
+class SubB(d.Init):
+    pass
+class SubC(SubA):
+    pass
+repr((d.Vec.mro() == [d.Vec, object], d.Cell.mro() == list(d.Cell.__mro__), [c for c in d.Init.__subclasses__() if c in (SubA, SubB)] == [SubA, SubB], [c for c in type.__subclasses__(d.Init) if c in (SubA, SubB)] == [SubA, SubB], SubA.__subclasses__() == [SubC], d.Vec.__subclasses__()))') equals: '(True, True, True, True, True, [])'
+%
+

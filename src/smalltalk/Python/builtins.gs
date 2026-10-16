@@ -4818,6 +4818,16 @@ vars: anObject
 		or: [(anObject isKindOf: CharacterCollection)
 		or: [(anObject @env0:class @env0:isPointers) @env0:not]]]]]) ifTrue: [
 		TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+	"A WHEEL'S OWN OBJECT OR TYPE answers __dict__ in C -- a type's is a
+	read-only view of its own entries -- and one with none is CPython's
+	TypeError.  It fell to the instance-variable scan below, which listed
+	the proxy's Smalltalk slots (cPtr, typeName, ...)."
+	(anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [ | missing found |
+		missing := false.
+		found := [anObject ___pyAttrLoad___: #'__dict__']
+			@env0:on: AttributeError do: [:ex | missing := true. ex @env0:return: nil].
+		missing ifTrue: [TypeError ___signal___: 'vars() argument must have __dict__ attribute'].
+		^ found].
 	"A Python class that defines __dict__ ITSELF -- a property, typically --
 	is asked for it: CPython's vars() is ``obj.__dict__'' through the
 	attribute protocol, so the property runs (and may raise).  FastAPI's
