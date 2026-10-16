@@ -14051,6 +14051,66 @@ ___pyContains___: item
 category: 'Grail-Augmented Assignment'
 method: object
 ___augmentedOp___: other inplace: iSel binary: bSel
+	"``a OP= b'' -- ___augmentedOpTry___:inplace:binary:, with CPython's
+	TypeError when neither operand handles it: ``unsupported operand type(s)
+	for +=: 'H' and 'int''', the IN-PLACE operator (#1688).
+
+	The binary dunder the try falls back to raises that TypeError itself, in
+	the binary spelling, before anything here sees a NotImplemented.  So the
+	handler recognises exactly that refusal -- the binary message for THESE
+	two operands -- and the in-place one is signalled after it returns.  Any
+	other TypeError (a str's ``can only concatenate'', a list's
+	``'int' object is not iterable'' from extend, one raised inside a
+	user's __iadd__) passes unchanged.  When both sides decline by answering
+	NotImplemented, which used to be STORED as the result, it is the same
+	TypeError."
+
+	| declined result cls |
+	"Two SmallIntegers, or two SmallDoubles under an arithmetic operator: the
+	binary dunder, directly.  Neither type has an in-place dunder, and the
+	pair cannot be refused (int has no ``@''; float has no ``@'' and no
+	bitwise ones), so neither the probing nor the handler is needed -- the
+	handler alone cost ``n += 1'' about 80ns, 11%."
+	cls := self @env0:class.
+	(cls == other @env0:class
+		@env0:and: [(cls == SmallInteger @env0:and: [bSel ~~ #'__matmul__:'])
+			@env0:or: [cls == SmallDouble @env0:and: [#( #'__add__:' #'__sub__:'
+				#'__mul__:' #'__truediv__:' #'__floordiv__:' #'__mod__:' #'__pow__:' )
+					@env0:includesIdentical: bSel]]])
+		@env0:ifTrue: [^ self @env0:perform: bSel env: 1 withArguments: { other }].
+	declined := false.
+	result := [self ___augmentedOpTry___: other inplace: iSel binary: bSel]
+		@env0:on: TypeError do: [:ex |
+			((ex @env0:messageText) @env0:= (self ___binOpMessage___: other
+				op: (object ___binaryOpStringFor___: bSel)))
+					@env0:ifFalse: [ex @env0:pass].
+			declined := true.
+			ex @env0:return: nil].
+	(declined @env0:or: [result @env0:== NotImplemented]) @env0:ifTrue: [
+		^ TypeError ___signal___: (self ___binOpMessage___: other
+			op: (object ___binaryOpStringFor___: bSel) @env0:, '=')].
+	^ result
+%
+
+category: 'Grail-Augmented Assignment'
+classmethod: object
+___binaryOpStringFor___: bSel
+	"The operator a binary dunder selector implements: #'__add__:' -> '+'."
+
+	| pairs i |
+	pairs := #( #'__add__:' '+' #'__sub__:' '-' #'__mul__:' '*' #'__matmul__:' '@'
+		#'__truediv__:' '/' #'__floordiv__:' '//' #'__mod__:' '%' #'__pow__:' '**'
+		#'__lshift__:' '<<' #'__rshift__:' '>>' #'__and__:' '&' #'__or__:' '|'
+		#'__xor__:' '^' ).
+	i := pairs @env0:indexOf: bSel.
+	^ i @env0:= 0
+		ifTrue: [bSel @env0:asString]
+		ifFalse: [pairs @env0:at: i @env0:+ 1]
+%
+
+category: 'Grail-Augmented Assignment'
+method: object
+___augmentedOpTry___: other inplace: iSel binary: bSel
 	"CPython augmented-assignment (``a OP= b'') semantics for a simple
 	(local Name) target: use the in-place dunder (``__iadd__'' etc.) when
 	the receiver's class defines one, honouring a NotImplemented return by
@@ -14139,7 +14199,14 @@ ___augmentedOp___: other inplace: iSel binary: bSel
 				to: bSel @env0:asString @env0:size)) @env0:asSymbol.
 			(other ___respondsTo___: refSel) ifTrue: [
 				result := other @env0:perform: refSel env: 1 withArguments: { self }.
-				result == niSingleton ifFalse: [^ result]]].
+				result == niSingleton ifFalse: [^ result]].
+			"A BUILT-IN with no such dunder -- int and ``@'' -- has no runtime
+			class attribute the backstop below could find either, so the perform
+			was a doesNotUnderstand Python could not catch: ``x = 1; x @= 2''
+			ended the process.  Declining instead lets ___augmentedOp___ raise
+			CPython's TypeError.  A Python class still takes the perform: its
+			dunder may be a class attribute assigned at run time."
+			(self @env0:class ___grailIsPythonClass___) ifFalse: [^ niSingleton]].
 	"DECLINING IS NOT THE SAME AS NOT HAVING ONE, and only the second was
 	handled.  The block above tries the right operand's reflected dunder when
 	self has no forward binary dunder AT ALL; a receiver that HAS one and
@@ -15006,11 +15073,93 @@ category: 'Grail-Arithmetic'
 method: object
 ___binOpTypeError___: other op: opString
 	"CPython's ``unsupported operand type(s) for +: 'A' and 'B''' -- see
-	___binOpFallback___ for why the names come from ___pyTypeNameForError___."
+	___binOpFallback___ for why the names come from ___pyTypeNameForError___.
 
-	^ TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
+	A str, list or tuple on the left of ``+'', or a sequence on either side of
+	``*'', gets its own wording instead, as CPython's sequence protocol gives
+	it once both operands have declined (#1688)."
+
+	^ TypeError ___signal___: ((self ___sequenceOpMessage___: other op: opString)
+		ifNil: [self ___binOpMessage___: other op: opString])
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___binOpMessage___: other op: opString
+	"``unsupported operand type(s) for <op>: 'A' and 'B''', receiver first.
+	``**'' reads ``** or pow()'', as CPython names both spellings of the
+	operation.  ___augmentedOp___:inplace:binary: compares a TypeError's text
+	with this to tell its own operands' failure from any other."
+
+	^ 'unsupported operand type(s) for '
+		@env0:, ((opString @env0:= '**') ifTrue: ['** or pow()'] ifFalse: [opString])
 		@env0:, ': ''' @env0:, (self ___pyTypeNameForError___)
-		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, '''')
+		@env0:, ''' and ''' @env0:, (other ___pyTypeNameForError___) @env0:, ''''
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___sequenceOpMessage___: other op: opString
+	"CPython's sequence-protocol message for ``self <op> other'', or nil.
+
+	``+'' with a str, list or tuple on the LEFT: ``can only concatenate list
+	(not ""int"") to list'' -- the built-in's own name even for a subclass,
+	because the text is a literal in its concat slot.  Only the left operand:
+	``1 + 'a''' keeps the ordinary message.  ``*'' with one of them on EITHER
+	side: ``can't multiply sequence by non-int of type 'float''', naming the
+	other operand.  bytes and bytearray already say ``can't concat''.
+
+	A Python class that defines __add__ has no concat slot, and one that
+	defines __mul__ or __rmul__ has no repeat slot, so its instances take the
+	ordinary message: ``3 * N('b')'' for a str subclass whose __rmul__
+	declines is ``unsupported operand type(s) for *: 'int' and 'N'''."
+
+	| name |
+	opString @env0:= '+' ifTrue: [
+		name := (self ___sequenceSlotDefinedBy___: #( #'__add__:' ))
+			ifTrue: [nil]
+			ifFalse: [self ___concatSequenceName___].
+		^ name == nil
+			ifTrue: [nil]
+			ifFalse: ['can only concatenate ' @env0:, name @env0:, ' (not "'
+				@env0:, (other ___pyTypeNameForError___) @env0:, '") to ' @env0:, name]].
+	opString @env0:= '*' ifTrue: [
+		(self ___concatSequenceName___ ~~ nil
+			and: [(self ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]) ifTrue: [
+			^ 'can''t multiply sequence by non-int of type '''
+				@env0:, (other ___pyTypeNameForError___) @env0:, ''''].
+		(other ___concatSequenceName___ ~~ nil
+			and: [(other ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]) ifTrue: [
+			^ 'can''t multiply sequence by non-int of type '''
+				@env0:, (self ___pyTypeNameForError___) @env0:, '''']].
+	^ nil
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___sequenceSlotDefinedBy___: selectors
+	"Does a PYTHON class in the receiver's lineage define one of these
+	dunders?  Then CPython leaves the type no sequence slot for that
+	operation (see ___sequenceOpMessage___:op:)."
+
+	| cls owner |
+	cls := self @env0:class.
+	selectors @env0:do: [:sel |
+		owner := cls @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifTrue: [^ true]].
+	^ false
+%
+
+category: 'Grail-Arithmetic'
+method: object
+___concatSequenceName___
+	"'str', 'list' or 'tuple' when the receiver is one (or a subclass), else
+	nil -- the sequences whose concatenation error names the built-in."
+
+	(self @env0:___isPyStr___) ifTrue: [^ 'str'].
+	(self @env0:isKindOf: list) ifTrue: [^ 'list'].
+	(self @env0:isKindOf: tuple) ifTrue: [^ 'tuple'].
+	^ nil
 %
 
 category: 'Grail-Arithmetic'
@@ -15083,10 +15232,10 @@ ___rbinOpFallback___: other op: opString
 	-- and the message names the operands in evaluation order
 	(other OP self)."
 
-	"Python type names, for the reason ___binOpFallback___ gives."
-	TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
-		@env0:, ': ''' @env0:, (other ___pyTypeNameForError___)
-		@env0:, ''' and ''' @env0:, (self ___pyTypeNameForError___) @env0:, '''')
+	"Python type names, for the reason ___binOpFallback___ gives; the
+	sequence wording too, for a sequence on the right of ``*''."
+	TypeError ___signal___: ((other ___sequenceOpMessage___: self op: opString)
+		ifNil: [other ___binOpMessage___: self op: opString])
 %
 
 category: 'Grail-Arithmetic'

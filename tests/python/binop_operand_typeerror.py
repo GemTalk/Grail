@@ -150,8 +150,8 @@ def float_plus_plain():
 
 
 # --- other operators, so the op string is not the only thing verified.
-# --- ``**'' is deliberately absent: CPython words that one ``for ** or
-# --- pow()'', a wording divergence of its own and not this fix's business.
+# --- ``**'' is absent: CPython words that one ``for ** or pow()'', which
+# --- operand_typeerror_messages.py checks (#1688).
 
 
 @check("plain_minus_int", "TypeError: unsupported operand type(s) for -: 'P' and 'int'")
