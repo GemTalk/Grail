@@ -220,19 +220,28 @@ static int complex_part(PyObject *op, const char *part, double *out) {
     *out = d;
     return 1;
 }
+/* A complex in CPython's layout -- a Grail one crossing with its prefix, or
+   a wheel's subtype instance (numpy.complex128) -- holds cval at 16. */
+extern "C" PyTypeObject PyComplex_Type;   /* defined below */
+static int complex_in_layout(PyObject *op) {
+    return op != NULL && op->ob_type != NULL && PyType_IsSubtype(op->ob_type, &PyComplex_Type);
+}
 extern "C" double PyComplex_RealAsDouble(PyObject *op) {
+    if (complex_in_layout(op)) return ((Py_complex *)((char *)op + 16))->real;
     double d;
     int got = complex_part(op, "real", &d);
     if (got < 0) return -1.0;
     return got ? d : PyFloat_AsDouble(op);
 }
 extern "C" double PyComplex_ImagAsDouble(PyObject *op) {
+    if (complex_in_layout(op)) return ((Py_complex *)((char *)op + 16))->imag;
     double d;
     int got = complex_part(op, "imag", &d);
     if (got < 0) return -1.0;
     return got ? d : 0.0;
 }
 extern "C" Py_complex PyComplex_AsCComplex(PyObject *op) {
+    if (complex_in_layout(op)) return *(Py_complex *)((char *)op + 16);
     Py_complex z = { -1.0, 0.0 };
     double re, im;
     int gotRe = complex_part(op, "real", &re);

@@ -420,6 +420,11 @@ foreignProxyForPointer: ptrInt typeName: nameStr ops: anInteger
 	foreign_proxy_oop computes it as the object first crosses."
 
 	| p |
+	"A module function's C object (___functionObjectFor:) comes back as the
+	function Grail reads off the module, so ``mod.f is f'' holds across a
+	round trip through C, as pickle's save_global checks."
+	(SessionTemps current at: #'GrailFunctionObjects' otherwise: nil) ifNotNil: [:fns |
+		(fns at: ptrInt otherwise: nil) ifNotNil: [:fn | ^ fn]].
 	p := self foreignProxyForPointer: ptrInt typeName: nameStr.
 	p ___compareHashBits: anInteger.
 	^ p
@@ -588,7 +593,7 @@ ___staticTypeObjectFor: aClass
 
 	| addr |
 	#(#float #int #bool #str #bytes #list #dict #tuple #object #type #NoneType
-		#set #frozenset) do: [:n |
+		#set #frozenset #complex) do: [:n |
 		(addr isNil and: [(Python at: n otherwise: nil) == aClass])
 			ifTrue: [addr := typeAddresses at: n otherwise: nil]].
 	addr isNil ifTrue: [
@@ -1155,6 +1160,10 @@ ___functionObjectFor: aBoundMethod
 		System userAction: #shimFunctionObject
 			withArgs: { rcvClass ___shimModuleName___ . name }].
 	addr isNil ifTrue: [^ nil].
+	"Kept for the way back (foreignProxyForPointer:typeName:ops:): the first
+	BoundMethod to cross for each C function object stands for it."
+	(SessionTemps current at: #'GrailFunctionObjects' ifAbsentPut: [IntegerKeyValueDictionary new])
+		at: addr ifAbsentPut: [aBoundMethod].
 	^ CByteArray fromCPointer: (CPointer forAddress: addr) numBytes: 64
 %
 
@@ -1251,7 +1260,7 @@ initTypeAddresses
 	| addr |
 	typeAddresses := Dictionary new.
 	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType'
-		'set' 'frozenset' 'slice')
+		'set' 'frozenset' 'slice' 'complex')
 		do: [:name |
 			typeAddresses at: name asSymbol put: (System userAction: #shimTypeAddr with: name).
 		].
@@ -1269,6 +1278,11 @@ initTypeAddresses
 			addr := typeAddresses at: n.
 			typeAddresses at: cls put: addr.
 			cls allSubclasses do: [:each | typeAddresses at: each put: addr]]].
+	"An exact complex only, which crosses in CPython's layout
+	(___prefixedWrapperFor:); a Python subclass of complex keeps its own
+	type."
+	((Python at: #complex otherwise: nil) notNil and: [(typeAddresses at: #complex otherwise: 0) ~= 0])
+		ifTrue: [typeAddresses at: (Python at: #complex) put: (typeAddresses at: #complex)].
 	"Map Float and all subclasses"
 	addr := typeAddresses at: #float.
 	typeAddresses at: Float put: addr.
@@ -1516,7 +1530,7 @@ sweep
 category: 'Grail-Wrapping'
 method: CPythonShim
 ___prefixedWrapperFor: aValue
-	"An exact int, str or bytes in CPython 3.14''s OWN layout, or nil for
+	"An exact int, str, bytes or complex in CPython 3.14''s OWN layout, or nil for
 	anything else.  A Cython module reads both INLINE -- an int''s lv_tag and digits, a
 	str''s length, hash, state and data -- and a 32-byte wrapper keeps the OOP
 	at offset 16, which Cython read as an int''s sign (every SmallInteger came
@@ -1595,6 +1609,16 @@ ___prefixedWrapperFor: aValue
 		body int64At: 16 put: n.
 		body int64At: 24 put: -1.
 		n > 0 ifTrue: [body copyBytesFrom: aValue from: 1 to: n into: 32 allowCodePointZero: true].
+		^ body].
+	"An exact complex: [cval.real@16][cval.imag@24], as numpy reads it
+	(PyComplexObject)."
+	(aValue class == (Python at: #complex otherwise: nil)
+			and: [(typeAddresses at: #complex otherwise: 0) ~= 0]) ifTrue: [
+		block := self ___prefixBlock: 32 for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #complex).
+		body doubleAt: 16 put: (aValue dynamicInstVarAt: #real) asFloat.
+		body doubleAt: 24 put: (aValue dynamicInstVarAt: #imag) asFloat.
 		^ body].
 	^ nil
 %
@@ -1875,6 +1899,17 @@ foreignDirNames: cPtr
 	A list, or nil when the pointer is not a plausible object."
 
 	^ self ___shimUserAction: #shimForeignDirNames withArgs: { cPtr }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignBuffer: cPtr mode: mode index: anIndex value: aByte
+	"A wheel's object's buffer, for memoryview (shimForeignBuffer): mode 0
+	its metadata, ''format itemsize readonly ndim shape...''; mode 1 its
+	bytes, C-contiguous; mode 2 sets byte anIndex to aByte.  Raises what
+	PyObject_GetBuffer raised -- a TypeError for an object with no buffer."
+
+	^ self ___shimUserAction: #shimForeignBuffer withArgs: { cPtr . mode . anIndex . aByte }
 %
 
 category: 'Grail-Calling'

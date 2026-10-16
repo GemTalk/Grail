@@ -612,6 +612,10 @@ __instancecheck__: instance
 	or if instance's class has been registered with this ABC or any of its sub-ABCs."
 
 	| instanceClass |
+	"A C extension's object is an instance of its C type, which numpy
+	registers: isinstance(np.float64(1), numbers.Real) is True in CPython."
+	(instance ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [
+		^ self __subclasscheck__: (instance ___pyAttrLoad___: #'__class__')].
 	instanceClass := instance @env0:class.
 
 	"Check normal inheritance - use env 0 for isSubclassOf:"
@@ -630,6 +634,18 @@ __subclasscheck__: aClass
 	Returns true if aClass inherits from this ABC,
 	or if aClass has been registered with this ABC or any of its sub-ABCs."
 
+	"A C extension's TYPE has no Smalltalk superclasses: what its __mro__
+	names, each a class or registered (numpy registers numpy.floating with
+	numbers.Real).  isSubclassOf: on it was an uncatchable
+	MessageNotUnderstood."
+	(aClass @env0:isBehavior) ifFalse: [ | mro |
+		mro := [aClass ___pyAttrLoad___: #'__mro__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+		mro @env0:do: [:c |
+			(((c @env0:isBehavior) and: [c @env0:isSubclassOf: self])
+				or: [self isClassRegistered: c]) ifTrue: [^ true]].
+		^ false].
+
 	"Check normal inheritance - use env 0 for isSubclassOf:"
 	(aClass @env0:isSubclassOf: self) ifTrue: [^ true].
 
@@ -646,11 +662,13 @@ isClassRegistered: aClass
 
 	| currentClass abcSubclasses |
 
-	"Check if any superclass of aClass is registered directly with us"
+	"Check if any superclass of aClass is registered directly with us.  A C
+	extension's type has none here: __subclasscheck__: walks its __mro__."
 	currentClass := aClass.
 	[currentClass notNil] whileTrue: [
 		(self registeredTypes @env0:includes: currentClass) ifTrue: [^ true].
-		currentClass := currentClass @env0:superclass.
+		currentClass := (currentClass @env0:isBehavior)
+			ifTrue: [currentClass @env0:superclass] ifFalse: [nil].
 	].
 
 	"Check if aClass is registered with any of our ABC subclasses"

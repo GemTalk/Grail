@@ -932,6 +932,9 @@ Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start,
 #define PyBUF_ND        0x0008
 #define PyBUF_STRIDES   (0x0010 | PyBUF_ND)
 #define PyBUF_FULL      (PyBUF_FORMAT | PyBUF_STRIDES | PyBUF_WRITABLE)
+#define PyBUF_C_CONTIGUOUS   (0x0020 | PyBUF_STRIDES)
+#define PyBUF_F_CONTIGUOUS   (0x0040 | PyBUF_STRIDES)
+#define PyBUF_ANY_CONTIGUOUS (0x0080 | PyBUF_STRIDES)
 #define PyBUF_READ      0x100
 #define PyBUF_WRITE     0x200
 

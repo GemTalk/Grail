@@ -154,10 +154,17 @@ static inline int is_grail_wrapper_magic(uint64_t m) {
    reads them with the inline PyBytes_AS_STRING -- past the end of a 32-byte
    wrapper -- and its capsules' names point into that buffer. */
 #define GRAIL_PREFIX_MAGIC 0x475241494C505831ULL   /* "GRAILPX1" */
+extern "C" PyTypeObject PyComplex_Type;   /* shim_numpy.cc */
 static inline int has_grail_prefix(PyObject *obj) {
     PyTypeObject *t = obj->ob_type;
-    if (t != &PyLong_Type && t != &PyUnicode_Type && t != &PyBytes_Type) return 0;
+    if (t != &PyLong_Type && t != &PyUnicode_Type && t != &PyBytes_Type && t != &PyComplex_Type)
+        return 0;
     return *(uint64_t *)((char *)obj - 16) == GRAIL_PREFIX_MAGIC;
+}
+/* A prefixed str or bytes: the two whose hash field the shim fills. */
+static inline int has_grail_text_prefix(PyObject *obj) {
+    return (obj->ob_type == &PyUnicode_Type || obj->ob_type == &PyBytes_Type)
+        && has_grail_prefix(obj);
 }
 static OopType prefixed_value_oop(PyObject *obj);
 static inline int is_type_mirror(PyObject *obj) {
@@ -347,6 +354,27 @@ static PyObject *float_tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds
     return o;
 }
 
+/* complex.__new__(type, real=0, imag=0), as float_tp_new is float's: Grail's
+   complex() decides the value, and a SUBTYPE (numpy.complex128) gets an
+   instance of its own with the value at cval.  complex crossing into C as
+   this type -- so PyComplex_Check passes -- made calling it from C, as
+   PyComplex_FromDoubles does, ``cannot create 'complex' instances''. */
+static PyObject *grail_static_type_call(PyTypeObject *type, PyObject *args, PyObject *kwds);
+extern "C" double PyComplex_RealAsDouble(PyObject *op);   /* shim_numpy.cc */
+extern "C" double PyComplex_ImagAsDouble(PyObject *op);
+static PyObject *complex_tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    PyObject *g = grail_static_type_call(&PyComplex_Type, args, kwds);
+    if (g == NULL || type == &PyComplex_Type) return g;
+    double re = PyComplex_RealAsDouble(g), im = PyComplex_ImagAsDouble(g);
+    if (PyErr_Occurred()) return NULL;
+    allocfunc alloc = type->tp_alloc ? type->tp_alloc : PyType_GenericAlloc;
+    PyObject *o = alloc(type, 0);
+    if (o == NULL) return NULL;
+    ((double *)((char *)o + 16))[0] = re;
+    ((double *)((char *)o + 16))[1] = im;
+    return o;
+}
+
 /* builtins.<type>(*args, **kwds) in Grail, for one of the shim's own static
    types.  The server is asked directly, as float_tp_new does: the static
    type is foreign to PyObject_Call, which would come back to its tp_new. */
@@ -413,6 +441,15 @@ static void init_types(void) {
     init_type(&PyLong_Type, "int", &PyBaseObject_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_LONG_SUBCLASS);
 
+    /* complex, so a Grail complex passes a wheel's PyComplex_Check -- an
+       inline compare against this type -- and its value reads inline from
+       cval (CPythonShim>>___prefixedWrapperFor:).  It was a zeroed
+       placeholder, and numpy took ``1j'' for an object: np.array(1j) had
+       dtype object, and np.result_type(x, 1j) refused it (np.fft). */
+    init_type(&PyComplex_Type, "complex", &PyBaseObject_Type,
+              Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE);
+    PyComplex_Type.tp_new = complex_tp_new;
+
     init_type(&PyBool_Type, "bool", &PyLong_Type,
               Py_TPFLAGS_DEFAULT | Py_TPFLAGS_LONG_SUBCLASS);
 
@@ -471,6 +508,7 @@ static void init_types(void) {
             { &PyType_Type, 936, 40 }, { &PyBaseObject_Type, 16, 0 },
             { &PyLong_Type, 24, 4 },   { &PyBool_Type, 24, 4 },
             { &PyFloat_Type, 24, 0 },  { &PyUnicode_Type, 64, 0 },
+            { &PyComplex_Type, 32, 0 },
             { &PyBytes_Type, 33, 1 },  { &PyByteArray_Type, 56, 0 },
             { &PyList_Type, 40, 0 },   { &PyTuple_Type, 32, 8 },
             { &PyDict_Type, 48, 0 },   { &PySet_Type, 200, 0 },
@@ -489,6 +527,7 @@ static void init_types(void) {
     register_shim_type(&PyType_Type);
     register_shim_type(&PyBaseObject_Type);
     register_shim_type(&PyFloat_Type);
+    register_shim_type(&PyComplex_Type);
     register_shim_type(&PyLong_Type);
     register_shim_type(&PyBool_Type);
     register_shim_type(&PyUnicode_Type);
@@ -1941,6 +1980,7 @@ static inline char *grail_str_data(PyObject *o) {
 static inline Py_ssize_t grail_str_length(PyObject *o) { return *(Py_ssize_t *)((char *)o + 16); }
 
 extern "C" PyObject *PyUnicode_FromKindAndData(int kind, const void *buffer, Py_ssize_t size);
+extern "C" PyObject *PyComplex_FromDoubles(double real, double imag);   /* shim_numpy.cc */
 
 /* The Grail value of an int or str C made, which has no OOP: an int from its
    digits (the shim makes ints only through the server, so a C-made one is
@@ -1959,6 +1999,11 @@ static OopType prefixed_value_oop(PyObject *obj) {
     }
     if (obj->ob_type == &PyBytes_Type) {
         PyObject *g = PyBytes_FromStringAndSize((char *)obj + 32, Py_SIZE(obj));
+        return g ? pyobj_oop(g) : none_oop;
+    }
+    if (obj->ob_type == &PyComplex_Type) {
+        const double *c = (const double *)((char *)obj + 16);   /* cval */
+        PyObject *g = PyComplex_FromDoubles(c[0], c[1]);
         return g ? pyobj_oop(g) : none_oop;
     }
     PyObject *w = PyUnicode_FromKindAndData(grail_str_kind(obj), grail_str_data(obj),
@@ -1993,7 +2038,7 @@ extern "C" PyObject *PyUnicode_New(Py_ssize_t size, Py_UCS4 maxchar) {
 /* PyUnicode_DATA's answer (shim_pyo3.cc exports the function; here it is a
    macro for the shim's own modules). */
 extern "C" void *_grail_str_data_in_layout(PyObject *u) {
-    if (u != NULL && has_grail_prefix(u)) return grail_str_data(u);
+    if (u != NULL && u->ob_type == &PyUnicode_Type && has_grail_prefix(u)) return grail_str_data(u);
     PyErr_SetString(PyExc_SystemError, "PyUnicode_DATA: not a str in CPython's layout");
     return NULL;
 }
@@ -2313,7 +2358,7 @@ static int is_foreign(PyObject *obj) {
        caller gets a reportable error rather than a proxy for garbage. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
-    if (has_grail_prefix(obj)) return 0;   /* a Grail int or str */
+    if (has_grail_prefix(obj)) return 0;   /* a Grail int, str, bytes or complex */
     /* A subtype body IS a C object -- the base's slots, through its subtype
        mirror -- though pyobj_oop answers its Grail half for it. */
     if (is_type_mirror(obj)) return 0;     /* a Grail class's type mirror */
@@ -2398,7 +2443,7 @@ static OopType foreign_proxy_oop(PyObject *obj) {
     {
         PyTypeObject *const statics[] = { &PyType_Type, &PyBaseObject_Type, &PyFloat_Type,
             &PyLong_Type, &PyBool_Type, &PyUnicode_Type, &PyBytes_Type, &PyList_Type,
-            &PyDict_Type, &PyTuple_Type, &_PyNone_Type };
+            &PyDict_Type, &PyTuple_Type, &_PyNone_Type, &PyComplex_Type };
         for (size_t i = 0; i < sizeof(statics) / sizeof(statics[0]); i++)
             if ((PyTypeObject *)obj == statics[i]) {
                 OopType nameOop = GciNewString(statics[i]->tp_name);
@@ -2443,6 +2488,17 @@ typedef struct {
     Py_hash_t     ob_hash;      /* CPython 3.14 tuple hash cache (offset 24) */
     PyObject     *ob_item[1];   /* inline, flexible (offset 32) */
 } ShimTupleObject;
+
+/* A type's tp_mro, read inline when it is a real-layout tuple -- the one
+   grail_set_mro builds -- and nothing otherwise: PyType_IsSubtype runs on
+   every type check, and asking the server for a Grail tuple's items there
+   recursed until the stack ran out. */
+static Py_ssize_t real_mro_items(PyTypeObject *t, PyObject *const **items) {
+    PyObject *mro = t ? t->tp_mro : NULL;
+    if (mro == NULL || mro->ob_type != &PyTuple_Type || !is_real_layout(mro)) return 0;
+    *items = ((ShimTupleObject *)mro)->ob_item;
+    return ((ShimTupleObject *)mro)->ob_size;
+}
 
 static PyObject *real_layout_arg(PyObject *o, int depth);
 
@@ -4006,6 +4062,7 @@ static PyObject *grail_tp_new_wrapper(PyObject *self, PyObject *args, PyObject *
     return type->tp_new(subtype, rest, kwds);
 }
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name);
+static void grail_set_mro(PyTypeObject *type);   /* with PyType_Ready */
 /* ``T.__getattribute__'' for a wheel's type: object.__getattribute__ as the
    type has it, the C walk of the instance's type -- what recarray's
    ``ndarray.__getattribute__(self, 'dtype')'' asks of a subclass instance. */
@@ -4220,7 +4277,13 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
         if (strcmp(name, "__itemsize__") == 0) return PyLong_FromSsize_t(t->tp_itemsize);
         if (strcmp(name, "__dictoffset__") == 0) return PyLong_FromSsize_t(t->tp_dictoffset);
         if (strcmp(name, "__weakrefoffset__") == 0) return PyLong_FromSsize_t(t->tp_weaklistoffset);
-        /* The tuples PyType_Ready builds (grail_set_mro). */
+        /* The tuples PyType_Ready builds (grail_set_mro) -- built here for a
+           static type nobody readied: the shim's own builtin_function_or_method,
+           whose ``issubclass(type(f), type)'' pickle asks of numpy's array
+           reconstructor. */
+        if ((strcmp(name, "__bases__") == 0 || strcmp(name, "__mro__") == 0)
+                && (t->tp_bases == NULL || t->tp_mro == NULL))
+            grail_set_mro(t);
         if (strcmp(name, "__base__") == 0)
             return Py_NewRef(t->tp_base != NULL ? (PyObject *)t->tp_base : Py_None);
         if (strcmp(name, "__bases__") == 0 && t->tp_bases != NULL) return Py_NewRef(t->tp_bases);
@@ -4312,6 +4375,33 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
         for (PyTypeObject *t = start->tp_base; t != NULL && plausible_pyobj((PyObject *)t); t = t->tp_base) {
             if (!is_builtin_static_type(t)) continue;
             PyObject *v = PyObject_GetAttrString((PyObject *)t, name);
+            if (v == NULL) PyErr_Clear();
+            return v;
+        }
+    }
+    /* An INSTANCE whose chain reaches float or complex is one: past its C
+       chain it has that type's own methods, bound to its value -- the value
+       read from the layout it shares with float and complex.  numpy.float64
+       and numpy.complex128 subclass them, and complex(np.complex128(2-1j))
+       found no __complex__ and took __float__, answering (2+0j).  Not a name
+       object defines: those keep their C or Grail answers. */
+    PyObject *const *mitems;
+    Py_ssize_t nm = is_type || name[0] == '\0' ? 0 : real_mro_items(start, &mitems);
+    if (nm > 0) {
+        for (Py_ssize_t mi = 1; mi < nm; mi++) {
+            PyTypeObject *t = (PyTypeObject *)mitems[mi];
+            if (t != &PyFloat_Type && t != &PyComplex_Type) continue;
+            /* __format__ is object's too, but float's and complex's own. */
+            if (strcmp(name, "__format__") != 0) {
+                PyObject *own = PyObject_GetAttrString((PyObject *)&PyBaseObject_Type, name);
+                if (own != NULL) { Py_DECREF(own); return NULL; }
+                PyErr_Clear();
+            }
+            const double *d = (const double *)((char *)obj + 16);
+            PyObject *val = t == &PyFloat_Type ? PyFloat_FromDouble(d[0])
+                                               : PyComplex_FromDoubles(d[0], d[1]);
+            if (val == NULL) { PyErr_Clear(); return NULL; }
+            PyObject *v = PyObject_GetAttrString(val, name);
             if (v == NULL) PyErr_Clear();
             return v;
         }
@@ -4418,6 +4508,25 @@ static PyObject *foreign_str(PyObject *obj, int want_repr) {
         const char *tn = t->tp_name ? t->tp_name : "Exception";
         const char *dot = strrchr(tn, '.');
         return PyUnicode_FromFormat("%s('%s')", dot ? dot + 1 : tn, raised);
+    }
+    /* An instance whose MRO reaches float or complex before any type with a
+       slot of its own is printed as that value: the shim's float and complex
+       have no tp_repr (Grail prints them).  A C type with two bases,
+       (Marker, float), printed as the proxy. */
+    {
+        PyObject *const *items;
+        Py_ssize_t n = real_mro_items(t, &items);
+        for (Py_ssize_t i = 0; i < n; i++) {
+            PyTypeObject *b = (PyTypeObject *)items[i];
+            if (b == &PyFloat_Type || b == &PyComplex_Type) {
+                const double *d = (const double *)((char *)obj + 16);
+                PyObject *val = b == &PyFloat_Type ? PyFloat_FromDouble(d[0])
+                                                   : PyComplex_FromDoubles(d[0], d[1]);
+                if (val == NULL) return NULL;
+                return want_repr ? PyObject_Repr(val) : PyObject_Str(val);
+            }
+            if (b->tp_repr || b->tp_str) break;
+        }
     }
     /* Along the base chain: the shim's PyType_FromSpec does no slot
        inheritance, so a pyclass's tp_str may live on its base. */
@@ -5643,17 +5752,36 @@ extern "C" PyObject *PyDict_GetItemWithError(PyObject *dict, PyObject *key) {
    base char; on success it is advanced to the unit's LAST char (a modifier
    like '!','&','#','*' if present) and the caller advances past it.  Mirrors
    the conversion cases of PyArg_ParseTuple; shared by the keyword parser. */
+static int parse_paren_unit(PyObject *item, const char **pf, va_list *va,
+                            const char *fname, Py_ssize_t argnum);
 static int parse_one_unit(PyObject *item, const char **pf, va_list *va,
                           const char *fname, Py_ssize_t argnum) {
     const char *f = *pf;
     switch (*f) {
+        case '(':
+            if (!parse_paren_unit(item, &f, va, fname, argnum)) return 0;
+            break;
+        case 'U': {
+            /* a str object (numpy's scalar __format__: "U:__format__") */
+            if (!PyUnicode_Check(item)) {
+                PyErr_Format(PyExc_TypeError, "%s argument %zd must be str, not %s", fname, argnum,
+                             Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
+                return 0;
+            }
+            PyObject **o = va_arg(*va, PyObject **);
+            *o = item;
+            break;
+        }
         case 'O': {
             if (f[1] == '!') {
                 PyTypeObject *expected = va_arg(*va, PyTypeObject *);
                 PyObject **out = va_arg(*va, PyObject **);
+                /* PyObject_TypeCheck: any subtype, not only a direct one --
+                   numpy's __setstate__ takes "O!" &PyArrayDescr_Type, and a
+                   dtype is an instance of a DType class beneath it. */
                 if (Py_TYPE(item) != expected &&
                     !(Py_TYPE(item) && expected &&
-                      Py_TYPE(item)->tp_base == expected)) {
+                      PyType_IsSubtype(Py_TYPE(item), expected))) {
                     PyErr_Format(PyExc_TypeError,
                         "%s argument %zd must be %s, not %s", fname, argnum,
                         expected->tp_name,
@@ -5750,6 +5878,45 @@ static int parse_one_unit(PyObject *item, const char **pf, va_list *va,
             PyErr_Format(PyExc_RuntimeError,
                 "PyArg parsing: unsupported format char '%c'", *f);
             return 0;
+    }
+    *pf = f;
+    return 1;
+}
+
+/* ``(units)'': item is a sequence of exactly as many items, each converted
+   by its unit -- CPython's converttuple.  numpy's ndarray.__setstate__
+   parses its state with "(iO!O!iO)", so an unpickled array raised
+   ``unsupported format char '(' ''.  *pf points at the '(' and is left at
+   the matching ')'. */
+static int parse_paren_unit(PyObject *item, const char **pf, va_list *va,
+                            const char *fname, Py_ssize_t argnum) {
+    const char *f = *pf + 1;
+    Py_ssize_t n = PySequence_Size(item);
+    if (n < 0) {
+        PyErr_Clear();
+        PyErr_Format(PyExc_TypeError, "%s argument %zd must be a sequence, not %s",
+                     fname, argnum, Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
+        return 0;
+    }
+    Py_ssize_t k = 0;
+    while (*f && *f != ')') {
+        if (k >= n) {
+            PyErr_Format(PyExc_TypeError, "%s argument %zd must be a longer sequence, not of length %zd",
+                         fname, argnum, n);
+            return 0;
+        }
+        /* Borrowed, as the conversions hand out for 'O': the sequence keeps
+           its items alive for the call. */
+        PyObject *sub = PyTuple_Check(item) ? PyTuple_GetItem(item, k) : PySequence_GetItem(item, k);
+        if (sub == NULL) return 0;
+        if (!parse_one_unit(sub, &f, va, fname, argnum)) return 0;
+        f++;
+        k++;
+    }
+    if (k != n) {
+        PyErr_Format(PyExc_TypeError, "%s argument %zd must be sequence of length %zd, not %zd",
+                     fname, argnum, k, n);
+        return 0;
     }
     *pf = f;
     return 1;
@@ -5863,7 +6030,7 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
                     PyObject **out = va_arg(vargs, PyObject **);
                     if (Py_TYPE(item) != expected &&
                         !(Py_TYPE(item) && expected &&
-                          Py_TYPE(item)->tp_base == expected)) {
+                          PyType_IsSubtype(Py_TYPE(item), expected))) {
                         va_end(vargs);
                         PyErr_Format(PyExc_TypeError,
                             "%s argument %zd must be %s, not %s",
@@ -6029,6 +6196,13 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
                 }
                 break;
             }
+            case '(':
+            case 'U':
+                if (!parse_one_unit(item, &f, &vargs, fname, i + 1)) {
+                    va_end(vargs);
+                    return 0;
+                }
+                break;
             default:
                 va_end(vargs);
                 PyErr_Format(PyExc_RuntimeError,
@@ -6775,6 +6949,7 @@ static OopType shimTypeAddr(OopType nameOop)
 
     PyTypeObject *type = NULL;
     if      (strcmp(name, "float")  == 0) type = &PyFloat_Type;
+    else if (strcmp(name, "complex") == 0) type = &PyComplex_Type;
     else if (strcmp(name, "int")    == 0) type = &PyLong_Type;
     else if (strcmp(name, "bool")   == 0) type = &PyBool_Type;
     else if (strcmp(name, "str")    == 0) type = &PyUnicode_Type;
@@ -6832,14 +7007,68 @@ static void grail_set_mro(PyTypeObject *type) {
         type->tp_bases = bases;
     }
     if (type->tp_mro != NULL) return;
-    Py_ssize_t n = 0;
-    for (PyTypeObject *t = type; t != NULL && n < 64; t = t->tp_base) n++;
-    PyObject *mro = PyTuple_New(n);
+    /* CPython's mro_implementation: the C3 merge of each base's MRO and the
+       bases themselves.  Following tp_base alone lost a second base -- numpy's
+       float64 has bases (floating, float), and its MRO had no float, so
+       isinstance(np.float64(1), float) was False and PyType_IsSubtype(float64,
+       &PyFloat_Type) 0. */
+    enum { MAX_MRO = 64, MAX_BASES = 16 };
+    PyTypeObject *seqs[MAX_BASES + 1][MAX_MRO];
+    Py_ssize_t lens[MAX_BASES + 1], heads[MAX_BASES + 1];
+    PyTypeObject *out[MAX_MRO];
+    Py_ssize_t nseq = 0, nout = 0;
+    Py_ssize_t nb = PyTuple_Size(type->tp_bases);
+    if (nb < 0 || nb > MAX_BASES) { PyErr_Clear(); nb = 0; }
+    int ok = 1;
+    for (Py_ssize_t b = 0; b < nb && ok; b++) {
+        PyTypeObject *base = (PyTypeObject *)PyTuple_GetItem(type->tp_bases, b);
+        if (base == NULL || !plausible_pyobj((PyObject *)base)) { ok = 0; break; }
+        if (base->tp_mro == NULL) grail_set_mro(base);
+        PyObject *const *bitems;
+        Py_ssize_t m = real_mro_items(base, &bitems);
+        if (m <= 0 || m > MAX_MRO) { ok = 0; break; }
+        for (Py_ssize_t k = 0; k < m; k++)
+            seqs[nseq][k] = (PyTypeObject *)bitems[k];
+        lens[nseq] = m; heads[nseq] = 0; nseq++;
+    }
+    if (ok && nb > 0) {
+        for (Py_ssize_t b = 0; b < nb; b++)
+            seqs[nseq][b] = (PyTypeObject *)PyTuple_GetItem(type->tp_bases, b);
+        lens[nseq] = nb; heads[nseq] = 0; nseq++;
+    }
+    out[nout++] = type;
+    while (ok) {
+        PyTypeObject *cand = NULL;
+        for (Py_ssize_t i = 0; i < nseq && cand == NULL; i++) {
+            if (heads[i] >= lens[i]) continue;
+            PyTypeObject *c = seqs[i][heads[i]];
+            int in_tail = 0;
+            for (Py_ssize_t j = 0; j < nseq && !in_tail; j++)
+                for (Py_ssize_t k = heads[j] + 1; k < lens[j]; k++)
+                    if (seqs[j][k] == c) { in_tail = 1; break; }
+            if (!in_tail) cand = c;
+        }
+        if (cand == NULL) {
+            for (Py_ssize_t i = 0; i < nseq; i++) if (heads[i] < lens[i]) ok = 0;
+            break;
+        }
+        if (nout >= MAX_MRO) { ok = 0; break; }
+        out[nout++] = cand;
+        for (Py_ssize_t i = 0; i < nseq; i++)
+            if (heads[i] < lens[i] && seqs[i][heads[i]] == cand) heads[i]++;
+    }
+    PyErr_Clear();
+    if (!ok) {
+        /* No consistent order (or more than this handles): the tp_base chain,
+           as before. */
+        nout = 0;
+        for (PyTypeObject *t = type; t != NULL && nout < MAX_MRO; t = t->tp_base) out[nout++] = t;
+    }
+    PyObject *mro = PyTuple_New(nout);
     if (mro == NULL) { PyErr_Clear(); return; }
-    Py_ssize_t i = 0;
-    for (PyTypeObject *t = type; t != NULL && i < n; t = t->tp_base, i++) {
-        Py_INCREF((PyObject *)t);
-        PyTuple_SET_ITEM(mro, i, (PyObject *)t);
+    for (Py_ssize_t i = 0; i < nout; i++) {
+        Py_INCREF((PyObject *)out[i]);
+        PyTuple_SET_ITEM(mro, i, (PyObject *)out[i]);
     }
     type->tp_mro = mro;
 }
@@ -6944,6 +7173,11 @@ extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b) {
     if (a == NULL || b == NULL) return 0;
     for (PyTypeObject *t = a; t != NULL; t = t->tp_base)
         if (t == b) return 1;
+    /* A second base is only in the MRO, as CPython reads it. */
+    PyObject *const *items;
+    Py_ssize_t n = real_mro_items(a, &items);
+    for (Py_ssize_t i = 0; i < n; i++)
+        if ((PyTypeObject *)items[i] == b) return 1;
     return 0;
 }
 
@@ -8096,6 +8330,57 @@ static OopType shimForeignDirNames(OopType ptrOop)
     return res;
 }
 
+/* A wheel's object's buffer, for Grail's memoryview (ShimForeignObject's
+   buffer support in MemoryView.gs).  mode 0: its metadata as
+   "format itemsize readonly ndim shape..." (space-separated); mode 1: its
+   bytes, C-contiguous, as a ByteArray -- asked again for every read, so the
+   view sees writes through the array; mode 2: byte ``index'' set to
+   ``value''.  ``memoryview(ndarray)'' raised ``a bytes-like object is
+   required''. */
+static OopType shimForeignBuffer(OopType ptrOop, OopType modeOop, OopType indexOop, OopType valueOop)
+{
+    PyObject *obj = (PyObject *)(intptr_t)GciOopToI64(ptrOop);
+    int64 mode = GciOopToI64(modeOop);
+    PyErr_Clear();
+    if (!plausible_pyobj(obj) || !plausible_pyobj(obj->ob_type)) {
+        PyErr_SetString(PyExc_TypeError, "memoryview: a bytes-like object is required");
+        check_and_raise_error();
+        return OOP_NIL;
+    }
+    Py_buffer view;
+    int flags = PyBUF_C_CONTIGUOUS | PyBUF_FORMAT | (mode == 2 ? PyBUF_WRITABLE : 0);
+    if (PyObject_GetBuffer(obj, &view, flags) < 0) {
+        if (!PyErr_Occurred())
+            PyErr_Format(PyExc_TypeError, "memoryview: a bytes-like object is required, not '%s'",
+                         Py_TYPE(obj)->tp_name);
+        check_and_raise_error();
+        return OOP_NIL;
+    }
+    OopType res = OOP_NIL;
+    if (mode == 0) {
+        char buf[512];
+        int used = snprintf(buf, sizeof(buf), "%s %zd %d %d", view.format ? view.format : "B",
+                            view.itemsize, view.readonly ? 1 : 0, view.ndim);
+        for (int d = 0; d < view.ndim && view.shape != NULL && used > 0 && used < (int)sizeof(buf); d++)
+            used += snprintf(buf + used, sizeof(buf) - (size_t)used, " %zd", view.shape[d]);
+        res = GciNewString(buf);
+    } else if (mode == 1) {
+        OopType sizeOop = GciI64ToOop(view.len);
+        res = GciPerform(OOP_CLASS_BYTE_ARRAY, "new:", &sizeOop, 1);
+        if (view.len > 0) GciStoreBytes(res, 1, (const ByteType *)view.buf, (int64)view.len);
+    } else {
+        int64 i = GciOopToI64(indexOop);
+        if (i < 0 || i >= view.len)
+            PyErr_SetString(PyExc_IndexError, "index out of bounds on dimension 1");
+        else
+            ((unsigned char *)view.buf)[i] = (unsigned char)GciOopToI64(valueOop);
+        res = OOP_TRUE;
+    }
+    PyBuffer_Release(&view);
+    check_and_raise_error();
+    return res;
+}
+
 /* The PyTypeObject geometry CPythonShim>>typeMirrorFor: builds a mirror
    with: { size. tp_name. tp_basicsize. tp_flags. tp_base. tp_cache.
    tp_weaklist. tp_doc. tp_new }, as offsets from the struct start, then the
@@ -9174,13 +9459,13 @@ static Py_hash_t grail_inline_hash(PyObject *obj) {
     return (Py_hash_t)h;
 }
 extern "C" Py_hash_t _grail_inline_hash_if_str(PyObject *obj) {
-    if (obj != NULL && obj->ob_type != &PyLong_Type && has_grail_prefix(obj)) return grail_inline_hash(obj);
+    if (obj != NULL && has_grail_text_prefix(obj)) return grail_inline_hash(obj);
     return -1;
 }
 
 Py_hash_t PyObject_Hash(PyObject *obj) {
     if (obj == NULL) return -1;
-    if (obj->ob_type != &PyLong_Type && has_grail_prefix(obj)) return grail_inline_hash(obj);
+    if (has_grail_text_prefix(obj)) return grail_inline_hash(obj);
     OopType oop = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyObject_Hash:", &oop, 1);
     if (check_gci_error()) return -1;
@@ -9364,7 +9649,11 @@ extern "C" PyObject *PyVectorcall_Call(PyObject *callable, PyObject *tuple, PyOb
         while (k < nkw && PyDict_Next(kwargs, &pos, &key, &value)) {
             Py_INCREF(key);
             PyTuple_SetItem(kwnames, k, key);
-            stack[nargs + k] = value;
+            /* As a positional argument is: real_layout_arg's copy put in
+               a Grail dict came back out a Grail list, which numpy read
+               inline -- a gufunc's ``axes=[(0,), (), (0,)]'' (np.fft, and
+               np.matmul with axes=) segfaulted. */
+            stack[nargs + k] = real_layout_arg(value, 0);
             k++;
         }
         kwnames = to_real_tuple(kwnames);
@@ -10099,6 +10388,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimDataDescriptorNames", shimDataDescriptorNames, 1);
     GCI_DECLARE_ACTION("shimForeignDirNames", shimForeignDirNames, 1);
+    GCI_DECLARE_ACTION("shimForeignBuffer", shimForeignBuffer, 4);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
     GCI_DECLARE_ACTION("shimForeignSetAttr", shimForeignSetAttr, 3);
     GCI_DECLARE_ACTION("shimForeignOp", shimForeignOp, 4);

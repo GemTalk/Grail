@@ -4760,3 +4760,175 @@ class SubC(SubA):
 repr((d.Vec.mro() == [d.Vec, object], d.Cell.mro() == list(d.Cell.__mro__), [c for c in d.Init.__subclasses__() if c in (SubA, SubB)] == [SubA, SubB], [c for c in type.__subclasses__(d.Init) if c in (SubA, SubB)] == [SubA, SubB], SubA.__subclasses__() == [SubC], d.Vec.__subclasses__()))') equals: '(True, True, True, True, True, [])'
 %
 
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testAComplexCrossesInCPythonsLayout
+	"A Grail complex crosses as CPython's PyComplexObject, its value at cval, so a
+	wheel's PyComplex_Check (an inline compare against PyComplex_Type) passes and
+	it reads the parts inline; a complex C makes comes back as one, and the type
+	answers ``complex''.  PyComplex_Type was a zeroed placeholder: numpy took 1j
+	for an object (np.array(1j) had dtype object), and np.fft refused it.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((t(d.capi, ''complex_inline'', 1+2j), t(d.capi, ''complex_inline'', complex(-0.5, 0.25)), t(d.capi, ''complex_inline'', 1.5), t(d.capi, ''complex_from''), type(d.capi(''complex_from'')) is complex, t(d.capi, ''build_value'') is not None))') equals: '((True, 1.0, 2.0), (True, -0.5, 0.25), (False,), (1.5-2j), True, True)'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testACTypeWithTwoBasesHasItsC3Mro
+	"A C type whose second base is float or complex -- numpy.float64 is
+	(numpy.floating, float) -- has CPython's C3 MRO, so it is a float to
+	isinstance, issubclass and the numbers ABCs, an instance reaches float's and
+	complex's own methods (hex, __complex__, conjugate, __format__), and
+	complex() of one keeps its imaginary part.  The MRO followed tp_base alone:
+	isinstance(np.float64(1), float) was False and complex(np.complex128(2-1j))
+	was (2+0j).  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+import numbers
+numbers.Integral.register(d.Marker)
+x, z = d.Dual(2.5), d.DualC(1-2j)
+repr(([c.__name__ for c in d.Dual.__mro__], [c.__name__ for c in d.DualC.__mro__], isinstance(x, float), isinstance(z, complex), issubclass(d.Dual, float), isinstance(x, numbers.Real), isinstance(x, numbers.Integral), isinstance(d.Cell(1), numbers.Integral), t(x.hex), format(x, ''.2f''), f''{x:>6}'', complex(z), t(z.conjugate), complex(x), issubclass(type(d.WithMeta), type), issubclass(d.Cell, type), repr(x), str(z)))') equals: '([''Dual'', ''Marker'', ''float'', ''object''], [''DualC'', ''Marker'', ''complex'', ''object''], True, True, True, True, True, False, ''0x1.4000000000000p+1'', ''2.50'', ''   2.5'', (1-2j), (1+2j), (2.5+0j), True, False, ''2.5'', ''(1-2j)'')'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testACFunctionObjectReprsPicklesAndRoundTrips
+	"A function object C made answers repr, __reduce__ and a __module__ store as
+	CPython's builtin_function_or_method does, its type has __bases__, and a
+	module function handed to C comes back as the very function Grail reads off
+	the module, so pickle's ``obj is getattr(module, name)'' check holds.  numpy's
+	ndarray reconstructor failed each of these in turn.  (Pickling d.add itself
+	is left out: inside an SUnit eval it raises GemStone error 2727, index
+	maintenance, though it works from a script.)  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+m = d.Cell(1).get
+f = d.getattr_in_c(d, ''add'')
+red = m.__reduce__()
+m.__module__ = ''mod.x''
+repr((f is d.add, m.__module__, repr(m).startswith(''<built-in method get of _grail_demo.Cell object at 0x''), red[0] == getattr, red[1][1], type(m).__bases__, issubclass(type(m), type)))') equals: '(True, ''mod.x'', True, True, ''get'', (<class ''object''>,), False)'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testArgumentParsingTakesNestedTuplesStrAndSubtypes
+	"PyArg_ParseTuple's ``(...)'' unit (a sequence of exactly that many items, each
+	converted) and ``U'' (a str object), which numpy's ndarray.__setstate__ and
+	scalar __format__ use, and ``O!'' given an instance of a subtype of a subtype
+	of the type it names.  The first two were ``unsupported format char'', and O!
+	looked one base deep -- Dual reaches Marker only through its MRO.  Values
+	are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((t(d.capi, ''parse_paren'', ((1, (2, 3), ''x''), ''u'')), t(d.capi, ''parse_paren'', ((1, (2,)), ''u''))[:2], t(d.capi, ''parse_paren'', ((1, (), ''x''), 5))[:2], t(d.capi, ''parse_subtype'', (d.Dual(1.5),)), t(d.capi, ''parse_subtype'', (5,))[:2]))') equals: '((1, (2, 3), ''x'', ''u''), (''raised'', ''TypeError''), (''raised'', ''TypeError''), True, (''raised'', ''TypeError''))'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testKeywordValuesReachVectorcallInRealLayout
+	"A keyword argument of a vectorcall call reaches C in the layout a positional
+	one does, so C may read a list of tuples inline -- a gufunc's
+	``axes=[(0,), (), (0,)]'' (np.fft, np.matmul with axes=) segfaulted.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+v = d.Vec()
+repr(t(v, 1, inline=[(0,), (), (0, 1)]))') equals: '(''inline'', [1, 0, 2])'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testMemoryviewOverACBuffer
+	"memoryview of a C object is a view of its buffer -- format, itemsize,
+	readonly and shape from bf_getbuffer, the contents read again on each access,
+	a write through a byte cast reaching the object -- where it raised ``a
+	bytes-like object is required''.  And a native 'l' is 8 bytes:
+	memoryview(array('l', [1, 2])) read [1, 0, 2, 0].  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.cython
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+import array
+b = d.Buf()
+m = memoryview(b)
+first = (m.tolist(), m.format, m.itemsize, m.readonly, m.nbytes, m.shape, m.obj is b)
+memoryview(b).cast(''B'')[0] = 7
+repr((first, m.tolist(), b.values(), m[1:].tolist(), memoryview(array.array(''l'', [1, 2])).tolist(), memoryview(array.array(''l'', [1])).itemsize))') equals: '(([10, 20, 30], ''i'', 4, False, 12, (3,), True), [7, 20, 30], (7, 20, 30), [20, 30], [1, 2], 8)'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testARebindingDecoratorMayAnswerACObject
+	"A module-level def that a decorator rebinds to a C object is called
+	through it from another function of the module (tests/python/
+	shim_rebound_def.py): numpy's allclose calls isclose, which
+	@array_function_dispatch rebinds to a dispatcher.  The call takes the
+	probe-then-branch path, ___pyCallValue___:kw:, which a foreign object did
+	not answer -- ``'ShimForeignObject' object is not callable''.  Values are
+	CPython's, from the same module."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	importlib @env1:modules removeKey: #'shim_rebound_def' ifAbsent: [].
+	importlib
+		loadModuleFromPath: (importlib grailDir, '/tests/python/shim_rebound_def.py')
+		name: 'shim_rebound_def'.
+	self assert: (self eval: 'import shim_rebound_def as m
+repr((m.caller(), m.caller2()))') equals: '((''vectorcall'', 1, (''k'',)), (''vectorcall'', 1, None))'
+%

@@ -264,6 +264,15 @@ __new__: r
 	(self ___hasDunder___: r named: #'__complex__') ifTrue: [
 		c := self ___complexHookOn___: r.
 		^ self ___fromParts___: (c @env1:real) _: (c @env1:imag)].
+	"A C extension's object has __complex__ in C when its type defines one
+	(numpy's complex scalars): complex(np.complex128(2-1j)) took __float__
+	and answered (2+0j)."
+	(r ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [
+		c := [r ___pyAttrLoad___: #'__complex__']
+			@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+		c @env0:notNil ifTrue: [
+			c := c value: #() value: nil.
+			^ self ___fromParts___: (c @env1:real) _: (c @env1:imag)]].
 	f := self ___realValueOf___: r.
 	f @env0:== nil ifTrue: [
 		TypeError ___signal___: ('complex() argument must be a string or a number, not '
