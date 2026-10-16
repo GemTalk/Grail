@@ -4224,7 +4224,7 @@ classmethod: BaseException
 ___moveGeneratorStack___: oldException to: newException
 	"Follow the stash when PythonGenerator has to re-signal a COPY (an exception
 	that was passed on its way out keeps live handler frames and cannot be
-	signalled again -- PythonGenerator >> _resignalable:).  Also clears the copy's
+	signalled again -- PythonGenerator >> ___resignalable___:).  Also clears the copy's
 	_gsStack, which `copy' brought along with the other named instVars."
 
 	| reg st |
@@ -6234,7 +6234,7 @@ ___ensureFinally___: protectedBlock finally: finallyBlock
 				below.  Both keep the exception propagating, but an exception
 				that was passed retains a handler frame, and the VM refuses to
 				signal one of those again -- so every later re-raise has to
-				work on a COPY (PythonGenerator >> _resignalable:), and the
+				work on a COPY (PythonGenerator >> ___resignalable___:), and the
 				object's IDENTITY is lost.  Returning pops the frames, so the
 				re-signal below is the same object the raise site created.
 				That matters wherever Python compares exceptions by identity:
@@ -6272,7 +6272,7 @@ ___resignalable___: anException
 
 	A last resort, not the default -- Python propagates the identical object,
 	and the frame test keeps the copy to the cases that cannot avoid it.  This
-	is PythonGenerator >> _resignalable:'s rule, applied at the other site that
+	is PythonGenerator >> ___resignalable___:'s rule, applied at the other site that
 	re-raises a caught exception."
 
 	| ovf |
@@ -7281,12 +7281,12 @@ ___generatorOwningStack___: triples
 				ex return: meth]].
 		(home notNil and: [home selector == #'_forkBody']) ifTrue: [
 			rcvr := triples at: i + 2.
-			cand := (rcvr isKindOf: PythonGenerator)
+			cand := (rcvr isKindOf: PyGeneratorBase)
 				ifTrue: [rcvr]
 				ifFalse: [[rcvr selfValue] on: Error do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: nil]].
-			(cand isKindOf: PythonGenerator) ifTrue: [^ cand]].
+			(cand isKindOf: PyGeneratorBase) ifTrue: [^ cand]].
 		i := i + 3].
 	^ nil
 %

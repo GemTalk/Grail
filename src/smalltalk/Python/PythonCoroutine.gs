@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-PythonGenerator ifNil: [self error: 'PythonGenerator is not defined. Check file ordering.'].
+PyGeneratorBase ifNil: [self error: 'PyGeneratorBase is not defined. Check file ordering.'].
 %
 
 ! ------- PyCoroutineWrapper class definition
@@ -41,7 +41,7 @@ removeallclassmethods PyCoroutineWrapper
 ! ------- PythonCoroutine class definition
 expectvalue /Class
 doit
-PythonGenerator subclass: 'PythonCoroutine'
+PyGeneratorBase subclass: 'PythonCoroutine'
   instVarNames: #()
   classVars: #()
   classInstVars: #()
@@ -56,9 +56,10 @@ PythonCoroutine comment:
 'What calling an ``async def`` answers.
 
 Calling a coroutine function must NOT run its body -- it answers an object that
-runs when driven.  That is the same contract PythonGenerator already implements
-(fork the body, park it, resume on send:), so this IS a PythonGenerator, with
-Python''s coroutine names on top.  The one behavioural difference upstream --
+runs when driven.  That is the same contract the generator machinery already
+implements (fork the body, park it, resume on send:), so this shares it: it is a
+PyGeneratorBase, a SIBLING of PythonGenerator as CPython''s coroutine is of its
+generator, with Python''s coroutine names on top.  The one behavioural difference upstream --
 send() on a coroutine that never suspends runs it to completion and raises
 StopIteration carrying the return value -- is exactly what the generator
 machinery already does when a body contains no yield.
@@ -175,10 +176,47 @@ __await__
 
 category: 'Grail-Coroutine Protocol'
 method: PythonCoroutine
+send: aValue
+	"coroutine.send() -- the generator's, from the shared machinery
+	(PyGeneratorBase >> ___send___:).  A coroutine has send / throw / close in
+	CPython, as a generator does; an async generator does not."
+
+	^ self ___send___: aValue
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+throw: anException
+	^ self ___throw___: anException
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+throw: aType _: aValue
+	"The deprecated multi-arg signature -- see PyGeneratorBase >>
+	___throwLegacy___:value:."
+
+	^ self ___throwLegacy___: aType value: aValue
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+throw: aType _: aValue _: aTb
+	^ self ___throwLegacy___: aType value: aValue tb: aTb
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
+close
+	^ self ___close___
+%
+
+category: 'Grail-Coroutine Protocol'
+method: PythonCoroutine
 cr_running
 	"Python's ``coro.cr_running'' -- the coroutine spelling of gi_running."
 
-	^ self gi_running
+	^ self ___genRunning___
 %
 
 category: 'Grail-Coroutine Protocol'
@@ -250,7 +288,7 @@ cr_frame
 	until the body finishes, None afterwards.  test_cr_frame_after_close pins
 	exactly that flip."
 
-	^ self gi_frame
+	^ self ___genFrame___
 %
 
 category: 'Grail-Private'
@@ -272,42 +310,7 @@ cr_suspended
 	straight through on its first send, CREATED -> CLOSED, never suspended --
 	the no-event-loop semantics, not an accident."
 
-	^ self gi_suspended
-%
-
-category: 'Grail-Protocol Refusal'
-method: PythonCoroutine
-__iter__
-	<grailProtocolRefusal>
-	"CPython: a coroutine is NOT iterable -- iter(), for, list(), sum(), a
-	comprehension all refuse before running any of the body.  Grail inherited
-	the generator's ``^ self'' here, so ``list(coro)'' DROVE the coroutine:
-	its body ran, its StopIteration was PEP-479'd into 'coroutine raised
-	StopIteration', and test_func_4 saw a RuntimeError where CPython promises
-	a TypeError and an untouched body.
-
-	The refusal lives at the PYTHON protocol boundary only: the internal
-	delegation paths (await's ___yieldFrom___:, do:, send:) never consult
-	__iter__, so awaiting -- and the @types.coroutine ``yield from coro''
-	pattern -- are untouched."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not iterable')
-%
-
-category: 'Grail-Protocol Refusal'
-method: PythonCoroutine
-__next__
-	<grailProtocolRefusal>
-	"next(coro) -- CPython's spelling of the same refusal, measured:
-	``TypeError: 'coroutine' object is not an iterator''.  do: no longer
-	routes through __next__ (it drives send: directly), so this only fires
-	on genuine Python-protocol iteration."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not an iterator')
+	^ self ___genSuspended___
 %
 
 
@@ -330,8 +333,8 @@ ___grailAwait___: anObject
 	synchronously.  Turning those into a TypeError would break working paths to
 	enforce a rule nothing here can benefit from."
 
-	(anObject @env0:isKindOf: PythonGenerator) @env0:ifFalse: [^ anObject].
-	^ [anObject @env1:send: None. None]
+	(anObject @env0:isKindOf: PyGeneratorBase) @env0:ifFalse: [^ anObject].
+	^ [anObject @env1:___send___: None. None]
 		@env0:on: StopIteration
 		do: [:e | e @env0:return: (e @env1:value)]
 %

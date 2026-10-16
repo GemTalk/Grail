@@ -8040,6 +8040,11 @@ ___isHiddenBase___: k of: aClass
 	| ba |
 	k == aClass ifTrue: [^ false].
 	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
+	"A third kind, named because nothing exposes it: PyGeneratorBase, the
+	machinery generators, coroutines and async generators share.  CPython's
+	three are siblings under object, so type(coro).__mro__ is (coroutine,
+	object), and the base is no part of any of their Python ancestries."
+	k == (Python @env0:at: #PyGeneratorBase otherwise: nil) ifTrue: [^ true].
 	ba := Python @env0:at: #bytearray otherwise: nil.
 	^ ba notNil
 		and: [k == ba superclass

@@ -39,7 +39,7 @@ StopIterationThroughContextManagerTestCase category: 'Grail-SUnit'
 ! That is an IDENTITY test, and the CARRIER machinery broke it.  A carrier is the
 ! throwaway raised when a payload cannot be signalled directly -- and
 ! gen.throw(value) is called from INSIDE the with-statement's own handler, so
-! value is in flight and always travels wrapped.  _signalEscapedException then
+! value is in flight and always travels wrapped.  ___signalEscapedException___ then
 ! chained the CARRIER as __cause__, ``exc.__cause__ is value'' answered False,
 ! and __exit__ re-raised the RuntimeError instead of stepping aside.  Unwrapping
 ! to the payload before the PEP 479 chaining is the whole fix.

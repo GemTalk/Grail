@@ -1,6 +1,6 @@
 ! ------------------- Superclass check
 run
-PythonGenerator ifNil: [self error: 'PythonGenerator is not defined. Check file ordering.'].
+PyGeneratorBase ifNil: [self error: 'PyGeneratorBase is not defined. Check file ordering.'].
 %
 
 ! ------- PyAnextAwaitable class definition
@@ -87,7 +87,7 @@ ___inner___
 		aw := anextResult.
 		inner := ((aw @env0:isKindOf: PythonCoroutine)
 			@env0:or: [bareGenOk == true
-				@env0:and: [aw @env0:isKindOf: PythonGenerator]])
+				@env0:and: [aw @env0:isKindOf: PyGeneratorBase]])
 			ifTrue: [aw]
 			ifFalse: [
 				(aw ___respondsTo___: #'__await__')
@@ -160,8 +160,8 @@ send: aValue
 
 	| in |
 	in := self ___inner___.
-	^ [(in @env0:isKindOf: PythonGenerator)
-			ifTrue: [in send: aValue]
+	^ [(in @env0:isKindOf: PyGeneratorBase)
+			ifTrue: [in ___send___: aValue]
 			ifFalse: [aValue == None
 				ifTrue: [in @env1:__next__]
 				ifFalse: [in @env1:send: aValue]]]
@@ -487,12 +487,12 @@ throw: anException
 		@env0:and: [kind == #'close'
 		@env0:and: [___exc___ @env0:isKindOf: GeneratorExit]]) ifTrue: [
 			started := true.
-			agen @env1:close.
+			agen @env1:___close___.
 			agen ___setAsendOwner___: nil.
 			finished := true.
 			^ StopIteration @env1:___signalReturn___: None].
 	started := true.
-	out := [[[agen @env1:throw: ___exc___]
+	out := [[[agen @env1:___throw___: ___exc___]
 			@env0:on: StopIteration
 			do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
 		@env0:on: GeneratorExit
@@ -524,7 +524,7 @@ close
 	| out |
 	finished @env0:ifTrue: [^ None].
 	started @env0:ifFalse: [finished := true. ^ None].
-	out := [[[[agen @env1:throw: (GeneratorExit @env0:new)]
+	out := [[[[agen @env1:___throw___: (GeneratorExit @env0:new)]
 			@env0:on: GeneratorExit
 			do: [:ex | ex @env0:return: #'___grailExitTookHold___']]
 			@env0:on: StopIteration
@@ -636,7 +636,7 @@ ___step___: aValue
 	agen ___fireFirstiterIfNeeded___.
 	self ___claimAgen___.
 	out := [[[started
-			@env0:ifTrue: [agen @env1:send: aValue]
+			@env0:ifTrue: [agen @env1:___send___: aValue]
 			ifFalse: [
 				started := true.
 				"A value sent into this step's FIRST drive reaches the
@@ -659,10 +659,10 @@ ___step___: aValue
 						and the classification below decides how the story
 						ends: the exit escaping or the body returning is a
 						clean close, a yield is 'ignored GeneratorExit'."
-						agen @env1:throw: (GeneratorExit @env0:new)]
+						agen @env1:___throw___: (GeneratorExit @env0:new)]
 					ifFalse: [kind == #'throw'
-						ifTrue: [agen @env1:throw: arg]
-						ifFalse: [agen @env1:send: arg]]]]
+						ifTrue: [agen @env1:___throw___: arg]
+						ifFalse: [agen @env1:___send___: arg]]]]
 		@env0:on: StopIteration
 		do: [:ex | ex @env0:return: #'___grailAgenReturned___']]
 		@env0:on: GeneratorExit
@@ -696,9 +696,10 @@ set compile_env: 0
 ! requires an object with __aiter__ method, got PythonCoroutine'', and the
 ! two-thirds of the surface that is not iteration did not exist at all.
 !
-! IT IS A PythonGenerator, for the same reason PythonCoroutine is: "do not run
-! the body at the call, run it when driven" is exactly what the generator
-! machinery already implements -- fork the body, park it on a semaphore, resume
+! IT SHARES THE GENERATOR MACHINERY (PyGeneratorBase, as PythonCoroutine does,
+! and as a sibling of PythonGenerator, not a subclass): "do not run the body at
+! the call, run it when driven" is exactly what that machinery already
+! implements -- fork the body, park it on a semaphore, resume
 ! it on send.  What this class adds is the ASYNC protocol on top, and the
 ! yield/await disambiguation PyAsyncYield exists for.
 !
@@ -711,7 +712,7 @@ set compile_env: 0
 
 expectvalue /Class
 doit
-PythonGenerator subclass: 'PythonAsyncGenerator'
+PyGeneratorBase subclass: 'PythonAsyncGenerator'
   instVarNames: #( asendOwner )
   classVars: #()
   classInstVars: #()
@@ -726,8 +727,10 @@ PythonAsyncGenerator comment:
 'What calling an ``async def`` containing ``yield`` answers -- Python''s async
 generator.
 
-IS a PythonGenerator: "do not run the body at the call, run it when driven" is
-the contract the generator machinery already implements.  What this adds is the
+Shares the generator machinery (PyGeneratorBase), as a sibling of
+PythonGenerator: "do not run the body at the call, run it when driven" is the
+contract that machinery already implements.  It has none of the generator''s
+Python API -- no send / throw / close, no gi_* -- as in CPython.  What this adds is the
 async protocol (__aiter__ / __anext__ / asend / athrow / aclose) and the
 disambiguation between a ``yield`` (which ends the current __anext__) and an
 ``await`` (which suspends past it, out to the event loop).  See PyAsyncYield and
@@ -761,7 +764,7 @@ ___asyncYield___: aValue
 
 category: 'Grail-Private'
 method: PythonAsyncGenerator
-_signalEscapedException
+___signalEscapedException___
 	"PEP 479's ASYNC twin, which the inherited path cannot express:
 	StopAsyncIteration is deliberately OUTSIDE the StopIteration hierarchy,
 	so the generator machinery lets it escape raw -- but one escaping an
@@ -788,7 +791,7 @@ _signalEscapedException
 		err ___args___: { msg }.
 		err ___setCause___: ex context: ex.
 		^ err ___signal___: msg].
-	^ super _signalEscapedException
+	^ super ___signalEscapedException___
 %
 
 category: 'Grail-Async Generator Protocol'
@@ -946,7 +949,7 @@ ag_suspended
 	a plain coroutine an async generator genuinely reaches here: asend drives
 	the body one yield at a time."
 
-	^ self gi_suspended
+	^ self ___genSuspended___
 %
 
 category: 'Grail-Async Generator Protocol'
@@ -976,7 +979,7 @@ method: PythonAsyncGenerator
 ag_frame
 	"Python's ``agen.ag_frame'' -- the async-generator spelling of gi_frame."
 
-	^ self gi_frame
+	^ self ___genFrame___
 %
 
 category: 'Grail-Async Generator Protocol'
@@ -987,35 +990,6 @@ ag_await
 	included, measured), None otherwise."
 
 	^ self ___delegationTargetWhileAlive___
-%
-
-category: 'Grail-Protocol Refusal'
-method: PythonAsyncGenerator
-__iter__
-	<grailProtocolRefusal>
-	"CPython: an async generator is not SYNC-iterable -- ``async for'' is its
-	loop, __aiter__ its protocol.  The inherited generator ``^ self'' was the
-	dangerous kind of wrong (isgenerator's docstring already called it that):
-	an async generator answers send() happily, so ``for v in agen()'' iterated
-	without complaint, binding the internal PyAsyncYield carrier objects as if
-	they were items.  Message measured from CPython 3.14:
-	``'async_generator' object is not iterable''."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not iterable')
-%
-
-category: 'Grail-Protocol Refusal'
-method: PythonAsyncGenerator
-__next__
-	<grailProtocolRefusal>
-	"next(agen) -- ``TypeError: 'async_generator' object is not an iterator''
-	(measured).  anext() is the async spelling and goes through __anext__."
-
-	^ TypeError ___signal___:
-		('''' @env0:, (bytes ___pyTypeNameOf___: self)
-			@env0:, ''' object is not an iterator')
 %
 
 category: 'Grail-Private'

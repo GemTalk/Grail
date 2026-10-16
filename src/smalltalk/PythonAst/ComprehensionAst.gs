@@ -217,15 +217,15 @@ emitGenerators: aCollection from: anIndex on: aStream innerBody: aBlock outerSou
 	operand SYNCHRONOUSLY -- __aiter__/__anext__ never consulted.
 
 	That went unnoticed while an ``async def'' containing ``yield'' answered a
-	plain coroutine: PythonCoroutine is a PythonGenerator, so sync iteration
-	over one produced the right items by accident.  Real async generators end
+	plain coroutine: PythonCoroutine was then a PythonGenerator subclass, so
+	sync iteration over one produced the right items by accident.  Real async generators end
 	the accident -- their yields are TAGGED (PyAsyncYield) so a yield can be
 	told from an await -- and sync iteration then hands the tag to user code:
 	``TypeError: unsupported operand type(s) for +: 'PyAsyncYield' and
 	'SmallInteger''' from test_coroutines' test_comp_3.
 
 	The three protocol points are the same three AsyncForAst overrides, for the
-	same reasons; see AsyncForAst and PythonGenerator >> ___grailAwaitAnext___:."
+	same reasons; see AsyncForAst and PyGeneratorBase >> ___grailAwaitAnext___:."
 	isAsyncClause := gen is_async = 1.
 	nextExpr := isAsyncClause
 		ifTrue: ['(___gen___ @env1:___grailAwaitAnext___: (PythonCoroutine @env1:___grailAnext___: '
