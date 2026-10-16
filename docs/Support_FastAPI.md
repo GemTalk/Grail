@@ -1381,3 +1381,14 @@ shards; the CPython conformance gate **0 regressions, 4 improvements**
 test_math and test___all__ timed out beside the SUnit suite and are OK alone;
 `check_python_fixtures.sh` 667 fixtures agree with CPython.
 
+
+**Merged with `origin/main` a third time (2026-10-15)**, 25 commits
+(#1645-#1664, among them main's own CPython `importlib.metadata`).  One
+conflict: `inspect.py`, where this branch's `_signature_get_partial` and
+main's `_signature_from_text` were added at the same place -- independent
+helpers, both kept.  Gates after the merge: `run_tests.sh` **8151 run, 8151
+passed**, 8 of 8 shards; the CPython conformance gate **0 regressions, 4
+improvements** (test_setcomps, test_generators, test_exception_hierarchy,
+test_uuid) -- test_math, test_pickle and test___all__ timed out beside the
+SUnit suite and are OK alone; `check_python_fixtures.sh` 674 fixtures agree
+with CPython.
