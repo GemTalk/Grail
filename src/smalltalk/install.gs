@@ -1294,6 +1294,7 @@ run
 	at: #'ObjectNewArgsAndSurrogateWarningsTestCase' put: nil;
 	at: #'ObjectTestCase' put: nil;
 	at: #'OpenCodecsAndDescriptorsTestCase' put: nil;
+	at: #'OperandTypeErrorMessagesTestCase' put: nil;
 	at: #'OperatorSemanticsTestCase' put: nil;
 	at: #'OsDirectoryErrorsTestCase' put: nil;
 	at: #'OsEnvironMappingTestCase' put: nil;
@@ -2890,6 +2891,7 @@ input src/smalltalk/PythonTests/NumericSubclassOperandsTestCase.gs
 input src/smalltalk/PythonTests/ObjectNewArgsAndSurrogateWarningsTestCase.gs
 input src/smalltalk/PythonTests/ObjectTestCase.gs
 input src/smalltalk/PythonTests/OpenCodecsAndDescriptorsTestCase.gs
+input src/smalltalk/PythonTests/OperandTypeErrorMessagesTestCase.gs
 input src/smalltalk/PythonTests/OperatorSemanticsTestCase.gs
 input src/smalltalk/PythonTests/OsDirectoryErrorsTestCase.gs
 input src/smalltalk/PythonTests/OsEnvironMappingTestCase.gs

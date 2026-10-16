@@ -239,14 +239,19 @@ __iadd__: other
 	reflected add is absent or punts (NotImplemented) does CPython fall back to
 	extending in place.  Mirror that: if other's class defines its OWN __radd__:,
 	try other.__radd__(self) and honour a non-NotImplemented result; otherwise
-	extend in place.  ``lst += 5'' still reaches the ``not iterable'' TypeError via
-	extend (int.__radd__ punts on a list); ``lst += [..]/(..)/'..''' stay in-place
+	extend in place.  ``lst += 5'' reaches the ``not iterable'' TypeError via
+	extend (see below for int's __radd__); ``lst += [..]/(..)/'..''' stay in-place
 	(list/tuple/str define no __radd__).  test_userlist test_mixed_iadd asserts
 	``list += UserList'' yields a UserList."
 
+	"Only a __radd__ a PYTHON class defines.  A built-in's own (int's, float's)
+	is CPython's nb_add, which answers NotImplemented for a list; Grail's
+	raises the binary TypeError instead, so ``lst += 5'' said ``can only
+	concatenate'' / ``unsupported operand'' where CPython reaches extend and
+	says ``'int' object is not iterable'' (#1688)."
 	| owner ni result |
 	owner := other @env0:class @env0:whichClassIncludesSelector: #'__radd__:' environmentId: 1.
-	owner ~~ nil ifTrue: [
+	(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifTrue: [
 		ni := Python @env0:at: #NotImplemented otherwise: nil.
 		result := other @env0:perform: #'__radd__:' env: 1 withArguments: { self }.
 		result ~~ ni ifTrue: [^ result]].
