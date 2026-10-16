@@ -6718,6 +6718,14 @@ type: className _: bases _: namespace kw: classKeywords
 	asking for it when a base already declares it is a no-op."
 	newClass := storageBase ___subclass___: nameSym instVarNames: #()
 		classInstVarNames: #('___dynInstVars___').
+	"The mark object >> ___grailIsPythonClass___ reads for a class type()
+	built, as ___pyDefinedClass___ is for a class statement's.  It used to
+	infer one from the metaclass's OWN ___dynInstVars___ accessor, which a
+	class over a Python base inherits instead -- so ``type('V', (B,), {})''
+	read as a built-in: its __class__ could not be assigned, and dir(V)
+	missed its own __dict__."
+	newClass ___compileMethod: '___pyTypeBuiltClass___
+	^ true' category: 'Grail-Slots'.
 	"Symbols: ___inheritClassAttrs___ compares against ``allInstVarNames'',
 	which answers symbols."
 	ownAttrNames := IdentitySet @env0:new.
