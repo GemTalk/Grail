@@ -1465,9 +1465,10 @@ exceptions there; they are defined where CPython defines them.
 **Left, recorded:**
 
 * **argon2 (pwdlib's default hasher) -- 70 security tests.**  The CPython
-  shim gained what `_cffi_backend` links against (`src/c/shim/shim_cffi.cc`:
-  24 entry points -- thread/interpreter state, locks, weakrefs,
-  `PyModule_Create2`, ...), `PyType_Ready` now gives a type its `tp_dict`, and
+  shim gained the 24 entry points `_cffi_backend` links against and it lacked
+  (thread/interpreter state, locks, weakrefs, `PyModule_Create2`, ... --
+  `src/c/shim/shim_cffi.cc`, 19 of them now; main added the other five to
+  `shim_numpy.cc` meanwhile), `PyType_Ready` now gives a type its `tp_dict`, and
   C extensions see a CPython-shaped `sys.version` (`3.14.0 (Grail ...)` --
   cffi compares its first three characters with `PY_VERSION`); Python code
   still sees Grail's.  `_cffi_backend` now LOADS; calling into it fails
@@ -1501,3 +1502,17 @@ test_exception_hierarchy, test_uuid) -- test_math and test___all__ timed out
 beside the tutorial slice and are OK alone; test_pickle, which the first gate
 run of this phase flagged (the CompatPickleTests above), is OK at 470 tests;
 `check_python_fixtures.sh` 667 fixtures agree with CPython.
+
+**Merged with `origin/main` (2026-10-16)**, after #1654.  Main had landed
+#1657 -- CPython's `importlib.metadata`, the live `vars()`, the metaclass-side
+classmethod check -- independently of this branch's same three fixes; main's
+versions were kept (the table above credits them), and this branch's
+vendored-version table went with it in favour of main's `.dist-info`
+directories.  `shim_cffi.cc` dropped the five entry points main had added to
+`shim_numpy.cc`.  All 150 wall checks still pass on both arms; `_cffi_backend`
+still loads.  Gates after the merge: `run_tests.sh` **8174 run, 8174
+passed**, 8 of 8 shards; the CPython conformance gate **0 regressions, 1
+improvement** (test_uuid; main's refreshed board already carries the other
+three) -- test_math, test_pickle and test___all__ timed out beside the SUnit
+suite and are OK alone; `check_python_fixtures.sh` 675 fixtures agree with
+CPython.
