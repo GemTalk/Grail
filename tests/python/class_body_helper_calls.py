@@ -177,15 +177,14 @@ EXPECTED = {
     'unexpected_keyword': 'TypeError',
     'an_instance_still_works': (1, 2),
     'builtin_descriptor_refuses': 'TypeError',
+    # A default naming a class attribute the body rebinds later reads the value
+    # bound at the def.  Grail read the later one while it emitted every store
+    # of such a name at the last assignment (#1677).
+    'default_is_fixed_at_the_def': (1, 1),
 }
 
-# CPython's answers that Grail does not give yet.  A class attribute bound
-# twice has all its stores emitted at its LAST assignment, so a default naming
-# it is evaluated after the rebinding: Grail reads v == 2 here, where CPython,
-# evaluating at the def, reads 1.  It used to raise nothing and answer 2 as
-# well; what #1426 changes is only that it still does not raise.
+# CPython's answers that Grail does not give yet.
 KNOWN_DIVERGENCES = {
-    'default_is_fixed_at_the_def': (1, 1),
 }
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, '<missing>') != EXPECTED[k])
