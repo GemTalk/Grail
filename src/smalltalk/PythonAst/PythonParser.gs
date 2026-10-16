@@ -3334,13 +3334,14 @@ parseImportFrom
 	| tok level moduleStr names |
 	tok := self advance. "consume 'from'"
 	level := 0.
-	[self matchOp: '.'] whileTrue: [
-		level := level + 1.
-	].
-	"Ellipsis counts as 3 dots"
-	[self matchOp: '...'] whileTrue: [
-		level := level + 3.
-	].
+	"Dots in any mix: the tokenizer reads ``...'' as one Ellipsis token, so
+	``from ....error import X'' (graphql-core) arrives as ``...'' then ``.''.
+	Two loops, dots first, left that trailing dot unread -- a SyntaxError."
+	[(self matchOp: '.')
+		ifTrue: [level := level + 1. true]
+		ifFalse: [(self matchOp: '...')
+			ifTrue: [level := level + 3. true]
+			ifFalse: [false]]] whileTrue.
 	"Module name (optional if we have dots)"
 	moduleStr := nil.
 	(self peek notNil and: [self peekType == #NAME]) ifTrue: [

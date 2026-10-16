@@ -181,6 +181,17 @@ class Message:
                 return pair[1]
         return failobj
 
+    def get_params(self, failobj=None, header="content-type", unquote=True):
+        """CPython's shape: the base value first, as ``(base, '')'' with
+        its case kept, then each parameter as ``(lowercased key, value)''
+        (strawberry's parse_content_type pops the first pair as the
+        mime type)."""
+        value = self.get(header)
+        if value is None:
+            return failobj
+        base, params = _split_params(value)
+        return [(base, "")] + params
+
     def get_boundary(self, failobj=None):
         return self.get_param("boundary", failobj)
 

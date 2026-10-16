@@ -33,6 +33,13 @@ class defaultdict(dict):
         self[key] = value
         return value
 
+    # dict.copy() answers a plain dict for a subclass, as CPython's does;
+    # defaultdict, as in CPython, overrides it to keep its type and factory.
+    def copy(self):
+        return type(self)(self.default_factory, self)
+
+    __copy__ = copy
+
     def __getitem__(self, key):
         if key in self:
             return super().__getitem__(key)

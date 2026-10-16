@@ -23,7 +23,7 @@ else
   CFLAGS += -I/usr/include/python3.14 -I/usr/include/python3.13
 endif
 
-EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o shim_numpy.o shim_numpy_compat.o shim_pyo3.o
+EXT_OBJECTS = _statisticsmodule.o _bisectmodule.o _crc32cmodule.o _shimtestmodule.o _heapqmodule.o _grail_demo.o _sre.o shim_numpy.o shim_numpy_compat.o shim_pyo3.o shim_cffi.o
 
 LIB = libcpython_ua.$(SHARED_EXT)
 OBJECTS = cpython.o $(EXT_OBJECTS)
@@ -67,6 +67,9 @@ shim_numpy.o: shim_numpy.cc cpython.h
 # docs/Support_Pydantic.md.
 shim_pyo3.o: shim_pyo3.cc cpython.h
 	$(CXX) $(CXXFLAGS) -c shim_pyo3.cc -o shim_pyo3.o
+
+shim_cffi.o: shim_cffi.cc cpython.h
+	$(CXX) $(CXXFLAGS) -c shim_cffi.cc -o shim_cffi.o
 
 $(LIB): $(OBJECTS)
 	$(CXX) $(SHARED_FLAGS) -o $@ $(OBJECTS) $(GEMSTONE)/lib/gciualib.o -lm -lpthread $(UNDEF_ARGS)

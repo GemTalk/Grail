@@ -91,8 +91,24 @@ _digestBytes
 	(self dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_256SumBytes].
 	(self dynamicInstVarAt: #algo) == #sha3_384 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_384SumBytes].
 	(self dynamicInstVarAt: #algo) == #sha3_512 ifTrue: [^ (self dynamicInstVarAt: #buffer) sha3_512SumBytes].
+	"SHA-224 and SHA-384 have no kernel primitive: they are computed by
+	_grail_sha2, in Python (PyJWT's ES384 / RS384 / HS384 sign with SHA-384)."
+	((self dynamicInstVarAt: #algo) == #sha224 or: [(self dynamicInstVarAt: #algo) == #sha384])
+		ifTrue: [^ self _pythonDigest: ((self dynamicInstVarAt: #algo) asString , '_digest')].
 	ValueError @env1:___signal___:
 		'unsupported hash algorithm ''' , (self dynamicInstVarAt: #algo) asString , ''''
+%
+
+category: 'Grail-Private'
+method: Hash
+_pythonDigest: aFunctionName
+	"The buffer's digest by a function of _grail_sha2."
+
+	| mod |
+	mod := (Python at: #builtins) @env1:instance
+		@env1:___import__: { '_grail_sha2' } kw: nil.
+	^ (mod @env1:___pyAttrLoad___: aFunctionName asSymbol)
+		@env1:___pyCallValue___: { self dynamicInstVarAt: #buffer } kw: nil
 %
 
 set compile_env: 1
@@ -124,7 +140,9 @@ digest_size
 
 	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ 16].
 	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ 20].
+	(self @env0:dynamicInstVarAt: #algo) == #sha224 ifTrue: [^ 28].
 	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ 32].
+	(self @env0:dynamicInstVarAt: #algo) == #sha384 ifTrue: [^ 48].
 	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ 64].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ 28].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ 32].
@@ -140,7 +158,9 @@ block_size
 
 	(self @env0:dynamicInstVarAt: #algo) == #md5 ifTrue: [^ 64].
 	(self @env0:dynamicInstVarAt: #algo) == #sha1 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha224 ifTrue: [^ 64].
 	(self @env0:dynamicInstVarAt: #algo) == #sha256 ifTrue: [^ 64].
+	(self @env0:dynamicInstVarAt: #algo) == #sha384 ifTrue: [^ 128].
 	(self @env0:dynamicInstVarAt: #algo) == #sha512 ifTrue: [^ 128].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_224 ifTrue: [^ 144].
 	(self @env0:dynamicInstVarAt: #algo) == #sha3_256 ifTrue: [^ 136].
@@ -263,7 +283,7 @@ category: 'Grail-Initialization'
 method: hashlib
 initialize
 	| names |
-	names := #(#md5 #sha1 #sha256 #sha512 #sha3_224 #sha3_256 #sha3_384 #sha3_512).
+	names := #(#md5 #sha1 #sha224 #sha256 #sha384 #sha512 #sha3_224 #sha3_256 #sha3_384 #sha3_512).
 	self @env0:at: #algorithms_guaranteed put: names @env0:asSet.
 	self @env0:at: #algorithms_available put: names @env0:asSet.
 %
@@ -330,6 +350,30 @@ category: 'Grail-Constructors'
 method: hashlib
 sha256: data
 	^ Hash algo: #sha256 data: data
+%
+
+category: 'Grail-Built-in Functions'
+method: hashlib
+sha224
+	^ Hash algo: #sha224 data: nil
+%
+
+category: 'Grail-Constructors'
+method: hashlib
+sha224: data
+	^ Hash algo: #sha224 data: data
+%
+
+category: 'Grail-Built-in Functions'
+method: hashlib
+sha384
+	^ Hash algo: #sha384 data: nil
+%
+
+category: 'Grail-Constructors'
+method: hashlib
+sha384: data
+	^ Hash algo: #sha384 data: data
 %
 
 category: 'Grail-Built-in Functions'
@@ -480,6 +524,18 @@ category: 'Grail-Constructors'
 method: hashlib
 _sha256: positional kw: kwargs
 	^ self ___hashFor___: #sha256 positional: positional kw: kwargs from: 'openssl_sha256'
+%
+
+category: 'Grail-Constructors'
+method: hashlib
+_sha224: positional kw: kwargs
+	^ self ___hashFor___: #sha224 positional: positional kw: kwargs from: 'openssl_sha224'
+%
+
+category: 'Grail-Constructors'
+method: hashlib
+_sha384: positional kw: kwargs
+	^ self ___hashFor___: #sha384 positional: positional kw: kwargs from: 'openssl_sha384'
 %
 
 category: 'Grail-Constructors'

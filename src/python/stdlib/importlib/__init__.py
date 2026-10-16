@@ -131,10 +131,29 @@ class _Loader:
         return None
 
     def exec_module(self, module):
+        exec(self.get_code(module.__name__), module.__dict__)
+
+    # The rest of SourceFileLoader's surface that runpy reads:
+    # ``runpy.run_module(name)'' asks the spec's loader for get_code (and
+    # is_package, to run a package's __main__), so every
+    # ``runpy.run_module('docs_src.x', run_name='__main__')'' -- FastAPI's
+    # python_types tutorials -- raised AttributeError.
+
+    def get_filename(self, fullname=None):
+        return self.path
+
+    def get_source(self, fullname=None):
+        with open(self.path, 'rb') as f:
+            return f.read().decode('utf-8')
+
+    def get_code(self, fullname=None):
         with open(self.path, 'rb') as f:
             source = f.read()
-        exec(compile(source, self.path, 'exec', dont_inherit=True),
-             module.__dict__)
+        return compile(source, self.path, 'exec', dont_inherit=True)
+
+    def is_package(self, fullname=None):
+        import os
+        return os.path.basename(self.path) == '__init__.py'
 
 
 # ``_ModuleSpec`` and ``ModuleSpec`` are NOT defined here.  They are the one

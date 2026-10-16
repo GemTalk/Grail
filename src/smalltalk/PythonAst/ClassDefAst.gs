@@ -235,10 +235,15 @@ printSmalltalkRuntimeOn: aStream
 	so it rides the existing getter+setter value-attr path -- and so a
 	subclass with no docstring stamps its OWN None slot (classInstVars are
 	per-class), shadowing a documented base exactly as CPython does.  Skipped
-	when the body already assigns __doc__ itself.  A ConstantAst holding nil
+	when the body already assigns __doc__ itself -- or DEFINES it: a ``def
+	__doc__'' is the later binding in CPython, docstring or not, and the
+	injected one made the body's own reads answer the string, so
+	SQLAlchemy's ``@__doc__.setter'' / ``@__doc__.classlevel'' hybrid
+	(InstrumentedAttribute) raised at import.  A ConstantAst holding nil
 	emits as the ``None'' singleton; a string ConstantAst emits an escaped
 	literal."
-	(classAttrs anySatisfy: [:p | p key == #'__doc__']) ifFalse: [
+	((classAttrs anySatisfy: [:p | p key == #'__doc__'])
+		or: [self ___classBodyDefines___: #'__doc__']) ifFalse: [
 		| docNode |
 		docNode := self ___docString___ ifNil: [
 			ConstantAst new 
@@ -574,6 +579,23 @@ printSmalltalkRuntimeOn: aStream
 					def generateMethodSourceOn: s.
 					s writeMapAsComment.
 					classMethodSources add: def ___mangledName___ asString -> s contents.
+					"And the varargs ``_m:kw:'' entry an instance method gets, so a
+					KEYWORD call through ``cls'' -- ``cls.m(x, a=1)'', which compiles
+					to that send -- binds by name.  A classmethod compiled only its
+					fixed-arity form, and the send was an uncatchable
+					MessageNotUnderstood on the class: pydantic-settings'
+					``cls.settings_customise_sources(cls, init_settings=..., ...)''
+					left every BaseSettings model empty.
+
+					Not for a def whose only parameter is ``cls'' -- the forwarder
+					would bind nothing -- and never for __init_subclass__, whose
+					``___init_subclass__:kw:'' is the packed body the subclass hook
+					machinery (object class >> ___grailInitSubclass___:) calls."
+					(def needsVarargsForwarder
+						and: [def allParameterNames size > 1
+						and: [def name asString ~= '__init_subclass__']]) ifTrue: [
+						classMethodSources add: ('_' , def ___mangledName___ asString)
+							-> def generateInstanceVarargsForwarderSource].
 					"IR seam for @classmethods (cut 61), as for instance methods
 					above: judged and registered HERE, with selfParameterName
 					switched to the def's own receiver, so the snapshot the
@@ -3980,11 +4002,71 @@ ___unhashableByClassBody___
 		"``__hash__ = None'' opts out; ``__hash__ = anything_else'' is a real
 		hash function and must not be overwritten."
 		^ (hashAttr value isKindOf: ConstantAst) and: [hashAttr value value isNil]].
+	"A __hash__ bound under a class-body ``if'' is decided when the body RUNS,
+	so the implicit rule must not pre-empt it.  SQLAlchemy's ColumnOperators
+	keeps its hash with ``if TYPE_CHECKING: def __hash__ ... else: __hash__ =
+	Operators.__hash__'' beside its __eq__; read as no __hash__ at all, every
+	column element -- the Null singleton first, at import -- was unhashable."
+	self ___classBodyBindsHashConditionally___ ifTrue: [^ false].
 	"No __hash__ in the body at all -- unhashable iff __eq__ is there, whether
 	as a def or as an assignment (CPython only asks whether the name is in the
 	class namespace)."
 	(self ___classBodyDefines___: #'__eq__') ifTrue: [^ true].
 	^ (namesAssigned detect: [:p | p key == #'__eq__'] ifNone: [nil]) notNil
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___classBodyBindsHashConditionally___
+	"True when a class-body ``if'' (at any depth of if/elif/else) binds
+	__hash__ by def or by a non-None assignment in a branch that can run.  The
+	branch an ``if TYPE_CHECKING:'' guards cannot -- it exists for type
+	checkers -- so only its else is read; a def there is the stub that
+	documents the hash, not the hash.  Any other test may go either way and
+	the binding counts: an emitted unhashable __hash__ would overwrite it."
+
+	| found walk |
+	found := false.
+	walk := nil.
+	walk := [:suite |
+		(suite notNil and: [suite body notNil]) ifTrue: [
+			suite body do: [:stmt |
+				(stmt isKindOf: IfAst) ifTrue: [
+					(self ___isTypeCheckingTest___: stmt test)
+						ifFalse: [walk value: stmt body].
+					walk value: stmt orelse].
+				((stmt isKindOf: FunctionDefAst)
+					and: [stmt name asSymbol == #'__hash__']) ifTrue: [found := true].
+				"``__hash__ = None'' does not count: under an if, as at top
+				level, it opts out -- and absent, __eq__ opts out anyway."
+				((stmt isKindOf: AssignAst)
+					and: [(stmt targets anySatisfy: [:t |
+						(t isKindOf: NameAst) and: [t id asSymbol == #'__hash__']])
+					and: [((stmt value isKindOf: ConstantAst) and: [stmt value value isNil]) not]])
+					ifTrue: [found := true]]]].
+	body body do: [:stmt |
+		(stmt isKindOf: IfAst) ifTrue: [
+			(self ___isTypeCheckingTest___: stmt test)
+				ifFalse: [walk value: stmt body].
+			walk value: stmt orelse]].
+	^ found
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___isTypeCheckingTest___: aTest
+	"``TYPE_CHECKING'', ``<module>.TYPE_CHECKING'' or an alias ending in it
+	(``from typing import TYPE_CHECKING as _TYPE_CHECKING'') -- false at run
+	time."
+
+	| nm |
+	nm := (aTest isKindOf: NameAst)
+		ifTrue: [aTest id asString]
+		ifFalse: [(aTest isKindOf: AttributeAst)
+			ifTrue: [aTest attr asString]
+			ifFalse: [^ false]].
+	^ nm size >= 13
+		and: [(nm copyFrom: nm size - 12 to: nm size) = 'TYPE_CHECKING']
 %
 
 category: 'Grail-code generation'
@@ -5432,6 +5514,24 @@ emitClassBodyIfBranch: aSuite on: aStream
 			aStream lf].
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
 			self emitClassBodyIfDef: stmt on: aStream].
+		"A nested CLASS in a branch: the top-level nested-class emit (see the
+		attr-init section), stored through the definitional store like every
+		other branch binding.  It was dropped, so the class was never bound at
+		all -- SQLAlchemy's SelectState defines ``default_select_compile_options''
+		in the else of an ``if TYPE_CHECKING:'', and selectable.py read it a few
+		hundred lines later, at import."
+		(stmt isKindOf: ClassDefAst) ifTrue: [
+			aStream nextPutAll: '[ | '; nextPutAll: stmt ___stVarName___;
+				nextPutAll: ' |'; lf.
+			stmt printSmalltalkOn: aStream.
+			aStream lf;
+				nextPutAll: self ___stVarName___;
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+				nextPutAll: (stmt ___manglePrivate___: stmt name) asString;
+				nextPutAll: ''' put: ';
+				nextPutAll: stmt ___stVarName___;
+				nextPutAll: '.'; lf;
+				nextPutAll: ' ] @env0:value.'; lf].
 		((stmt isKindOf: AssignAst)
 			and: [stmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			stmt targets do: [:t |
@@ -5687,6 +5787,8 @@ ___classBodyConditionalNames___
 					collect value: h body]]].
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
 			names add: stmt name asSymbol].
+		(stmt isKindOf: ClassDefAst) ifTrue: [
+			names add: (stmt ___manglePrivate___: stmt name) asSymbol].
 		"Per TARGET rather than only when every target is a plain name: Python
 		binds each name in each target, so ``a, b = pair'' inside a class-body
 		loop binds both -- and the old all-or-nothing test collected NEITHER,
@@ -6121,11 +6223,30 @@ emitMethodCodeTableOn: aStream className: aClassName
 	entries := OrderedCollection new.
 	defs do: [:def | | src |
 		src := WriteStream on: String new.
-		src nextPutAll: ' @env0:at: '''; nextPutAll: def name asString; nextPutAll: ''' put: '.
+		src nextPutAll: ' @env0:at: '''; nextPutAll: (self ___codeTableKeyFor___: def); nextPutAll: ''' put: '.
 		def emitPyCodeExprOn: src qualname: aClassName , '.' , def name asString.
 		src nextPut: $;.
 		entries add: src contents].
 	self ___emitTable___: '___methodCodeTable___' entries: entries category: 'Grail-Tracebacks' onStream: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___codeTableKeyFor___: aDef
+	"The ___methodCodeTable___ key for aDef: the selector its UnboundMethod
+	looks itself up by.  A property's setter and deleter compile under their own
+	selectors -- ``x:'', or ``___propSetter_x'' / ``___propDeleter_x'' when
+	redirected -- and keyed by the bare name instead, a setter's entry overwrote
+	its getter's and was then never found: ``C.p.fset.__code__'' raised, so
+	inspect.isfunction refused the def a setter's inner decorator receives
+	(SQLAlchemy's ``@p.setter @util.deprecated(...)'', at sqlalchemy.orm
+	import), and ``C.p.fget.__code__'' was the setter's."
+
+	(aDef isDeleterDecorated or: [self ___isRedirectedPropertySetter___: aDef])
+		ifTrue: [^ self ___redirectedAccessorNameFor___: aDef].
+	aDef ___propertyAccessorKind___ == #setter
+		ifTrue: [^ aDef ___mangledName___ asString , ':'].
+	^ aDef name asString
 %
 
 category: 'Grail-code generation'

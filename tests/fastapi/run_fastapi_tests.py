@@ -17,6 +17,28 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, 'standins'))
+
+
+def _sdist_root(paths):
+    """The directory pytest would run from: the nearest ancestor of the first
+    test file that holds pyproject.toml.  FastAPI's tutorial tests read files
+    relative to it -- ``./docs_src/templates/``, the docs' favicon -- because
+    its CI runs pytest from the repository root (docs/Support_FastAPI.md,
+    Phase 6)."""
+    for arg in paths:
+        if not arg.endswith('.py'):
+            continue
+        d = os.path.dirname(os.path.abspath(arg))
+        while d and d != os.path.dirname(d):
+            if os.path.exists(os.path.join(d, 'pyproject.toml')):
+                return d
+            d = os.path.dirname(d)
+    return None
+
+
+_root = _sdist_root(sys.argv[1:])
+if _root is not None:
+    os.chdir(_root)
 # Not run as __main__: runpy would then swap sys.modules['__main__'] in and out
 # around the whole run, and the tests' own imports are none of its business.
 runner = runpy.run_path(os.path.join(HERE, '..', 'pydantic', 'run_pydantic_tests.py'),

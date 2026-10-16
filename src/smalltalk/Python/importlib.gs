@@ -8246,7 +8246,8 @@ ___copyDecoratorRebinding___: aSelector from: aBase to: aClass
 			on: Error do: [:e | holder := nil]].
 	holder isNil ifTrue: [^ self].
 	([holder dynamicInstVarAt: pyName] on: Error do: [:e | nil]) isNil ifTrue: [
-		[holder dynamicInstVarAt: pyName put: deco] on: Error do: [:e | nil]].
+		[holder dynamicInstVarAt: pyName put: deco.
+		 holder ___noteInherited___: pyName] on: Error do: [:e | nil]].
 	^ self
 %
 
@@ -8415,7 +8416,8 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 					leftmost base); gap-fill guards against the whole
 					primary chain."
 					shouldCopy := overrideMode
-						ifTrue: [ownMd isNil or: [(ownMd includesKey: sel) not]]
+						ifTrue: [(ownMd isNil or: [(ownMd includesKey: sel) not])
+							and: [(self ___mroDefinerOf___: sel forClass: aClass precedes: walker) not]]
 						ifFalse: [(self ___primaryChainProvides___: sel forClass: aClass mergingFrom: walker) not].
 					"Never copy a base's SLOT machinery: its ___pySlotIndexFor___:
 					table holds the BASE's instVar indices, and its inferred-slot
@@ -8530,7 +8532,10 @@ ___mergeSecondaryBases___: aClass bases: secondaryBases resolved: resolvedBases
 									on: Error do: [:e | nil]
 							].
 							(holder dynamicInstVarAt: sel) isNil ifTrue: [
-								holder dynamicInstVarAt: sel put: v
+								holder dynamicInstVarAt: sel put: v.
+								"A COPY, not the class's own: __dict__ must not list it
+								(GrailClassAttrHolder >> ___noteInherited___:)."
+								[holder ___noteInherited___: sel] on: Error do: [:e | nil]
 							]
 						]
 					].
@@ -8740,6 +8745,51 @@ ___primaryChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 
 category: 'Grail-Module Loading'
 classmethod: importlib
+___mroDefinerOf___: aSelector forClass: aClass precedes: aWalker
+	"In OVERRIDE mode -- a base written LEFT of the storage base -- does a
+	Python class that DEFINES aSelector's name come before aWalker in aClass's
+	MRO?  Then aWalker's method is not the one CPython finds, and copying it
+	over would be wrong.
+
+	Override mode copies a left base's methods past the primary chain because
+	that base precedes the chain in the MRO -- but the walk climbs the base's
+	whole ancestry, and an ancestor deep enough can come AFTER classes of the
+	primary chain.  SQLAlchemy's Select lists HasSyntaxExtensions[...] (a
+	Generic) left of its storage base, so Generic.__class_getitem__ was copied
+	onto Select over Visitable.__class_getitem__, which the MRO puts first
+	(index 41 to Generic's 42): ``Select[...]'' went to typing and was refused
+	as not generic (sqlmodel, at import).
+
+	The definer is the first class in the MRO after aClass whose OWN methods
+	include the name: a merge COPY (Grail-MI-Inherited) or a protocol forwarder
+	does not define it, so a copy's position in the MRO cannot stand in for
+	its origin's.  Only a definer written in PYTHON counts, for the reason
+	___primaryChainProvides___:forClass:mergingFrom: gives -- the linearization
+	is exact only for those, and a Smalltalk-written stand-in keeps override
+	mode's old answer."
+
+	| mro family walkerIdx |
+	mro := [self ___mroOf___: aClass] on: Error do: [:e | e return: #()].
+	walkerIdx := mro indexOf: aWalker.
+	walkerIdx <= 1 ifTrue: [^ false].
+	family := self ___pythonNameFamilyOf___: aSelector.
+	2 to: walkerIdx - 1 do: [:i | | c md |
+		c := mro at: i.
+		((c isKindOf: Behavior)
+			and: [c includesSelector: #'___pyDefinedClass___' environmentId: 1]) ifTrue: [
+			md := c methodDictForEnv: 1.
+			(md notNil and: [family anySatisfy: [:sel |
+				(md includesKey: sel)
+					and: [| cat |
+						cat := c categoryOfSelector: sel environmentId: 1.
+						cat ~= #'Grail-MI-Inherited'
+							and: [cat ~= #'Grail-Protocol Forwarders']]]])
+				ifTrue: [^ true]]].
+	^ false
+%
+
+category: 'Grail-Module Loading'
+classmethod: importlib
 ___metaChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	"The class-side twin of ___primaryChainProvides___:forClass:mergingFrom:'s
 	MRO rule, for the merge's @classmethod / @staticmethod pass: does aClass's
@@ -8758,6 +8808,14 @@ ___metaChainProvides___: aSelector forClass: aClass mergingFrom: aSource
 	owner := aClass class whichClassIncludesSelector: aSelector environmentId: 1.
 	owner isNil ifTrue: [^ false].
 	owner == aClass class ifTrue: [^ true].
+	"The UNIVERSAL ROOTS' class-side defaults are overridable by a secondary
+	base, as the instance-side twin's are: a Python class anywhere in the MRO
+	beats them.  Counted as provided, ``Object class >> __class_getitem__:''
+	refused SQLAlchemy's Visitable.__class_getitem__ (``return cls'') to every
+	class that reaches Visitable through a secondary base -- ClauseElement, and
+	so Select -- and ``Select[...]'' went to typing, which refused it as not
+	generic (sqlmodel's _expression_select_cls, at import)."
+	(owner == Object class or: [owner == PythonInstance class]) ifTrue: [^ false].
 	owner isMeta ifFalse: [^ true].
 	(owner thisClass includesSelector: #'___pyDefinedClass___' environmentId: 1)
 		ifFalse: [^ true].

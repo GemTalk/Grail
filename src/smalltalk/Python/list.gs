@@ -55,6 +55,17 @@ __new__: iterable
 	     behaviour for classes that lack __iter__."
 
 	| result iter done cls hasIter hasGetitem ic |
+	"``X.__new__(cls)'' -- CPython's first argument to a type's __new__ is the
+	TARGET CLASS, not the contents: a class that inherits from the receiver
+	can only be that.  Built as a plain constructor argument it was
+	iterated -- ``'type' object is not iterable'' -- which is what
+	SQLAlchemy's ``ImmutableDictBase.__new__(cls)'' (FacadeDict) raised at
+	MetaData() construction.  A STRICT subclass only: ``list(list)'' reaches
+	here too and must raise as CPython's does, and a class that does not
+	inherit from the receiver stays an iterable (``list(SomeEnum)'')."
+	((iterable @env0:isKindOf: Behavior)
+		@env0:and: [iterable @env0:inheritsFrom: self])
+			@env0:ifTrue: [^ iterable ___new___].
 	result := self ___new___.
 	"Strings are SequenceableCollections, but ``at:'' yields Characters, not
 	the 1-char Python strings CPython's ``list(str)'' produces.  Route

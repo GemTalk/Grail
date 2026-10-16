@@ -360,7 +360,12 @@ __annotations__
 	cur := attrs @env0:slotAt: self attr: '__annotations__'.
 	cur == nil ifFalse: [^ cur].
 	annotate := attrs @env0:slotAt: self attr: '__annotate__'.
-	annotate == nil ifTrue: [
+	"``__annotate__ = None'' -- what functools.update_wrapper copies from a
+	wrapped callable that has none (3.14 lists __annotate__ in
+	WRAPPER_ASSIGNMENTS) -- means no annotations, as unset does; it was
+	CALLED, and the nil MNU escaped every Python handler (SQLAlchemy's
+	schema module, at import)."
+	(annotate == nil @env0:or: [annotate == ExecBlock @env0:___pyNone___]) ifTrue: [
 		^ attrs @env0:slotAt: self attr: '__annotations__'
 			put: (KeyValueDictionary @env0:new)].
 	^ attrs @env0:slotAt: self attr: '__annotations__'

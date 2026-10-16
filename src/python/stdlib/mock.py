@@ -614,7 +614,14 @@ class _Patcher:
         # alongside an explicit ``new``, since there would be nothing to
         # configure; so does this, at __enter__ time where the error is
         # attributable to the with-statement.
-        self._kwargs = kwargs or {}
+        self._kwargs = dict(kwargs or {})
+        # ``create=True'' lets the patch bind a name the target does not
+        # have yet, and removes it again on exit (CPython's _patch does the
+        # same).  FastAPI's dependency tutorials patch a module global the
+        # module only REFERS to (``patch("...tutorial007_py310.DBSession",
+        # create=True)''); popped here so it is never taken for a Mock
+        # configuration keyword.
+        self._create = bool(self._kwargs.pop("create", False))
         # ``new_callable`` stands in for MagicMock as the thing CALLED to make
         # the replacement (``patch('sys.stdout', new_callable=io.StringIO)``);
         # the trailing keywords go to it.  CPython refuses it beside an
@@ -643,8 +650,9 @@ class _Patcher:
             #
             # Anything else missing stays an error: patching a name that is
             # neither defined nor a builtin is a typo, and CPython reports it.
-            if not (_is_module(self._target_obj)
-                    and hasattr(builtins, self._attribute)):
+            if not (self._create
+                    or (_is_module(self._target_obj)
+                        and hasattr(builtins, self._attribute))):
                 raise
             self._created = True
         replacement = self._new
@@ -725,7 +733,7 @@ class _Patcher:
             try:
                 for p in wrapper.patchings:
                     fresh = _Patcher(p._target_obj, p._attribute, p._new,
-                                     p._kwargs)
+                                     dict(p._kwargs, create=p._create))
                     mocked = fresh.__enter__()
                     entered.append(fresh)
                     if p._new is DEFAULT:
@@ -882,6 +890,8 @@ def patch_multiple(target, spec=None, create=False, spec_set=None,
                        ("autospec", autospec), ("new_callable", new_callable)):
         if value is not None:
             options[key] = value
+    if create:
+        options["create"] = True
     return _MultiPatcher(target, kwargs, options)
 
 
