@@ -370,6 +370,7 @@ run
 	at: #'GrailBuiltinImporter' put: nil;
 	at: #'GrailClassAttrHolder' put: nil;
 	at: #'GrailCommitCoordinator' put: nil;
+	at: #'GrailDynLoadRequest' put: nil;
 	at: #'GrailShimError' put: nil;
 	at: #'Hash' put: nil;
 	at: #'hashlib' put: nil;
@@ -1817,6 +1818,7 @@ input src/smalltalk/Python/gemstone.gs
 input src/smalltalk/Python/grail.gs
 input src/smalltalk/Python/PyObject.gs
 input src/smalltalk/Python/GrailShimError.gs
+input src/smalltalk/Python/GrailDynLoadRequest.gs
 input src/smalltalk/Python/GrailMainRestart.gs
 input src/smalltalk/Python/CPythonShim.gs
 input src/smalltalk/Python/ShimForeignObject.gs

@@ -140,6 +140,26 @@ extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
 static inline int is_grail_wrapper_magic(uint64_t m) {
     return m == GRAIL_WRAP_MAGIC || m == GRAIL_FLOAT_MAGIC;
 }
+/* "GRAILPX1": an int or str in CPython 3.14's OWN layout, with its OOP in a
+   hidden PREFIX -- [magic][oop] at ptr-16 / ptr-8, before the object, as
+   CPython hides its PyGC_Head (docs/Shim_Object_Model.md, section 2).  A
+   Cython module reads both inline: an int's lv_tag and 30-bit digits (the
+   SmallInteger OOP's tag bits at offset 16 read as "negative"), a str's
+   length, hash, state and data.  Detected by ob_type FIRST: an exact int or
+   str is only ever made by the shim -- by CPythonShim>>wrap:, or by
+   PyUnicode_New for a wheel to fill -- so ptr-16 is never read in front of
+   a wheel's own object.  An OOP of 0 is a str C built: pyobj_oop makes the
+   Grail str from its data.  An exact bytes too ([ob_size@16][ob_shash@24]
+   [data@32]): Cython keeps its signature strings in a bytes constant and
+   reads them with the inline PyBytes_AS_STRING -- past the end of a 32-byte
+   wrapper -- and its capsules' names point into that buffer. */
+#define GRAIL_PREFIX_MAGIC 0x475241494C505831ULL   /* "GRAILPX1" */
+static inline int has_grail_prefix(PyObject *obj) {
+    PyTypeObject *t = obj->ob_type;
+    if (t != &PyLong_Type && t != &PyUnicode_Type && t != &PyBytes_Type) return 0;
+    return *(uint64_t *)((char *)obj - 16) == GRAIL_PREFIX_MAGIC;
+}
+static OopType prefixed_value_oop(PyObject *obj);
 static inline int is_type_mirror(PyObject *obj) {
     /* A wrapper is excluded FIRST: it is only 32 bytes, and an instance of a
        mirrored class carries the mirror as its ob_type. */
@@ -203,6 +223,10 @@ static inline OopType pyobj_oop(PyObject *obj) {
        stderr line is the attribution; CHECK_pyObj raises at the API
        boundary, where there is a return path. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("pyobj_oop", obj); return none_oop; }
+    if (has_grail_prefix(obj)) {
+        OopType oop = *(OopType *)((char *)obj - 8);
+        return oop != 0 ? oop : prefixed_value_oop(obj);
+    }
     if (is_real_layout(obj)) return real_obj_to_oop(obj);
     /* Before is_type_mirror: a body's ob_type IS a mirror, and that test reads
        a type's fields far past the end of a body. */
@@ -271,6 +295,7 @@ static void init_type(PyTypeObject *type, const char *name,
 }
 
 static void init_exception_types(void);   /* below, with the exception objects */
+static void install_value_type_slots(void);   /* below, with the number protocol */
 
 /* object.__new__ for a wheel's own subtype: allocate subtype->tp_basicsize
    through the subtype's allocator.  PyO3 creates EVERY pyclass instance whose
@@ -436,6 +461,29 @@ static void init_types(void) {
        an IndexError. */
     init_type(&PySlice_Type, "slice", &PyBaseObject_Type, Py_TPFLAGS_DEFAULT);
 
+    /* CPython 3.14.8's instance sizes (``T.__basicsize__'', ``__itemsize__'').
+       A Cython module checks a type it imports against the struct it was
+       compiled with -- ``builtins.type size changed, may indicate binary
+       incompatibility. Expected 936 from C header, got 0'' -- and a wheel's
+       subtype of one of these starts its own fields after them. */
+    {
+        static const struct { PyTypeObject *t; Py_ssize_t basic, item; } sizes[] = {
+            { &PyType_Type, 936, 40 }, { &PyBaseObject_Type, 16, 0 },
+            { &PyLong_Type, 24, 4 },   { &PyBool_Type, 24, 4 },
+            { &PyFloat_Type, 24, 0 },  { &PyUnicode_Type, 64, 0 },
+            { &PyBytes_Type, 33, 1 },  { &PyByteArray_Type, 56, 0 },
+            { &PyList_Type, 40, 0 },   { &PyTuple_Type, 32, 8 },
+            { &PyDict_Type, 48, 0 },   { &PySet_Type, 200, 0 },
+            { &PyFrozenSet_Type, 200, 0 }, { &PySlice_Type, 40, 0 },
+            { &_PyNone_Type, 16, 0 },  { &PyModule_Type, 56, 0 },
+            { &PyFunction_Type, 152, 0 },
+        };
+        for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+            sizes[i].t->tp_basicsize = sizes[i].basic;
+            sizes[i].t->tp_itemsize = sizes[i].item;
+        }
+    }
+
     /* Record every static shim type so is_foreign() can tell a Grail-backed
        wrapper (ob_type is one of these) from a wheel's own object. */
     register_shim_type(&PyType_Type);
@@ -454,6 +502,7 @@ static void init_types(void) {
     register_shim_type(&PySlice_Type);
 
     init_exception_types();
+    install_value_type_slots();
 }
 
 /* ====================================================================
@@ -511,6 +560,8 @@ static PyTypeObject _exc_RuntimeWarning;
 static PyTypeObject _exc_UserWarning;
 static PyTypeObject _exc_AssertionError;
 static PyTypeObject _exc_BaseExceptionGroup;
+static PyTypeObject _exc_GeneratorExit;
+static PyTypeObject _exc_UnboundLocalError;
 
 PyObject *PyExc_ValueError        = (PyObject *)&_exc_ValueError;
 PyObject *PyExc_TypeError         = (PyObject *)&_exc_TypeError;
@@ -547,6 +598,8 @@ PyObject *PyExc_RuntimeWarning    = (PyObject *)&_exc_RuntimeWarning;
 PyObject *PyExc_UserWarning       = (PyObject *)&_exc_UserWarning;
 PyObject *PyExc_AssertionError    = (PyObject *)&_exc_AssertionError;
 PyObject *PyExc_BaseExceptionGroup = (PyObject *)&_exc_BaseExceptionGroup;
+PyObject *PyExc_GeneratorExit     = (PyObject *)&_exc_GeneratorExit;
+PyObject *PyExc_UnboundLocalError = (PyObject *)&_exc_UnboundLocalError;
 
 /* Exception hierarchy for PyErr_(Given)ExceptionMatches. Each row is
    { child, parent }; matching walks child→parent until NULL. Only the
@@ -576,11 +629,13 @@ static PyTypeObject *const exc_parent_table[][2] = {
     { &_exc_ModuleNotFoundError, &_exc_ImportError },
     { &_exc_ImportError,        &_exc_Exception },
     { &_exc_NameError,          &_exc_Exception },
+    { &_exc_UnboundLocalError,  &_exc_NameError },
     { &_exc_BufferError,        &_exc_Exception },
     { &_exc_AssertionError,     &_exc_Exception },
     { &_exc_BaseExceptionGroup, &_exc_BaseException },
     { &_exc_Exception,          &_exc_BaseException },
     { &_exc_KeyboardInterrupt,  &_exc_BaseException },
+    { &_exc_GeneratorExit,      &_exc_BaseException },
     { NULL, NULL }
 };
 
@@ -673,6 +728,8 @@ static void init_exception_types(void) {
     init_exc_type(&_exc_RuntimeWarning, "RuntimeWarning");
     init_exc_type(&_exc_UserWarning, "UserWarning");
     init_exc_type(&_exc_AssertionError, "AssertionError");
+    init_exc_type(&_exc_GeneratorExit, "GeneratorExit");
+    init_exc_type(&_exc_UnboundLocalError, "UnboundLocalError");
     init_exc_type(&_exc_BaseExceptionGroup, "BaseExceptionGroup");
     for (int i = 0; exc_parent_table[i][0]; i++)
         exc_parent_table[i][0]->tp_base = exc_parent_table[i][1];
@@ -773,8 +830,10 @@ static OopType notimpl_oop(void) {
  * ==================================================================== */
 
 struct _object _Py_NoneStruct  = { 1, &_PyNone_Type };
-struct _object _Py_TrueStruct  = { 1, NULL };  /* ob_type set by shimInit */
-struct _object _Py_FalseStruct = { 1, NULL };  /* ob_type set by shimInit */
+/* lv_tag = (ndigits << 3) | sign, sign 0 positive and 1 zero: True is one
+   digit of 1, False is zero -- CPython 3.14's own encoding of both. */
+_GrailLongSingleton _Py_TrueStruct  = { { 1, NULL }, 0x8, { 1, 0 } };  /* ob_type set by shimInit */
+_GrailLongSingleton _Py_FalseStruct = { { 1, NULL }, 0x1, { 0, 0 } };  /* ob_type set by shimInit */
 
 /* _Py_Dealloc — called when refcount hits zero.
    In the shim, object lifetime is managed by GemStone. No-op. */
@@ -843,17 +902,129 @@ static void forget_saved_gs_error(void) {
     current_error_from_grail = 0;
 }
 
-extern "C" int  _grail_err_from_grail(void) { return current_error_from_grail; }
-extern "C" void _grail_err_set_from_grail(int v) { current_error_from_grail = v; }
+/* THE INDICATOR IN THE THREAD STATE.  Cython keeps a pending exception in
+   ``tstate->current_exception'' and reads and writes that slot INLINE
+   (CYTHON_FAST_THREAD_STATE): an error is pending when it is not NULL, a
+   fetch takes the object out, a restore puts one back, and an exception's
+   type is Py_TYPE of the object.  So the slot mirrors the indicator above:
+   err_publish puts it there after every change -- a wheel's own exception
+   instance as itself, any other error as a token carrying the (type,
+   message) pair (shim_pyo3.cc) -- and err_adopt takes back whatever Cython
+   left there before the indicator is read: NULL clears it, a token restores
+   its pair, a wheel's instance becomes the raised object.  g_err_published
+   is what the shim last put there, so a difference is Cython's doing.
+   A token still in the slot when the indicator changes was never taken, so
+   it is recycled.  Offset measured against CPython 3.14.8's headers. */
+#define GRAIL_TSTATE_CURRENT_EXCEPTION_OFFSET 112
+extern "C" char *_grail_tstate_bytes(void);                                   /* shim_numpy.cc */
+extern "C" PyObject *_grail_raised_token(PyObject *type, const char *msg, int from_grail);   /* shim_pyo3.cc */
+extern "C" int _grail_raised_token_read(PyObject *o, PyObject **type, const char **msg, int *from_grail);
+extern "C" void _grail_raised_token_recycle(PyObject *o);
+static PyObject *g_err_published = NULL;
+static int g_err_sync_busy = 0;
 
-extern "C" void _grail_err_set_instance(PyObject *exc) { current_error_instance = exc; }
-extern "C" PyObject *_grail_err_instance(void) { return current_error_instance; }
+static PyObject **tstate_exc_slot(void) {
+    return (PyObject **)(_grail_tstate_bytes() + GRAIL_TSTATE_CURRENT_EXCEPTION_OFFSET);
+}
+
+static int is_foreign_exc_instance(PyObject *v);
+static int keep_grail_exc_instance(PyObject *type, PyObject *value);
+static void foreign_exc_text(PyObject *v, char *buf, size_t cap);
+
+static void err_publish(void) {
+    if (g_err_sync_busy) return;
+    PyObject **slot = tstate_exc_slot();
+    PyObject *old = *slot;
+    PyObject *now = NULL;
+    if (current_error_type != NULL) {
+        if (current_error_instance != NULL && is_foreign_exc_instance(current_error_instance))
+            now = current_error_instance;
+        else
+            now = _grail_raised_token(current_error_type, current_error_msg, current_error_from_grail);
+    }
+    if (old != NULL && old == g_err_published && old != now) _grail_raised_token_recycle(old);
+    *slot = now;
+    g_err_published = now;
+}
+
+static void err_adopt(void) {
+    if (g_err_sync_busy) return;
+    PyObject *cur = *tstate_exc_slot();
+    if (cur == g_err_published) return;
+    g_err_published = cur;
+    PyObject *type; const char *msg; int from_grail;
+    if (cur == NULL) {
+        forget_saved_gs_error();
+        current_error_type = NULL;
+        current_error_msg[0] = '\0';
+    } else if (!is_foreign(cur)) {
+        /* A Grail exception object, written into the slot from C: Cython
+           re-raising one it fetched (__Pyx_ErrRestoreInState), or
+           PyErr_SetRaisedException.  It is a wrapper, not a C exception
+           struct, so reading it as a token or as a wheel's instance read
+           past its end (a SIGSEGV).  It becomes the indicator as
+           PyErr_SetObject would make it, and stays in the slot. */
+        g_err_sync_busy = 1;
+        int kept = keep_grail_exc_instance((PyObject *)cur->ob_type, cur);
+        g_err_sync_busy = 0;
+        if (!kept) {
+            forget_saved_gs_error();
+            current_error_type = (PyObject *)cur->ob_type;
+            current_error_msg[0] = '\0';
+        }
+    } else if (_grail_raised_token_read(cur, &type, &msg, &from_grail)) {
+        forget_saved_gs_error();
+        current_error_type = type;
+        snprintf(current_error_msg, sizeof(current_error_msg), "%s", msg);
+        current_error_from_grail = from_grail;
+    } else {
+        char text[sizeof(current_error_msg)];
+        g_err_sync_busy = 1;            /* str() may run, and clear, the indicator */
+        foreign_exc_text(cur, text, sizeof(text));
+        g_err_sync_busy = 0;
+        forget_saved_gs_error();
+        current_error_type = (PyObject *)cur->ob_type;
+        memcpy(current_error_msg, text, sizeof(current_error_msg));
+        current_error_instance = cur;
+    }
+}
+
+/* PyErr_GetRaisedException: the object in the slot, now the caller's -- out
+   of the slot first, so clearing the indicator does not recycle it. */
+extern "C" PyObject *_grail_err_take_published(void) {
+    err_adopt();
+    PyObject **slot = tstate_exc_slot();
+    PyObject *exc = *slot;
+    *slot = NULL;
+    g_err_published = NULL;
+    forget_saved_gs_error();
+    current_error_type = NULL;
+    current_error_msg[0] = '\0';
+    return exc;
+}
+
+/* PyErr_SetRaisedException: exc becomes the slot's object, then the
+   indicator -- the same path as Cython's own restore. */
+extern "C" void _grail_err_set_published(PyObject *exc) {
+    err_adopt();
+    PyObject **slot = tstate_exc_slot();
+    if (*slot != NULL && *slot == g_err_published && *slot != exc) _grail_raised_token_recycle(*slot);
+    *slot = exc;
+    err_adopt();
+}
+
+extern "C" int  _grail_err_from_grail(void) { err_adopt(); return current_error_from_grail; }
+extern "C" void _grail_err_set_from_grail(int v) { current_error_from_grail = v; err_publish(); }
+
+extern "C" void _grail_err_set_instance(PyObject *exc) { current_error_instance = exc; err_publish(); }
+extern "C" PyObject *_grail_err_instance(void) { err_adopt(); return current_error_instance; }
 
 extern "C" void PyErr_SetString(PyObject *type, const char *message) {
     forget_saved_gs_error();
     current_error_type = type;
     strncpy(current_error_msg, message, sizeof(current_error_msg) - 1);
     current_error_msg[sizeof(current_error_msg) - 1] = '\0';
+    err_publish();
 }
 
 extern "C" void PyErr_Format(PyObject *type, const char *format, ...) {
@@ -874,9 +1045,11 @@ extern "C" void PyErr_Format(PyObject *type, const char *format, ...) {
     forget_saved_gs_error();
     current_error_type = type;
     memcpy(current_error_msg, msg, sizeof(current_error_msg));
+    err_publish();
 }
 
 extern "C" PyObject *PyErr_Occurred(void) {
+    err_adopt();
     return current_error_type;
 }
 
@@ -884,6 +1057,7 @@ extern "C" void PyErr_Clear(void) {
     forget_saved_gs_error();
     current_error_type = NULL;
     current_error_msg[0] = '\0';
+    err_publish();
 }
 
 extern "C" void PyErr_SetNone(PyObject *type) {
@@ -891,6 +1065,7 @@ extern "C" void PyErr_SetNone(PyObject *type) {
 }
 
 extern "C" void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptb) {
+    err_adopt();
     *ptype = current_error_type;
     /* The instance itself when there is one, so Fetch -> Restore through a
        wheel keeps its exception object; the message text otherwise. */
@@ -905,15 +1080,18 @@ extern "C" void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptb)
     forget_saved_gs_error();
     current_error_type = NULL;
     current_error_msg[0] = '\0';
+    err_publish();
 }
-
-static int is_foreign_exc_instance(PyObject *v);
-static void foreign_exc_text(PyObject *v, char *buf, size_t cap);
 
 static int keep_grail_exc_instance(PyObject *type, PyObject *value);
 
+static void err_restore(PyObject *type, PyObject *value);
 extern "C" void PyErr_Restore(PyObject *type, PyObject *value, PyObject *tb) {
     (void)tb;
+    err_restore(type, value);
+    err_publish();
+}
+static void err_restore(PyObject *type, PyObject *value) {
     forget_saved_gs_error();
     if (type != NULL && keep_grail_exc_instance(type, value)) return;
     current_error_type = type;
@@ -934,6 +1112,7 @@ extern "C" void PyErr_Restore(PyObject *type, PyObject *value, PyObject *tb) {
 static const char *name_for_exc_type(PyObject *current_error_type);
 
 static const char *get_error_type(void) {
+    err_adopt();
     if (current_error_type == NULL) return NULL;
     /* A wheel's OWN exception class (a PyO3 pyclass extending ValueError) is
        reported as the nearest ancestor the table knows, so Grail raises
@@ -978,6 +1157,8 @@ static const char *name_for_exc_type(PyObject *current_error_type) {
     if (current_error_type == PyExc_UnicodeDecodeError) return "UnicodeDecodeError";
     if (current_error_type == PyExc_UnicodeEncodeError) return "UnicodeEncodeError";
     if (current_error_type == PyExc_AssertionError)    return "AssertionError";
+    if (current_error_type == PyExc_GeneratorExit)     return "GeneratorExit";
+    if (current_error_type == PyExc_UnboundLocalError) return "UnboundLocalError";
     if (current_error_type == PyExc_BaseExceptionGroup) return "BaseExceptionGroup";
     if (current_error_type == PyExc_RuntimeWarning)    return "RuntimeWarning";
     if (current_error_type == PyExc_UserWarning)       return "UserWarning";
@@ -995,6 +1176,7 @@ static const char *name_for_exc_type(PyObject *current_error_type) {
 }
 
 static const char *get_error_message(void) {
+    err_adopt();
     if (current_error_type == NULL) return NULL;
     return current_error_msg;
 }
@@ -1366,6 +1548,7 @@ static void take_callback_error(void) {
         PyErr_SetString(t ? t : PyExc_Exception, msg);
     }
     current_error_from_grail = 1;
+    err_publish();
 }
 
 static int check_gci_error(void) {
@@ -1702,6 +1885,7 @@ extern "C" PyObject *PyUnicode_FromString(const char *str) {
 /* A wheel's own instance of a bytes subtype (numpy.bytes_), in CPython's
    PyBytesObject layout as bytes_tp_new builds it: its data is read in place. */
 static int is_foreign_bytes(PyObject *obj) {
+    if (obj != NULL && obj->ob_type == &PyBytes_Type && has_grail_prefix(obj)) return 1;
     return obj != NULL && is_foreign(obj) && !is_foreign_type(obj)
         && (Py_TYPE(obj)->tp_flags & Py_TPFLAGS_BYTES_SUBCLASS);
 }
@@ -1740,10 +1924,171 @@ extern "C" int PyUnicode_Check(PyObject *obj) {
 }
 
 /* ====================================================================
+ * Ints and strs in CPython's own layout (see GRAIL_PREFIX_MAGIC)
+ *
+ * CPython 3.14: an int is [refcnt][type][lv_tag][30-bit digits...], lv_tag
+ * = (ndigits << 3) | sign (0 positive, 1 zero, 2 negative).  A compact str
+ * is [refcnt][type][length@16][hash@24][state@32] and its data at 40 (ASCII)
+ * or 56 (PyCompactUnicodeObject: utf8_length@40, utf8@48); state holds the
+ * kind in bits 2-4, compact in bit 5, ascii in bit 6.
+ * ==================================================================== */
+
+static inline unsigned grail_str_state(PyObject *o) { return *(uint32_t *)((char *)o + 32); }
+static inline int grail_str_kind(PyObject *o) { return (int)((grail_str_state(o) >> 2) & 7); }
+static inline char *grail_str_data(PyObject *o) {
+    return (char *)o + (((grail_str_state(o) >> 6) & 1) ? 40 : 56);
+}
+static inline Py_ssize_t grail_str_length(PyObject *o) { return *(Py_ssize_t *)((char *)o + 16); }
+
+extern "C" PyObject *PyUnicode_FromKindAndData(int kind, const void *buffer, Py_ssize_t size);
+
+/* The Grail value of an int or str C made, which has no OOP: an int from its
+   digits (the shim makes ints only through the server, so a C-made one is
+   small), a str from its data -- PyUnicode_New filled in place. */
+static OopType prefixed_value_oop(PyObject *obj) {
+    if (obj->ob_type == &PyLong_Type) {
+        uintptr_t tag = *(uintptr_t *)((char *)obj + 16);
+        uint32_t *d = (uint32_t *)((char *)obj + 24);
+        Py_ssize_t n = (Py_ssize_t)(tag >> 3);
+        if (n <= 2) {
+            int64 v = n == 0 ? 0 : (int64)d[0] | (n == 2 ? (int64)d[1] << 30 : 0);
+            return GciI64ToOop((tag & 3) == 2 ? -v : v);
+        }
+        report_bad_pyobj("prefixed_value_oop: a C-made int wider than 60 bits", obj);
+        return none_oop;
+    }
+    if (obj->ob_type == &PyBytes_Type) {
+        PyObject *g = PyBytes_FromStringAndSize((char *)obj + 32, Py_SIZE(obj));
+        return g ? pyobj_oop(g) : none_oop;
+    }
+    PyObject *w = PyUnicode_FromKindAndData(grail_str_kind(obj), grail_str_data(obj),
+                                            grail_str_length(obj));
+    if (w == NULL) return none_oop;
+    return pyobj_oop(w);
+}
+
+/* A fresh str for the caller to fill, in CPython's compact layout with an
+   empty prefix: Cython's string joins (f-strings, error messages) write
+   their pieces straight into PyUnicode_DATA.  It was refused. */
+extern "C" PyObject *PyUnicode_New(Py_ssize_t size, Py_UCS4 maxchar) {
+    if (size < 0 || maxchar > 0x10ffff) {
+        PyErr_SetString(PyExc_SystemError, "invalid size or maximum character for PyUnicode_New");
+        return NULL;
+    }
+    int kind = maxchar < 256 ? 1 : maxchar < 65536 ? 2 : 4;
+    int ascii = maxchar < 128;
+    size_t hdr = ascii ? 40 : 56;
+    char *block = (char *)calloc(1, 16 + hdr + (size_t)(size + 1) * (size_t)kind);
+    if (block == NULL) return PyErr_NoMemory();
+    *(uint64_t *)block = GRAIL_PREFIX_MAGIC;            /* OOP stays 0 */
+    PyObject *o = (PyObject *)(block + 16);
+    o->ob_refcnt = 1;
+    o->ob_type = &PyUnicode_Type;
+    *(Py_ssize_t *)((char *)o + 16) = size;
+    *(Py_hash_t *)((char *)o + 24) = -1;
+    *(uint32_t *)((char *)o + 32) = (uint32_t)((kind << 2) | 0x20 | (ascii ? 0x40 : 0));
+    return o;
+}
+
+/* PyUnicode_DATA's answer (shim_pyo3.cc exports the function; here it is a
+   macro for the shim's own modules). */
+extern "C" void *_grail_str_data_in_layout(PyObject *u) {
+    if (u != NULL && has_grail_prefix(u)) return grail_str_data(u);
+    PyErr_SetString(PyExc_SystemError, "PyUnicode_DATA: not a str in CPython's layout");
+    return NULL;
+}
+
+static inline Py_UCS4 grail_str_read(int kind, const char *data, Py_ssize_t i) {
+    return kind == 1 ? ((const uint8_t *)data)[i]
+         : kind == 2 ? ((const uint16_t *)data)[i] : ((const uint32_t *)data)[i];
+}
+
+/* Copy how_many characters of from into to, a str C is filling (PyUnicode_New).
+   Answers how_many, or -1 with an error. */
+extern "C" Py_ssize_t PyUnicode_CopyCharacters(PyObject *to, Py_ssize_t to_start, PyObject *from,
+                                               Py_ssize_t from_start, Py_ssize_t how_many) {
+    if (to == NULL || from == NULL || !has_grail_prefix(to) || !has_grail_prefix(from)) {
+        PyErr_SetString(PyExc_SystemError, "PyUnicode_CopyCharacters: not strs in CPython's layout");
+        return -1;
+    }
+    if (*(OopType *)((char *)to - 8) != 0) {
+        PyErr_SetString(PyExc_SystemError, "Cannot modify a string currently used");
+        return -1;
+    }
+    Py_ssize_t from_len = grail_str_length(from), to_len = grail_str_length(to);
+    if (from_start < 0 || to_start < 0 || from_start > from_len || to_start > to_len) {
+        PyErr_SetString(PyExc_IndexError, "string index out of range");
+        return -1;
+    }
+    if (how_many > from_len - from_start) how_many = from_len - from_start;
+    if (how_many > to_len - to_start) {
+        PyErr_SetString(PyExc_SystemError, "Cannot write characters past the end of the string");
+        return -1;
+    }
+    int fk = grail_str_kind(from), tk = grail_str_kind(to);
+    const char *fd = grail_str_data(from);
+    char *td = grail_str_data(to);
+    for (Py_ssize_t i = 0; i < how_many; i++) {
+        Py_UCS4 c = grail_str_read(fk, fd, from_start + i);
+        if ((tk == 1 && c > 0xff) || (tk == 2 && c > 0xffff)) {
+            PyErr_SetString(PyExc_SystemError, "Cannot write a character wider than the string's kind");
+            return -1;
+        }
+        if (tk == 1) ((uint8_t *)td)[to_start + i] = (uint8_t)c;
+        else if (tk == 2) ((uint16_t *)td)[to_start + i] = (uint16_t)c;
+        else ((uint32_t *)td)[to_start + i] = c;
+    }
+    return how_many;
+}
+
+/* Shrink or grow a str C is filling, in place when it can. */
+extern "C" int PyUnicode_Resize(PyObject **unicode, Py_ssize_t length) {
+    PyObject *u = unicode ? *unicode : NULL;
+    if (u == NULL || length < 0 || !has_grail_prefix(u) || *(OopType *)((char *)u - 8) != 0) {
+        PyErr_SetString(PyExc_SystemError, "PyUnicode_Resize: not a str C is filling");
+        return -1;
+    }
+    int kind = grail_str_kind(u);
+    size_t hdr = (size_t)(grail_str_data(u) - (char *)u);
+    char *block = (char *)realloc((char *)u - 16, 16 + hdr + (size_t)(length + 1) * (size_t)kind);
+    if (block == NULL) { PyErr_NoMemory(); return -1; }
+    u = (PyObject *)(block + 16);
+    Py_ssize_t old = grail_str_length(u);
+    char *data = grail_str_data(u);
+    if (length > old) memset(data + old * kind, 0, (size_t)(length - old) * (size_t)kind);
+    memset(data + length * kind, 0, (size_t)kind);
+    *(Py_ssize_t *)((char *)u + 16) = length;
+    *unicode = u;
+    return 0;
+}
+
+/* ====================================================================
  * CPython API implementations — Bytes
  * ==================================================================== */
 
 extern "C" PyObject *PyBytes_FromStringAndSize(const char *data, Py_ssize_t len) {
+    /* NO DATA: a bytes of len uninitialised bytes, for the caller to fill in
+       place -- CPython's contract, and how Cython 3 unpacks its string table
+       (it writes the decompressed text at PyBytes_AS_STRING, offset 32).  So
+       it is in CPython's PyBytesObject layout with an empty prefix (see
+       GRAIL_PREFIX_MAGIC), read in place by the shim's bytes functions and
+       made a Grail bytes when it crosses (prefixed_value_oop).  Copying len
+       bytes from NULL into a Grail ByteArray took the gem down. */
+    if (data == NULL) {
+        if (len < 0) {
+            PyErr_SetString(PyExc_SystemError, "Negative size passed to PyBytes_FromStringAndSize");
+            return NULL;
+        }
+        char *block = (char *)calloc(1, 16 + GRAIL_BYTES_SVAL_OFFSET + (size_t)len + 1);
+        if (block == NULL) return PyErr_NoMemory();
+        *(uint64_t *)block = GRAIL_PREFIX_MAGIC;       /* OOP 0: C fills it */
+        PyObject *o = (PyObject *)(block + 16);
+        o->ob_refcnt = 1;
+        o->ob_type = &PyBytes_Type;
+        Py_SET_SIZE(o, len);
+        *(Py_hash_t *)((char *)o + 24) = -1;
+        return o;
+    }
     /* GciCreateByteObj is not available inside user actions.
        Create the ByteArray via GciPerform(ByteArray, "new:", size),
        then copy data into it with GciStoreBytes. */
@@ -1968,6 +2313,7 @@ static int is_foreign(PyObject *obj) {
        caller gets a reportable error rather than a proxy for garbage. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
+    if (has_grail_prefix(obj)) return 0;   /* a Grail int or str */
     /* A subtype body IS a C object -- the base's slots, through its subtype
        mirror -- though pyobj_oop answers its Grail half for it. */
     if (is_type_mirror(obj)) return 0;     /* a Grail class's type mirror */
@@ -2026,6 +2372,7 @@ static void foreign_class_method_names(PyTypeObject *type, char *buf, size_t cap
 static int64 foreign_compare_hash_bits(PyObject *obj);   /* see below */
 static OopType foreign_proxy_oop(PyObject *obj) {
     if (g_diag_on == 1) diag_foreign(obj);
+
     PyTypeObject *mt = obj->ob_type;
     int is_type = mt == &PyType_Type
         || (mt != NULL && plausible_pyobj(mt) && PyType_IsSubtype(mt, &PyType_Type));
@@ -2603,14 +2950,32 @@ static PyObject *do_import_via_server(const char *name) {
     return addr_to_pyobj(r);               /* 0 if server returned 0 (not found) */
 }
 
+extern "C" PyObject *_grail_import_level(PyObject *name, PyObject *globals, PyObject *locals,
+                                         PyObject *fromlist, int level);
+extern "C" PyObject *PyImport_GetModule(PyObject *name);          /* shim_numpy.cc */
 extern "C" PyObject *PyImport_ImportModule(const char *name) {
     PyObject *cached = import_cache_get(name);
     /* A NEW reference, as CPython's is: the caller will decref it. */
     if (cached) { Py_INCREF(cached); return cached; }
     PyObject *m = do_import_via_server(name);
     if (m == NULL) {
-        PyErr_Format(PyExc_ImportError, "No module named '%s'", name);
-        return NULL;
+        /* Not a builtin or a .py on the search path: Grail's whole import,
+           which also finds a package's .so submodule (Cython cimports). */
+        PyObject *n = PyUnicode_FromString(name);
+        m = n ? _grail_import_level(n, NULL, NULL, NULL, 0) : NULL;
+        Py_XDECREF(n);
+        if (m == NULL) return NULL;
+        /* __import__ answers the TOP package for a dotted name. */
+        if (strchr(name, '.') != NULL) {
+            PyObject *top = m;
+            m = PyImport_GetModule(n = PyUnicode_FromString(name));
+            Py_XDECREF(n);
+            Py_DECREF(top);
+            if (m == NULL) {
+                if (!PyErr_Occurred()) PyErr_Format(PyExc_ImportError, "No module named '%s'", name);
+                return NULL;
+            }
+        }
     }
     import_cache_put(name, m);
     return m;
@@ -2978,7 +3343,7 @@ static int foreign_setattr(PyObject *obj, const char *name, PyObject *value) {
 enum ForeignOpKind {
     FOP_BIN, FOP_RBIN, FOP_IBIN, FOP_CMP, FOP_UNARY, FOP_BOOL, FOP_LEN,
     FOP_HASH, FOP_ITER, FOP_NEXT, FOP_GETITEM, FOP_SETITEM, FOP_DELITEM,
-    FOP_CONTAINS
+    FOP_CONTAINS, FOP_INIT
 };
 
 struct ForeignOpDef {
@@ -2990,6 +3355,11 @@ struct ForeignOpDef {
 
 #define NBO(f) ((int)offsetof(PyNumberMethods, f))
 static const ForeignOpDef g_foreign_ops[] = {
+    /* ``T.__init__'' is T's tp_init: Cython's ``BitGenerator.__init__(self,
+       seed)'' in MT19937.__init__ calls it so, and it answered object's
+       __init__, a no-op -- every numpy.random bit generator came out with
+       no seed sequence. */
+    {"__init__", FOP_INIT, 0, "__init__"},
     {"__add__", FOP_BIN, NBO(nb_add), "+"},             {"__radd__", FOP_RBIN, NBO(nb_add), "+"},
     {"__sub__", FOP_BIN, NBO(nb_subtract), "-"},        {"__rsub__", FOP_RBIN, NBO(nb_subtract), "-"},
     {"__mul__", FOP_BIN, NBO(nb_multiply), "*"},        {"__rmul__", FOP_RBIN, NBO(nb_multiply), "*"},
@@ -3067,6 +3437,11 @@ static void *foreign_tp_iternext(PyTypeObject *t) {
         if (t->tp_iternext) return (void *)t->tp_iternext;
     return NULL;
 }
+static void *foreign_tp_init(PyTypeObject *t) {
+    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+        if (t->tp_init) return (void *)t->tp_init;
+    return NULL;
+}
 
 /* tp_hash and tp_richcompare go together, as CPython inherits them: the first
    type defining either decides.  Comparison without a hash is CPython's
@@ -3131,6 +3506,7 @@ static int foreign_op_present(PyTypeObject *t, const ForeignOpDef *d) {
         case FOP_SETITEM:
         case FOP_DELITEM:  return foreign_mp_ass(t) != NULL || foreign_sq_ass_item(t) != NULL;
         case FOP_CONTAINS: return foreign_sq_contains(t) != NULL;
+        case FOP_INIT:     return foreign_tp_init(t) != NULL;
     }
     return 0;
 }
@@ -3422,7 +3798,30 @@ static PyTypeObject GrailSlotWrapper_Type;
 static PyTypeObject GrailMethodWrapper_Type;
 
 static PyObject *foreign_wrapper_call(PyObject *self, const ForeignOpDef *op,
-                                      PyObject *args, Py_ssize_t from) {
+                                      PyObject *args, Py_ssize_t from, PyObject *kw,
+                                      PyTypeObject *owner) {
+    if (op->kind == FOP_INIT) {
+        /* tp_init(self, args, kwargs): every argument after self, and the
+           keywords, which the fixed-arity operators below never take.  The
+           OWNER's slot -- the type the wrapper was read from, as CPython's
+           wrapper_descriptor holds it: ``BitGenerator.__init__(self, seed)''
+           inside MT19937.__init__ found MT19937's own tp_init through
+           Py_TYPE(self) and recursed until the C stack ran out. */
+        initproc f = (initproc)foreign_tp_init(owner ? owner : Py_TYPE(self));
+        if (f == NULL) {
+            PyErr_SetString(PyExc_TypeError, "object has no __init__ slot");
+            return NULL;
+        }
+        PyObject *rest = PyTuple_GetSlice(args, from, PyTuple_Size(args));
+        if (rest == NULL) return NULL;
+        rest = to_real_tuple(rest);       /* the slot reads its size inline */
+        if (rest == NULL) return NULL;
+        int rc = f(self, rest, kw);
+        Py_DECREF(rest);
+        if (rc < 0) return NULL;
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
     Py_ssize_t n = PyTuple_Size(args) - from;
     PyObject *a = n >= 1 ? PyTuple_GetItem(args, from) : NULL;
     PyObject *b = n >= 2 ? PyTuple_GetItem(args, from + 1) : NULL;
@@ -3452,7 +3851,7 @@ static PyObject *slotwrapper_call(PyObject *w, PyObject *args, PyObject *kw) {
                      d->op->name, d->d_type ? d->d_type->tp_name : "?");
         return NULL;
     }
-    return foreign_wrapper_call(PyTuple_GetItem(args, 0), d->op, args, 1);
+    return foreign_wrapper_call(PyTuple_GetItem(args, 0), d->op, args, 1, kw, d->d_type);
 }
 
 static PyObject *new_method_wrapper(PyObject *self, const ForeignOpDef *op);
@@ -3466,7 +3865,7 @@ static PyObject *slotwrapper_get(PyObject *w, PyObject *obj, PyObject *type) {
 static PyObject *methodwrapper_call(PyObject *w, PyObject *args, PyObject *kw) {
     (void)kw;
     GrailMethodWrapper *m = (GrailMethodWrapper *)w;
-    return foreign_wrapper_call(m->self, m->op, args, 0);
+    return foreign_wrapper_call(m->self, m->op, args, 0, kw, NULL);
 }
 
 static PyObject *wrapper_getattro(PyObject *w, PyObject *name) {
@@ -3640,6 +4039,18 @@ static PyMethodDef grail_tp_new_def = {
     "Create and return a new object.  See help(type) for accurate signature."
 };
 
+/* One of the shim's static builtin types, which cross into Grail as the
+   Grail class of that name (foreign_proxy_oop). */
+static int is_builtin_static_type(PyTypeObject *t) {
+    PyTypeObject *const statics[] = { &PyType_Type, &PyBaseObject_Type, &PyFloat_Type,
+        &PyLong_Type, &PyBool_Type, &PyUnicode_Type, &PyBytes_Type, &PyList_Type,
+        &PyDict_Type, &PyTuple_Type, &_PyNone_Type };
+    for (size_t i = 0; i < sizeof(statics) / sizeof(statics[0]); i++)
+        if (t == statics[i]) return 1;
+    return 0;
+}
+
+extern "C" PyObject *PyMethod_New(PyObject *func, PyObject *self);   /* shim_numpy.cc */
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     int is_type = is_foreign_type(obj);
     PyTypeObject *start = is_type ? (PyTypeObject *)obj : obj->ob_type;
@@ -3669,6 +4080,22 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
                 if (strcmp(mb->name, name) == 0) return PyMember_GetOne((const char *)obj, mb);
         }
     }
+    /* type's own members, read off the struct as CPython's type_members do:
+       numpy's add_newdoc tests ``obj.__flags__ & Py_TPFLAGS_HEAPTYPE'' of
+       every type it documents. */
+    if (is_type) {
+        PyTypeObject *t = (PyTypeObject *)obj;
+        if (strcmp(name, "__flags__") == 0) return PyLong_FromUnsignedLong(t->tp_flags);
+        if (strcmp(name, "__basicsize__") == 0) return PyLong_FromSsize_t(t->tp_basicsize);
+        if (strcmp(name, "__itemsize__") == 0) return PyLong_FromSsize_t(t->tp_itemsize);
+        if (strcmp(name, "__dictoffset__") == 0) return PyLong_FromSsize_t(t->tp_dictoffset);
+        if (strcmp(name, "__weakrefoffset__") == 0) return PyLong_FromSsize_t(t->tp_weaklistoffset);
+        /* The tuples PyType_Ready builds (grail_set_mro). */
+        if (strcmp(name, "__base__") == 0)
+            return Py_NewRef(t->tp_base != NULL ? (PyObject *)t->tp_base : Py_None);
+        if (strcmp(name, "__bases__") == 0 && t->tp_bases != NULL) return Py_NewRef(t->tp_bases);
+        if (strcmp(name, "__mro__") == 0 && t->tp_mro != NULL) return Py_NewRef(t->tp_mro);
+    }
     PyObject *v = foreign_type_dict_lookup(start, name);
     /* A descriptor found in the type's dict binds to an instance, as in
        CPython's PyObject_GenericGetAttr.  A type read caches one there
@@ -3678,6 +4105,17 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     if (v != NULL && !is_type && Py_TYPE(v) != NULL && plausible_pyobj(Py_TYPE(v))
             && Py_TYPE(v)->tp_descr_get != NULL)
         return Py_TYPE(v)->tp_descr_get(v, obj, (PyObject *)start);
+    /* A GRAIL function in a C type's dict binds too, as a function's __get__
+       does: Cython 3.3 keeps a cdef class's methods there as functions, and
+       ``ss.generate_state(2)'' called the unbound function ("takes at least
+       1 positional argument (0 given)").  Through types.MethodType, which is
+       what PyMethod_New is. */
+    if (v != NULL && !is_type && !is_foreign(v) && Py_TYPE(v) != NULL
+            && Py_TYPE(v)->tp_name != NULL && strcmp(Py_TYPE(v)->tp_name, "function") == 0) {
+        PyObject *bound = PyMethod_New(v, obj);
+        Py_DECREF(v);
+        return bound;
+    }
     if (v != NULL) return v;
     for (PyTypeObject *t = start; t != NULL; t = t->tp_base) {
         for (PyMethodDef *ml = t->tp_methods; ml && ml->ml_name; ml++) {
@@ -3718,6 +4156,30 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     if (op != NULL && foreign_op_present(start, op)) {
         if (is_type) return cache_type_descr(start, name, new_slot_wrapper(start, op));
         return new_method_wrapper(obj, op);
+    }
+    /* PAST THE C CHAIN, GRAIL'S.  A wheel's type whose tp_base chain reaches
+       one of the shim's builtin types -- object, for every cdef class --
+       inherits that class's attributes, as CPython's MRO ends in object:
+       Cython's __Pyx_setup_reduce reads ``T.__reduce_ex__'' off every cdef
+       class and failed with "foreign object has no attribute".  Types only:
+       object's methods bound to a C instance are not this.  NOT type's own
+       data descriptors, which CPython's type_getattro reads off the METATYPE
+       before the MRO: object's __name__ answered for every DType class, and
+       numpy.dtypes._add_dtype_helper filed them all under 'object'. */
+    static const char *const type_data_descrs[] = {
+        "__abstractmethods__", "__annotate__", "__annotations__", "__base__", "__bases__",
+        "__basicsize__", "__dict__", "__dictoffset__", "__doc__", "__flags__",
+        "__itemsize__", "__module__", "__mro__", "__name__", "__qualname__",
+        "__text_signature__", "__type_params__", "__weakrefoffset__" };
+    for (size_t i = 0; is_type && i < sizeof(type_data_descrs) / sizeof(type_data_descrs[0]); i++)
+        if (strcmp(name, type_data_descrs[i]) == 0) return NULL;
+    if (is_type) {
+        for (PyTypeObject *t = start->tp_base; t != NULL && plausible_pyobj((PyObject *)t); t = t->tp_base) {
+            if (!is_builtin_static_type(t)) continue;
+            PyObject *v = PyObject_GetAttrString((PyObject *)t, name);
+            if (v == NULL) PyErr_Clear();
+            return v;
+        }
     }
     return NULL;
 }
@@ -3990,17 +4452,38 @@ static int find_or_create_module_attrs(PyObject *module) {
     return idx;
 }
 
+static const char *module_name_for(PyObject *module);   /* below, with module_names */
+
 extern "C" PyObject *PyModule_GetDict(PyObject *module) {
     /* NumPy's init calls this early to get the namespace to populate.
        Return a lazily-created real (Grail-backed) dict associated with the
        module; PyDict_SetItemString into it delegates to Grail. */
     int idx = find_or_create_module_attrs(module);
     if (idx < 0) return NULL;
-    if (module_attrs[idx].dict == NULL)
-        module_attrs[idx].dict = PyDict_New();
+    if (module_attrs[idx].dict == NULL) {
+        PyObject *d = PyDict_New();
+        module_attrs[idx].dict = d;
+        /* __name__ and __package__, as every CPython module dict has: Cython
+           passes this dict as the globals of its relative imports
+           (``from .bit_generator cimport ...''), and __import__ finds the
+           package there -- "attempted relative import with no known parent
+           package" without them.  The name is the dotted one the module was
+           loaded under (shimDynLoad). */
+        const char *full = d ? module_name_for(module) : NULL;
+        if (full != NULL) {
+            const char *dot = strrchr(full, '.');
+            PyObject *n = PyUnicode_FromString(full);
+            PyObject *p = dot ? PyUnicode_FromStringAndSize(full, dot - full) : PyUnicode_FromString("");
+            if (n) PyDict_SetItemString(d, "__name__", n);
+            if (p) PyDict_SetItemString(d, "__package__", p);
+            Py_XDECREF(n); Py_XDECREF(p);
+            PyErr_Clear();
+        }
+    }
     return module_attrs[idx].dict;
 }
 
+static int module_dict_store(PyObject *module, const char *name, PyObject *value);
 extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
                                      PyObject *value) {
     int idx = find_or_create_module_attrs(module);
@@ -4016,7 +4499,7 @@ extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
     Py_XINCREF(value);
     module_attrs[idx].attrs[ai].obj_val = value;
     module_attrs[idx].attr_count++;
-    return 0;
+    return module_dict_store(module, name, value);
 }
 
 extern "C" int PyModule_Add(PyObject *module, const char *name,
@@ -4102,9 +4585,20 @@ static PyObject *shim_module_getattr(PyObject *module, const char *name) {
     return NULL;
 }
 
+/* The module's __dict__ holds what is stored on it, as in CPython, where
+   the dict IS the namespace: Cython reads its globals -- the types it set
+   with PyObject_SetAttr, and ``__pyx_capi__'', which it looks for there
+   before it makes a new one -- from PyModule_GetDict.  Kept in the table too,
+   for the readers of that. */
+static int module_dict_store(PyObject *module, const char *name, PyObject *value) {
+    PyObject *d = PyModule_GetDict(module);
+    return (d == NULL || value == NULL) ? 0 : PyDict_SetItemString(d, name, value);
+}
+
 static int shim_module_setattr(PyObject *module, const char *name, PyObject *value) {
     int idx = find_or_create_module_attrs(module);
     if (idx < 0) return -1;
+    if (module_dict_store(module, name, value) < 0) return -1;
     for (int i = 0; i < module_attrs[idx].attr_count; i++) {
         ModuleAttr *a = &module_attrs[idx].attrs[i];
         if (strcmp(a->name, name) == 0) {
@@ -4499,10 +4993,20 @@ extern "C" const char *_grail_static_exc_name(PyObject *type) {
    when numpy instantiates a DType, e.g. PyObject_Call(StringDType, ()).
    Args are converted to a real-layout tuple so the wheel's C can struct-
    access them. */
+extern "C" PyObject *PyVectorcall_Call(PyObject *callable, PyObject *tuple, PyObject *kwargs);   /* below */
 static PyObject *call_foreign(PyObject *callable, PyObject *args,
                               PyObject *kwargs) {
     PyTypeObject *mt = callable->ob_type;
     PyObject *real_args = to_real_tuple(args);
+    /* A VECTORCALL type is called through its vectorcall entry, as CPython's
+       PyObject_Call does (_PyVectorcall_Call): the keywords travel as a
+       kwnames tuple, never as the dict.  Cython's cyfunction tp_call sizes
+       a keyword dict with the INLINE PyDict_GET_SIZE (ma_used, offset 16),
+       which on a Grail dict read the OOP -- a keyword call crashed and a
+       positional one answered NULL with no error. */
+    if (mt && (mt->tp_flags & Py_TPFLAGS_HAVE_VECTORCALL) && mt->tp_vectorcall_offset > 0
+            && *(vectorcallfunc *)((char *)callable + mt->tp_vectorcall_offset) != NULL)
+        return PyVectorcall_Call(callable, real_args, kwargs);
     /* A defined tp_call on the (meta)type handles general callables. */
     if (mt && mt->tp_call)
         return mt->tp_call(callable, real_args, kwargs);
@@ -4665,10 +5169,72 @@ extern "C" PyObject *PyNumber_Power(PyObject *a, PyObject *b, PyObject *c) {
     return (c == NULL || c == Py_None) ? number_op("pow", 2, a, b, NULL)
                                        : number_op("pow", 3, a, b, c);
 }
+extern "C" PyObject *PyNumber_MatrixMultiply(PyObject *a, PyObject *b) { return number_op("matmul", 2, a, b, NULL); }
+/* The augmented assignments: operator's i-functions, which try __iadd__ and
+   friends and fall back to the binary form, as CPython's in-place slots do.
+   Cython's ``x += y'' on objects compiles to these. */
+extern "C" PyObject *PyNumber_InPlaceAdd(PyObject *a, PyObject *b)         { return number_op("iadd", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceSubtract(PyObject *a, PyObject *b)    { return number_op("isub", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceMultiply(PyObject *a, PyObject *b)    { return number_op("imul", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceFloorDivide(PyObject *a, PyObject *b) { return number_op("ifloordiv", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceTrueDivide(PyObject *a, PyObject *b)  { return number_op("itruediv", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceRemainder(PyObject *a, PyObject *b)   { return number_op("imod", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceLshift(PyObject *a, PyObject *b)      { return number_op("ilshift", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceRshift(PyObject *a, PyObject *b)      { return number_op("irshift", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceAnd(PyObject *a, PyObject *b)         { return number_op("iand", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceOr(PyObject *a, PyObject *b)          { return number_op("ior", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceXor(PyObject *a, PyObject *b)         { return number_op("ixor", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlaceMatrixMultiply(PyObject *a, PyObject *b) { return number_op("imatmul", 2, a, b, NULL); }
+extern "C" PyObject *PyNumber_InPlacePower(PyObject *a, PyObject *b, PyObject *c) {
+    (void)c;   /* three-argument in-place pow has no operator; CPython ignores it too */
+    return number_op("ipow", 2, a, b, NULL);
+}
 extern "C" PyObject *PyNumber_Negative(PyObject *a) { return number_op("neg", 1, a, NULL, NULL); }
 extern "C" PyObject *PyNumber_Positive(PyObject *a) { return number_op("pos", 1, a, NULL, NULL); }
 extern "C" PyObject *PyNumber_Absolute(PyObject *a) { return number_op("abs", 1, a, NULL, NULL); }
 extern "C" PyObject *PyNumber_Invert(PyObject *a)   { return number_op("invert", 1, a, NULL, NULL); }
+/* int, bool and float have their number slots, as every CPython builtin
+   does: a wheel calls them DIRECTLY -- Cython's int fast paths fetch
+   ``Py_TYPE(op)->tp_as_number->nb_and'' (and the rest) for an operand it
+   does not handle inline, and raised "unsupported operand type(s) for &:
+   'int' and 'int'" from SeedSequence when they were NULL.  Each is the
+   shim's PyNumber_* function, which asks the server and never a slot. */
+extern "C" PyObject *PyNumber_Float(PyObject *);   /* shim_numpy.cc */
+extern "C" PyObject *PyNumber_Long(PyObject *);    /* shim_numpy.cc */
+static PyNumberMethods grail_value_number_methods;
+static void install_value_type_slots(void) {
+    PyNumberMethods *m = &grail_value_number_methods;
+    m->nb_add = PyNumber_Add;           m->nb_subtract = PyNumber_Subtract;
+    m->nb_multiply = PyNumber_Multiply; m->nb_remainder = PyNumber_Remainder;
+    m->nb_divmod = PyNumber_Divmod;     m->nb_power = PyNumber_Power;
+    m->nb_negative = PyNumber_Negative; m->nb_positive = PyNumber_Positive;
+    m->nb_absolute = PyNumber_Absolute; m->nb_bool = PyObject_IsTrue;
+    m->nb_invert = PyNumber_Invert;     m->nb_lshift = PyNumber_Lshift;
+    m->nb_rshift = PyNumber_Rshift;     m->nb_and = PyNumber_And;
+    m->nb_xor = PyNumber_Xor;           m->nb_or = PyNumber_Or;
+    m->nb_int = PyNumber_Long;          m->nb_float = PyNumber_Float;
+    m->nb_inplace_add = PyNumber_InPlaceAdd;
+    m->nb_inplace_subtract = PyNumber_InPlaceSubtract;
+    m->nb_inplace_multiply = PyNumber_InPlaceMultiply;
+    m->nb_inplace_remainder = PyNumber_InPlaceRemainder;
+    m->nb_inplace_power = PyNumber_InPlacePower;
+    m->nb_inplace_lshift = PyNumber_InPlaceLshift;
+    m->nb_inplace_rshift = PyNumber_InPlaceRshift;
+    m->nb_inplace_and = PyNumber_InPlaceAnd;
+    m->nb_inplace_xor = PyNumber_InPlaceXor;
+    m->nb_inplace_or = PyNumber_InPlaceOr;
+    m->nb_floor_divide = PyNumber_FloorDivide;
+    m->nb_true_divide = PyNumber_TrueDivide;
+    m->nb_inplace_floor_divide = PyNumber_InPlaceFloorDivide;
+    m->nb_inplace_true_divide = PyNumber_InPlaceTrueDivide;
+    m->nb_index = PyNumber_Index;
+    m->nb_matrix_multiply = PyNumber_MatrixMultiply;
+    m->nb_inplace_matrix_multiply = PyNumber_InPlaceMatrixMultiply;
+    PyLong_Type.tp_as_number = m;
+    PyBool_Type.tp_as_number = m;
+    PyFloat_Type.tp_as_number = m;
+}
+
 /* An int, a float (bool included), or anything with __index__ / __float__
    / __int__ -- CPython's test; asked of the server only past the two inline
    cases. */
@@ -5535,6 +6101,13 @@ static int g_dyn_ever_count = 0;
 static char      module_names[MAX_MODULES][64];
 static int       num_modules = 0;
 
+/* The dotted name a loaded module was loaded under, or NULL. */
+static const char *module_name_for(PyObject *module) {
+    for (int i = 0; i < num_modules; i++)
+        if (module_cache[i] == module) return module_names[i];
+    return NULL;
+}
+
 /* Multi-phase init: allocate state and run Py_mod_exec slots.
    Returns 0 on success, -1 if an exec slot failed. */
 static int run_module_exec_slots(PyObject *mod) {
@@ -5676,6 +6249,7 @@ static void raise_error(const char *message) {
    to be fixed at the call site, by checking and CONSUMING.  What the boundary
    must do is never let an outstanding error go unreported. */
 static void check_and_raise_error(void) {
+    err_adopt();       /* Cython may have raised, or cleared, through the slot */
     /* Sample-and-clear the GCI error state FIRST, unconditionally, for two
        independent reasons:
          (a) it must not still be pending when raise_error() performs
@@ -6009,7 +6583,7 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
     if (fa != Py_False) false_oop = *(OopType *)((char *)fa + 16);
 
     /* Set type pointers on the static singletons. */
-    _Py_TrueStruct.ob_type  = &PyBool_Type;
+    _Py_TrueStruct.ob_base.ob_type  = &PyBool_Type;
     if (_Py_NotImplementedStruct.ob_type == NULL) {
         init_type(&_PyNotImplemented_Type, "NotImplementedType", &PyBaseObject_Type,
                   Py_TPFLAGS_DEFAULT);
@@ -6021,7 +6595,7 @@ static OopType shimInit(OopType serverOop, OopType noneAddr,
         register_shim_type(&_PyEllipsis_Type);
         _Py_EllipsisObject.ob_type = &_PyEllipsis_Type;
     }
-    _Py_FalseStruct.ob_type = &PyBool_Type;
+    _Py_FalseStruct.ob_base.ob_type = &PyBool_Type;
     check_and_raise_error();
 
     return OOP_TRUE;
@@ -6046,7 +6620,8 @@ static PyObject *static_exc_named(const char *name) {
         PyExc_BufferError, PyExc_EOFError, PyExc_KeyboardInterrupt,
         PyExc_UnicodeError, PyExc_UnicodeDecodeError, PyExc_UnicodeEncodeError,
         PyExc_AssertionError, PyExc_BaseExceptionGroup, PyExc_DeprecationWarning,
-        PyExc_FutureWarning, PyExc_RuntimeWarning, PyExc_UserWarning };
+        PyExc_FutureWarning, PyExc_RuntimeWarning, PyExc_UserWarning,
+        PyExc_GeneratorExit, PyExc_UnboundLocalError };
     for (size_t i = 0; i < sizeof(excs) / sizeof(excs[0]); i++) {
         const char *n = name_for_exc_type(excs[i]);
         if (n && strcmp(n, name) == 0) return excs[i];
@@ -6100,6 +6675,36 @@ static OopType shimTypeAddr(OopType nameOop)
  * Type creation API stubs
  * ==================================================================== */
 
+/* tp_bases and tp_mro as real-layout tuples, as PyType_Ready gives every
+   type: the MRO is the type, then its tp_base chain, which is the C3 order
+   for single inheritance.  Cython reads both INLINE (PyTuple_GET_SIZE /
+   GET_ITEM) when it readies a cdef class. */
+static void grail_set_mro(PyTypeObject *type) {
+    /* tp_bases first, as type_ready_set_bases: (tp_base,), or () for object.
+       Cython reads its size inline while it sets up a cdef class (a read of
+       address 0x10 when it was NULL). */
+    if (type->tp_bases == NULL) {
+        PyObject *bases = PyTuple_New(type->tp_base ? 1 : 0);
+        if (bases == NULL) { PyErr_Clear(); return; }
+        if (type->tp_base) {
+            Py_INCREF((PyObject *)type->tp_base);
+            PyTuple_SET_ITEM(bases, 0, (PyObject *)type->tp_base);
+        }
+        type->tp_bases = bases;
+    }
+    if (type->tp_mro != NULL) return;
+    Py_ssize_t n = 0;
+    for (PyTypeObject *t = type; t != NULL && n < 64; t = t->tp_base) n++;
+    PyObject *mro = PyTuple_New(n);
+    if (mro == NULL) { PyErr_Clear(); return; }
+    Py_ssize_t i = 0;
+    for (PyTypeObject *t = type; t != NULL && i < n; t = t->tp_base, i++) {
+        Py_INCREF((PyObject *)t);
+        PyTuple_SET_ITEM(mro, i, (PyObject *)t);
+    }
+    type->tp_mro = mro;
+}
+
 extern "C" int PyType_Ready(PyTypeObject *type) {
     /* In real CPython, this resolves bases, populates tp_dict, etc.
        For our shim, just set the READY flag and default base.
@@ -6115,6 +6720,10 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
     if (type->tp_base == NULL && type != &PyBaseObject_Type)
         type->tp_base = &PyBaseObject_Type;
     type->tp_flags |= Py_TPFLAGS_READY;
+    /* A readied type has its dict and its MRO, as in CPython: Cython stores
+       a cdef class's __pyx_vtable__ straight into tp_dict, and reads tp_mro. */
+    if (type->tp_dict == NULL) type->tp_dict = PyDict_New();
+    grail_set_mro(type);
     type->ob_base.ob_base.ob_refcnt = 1;
     /* Only default the metatype when unset — matching CPython, which does
        `if (Py_IS_TYPE(type, NULL)) Py_SET_TYPE(type, &PyType_Type);`.
@@ -6162,13 +6771,17 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
         if (type->tp_itemsize == 0) type->tp_itemsize = base->tp_itemsize;
         /* CPython's inherit_special: a subtype of a builtin value type is
            one for PyBytes_Check and the rest, which read these flags inline.
-           numpy.bytes_ failed PyBytes_Check in numpy's own C.  (TYPE_SUBCLASS
-           is not inherited here: a wheel's metatype -- numpy's _DTypeMeta --
-           would turn every DType class into a PyType_Check'd type.) */
+           numpy.bytes_ failed PyBytes_Check in numpy's own C.  TYPE_SUBCLASS
+           and BASE_EXC_SUBCLASS too, as inherit_special passes every one: a
+           wheel's metatype (numpy's _DTypeMeta) is a type subclass, so a
+           DType class -- numpy.dtype itself -- passes PyType_Check, which a
+           Cython module's __Pyx_ImportType reads inline ("numpy.dtype is not
+           a type object" when it was left out). */
         type->tp_flags |= base->tp_flags & (Py_TPFLAGS_LONG_SUBCLASS
             | Py_TPFLAGS_LIST_SUBCLASS | Py_TPFLAGS_TUPLE_SUBCLASS
             | Py_TPFLAGS_BYTES_SUBCLASS | Py_TPFLAGS_UNICODE_SUBCLASS
-            | Py_TPFLAGS_DICT_SUBCLASS);
+            | Py_TPFLAGS_DICT_SUBCLASS | Py_TPFLAGS_TYPE_SUBCLASS
+            | Py_TPFLAGS_BASE_EXC_SUBCLASS);
 #undef INHERIT_SLOT
     }
     /* object's default allocator — every type needs a working tp_alloc. */
@@ -6261,21 +6874,33 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
     type->tp_flags = spec->flags | Py_TPFLAGS_HEAPTYPE | Py_TPFLAGS_READY;
     type->tp_base = &PyBaseObject_Type;
 
-    /* A single type object passed as `bases` becomes tp_base. A TUPLE of
-       bases cannot be supported: the tuple lives in Smalltalk and type
-       objects have no OOP at offset 16, so its elements are unreadable —
-       reject loudly rather than mis-derive. */
+    /* `bases` is a type, or a tuple of them (Cython passes ``(base,)'' for
+       every cdef class).  The first becomes tp_base -- CPython's best_base
+       whenever the first base has the widest layout, as single inheritance
+       does -- and a tuple is kept as tp_bases.  A tuple's elements are read
+       with PyTuple_GetItem, which answers a real-layout tuple's in C and a
+       Grail tuple's through the server; a type element comes back as its C
+       pointer either way. */
     if (bases != NULL) {
-        if (Py_TYPE(bases) == &PyType_Type) {
-            type->tp_base = (PyTypeObject *)bases;
-        } else {
+        PyTypeObject *bt = Py_TYPE(bases);
+        int bases_is_type = bt == &PyType_Type || PyType_IsSubtype(bt, &PyType_Type);
+        PyObject *first = bases_is_type ? bases
+            : (PyTuple_Check(bases) && PyTuple_Size(bases) > 0) ? PyTuple_GetItem(bases, 0) : NULL;
+        PyTypeObject *ft = first ? Py_TYPE(first) : NULL;
+        if (first == NULL || ft == NULL
+                || !(ft == &PyType_Type || PyType_IsSubtype(ft, &PyType_Type))) {
             free(type);
-            PyErr_SetString(PyExc_TypeError,
-                "PyType_FromSpecWithBases: only a single type object is "
-                "supported as bases in the Grail shim (not a tuple)");
+            if (!PyErr_Occurred())
+                PyErr_SetString(PyExc_TypeError,
+                    "PyType_FromSpecWithBases: bases must be a type or a non-empty tuple of types");
             return NULL;
         }
+        type->tp_base = (PyTypeObject *)first;
+        if (!bases_is_type) { Py_INCREF(bases); type->tp_bases = bases; }
     }
+
+    type->tp_dict = PyDict_New();     /* see PyType_Ready */
+    grail_set_mro(type);
 
     int idx = heap_type_count++;
     heap_types[idx].type = type;
@@ -6312,6 +6937,17 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
             case Py_tp_new:        type->tp_new = (newfunc)slot->pfunc; break;
             case Py_tp_free:       type->tp_free = (freefunc)slot->pfunc; break;
             case Py_tp_finalize:   type->tp_finalize = (destructor)slot->pfunc; break;
+            /* A descriptor type binds: Cython's cyfunction (every method of a
+               cdef class) has tp_descr_get, and without it an instance read
+               answered the unbound function -- ``generate_state() takes at
+               least 1 positional argument (0 given)''. */
+            case Py_tp_descr_get:  type->tp_descr_get = (descrgetfunc)slot->pfunc; break;
+            case Py_tp_descr_set:  type->tp_descr_set = (descrsetfunc)slot->pfunc; break;
+            case Py_tp_getattr:    type->tp_getattr = (getattrfunc)slot->pfunc; break;
+            case Py_tp_setattr:    type->tp_setattr = (setattrfunc)slot->pfunc; break;
+            case Py_tp_is_gc:      type->tp_is_gc = (inquiry)slot->pfunc; break;
+            case Py_tp_del:        type->tp_del = (destructor)slot->pfunc; break;
+            case Py_tp_vectorcall: type->tp_vectorcall = (vectorcallfunc)slot->pfunc; break;
 
             /* Mapping protocol slots */
             case Py_mp_length:
@@ -6367,6 +7003,17 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
         }
     }
 
+    /* The offsets a spec declares as members, as type_from_spec reads them:
+       ``__vectorcalloffset__'', ``__dictoffset__'' and ``__weaklistoffset__''.
+       Cython declares its cyfunction's vectorcall slot this way, and without
+       tp_vectorcall_offset a call fell to its tp_call, which sizes a keyword
+       dict inline. */
+    for (PyMemberDef *mb = type->tp_members; mb != NULL && mb->name != NULL; mb++) {
+        if (strcmp(mb->name, "__vectorcalloffset__") == 0) type->tp_vectorcall_offset = mb->offset;
+        else if (strcmp(mb->name, "__dictoffset__") == 0) type->tp_dictoffset = mb->offset;
+        else if (strcmp(mb->name, "__weaklistoffset__") == 0) type->tp_weaklistoffset = mb->offset;
+    }
+
     /* A NEGATIVE basicsize (3.12) means "the base's size plus this much":
        the class's own data follows the base's, aligned, and is found with
        PyObject_GetTypeData.  abi3 PyO3 declares every pyclass this way.
@@ -6388,6 +7035,16 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
         if (!type->tp_as_buffer && type->tp_base->tp_as_buffer)
             type->tp_as_buffer = type->tp_base->tp_as_buffer;
     }
+
+    /* The allocator, as type_ready inherits it: a spec with no Py_tp_alloc
+       slot gets its base's, and object's is PyType_GenericAlloc.  It was
+       left NULL, so a tp_new calling ``type->tp_alloc(type, 0)'' -- what a
+       C type's tp_new does -- jumped to 0. */
+    if (type->tp_alloc == NULL)
+        type->tp_alloc = type->tp_base && type->tp_base->tp_alloc
+            ? type->tp_base->tp_alloc : PyType_GenericAlloc;
+    if (type->tp_free == NULL && type->tp_base)
+        type->tp_free = type->tp_base->tp_free;
 
     return (PyObject *)type;
 }
@@ -6456,6 +7113,16 @@ extern "C" PyObject *PyType_GetModule(PyTypeObject *type) {
  * Returns: an Array of method name Strings (the module's method table)
  * ==================================================================== */
 
+/* Called as a user action, shimDynLoad reports a failure by raising across
+   the boundary (raise_error).  Called from C inside a user action already in
+   flight (grail_import_level, for an import C asked for), it must not: the
+   failure becomes the pending ImportError and the caller returns NULL. */
+static int g_dynload_direct = 0;
+static void dynload_fail(const char *msg) {
+    if (g_dynload_direct) PyErr_SetString(PyExc_ImportError, msg);
+    else raise_error(msg);
+}
+
 static OopType shimDynLoad(OopType pathOop, OopType nameOop)
 {
     char path[512], name[64];
@@ -6476,7 +7143,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
                 OopType nameStr = GciNewString(methods[j].ml_name);
                 GciStoreOop(arr, j + 1, nameStr);
             }
-            check_and_raise_error();
+            if (!g_dynload_direct) check_and_raise_error();
             return arr;
         }
     }
@@ -6489,7 +7156,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
                 "ImportError: extension module '%s' was initialised in an earlier "
                 "session of this gem process and cannot be initialised again; "
                 "import it in a new gem process", name);
-            raise_error(msg);
+            dynload_fail(msg);
             return OOP_NIL;
         }
     }
@@ -6499,7 +7166,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     if (!handle) {
         char msg[1024];
         snprintf(msg, sizeof(msg), "dlopen failed: %s", dlerror());
-        raise_error(msg);
+        dynload_fail(msg);
         return OOP_NIL;
     }
 
@@ -6516,7 +7183,7 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     if (!initFunc) {
         char msg[1024];
         snprintf(msg, sizeof(msg), "Symbol not found: %s in %s", initName, path);
-        raise_error(msg);
+        dynload_fail(msg);
         return OOP_NIL;
     }
 
@@ -6525,13 +7192,13 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
     if (!mod) {
         char msg[256];
         snprintf(msg, sizeof(msg), "Module init failed: %s", name);
-        raise_error(msg);
+        dynload_fail(msg);
         return OOP_NIL;
     }
 
     /* Cache the module */
     if (num_modules >= MAX_MODULES) {
-        raise_error("Too many loaded modules (increase MAX_MODULES)");
+        dynload_fail("Too many loaded modules (increase MAX_MODULES)");
         return OOP_NIL;
     }
     snprintf(module_names[num_modules], sizeof(module_names[num_modules]), "%s", name);
@@ -6548,9 +7215,10 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
        this, so dynamically loaded modules silently skipped their init. */
     if (run_module_exec_slots(mod) != 0) {
         num_modules--;
+        if (g_dynload_direct && PyErr_Occurred()) return OOP_NIL;
         char msg[256];
         snprintf(msg, sizeof(msg), "Module exec failed: %s", name);
-        raise_error(msg);
+        dynload_fail(msg);
         return OOP_NIL;
     }
 
@@ -6567,8 +7235,67 @@ static OopType shimDynLoad(OopType pathOop, OopType nameOop)
         OopType nameStr = GciNewString(methods[i].ml_name);
         GciStoreOop(arr, i + 1, nameStr);
     }
-    check_and_raise_error();
+    if (!g_dynload_direct) check_and_raise_error();
     return arr;
+}
+
+/* __import__(name, globals, locals, fromlist, level) for C, in Grail
+   (CPythonShim>>PyImport_ImportModuleLevel:...).  When that import reaches a
+   .so the server hands the load back (-1 and ___pendingDynLoad): it runs
+   here, as a plain call of shimDynLoad inside the user action already in
+   flight, the server builds and registers the module
+   (finishDynLoad:path:methodNames:), and the import is asked again.  A
+   Cython module's exec imports its siblings this way, and as user actions
+   numpy.random's would nest three deep, past GemStone's two in flight.  A
+   load the server would do as a user action of its own is still the third. */
+extern "C" PyObject *PyErr_GetRaisedException(void);        /* shim_pyo3.cc */
+extern "C" void PyErr_SetRaisedException(PyObject *exc);
+extern "C" PyObject *_grail_import_level(PyObject *name, PyObject *globals, PyObject *locals,
+                                         PyObject *fromlist, int level) {
+    if (name == NULL || !PyUnicode_Check(name)) {
+        PyErr_SetString(PyExc_TypeError, "module name must be a str");
+        return NULL;
+    }
+    for (int round = 0; round < 64; round++) {
+        /* A missing argument is Python's None (pyobj_oop(NULL)), not nil. */
+        OopType args[5] = { pyobj_oop(name), pyobj_oop(globals), pyobj_oop(locals),
+                            pyobj_oop(fromlist), GciI64ToOop(level) };
+        OopType r = GciPerform(server, "PyImport_ImportModuleLevel:globals:locals:fromlist:level:", args, 5);
+        if (check_gci_error()) return NULL;
+        if (r != GciI64ToOop(-1)) {
+            PyObject *m = addr_to_pyobj(r);
+            if (m == NULL && !PyErr_Occurred())
+                PyErr_Format(PyExc_ImportError, "No module named '%s'", PyUnicode_AsUTF8(name));
+            return m;
+        }
+        OopType req = GciPerform(server, "___pendingDynLoad", NULL, 0);
+        if (check_gci_error()) return NULL;
+        OopType pathOop = GciFetchOop(req, 1);
+        OopType nameOop = GciFetchOop(req, 2);
+        g_dynload_direct++;
+        OopType methods = shimDynLoad(pathOop, nameOop);
+        g_dynload_direct--;
+        if (methods == OOP_NIL) {
+            if (!PyErr_Occurred()) PyErr_SetString(PyExc_ImportError, "extension load failed");
+            /* Nothing left in sys.modules, as CPython removes a failed load
+               (a Cython module registers itself as its exec starts). */
+            PyObject *exc = PyErr_GetRaisedException();
+            PyObject *mods = PySys_GetObject("modules");
+            OopType delArgs[2] = { mods ? pyobj_oop(mods) : OOP_NIL, nameOop };
+            if (mods != NULL) {
+                GciPerform(server, "___removeModule:named:", delArgs, 2);
+                GciErrSType e; GciErr(&e);
+            }
+            PyErr_SetRaisedException(exc);
+            return NULL;
+        }
+        OopType fin[3] = { nameOop, pathOop, methods };
+        GciPerform(server, "finishDynLoad:path:methodNames:", fin, 3);
+        if (check_gci_error()) return NULL;
+    }
+    PyErr_Format(PyExc_ImportError, "import of '%s' kept asking for extension loads",
+                 PyUnicode_AsUTF8(name));
+    return NULL;
 }
 
 /* ====================================================================
@@ -6730,6 +7457,9 @@ static int is_foreign_exc_instance(PyObject *v) {
     if (v == NULL || !is_foreign(v) || is_foreign_type(v)) return 0;
     return v->ob_type != NULL && (v->ob_type->tp_flags & Py_TPFLAGS_BASE_EXC_SUBCLASS);
 }
+/* An exception object in C's own layout -- a raised-exception token or a
+   wheel's instance -- whose traceback is a struct field (shim_pyo3.cc). */
+extern "C" int _grail_is_c_exception(PyObject *o) { return is_foreign_exc_instance(o); }
 
 /* str(exc) for such an instance, in C: the nearest tp_str on its type chain
    (PyO3 fills it from the class's __str__), else args[0] when that is a
@@ -6822,6 +7552,11 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
     PyErr_Clear();
     PyObject *result = PyObject_Call(callable, tuple, kwargs);
     buffer_cache_clear();
+    if (result == NULL && PyErr_Occurred() == NULL && getenv("GRAIL_SHIM_DIAG")) {
+        fprintf(stderr, "SHIM-DIAG: call of %s answered NULL with no error set\n",
+                Py_TYPE(callable) && Py_TYPE(callable)->tp_name ? Py_TYPE(callable)->tp_name : "?");
+        fflush(stderr);
+    }
     check_and_raise_error();
     if (!result) return OOP_NIL;
     OopType res = pyobj_oop(result);
@@ -7222,6 +7957,16 @@ static OopType shimTypeMirrorLayout(OopType ignored)
            real-layout tuple numpy reads inline (_descr_from_subtype). */
         (int64)offsetof(PyTypeObject, tp_mro),
         (int64)(intptr_t)&PyTuple_Type,
+        /* 23-26: tp_iter / tp_iternext, and the shim's PyObject_GetIter /
+           PyIter_Next, which a type mirror of a class with __iter__ /
+           __next__ carries as those slots (CPythonShim>>
+           ___buildTypeMirrorFor:).  Both ask the server for a Grail object,
+           never a slot, and PyIter_Next answers NULL with no error at the
+           end, as tp_iternext must. */
+        (int64)offsetof(PyTypeObject, tp_iter),
+        (int64)offsetof(PyTypeObject, tp_iternext),
+        (int64)(intptr_t)PyObject_GetIter,
+        (int64)(intptr_t)PyIter_Next,
     };
     int n = (int)(sizeof(vals) / sizeof(vals[0]));
     OopType sizeOop = GciI64ToOop(n);
@@ -7623,6 +8368,7 @@ static int keep_grail_exc_instance(PyObject *type, PyObject *value) {
     current_error_type = type;
     current_error_instance = value;
     current_error_from_grail = 1;
+    err_publish();
     return 1;
 }
 
@@ -7633,6 +8379,7 @@ void PyErr_SetObject(PyObject *type, PyObject *value) {
         foreign_exc_text(value, text, sizeof(text));
         PyErr_SetString(type, text);
         current_error_instance = value;
+        err_publish();
         return;
     }
     if (value != NULL && PyUnicode_Check(value)) {
@@ -8004,7 +8751,7 @@ static PyObject *build_value_item(const char **pf, va_list *ap) {
        only stepped over a single ':'. */
     while (*f == ' ' || *f == '\t' || *f == ',' || *f == ':') f++;
     switch (*f) {
-        case 'i': case 'b': case 'h':
+        case 'i': case 'b': case 'h': case 'B': case 'H':
             result = PyLong_FromLong((long)va_arg(*ap, int)); f++; break;
         case 'l':
             result = PyLong_FromLong(va_arg(*ap, long)); f++; break;
@@ -8020,10 +8767,14 @@ static PyObject *build_value_item(const char **pf, va_list *ap) {
             result = PyLong_FromUnsignedLong((unsigned long)va_arg(*ap, unsigned int)); f++; break;
         case 'd': case 'f':
             result = PyFloat_FromDouble(va_arg(*ap, double)); f++; break;
+        /* c is a bytes of length 1 and C a str of one code point, as in
+           CPython's do_mkvalue; c used to build a str. */
         case 'c': {
-            char buf[2] = { (char)va_arg(*ap, int), '\0' };
-            result = PyUnicode_FromString(buf); f++; break;
+            char buf[1] = { (char)va_arg(*ap, int) };
+            result = PyBytes_FromStringAndSize(buf, 1); f++; break;
         }
+        case 'C':
+            result = PyUnicode_FromOrdinal(va_arg(*ap, int)); f++; break;
         case 's': case 'z': {
             const char *s = va_arg(*ap, const char *);
             if (f[1] == '#') {
@@ -8212,8 +8963,42 @@ Py_ssize_t PyNumber_AsSsize_t(PyObject *obj, PyObject *exc) {
    with Grail's dicts.  It sent Smalltalk's #hash, which is another function:
    hash(1.5) from C differed from hash(1.5) in Python, and 1 and 1.0 could
    hash apart.  An unhashable object raises TypeError, as in CPython. */
+/* The hash of a str or bytes in CPython's layout, computed in C and cached in
+   the object as CPython caches it (hash@24).  Cython matches a keyword by its
+   hash FIELD -- ``((PyASCIIObject *)name)->hash == key_hash'' -- trusting
+   its interned names to carry one, so a field left at -1 matched nothing
+   ("got an unexpected keyword argument 'n_words'").  FNV-1a over the code
+   points, so it does not depend on the kind, nor on whether Grail holds the
+   text as a String or a Symbol, whose Python hashes differ.  A C caller's
+   own hashing agrees with itself; the shim's dict operations are the
+   server's and do not use it. */
+static Py_hash_t grail_inline_hash(PyObject *obj) {
+    Py_hash_t *field = (Py_hash_t *)((char *)obj + 24);
+    if (*field != -1) return *field;
+    Py_uhash_t h = 14695981039346656037ULL;
+    if (obj->ob_type == &PyBytes_Type) {
+        const unsigned char *p = (const unsigned char *)obj + 32;
+        for (Py_ssize_t i = 0; i < Py_SIZE(obj); i++) { h ^= p[i]; h *= 1099511628211ULL; }
+    } else {
+        int kind = grail_str_kind(obj);
+        const char *data = grail_str_data(obj);
+        for (Py_ssize_t i = 0; i < grail_str_length(obj); i++) {
+            Py_UCS4 c = grail_str_read(kind, data, i);
+            for (int b = 0; b < 4; b++) { h ^= (c >> (8 * b)) & 0xff; h *= 1099511628211ULL; }
+        }
+    }
+    if ((Py_hash_t)h == -1) h = (Py_uhash_t)-2;
+    *field = (Py_hash_t)h;
+    return (Py_hash_t)h;
+}
+extern "C" Py_hash_t _grail_inline_hash_if_str(PyObject *obj) {
+    if (obj != NULL && obj->ob_type != &PyLong_Type && has_grail_prefix(obj)) return grail_inline_hash(obj);
+    return -1;
+}
+
 Py_hash_t PyObject_Hash(PyObject *obj) {
     if (obj == NULL) return -1;
+    if (obj->ob_type != &PyLong_Type && has_grail_prefix(obj)) return grail_inline_hash(obj);
     OopType oop = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyObject_Hash:", &oop, 1);
     if (check_gci_error()) return -1;
@@ -8651,8 +9436,11 @@ extern "C" PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size,
     return PyUnicode_FromStringAndSize(s, size);
 }
 
+/* Interned strs carry their hash, as CPython's do (see grail_inline_hash). */
 extern "C" PyObject *PyUnicode_InternFromString(const char *s) {
-    return PyUnicode_FromString(s);
+    PyObject *u = PyUnicode_FromString(s);
+    if (u != NULL) (void)_grail_inline_hash_if_str(u);
+    return u;
 }
 
 extern "C" PyObject *PyUnicode_Concat(PyObject *left, PyObject *right) {
@@ -9149,6 +9937,8 @@ static void new_session_reset(void) {
     current_error_type = NULL;
     current_error_msg[0] = '\0';
     forget_saved_gs_error();
+    *tstate_exc_slot() = NULL;
+    g_err_published = NULL;
 }
 
 extern "C" void GciUserActionShutdown(void) {
