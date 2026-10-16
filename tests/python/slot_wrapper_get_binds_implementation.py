@@ -12,9 +12,9 @@ way: a module-level function bound with __get__ looked for a method of that
 name on the instance, and an already-bound method or classmethod re-bound
 itself to the new object instead of answering itself unchanged.
 
-Not covered: a nested def or a lambda (an ExecBlock) has no __get__ at all,
-so binding one fails outright; the module-level def here is a different
-object.  A module function bound to its OWN module answers itself rather than
+Not covered here: a nested def or a lambda is an ExecBlock rather than this
+module-level def; tests/python/execblock_get.py covers its __get__ (#1656).
+A module function bound to its OWN module answers itself rather than
 binding the module as an argument: Grail's functions report that module as
 __self__, and Django's signal dispatch round-trips them through
 weakref.WeakMethod on exactly that assumption.  And the type names: CPython calls ``object.__setattr__`` a
