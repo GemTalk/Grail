@@ -111,7 +111,7 @@ __iter__
 		^ self ___callTypeAttr___: ___fn with: #()].
 	(self ___hasProtocolForCall___: '__getitem__')
 		ifFalse: [
-			TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+			TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
 				@env0:, ''' object is not iterable')].
 	^ seq_iterator ___on: self
 %
@@ -195,7 +195,7 @@ __next__
 		^ self ___callTypeAttr___: ___fn with: #()].
 	(self ___grailMetaclassMethodFor___: #'__next__') @env0:ifNotNil: [:___m |
 		^ self @env0:performMethod: ___m].
-	TypeError ___signal___: ('''' @env0:, self @env0:class @env0:name @env0:asString
+	TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
 		@env0:, ''' object is not an iterator')
 %
 

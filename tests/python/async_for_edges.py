@@ -14,7 +14,7 @@ ESCAPE.  A StopAsyncIteration escaping an async generator BODY is as
 ambiguous as StopIteration escaping a sync one, and CPython converts it the
 same way: RuntimeError('async generator raised StopAsyncIteration') with the
 escaped exception as __cause__ (PythonAsyncGenerator >>
-_signalEscapedException).
+___signalEscapedException___).
 
 UNPACK.  CPython's UNPACK_SEQUENCE is defined by ITERATION.  Grail unpacks
 by subscript for speed; a non-subscriptable item is now materialised through

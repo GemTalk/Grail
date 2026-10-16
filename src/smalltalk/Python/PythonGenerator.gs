@@ -3,10 +3,10 @@ run
 PythonInstance ifNil: [self error: 'PythonInstance is not defined. Check file ordering.'].
 %
 
-! ------- PythonGenerator class definition
+! ------- PyGeneratorBase class definition
 expectvalue /Class
 doit
-PythonInstance subclass: 'PythonGenerator'
+PythonInstance subclass: 'PyGeneratorBase'
   instVarNames: #( block proc consumerSem producerSem value done returnValue started sentValue injectedException escapedException running consumerProcess codeThunk codeObject frameObject delegationTarget inlineYields )
   classVars: #()
   classInstVars: #()
@@ -17,8 +17,29 @@ PythonInstance subclass: 'PythonGenerator'
 
 expectvalue /Class
 doit
-PythonGenerator comment:
-'Runtime representation of a Python generator function''s call result.
+PyGeneratorBase comment:
+'The suspension machinery the three generator kinds share -- generators,
+coroutines and async generators -- and none of their Python API.
+
+CPython''s three are SIBLINGS: generator, coroutine and async_generator each
+derive from object alone, so a coroutine is not a generator (isinstance(coro,
+types.GeneratorType) is False, and collections.abc.Generator / Iterator /
+Iterable reject it), and each kind has only its own attributes -- gi_* on a
+generator, cr_* on a coroutine, ag_* plus asend / athrow / aclose on an async
+generator, which has no send / throw / close at all.  Grail used to make
+PythonCoroutine and PythonAsyncGenerator SUBCLASSES of PythonGenerator, to share
+the machinery below, and with it they inherited the generator''s whole Python
+surface: every one of those checks answered as for a generator.
+
+So the machinery lives here, under private selectors (___send___:,
+___throw___:, ___close___, ___genRunning___, ...), and each kind publishes its
+own API on top.  This class is hidden from __mro__ and __bases__
+(importlib >> ___isHiddenBase___:of:), so type(coro).__mro__ is (coroutine,
+object), as in CPython.
+
+What follows is the original description of the machinery.
+
+Runtime representation of a Python generator function''s call result.
 
 A function containing ``yield`` (or ``yield from``) doesn''t run its
 body when called — it returns a generator object that lazily produces
@@ -85,16 +106,44 @@ is CPython''s contract for them (test_async_gen_api_01 reassigns both).'
 
 expectvalue /Class
 doit
+PyGeneratorBase category: 'Grail-Modules'
+%
+
+! ------- PythonGenerator class definition
+expectvalue /Class
+doit
+PyGeneratorBase subclass: 'PythonGenerator'
+  instVarNames: #()
+  classVars: #()
+  classInstVars: #()
+  poolDictionaries: #()
+  inDictionary: Python
+  options: #()
+%
+
+expectvalue /Class
+doit
+PythonGenerator comment:
+'What calling a def containing ``yield`` answers: Python''s generator.  Only
+the generator''s own Python API is here -- __iter__, __next__, send, throw,
+close and the gi_* attributes; the machinery is PyGeneratorBase''s, which
+PythonCoroutine and PythonAsyncGenerator share as siblings.'
+%
+
+expectvalue /Class
+doit
 PythonGenerator category: 'Grail-Modules'
 %
 
+removeallmethods PyGeneratorBase
+removeallclassmethods PyGeneratorBase
 removeallmethods PythonGenerator
 removeallclassmethods PythonGenerator
 
 set compile_env: 0
 
 category: 'Grail-Iterator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 do: aBlock
 	"Smalltalk iteration protocol — walk the generator via send: until
 	StopIteration, calling aBlock with each yielded value.  Used by
@@ -114,12 +163,12 @@ do: aBlock
 	boundary without severing the delegation underneath it, which the
 	@types.coroutine ``yield from coro'' pattern still needs."
 	[
-		[aBlock value: (self @env1:send: None)] repeat
+		[aBlock value: (self @env1:___send___: None)] repeat
 	] on: StopIteration do: [:___ex___ | ^ self]
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 _initWithBlock: aBlock
 	"aBlock is a 1-arg Block ``[:gen | ...generator body...]``.
 	Construction is lazy: the body doesn''t run until the first advance."
@@ -137,7 +186,7 @@ _initWithBlock: aBlock
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 _forkBody
 	"Start the producer process.  Every exception that leaves the body --
 	GeneratorExit included -- is stowed for the consumer rather than handled
@@ -205,7 +254,7 @@ _forkBody
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___consumerProcess___
 	"The GsProcess blocked on consumerSem waiting for this generator, or nil
 	before the first resume.
@@ -220,7 +269,7 @@ ___consumerProcess___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___unrootParkedProducer___
 	"Let a SUSPENDED generator be garbage like any other object.  Sent by the
 	consumer each time it gets control back from the body.
@@ -266,7 +315,7 @@ ___unrootParkedProducer___
 set compile_env: 1
 
 category: 'Grail-Instance Creation'
-classmethod: PythonGenerator
+classmethod: PyGeneratorBase
 ___withBlock___: aBlock
 	"withBlock: under a Grail-internal selector, for the generated code that
 	wraps a generator / coroutine body without a def to name (generator
@@ -279,7 +328,7 @@ ___withBlock___: aBlock
 %
 
 category: 'Grail-Introspection'
-classmethod: PythonGenerator
+classmethod: PyGeneratorBase
 __dir__
 	"dir(generator) without ``withBlock''.  withBlock: is the Smalltalk
 	constructor (the senders are Grail's own Smalltalk; generated code uses
@@ -292,7 +341,7 @@ __dir__
 %
 
 category: 'Grail-Instance Creation'
-classmethod: PythonGenerator
+classmethod: PyGeneratorBase
 withBlock: aBlock
 	"Wrap aBlock as a fresh generator.  No work happens until the
 	first advance — Python semantics."
@@ -304,7 +353,7 @@ withBlock: aBlock
 %
 
 category: 'Grail-Private'
-classmethod: PythonGenerator
+classmethod: PyGeneratorBase
 withBlock: aBlock name: aName qualname: aQualname code: aCodeThunk
 	"withBlock:, carrying the identity CPython stamps on the object at call
 	time: the def's name and qualified name (stored as the dynamic instVars
@@ -326,7 +375,7 @@ withBlock: aBlock name: aName qualname: aQualname code: aCodeThunk
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___setCodeThunk___: aBlockOrNil
 	codeThunk := aBlockOrNil
 %
@@ -340,8 +389,8 @@ __iter__
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-gi_running
+method: PyGeneratorBase
+___genRunning___
 	"Python's ``gen.gi_running'' — True while this generator's body is
 	executing.  A debugger reads it, and so does test_yield_from's
 	test_delegating_generators_claim_to_be_running_with_close, which checks it
@@ -351,8 +400,8 @@ gi_running
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-gi_suspended
+method: PyGeneratorBase
+___genSuspended___
 	"Python's ``gen.gi_suspended'' (3.12+) — True when the body has started,
 	is not currently executing, and has not finished: parked at a yield.
 	inspect.getgeneratorstate consults this BEFORE gi_frame, which is what
@@ -363,7 +412,7 @@ gi_suspended
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___pyKindWords___
 	"How CPython's runtime messages name this kind of object: 'generator',
 	'coroutine', 'async generator' — the SPACED spelling; the underscored
@@ -376,7 +425,7 @@ ___pyKindWords___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___codeObjectOrSignal___: anAttrName
 	"The code object the call site described, built on first read and then
 	memoized — CPython's gi_code is one object for the generator's lifetime,
@@ -396,7 +445,7 @@ ___codeObjectOrSignal___: anAttrName
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 __reduce_ex__: aProtocol
 	"copy.copy, copy.deepcopy and pickle all funnel through
 	``x.__reduce_ex__(protocol)'', and CPython refuses the whole lazy-call
@@ -413,8 +462,8 @@ __reduce_ex__: aProtocol
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-gi_yieldfrom
+method: PyGeneratorBase
+___genYieldFrom___
 	"Python's ``gen.gi_yieldfrom'' -- the iterator this generator is
 	suspended delegating to, None otherwise (fresh, running, finished, or
 	parked at a plain yield).  Identity is CPython's contract:
@@ -425,7 +474,7 @@ gi_yieldfrom
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___delegationTargetWhenParked___
 	^ (started == true
 		and: [done ~~ true
@@ -435,7 +484,7 @@ ___delegationTargetWhenParked___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___delegationTargetWhileAlive___
 	"ag_await's wider gate: CPython reports the awaited object through the
 	whole asend-in-flight window, running included (measured: mid-await the
@@ -455,8 +504,8 @@ gi_code
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-gi_frame
+method: PyGeneratorBase
+___genFrame___
 	"Python's ``gen.gi_frame'' — None once the body has finished, a frame
 	object until then.  CPython's tests lean on exactly that None-flip
 	(test_cr_frame_after_close), and inspect's state functions read only the
@@ -471,7 +520,7 @@ gi_frame
 
 	done @env0:ifTrue: [frameObject := nil. ^ None].
 	frameObject @env0:ifNil: [ | code lineno |
-		code := codeThunk @env0:ifNil: [None] ifNotNil: [self gi_code].
+		code := codeThunk @env0:ifNil: [None] ifNotNil: [self ___codeObjectOrSignal___: 'gi_code'].
 		lineno := code == None
 			ifTrue: [0]
 			ifFalse: [(code @env0:dynamicInstVarAt: #'co_firstlineno')
@@ -486,7 +535,7 @@ gi_frame
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___clearFromFrame___
 	"frame.clear() on this generator's frame -- CPython 3.14's frame_clear for a
 	generator-owned frame: refused while the body runs or is parked at a yield,
@@ -500,7 +549,7 @@ ___clearFromFrame___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___finalizeFromFrameClear___
 	"_PyGen_Finalize for a generator that is not suspended: one never started
 	is closed; a finished one has nothing left to do."
@@ -542,8 +591,8 @@ __next__
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-send: aValue
+method: PyGeneratorBase
+___send___: aValue
 	"Resume the generator.  The yielded expression in the suspended
 	body evaluates to ``aValue`` (so Python ``x = yield`` receives
 	the sent value).  Raises StopIteration when the body finishes.
@@ -585,13 +634,13 @@ send: aValue
 	[consumerSem @env0:wait] @env0:ensure: [running := false. self ___restoreConsumerState___: ___savedState___].
 	self @env0:___unrootParkedProducer___.
 	done ifTrue: [
-		escapedException == nil ifFalse: [^ self _signalEscapedException].
+		escapedException == nil ifFalse: [^ self ___signalEscapedException___].
 		^ self ___signalExhausted___].
 	^ value
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___mustRunInline___
 	"Must this generator's body run INLINE rather than on a forked process?
 	Yes when it is started inside a C extension's callback -- pydantic_core
@@ -609,7 +658,7 @@ ___mustRunInline___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___runInline___
 	"Run the whole body now, on this process, buffering what it yields, and
 	answer the first value -- see ___mustRunInline___.
@@ -641,7 +690,7 @@ ___runInline___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___yieldInline___: aValue
 	"``yield aValue'' in a body running inline: buffer it and carry on, as if
 	resumed by next().  A body that yields without end would never return, so
@@ -656,7 +705,7 @@ ___yieldInline___: aValue
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___nextInline___
 	"The next value an inline-run body yielded; once they are spent, what it
 	ended with -- its exception, or StopIteration with its return value -- and
@@ -664,12 +713,12 @@ ___nextInline___
 
 	inlineYields @env0:isEmpty ifFalse: [^ inlineYields @env0:removeFirst].
 	inlineYields := nil.
-	escapedException == nil ifFalse: [^ self _signalEscapedException].
+	escapedException == nil ifFalse: [^ self ___signalEscapedException___].
 	^ self ___signalExhausted___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___resumeFinishedWith___: anExceptionOrNil
 	"A consumer resuming a body that has ALREADY finished -- send/next with
 	nil, throw with the exception it wanted injected.  Generators answer the
@@ -685,11 +734,11 @@ ___resumeFinishedWith___: anExceptionOrNil
 	stays quiet for every kind."
 
 	anExceptionOrNil @env0:ifNil: [^ StopIteration ___signalReturn___: returnValue].
-	^ self _raiseThrown: anExceptionOrNil
+	^ self ___raiseThrown___: anExceptionOrNil
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___signalExhausted___
 	"Raise the StopIteration that reports the body has finished, carrying its
 	return value -- ONCE.
@@ -709,8 +758,8 @@ ___signalExhausted___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
-_signalEscapedException
+method: PyGeneratorBase
+___signalEscapedException___
 	"Re-signal, on the CONSUMER process, the exception that escaped the generator
 	body (stowed by _forkBody, which runs on the forked producer) -- applying
 	PEP 479.
@@ -750,7 +799,7 @@ _signalEscapedException
 	implementation detail of how carriers pick their class."
 	ex := BaseException @env0:___payloadOf___: escapedException.
 	escapedException := nil.
-	(ex @env0:isKindOf: StopIteration) ifFalse: [^ self _raiseThrown: ex].
+	(ex @env0:isKindOf: StopIteration) ifFalse: [^ self ___raiseThrown___: ex].
 	msg := self ___pyKindWords___ @env0:, ' raised StopIteration'.
 	err := RuntimeError ___new___.
 	err ___args___: { msg }.
@@ -759,15 +808,15 @@ _signalEscapedException
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
-_raiseThrown: ex
+method: PyGeneratorBase
+___raiseThrown___: ex
 	"Raise ex on THIS process -- the consumer -- keeping the object Python holds.
 
 	Every generator path that has to surface an exception the consumer will see
 	comes through here: one thrown in with gen.throw(), one that escaped the
 	body, and one re-raised at a suspension point.
 
-	This used to be ``(self _resignalable: ex) signal'', which COPIED an
+	This used to be ``(self ___resignalable___: ex) signal'', which COPIED an
 	exception that still carried live handler frames, because the VM refuses to
 	signal one that does (6011).  The copy signalled cleanly and matched the same
 	``except'', so it looked right -- and silently broke object identity, which
@@ -795,12 +844,12 @@ _raiseThrown: ex
 	whose unstarted half raises in the caller through here)."
 
 	(ex @env0:isKindOf: Behavior) ifTrue: [
-		^ self _raiseThrown: (BaseException ___exceptionFromClass___: ex)].
+		^ self ___raiseThrown___: (BaseException ___exceptionFromClass___: ex)].
 	^ BaseException @env0:___signalCarrying___: (BaseException @env0:___payloadOf___: ex)
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___raiseThrownOnTop___: ex
 	"Raise ex where gen.throw() injects it -- at the suspended yield, or in the
 	caller of a generator that never started -- adding this raise's frames ON
@@ -827,12 +876,12 @@ ___raiseThrownOnTop___: ex
 		ex @env0:dynamicInstVarAt: #'___tbUserAttached___' put: true.
 		ex @env0:_gsStack: nil.
 		BaseException @env0:___dropGeneratorStack___: ex].
-	^ self _raiseThrown: ex
+	^ self ___raiseThrown___: ex
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
-_resignalable: ex
+method: PyGeneratorBase
+___resignalable___: ex
 	"``ex'' if it can be signaled again, else a clean copy of it.
 
 	An exception instance carries its live handler frames in INDEXED slots
@@ -879,19 +928,19 @@ throw: aType _: aValue
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-throw: aType _: aValue _: aTb
-	"The deprecated three-arg signature.  The traceback argument is checked
+method: PyGeneratorBase
+___throwLegacy___: aType value: aValue tb: aTb
+	"The deprecated three-arg signature of throw() (and athrow()).  The traceback argument is checked
 	(___normalizedLegacyExc___:value:tb:) and otherwise ignored -- CPython
 	attaches it to the raised exception, but the exception's own travel
 	through the generator machinery rebuilds the traceback either way."
 
 	self ___warnLegacySignatureOf___: 'throw'.
-	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
+	^ self ___throw___: (self ___normalizedLegacyExc___: aType value: aValue tb: aTb)
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___throwLegacy___: aType value: aValue
 	"``gen.throw(type, value, tb)'' -- the pre-3.12 spelling, still honoured
 	by CPython with a DeprecationWarning (measured, 3.14: 'the (type, exc,
@@ -907,11 +956,11 @@ ___throwLegacy___: aType value: aValue
 	window before warnings exists."
 
 	self ___warnLegacySignatureOf___: 'throw'.
-	^ self throw: (self ___normalizedLegacyExc___: aType value: aValue)
+	^ self ___throw___: (self ___normalizedLegacyExc___: aType value: aValue)
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___coercedThrowArg___: anException
 	"The single-arg throw form accepts an exception CLASS as well as an
 	instance -- ``gen.throw(SyntaxError)'' instantiates it bare,
@@ -930,7 +979,7 @@ ___coercedThrowArg___: anException
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___warnLegacySignatureOf___: aMethodName
 	"CPython 3.14's wording, parameterised only by the method name --
 	athrow's is identical text with 'athrow' in it (measured)."
@@ -944,7 +993,7 @@ ___warnLegacySignatureOf___: aMethodName
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___normalizedLegacyExc___: aType value: aValue
 	"CPython's normalisation for the deprecated multi-arg signatures
 	(_gen_throw, then PyErr_NormalizeException).
@@ -961,7 +1010,7 @@ ___normalizedLegacyExc___: aType value: aValue
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___normalizedLegacyExc___: aType value: aValue tb: aTb
 	"___normalizedLegacyExc___:value:, after CPython's first check: a
 	traceback argument must be None or a traceback.  CPython makes it after
@@ -984,7 +1033,7 @@ ___normalizedLegacyExc___: aType value: aValue tb: aTb
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___pyAttrStore___: aName put: aValue
 	"__name__ and __qualname__ are getsets in CPython, and their setter takes
 	only a string: ``gen.__name__ = 123'' is a TypeError.  Grail keeps them as
@@ -1004,7 +1053,7 @@ ___pyAttrStore___: aName put: aValue
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___pyAttrDelete___: aName
 	"CPython routes ``del gen.__name__'' through the same setter with no value,
 	so it is refused with the setter's own message.  See ___pyAttrStore___:put:."
@@ -1019,7 +1068,7 @@ ___pyAttrDelete___: aName
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___refuseReadOnlyAttr___: aName
 	"gi_running, gi_frame and the rest are read-only in CPython, for a set and
 	a delete alike.  Grail's are reader methods, and a store beside one made a
@@ -1044,19 +1093,21 @@ ___refuseReadOnlyAttr___: aName
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___readOnlyGetsetNames___
-	^ #('gi_code' 'gi_frame' 'gi_running' 'gi_suspended' 'gi_yieldfrom')
+	"Each kind lists its own; see ___refuseReadOnlyAttr___:."
+
+	^ #()
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___readOnlyMemberNames___
 	^ #()
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___isNameAttr___: aName
 	"Is aName ``__name__'' or ``__qualname__''?"
 
@@ -1066,7 +1117,7 @@ ___isNameAttr___: aName
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___pyHasStarted___
 	"Whether the BODY has ever been resumed -- PyAsyncGenASend's just-started
 	guard reads this on its generator."
@@ -1075,8 +1126,8 @@ ___pyHasStarted___
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-throw: anException
+method: PyGeneratorBase
+___throw___: anException
 	"Inject anException at the suspended yield point.  If the
 	generator''s body catches it and yields again, return that
 	value; if the exception bubbles out, propagate it; if the
@@ -1109,7 +1160,7 @@ throw: anException
 		"Body finished — normal completion raises StopIteration; an
 		exception that bubbled out of the body (stowed by _forkBody)
 		re-signals on THIS (consumer) process, PEP 479 applied."
-		escapedException == nil ifFalse: [^ self _signalEscapedException].
+		escapedException == nil ifFalse: [^ self ___signalEscapedException___].
 		"A GeneratorExit that was THROWN and that the body then swallowed by
 		returning still propagates: PEP 342 suppresses the StopIteration, not
 		the GeneratorExit.  ``inner'' catching the exit and returning a value
@@ -1122,14 +1173,14 @@ throw: anException
 				and: [(___exc___ == GeneratorExit)
 					or: [___exc___ @env0:inheritsFrom: GeneratorExit]]]) ifTrue: [
 			returnValue := None.
-			^ self _raiseThrown: ___exc___].
+			^ self ___raiseThrown___: ___exc___].
 		^ self ___signalExhausted___
 	].
 	^ value
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___captureConsumerState___
 	"The consumer's exception bookkeeping, saved across a resume of the generator
 	body: its ``currently-handled exception'' (CPython sys.exc_info()) AND the
@@ -1167,7 +1218,7 @@ ___captureConsumerState___
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___restoreConsumerState___: anArray
 	"Reinstate the consumer's exception bookkeeping after the generator body has
 	yielded control back.  See ___captureConsumerState___."
@@ -1178,7 +1229,7 @@ ___restoreConsumerState___: anArray
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___stackOnResumersException___: ownExceptionOrNil
 	"Install the body's own handled exception (nil at the start, otherwise what
 	it was handling when it last yielded), stacked on the one its resumer is
@@ -1203,7 +1254,7 @@ ___stackOnResumersException___: ownExceptionOrNil
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___thrownInstanceFor___: aClassOrException
 	"What throw() injects at the suspended yield, as an instance, with its
 	__context__ set the way CPython sets it.  Sent on the body's process, after
@@ -1232,7 +1283,7 @@ ___thrownInstanceFor___: aClassOrException
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___probeDelegationAttr___: anIterator named: aName
 	"Look aName up on a sub-iterator through the PYTHON attribute protocol,
 	purely for its side effects.
@@ -1256,7 +1307,7 @@ ___probeDelegationAttr___: anIterator named: aName
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___closeDelegate___: anIterator
 	"Close the sub-iterator of a delegation that is being shut down -- CPython's
 	gen_close_iter.
@@ -1302,7 +1353,7 @@ ___closeDelegate___: anIterator
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___safeReprOf___: anObject
 	"repr(anObject) for a message that is being built DURING an unwind.
 
@@ -1317,7 +1368,7 @@ ___safeReprOf___: anObject
 %
 
 category: 'Grail-Private'
-method: PythonGenerator
+method: PyGeneratorBase
 ___checkNotRunning___
 	"Guard every consumer entry point against re-entering a generator that is
 	already executing -- Python's ``ValueError: generator already executing''.
@@ -1336,8 +1387,8 @@ ___checkNotRunning___
 %
 
 category: 'Grail-Generator Protocol'
-method: PythonGenerator
-close
+method: PyGeneratorBase
+___close___
 	"Politely shut the generator down by injecting GeneratorExit
 	at the suspended yield point.  No-op if not started or already
 	finished.  Raises RuntimeError if the body catches GeneratorExit
@@ -1385,12 +1436,12 @@ close
 	escapedException @env0:isNil ifFalse: [
 		(escapedException @env0:isKindOf: GeneratorExit)
 			ifTrue: [escapedException := nil]
-			ifFalse: [^ self _signalEscapedException]].
+			ifFalse: [^ self ___signalEscapedException___]].
 	^ result
 %
 
 category: 'Grail-Yield Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___yield___: aValue
 	"Called from the generator body for ``yield aValue``.  Hands
 	control back to the consumer and blocks until the next resume.
@@ -1439,21 +1490,21 @@ ___yield___: aValue
 %
 
 category: 'Grail-Yield Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___subIterAdvance___: it
 	"One next() on a delegation sub-iterator.  For the generator family this
 	is ``send: None'' directly -- __next__ IS send(None) for a generator, and
-	the coroutine/async-generator subclasses REFUSE __next__ (Python-protocol
-	iteration), while delegation must still drive them.  Everything else gets
+	its coroutine/async-generator siblings have no __next__ (they are not
+	iterators), while delegation must still drive them.  Everything else gets
 	the ordinary protocol send."
 
-	^ (it @env0:isKindOf: PythonGenerator)
-		ifTrue: [it @env1:send: None]
+	^ (it @env0:isKindOf: PyGeneratorBase)
+		ifTrue: [it @env1:___send___: None]
 		ifFalse: [it @env1:__next__]
 %
 
 category: 'Grail-Yield Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___yieldFrom___: anIterable
 	"Called from the generator body for ``yield from anIterable'' -- PEP 380
 	delegation.  Answers the sub-iterator's return value, which is what the
@@ -1531,7 +1582,7 @@ ___yieldFrom___: anIterable
 	__iter__ send let both through, and the first advance sent __next__ to
 	whatever came back -- an uncatchable MessageNotUnderstood (FastAPI's
 	test_multi_body_errors, when a misdispatched __iter__ answered None)."
-	it := (anIterable @env0:isKindOf: PythonGenerator)
+	it := (anIterable @env0:isKindOf: PyGeneratorBase)
 		ifTrue: [anIterable]
 		ifFalse: [(builtins @env0:___instance___) @env1:___pyIter___: anIterable].
 	"The delegation TARGET, recorded for introspection: cr_await /
@@ -1587,7 +1638,7 @@ ___yieldFrom___: anIterable
 				``finally''), then let GeneratorExit carry on out of this body so
 				_forkBody can retire the delegator."
 				self ___closeDelegate___: it.
-				^ (self _resignalable: raised) @env0:signal].
+				^ (self ___resignalable___: raised) @env0:signal].
 			"throw(): re-raise at the SUB-generator's suspension point.  If it
 			catches and yields again, that value becomes the next value we
 			yield; if it returns, the delegation ends with its return value; if
@@ -1599,7 +1650,7 @@ ___yieldFrom___: anIterable
 				probe above) is what lets a __getattr__ hook run and its own
 				exception propagate -- test_broken_getattr_handling."
 				self ___probeDelegationAttr___: it named: 'throw'.
-				^ (self _resignalable: raised) @env0:signal].
+				^ (self ___resignalable___: raised) @env0:signal].
 			[y := it @env1:throw: raised]
 				@env0:on: StopIteration
 				do: [:ex |
@@ -1611,7 +1662,7 @@ ___yieldFrom___: anIterable
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___grailAwait___: anObject
 	"``await anObject'' from inside a coroutine body.  CPython's GET_AWAITABLE
 	followed by its send/yield loop -- which is PEP 492's own definition of
@@ -1678,7 +1729,7 @@ ___grailAwait___: anObject
 	messages, coroutine first, because a Grail coroutine IS iterator-shaped
 	and the non-iterator test alone would let it through."
 
-	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+	(anObject @env0:isKindOf: PyGeneratorBase) ifTrue: [
 		"An async generator is not awaitable -- CPython:
 		''async_generator'' object can't be awaited -- and must be told apart
 		HERE, before the family branch delegates: ___yieldFrom___: would
@@ -1706,7 +1757,7 @@ ___grailAwait___: anObject
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___checkedAwaitIterator___: anIterator
 	"What __await__ answered, validated as CPython's GET_AWAITABLE validates
 	it: a coroutine is rejected by name (its own message, and checked FIRST,
@@ -1724,7 +1775,7 @@ ___checkedAwaitIterator___: anIterator
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___isRealIterator___: anObject
 	"CPython's PyIter_Check is a TYPE-SLOT test, and ___respondsTo___: cannot
 	stand in for it here: PythonInstance defines a FALLBACK __next__/__iter__
@@ -1750,7 +1801,7 @@ ___isRealIterator___: anObject
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___grailAwaitAwith___: anObject from: aMethodName
 	"``async with'' awaiting what __aenter__ / __aexit__ answered.  The same
 	acceptance as ___grailAwait___: -- a coroutine or generator-shaped result
@@ -1761,7 +1812,7 @@ ___grailAwaitAwith___: anObject from: aMethodName
 	can see.  AsyncWithAst emits the two spellings below; message verbatim
 	from CPython 3.14 (test_with_6 / test_with_8)."
 
-	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+	(anObject @env0:isKindOf: PyGeneratorBase) ifTrue: [
 		^ self ___yieldFrom___: anObject].
 	(anObject ___respondsTo___: #'__await__') ifTrue: [
 		^ self ___yieldFrom___:
@@ -1773,19 +1824,19 @@ ___grailAwaitAwith___: anObject from: aMethodName
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___grailAwaitAenter___: anObject
 	^ self ___grailAwaitAwith___: anObject from: '__aenter__'
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___grailAwaitAexit___: anObject
 	^ self ___grailAwaitAwith___: anObject from: '__aexit__'
 %
 
 category: 'Grail-Coroutine Protocol'
-method: PythonGenerator
+method: PyGeneratorBase
 ___grailAwaitAnext___: anObject
 	"Await what __anext__ answered, inside an ``async for''.  AsyncForAst emits
 	this rather than ___grailAwait___:, and the ONLY difference is that this one
@@ -1812,7 +1863,7 @@ ___grailAwaitAnext___: anObject
 
 	Message is CPython's verbatim."
 
-	(anObject @env0:isKindOf: PythonGenerator) ifTrue: [
+	(anObject @env0:isKindOf: PyGeneratorBase) ifTrue: [
 		^ self ___yieldFrom___: anObject].
 	(anObject ___respondsTo___: #'__await__') ifTrue: [ | it |
 		"An __await__ that RAISES makes the __anext__ result just as invalid
@@ -1841,7 +1892,7 @@ ___grailAwaitAnext___: anObject
 set compile_env: 0
 
 category: 'Grail-Python Attribute Hook'
-classmethod: PythonGenerator
+classmethod: PyGeneratorBase
 ___pythonValueAttrs___
 	"``g.gi_running'' is a bool, not a callable, so ___pyAttrLoad___ performs
 	the accessor rather than answering a BoundMethod (which would test truthy
@@ -1852,18 +1903,12 @@ ___pythonValueAttrs___
 	had before the coroutine override listed it."
 
 	^ IdentitySet new
-		add: #'gi_running';
-		add: #'gi_suspended';
-		add: #'gi_code';
-		add: #'gi_frame';
-		add: #'gi_yieldfrom';
-		yourself
 %
 
 set compile_env: 1
 
 category: 'Grail-String Representation'
-method: PythonGenerator
+method: PyGeneratorBase
 __repr__
 	"CPython: ``<generator object f at 0x...>'' — the TYPE name (so the
 	coroutine and async-generator subclasses read right through the type-name
@@ -1892,3 +1937,92 @@ __repr__
 %
 
 set compile_env: 0
+
+! ------- PythonGenerator's own Python API: thin over PyGeneratorBase
+
+set compile_env: 1
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+send: aValue
+	"Resume the body; see PyGeneratorBase >> ___send___:."
+
+	^ self ___send___: aValue
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+throw: anException
+	"Raise anException at the suspended yield; see PyGeneratorBase >>
+	___throw___:."
+
+	^ self ___throw___: anException
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+throw: aType _: aValue _: aTb
+	"The deprecated three-arg signature; see PyGeneratorBase >>
+	___throwLegacy___:value:tb:."
+
+	^ self ___throwLegacy___: aType value: aValue tb: aTb
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+close
+	"Raise GeneratorExit at the suspended yield; see PyGeneratorBase >>
+	___close___."
+
+	^ self ___close___
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_running
+	^ self ___genRunning___
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_suspended
+	^ self ___genSuspended___
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_yieldfrom
+	^ self ___genYieldFrom___
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+gi_frame
+	^ self ___genFrame___
+%
+
+category: 'Grail-Generator Protocol'
+method: PythonGenerator
+___readOnlyGetsetNames___
+	"See PyGeneratorBase >> ___refuseReadOnlyAttr___:."
+
+	^ #('gi_code' 'gi_frame' 'gi_running' 'gi_suspended' 'gi_yieldfrom')
+%
+
+set compile_env: 0
+
+category: 'Grail-Python Attribute Hook'
+classmethod: PythonGenerator
+___pythonValueAttrs___
+	"The gi_ introspection surface is VALUES (a bool, a code object, a frame or
+	None), so ___pyAttrLoad___ performs these accessors rather than answering a
+	BoundMethod that is always truthy.  See PyGeneratorBase."
+
+	^ super ___pythonValueAttrs___
+		add: #'gi_running';
+		add: #'gi_suspended';
+		add: #'gi_code';
+		add: #'gi_frame';
+		add: #'gi_yieldfrom';
+		yourself
+%

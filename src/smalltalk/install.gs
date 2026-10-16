@@ -439,6 +439,7 @@ run
 	at: #'PyDate' put: nil;
 	at: #'PyDateTime' put: nil;
 	at: #'PyFrame' put: nil;
+	at: #'PyGeneratorBase' put: nil;
 	at: #'PyGenericAlias' put: nil;
 	at: #'PyHostProcess' put: nil;
 	at: #'PyInstanceDict' put: nil;

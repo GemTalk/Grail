@@ -80,3 +80,23 @@ testGeneratorIntrospectionMatchesCPython
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
 		equals: '7 checks, 0 disagreeing [], keys match: True'
 %
+
+category: 'Grail-Tests-Generators'
+method: GeneratorApiTestCase
+testTheThreeGeneratorKindsAreSiblings
+	"tests/python/generator_sibling_types.py: generator, coroutine and async
+	generator each have (kind, object) as their MRO; none is an instance of
+	another's type or ABC; each has only its own API (no gi_* on a coroutine,
+	no send / throw / close on an async generator); iterating a coroutine or an
+	async generator is CPython's TypeError, named by the Python type; and all
+	three still run.  Two general divergences are pinned in the fixture."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'generator_sibling_types' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/generator_sibling_types.py')
+		name: 'generator_sibling_types'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '7 checks, 0 disagreeing [], keys match: True'
+%

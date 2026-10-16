@@ -111,7 +111,7 @@ category: 'Grail-Tests-PEP479'
 method: GeneratorStopTestCase
 testConversionAlsoAppliesOnTheSendPath
 	"send: and throw: had the same re-signal code duplicated; both now route
-	through _signalEscapedException, so the wrapping is not next()-only."
+	through ___signalEscapedException___, so the wrapping is not next()-only."
 
 	self
 		assertResult: 'convert_via_send'
@@ -216,7 +216,7 @@ testThrownStopIterationCaughtByBodyIsUnaffected
 ! (a bare ``raise'' in an ``except'', and every comprehension, which pushes its
 ! traceback frame in a handler and re-passes), so these shapes replaced the
 ! user's own exception with an error no Python ``except'' could catch.
-! PythonGenerator>>_resignalable: re-signals a clean copy in that case.
+! PythonGenerator>>___resignalable___: re-signals a clean copy in that case.
 
 category: 'Grail-Tests-PEP479'
 method: GeneratorStopTestCase

@@ -31,7 +31,7 @@ loop-level handler catches, so for-else and break placement are untouched.
 ESCAPE.  A StopAsyncIteration escaping an async generator BODY converts as
 CPython converts it -- RuntimeError(''async generator raised
 StopAsyncIteration'') with the escaped exception as __cause__
-(PythonAsyncGenerator >> _signalEscapedException, PEP 479''s async twin).
+(PythonAsyncGenerator >> ___signalEscapedException___, PEP 479''s async twin).
 
 UNPACK.  CPython''s UNPACK_SEQUENCE is defined by ITERATION; a
 non-subscriptable item is materialised through the iterator protocol first
