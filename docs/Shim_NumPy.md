@@ -1119,8 +1119,25 @@ category of `CPythonShimTestCase`):
   * `isinstance(C type, type)` is true, so `ABCMeta.register` accepts one.
   * `secrets.randbits` and `randbelow` work past 2**32.
 
-Still open: a dict read inline (`PyDict_GET_SIZE`), and a C type's `repr`,
-which reads `<ShimForeignObject ...>` rather than `<class '...'>`.
+Still open: a dict read inline (`PyDict_GET_SIZE`).
+
+A C type now introspects as CPython's does (category `Grail-Tests - C Type
+Introspection`). It used to fall back to the proxy's own Smalltalk answers.
+* **`repr`/`str`** are `<class 'numpy.ndarray'>`, not
+  `<ShimForeignObject ...>`.
+* **`__dict__`** is a mappingproxy of its own entries.
+  `PyDictProxy_New` now makes a real mappingproxy, where it used to answer
+  the dict itself.
+* **`__doc__`** is the type's own doc.
+* **`dir()`** lists its C methods, members and getsets, so
+  `inspect.getmembers` sees them. It used to list only the proxy's own
+  methods.
+* **`vars()`** reads `__dict__`. It used to list the proxy's Smalltalk
+  slots.
+* **`mro()`** works.
+* **`__subclasses__()`** lists the Python classes built on the type, in both
+  the bound spelling and `type.__subclasses__(T)`. It used to list
+  `object`'s subclasses, and the unbound spelling crashed the session.
 
 ## Repro
 

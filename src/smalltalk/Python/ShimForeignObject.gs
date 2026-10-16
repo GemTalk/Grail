@@ -303,6 +303,11 @@ ___pyAttrLoad___: aSym
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
+	"type's methods of a C TYPE, which C leaves to the proxy rather than
+	answer object's bound to object."
+	((aSym == #mro or: [aSym == #'__subclasses__'])
+		and: [(self ___grailForeignTypeCheck___: self subclass: true) @env0:notNil])
+			ifTrue: [^ super ___pyAttrLoad___: aSym].
 	"``__hash__'' that C does not answer is object's: a PyO3 class inherits
 	tp_hash, which no dict carries, and CPython's dataclasses reads
 	``default.__class__.__hash__'' for every field (pydantic's defaults are
@@ -902,6 +907,49 @@ __repr__
 	^ r
 %
 
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+__dir__
+	"dir() of a wheel's object, as CPython's type.__dir__ and object.__dir__
+	build it: the names C finds -- a type's own and its C bases', or an
+	instance's dict keys and its type's (CPythonShim>>foreignDirNames:) --
+	then object's.  Grail's object.__dir__ listed the proxy's own Smalltalk
+	methods instead, so dir() and inspect.getmembers missed every C method."
+
+	| names cNames |
+	names := Set @env0:new.
+	cNames := [(CPythonShim @env0:current) @env0:foreignDirNames: cPtr]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	cNames @env0:notNil ifTrue: [
+		cNames @env0:do: [:n | names @env0:add: n @env0:asString]].
+	object __dir__ @env0:do: [:n | names @env0:add: n @env0:asString].
+	^ names @env0:asArray
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+mro
+	"``T.mro()'' of a C type: its __mro__ as a list, as Behavior>>mro answers
+	a class's.  Reached from ___pyAttrLoad___:, for a type only."
+
+	^ list @env0:withAll: (self ___pyAttrLoad___: #'__mro__')
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+__subclasses__
+	"``T.__subclasses__()'' of a C type: the Python classes built directly on
+	it (ShimForeignSubclass class>>___foreignBases), by name.  A C type
+	deriving from it is not listed: nothing records one.  It answered
+	object's subclasses, bound to object."
+
+	| out |
+	out := OrderedCollection @env0:new.
+	(ShimForeignSubclass @env0:___foreignBases) @env0:keysAndValuesDo: [:cls :base |
+		base == self ifTrue: [out @env0:add: cls]].
+	^ list @env0:withAll: (out @env0:asSortedCollection: [:a :b | a @env0:name @env0:<= b @env0:name])
+%
 
 ! ------- ShimForeignSubclass instances: a Grail half and its C body ----------
 set compile_env: 0

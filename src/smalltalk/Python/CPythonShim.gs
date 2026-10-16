@@ -1869,6 +1869,16 @@ arrayFunctionKind: cPtr
 
 category: 'Grail-Calling'
 method: CPythonShim
+foreignDirNames: cPtr
+	"The names dir() finds in C for a wheel's object (shimForeignDirNames): a
+	type's own and its C bases', or an instance's dict keys and its type's.
+	A list, or nil when the pointer is not a plausible object."
+
+	^ self ___shimUserAction: #shimForeignDirNames withArgs: { cPtr }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
 foreignStr: cPtr repr: aBoolean
 	"str() -- or repr() when aBoolean -- of a wheel's own C object, through its
 	tp_str / tp_repr; nil when C has nothing to offer."
@@ -3551,6 +3561,14 @@ PyUnicode_Concat: left with: right
 %
 
 ! --------------- Dict API (additional) ---------------
+
+category: 'Grail-CPython API'
+method: CPythonShim
+PyDictProxy_New: aMapping
+	"types.MappingProxyType(aMapping): a read-only view of the live mapping."
+
+	^ (self wrap: (mappingproxy @env1:___on: aMapping)) memoryAddress
+%
 
 category: 'Grail-CPython API'
 method: CPythonShim

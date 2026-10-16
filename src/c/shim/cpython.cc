@@ -4051,6 +4051,99 @@ static int is_builtin_static_type(PyTypeObject *t) {
 }
 
 extern "C" PyObject *PyMethod_New(PyObject *func, PyObject *self);   /* shim_numpy.cc */
+/* A C type's own names, as its __dict__ has them in CPython: its tp_dict
+   (what Cython and cache_type_descr put there) and what PyType_Ready would
+   have added from the method, member and getset tables.  Each name once,
+   appended to the list ``into''. */
+static void foreign_type_own_names(PyTypeObject *t, PyObject *into) {
+    PyObject *seen = PyDict_New();
+    if (seen == NULL) { PyErr_Clear(); return; }
+#define GRAIL_ADD_NAME(n) do { \
+        if (PyDict_GetItemString(seen, (n)) == NULL) { \
+            PyObject *s_ = PyUnicode_FromString(n); \
+            if (s_ != NULL) { PyList_Append(into, s_); PyDict_SetItemString(seen, (n), Py_None); } \
+        } } while (0)
+    if (t->tp_dict != NULL) {
+        PyObject *keys = PyDict_Keys(t->tp_dict);
+        for (Py_ssize_t i = 0; keys != NULL && i < PyList_Size(keys); i++) {
+            const char *k = PyUnicode_AsUTF8(PyList_GetItem(keys, i));
+            if (k != NULL) GRAIL_ADD_NAME(k);
+        }
+        Py_XDECREF(keys);
+    }
+    for (PyMethodDef *m = t->tp_methods; m && m->ml_name; m++) GRAIL_ADD_NAME(m->ml_name);
+    for (PyMemberDef *m = t->tp_members; m && m->name; m++)
+        if (m->name[0] != '_' || m->name[1] != '_' || strstr(m->name, "offset__") == NULL)
+            GRAIL_ADD_NAME(m->name);
+    for (PyGetSetDef *g = t->tp_getset; g && g->name; g++) GRAIL_ADD_NAME(g->name);
+#undef GRAIL_ADD_NAME
+    Py_DECREF(seen);
+    PyErr_Clear();
+}
+
+/* ``T.__doc__'' as CPython's type_get_doc answers it: the type's own
+   __doc__ entry, else its tp_doc with any Argument Clinic signature left
+   out, else None.  Its own only -- a type's doc is not inherited. */
+extern "C" PyObject *_grail_doc_from_internal_doc(const char *name, const char *doc);
+static PyObject *foreign_type_doc(PyTypeObject *t) {
+    if (t->tp_dict != NULL) {
+        PyObject *v = PyDict_GetItemString(t->tp_dict, "__doc__");
+        if (v != NULL) return Py_NewRef(v);
+    }
+    return _grail_doc_from_internal_doc(t->tp_name, t->tp_doc);
+}
+
+/* ``T.__dict__'': a read-only view of the type's own entries, each the
+   object ``T.name'' answers (a method or member descriptor, a getset, a
+   value), plus __doc__.  It was a miss, so vars(T) listed the proxy's
+   Smalltalk instance variables and inspect saw no methods. */
+static PyObject *foreign_type_dict(PyTypeObject *t) {
+    PyObject *names = PyList_New(0);
+    PyObject *d = PyDict_New();
+    if (names == NULL || d == NULL) { Py_XDECREF(names); Py_XDECREF(d); return NULL; }
+    foreign_type_own_names(t, names);
+    for (Py_ssize_t i = 0; i < PyList_Size(names); i++) {
+        PyObject *n = PyList_GetItem(names, i);
+        const char *k = PyUnicode_AsUTF8(n);
+        if (k == NULL) continue;
+        PyObject *v = t->tp_dict != NULL ? PyDict_GetItemString(t->tp_dict, k) : NULL;
+        if (v != NULL) Py_INCREF(v);
+        else v = foreign_generic_getattr((PyObject *)t, k);
+        if (v == NULL) { PyErr_Clear(); continue; }
+        PyDict_SetItem(d, n, v);
+        Py_DECREF(v);
+    }
+    Py_DECREF(names);
+    if (PyDict_GetItemString(d, "__doc__") == NULL) {
+        PyObject *doc = foreign_type_doc(t);
+        if (doc != NULL) { PyDict_SetItemString(d, "__doc__", doc); Py_DECREF(doc); }
+    }
+    PyErr_Clear();
+    PyObject *proxy = PyDictProxy_New(d);
+    Py_DECREF(d);
+    return proxy;
+}
+
+/* ``repr(T)'' of a C type, as CPython's type_repr writes it: <class
+   'module.qualname'>, the module left out when it is builtins.  The
+   module is the type's __module__ entry, else tp_name before its last
+   dot; the name is what follows the dot. */
+static PyObject *foreign_type_repr(PyTypeObject *t) {
+    const char *tn = t->tp_name ? t->tp_name : "?";
+    const char *dot = strrchr(tn, '.');
+    const char *qual = dot ? dot + 1 : tn;
+    PyObject *mod = t->tp_dict != NULL ? PyDict_GetItemString(t->tp_dict, "__module__") : NULL;
+    const char *m = mod != NULL && PyUnicode_Check(mod) ? PyUnicode_AsUTF8(mod) : NULL;
+    if (m != NULL && strcmp(m, "builtins") != 0)
+        return PyUnicode_FromFormat("<class '%s.%s'>", m, qual);
+    if (m == NULL && dot != NULL) {
+        char buf[512];
+        snprintf(buf, sizeof(buf), "<class '%.*s.%s'>", (int)(dot - tn), tn, qual);
+        return PyUnicode_FromString(buf);
+    }
+    return PyUnicode_FromFormat("<class '%s'>", qual);
+}
+
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
     int is_type = is_foreign_type(obj);
     PyTypeObject *start = is_type ? (PyTypeObject *)obj : obj->ob_type;
@@ -4095,6 +4188,8 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
             return Py_NewRef(t->tp_base != NULL ? (PyObject *)t->tp_base : Py_None);
         if (strcmp(name, "__bases__") == 0 && t->tp_bases != NULL) return Py_NewRef(t->tp_bases);
         if (strcmp(name, "__mro__") == 0 && t->tp_mro != NULL) return Py_NewRef(t->tp_mro);
+        if (strcmp(name, "__doc__") == 0) return foreign_type_doc(t);
+        if (strcmp(name, "__dict__") == 0) return foreign_type_dict(t);
     }
     PyObject *v = foreign_type_dict_lookup(start, name);
     /* A descriptor found in the type's dict binds to an instance, as in
@@ -4170,7 +4265,10 @@ static PyObject *foreign_generic_getattr(PyObject *obj, const char *name) {
         "__abstractmethods__", "__annotate__", "__annotations__", "__base__", "__bases__",
         "__basicsize__", "__dict__", "__dictoffset__", "__doc__", "__flags__",
         "__itemsize__", "__module__", "__mro__", "__name__", "__qualname__",
-        "__text_signature__", "__type_params__", "__weakrefoffset__" };
+        "__text_signature__", "__type_params__", "__weakrefoffset__",
+        /* and type's methods that object would answer bound to itself:
+           the proxy answers these (ShimForeignObject>>mro). */
+        "mro", "__subclasses__" };
     for (size_t i = 0; is_type && i < sizeof(type_data_descrs) / sizeof(type_data_descrs[0]); i++)
         if (strcmp(name, type_data_descrs[i]) == 0) return NULL;
     if (is_type) {
@@ -4287,6 +4385,10 @@ static PyObject *foreign_str(PyObject *obj, int want_repr) {
     /* Along the base chain: the shim's PyType_FromSpec does no slot
        inheritance, so a pyclass's tp_str may live on its base. */
     for (PyTypeObject *b = t; b != NULL; b = b->tp_base) {
+        /* A type whose metatype chain reaches type with no slot of its own
+           on the way: type's repr, which is also its str. */
+        if (b == &PyType_Type && !b->tp_repr && !b->tp_str)
+            return foreign_type_repr((PyTypeObject *)obj);
         if (want_repr) { if (b->tp_repr) return b->tp_repr(obj);
                          if (b->tp_str)  return b->tp_str(obj); }
         else           { if (b->tp_str)  return b->tp_str(obj);
@@ -7919,6 +8021,36 @@ static OopType shimDataDescriptorNames(OopType typeOop)
     return GciNewString(buf);
 }
 
+/* shimForeignDirNames: the names dir() finds in C for a wheel's object, as a
+   list -- for a type, its own names and its C bases' (stopping at the
+   shim's builtin types, whose names Grail adds); for an instance, its
+   instance dict's keys and then its type's.  ShimForeignObject>>__dir__. */
+static OopType shimForeignDirNames(OopType ptrOop)
+{
+    PyObject *obj = (PyObject *)(intptr_t)GciOopToI64(ptrOop);
+    if (!plausible_pyobj(obj) || !plausible_pyobj(obj->ob_type)) return OOP_NIL;
+    PyErr_Clear();
+    PyObject *names = PyList_New(0);
+    if (names == NULL) { PyErr_Clear(); return OOP_NIL; }
+    PyTypeObject *t = obj->ob_type;
+    if (is_foreign_type(obj)) {
+        t = (PyTypeObject *)obj;
+    } else {
+        PyObject *d = foreign_instance_dict(obj, 0);
+        PyObject *keys = d != NULL ? PyDict_Keys(d) : NULL;
+        for (Py_ssize_t i = 0; keys != NULL && i < PyList_Size(keys); i++)
+            PyList_Append(names, PyList_GetItem(keys, i));
+        Py_XDECREF(keys);
+    }
+    for (; t != NULL && plausible_pyobj((PyObject *)t) && !is_shim_type(t); t = t->tp_base)
+        foreign_type_own_names(t, names);
+    PyErr_Clear();
+    buffer_cache_clear();
+    OopType res = pyobj_oop(names);
+    check_and_raise_error();
+    return res;
+}
+
 /* The PyTypeObject geometry CPythonShim>>typeMirrorFor: builds a mirror
    with: { size. tp_name. tp_basicsize. tp_flags. tp_base. tp_cache.
    tp_weaklist. tp_doc. tp_new }, as offsets from the struct start, then the
@@ -9026,8 +9158,14 @@ Py_hash_t Py_HashBuffer(const void *ptr, Py_ssize_t len) {
 
 /* --- Dict additional --- */
 
+/* A read-only view of the mapping, Grail's mappingproxy -- it answered the
+   mapping itself, so a C type's __dict__ could be written through. */
 PyObject *PyDictProxy_New(PyObject *mapping) {
-    return Py_NewRef(mapping);
+    if (mapping == NULL) return NULL;
+    OopType arg = pyobj_oop(mapping);
+    OopType r = GciPerform(server, "PyDictProxy_New:", &arg, 1);
+    if (check_gci_error()) return NULL;
+    return addr_to_pyobj(r);
 }
 
 /* --- Iterator --- */
@@ -9915,6 +10053,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimCallObject", shimCallObject, 4);
     GCI_DECLARE_ACTION("shimTypeMirrorLayout", shimTypeMirrorLayout, 1);
     GCI_DECLARE_ACTION("shimDataDescriptorNames", shimDataDescriptorNames, 1);
+    GCI_DECLARE_ACTION("shimForeignDirNames", shimForeignDirNames, 1);
     GCI_DECLARE_ACTION("shimForeignGetAttr", shimForeignGetAttr, 2);
     GCI_DECLARE_ACTION("shimForeignSetAttr", shimForeignSetAttr, 3);
     GCI_DECLARE_ACTION("shimForeignOp", shimForeignOp, 4);
