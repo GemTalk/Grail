@@ -1226,6 +1226,7 @@ run
 	at: #'ModuleFrameTestCase' put: nil;
 	at: #'ModuleFromSpecTestCase' put: nil;
 	at: #'ModuleFunctionDecoratorsTestCase' put: nil;
+	at: #'ModuleFunctionMetadataTestCase' put: nil;
 	at: #'ModuleFunctionsFirstClassTestCase' put: nil;
 	at: #'ModuleFunctionTestCase' put: nil;
 	at: #'ModuleGlobalRebindStringsTestCase' put: nil;
@@ -2818,6 +2819,7 @@ input src/smalltalk/PythonTests/ModuleFixturesTestCase.gs
 input src/smalltalk/PythonTests/ModuleFrameTestCase.gs
 input src/smalltalk/PythonTests/ModuleFromSpecTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionDecoratorsTestCase.gs
+input src/smalltalk/PythonTests/ModuleFunctionMetadataTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionsFirstClassTestCase.gs
 input src/smalltalk/PythonTests/ModuleFunctionTestCase.gs
 input src/smalltalk/PythonTests/ModuleGlobalRebindStringsTestCase.gs

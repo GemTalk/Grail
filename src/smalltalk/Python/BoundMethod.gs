@@ -595,6 +595,8 @@ __setattr__: name _: value
 	closure, which is where those rules live (ExecBlock)."
 	self ___isPythonBoundMethod___ ifFalse: [
 		BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
+		(self ___writeDefaultsThrough___: name value: value)
+			ifTrue: [^ ExecBlock @env0:___pyNone___].
 		^ super @env1:__setattr__: name _: value].
 	"``__class__'' is the one name that is a TYPE error rather than an attribute
 	one, and the difference is not cosmetic: CPython's method type defines no
@@ -1728,6 +1730,35 @@ __kwdefaults__
 
 	^ ExecBlock @env0:___pyKwDefaultsDict___:
 		(self ___rawDefaults___ ifNotNil: [:r | r @env0:at: 2])
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___writeDefaultsThrough___: name value: value
+	"``f.__defaults__ = t'' / ``f.__kwdefaults__ = d'' on a MODULE-LEVEL
+	function, written into the memo its calls bind from, so the assignment
+	changes what the next call does.  Answers false for any other name or
+	receiver, and for a shape the memo cannot carry (module class >>
+	___writeDefaults:entry:kw:into:); the caller then stores the value as an
+	attribute, as before.
+
+	Before, every such write took that attribute route: the read answered the
+	new value and the call went on binding the def-time one -- a default that
+	reads back but is not in effect (#1228).  A closure already wrote through
+	(ExecBlockAttrs >> ___writeDefaultsFor___:value:).  When this one takes
+	effect, any attribute an earlier, uncarried write left behind is dropped,
+	so the read is computed from the memo again."
+
+	| sym isKw |
+	sym := name @env0:asSymbol.
+	isKw := sym == #'__kwdefaults__'.
+	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
+	(receiver @env0:isKindOf: module) ifFalse: [^ false].
+	(receiver @env0:___writeFunctionDefaults___: selector @env0:asString
+		value: value kw: isKw) ifFalse: [^ false].
+	[self @env0:removeDynamicInstVar: sym]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	^ true
 %
 
 category: 'Grail-Attribute Access'
