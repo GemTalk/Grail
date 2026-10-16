@@ -3345,9 +3345,14 @@ ___defaultOwnerClassName___
 	"The class this def is being compiled INTO, or nil when there is none.  It
 	qualifies the side-table key a class-body method's def-time default is stored
 	under, so it has to be the same name ClassDefAst used when it emitted the
-	store.  Nil for a module-level def (which has its own module-keyed memo) and
-	for a @staticmethod, whose body has no receiver for the lookup to walk out
-	from -- both of those keep the default expression inline.
+	store.  Nil for a module-level def, which has its own module-keyed memo.
+
+	A @staticmethod has an owner too.  It compiles onto the METACLASS, so its
+	Smalltalk receiver is the class it was reached through, and the lookup walks
+	out from there like a @classmethod's.  It used to answer nil here and keep
+	the default inline, which re-evaluated it on every call -- so
+	``def f(acc=[])'' got a new list each time -- and left __defaults__ None,
+	because the key table had no entry to read (#1575).
 
 	Read through classBeingCompiled rather than from a scope stack because this
 	runs while the class's OWN methods are emitted, one at a time, which is
@@ -3357,9 +3362,7 @@ ___defaultOwnerClassName___
 	read have to agree on the spelling or the read simply misses and the default
 	is recomputed, which looks like nothing wrong."
 
-	^ (self isKindOf: StaticFunctionDefAst)
-		ifTrue: [nil]
-		ifFalse: [CallAst classBeingCompiled ifNotNil: [:c | c asString]]
+	^ CallAst classBeingCompiled ifNotNil: [:c | c asString]
 %
 
 category: 'Grail-code generation'
@@ -3430,8 +3433,8 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 	  * class-body method -- the class side table ClassDefAst filled while the
 	    class body ran, ``ifNil:'' back to the inline expression so a shape the
 	    store does not cover behaves exactly as it did before;
-	  * @staticmethod -- inline, as before: its body has no receiver for the
-	    lookup to walk out from.
+	  * @staticmethod -- the same class side table: its receiver is the class
+	    it was reached through (see ___defaultOwnerClassName___).
 
 	The closure (nested-def) generators do NOT come here.  They already wrap the
 	def in an outer block that binds the default at def time, which is the one
@@ -5180,11 +5183,9 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	no Python name can be spelled that way."
 	(aBuilder leafFor: ('___default_' , pname asString , '___') asSymbol)
 		ifNotNil: [:l | ^ aBuilder var: l].
-	"A @staticmethod (cut 67): the text's module-form generator, run under a
-	class context, emits NO memo -- the default expression is evaluated inline
-	on every call that needs it (the third of the three default paths the
-	``defaults are recreated per call'' note records).  Mirrored, not improved:
-	the two paths must agree."
+	"A @staticmethod (cut 67) reads the class side table like a method: its
+	receiver is the class it was reached through, and the text's module-form
+	generator emits the same probe (___defaultOwnerClassName___, #1575)."
 	"EVERY default expression below is emitted with the method's local table
 	suppressed, because a default is evaluated at def time in the scope ENCLOSING
 	the def: a name in it resolves as a module / builtins global even when this
@@ -5192,9 +5193,7 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 	default through module name resolution, not the method's -- and without the
 	suppression the emit would answer the very temp the binding is about to
 	fill (`def __getattr__(self, name, getattr=getattr)', the codecs idiom)."
-	(self ___irMethodMode___ and: [self ___irStripsReceiver___ not]) ifTrue: [
-		^ aBuilder withoutLocalsDo: [aDefaultNode ___emitIRValueOn___: aBuilder]].
-	owner := self ___irStripsReceiver___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
+	owner := self ___irMethodMode___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
 	owner notNil ifTrue: [
 		| probe privateName |
 		key := (self ___classDefaultKeyFor___: pname className: owner) asSymbol.

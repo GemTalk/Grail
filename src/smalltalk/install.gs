@@ -1441,6 +1441,7 @@ run
 	at: #'StarImportDynamicNamesTestCase' put: nil;
 	at: #'StarImportUnboundGlobalTestCase' put: nil;
 	at: #'StarUnpackIteratorTestCase' put: nil;
+	at: #'StaticmethodDefaultsTestCase' put: nil;
 	at: #'StaticmethodOverridesBaseMethodTestCase' put: nil;
 	at: #'StaticmethodShadowingTestCase' put: nil;
 	at: #'StatisticsTestCase' put: nil;
@@ -3037,6 +3038,7 @@ input src/smalltalk/PythonTests/StandInPackagesTestCase.gs
 input src/smalltalk/PythonTests/StarImportDynamicNamesTestCase.gs
 input src/smalltalk/PythonTests/StarImportUnboundGlobalTestCase.gs
 input src/smalltalk/PythonTests/StarUnpackIteratorTestCase.gs
+input src/smalltalk/PythonTests/StaticmethodDefaultsTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodOverridesBaseMethodTestCase.gs
 input src/smalltalk/PythonTests/StaticmethodShadowingTestCase.gs
 input src/smalltalk/PythonTests/StatisticsTestCase.gs
