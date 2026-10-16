@@ -7557,8 +7557,13 @@ int PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc) {
     }
     /* A type MIRROR -- the C face of an exception class Python defined --
        matches its own tp_base chain, which ends in the static types:
-       decimal.InvalidOperation -> DecimalException -> ArithmeticError. */
-    if (is_type_mirror(given)) {
+       decimal.InvalidOperation -> DecimalException -> ArithmeticError.  So
+       does a wheel's OWN exception type: pydantic_core's ValidationError
+       extends ValueError, and its convert_err asks exactly that of an error a
+       wrap validator's Python function let through.  Unmatched, the error
+       became an internal one, which a union does not catch -- ``AnyUrl | str''
+       refused "/" instead of trying str (FastAPI's test_openapi_servers). */
+    if (is_type_mirror(given) || is_foreign_type(given)) {
         PyObject *base = (PyObject *)((PyTypeObject *)given)->tp_base;
         if (base != NULL && base != given)
             return PyErr_GivenExceptionMatches(base, exc);

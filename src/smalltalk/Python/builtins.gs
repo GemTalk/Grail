@@ -5339,7 +5339,36 @@ ___isInstance___: anObject of: aClassOrTuple depth: aDepth
 					ifTrue: [^ true]].
 		^ false
 	].
-	^ self ___isInstanceSingle___: anObject of: cls
+	(self ___isInstanceSingle___: anObject of: cls) ifTrue: [^ true].
+	^ self ___isInstanceViaDunderClass___: anObject of: cls
+%
+
+category: 'Python-Built-in Functions'
+method: builtins
+___isInstanceViaDunderClass___: anObject of: cls
+	"CPython's isinstance second chance: when type(obj) is not a subclass, it
+	asks ``obj.__class__'', and a class that overrides __class__ -- asyncpg's
+	pgproto.UUID answers uuid.UUID -- passes through it (FastAPI's
+	test_inherited_custom_class).  Only for an instance whose own Python class
+	overrides __class__, so an ordinary failed isinstance pays one method
+	lookup and nothing else."
+
+	| real owner dc |
+	(anObject @env0:isKindOf: Behavior) ifTrue: [^ false].
+	(cls @env0:isKindOf: Behavior) ifFalse: [^ false].
+	real := anObject @env0:class.
+	real ___grailIsPythonClass___ ifFalse: [^ false].
+	owner := real @env0:whichClassIncludesSelector: #'__class__' environmentId: 1.
+	(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifFalse: [^ false].
+	dc := [anObject ___pyAttrLoad___: #'__class__']
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(dc == nil or: [dc == real or: [(dc @env0:isKindOf: Behavior) @env0:not]]) ifTrue: [^ false].
+	^ [(self issubclass: dc _: cls) ___isTruthy___]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
 %
 
 category: 'Python-Built-in Functions'

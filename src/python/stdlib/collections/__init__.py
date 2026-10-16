@@ -55,6 +55,12 @@ class defaultdict(dict):
 # ``...'' for the inner one, as CPython's recursive_repr makes it.
 _odict_repr_running = set()
 
+# OrderedDict.pop's "no default given" sentinel.  Module-level rather than
+# CPython's class-private ``__marker``: a mangled class-body name read by a
+# DEFAULT expression resolved when collections was loaded from source but not
+# once it was deployed (``NameError: _OrderedDict__marker'').
+_odict_marker = object()
+
 
 class OrderedDict(dict):
     """OrderedDict - dict that preserves insertion order plus a few
@@ -103,6 +109,37 @@ class OrderedDict(dict):
     def clear(self):
         super().clear()
         self._order = []
+
+    # dict's own pop / setdefault / update do not go through __setitem__ /
+    # __delitem__, so they left the key order stale: ``pop'' kept the key in
+    # _order and the next items() raised KeyError, and a key setdefault or
+    # update added was missing from keys(), values() and items() (inspect's
+    # _signature_get_partial pops from one).  Each is routed through the two
+    # methods that keep _order, as CPython's pure-Python OrderedDict does.
+    def pop(self, key, default=_odict_marker):
+        if key in self:
+            value = self[key]
+            del self[key]
+            return value
+        if default is _odict_marker:
+            raise KeyError(key)
+        return default
+
+    def setdefault(self, key, default=None):
+        if key in self:
+            return self[key]
+        self[key] = default
+        return default
+
+    def update(self, other=(), /, **kwds):
+        if hasattr(other, 'keys'):
+            for key in other.keys():
+                self[key] = other[key]
+        else:
+            for key, value in other:
+                self[key] = value
+        for key, value in kwds.items():
+            self[key] = value
 
     # CPython 3.12+: ``OrderedDict({'a': 1})'', ``OrderedDict()'' when empty.
     # Its own, not dict's -- see defaultdict.__repr__ for why pprint needs the

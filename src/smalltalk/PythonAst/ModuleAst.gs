@@ -893,6 +893,12 @@ ___docString___
 	"A NEW node holding the cleaned text (AbstractNode class >>
 	___cleanDoc___:, as CPython 3.13's compiler cleans it): the tree keeps
 	the literal, which ast.parse answers."
+	"Not the ``...'' marker: the parser records an Ellipsis literal as the
+	Symbol #'...', and a Symbol IS a CharacterCollection, so ``class E(str,
+	Enum): ...'' had Ellipsis for its __doc__ and ``def m(self): ...'' had
+	'...' -- pydantic's cleandoc then failed on the enum
+	(FastAPI's test_schema_compat_pydantic_v2)."
+	inner value == #'...' ifTrue: [^ nil].
 	^ (inner value isKindOf: CharacterCollection)
 		ifTrue: [ConstantAst new
 			value: (AbstractNode ___cleanDoc___: inner value);

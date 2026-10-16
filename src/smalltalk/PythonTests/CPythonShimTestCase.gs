@@ -3291,6 +3291,23 @@ f()'.
 
 category: 'Grail-Tests - FastAPI Phase 6'
 method: CPythonShimTestCase
+testAWheelsOwnExceptionTypeMatchesItsBases
+	"A heap exception type over ValueError -- how PyO3 builds pydantic_core's
+	ValidationError -- matches ValueError and Exception and not TypeError.  It
+	matched nothing: pydantic_core's convert_err then took a ValidationError
+	that a wrap validator let through for an internal error, and ``AnyUrl |
+	str'' refused a relative URL instead of trying str."
+
+	| shim |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	self
+		assert: (shim callModule: '_shimtest' method: 'test_heap_exception_matches')
+		equals: 'ValueError:1 Exception:1 TypeError:0'
+%
+
+category: 'Grail-Tests - FastAPI Phase 6'
+method: CPythonShimTestCase
 testAWheelsOwnIteratorIterates
 	"A wheel's own iterator type -- pydantic_core's ValidatorIterator, what
 	``Iterable[Model]'' validates to -- iterates through its tp_iter /

@@ -1788,6 +1788,30 @@ test_import_refcount(PyObject *module, PyObject *const *args, Py_ssize_t nargs) 
     return PyLong_FromSsize_t(m == NULL ? 0 : m->ob_refcnt);
 }
 
+/* test_heap_exception_matches() -> "ValueError:1 Exception:1 TypeError:0".
+   A wheel's own exception type -- built as PyO3 builds pydantic_core's
+   ValidationError, a heap type over ValueError -- must match its bases in
+   PyErr_GivenExceptionMatches.  It matched nothing, so convert_err took a
+   ValidationError a wrap validator let through for an internal error, and a
+   union did not try its next member (docs/Support_FastAPI.md, Phase 6). */
+static PyObject *
+test_heap_exception_matches(PyObject *module, PyObject *const *args, Py_ssize_t nargs) {
+    (void)module; (void)args; (void)nargs;
+    static PyType_Slot Err_slots[] = { {0, NULL} };
+    static PyType_Spec Err_spec = {
+        "_shimtest.HeapValueError", 0, 0, Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+        Err_slots
+    };
+    PyObject *type = PyType_FromSpecWithBases(&Err_spec, PyExc_ValueError);
+    if (!type) return NULL;
+    char out[128];
+    snprintf(out, sizeof out, "ValueError:%d Exception:%d TypeError:%d",
+             PyErr_GivenExceptionMatches(type, PyExc_ValueError),
+             PyErr_GivenExceptionMatches(type, PyExc_Exception),
+             PyErr_GivenExceptionMatches(type, PyExc_TypeError));
+    return PyUnicode_FromString(out);
+}
+
 /* test_dict_unhashable(d, bad, good) -> a report of each dict lookup on an
    UNHASHABLE key `bad', then one on a present key `good'.  pydantic_core's
    Literal validator looks every input up in a dict and takes the TypeError
@@ -2258,6 +2282,8 @@ static PyMethodDef shimtest_methods[] = {
      METH_FASTCALL, "test_dict_unhashable(d, bad, good) -> a report of lookups on an unhashable key"},
     {"test_iterate_counter", (PyCFunction)(void *)test_iterate_counter,
      METH_FASTCALL, "test_iterate_counter() -> a fresh Counter iterated from C"},
+    {"test_heap_exception_matches", (PyCFunction)(void *)test_heap_exception_matches,
+     METH_FASTCALL, "test_heap_exception_matches() -> a heap exception type matched against its bases"},
     {"test_import_refcount", (PyCFunction)(void *)test_import_refcount,
      METH_FASTCALL, "test_import_refcount(name, n) -> the module's refcount after n import/decref cycles"},
     {NULL, NULL, 0, NULL}
