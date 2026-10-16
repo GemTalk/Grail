@@ -1378,15 +1378,42 @@ ___declaresPropertyBinding___
 category: 'Grail-code generation'
 method: FunctionDefAst
 ___readsEarlierBindingOf___: aSymbol
-	"Whether one of this def's decorators is a foreign accessor on aSymbol --
-	``@foo.setter'' over a non-property ``foo'' -- and so READS the earlier
-	binding rather than simply replacing it.  See ClassDefAst >>
-	___isRebindLaterInBody___:."
+	"Whether one of this def's decorators is rooted at aSymbol --
+	``@foo.setter'' over a non-property ``foo'', ``@foo.classlevel'' -- and so
+	READS the earlier binding rather than simply replacing it.  A declarative
+	property's own accessors are not: the property machinery assembles those.
+	See ClassDefAst >> ___isRebindLaterInBody___:."
 
 	decorator_list isNil ifTrue: [^ false].
 	^ decorator_list anySatisfy: [:deco |
-		(self ___isForeignAccessorDecorator___: deco)
-			and: [deco value id asSymbol == aSymbol]]
+		(self isPropertyAccessorDecorator: deco) not
+			and: [(self ___decoratorRootName___: deco) == aSymbol]]
+%
+
+category: 'Grail-code generation'
+method: FunctionDefAst
+___decoratorRootName___: deco
+	"The name an attribute / call chain decorator starts from -- ``foo'' for
+	``@foo.setter'', ``@foo.classlevel'', ``@foo.register(int)'' -- or nil.
+
+	Any decorator rooted at the def's own name READS the earlier binding, not
+	only the three accessor spellings: SQLAlchemy's rw_hybridproperty is
+	``@__doc__.setter'' then ``@__doc__.classlevel'', and its hybridmethod is
+	``@m.classlevel''.  Counted as a rebind, the first def's decorator was
+	deferred past the body, so ``__doc__.classlevel'' read the bare function
+	(InstrumentedAttribute, at sqlalchemy.orm import)."
+
+	| node |
+	node := deco.
+	[node notNil] whileTrue: [
+		(node isKindOf: NameAst) ifTrue: [^ node id asSymbol].
+		(node isKindOf: AttributeAst)
+			ifTrue: [node := node value]
+			ifFalse: [
+				(node isKindOf: CallAst)
+					ifTrue: [node := node function]
+					ifFalse: [^ nil]]].
+	^ nil
 %
 
 category: 'Grail-code generation'
@@ -3397,7 +3424,7 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 	def in an outer block that binds the default at def time, which is the one
 	form that was right all along."
 
-	| ownerClassName |
+	| ownerClassName privateName |
 	self isModuleLevelDef ifTrue: [
 		aStream
 			nextPutAll: '(self @env0:___moduleDefaultAt: #''___default_';
@@ -3410,11 +3437,15 @@ emitDefTimeDefaultFor: aParamName node: aDefaultNode on: aStream
 		^ self].
 	ownerClassName := self ___defaultOwnerClassName___.
 	ownerClassName isNil ifTrue: [^ aDefaultNode printSmalltalkOn: aStream].
+	privateName := self ___privateClassBodyNameIn___: aDefaultNode owner: ownerClassName.
 	aStream
 		nextPutAll: '((self @env0:___grailClassDefault___: #';
 		nextPut: $';
 		nextPutAll: (self ___classDefaultKeyFor___: aParamName className: ownerClassName);
-		nextPut: $';
+		nextPut: $'.
+	privateName notNil ifTrue: [
+		aStream nextPutAll: ' orClassBodyName: #'''; nextPutAll: privateName; nextPut: $'].
+	aStream
 		nextPutAll: ') ifNil: ['.
 	aDefaultNode printSmalltalkOn: aStream.
 	aStream nextPutAll: '])'
@@ -5076,6 +5107,36 @@ ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwLeaf names: paramNa
 		aBuilder add: (aBuilder assign: (aBuilder leafFor: pname asSymbol) from: posGate)]
 %
 
+category: 'Grail-code generation'
+method: FunctionDefAst
+___privateClassBodyNameIn___: aDefaultNode owner: ownerClassName
+	"The MANGLED name when aDefaultNode is a bare private name -- ``__marker'',
+	read as ``_MutableMapping__marker'' -- else nil.  Such a default can only
+	mean the class-body binding, so when the stored default is missing (a
+	deployed class: see Object >> ___grailClassDefault___:orClassBodyName:)
+	the class attribute answers it.  Both emit arms ask this.
+
+	Mangled from ownerClassName when the node answers its name unmangled: the
+	IR arm builds a method after the class context that NameAst mangles
+	through has moved on (collections.abc's MutableMapping.pop is IR-built)."
+
+	| id mangled stem |
+	(aDefaultNode isKindOf: NameAst) ifFalse: [^ nil].
+	"The SOURCE spelling decides privacy: the parser has usually mangled ``id''
+	already (``_C__x''), keeping ``__x'' in writtenId."
+	id := aDefaultNode writtenId asString.
+	((id size > 2) and: [(id copyFrom: 1 to: 2) = '__'
+		and: [(id size >= 4 and: [(id copyFrom: id size - 1 to: id size) = '__']) not]])
+			ifFalse: [^ nil].
+	mangled := aDefaultNode id asString.
+	mangled = id ifTrue: [mangled := aDefaultNode ___mangledId___ asString].
+	(mangled = id and: [ownerClassName notNil]) ifTrue: [
+		stem := ownerClassName asString.
+		[stem notEmpty and: [stem first = $_]] whileTrue: [stem := stem copyFrom: 2 to: stem size].
+		mangled := '_' , stem , id].
+	^ mangled
+%
+
 category: 'Grail-IR Codegen'
 method: FunctionDefAst
 ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
@@ -5113,11 +5174,16 @@ ___irDefTimeDefault___: pname node: aDefaultNode on: aBuilder
 		^ aBuilder withoutLocalsDo: [aDefaultNode ___emitIRValueOn___: aBuilder]].
 	owner := self ___irStripsReceiver___ ifTrue: [self ___defaultOwnerClassName___] ifFalse: [nil].
 	owner notNil ifTrue: [
-		| probe |
+		| probe privateName |
 		key := (self ___classDefaultKeyFor___: pname className: owner) asSymbol.
+		privateName := self ___privateClassBodyNameIn___: aDefaultNode owner: owner.
 		aBuilder atNode: self.
-		probe := aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
-			with: { aBuilder obj: key } env: 0.
+		probe := privateName isNil
+			ifTrue: [aBuilder send: #'___grailClassDefault___:' to: aBuilder selfNode
+				with: { aBuilder obj: key } env: 0]
+			ifFalse: [aBuilder send: #'___grailClassDefault___:orClassBodyName:'
+				to: aBuilder selfNode
+				with: { aBuilder obj: key. aBuilder obj: privateName asSymbol } env: 0].
 		^ aBuilder ifNilValue: probe
 			then: [aBuilder add: (aBuilder withoutLocalsDo: [
 				aDefaultNode ___emitIRValueOn___: aBuilder])]].

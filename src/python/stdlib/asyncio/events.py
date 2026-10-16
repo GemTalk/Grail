@@ -52,8 +52,20 @@ from asyncio import exceptions as _exceptions
 # separate facts: get_running_loop() must raise when nothing is running even if
 # a loop has been created, because that is the canonical "am I in async code?"
 # test and library code (asgiref.local) depends on it raising.
-_running_loop = None
+#
+# The RUNNING loop is per thread, as in CPython: keyed by _thread.get_ident()
+# (the resuming thread's GsProcess, so a coroutine body shares its thread's
+# entry).  It was one module global, so a loop running in one thread read as
+# running in EVERY thread -- Starlette's TestClient runs each websocket
+# connection's loop in a portal thread of its own, and the second
+# ``client.websocket_connect'' raised "Already running asyncio in this
+# thread" (FastAPI's websockets tutorial003).
+_running_loops = {}
 _event_loop = None
+
+
+def _running_here():
+    return _running_loops.get(_thread.get_ident())
 
 
 class Handle:
@@ -305,7 +317,7 @@ class EventLoop(AbstractEventLoop):
     # --- running ----------------------------------------------------------
 
     def is_running(self):
-        return _running_loop is self
+        return any(loop is self for loop in _running_loops.values())
 
     def is_closed(self):
         return self._closed
@@ -402,14 +414,16 @@ class EventLoop(AbstractEventLoop):
                 self.call_soon_threadsafe(future.set_exception, ex)
 
     def run_forever(self):
-        global _running_loop
         self._check_closed()
-        if _running_loop is not None:
+        if self.is_running():
+            raise RuntimeError('This event loop is already running')
+        ident = _thread.get_ident()
+        if _running_loops.get(ident) is not None:
             raise RuntimeError(
                 'Cannot run the event loop while another loop is running')
         import sys as _sys
         old_hooks = _sys.get_asyncgen_hooks()
-        _running_loop = self
+        _running_loops[ident] = self
         self._stopping = False
         try:
             # Inside the protected region: anything raising between the
@@ -422,7 +436,7 @@ class EventLoop(AbstractEventLoop):
                 if self._stopping:
                     break
         finally:
-            _running_loop = None
+            _running_loops.pop(ident, None)
             self._stopping = False
             _sys.set_asyncgen_hooks(firstiter=old_hooks[0],
                                     finalizer=old_hooks[1])
@@ -735,22 +749,24 @@ def get_running_loop():
     inside async code?" test, and callers such as asgiref.local rely on the
     exception to take their synchronous path.
     """
-    if _running_loop is None:
+    loop = _running_here()
+    if loop is None:
         raise RuntimeError('no running event loop')
-    return _running_loop
+    return loop
 
 
 def _get_running_loop():
     """CPython's private accessor: the loop or None, no raising."""
-    return _running_loop
+    return _running_here()
 
 
 def get_event_loop():
     """The running loop if there is one, else the one set for this session,
     creating it on first use."""
     global _event_loop
-    if _running_loop is not None:
-        return _running_loop
+    running = _running_here()
+    if running is not None:
+        return running
     if _event_loop is None:
         _event_loop = new_event_loop()
     return _event_loop

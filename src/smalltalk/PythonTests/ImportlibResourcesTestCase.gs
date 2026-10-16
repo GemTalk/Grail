@@ -192,7 +192,7 @@ testCertifiWhereIdiomLocatesABundledFile
 	| result |
 	result := self eval: 'from importlib.resources import as_file, files
 import os
-ctx = as_file(files("importlib").joinpath("metadata.py"))
+ctx = as_file(files("importlib").joinpath("machinery.py"))
 located = str(ctx.__enter__())
 ok = os.path.isfile(located)
 with open(located) as fp:

@@ -96,6 +96,7 @@ dynamicInstVarAt: aSymbol put: aValue
 		^ aValue].
 	(dict includesKey: aSymbol) ifFalse: [order add: aSymbol].
 	dict at: aSymbol put: aValue.
+	self ___forgetInherited___: aSymbol.
 	^ aValue
 %
 
@@ -105,9 +106,57 @@ removeDynamicInstVar: aSymbol
 	"Remove aSymbol's entry; a missing name is a no-op (every caller probes
 	first, and the reset paths sweep names that may already be gone)."
 
+	self ___forgetInherited___: aSymbol.
 	(dict includesKey: aSymbol) ifFalse: [^ self].
 	dict removeKey: aSymbol.
 	order remove: aSymbol ifAbsent: [].
+	^ self
+%
+
+category: 'Grail-MI Provenance'
+method: GrailClassAttrHolder
+___noteInherited___: aSymbol
+	"Record that aSymbol's entry was COPIED here from a secondary base by
+	importlib's ___mergeSecondaryBases___:..., not stored by the class itself.
+	Single inheritance underneath means a secondary base's class attributes
+	have to be copied for reads to find them, but in CPython they are the
+	BASE's, not the subclass's: ``class G(Generic[T], O): ...'' listed O's
+	attributes in G.__dict__, and SQLAlchemy's TypingOnly -- which asserts a
+	direct subclass adds nothing -- refused SQLCoreOperations over Generic's
+	copied ``_is_protocol''.  ___classDict___ asks ___isInherited___:.
+
+	Kept in the object's OWN kernel dynamic instVar, under super, rather than
+	in ``dict'': every reader of the holder protocol (43 of them, enum member
+	scans among them) would otherwise see the record as an attribute; and an
+	instVar would change the shape of every deployed class's holder.  A later
+	store or removal of the name by anyone forgets it, so an attribute the
+	class then sets for itself is its own again."
+
+	| names |
+	names := super dynamicInstVarAt: #'___grailMIInherited___'.
+	names == nil ifTrue: [
+		names := IdentitySet new.
+		super dynamicInstVarAt: #'___grailMIInherited___' put: names].
+	names add: aSymbol asSymbol.
+	^ self
+%
+
+category: 'Grail-MI Provenance'
+method: GrailClassAttrHolder
+___isInherited___: aSymbol
+	"True when aSymbol's entry is a merge copy (see ___noteInherited___:)."
+
+	| names |
+	names := super dynamicInstVarAt: #'___grailMIInherited___'.
+	^ names ~~ nil and: [names includes: aSymbol asSymbol]
+%
+
+category: 'Grail-MI Provenance'
+method: GrailClassAttrHolder
+___forgetInherited___: aSymbol
+	| names |
+	names := super dynamicInstVarAt: #'___grailMIInherited___'.
+	names == nil ifFalse: [names remove: aSymbol asSymbol ifAbsent: []].
 	^ self
 %
 

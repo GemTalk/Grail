@@ -122,6 +122,21 @@ Phase 6 -- the rest of FastAPI's core tests:
 37. A class's ``__module__`` ignored a module that renames itself
     (_pydecimal's ``__name__ = 'decimal'``): CPython reads ``__name__`` as the
     class statement runs.
+
+Phase 6 part 3 -- the tutorial tests:
+
+38. importlib.metadata was a stub: no installed distribution had a version
+    (pydantic's EmailStr asks email-validator's).  It is CPython's now.
+39. Under a Python metaclass, a classmethod overriding a base's instance method
+    of the same name read as the base's UnboundMethod when it had a default
+    argument (importlib.metadata's MetadataPathFinder).
+40. vars(obj) answered a snapshot, not obj.__dict__: writes through it were
+    lost.
+41. ``from ....x import y`` -- four dots -- was a SyntaxError.
+42. hashlib had no sha224 / sha384 (PyJWT's HS384 / ES384 / RS384).
+43. A keyword call through ``cls`` to a classmethod with no defaults --
+    ``cls.m(x, a=1)`` -- found no varargs entry: pydantic-settings' models
+    were empty.
 """
 
 import sys
@@ -1288,6 +1303,438 @@ finally:
 check('class_module_follows_a_renamed_module',
       (_ren.Before.__module__, _ren.After.__module__),
       ('walls_renamed_impl', 'walls_public_name'))
+
+
+# --- 38-41. Phase 6 part 3 ---------------------------------------------------------
+
+import importlib.metadata as _md                                 # noqa: E402
+
+check('metadata_raises_for_a_missing_distribution',
+      _raises(lambda: _md.version('grail-walls-no-such-dist'), _md.PackageNotFoundError), True)
+
+
+class _Meta(type):
+    pass
+
+
+class _InstanceSide(metaclass=_Meta):
+    def probe(self, context=None):
+        return 'instance'
+
+
+class _ClassSide(_InstanceSide):
+    @classmethod
+    def probe(cls, context=None):
+        return ('classmethod', cls.__name__, context)
+
+
+check('classmethod_overriding_under_a_metaclass', _ClassSide.probe(7), ('classmethod', '_ClassSide', 7))
+
+
+class _Plain:
+    pass
+
+
+_plain = _Plain()
+vars(_plain).update({'written': 1})
+check('vars_is_the_live_dict', getattr(_plain, 'written', None), 1)
+check('four_dot_relative_import_parses',
+      compile('from ....pkg import name\n', '<walls>', 'exec') is not None, True)
+
+
+import hashlib as _hashlib                                       # noqa: E402
+import hmac as _hmac                                             # noqa: E402
+
+_h384 = _hashlib.sha384(b'abc')
+_h384.update(b'def')
+check('sha224_and_sha384',
+      (_hashlib.sha224(b'abc').hexdigest()[:16], _h384.hexdigest()[:16], _h384.digest_size,
+       _h384.block_size, _hmac.new(b'key', b'msg', _hashlib.sha384).hexdigest()[:16]),
+      ('23097d223405d822', 'c6a4c65b227e7387', 48, 128, '3bba95ff38376a12'))
+
+
+class _KwClassmethod:
+    @classmethod
+    def pair(cls, first, second):
+        return (cls.__name__, first, second)
+
+    @classmethod
+    def call_by_keyword(cls):
+        return cls.pair(1, second=2)
+
+
+class _KwClassmethodChild(_KwClassmethod):
+    pass
+
+
+check('keyword_call_to_a_classmethod_through_cls', _KwClassmethodChild.call_by_keyword(),
+      ('_KwClassmethodChild', 1, 2))
+
+
+
+import os as _os                                                 # noqa: E402
+import runpy as _runpy                                           # noqa: E402
+import sys as _sys                                               # noqa: E402
+import tempfile as _tempfile                                     # noqa: E402
+
+_rm_dir = _tempfile.mkdtemp()
+_os.mkdir(_os.path.join(_rm_dir, '_walls_rm_pkg'))
+with open(_os.path.join(_rm_dir, '_walls_rm_pkg', '__init__.py'), 'w') as _f:
+    _f.write('')
+with open(_os.path.join(_rm_dir, '_walls_rm_pkg', 'mod.py'), 'w') as _f:
+    _f.write('answer = 6 * 7\n')
+_sys.path.insert(0, _rm_dir)
+try:
+    _rm_globals = _runpy.run_module('_walls_rm_pkg.mod', run_name='__main__')
+finally:
+    _sys.path.remove(_rm_dir)
+check('runpy_run_module_through_the_path_finder',
+      (_rm_globals['answer'], _rm_globals['__name__']), (42, '__main__'))
+
+
+import multiprocessing as _mp                                    # noqa: E402
+from multiprocessing.context import SpawnProcess as _SpawnProcess  # noqa: E402
+
+_mp.allow_connection_pickling()
+_spawn = _mp.get_context('spawn')
+check('multiprocessing_context_imports',
+      (_spawn.get_start_method(), _spawn.Process is _SpawnProcess), ('spawn', True))
+
+
+from email.message import Message as _Message                    # noqa: E402
+
+_msg = _Message()
+_msg['content-type'] = 'text/html; charset="utf-8"; X=1'
+check('email_message_get_params', _msg.get_params(),
+      [('text/html', ''), ('charset', 'utf-8'), ('x', '1')])
+
+
+import types as _types                                           # noqa: E402
+from unittest.mock import patch as _patch                        # noqa: E402
+
+_patched_mod = _types.ModuleType('_walls_patched')
+
+
+def _reads_missing_global():
+    return _patched_mod.not_there_yet
+
+
+with _patch.object(_patched_mod, 'not_there_yet', 'made', create=True):
+    _inside = _reads_missing_global()
+check('patch_create_binds_and_removes_a_missing_name',
+      (_inside, hasattr(_patched_mod, 'not_there_yet')), ('made', False))
+
+
+import asyncio as _asyncio                                       # noqa: E402
+import threading as _threading                                   # noqa: E402
+
+_other_thread = []
+
+
+async def _in_other_thread():
+    return 'other loop'
+
+
+async def _start_a_loop_in_a_thread():
+    t = _threading.Thread(
+        target=lambda: _other_thread.append(_asyncio.run(_in_other_thread())))
+    t.start()
+    t.join()
+    return _asyncio.get_running_loop() is not None
+
+
+check('the_running_loop_is_per_thread',
+      (_asyncio.run(_start_a_loop_in_a_thread()), _other_thread), (True, ['other loop']))
+
+
+
+class _FrozenMapping(dict):
+    def __setitem__(self, key, value):
+        raise ValueError(key)
+
+
+_thawed = _FrozenMapping({'a': 1}).copy()
+_thawed['b'] = 2
+from collections import defaultdict as _defaultdict             # noqa: E402
+_dd = _defaultdict(list, {'k': [1]}).copy()
+check('dict_copy_of_a_subclass_is_a_plain_dict',
+      (type(_thawed).__name__, _thawed, type(_dd).__name__, _dd.default_factory, _dd['k']),
+      ('dict', {'a': 1, 'b': 2}, 'defaultdict', list, [1]))
+
+
+from typing import Generic as _Generic, TypeVar as _TypeVar      # noqa: E402
+
+_TV = _TypeVar('_TV')
+
+
+class _SecondaryWithAttr:
+    shared = 1
+
+
+class _GenericFirst(_Generic[_TV], _SecondaryWithAttr):
+    __slots__ = ()
+
+
+class _GenericFirstStores(_Generic[_TV], _SecondaryWithAttr):
+    pass
+
+
+_GenericFirstStores.shared = 2
+check('a_secondary_bases_attributes_are_not_in_the_subclass_dict',
+      (sorted(n for n in vars(_GenericFirst) if not n.startswith('__')), _GenericFirst.shared,
+       'shared' in vars(_GenericFirstStores), _SecondaryWithAttr.shared),
+      ([], 1, True, 1))
+
+
+
+from typing import TYPE_CHECKING as _TYPE_CHECKING              # noqa: E402
+
+
+class _HashKeptUnderTypeChecking:
+    if _TYPE_CHECKING:
+        def __hash__(self) -> int: ...
+    else:
+        __hash__ = object.__hash__
+
+    def __eq__(self, other):
+        return NotImplemented
+
+
+class _HashStubOnlyUnderTypeChecking:
+    if _TYPE_CHECKING:
+        def __hash__(self) -> int: ...
+
+    def __eq__(self, other):
+        return NotImplemented
+
+
+def _hashable(cls):
+    try:
+        hash(cls())
+        return True
+    except TypeError:
+        return False
+
+
+check('a_hash_bound_under_a_class_body_if',
+      (_hashable(_HashKeptUnderTypeChecking), _hashable(_HashStubOnlyUnderTypeChecking)),
+      (True, False))
+
+
+class _NestedUnderIf:
+    if _TYPE_CHECKING:
+        options: object
+    else:
+        class options:
+            depth = 1
+    deeper = options.depth + 1
+
+
+check('a_class_defined_under_a_class_body_if',
+      (_NestedUnderIf.options.__qualname__, _NestedUnderIf.deeper),
+      ('_NestedUnderIf.options', 2))
+
+
+
+class _Hybrid:
+    def __init__(self, func):
+        self.func = func
+        self.clslevel = func
+
+    def classlevel(self, func):
+        self.clslevel = func
+        return self
+
+
+class _HybridChain:
+    @_Hybrid
+    def m(self):
+        return 'instance'
+    first_read = type(m).__name__
+
+    @m.classlevel
+    def m(cls):
+        return 'class'
+
+
+check('a_decorator_rooted_at_the_defs_own_name_reads_the_earlier_binding',
+      (_HybridChain.first_read, type(_HybridChain.__dict__['m']).__name__,
+       _HybridChain.__dict__['m'].clslevel(None)),
+      ('_Hybrid', '_Hybrid', 'class'))
+
+
+import inspect as _inspect                                       # noqa: E402
+
+
+def _keep(fn):
+    _kept.append(_inspect.isfunction(fn))
+    return fn
+
+
+_kept = []
+
+
+class _WrappedAccessors:
+    @property
+    @_keep
+    def p(self):
+        return self._p
+
+    @p.setter
+    @_keep
+    def p(self, value):
+        self._p = value
+
+
+check('a_wrapped_property_setter_is_a_function',
+      (_kept, _WrappedAccessors.p.fget.__code__.co_argcount,
+       _WrappedAccessors.p.fset.__code__.co_argcount),
+      ([True, True], 1, 2))
+
+
+class _AddMeta(type):
+    def __add__(cls, other):
+        return (cls.__name__, other)
+
+    def __radd__(cls, other):
+        return (other, cls.__name__)
+
+
+class _Addable(metaclass=_AddMeta):
+    def __add__(self, other):
+        return 'instance'
+
+
+check('a_metaclass_binary_operator_applies_to_its_classes',
+      (_Addable + {'k': 1}, 1 + _Addable, _Addable() + 1),
+      (('_Addable', {'k': 1}), (1, '_Addable'), 'instance'))
+
+
+import functools as _functools_walls                             # noqa: E402
+
+check('annotations_of_a_wrapper_of_a_builtin',
+      _functools_walls.update_wrapper(lambda: 0, len).__annotations__, {})
+
+
+class _DocDescriptor:
+    def __init__(self, func):
+        self.func = func
+
+    def setter(self, func):
+        return self
+
+
+class _DefinesDoc:
+    """class docstring"""
+    @_DocDescriptor
+    def __doc__(self):
+        return 'instance doc'
+    seen = type(__doc__).__name__
+
+    @__doc__.setter
+    def __doc__(self, value):
+        pass
+
+
+check('a_class_body_def_named_doc_is_its_binding',
+      (_DefinesDoc.seen, type(_DefinesDoc.__dict__['__doc__']).__name__),
+      ('_DocDescriptor', '_DocDescriptor'))
+
+
+
+class _ClassGetitemFirst:
+    def __class_getitem__(cls, key):
+        return ('first', cls.__name__)
+
+
+class _PlainRoot:
+    pass
+
+
+class _CarriesItSecondary(_PlainRoot, _ClassGetitemFirst):
+    pass
+
+
+class _Deep(_CarriesItSecondary):
+    pass
+
+
+class _DeeperGeneric(_Deep, _Generic[_TV]):
+    pass
+
+
+class _LeftGeneric(_Generic[_TV]):
+    pass
+
+
+class _MroOrdered(_LeftGeneric, _DeeperGeneric):
+    pass
+
+
+check('an_mro_earlier_definer_beats_a_left_bases_ancestor',
+      _MroOrdered[int], ('first', '_MroOrdered'))
+
+
+class _NewDict(dict):
+    def __new__(cls, *args):
+        return dict.__new__(cls)
+
+
+class _NewList(list):
+    def __new__(cls, *args):
+        return list.__new__(cls)
+
+
+class _NewTuple(tuple):
+    def __new__(cls, *args):
+        return tuple.__new__(cls)
+
+
+check('a_builtin_new_called_with_its_subclass',
+      (type(_NewDict()).__name__, type(_NewList()).__name__, type(_NewTuple()).__name__,
+       list(type('E', (), {'__iter__': lambda self: iter([1])})())),
+      ('_NewDict', '_NewList', '_NewTuple', [1]))
+
+
+
+from collections.abc import MutableMapping as _MutableMapping   # noqa: E402
+
+
+class _PoppableMapping(_MutableMapping):
+    def __init__(self):
+        self._d = {'k': 1}
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __setitem__(self, key, value):
+        self._d[key] = value
+
+    def __delitem__(self, key):
+        del self._d[key]
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def __len__(self):
+        return len(self._d)
+
+
+def _pop_missing():
+    try:
+        _PoppableMapping().pop('absent')
+    except KeyError:
+        return 'KeyError'
+    return 'no error'
+
+
+# MutableMapping.pop's default is the class-private ``__marker''.  Run warm --
+# collections.abc deployed, as the SUnit shards run it -- the stored default
+# was missing and the fallback read ``_MutableMapping__marker'' as a module
+# global: a NameError from every pop() without a default.
+check('a_deployed_class_private_default',
+      (_PoppableMapping().pop('k'), _PoppableMapping().pop('absent', 'd'), _pop_missing()),
+      (1, 'd', 'KeyError'))
 
 
 if __name__ == '__main__':

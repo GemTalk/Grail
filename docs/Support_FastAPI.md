@@ -1381,3 +1381,112 @@ shards; the CPython conformance gate **0 regressions, 4 improvements**
 test_math and test___all__ timed out beside the SUnit suite and are OK alone;
 `check_python_fixtures.sh` 667 fixtures agree with CPython.
 
+
+### Phase 6, part 3 -- FastAPI's tutorial tests *(2026-10-15)*
+
+On `jmason/fastapi7`, after #1654.  `tests/test_tutorial/` -- 252 modules,
+1288 tests, each importing a `docs_src` example -- run through
+`tests/fastapi/run_fastapi_tests.py` (which now `chdir`s to the sdist root,
+as the tutorials open `./docs_src/...` relative paths).  CPython's reference
+(`p7/tut.cpy`): 1285 passed, 3 skipped, 4 xfailed, after installing PyJWT,
+pydantic-settings, email-validator, uvicorn, a2wsgi, opentelemetry-sdk,
+strawberry-graphql, sqlmodel, jinja2, flask and `pwdlib[argon2]` (sqlalchemy
+with `DISABLE_SQLALCHEMY_CEXT=1 --no-binary`).
+
+The first Grail run matched CPython on **1175 of 1288**.  The walls, each a
+general Grail bug, each pinned by a check in `tests/python/fastapi_walls.py`:
+
+| wall | symptom in the tutorials | fix |
+|---|---|---|
+| `importlib.metadata` was a stub | `version()` of an installed distribution raised; pydantic's email/settings paths asked | CPython 3.14's package; a vendored-module version table for the stdlib-shipped frameworks |
+| a `@classmethod` with a default overriding a base instance method under a metaclass | MessageNotUnderstood | the metaclass-side source-chain check also asks the selector family |
+| `vars(cls)` was a snapshot | `vars(C).update(...)` lost the write | the live view |
+| `from ....x import y` | a four-dot relative import did not parse | dots read as `.` and `...` tokens alike |
+| no `hashlib.sha224` / `sha384` | 70 OAuth2/JWT setups failed (`HS384` tables) | pure-Python `_grail_sha2`, verified against CPython |
+| a keyword call to a classmethod through `cls` | `cls.m(x, a=1)` was an MNU: pydantic-settings' `settings_customise_sources` left every `BaseSettings` empty | classmethods get the varargs forwarder instance methods have (not for a `cls`-only def, nor `__init_subclass__`) |
+| runpy's `_Loader` had no `get_code` | `runpy.run_module` (python_types tutorials) | `get_code` / `get_source` / `get_filename` / `is_package` |
+| no `multiprocessing.context`, `Pipe`, `get_context` | `import uvicorn` failed (so `patch('uvicorn.run')` too) | importable; constructing a process still raises |
+| `email.message.Message.get_params` | strawberry's content-type parse | CPython's shape |
+| `mock.patch(..., create=True)` ignored | patching a module global the module only refers to (dependencies 007/008/010) | honoured, through the decorator and `patch.multiple` |
+| the RUNNING event loop was one global | a second websocket connection (its own portal thread) raised "Already running asyncio in this thread" | per thread, keyed by `_thread.get_ident()` |
+| `dict.copy()` of a subclass answered the subclass | OpenTelemetry's write-forbidding `Context` raised ValueError on every `set_value` | a plain dict, as CPython; `defaultdict.copy` keeps its type, as CPython's |
+
+Then SQLAlchemy (the sql_databases tutorials, via sqlmodel), which did not
+import -- nine walls in a row, each again general:
+
+| wall | fix |
+|---|---|
+| a secondary base's class attributes listed in the subclass's `__dict__` (`TypingOnly` refused `SQLCoreOperations` over Generic's copied `_is_protocol`) | the MI merge records what it copied (`GrailClassAttrHolder >> ___noteInherited___:`, kept off the attribute protocol); `__dict__` skips it, reads still find it |
+| `__hash__` bound under a class-body `if TYPE_CHECKING: ... else: __hash__ = ...` ignored beside `__eq__` | the body's `if` branches that can run are consulted (`___classBodyBindsHashConditionally___`) |
+| a nested `class` under a class-body `if` was never bound | emitted and stored like every other branch binding |
+| `__annotate__ = None` (what `update_wrapper` copies from a builtin) was CALLED | treated as absent; the nil MNU had escaped every handler |
+| `def __doc__` beside a class docstring | the docstring injection yields to a def of `__doc__` |
+| `@x.classlevel` / any decorator rooted at the def's own name | reads the earlier binding, as `@x.setter` already did, so the first def's decorator is applied in place |
+| a wrapped property setter had no `__code__` (and the getter had the setter's) | the code table keys a setter/deleter by its compiled selector |
+| a metaclass's binary operators (`Options + {...}`) | `___binOpFallback___` asks a class operand's metaclass first |
+| `dict.__new__(cls)` / `list.__new__(cls)` / `tuple.__new__(cls)` built from `cls` as contents | a strict subclass argument is the target class |
+
+and two places the MI merge did not follow the MRO: a universal root's
+class-side default (`Object class >> __class_getitem__:`) blocked a secondary
+base's classmethod, and override mode copied a left base's DEEP ancestor
+(`Generic.__class_getitem__`) over a definer the MRO puts first (Select's
+`Visitable.__class_getitem__`; `___mroDefinerOf___:forClass:precedes:`).
+
+One more, found by measuring after a gate run rather than after an install:
+**a deployed class's private-name default.**  `MutableMapping.pop(key,
+default=__marker)` raised `NameError: name '_MutableMapping__marker' is not
+defined` on every call without a default -- every Starlette request path --
+but only in sessions after `run_tests.sh`'s framework deploy commits
+collections.abc.  Method defaults are stored per session while the class body
+runs, a deployed class's body does not run again, and the miss fell back to
+the inline expression, which resolves a name as a module global; a mangled
+private name never is one.  (Phase 6 part 2 met the same thing in
+`OrderedDict.pop` and moved its sentinel to module level.)  Now a bare
+private-name default falls back to the CLASS attribute first
+(`Object >> ___grailClassDefault___:orClassBodyName:`, both arms; the name
+is read from `NameAst >> writtenId`, since the parser has mangled `id`).
+The wall check runs warm in the SUnit shards, where the deploy is.
+
+`multiprocessing.context` now existing un-skipped test_pickle's
+`CompatPickleTests`, which look up `Process` and the four multiprocessing
+exceptions there; they are defined where CPython defines them.
+
+**Left, recorded:**
+
+* **argon2 (pwdlib's default hasher) -- 70 security tests.**  The CPython
+  shim gained what `_cffi_backend` links against (`src/c/shim/shim_cffi.cc`:
+  24 entry points -- thread/interpreter state, locks, weakrefs,
+  `PyModule_Create2`, ...), `PyType_Ready` now gives a type its `tp_dict`, and
+  C extensions see a CPython-shaped `sys.version` (`3.14.0 (Grail ...)` --
+  cffi compares its first three characters with `PY_VERSION`); Python code
+  still sees Grail's.  `_cffi_backend` now LOADS; calling into it fails
+  ("'WeakReference' object is not callable") and argon2's out-of-line
+  `_ffi` module still fails its init.  More of cffi's C object protocol, a
+  session of its own.
+* **sqlmodel's sql_databases tutorials** import now, and then thrash the
+  gem's garbage collector (every sample is MarkSweep / Scavenge) -- both
+  modules were killed after 8-15 minutes.  Unmeasured.
+* an `exec`'d function never sees a later rebinding of a global
+  (docs/Issues.md, OPEN, a design seam); a decorated def later rebound by an
+  unrelated decorator still reads raw before the rebinding; `f.__annotate__
+  = None` does not clear a def's annotations; `__doc__` as a descriptor is
+  read specially on classes.
+
+**Where it stands:** **1,202 of 1,288** with CPython's outcome (was 1,175),
+the 8 sql_databases tests excluded and unmeasured -- 1,202 of the 1,280
+measured.  Of the other 78: 70 are the argon2 cluster above; 3 are
+`response_model` tests where pydantic-core's
+`validate_python(data, self_instance=self)` raises RuntimeError; and one each
+-- `conditional_openapi` `test_disable_openapi` (the schema is still served),
+the graphql query (strawberry's answer differs), `query_params_str_validations`
+tutorial015's snapshot, `settings` `test_settings_validation_error` (the
+`errors()` list differs), and websockets tutorial003, which now gets past the
+per-thread loop and crashes the gem later in the disconnect handling.
+
+**Gates** (Darwin arm64, 2026-10-15, after the last fix): `run_tests.sh`
+**8134 run, 8134 passed**, 8 of 8 shards; the CPython conformance gate **0
+regressions, 4 improvements** (test_setcomps, test_generators,
+test_exception_hierarchy, test_uuid) -- test_math and test___all__ timed out
+beside the tutorial slice and are OK alone; test_pickle, which the first gate
+run of this phase flagged (the CompatPickleTests above), is OK at 470 tests;
+`check_python_fixtures.sh` 667 fixtures agree with CPython.

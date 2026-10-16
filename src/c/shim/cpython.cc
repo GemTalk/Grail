@@ -2575,7 +2575,44 @@ extern "C" PyObject *PyImport_ImportModule(const char *name) {
 /* PySys_GetObject(name): borrowed ref to the named sys-module attribute,
    or NULL if absent.  Delegates to the Grail sys module via the server
    (CPythonShim>>PySys_GetObject:).  NumPy's core reads sys.flags here. */
+static PyObject *sys_get_object_raw(const char *name) {
+    GciErrSType e; GciErr(&e);              /* drop any stale error first */
+    OopType arg = GciNewString(name);
+    OopType r = GciPerform(server, "PySys_GetObject:", &arg, 1);
+    if (GciErr(&e)) return NULL;
+    return addr_to_pyobj(r);               /* 0 -> NULL (no such sys attr) */
+}
+
+/* ``sys.version'' AS A C EXTENSION READS IT: CPython's leads with the
+   language version, and extensions check it -- cffi's PyInit__cffi_backend
+   compares its first three characters with PY_VERSION and refuses to load
+   otherwise.  Grail's reads ``Grail 0.1.0 (GemStone/S ...)'', which Python
+   code (platform) parses as it is, so only the C view changes:
+   ``3.14.0 (Grail 0.1.0 (GemStone/S ...))'', from sys.version_info.  Built
+   once and kept, like the other process-lifetime shim objects. */
+static PyObject *g_c_sys_version = NULL;
+static PyObject *c_sys_version(void) {
+    if (g_c_sys_version != NULL) return g_c_sys_version;
+    PyObject *orig = sys_get_object_raw("version");
+    PyObject *info = sys_get_object_raw("version_info");
+    if (orig == NULL || info == NULL) return orig;
+    long part[3] = { 0, 0, 0 };
+    for (int i = 0; i < 3; i++) {
+        PyObject *p = PySequence_GetItem(info, i);
+        if (p == NULL) { PyErr_Clear(); return orig; }
+        part[i] = PyLong_AsLong(p);
+        Py_DECREF(p);
+    }
+    const char *text = PyUnicode_AsUTF8(orig);
+    if (text == NULL) { PyErr_Clear(); return orig; }
+    char buf[512];
+    snprintf(buf, sizeof buf, "%ld.%ld.%ld (%s)", part[0], part[1], part[2], text);
+    g_c_sys_version = PyUnicode_FromString(buf);
+    return g_c_sys_version != NULL ? g_c_sys_version : orig;
+}
+
 extern "C" PyObject *PySys_GetObject(const char *name) {
+    if (name != NULL && strcmp(name, "version") == 0) return c_sys_version();
     GciErrSType e; GciErr(&e);              /* drop any stale error first */
     OopType arg = GciNewString(name);
     OopType r = GciPerform(server, "PySys_GetObject:", &arg, 1);
@@ -5936,6 +5973,14 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
        PyObject_TypeCheck(dtype, &PyArrayDTypeMeta_Type) rejected it. */
     if (type->ob_base.ob_base.ob_type == NULL)
         type->ob_base.ob_base.ob_type = &PyType_Type;
+    /* Every readied type HAS a tp_dict in CPython, and an extension may write
+       straight into it: cffi's PyInit__cffi_backend sets ``__module__'' and
+       ``__name__'' in CData_Type.tp_dict right after PyType_Ready, and with no
+       dict that write failed and the module's init answered NULL with no
+       error set ("initialization of _cffi_backend failed without raising an
+       exception" -- argon2-cffi, and so pwdlib's default hasher).  The other
+       tp_dict readers here already treat an empty dict as nothing stored. */
+    if (type->tp_dict == NULL) type->tp_dict = PyDict_New();
 
     /* Minimal slot inheritance (CPython's inherit_slots): a readied type
        inherits unset slots from its base.  Without this a prebuilt wheel's

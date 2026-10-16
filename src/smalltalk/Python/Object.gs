@@ -8701,9 +8701,14 @@ ___classDict___
 				because a class's Smalltalk name and its Python name are two
 				things -- showed up in every ``type(name, bases, ns)'' class's
 				__dict__."
+				"A value the MRO merge COPIED from a secondary base is the
+				base's attribute, not this class's (GrailClassAttrHolder >>
+				___noteInherited___:)."
 				(v == nil @env0:or: [
-					(nm @env0:size @env0:>= 3)
-						@env0:and: [(nm @env0:copyFrom: 1 to: 3) @env0:= '___']])
+					((nm @env0:size @env0:>= 3)
+						@env0:and: [(nm @env0:copyFrom: 1 to: 3) @env0:= '___'])
+					@env0:or: [[holder @env0:___isInherited___: (pairs @env0:at: i)]
+						@env0:on: AbstractException do: [:e | e @env0:return: false]]])
 					ifFalse: [d @env0:at: nm put: v]]]].
 	"(c)/(b) shared: collapse a selector to its Python name and store an
 	UnboundMethod wrapper unless a data value already claimed the name.
@@ -10215,11 +10220,25 @@ ___pythonSourceChainOwnsAnyOf___: family orUnary: aSym from: aClass
 		abstractclassmethod compiles to -- and answered an UnboundMethod for
 		the subclass's own classmethod, so ``D.foo()'' raised 'must be called
 		with an instance' (test_abc TestLegacyAPI, with a Python metaclass)."
+		"EVERY SPELLING, as the instance side below asks.  A classmethod with a
+		default argument compiles class-side to the varargs ``_fd:kw:'' and its
+		forwarders, not to a unary ``fd'', so asking for aSym alone missed it:
+		``class C(Base): @classmethod def fd(cls, context=None)'' under a Python
+		metaclass, over a base whose instance-side ``fd'' it overrides, read
+		``C.fd'' as that base's UnboundMethod, and ``C.fd(x)'' ran the
+		classmethod's body with x as the receiver -- an uncatchable
+		MessageNotUnderstood.  importlib.metadata's MetadataPathFinder (an
+		ABCMeta class) is exactly that shape."
 		metaDict := walker @env0:class @env0:methodDictForEnv: 1.
 		(metaDict ~~ nil
-			and: [(metaDict @env0:includesKey: aSym)
-			and: [self ___isPythonSourceMethodCategory___:
-				(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)]])
+			and: [((metaDict @env0:includesKey: aSym)
+					and: [self ___isPythonSourceMethodCategory___:
+						(walker @env0:class @env0:categoryOfSelector: aSym environmentId: 1)])
+				or: [(1 @env0:to: 7) @env0:anySatisfy: [:i | | fsel |
+					fsel := family @env0:at: i.
+					(metaDict @env0:includesKey: fsel)
+						and: [self ___isPythonSourceMethodCategory___:
+							(walker @env0:class @env0:categoryOfSelector: fsel environmentId: 1)]]]])
 					ifTrue: [^ false].
 		dict := walker @env0:methodDictForEnv: 1.
 		dict == nil ifFalse: [
@@ -14882,6 +14901,18 @@ ___binOpFallback___: other op: opString reflected: refSelector
 		to: refSelector @env0:asString @env0:size - 1) @env0:asSymbol.
 	fwdBase := ('__' @env0:, (refBase @env0:asString @env0:copyFrom: 4
 		to: refBase @env0:asString @env0:size)) @env0:asSymbol.
+	"A CLASS operand's operator is its METACLASS's, as for the comparisons
+	(___grailMetaclassCmp___:with:, which is generic in the dunder): ``A +
+	d'' runs M.__add__(A, d).  Never consulted, so SQLAlchemy's
+	``QueryContext.default_load_options + {...}'' (an Options metaclass's
+	__add__) raised TypeError at sqlalchemy.orm import.  Forward on self,
+	then reflected on other; NotImplemented answers nil and falls through."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		result := self ___grailMetaclassCmp___: fwdBase with: other.
+		result == nil ifFalse: [^ result]].
+	(other @env0:isKindOf: Behavior) ifTrue: [
+		result := other ___grailMetaclassCmp___: refBase with: self.
+		result == nil ifFalse: [^ result]].
 	fn := self ___classAttrDunder___: fwdBase.
 	fn == nil ifFalse: [
 		result := self ___callTypeAttr___: fn with: { other }.
@@ -19948,6 +19979,33 @@ ___grailClassDefault___: aSymbol
 		owner isNil
 			ifTrue: [nil]
 			ifFalse: [module @env0:___classDefaultOwnedBy: owner at: aSymbol]]
+%
+
+category: 'Grail-Method Defaults'
+method: Object
+___grailClassDefault___: aSymbol orClassBodyName: aName
+	"___grailClassDefault___:, and when no default was stored, the CLASS
+	attribute aName -- for a default that is a bare PRIVATE class-body name
+	(``def pop(self, key, default=__marker)'', which reads
+	``_MutableMapping__marker'').
+
+	The store is session-local and filled while the class body runs, and a
+	DEPLOYED (canonical) class's body does not run again in a later session:
+	the miss then fell back to the inline expression, which resolves the name
+	as a module GLOBAL -- and a mangled private name never is one.  So
+	collections.abc's MutableMapping.pop(key) raised ``NameError: name
+	'_MutableMapping__marker' is not defined'' in every session after
+	run_tests.sh's framework deploy (every Flask/Starlette request path).  The
+	class still holds the attribute; reading it there is what the class-body
+	scope the default was written in means.  nil when neither answers, so the
+	caller still evaluates the expression and raises CPython's NameError."
+
+	| v cls |
+	v := self ___grailClassDefault___: aSymbol.
+	v isNil ifFalse: [^ v].
+	cls := (self isKindOf: Behavior) ifTrue: [self] ifFalse: [self class].
+	^ [cls @env1:___pyAttrLoad___: aName]
+		on: AbstractException do: [:e | e return: nil]
 %
 
 set compile_env: 0

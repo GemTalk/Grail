@@ -4875,6 +4875,15 @@ vars: anObject
 	stack included, where CPython answers only what Python code stored.
 	BaseException >> __dict__ is that view."
 	(anObject isKindOf: BaseException) ifTrue: [^ anObject __dict__].
+	"AN INSTANCE OF A PYTHON CLASS answers its LIVE namespace -- the view
+	``obj.__dict__'' answers -- because vars(obj) IS obj.__dict__ in CPython,
+	and code writes through it: importlib.metadata's Message copies a parsed
+	email message with ``vars(res).update(vars(orig))'', and the snapshot this
+	built took the writes and dropped them, so every Distribution.metadata read
+	failed ('no attribute _headers') and no installed package had a version
+	(pydantic's EmailStr asks for email-validator's)."
+	(anObject @env0:class ___grailIsPythonClass___) ifTrue: [
+		^ anObject ___pyAttrLoad___: #'__dict__'].
 	d := dict ___new___.
 	(anObject isKindOf: SymbolDictionary) ifTrue: [
 		anObject @env0:keysDo: [:k |

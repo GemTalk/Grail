@@ -204,6 +204,17 @@ __new__: iterable
 	Receiver is the class."
 
 	| items iter done ic |
+	"``X.__new__(cls)'' -- CPython's first argument to a type's __new__ is the
+	TARGET CLASS, not the contents: a class that inherits from the receiver
+	can only be that.  Built as a plain constructor argument it was
+	iterated -- ``'type' object is not iterable'' -- which is what
+	SQLAlchemy's ``ImmutableDictBase.__new__(cls)'' (FacadeDict) raised at
+	MetaData() construction.  A STRICT subclass only: ``list(list)'' reaches
+	here too and must raise as CPython's does, and a class that does not
+	inherit from the receiver stays an iterable (``list(SomeEnum)'')."
+	((iterable @env0:isKindOf: Behavior)
+		@env0:and: [iterable @env0:inheritsFrom: self])
+			@env0:ifTrue: [^ iterable @env0:new].
 	"Fast index-copy ONLY for the EXACT built-in sequence classes.  A SUBCLASS
 	may override __iter__ to iterate differently (seq_tests test_constructors'
 	LyingTuple, issue #23757), and CPython always constructs via the iterator

@@ -48,6 +48,17 @@ __new__: source
 	sequences."
 
 	| result iter done keysMethod keysIter k idx |
+	"``X.__new__(cls)'' -- CPython's first argument to a type's __new__ is the
+	TARGET CLASS, not the contents: a class that inherits from the receiver
+	can only be that.  Built as a plain constructor argument it was
+	iterated -- ``'type' object is not iterable'' -- which is what
+	SQLAlchemy's ``ImmutableDictBase.__new__(cls)'' (FacadeDict) raised at
+	MetaData() construction.  A STRICT subclass only: ``list(list)'' reaches
+	here too and must raise as CPython's does, and a class that does not
+	inherit from the receiver stays an iterable (``list(SomeEnum)'')."
+	((source @env0:isKindOf: Behavior)
+		@env0:and: [source @env0:inheritsFrom: self])
+			@env0:ifTrue: [^ source ___new___].
 	result := self ___new___.
 
 	"Mapping fast path: a plain dict / raw KeyValueDictionary copies straight
@@ -703,8 +714,22 @@ clear
 category: 'Grail-Mutation Methods'
 method: dict
 copy
-	"Return a shallow copy of the dictionary"
-	^ self @env0:copy
+	"Return a shallow copy of the dictionary.
+
+	For a Python SUBCLASS the copy is a plain dict, as CPython's dict.copy
+	answers, built from the raw entries without consulting the subclass's
+	overrides.  It answered the subclass: OpenTelemetry's Context forbids
+	every write and set_value copies the current one to write into, so every
+	set_value raised ValueError (FastAPI's opentelemetry tutorials).
+	Subclasses that want their own type back say so with their own copy
+	(OrderedDict, Counter and defaultdict do, as in CPython).  Grail's
+	Smalltalk subclasses keep the class-preserving copy."
+
+	| result |
+	(self @env0:class ___grailIsPythonClass___) ifFalse: [^ self @env0:copy].
+	result := dict ___new___.
+	self @env0:keysAndValuesDo: [:k :v | result @env0:at: k put: v].
+	^ result
 %
 
 category: 'Grail-Access Methods'
