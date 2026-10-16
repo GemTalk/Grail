@@ -513,6 +513,34 @@ f_globals
 			and: [((mod @env0:dynamicInstVarAt: #'__file__') @env0:= fname) == true]])
 				ifTrue: [found := mod]]]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	"THEN THE SESSION'S MODULE INSTANCES, which do not depend on sys.modules.
+	A module that has left sys.modules -- popped, replaced by a stand-in, or
+	cleared by ``mock.patch.dict(sys.modules, clear=True)'' -- is still the
+	namespace its functions run in, and CPython's f_globals is that namespace
+	whatever sys.modules says.  Matching sys.modules only, every frame of such
+	a module answered None, and pytest's unittest support, which filters a
+	failing test's traceback with ``x.frame.f_globals.get('__unittest')'',
+	ended the whole session with an INTERNALERROR: s3transfer,
+	opentelemetry-api and pyparsing each lost every test after the first
+	such failure.  This is the registry generated code reaches a method's
+	module through (``<module class> ___instance___''), so it pins nothing
+	that is not pinned already.  sys.modules is still asked FIRST, so a
+	module that is registered answers exactly as before."
+	found isNil ifTrue: [
+		[(module @env0:___sessionInstances___) @env0:do: [:mod |
+			(found isNil and: [(mod isKindOf: module)
+				and: [((mod @env0:dynamicInstVarAt: #'__file__') @env0:= fname) == true]])
+					ifTrue: [found := mod]]]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
+	"LAST, A DEPLOYED MODULE THIS SESSION HAS NOT TOUCHED.  A warm bind binds
+	a module's committed globals without running its imports, so a module
+	whose functions arrived through ``from X import f'' is in neither table
+	above -- while f runs on X's committed instance (importlib >>
+	___committedModuleWithFile___:, which says why this cost pytest whole
+	sessions)."
+	found isNil ifTrue: [
+		found := [importlib @env0:___committedModuleWithFile___: fname]
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
 	found isNil ifTrue: [^ None].
 	^ (Python @env0:at: #'PyModuleDict') @env0:on: found
 %
