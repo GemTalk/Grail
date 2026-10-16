@@ -6185,15 +6185,11 @@ emitMethodDefaultKeysTableOn: aStream className: aClassName
 	compile in a separate class-side method, and would take every method's
 	entry with it.  The store holds the evaluated values already.
 
-	Exactly the defs that store does (no static methods, no overload stubs),
-	keyed by the same ___classDefaultKeyFor___:className: spelling."
+	Exactly the defs that store does (___storesDefaultsFor___:), keyed by the
+	same ___classDefaultKeyFor___:className: spelling."
 
 	| defs entries |
-	defs := self ___allFunctionDefs___ select: [:def |
-		def isOverloadStub not
-			and: [(def isKindOf: StaticFunctionDefAst) not
-			and: [def ___defaultedPositionalParams___ notEmpty
-				or: [def ___defaultedKeywordOnlyParams___ notEmpty]]]].
+	defs := self ___allFunctionDefs___ select: [:def | self ___storesDefaultsFor___: def].
 	defs isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
 	defs do: [:def | | src |
@@ -6232,13 +6228,13 @@ emitMethodDefaultStoresOn: aStream className: aClassName except: aSet
 	HTTPConnection -- raised ``NameError: name 'default_socket_options' is not
 	defined'' on every call.  The keyword-only half of this store is what fixes that.
 
-	SKIPPED for a def with no defaults at all, and for a STATIC method, whose body
-	has no receiver to walk outward from; a staticmethod keeps the inline default it
-	has always had rather than acquiring a lookup that cannot resolve.
+	SKIPPED for a def with no defaults at all and for an overload stub.  A STATIC
+	method is stored like any other (#1575): it compiles onto the metaclass, so its
+	receiver is the class and the read walks out from there.
 	FunctionDefAst >> ___defaultOwnerClassName___ -- which both the positional and
-	the keyword-only read consult -- makes the same two exclusions, and the two must
-	agree: a store with no matching read is dead weight, and a read with no store
-	silently recomputes, which is the bug this fixes wearing a disguise."
+	the keyword-only read consult -- must agree with this selection: a store with no
+	matching read is dead weight, and a read with no store silently recomputes,
+	which is the bug this fixes wearing a disguise."
 
 	(self ___allFunctionDefs___ select: [:def |
 		(self ___storesDefaultsFor___: def) and: [(aSet includes: def) not]])
@@ -6249,16 +6245,15 @@ category: 'Grail-code generation'
 method: ClassDefAst
 ___storesDefaultsFor___: aStmt
 	"Does this class-body statement get per-class default stores: a def with a
-	positional or keyword-only default that is neither an overload stub nor a
-	staticmethod?  The selection emitMethodDefaultStoresOn:className:except:
-	always made; FunctionDefAst >> ___defaultOwnerClassName___ makes the same
-	exclusions on the read side."
+	positional or keyword-only default that is not an overload stub?  A
+	staticmethod included (#1575).  The selection
+	emitMethodDefaultStoresOn:className:except: and the key table both make;
+	FunctionDefAst >> ___defaultOwnerClassName___ is the read side."
 
 	^ (aStmt isKindOf: FunctionDefAst)
 		and: [aStmt isOverloadStub not
-		and: [(aStmt isKindOf: StaticFunctionDefAst) not
 		and: [aStmt ___defaultedPositionalParams___ notEmpty
-			or: [aStmt ___defaultedKeywordOnlyParams___ notEmpty]]]]
+			or: [aStmt ___defaultedKeywordOnlyParams___ notEmpty]]]
 %
 
 category: 'Grail-code generation'
