@@ -402,6 +402,47 @@ value: positional value: kwargs
 
 category: 'Grail-Python Protocol'
 method: ShimForeignObject
+___pyCallValue___: positional kw: kwargs
+	"A call through a module global that a def's name was rebound to --
+	CallAst's probe-then-branch path -- is the call above.  It fell to
+	object's ``'ShimForeignObject' object is not callable'': numpy's
+	``allclose'' calls ``isclose'', a def in the same module that
+	@array_function_dispatch rebinds to a dispatcher."
+
+	^ self value: positional value: kwargs
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+__format__: aSpec
+	"format(x, spec) of a wheel's object: its type's own __format__, found in
+	C (numpy's scalars define one, which formats np.float64 as a float).
+	format() sends this message, and object's answered for every C object:
+	an f-string of np.float64(1.5) with a spec raised ``unsupported format
+	string passed to ShimForeignObject.__format__''.  A type with none keeps
+	object's."
+
+	| found fn |
+	found := true.
+	fn := [self ___pyAttrLoad___: #'__format__']
+		@env0:on: AttributeError do: [:ex | found := false. ex @env0:return: nil].
+	found ifFalse: [^ super __format__: aSpec].
+	^ fn value: (Array @env0:with: aSpec) value: nil
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
+_grail_set_byte: anIndex _: aByte
+	"memoryview's write hook (MemoryView.gs, __setitem__): byte anIndex of
+	this object's buffer, written in C.  A read-only buffer refuses, in
+	PyObject_GetBuffer."
+
+	(CPythonShim @env0:current) @env0:foreignBuffer: cPtr mode: 2 index: anIndex value: aByte.
+	^ None
+%
+
+category: 'Grail-Python Protocol'
+method: ShimForeignObject
 ___arrayDispatchParts
 	"{ dispatcher. implementation } when the receiver is one of numpy's
 	public functions, else nil.  Asked of C once per proxy (proxies are

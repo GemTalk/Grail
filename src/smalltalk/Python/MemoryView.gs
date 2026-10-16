@@ -83,6 +83,10 @@ __new__: anObject
 	rendered afresh, which is what the ``tobytes'' fallback below would make of
 	it (a copy, with ``obj'' naming the view instead of the exporter)."
 	(anObject isKindOf: memoryview) ifTrue: [^ anObject ___reexport___].
+	"A C extension's object exports its buffer in C (bf_getbuffer):
+	memoryview(ndarray) raised ``a bytes-like object is required''."
+	(anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [
+		^ self ___overForeign___: anObject].
 	"PEP 688: a Python class exports a buffer by defining ``__buffer__'', which
 	answers a memoryview.  pickle.PickleBuffer is one -- ``memoryview(pb).obj''
 	has to be the object the buffer wraps, which is how test.picklecommon's
@@ -100,6 +104,27 @@ __new__: anObject
 			ifTrue: [tc @env0:asString]
 			ifFalse: ['B']]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: 'B'].
+	^ self ___over___: anObject format: fmt
+%
+
+category: 'Grail-Instance Creation'
+classmethod: memoryview
+___overForeign___: anObject
+	"A view over a C extension's object, through its buffer
+	(CPythonShim>>foreignBuffer:mode:index:value:): its format, with a
+	native-order prefix dropped, and its bytes, read again for every access so
+	the view sees writes through the object.  One-dimensional, as every view
+	here is; a buffer of more dimensions is refused rather than flattened."
+
+	| parts fmt |
+	parts := ((CPythonShim @env0:current) @env0:foreignBuffer: anObject @env0:cPtr
+		mode: 0 index: 0 value: 0) @env0:subStrings: ' '.
+	(parts @env0:at: 4) @env0:asNumber @env0:> 1 ifTrue: [
+		^ NotImplementedError ___signal___:
+			'memoryview: a multi-dimensional buffer is not supported'].
+	fmt := parts @env0:at: 1.
+	((fmt @env0:size @env0:= 2) and: ['@=<' @env0:includes: (fmt @env0:at: 1)])
+		ifTrue: [fmt := fmt @env0:copyFrom: 2 to: 2].
 	^ self ___over___: anObject format: fmt
 %
 
@@ -218,9 +243,12 @@ ___itemsizeFor___: fmt
 		TypeError ___signal___: 'memoryview: format argument must be a string'].
 	(s @env0:= 'B' @env0:or: [s @env0:= 'b' @env0:or: [s @env0:= 'c']]) ifTrue: [^ 1].
 	(s @env0:= 'H' @env0:or: [s @env0:= 'h']) ifTrue: [^ 2].
-	(s @env0:= 'I' @env0:or: [s @env0:= 'i' @env0:or: [s @env0:= 'L' @env0:or: [s @env0:= 'l']]])
-		ifTrue: [^ 4].
-	(s @env0:= 'Q' @env0:or: [s @env0:= 'q']) ifTrue: [^ 8].
+	(s @env0:= 'I' @env0:or: [s @env0:= 'i']) ifTrue: [^ 4].
+	"'l' and 'L' are NATIVE longs, 8 bytes on the LP64 platforms Grail runs
+	on, as array('l').itemsize is: at 4, memoryview(array('l', [1, 2]))
+	read [1, 0, 2, 0]."
+	(s @env0:= 'Q' @env0:or: [s @env0:= 'q' @env0:or: [s @env0:= 'L' @env0:or: [s @env0:= 'l']]])
+		ifTrue: [^ 8].
 	ValueError ___signal___:
 		('memoryview: unsupported format ' @env0:, s)
 %
@@ -248,6 +276,10 @@ ___isReadOnly___: anObject
 	both of its pack_into tests ``cannot modify read-only memory''."
 
 	(anObject isKindOf: ByteArray) ifTrue: [^ (anObject isKindOf: bytearray) @env0:not].
+	"A C extension's object says, in its buffer."
+	(anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [
+		^ ((((CPythonShim @env0:current) @env0:foreignBuffer: anObject @env0:cPtr
+			mode: 0 index: 0 value: 0) @env0:subStrings: ' ') @env0:at: 3) @env0:= '1'].
 	^ (anObject ___respondsTo___: #'_grail_set_byte:_:') @env0:not
 %
 
@@ -268,6 +300,10 @@ ___sourceBytes___
 	self ___checkReleased___.
 	o := self @env0:dynamicInstVarAt: #'_obj'.
 	(o isKindOf: ByteArray) ifTrue: [^ o].
+	"A C extension's object: its buffer's bytes, asked of C each time."
+	(o ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifTrue: [
+		^ (CPythonShim @env0:current) @env0:foreignBuffer: o @env0:cPtr
+			mode: 1 index: 0 value: 0].
 	"array.array and anything else that can render itself as bytes."
 	^ [o @env1:tobytes]
 		@env0:on: AbstractException

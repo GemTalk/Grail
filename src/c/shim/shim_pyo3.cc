@@ -369,6 +369,48 @@ extern "C" PyObject *_grail_text_signature_from_internal_doc(const char *name, c
     return PyUnicode_FromStringAndSize(start, end - start);
 }
 
+extern "C" PyObject *PyEval_GetBuiltins(void);
+PyObject *PyCMethod_New(PyMethodDef *ml, PyObject *self, PyObject *module, PyTypeObject *cls);
+
+/* __reduce__ as CPython's meth_reduce answers it: a function's name, which
+   pickle saves as a global, or getattr(self, name) for a method.  Its
+   absence made ``pickle.dumps(np.arange(3))'' fail on the array's
+   reconstructor, numpy's _reconstruct. */
+static PyObject *gcm_reduce(PyObject *self, PyObject *unused) {
+    (void)unused;
+    GrailCMethodObject *f = (GrailCMethodObject *)self;
+    const char *n = f->m_ml && f->m_ml->ml_name ? f->m_ml->ml_name : "?";
+    if (f->m_self == NULL || PyType_IsSubtype(Py_TYPE(f->m_self), &PyModule_Type))
+        return PyUnicode_FromString(n);
+    PyObject *builtins = PyEval_GetBuiltins();
+    PyObject *getattr_fn = builtins ? PyDict_GetItemString(builtins, "getattr") : NULL;
+    if (getattr_fn == NULL) {
+        PyErr_SetString(PyExc_RuntimeError, "__reduce__: no builtins.getattr");
+        return NULL;
+    }
+    return Py_BuildValue("(O(Os))", getattr_fn, f->m_self, n);
+}
+static PyMethodDef gcm_reduce_def = { "__reduce__", gcm_reduce, METH_NOARGS, NULL };
+/* object.__reduce_ex__(protocol), which asks __reduce__. */
+static PyMethodDef gcm_reduce_ex_def = { "__reduce_ex__", gcm_reduce, METH_O, NULL };
+
+/* ``f.__module__ = name'', which CPython's builtin functions take (a
+   member): numpy's multiarray.py sets it on every function it re-exports,
+   _reconstruct among them, and the store went nowhere. */
+static int gcm_setattro(PyObject *self, PyObject *name, PyObject *value) {
+    GrailCMethodObject *f = (GrailCMethodObject *)self;
+    const char *n = PyUnicode_AsUTF8(name);
+    if (n == NULL) return -1;
+    if (strcmp(n, "__module__") == 0) {
+        Py_XINCREF(value);
+        Py_XSETREF(f->m_module, value);
+        return 0;
+    }
+    PyErr_Format(PyExc_AttributeError,
+                 "'builtin_function_or_method' object has no attribute '%s'", n);
+    return -1;
+}
+
 static PyObject *gcm_getattro(PyObject *self, PyObject *name) {
     GrailCMethodObject *f = (GrailCMethodObject *)self;
     const char *n = PyUnicode_AsUTF8(name);
@@ -389,9 +431,23 @@ static PyObject *gcm_getattro(PyObject *self, PyObject *name) {
         Py_INCREF(s);
         return s;
     }
+    if (strcmp(n, "__reduce__") == 0) return PyCMethod_New(&gcm_reduce_def, self, NULL, NULL);
+    if (strcmp(n, "__reduce_ex__") == 0) return PyCMethod_New(&gcm_reduce_ex_def, self, NULL, NULL);
     PyErr_Format(PyExc_AttributeError,
                  "'builtin_function_or_method' object has no attribute '%s'", n);
     return NULL;
+}
+
+/* repr() as CPython's meth_repr writes it: a module function (or one with
+   no self) is ``<built-in function name>'', a method names its receiver's
+   type. */
+static PyObject *gcm_repr(PyObject *self) {
+    GrailCMethodObject *f = (GrailCMethodObject *)self;
+    const char *n = f->m_ml && f->m_ml->ml_name ? f->m_ml->ml_name : "?";
+    if (f->m_self == NULL || PyType_IsSubtype(Py_TYPE(f->m_self), &PyModule_Type))
+        return PyUnicode_FromFormat("<built-in function %s>", n);
+    return PyUnicode_FromFormat("<built-in method %s of %s object at %p>", n,
+                                Py_TYPE(f->m_self)->tp_name, (void *)f->m_self);
 }
 
 static void init_cfunction_type(void) {
@@ -406,6 +462,8 @@ static void init_cfunction_type(void) {
     PyCFunction_Type.tp_base = &PyBaseObject_Type;
     PyCFunction_Type.tp_call = gcm_call;
     PyCFunction_Type.tp_getattro = gcm_getattro;
+    PyCFunction_Type.tp_repr = gcm_repr;
+    PyCFunction_Type.tp_setattro = gcm_setattro;
     PyCFunction_Type.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_READY;
 }
 

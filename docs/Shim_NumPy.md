@@ -1139,6 +1139,48 @@ Introspection`). It used to fall back to the proxy's own Smalltalk answers.
   the bound spelling and `type.__subclasses__(T)`. It used to list
   `object`'s subclasses, and the unbound spelling crashed the session.
 
+## Stage 9 (2026-10-16): the census's fixable cases
+
+The census cases that were not the user-action limit now agree with CPython.
+Each had its own cause, and a `_grail_demo` test (category `Grail-Tests -
+NumPy Census Gaps`) covers each one without numpy:
+
+| case | cause |
+|---|---|
+| `fft` | A Grail `complex` had no CPython layout and no real `PyComplex_Type`, so numpy took `1j` for an object. A gufunc's `axes=` keyword reached C as a Grail list, which numpy read inline (a segfault). |
+| `allclose` | `isclose` is a def in the same module that `@array_function_dispatch` rebinds. The call goes through `___pyCallValue___:kw:`, which a foreign object did not answer. |
+| `pickle` | numpy's reconstructor is a C function object. It had no `repr`, no `__reduce__`, no `__module__` setter and a type with no `__bases__`, and it did not come back as the function Grail reads off the module. Unpickling then needed `PyArg_ParseTuple`'s `(...)` unit and an `O!` that takes any subtype. |
+| f-string scalar | `format()` of a C object used `object`'s `__format__`, and `PyArg_ParseTuple` lacked `U`. |
+| `memoryview` | Grail's `memoryview` did not take a C object's buffer. |
+
+Fixing these exposed a deeper gap: **the shim built a C type's MRO from
+`tp_base` alone**. `numpy.float64` has two bases, `(floating, float)`, so its
+MRO had no `float`. Three things followed from that:
+* `isinstance(np.float64(1), float)` was False.
+* `PyType_IsSubtype(float64, &PyFloat_Type)` answered 0.
+* `complex(np.complex128(2-1j))` answered `(2+0j)`.
+
+`grail_set_mro` now computes CPython's C3 order, and `PyType_IsSubtype` reads
+`tp_mro` inline. It reads it only when the tuple has real layout: asking the
+server there overflowed the stack.
+
+Several Grail-side checks now follow a C type's MRO as well:
+* `isinstance`, the `numbers` ABCs and `issubclass(CMetaclass, type)`.
+* `complex()`, which asks a C object for `__complex__`.
+* Attribute reads: an instance whose MRO reaches `float` or `complex` gets that
+  type's own methods (`hex`, `__complex__`, `__format__`), bound to its value.
+
+Two more fixes turned up along the way:
+* A native `'l'` in `memoryview` is 8 bytes, not 4.
+* `str` and `repr` of arrays now agree too. Those were counted as blocked by
+  the user-action limit.
+
+Still differing:
+* Three cases blocked by the user-action limit: `str` of a dtype, `random
+  seed` (`numpy.random`), and `char`, which hits AlmostOutOfStack.
+* `memoryview` stays one-dimensional and integer-only. A 2-D array raises
+  NotImplementedError.
+
 ## Repro
 
 ```

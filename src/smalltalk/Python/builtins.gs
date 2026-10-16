@@ -5487,6 +5487,15 @@ ___isInstanceSingle___: anObject of: aClass
 				(anObject @env1:___pyAttrLoad___: #'__class__')
 			of: aClass depth: 0].
 	result := anObject isKindOf: aClass.
+	"A C EXTENSION'S OBJECT is an instance of what its C type's MRO names, as
+	PyObject_TypeCheck reads it: numpy.float64 subclasses float, and
+	isinstance(np.float64(1), float) was False."
+	(result not and: [anObject ___respondsTo___: #'___grailForeignTypeCheck___:subclass:']) ifTrue: [
+		| t |
+		t := [anObject ___pyAttrLoad___: #'__class__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(t @env0:notNil and: [t ~~ anObject])
+			ifTrue: [result := self ___isSubclass___: t of: aClass depth: 1]].
 	"CPython's object_isinstance: when the real type check FAILS it still reads
 	``inst.__class__'' and re-tests, so an object that declares its own
 	__class__ is judged by what it CLAIMS to be.  Two consequences the tests
@@ -6221,7 +6230,10 @@ ___isSubclassSingle___: sub of: target
 		is CPython's ``arg 1 must be a class'', not False."
 		(sub @env0:isKindOf: Behavior) ifFalse: [
 			self ___abstractClassCheck___: sub
-				argMessage: 'issubclass() arg 1 must be a class'].
+				argMessage: 'issubclass() arg 1 must be a class'.
+			"A C extension's METACLASS reaches type through its __bases__
+			(numpy's _DTypeMeta); it answered False."
+			^ self ___abstractIsSubclass___: sub of: type depth: 0].
 		^ (sub == type)
 			or: [(sub @env0:isKindOf: Behavior)
 				and: [(sub @env0:inheritsFrom: type)

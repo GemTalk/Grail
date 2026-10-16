@@ -272,6 +272,80 @@ static PyTypeObject MyFloat_Type = {
     .tp_flags = Py_TPFLAGS_DEFAULT,
 };
 
+/* Marker, Dual and DualC: numpy's scalar types in miniature.  numpy.float64
+   has two bases, (numpy.floating, float), set in tp_bases before
+   PyType_Ready -- float's layout is the instance's, and float is in the MRO
+   only through the second base.  Dual is (Marker, float); DualC is (Marker,
+   complex), as numpy.complex128 is. */
+static PyTypeObject Marker_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Marker",
+    .tp_basicsize = sizeof(PyObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+};
+static PyTypeObject Dual_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Dual",
+    .tp_basicsize = sizeof(PyFloatObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+};
+static PyTypeObject DualC_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.DualC",
+    .tp_basicsize = sizeof(PyComplexObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+};
+
+/* Buf: an object exporting a writable buffer of three C ints. */
+typedef struct {
+    PyObject_HEAD
+    int data[3];
+} BufObject;
+static PyObject *buf_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    (void)args; (void)kwds;
+    BufObject *self = (BufObject *)type->tp_alloc(type, 0);
+    if (self == NULL) return NULL;
+    self->data[0] = 10; self->data[1] = 20; self->data[2] = 30;
+    return (PyObject *)self;
+}
+static Py_ssize_t buf_shape[1] = { 3 };
+static Py_ssize_t buf_strides[1] = { sizeof(int) };
+static int buf_getbuffer(PyObject *self, Py_buffer *view, int flags) {
+    (void)flags;
+    view->obj = Py_NewRef(self);
+    view->buf = ((BufObject *)self)->data;
+    view->len = sizeof(((BufObject *)self)->data);
+    view->readonly = 0;
+    view->itemsize = sizeof(int);
+    view->format = "i";
+    view->ndim = 1;
+    view->shape = buf_shape;
+    view->strides = buf_strides;
+    view->suboffsets = NULL;
+    view->internal = NULL;
+    return 0;
+}
+static void buf_releasebuffer(PyObject *self, Py_buffer *view) { (void)self; (void)view; }
+static PyBufferProcs buf_as_buffer = { buf_getbuffer, buf_releasebuffer };
+static PyObject *buf_values(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    BufObject *b = (BufObject *)self;
+    return Py_BuildValue("(iii)", b->data[0], b->data[1], b->data[2]);
+}
+static PyMethodDef buf_methods[] = {
+    {"values", buf_values, METH_NOARGS, "the three ints, read in C"},
+    {NULL, NULL, 0, NULL}
+};
+static PyTypeObject Buf_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Buf",
+    .tp_basicsize = sizeof(BufObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_new = buf_new,
+    .tp_as_buffer = &buf_as_buffer,
+    .tp_methods = buf_methods,
+};
+
 /* ByteSub: a bytes subclass of the wheel's own, built through bytes' tp_new
    and read inline (PyBytes_AS_STRING) as numpy.bytes_ is. */
 static PyTypeObject ByteSub_Type = {
@@ -535,6 +609,8 @@ static PyObject *capi_formatv(PyObject *exc, const char *fmt, ...) {
     va_end(va);
     return NULL;
 }
+static PyTypeObject Cell_Type;   /* below */
+static PyTypeObject Marker_Type;
 static PyObject *ucs4_list(const Py_UCS4 *buf, Py_ssize_t n) {
     PyObject *out = PyList_New(n);
     for (Py_ssize_t i = 0; i < n; i++) PyList_SetItem(out, i, PyLong_FromLong((long)buf[i]));
@@ -783,6 +859,28 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     /* Py_BuildValue's small-integer and character units: B and H were
        unsupported, and c built a str where CPython builds a bytes. */
     if (IS("build_value")) return Py_BuildValue("(bBhHcC)", -3, 200, -300, 60000, 'x', 0x20ac);
+    /* A complex read inline, as numpy reads one (PyComplexObject.cval), and
+       one made in C. */
+    if (IS("complex_inline")) {
+        if (!PyComplex_Check(a)) return Py_BuildValue("(O)", Py_False);
+        Py_complex c = ((PyComplexObject *)a)->cval;
+        return Py_BuildValue("(Odd)", PyComplex_CheckExact(a) ? Py_True : Py_False, c.real, c.imag);
+    }
+    if (IS("complex_from")) return PyComplex_FromDoubles(1.5, -2.0);
+    /* PyArg_ParseTuple's "(...)" unit, "U", and "O!" given a subtype of
+       the type it names. */
+    if (IS("parse_paren")) {
+        int i = 0; PyObject *t = NULL, *u = NULL; const char *str = NULL;
+        if (!PyArg_ParseTuple(a, "(iO!s)U:parse_paren", &i, &PyTuple_Type, &t, &str, &u)) return NULL;
+        return Py_BuildValue("(iOsO)", i, t, str, u);
+    }
+    if (IS("parse_subtype")) {
+        PyObject *o = NULL;
+        /* Marker is a base of Dual only through its MRO, as numpy.floating
+           is of a DType's dtype instance. */
+        if (!PyArg_ParseTuple(a, "O!:parse_subtype", &Marker_Type, &o)) return NULL;
+        return Py_NewRef(Py_True);
+    }
 #undef IS
     PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
     return NULL;
@@ -1277,8 +1375,23 @@ typedef struct {
 } VecObject;
 
 static PyObject *vec_vectorcall(PyObject *self, PyObject *const *args, size_t nargsf, PyObject *kwnames) {
-    (void)self; (void)args;
-    return Py_BuildValue("(snO)", "vectorcall", PyVectorcall_NARGS(nargsf),
+    (void)self;
+    /* A keyword ``inline=[...]'' is read with the inline list macros, as a
+       gufunc reads ``axes=[(0,), (), (0,)]''. */
+    Py_ssize_t nargs = PyVectorcall_NARGS(nargsf);
+    for (Py_ssize_t k = 0; kwnames != NULL && k < PyTuple_GET_SIZE(kwnames); k++) {
+        PyObject *v = args[nargs + k];
+        if (PyUnicode_CompareWithASCIIString(PyTuple_GET_ITEM(kwnames, k), "inline") == 0
+                && PyList_Check(v)) {
+            PyObject *sizes = PyList_New(PyList_GET_SIZE(v));
+            for (Py_ssize_t i = 0; i < PyList_GET_SIZE(v); i++) {
+                PyObject *item = PyList_GET_ITEM(v, i);
+                PyList_SET_ITEM(sizes, i, PyLong_FromSsize_t(PyTuple_Check(item) ? PyTuple_GET_SIZE(item) : -1));
+            }
+            return Py_BuildValue("(sN)", "inline", sizes);
+        }
+    }
+    return Py_BuildValue("(snO)", "vectorcall", nargs,
                          kwnames != NULL ? kwnames : Py_None);
 }
 static PyObject *vec_call(PyObject *self, PyObject *args, PyObject *kwds) {
@@ -1381,6 +1494,19 @@ grail_demo_exec(PyObject *mod) {
         return -1;
     if (PyType_Ready(&Cell_Type) < 0) return -1;
     if (PyModule_AddObjectRef(mod, "Cell", (PyObject *)&Cell_Type) < 0) return -1;
+    if (PyType_Ready(&Marker_Type) < 0) return -1;
+    Dual_Type.tp_base = &PyFloat_Type;
+    Dual_Type.tp_bases = PyTuple_Pack(2, (PyObject *)&Marker_Type, (PyObject *)&PyFloat_Type);
+    DualC_Type.tp_base = &PyComplex_Type;
+    DualC_Type.tp_bases = PyTuple_Pack(2, (PyObject *)&Marker_Type, (PyObject *)&PyComplex_Type);
+    if (Dual_Type.tp_bases == NULL || DualC_Type.tp_bases == NULL) return -1;
+    if (PyType_Ready(&Dual_Type) < 0 || PyType_Ready(&DualC_Type) < 0 || PyType_Ready(&Buf_Type) < 0)
+        return -1;
+    if (PyModule_AddObjectRef(mod, "Marker", (PyObject *)&Marker_Type) < 0
+            || PyModule_AddObjectRef(mod, "Dual", (PyObject *)&Dual_Type) < 0
+            || PyModule_AddObjectRef(mod, "DualC", (PyObject *)&DualC_Type) < 0
+            || PyModule_AddObjectRef(mod, "Buf", (PyObject *)&Buf_Type) < 0)
+        return -1;
     if (PyType_Ready(&Init_Type) < 0) return -1;
     if (PyModule_AddObjectRef(mod, "Init", (PyObject *)&Init_Type) < 0) return -1;
     {
