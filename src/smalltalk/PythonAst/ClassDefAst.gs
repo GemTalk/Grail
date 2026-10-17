@@ -994,7 +994,11 @@ printSmalltalkRuntimeOn: aStream
 	Gated at class-creation time on whether anything above actually
 	implements the marker, so the ordinary class (nothing slotted anywhere
 	in its chain) pays one selector lookup and compiles no extra method."
-	self slotsValueAst isNil ifTrue: [
+	"So does a class whose own __slots__ NAMES ``__dict__'': it asks for the
+	__dict__ outright.  It declared __slots__, so the test above skipped it,
+	and over a slotted base (``class Empty: __slots__ = ()'') it inherited the
+	strict marker and had no __dict__ after all (#1658)."
+	(self slotsValueAst isNil or: [self slotsDeclareDict]) ifTrue: [
 		aStream nextPutAll: '('; nextPutAll: self ___stVarName___;
 			nextPutAll: ' ___pyInheritsStrictSlots___) ifTrue: ['; lf.
 		self
@@ -2852,6 +2856,25 @@ printSmalltalkRuntimeOn: aStream
 		and, like them, it is looked up along the superclass chain so an
 		inherited method reports what it closed over where it was DEFINED."
 		self emitMethodClassCellNamesOn: aStream].
+	"__slots__, validated as type() validates them, once the body has bound
+	every name and before the metaclass sees the class or the name is bound
+	(object class >> ___grailValidateStatementSlots___:, #1658).  Only for a
+	body that assigns __slots__, so every other class pays nothing.
+
+	The names passed are what the body BINDS, which is what ``conflicts with
+	class variable'' is about.  A bare annotation binds nothing -- ``x: int''
+	puts x in __annotations__, not in the namespace -- and werkzeug's
+	LocalProxy declares exactly that beside a slot of the same name, so it is
+	left out here although ___boundTargetNames___ (which scoping reads, where
+	an annotation does make a name local) answers it."
+	(self classBodyAttributes anySatisfy: [:pair | pair key asSymbol == #'__slots__']) ifTrue: [
+		aStream nextPutAll: self ___stVarName___;
+			nextPutAll: ' @env1:___grailValidateStatementSlots___: #('.
+		body body do: [:stmt |
+			((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifFalse: [
+				stmt ___boundTargetNames___ do: [:nm |
+					aStream nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $']]].
+		aStream nextPutAll: ' ).'; lf].
 	aStream nextPutAll: self ___stVarName___; nextPutAll: ' := '; nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___pyClassDefined___: { '.
 	self classBodyAttributes
@@ -4674,6 +4697,27 @@ slotsDeclaredStrict
 			ifTrue: [elt value = '__dict__' ifTrue: [hasDict := true]]
 			ifFalse: [^ false]].
 	^ hasDict not
+%
+
+category: 'Grail-Class Compilation'
+method: ClassDefAst
+slotsDeclareDict
+	"True when the class declares __slots__ as a recognized literal that
+	names ``__dict__'' -- the string itself, or a member of a tuple, list or
+	dict of constant strings.  slotsDeclaredStrict's other half: a computed
+	value answers false for both."
+
+	| valueAst elts |
+	valueAst := self slotsValueAst.
+	valueAst ifNil: [^ false].
+	(valueAst isKindOf: ConstantAst) ifTrue: [^ valueAst value = '__dict__'].
+	((valueAst isKindOf: TupleAst) or: [(valueAst isKindOf: ListAst)
+			or: [valueAst isKindOf: DictAst]]) ifFalse: [^ false].
+	elts := (valueAst isKindOf: DictAst)
+		ifTrue: [valueAst keys ifNil: [#()]]
+		ifFalse: [valueAst elts].
+	^ elts anySatisfy: [:elt |
+		(elt isKindOf: ConstantAst) and: [elt value = '__dict__']]
 %
 
 category: 'Grail-Class Compilation'

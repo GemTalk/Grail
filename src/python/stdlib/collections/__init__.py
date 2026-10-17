@@ -239,10 +239,14 @@ class deque:
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
     __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
-    # Bumped by every structural mutation so a live _deque_iterator can detect
-    # one (CPython's deque->state).  Also a class-level default, so an instance
-    # that somehow skipped __init__ still reads a value rather than raising.
-    _state = 0
+    # CPython's deque has no instance __dict__, so ``d.x = 1`` is an
+    # AttributeError and a subclass may ask for one with
+    # ``__slots__ = ('__dict__',)`` (test_deque's DequeWithSlots) -- which a
+    # class statement refuses over a base that already supplies a __dict__.
+    # _state is bumped by every structural mutation so a live _deque_iterator
+    # can detect one (CPython's deque->state); as a slot it can no longer also
+    # be a class-level default.
+    __slots__ = ('_items', '_maxlen', '_state', '__weakref__')
 
     # ids of deques whose __repr__ is currently on the stack, so a
     # self-referential deque (``d.append(d)``) renders the recursive slot as
