@@ -941,6 +941,7 @@ run
 	at: #'DynamicClassModuleTestCase' put: nil;
 	at: #'DynamicGlobalsTestCase' put: nil;
 	at: #'DynamicInstanceAttrsTestCase' put: nil;
+	at: #'DynamicStrSubclassValueTestCase' put: nil;
 	at: #'DynamicTypeTestCase' put: nil;
 	at: #'EllipsisSingletonTestCase' put: nil;
 	at: #'EmailMessageTestCase' put: nil;
@@ -2538,6 +2539,7 @@ input src/smalltalk/PythonTests/DuplicateArgumentBindingTestCase.gs
 input src/smalltalk/PythonTests/DynamicClassModuleTestCase.gs
 input src/smalltalk/PythonTests/DynamicGlobalsTestCase.gs
 input src/smalltalk/PythonTests/DynamicInstanceAttrsTestCase.gs
+input src/smalltalk/PythonTests/DynamicStrSubclassValueTestCase.gs
 input src/smalltalk/PythonTests/DynamicTypeTestCase.gs
 input src/smalltalk/PythonTests/EllipsisSingletonTestCase.gs
 input src/smalltalk/PythonTests/EmailMessageTestCase.gs
