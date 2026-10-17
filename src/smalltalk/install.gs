@@ -822,6 +822,7 @@ run
 	at: #'ClassDecoratorTestCase' put: nil;
 	at: #'ClassDescriptorReadsTestCase' put: nil;
 	at: #'ClassDictEntriesTestCase' put: nil;
+	at: #'ClassDictNotWritableTestCase' put: nil;
 	at: #'ClassDictOrderTestCase' put: nil;
 	at: #'ClassDictProxyTestCase' put: nil;
 	at: #'ClassFunctionBindingTestCase' put: nil;
@@ -2419,6 +2420,7 @@ input src/smalltalk/PythonTests/ClassCellTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
 input src/smalltalk/PythonTests/ClassDescriptorReadsTestCase.gs
 input src/smalltalk/PythonTests/ClassDictEntriesTestCase.gs
+input src/smalltalk/PythonTests/ClassDictNotWritableTestCase.gs
 input src/smalltalk/PythonTests/ClassDictOrderTestCase.gs
 input src/smalltalk/PythonTests/ClassDictProxyTestCase.gs
 input src/smalltalk/PythonTests/ClassFunctionBindingTestCase.gs

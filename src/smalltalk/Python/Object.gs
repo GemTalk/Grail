@@ -16938,6 +16938,23 @@ ___pyAttrDelete___: aName
 		sym @env0:== #'__type_params__' ifTrue: [
 			^ TypeError ___signal___: 'cannot delete ''__type_params__'' attribute of '
 				@env0:, self ___grailPythonClassNameForError___].
+		"``del Cls.__dict__'' is the store's refusal (see ___pyAttrStore___:put:):
+		type's __dict__ getset has no setter, and CPython words a delete the
+		same way (#1699)."
+		(sym @env0:== #'__dict__' and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+			^ AttributeError ___signal___:
+				'attribute ''__dict__'' of ''type'' objects is not writable'].
+		"A BUILT-IN class takes no deletes, as it takes no stores: CPython's
+		refusal is the same immutable-type TypeError for both (``del int.foo'',
+		``del int.__dict__'').  Grail answered an AttributeError that named the
+		GemStone class -- ``type object 'Integer' has no attribute 'foo''' --
+		inviting a fallback where no retry can help.  The test is the store's:
+		no per-class attribute holder means not a Python class."
+		(self ___respondsTo___: #___dynInstVars___) ifFalse: [
+			^ TypeError ___signal___:
+				'cannot set ''' @env0:, aName @env0:asString @env0:,
+					''' attribute of immutable type ''' @env0:,
+					self @env0:___pyClassNameForError___ @env0:, ''''].
 		"Enum members are undeletable: ``del Color.RED'' raises AttributeError
 		(CPython EnumType.__delattr__), the mirror of the reassignment guard in
 		__setattr__:_:.  Needed HERE now that a member is a holder entry like
@@ -18778,6 +18795,16 @@ ___pyAttrStore___: aName put: aValue
 				self @env0:with: aValue performMethod: (___po @env0:compiledMethodAt:
 					(aName @env0:asString @env0:, ':') @env0:asSymbol environmentId: 1).
 				^ aValue].
+		"``Cls.__dict__ = d'' is refused: type's __dict__ getset has no setter,
+		so CPython never replaces a class's namespace wholesale.  Grail stored
+		the value in the class holder, where the class-side read never looked,
+		and the assignment vanished without a word (#1699).  A Python class
+		only: a built-in one falls through to the immutable-type TypeError
+		below, which CPython raises first."
+		((aName @env0:size == 8 and: [aName @env0:asString @env0:= '__dict__'])
+			and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+			^ AttributeError ___signal___:
+				'attribute ''__dict__'' of ''type'' objects is not writable'].
 		"Installing __hash__ on a class at runtime has to become visible to
 		hash(), which reaches Object >> __hash__ by an ordinary message send and
 		so cannot see a dynamic class attribute.  Record that one exists; that
