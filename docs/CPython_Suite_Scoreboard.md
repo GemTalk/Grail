@@ -109,7 +109,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_difflib | OK | 59 | 0 | 0 | 0 |  |
 | test.test_gettext | OK | 74 | 0 | 0 | 1 |  |
 | test.test_linecache | OK | 29 | 0 | 0 | 1 |  |
-| test.test_pickle | OK | 470 | 0 | 0 | 51 |  |
+| test.test_pickle | OK | 470 | 0 | 0 | 50 |  |
 | test.test_reprlib | OK | 33 | 0 | 0 | 2 |  |
 | test.test_struct | OK | 44 | 0 | 0 | 8 |  |
 | test.test_typing | OK | 714 | 0 | 0 | 3 |  |
@@ -122,7 +122,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_netrc | OK | 24 | 0 | 0 | 1 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 191 | 0 | 0 | 0 |  |
-| test.test_ssl | OK | 203 | 0 | 0 | 23 |  |
+| test.test_ssl | OK | 203 | 0 | 0 | 22 |  |
 | test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | OK | 233 | 0 | 0 | 7 |  |
@@ -138,11 +138,11 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_userstring | OK | 71 | 0 | 0 | 2 |  |
 | test.test_exception_group | OK | 53 | 0 | 0 | 0 |  |
 | test.test_except_star | OK | 60 | 0 | 0 | 0 |  |
-| test.test_generators | ERROR | 59 | 11 | 3 | 1 |  |
+| test.test_generators | ERROR | 59 | 10 | 1 | 1 |  |
 | test.test_long | ERROR | 47 | 4 | 5 | 7 |  |
 | test.test_exception_hierarchy | OK | 16 | 0 | 0 | 1 |  |
 | test.test_copyreg | OK | 6 | 0 | 0 | 0 |  |
 | test.test_random | ERROR | 116 | 0 | 8 | 5 |  |
 | test.test_string.test_string | OK | 42 | 0 | 0 | 1 |  |
 | test.test_shlex | OK | 45 | 0 | 0 | 1 |  |
-| test.test_uuid | FAIL | 120 | 8 | 0 | 73 |  |
+| test.test_uuid | OK | 120 | 0 | 0 | 73 |  |
