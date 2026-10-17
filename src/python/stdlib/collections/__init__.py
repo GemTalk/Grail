@@ -18,6 +18,11 @@ class defaultdict(dict):
     by calling default_factory().
     """
 
+    # CPython's defaultdict has no instance __dict__ (``d.x = 1`` is an
+    # AttributeError) and takes no weak reference; a subclass that declares
+    # __slots__ is strict, as there (#1693).
+    __slots__ = ('default_factory',)
+
     def __init__(self, default_factory=None, *args, **kwargs):
         super().__init__()
         self.default_factory = default_factory
