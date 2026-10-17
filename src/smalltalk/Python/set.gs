@@ -590,7 +590,7 @@ __dict__
 		environmentId: 1) @env0:isNil ifTrue: [
 		^ AttributeError ___signal___:
 			'''set'' object has no attribute ''__dict__'''].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 %
 
 set compile_env: 0
