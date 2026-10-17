@@ -830,6 +830,7 @@ run
 	at: #'ClassGetitemTestCase' put: nil;
 	at: #'ClassHeaderEvaluatedOnceTestCase' put: nil;
 	at: #'ClassIdentityAndRelativeImportTestCase' put: nil;
+	at: #'ClassInClassBodyBlockTestCase' put: nil;
 	at: #'ClassInClassBodyTestCase' put: nil;
 	at: #'ClassInMethodLocalClassMethodTestCase' put: nil;
 	at: #'ClassMetaclassIdentityTestCase' put: nil;
@@ -2427,6 +2428,7 @@ input src/smalltalk/PythonTests/ClassGetitemPrecedenceTestCase.gs
 input src/smalltalk/PythonTests/ClassGetitemTestCase.gs
 input src/smalltalk/PythonTests/ClassHeaderEvaluatedOnceTestCase.gs
 input src/smalltalk/PythonTests/ClassIdentityAndRelativeImportTestCase.gs
+input src/smalltalk/PythonTests/ClassInClassBodyBlockTestCase.gs
 input src/smalltalk/PythonTests/ClassInClassBodyTestCase.gs
 input src/smalltalk/PythonTests/ClassInMethodLocalClassMethodTestCase.gs
 input src/smalltalk/PythonTests/ClassMetaclassIdentityTestCase.gs
