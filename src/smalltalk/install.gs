@@ -1196,6 +1196,7 @@ run
 	at: #'MetaclassClassAttrTestCase' put: nil;
 	at: #'MetaclassDirectCallInitTestCase' put: nil;
 	at: #'MetaclassDispatchTestCase' put: nil;
+	at: #'MetaclassGetattrOnClassMissTestCase' put: nil;
 	at: #'MetaclassInstancecheckTestCase' put: nil;
 	at: #'MetaclassLookupOrderTestCase' put: nil;
 	at: #'MetaclassMethodsTestCase' put: nil;
@@ -2795,6 +2796,7 @@ input src/smalltalk/PythonTests/MetaclassCallTestCase.gs
 input src/smalltalk/PythonTests/MetaclassClassAttrTestCase.gs
 input src/smalltalk/PythonTests/MetaclassDirectCallInitTestCase.gs
 input src/smalltalk/PythonTests/MetaclassDispatchTestCase.gs
+input src/smalltalk/PythonTests/MetaclassGetattrOnClassMissTestCase.gs
 input src/smalltalk/PythonTests/MetaclassInstancecheckTestCase.gs
 input src/smalltalk/PythonTests/MetaclassLookupOrderTestCase.gs
 input src/smalltalk/PythonTests/MetaclassMethodsTestCase.gs
