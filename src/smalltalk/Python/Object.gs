@@ -9082,13 +9082,10 @@ ___classDict___
 	a class whose only ``x'' is an unset slot still satisfies a protocol
 	requiring ``x'' (test_typing test_protocols_isinstance___slots__)."
 	((self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)) ifTrue: [
-		[ | mdt |
-		mdt := ((importlib @env0:___instance___) @env1:import_module: 'types')
-			@env1:___pyAttrLoad___: #'MemberDescriptorType'.
-		self ___pyDeclaredSlotNames___ @env0:do: [:sym | | nm |
+		[self ___pyDeclaredSlotNames___ @env0:do: [:sym | | nm |
 			nm := sym @env0:asString.
 			((d @env1:__contains__: nm) ___isTruthy___) ifFalse: [
-				d @env0:at: nm put: (mdt @env1:value: { nm. self } value: nil)]]]
+				d @env0:at: nm put: (self ___grailMemberDescriptor___: nm)]]]
 			@env0:on: AbstractException do: [:ex |
 				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 				ex @env0:return: nil]].
@@ -9273,6 +9270,47 @@ ___grailGetSetDescriptor___: aName
 			@env1:value: { aName. self } value: nil.
 	per @env0:at: aName put: desc.
 	^ desc
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailMemberDescriptor___: aName
+	"The ``member_descriptor'' this class's __dict__ lists for its declared
+	slot aName, and what ``Cls.aName'' answers -- built once per class and
+	session, so ``K.a is K.__dict__['a']'' as in CPython (#1694).
+	Instances never consult it: a slot is an instVar reached by index."
+
+	| cache per desc |
+	cache := SessionTemps @env0:current
+		@env0:at: #'GrailMemberDescriptors'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	per := cache @env0:at: self ifAbsentPut: [KeyValueDictionary @env0:new].
+	desc := per @env0:at: aName otherwise: nil.
+	desc == nil ifFalse: [^ desc].
+	desc := (((importlib @env0:___instance___) @env1:import_module: 'types')
+		@env1:___pyAttrLoad___: #'MemberDescriptorType')
+			@env1:value: { aName. self } value: nil.
+	per @env0:at: aName put: desc.
+	^ desc
+%
+
+category: 'Grail-Convenience Methods - Attribute'
+method: object
+___grailSlotMemberDescriptorFor___: aSym
+	"For a CLASS receiver, the member descriptor of the class that declares
+	aSym in its __slots__ -- this one or the nearest superclass -- or nil.
+	A slot lives in the layout, so the Smalltalk superclass chain is the one
+	to walk: a slot can only be inherited along it."
+
+	| c |
+	c := self.
+	[c ~~ nil] @env0:whileTrue: [
+		((c @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+			and: [c ___pyDeclaredSlotNames___ @env0:anySatisfy: [:n |
+				n @env0:asString @env0:= aSym @env0:asString]])
+			ifTrue: [^ c ___grailMemberDescriptor___: aSym @env0:asString].
+		c := c @env0:superclass].
+	^ nil
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -12592,6 +12630,12 @@ ___pyAttrLoad___: aSym
 	CPython: an instance of ``class memmap(ndarray)'' reads ndarray's ``shape''
 	and ``sum'' off its C body (ShimForeignSubclass)."
 	(self ___pyAttrForeignBaseLoad___: aSym) @env0:ifNotNil: [:assoc | ^ assoc @env0:value].
+	"A CLASS's slot name reads as its member descriptor -- ``K.a'' is
+	``<member 'a' of 'K' objects>'' -- found in the class dict before any
+	metaclass __getattr__ is asked, as type.__getattribute__ finds it.  Here,
+	at the miss, so no successful read pays for it (#1694)."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		(self ___grailSlotMemberDescriptorFor___: aSym) @env0:ifNotNil: [:md | ^ md]].
 	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
