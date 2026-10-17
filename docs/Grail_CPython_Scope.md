@@ -30,8 +30,8 @@ Where the in-scope tiers stand:
 | P1 | 59 | 2 | 29 | 90 |
 | P2 | 21 | 1 | 12 | 34 |
 | P3 | 16 | 0 | 40 | 56 |
-| P4 | 14 | 2 | 59 | 75 |
-| **In-scope** | **110** | **5** | **140** | **255** |
+| P4 | 15 | 1 | 59 | 75 |
+| **In-scope** | **111** | **4** | **140** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **110 of those score OK**.
+Of the 255 in-scope modules, **115 are wired into the harness** (P1 61 · P2 22 · P3 16 · P4 16) and **111 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,13 +136,13 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 61 | 3169 | 375 | 2771 | 12% |
+| P1 | 61 | 3169 | 375 | 2774 | 12% |
 | P2 | 22 | 4146 | 554 | 3584 | 13% |
-| P3 | 16 | 2600 | 402 | 2198 | 15% |
-| P4 | 20 | 1618 | 129 | 1481 | 8% |
-| **all** | **119** | **11533** | **1460** | **10034** | **13%** |
+| P3 | 16 | 2600 | 401 | 2199 | 15% |
+| P4 | 20 | 1618 | 128 | 1490 | 8% |
+| **all** | **119** | **11533** | **1458** | **10047** | **13%** |
 
-OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30.
+OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120.
 <!-- /test-tally -->
 
 Most of the heavy skips are CPython's own, not Grail's. A module that tests a C
@@ -449,7 +449,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_urllib_response` | urllib response objects — web stack. |
 |  | `test_urllibnet` | urllib against the live internet (needs real network). *(edge — see below)* |
 | ✅ | `test_urlparse` | urllib.parse — pure URL parsing (web stack). |
-| ❗ | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
+| ✅ | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
 | ✅ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
 |  | `test_wsgiref` | wsgiref (vendored) — WSGI reference (web stack). |
 |  | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
@@ -775,13 +775,12 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**5 of the 119 rows on the committed board are not OK.**
+**4 of the 119 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
-- `test.test_generators` ERROR, 59 tests: 11 failed, 3 errors, 1 skipped
+- `test.test_generators` ERROR, 59 tests: 10 failed, 1 errors, 1 skipped
 - `test.test_long` ERROR, 47 tests: 4 failed, 5 errors, 7 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 8 errors, 5 skipped
-- `test.test_uuid` FAIL, 120 tests: 8 failed, 0 errors, 73 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
