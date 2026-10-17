@@ -273,6 +273,32 @@ __new__: obj _: encoding _: errors
 
 category: 'Grail-Initialization'
 classmethod: CharacterCollection
+___grailStrSubclassNew___: positional kw: keywords
+	"The content of a NEW INSTANCE of a str subclass with no __new__ of its
+	own: CPython's ``str.__new__(cls, *args, **kw)'' -- (object, encoding,
+	errors), positionally or by keyword -- answered self-typed.  Both ways a
+	str subclass is constructed come here: the value:value: ClassDefAst
+	writes for a class statement naming ``str'', and object >>
+	___allocateInstance___:kw: for one built by type() or over a base held
+	in a variable, which used to answer an EMPTY string (#1706).  One method,
+	so the two cannot drift: the class statement's copy ignored keywords
+	(``S(b'x', encoding='ascii')'' answered the bytes' repr)."
+
+	| n |
+	(keywords @env0:notNil @env0:and: [keywords @env0:isEmpty @env0:not]) ifTrue: [
+		^ self _new: positional kw: keywords].
+	n := positional @env0:size.
+	n @env0:> 3 ifTrue: [
+		^ TypeError ___signal___: 'str() takes at most 3 arguments ('
+			@env0:, n @env0:printString @env0:, ' given)'].
+	n @env0:= 0 ifTrue: [^ self __new__: ''].
+	n @env0:= 1 ifTrue: [^ self __new__: (positional @env0:at: 1)].
+	n @env0:= 2 ifTrue: [^ self __new__: (positional @env0:at: 1) _: (positional @env0:at: 2)].
+	^ self __new__: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)
+%
+
+category: 'Grail-Initialization'
+classmethod: CharacterCollection
 _new: positional kw: kwargs
 	"``str(object='', encoding='utf-8', errors='strict')'' called with
 	KEYWORDS, which the class-call dispatcher routes here.  A class with no
@@ -285,6 +311,18 @@ _new: positional kw: kwargs
 	wording CPython 3.14 uses."
 
 	| args obj encoding errors |
+	"MORE THAN THREE POSITIONALS is an arity error, in CPython's two
+	wordings: the vectorcall one for positionals alone, the tp_new one --
+	counting the keywords too -- when there are any.  Grail read the fourth
+	and later as nothing and the second and third as an encoding, and so
+	answered ``decoding to str: need a bytes-like object''."
+	positional @env0:size @env0:> 3 ifTrue: [
+		^ TypeError ___signal___: ((kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty])
+			ifTrue: ['str expected at most 3 arguments, got '
+				@env0:, positional @env0:size @env0:printString]
+			ifFalse: ['str() takes at most 3 arguments ('
+				@env0:, (positional @env0:size @env0:+ kwargs @env0:size) @env0:printString
+				@env0:, ' given)'])].
 	args := OrderedCollection @env0:withAll: positional.
 	kwargs @env0:keysDo: [:k |
 		(#('object' 'encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
