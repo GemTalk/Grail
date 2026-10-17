@@ -5347,6 +5347,33 @@ ___pyClassDefined___: attrNames
 	^ self ___invokeSetNameHooks___: attrNames
 %
 
+category: 'Grail-Initialization'
+classmethod: object
+___grailValidateStatementSlots___: boundNames
+	"A class statement's __slots__, checked as type() checks them
+	(builtins >> ___validateSlots___:bases:) -- items that are strings and
+	identifiers, none that is also a name the body binds, and no __dict__ /
+	__weakref__ a base already supplies (#1658).  A class statement never
+	reached that check, so ``__slots__ = (1,)'' and the rest were accepted.
+
+	ClassDefAst emits this before the metaclass hook and before the class is
+	bound to its name, so a refusal leaves the name unbound, as CPython's
+	does.  boundNames is the body's own bindings -- its assignments, defs,
+	nested classes and imports, but not a bare annotation -- which is what
+	``conflicts with class variable'' is about."
+
+	| slots ns |
+	slots := self ___classBodyValueAt___: #'__slots__'.
+	slots == nil ifTrue: [^ self].
+	ns := dict @env0:new.
+	boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None].
+	ns @env1:__setitem__: '__slots__' _: slots.
+	((Python @env0:at: #builtins) @env0:___instance___)
+		___validateSlots___: ns bases: (self ___pyAttrLoad___: #'__bases__')
+		allBuiltinStorage: false.
+	^ self
+%
+
 category: 'Grail-Python Protocol'
 classmethod: object
 ___grailIsProtocolDunderName___: aName
@@ -9168,12 +9195,17 @@ category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___grailIsPythonClass___
 	"A class a class statement OR type() built: the first carries the
-	___pyDefinedClass___ marker, the second only its own attribute holder."
+	___pyDefinedClass___ marker, the second ___pyTypeBuiltClass___ (builtins >>
+	type:_:_:kw:).  The metaclass's own ___dynInstVars___ accessor stays as the
+	test for a type()-built class from before that marker, but it is not
+	enough alone: a class over a PYTHON base inherits the accessor rather
+	than defining it."
 
 	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
 	self == object ifTrue: [^ false].
 	^ (self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
-		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]
+		or: [(self @env0:includesSelector: #'___pyTypeBuiltClass___' environmentId: 1)
+		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]]
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -13025,8 +13057,11 @@ __dir__
 			its Smalltalk selectors, which the scan above already reports, and it
 			carries kernel names too -- ``new'' made dir(list) no longer a subset
 			of dir(UserList) (test_collections test_list_protocol)."
+			"A type()-built class counts too: it has no ___pyDefinedClass___
+			marker, so dir() of one missed what only its __dict__ holds, such
+			as the __weakref__ descriptor (#1658)."
 			((k @env0:isKindOf: Behavior)
-				and: [k @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]) ifTrue: [
+				and: [k ___grailIsPythonClass___]) ifTrue: [
 				[((k @env1:___pyAttrLoad___: #'__dict__') @env1:keys) @env0:do: [:key |
 					(key @env0:isKindOf: CharacterCollection) ifTrue: [
 						(names @env0:includes: key @env0:asString) ifFalse: [
