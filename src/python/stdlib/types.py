@@ -385,12 +385,19 @@ class getset_descriptor:
     def __get__(self, instance, owner=None):
         if instance is None:
             return self
+        if not isinstance(instance, self.__objclass__):
+            raise TypeError(
+                f"descriptor {self.__name__!r} for {self.__objclass__.__name__!r} "
+                f"objects doesn't apply to a {type(instance).__name__!r} object")
         if self.__name__ == '__dict__':
             return object.__getattribute__(instance, '__dict__')
         return None
 
     def __set__(self, instance, value):
-        if self.__name__ == '__dict__':
+        # type's own __dict__ entry has no setter: CPython never replaces a
+        # class's namespace wholesale.  (It refuses ``C.__dict__ = {}'' for the
+        # same reason; Grail's attribute store does not yet -- #1699.)
+        if self.__name__ == '__dict__' and self.__objclass__ is not type:
             object.__setattr__(instance, '__dict__', value)
             return
         raise AttributeError(

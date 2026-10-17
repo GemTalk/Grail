@@ -9113,6 +9113,14 @@ ___classDict___
 							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 							ex @env0:return: nil].
 					desc == nil ifFalse: [d @env0:at: nm put: desc]]]].
+	"type's OWN ``__dict__'' entry is CPython's getset_descriptor -- what every
+	class's ``cls.__dict__'' is read through -- not the wrap of the kernel
+	method that implements it, which bound as a method: its ``__get__(C)''
+	answered a bound method where CPython answers C's mappingproxy.  wrapt's
+	pure-Python fallback reads exactly ``type.__dict__['__dict__'].__get__(
+	cls)'' (#1428)."
+	(self == type and: [d @env0:includesKey: '__dict__']) ifTrue: [
+		d @env0:at: '__dict__' put: (self ___grailGetSetDescriptor___: '__dict__')].
 	"SOURCE ORDER for a class a class statement built.  The sections above
 	read the holder, then the instance-side method dictionary, then the
 	metaclass's -- two of them hash-ordered -- so ``z = 1; def b; a = 2''

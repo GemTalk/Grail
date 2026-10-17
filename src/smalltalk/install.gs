@@ -1545,6 +1545,7 @@ run
 	at: #'TypeBuiltClassOverridesTestCase' put: nil;
 	at: #'TypeCallMroEntriesTestCase' put: nil;
 	at: #'TypedDictTotalTestCase' put: nil;
+	at: #'TypeDictGetsetTestCase' put: nil;
 	at: #'TypeErrorTestCase' put: nil;
 	at: #'TypeInCallPositionTestCase' put: nil;
 	at: #'TypeParamScopesTestCase' put: nil;
@@ -3147,6 +3148,7 @@ input src/smalltalk/PythonTests/TypeAliasTestCase.gs
 input src/smalltalk/PythonTests/TypeBuiltClassOverridesTestCase.gs
 input src/smalltalk/PythonTests/TypeCallMroEntriesTestCase.gs
 input src/smalltalk/PythonTests/TypedDictTotalTestCase.gs
+input src/smalltalk/PythonTests/TypeDictGetsetTestCase.gs
 input src/smalltalk/PythonTests/TypeErrorTestCase.gs
 input src/smalltalk/PythonTests/TypeInCallPositionTestCase.gs
 input src/smalltalk/PythonTests/TypeParamScopesTestCase.gs
