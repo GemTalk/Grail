@@ -759,6 +759,7 @@ run
 	at: #'BuiltinSubclassPickleTestCase' put: nil;
 	at: #'BuiltinSubclassPropertyTestCase' put: nil;
 	at: #'BuiltinTypeDictAndBasesTestCase' put: nil;
+	at: #'BundledPackagesTestCase' put: nil;
 	at: #'ByteArrayReceiverTypeTestCase' put: nil;
 	at: #'BytearrayTestCase' put: nil;
 	at: #'BytesioGetbufferViewTestCase' put: nil;
@@ -2358,6 +2359,7 @@ input src/smalltalk/PythonTests/BuiltinSubclassOverrideTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPickleTestCase.gs
 input src/smalltalk/PythonTests/BuiltinSubclassPropertyTestCase.gs
 input src/smalltalk/PythonTests/BuiltinTypeDictAndBasesTestCase.gs
+input src/smalltalk/PythonTests/BundledPackagesTestCase.gs
 input src/smalltalk/PythonTests/ByteArrayReceiverTypeTestCase.gs
 input src/smalltalk/PythonTests/BytearrayTestCase.gs
 input src/smalltalk/PythonTests/BytesioGetbufferViewTestCase.gs

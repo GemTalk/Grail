@@ -122,6 +122,30 @@ directory containing an `os.py` still gets Grail's `os`;
 both halves — the bundled stdlib wins, *and* `sys.path` is genuinely consulted,
 so the first half cannot pass by the resolver ignoring `sys.path` altogether.
 
+### The third-party packages Grail bundles come after `sys.path`
+
+The rule above is for Grail's **stdlib**. The third-party packages Grail ships
+— flask, werkzeug, jinja2, markupsafe, itsdangerous, blinker, django, asgiref,
+sqlparse and twilio, each with its `.dist-info` — are in `src/python/bundled`,
+which is searched **after** `sys.path` (`___grailBundledRoots___`), like a
+lowest-priority site-packages. So a user's own copy of one of them, a later
+version or a modified one, in a venv or anywhere on `sys.path`, is the one that
+imports, as in CPython. The bundled copy is the fallback when there is none.
+`importlib.metadata` follows the same order, so the version it reports is the
+version that imports.
+
+They used to sit in `src/python/stdlib`, which gave them the stdlib's priority:
+a user's copy could never import, and the package census reported them as
+SHADOWED (#1713). `BundledPackagesTestCase` asserts both directions: a user's
+copy wins, and Grail's stdlib still beats `sys.path`.
+
+One thing `sys.path` order cannot change is a module already **deployed** under
+the same name in the current namespace (D10 in
+`docs/Persistent_Modules_and_Classes.md`): `run_tests.sh`'s framework deploy, or
+an earlier `import flask` that was committed, records the bundled copy, and a
+different file under that name is then refused with the message that names
+`gemdb.modules.forget`. A fresh app namespace has nothing deployed.
+
 ## `sys.meta_path` sits ABOVE the path search
 
 Finders installed in `sys.meta_path` (PEP 302 / PEP 451) are consulted, and they
@@ -142,7 +166,7 @@ nothing on disk for step 3 to find.
 **`GrailBuiltinImporter` is why step 2 cannot shadow Grail's `os` or
 `traceback`.** It is seeded at `sys.meta_path[0]` and serves exactly Grail's own
 two roots — `grailDir` and `grailDir/src/python/stdlib`
-(`___grailOwnRoots___`) — the same boundary `___moduleNameToPath___:` has always
+(`___grailOwnRoots___`), and not the bundled third-party packages — the same boundary `___moduleNameToPath___:` has always
 drawn, now stated as a finder. It is asked **first whatever its index**, because
 `sys.meta_path.insert(0, f)` is how everyone spells "ask my finder first" and
 that must not silently displace the tree Grail's own runtime imports from

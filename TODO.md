@@ -216,7 +216,7 @@ Each has a tracked root cause elsewhere in this file or in
 
 ## Flask Source-Drop — Remaining Blockers
 
-Flask 3.1 source is dropped under ``src/python/stdlib/flask/``,
+Flask 3.1 source is dropped under ``src/python/bundled/flask/`` (``src/python/stdlib/flask/`` until #1713),
 ``import flask`` succeeds end-to-end, and
 ``Flask(__name__).test_client().get('/')`` now works (M7, commit
 9f87ec04 — exercised by

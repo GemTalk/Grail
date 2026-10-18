@@ -45,7 +45,9 @@ WHAT IT CLAIMS.  Exactly the modules GRAIL ITSELF SHIPS: anything resolvable
 under ``importlib class >> ___grailOwnRoots___'' -- the checkout and its ported
 stdlib at src/python/stdlib. Not extraSearchRoots, not sys.path: those roots
 were added by the caller, and a caller who added a tree is entitled to have a
-finder serve out of it. That boundary is the same one
+finder serve out of it. Not the third-party packages Grail bundles either
+(src/python/bundled, ``___grailBundledRoots___''): they are a fallback after
+sys.path, so a user''s own copy of one wins (#1713). That boundary is the same one
 ``___moduleNameToPath___:'' has always drawn, now stated as a finder instead of
 as a search order.
 
