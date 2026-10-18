@@ -633,6 +633,10 @@ __delattr__: name
 				AttributeError ___signal___:
 					('attribute ''' @env0:, name @env0:asString
 						@env0:, ''' of ''function'' objects is not writable')].
+		"``del f.__defaults__'' sets None in CPython, and so stops a call
+		binding them -- the write a None assignment makes (#1714)."
+		((name @env0:asSymbol == #'__defaults__') or: [name @env0:asSymbol == #'__kwdefaults__'])
+			ifTrue: [^ self __setattr__: name _: ExecBlock @env0:___pyNone___].
 		^ super @env1:__delattr__: name].
 	name @env0:asSymbol == #'__class__' ifTrue: [
 		TypeError ___signal___: 'can''t delete __class__ attribute'].
@@ -1749,16 +1753,40 @@ ___writeDefaultsThrough___: name value: value
 	effect, any attribute an earlier, uncarried write left behind is dropped,
 	so the read is computed from the memo again."
 
-	| sym isKw |
+	| sym isKw cls |
 	sym := name @env0:asSymbol.
 	isKw := sym == #'__kwdefaults__'.
 	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
 	(receiver @env0:isKindOf: module) ifFalse: [^ false].
+	"Once REBOUND, every later write goes to the rebound record, whatever its
+	shape: the session entry point binds from there, not from the memo."
+	cls := receiver @env0:class.
+	(cls ___grailReboundRecordAt___: selVarargs) == nil ifFalse: [
+		self ___grailRebindDefaults___: value kw: isKw.
+		^ false].
 	(receiver @env0:___writeFunctionDefaults___: selector @env0:asString
-		value: value kw: isKw) ifFalse: [^ false].
+		value: value kw: isKw) ifFalse: [
+			self ___grailRebindDefaults___: value kw: isKw.
+			^ false].
 	[self @env0:removeDynamicInstVar: sym]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: BoundMethod
+___grailRebindDefaults___: value kw: isKw
+	"A module-level function's defaults written in a shape its compiled
+	prologue cannot carry: rebind its calls in this session (Behavior >>
+	___grailRebind___:code:receiverOffset:value:kw:initial:, #1714).  The
+	caller still stores the value as an attribute, which is what the read
+	answers.  False when the function cannot be rebound."
+
+	| code |
+	code := [self __code__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ receiver @env0:class ___grailRebind___: selVarargs code: code receiverOffset: 0
+		value: value kw: isKw
+		initial: [{ self __defaults__ . self __kwdefaults__ }]
 %
 
 category: 'Grail-Attribute Access'

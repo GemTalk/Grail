@@ -2437,10 +2437,11 @@ ___writeDefaults: aValue entry: anEntry kw: isKw into: aStoreBlock
 	and whether a parameter HAS a default is compiled into the call path.  So
 	a tuple of the declared length and a dict with exactly the declared
 	keyword-only names can be written; None, another length, or a dict that
-	adds or drops a name cannot, and the caller keeps the old behaviour for
-	those -- the limit FunctionDefaultsTestCase documents for a nested def.
-	Validated against that shape BEFORE anything is written, so a refused
-	write changes nothing."
+	adds or drops a name cannot.  For those the caller rebinds the function's
+	calls instead (Behavior >> ___grailRebind___:code:receiverOffset:value:kw:
+	initial:, #1714); a nested def keeps the limit FunctionDefaultsTestCase
+	documents.  Validated against that shape BEFORE anything is written, so a
+	refused write changes nothing."
 
 	| keys n |
 	(aValue isNil or: [aValue == ExecBlock ___pyNone___]) ifTrue: [^ false].

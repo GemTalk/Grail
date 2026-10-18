@@ -62,6 +62,11 @@ FunctionDefaultsTestCase category: 'Grail-SUnit'
 ! effect is worse than reporting none.
 !
 ! ------------------------------------------------------------------------------
+! A module-level def and a method no longer have either limit: a write that
+! changes the shape rebinds their calls for the session (#1714,
+! ReboundDefaultsTestCase).  What follows is about a NESTED def, whose defaults
+! are the temps described above.
+!
 ! TWO THINGS THIS DOES NOT DO, neither asserted by the fixture because CPython
 ! and Grail genuinely differ:
 !

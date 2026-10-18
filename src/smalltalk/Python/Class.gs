@@ -1135,6 +1135,151 @@ ___dropSessionMethods___
 	^ rec @env0:at: 2
 %
 
+category: 'Grail-Rebound Defaults'
+method: Behavior
+___grailReboundRecordAt___: aSelector
+	"The rebound-defaults record for aSelector on EXACTLY the receiver, or nil
+	-- see ___grailRebind___:code:receiverOffset:value:kw:initial:.  Exact,
+	not inherited: a subclass that defines its own method of the same name has
+	its own defaults, and must not be taken for the base's."
+
+	| reg perClass sym rec current |
+	reg := SessionTemps @env0:current @env0:at: #'GrailReboundDefaults' otherwise: nil.
+	reg == nil ifTrue: [^ nil].
+	perClass := reg @env0:at: self otherwise: nil.
+	perClass == nil ifTrue: [^ nil].
+	sym := aSelector @env0:asSymbol.
+	rec := perClass @env0:at: sym otherwise: nil.
+	rec == nil ifTrue: [^ nil].
+	"STALE once the method is compiled again -- a re-import that rebuilds the
+	class in place, or importlib.reload: the new compile displaces the session
+	entry point, and the function is a new one with its own defaults, as in
+	CPython.  The record is dropped, so the next write starts afresh."
+	current := (self @env0:includesSelector: sym environmentId: 1)
+		ifTrue: [self @env0:compiledMethodAt: sym environmentId: 1]
+		ifFalse: [nil].
+	current == (rec @env0:at: 10) ifTrue: [^ rec].
+	perClass @env0:removeKey: sym.
+	^ nil
+%
+
+category: 'Grail-Rebound Defaults'
+method: Behavior
+___grailReboundRecordFor___: aSelector
+	"The record of the nearest class in the receiver's chain that has one for
+	aSelector, or nil.  This is the class whose session method is running:
+	only a rebound class has one, and a class below it that defines the
+	method itself never reaches it."
+
+	| cls rec |
+	cls := self.
+	[cls == nil] whileFalse: [
+		rec := cls ___grailReboundRecordAt___: aSelector.
+		rec == nil ifFalse: [^ rec].
+		cls := cls @env0:superclass].
+	^ nil
+%
+
+category: 'Grail-Rebound Defaults'
+method: Behavior
+___grailRebind___: aSelector code: aCode receiverOffset: anOffset value: aValue kw: isKw initial: anInitialBlock
+	"``f.__defaults__ = t'' or ``f.__kwdefaults__ = d'' that changes the SHAPE
+	of a module-level function's or a method's defaults (#1714): None, another
+	length, or keyword-only names added or removed.
+
+	Whether a parameter has a default is compiled into the function's
+	``_name:kw:'' prologue, so the store a same-shape write goes into
+	(module class >> ___writeDefaults:entry:kw:into:) cannot carry it.  Instead
+	the receiver -- the class that defines the function -- gets a SESSION
+	``_name:kw:'' (___installSessionMethod:as:) that completes the arguments
+	under the new defaults, or raises CPython's TypeError for one that no
+	longer has a default, and then runs the original method unchanged
+	(object >> ___grailReboundCall___:pos:kw:).  Every call that could need a
+	default reaches it: a call with fewer arguments than parameters, or with
+	keywords, is compiled to ``_name:kw:'', and so is the fallback of a
+	fixed-arity send the class does not implement.  A call with every
+	positional argument still runs the body directly; it needs no default.
+
+	No call of any other function pays for this: there is no per-call check.
+	And it is per session -- nothing persistent is written -- as an assignment
+	lasts for the process in CPython.
+
+	The record is { original method . positional parameter names (the
+	receiver's dropped) . positional-only count . keyword-only names .
+	positional defaults (a tuple, or nil) . keyword-only defaults (a dict, or
+	nil) . qualname . receiver offset . has *args . the session method }.  A
+	later write of either
+	attribute, of any shape, updates it in place: the session method reads it
+	on every call.  anInitialBlock answers { positional . keyword-only } as
+	they were before the first rebind, for the attribute not being written.
+	Answers false, and installs nothing, when the receiver does not itself
+	define aSelector or aCode lacks the parameter layout."
+
+	| rec sym orig dyn argc posonly kwonly varnames flags reg perClass src stem init |
+	rec := self ___grailReboundRecordAt___: aSelector.
+	rec == nil ifFalse: [
+		rec @env0:at: (isKw ifTrue: [6] ifFalse: [5])
+			put: (self ___grailReboundDefaultsValue___: aValue).
+		^ true].
+	sym := aSelector @env0:asSymbol.
+	aCode == nil ifTrue: [^ false].
+	(self @env0:includesSelector: sym environmentId: 1) ifFalse: [^ false].
+	orig := self @env0:compiledMethodAt: sym environmentId: 1.
+	dyn := [:k | [aCode @env0:dynamicInstVarAt: k]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+	argc := dyn @env0:value: #'co_argcount'.
+	varnames := dyn @env0:value: #'___varnames___'.
+	(argc == nil or: [varnames == nil or: [argc @env0:< anOffset]]) ifTrue: [^ false].
+	posonly := (((dyn @env0:value: #'co_posonlyargcount') ifNil: [0]) @env0:- anOffset) @env0:max: 0.
+	kwonly := (dyn @env0:value: #'co_kwonlyargcount') ifNil: [0].
+	(varnames @env0:size @env0:< (argc @env0:+ kwonly)) ifTrue: [^ false].
+	flags := (dyn @env0:value: #'co_flags') ifNil: [0].
+	init := anInitialBlock @env0:value.
+	rec := Array @env0:new: 10.
+	rec @env0:at: 1 put: orig.
+	rec @env0:at: 2 put: (varnames @env0:copyFrom: anOffset @env0:+ 1 to: argc).
+	rec @env0:at: 3 put: posonly.
+	rec @env0:at: 4 put: (varnames @env0:copyFrom: argc @env0:+ 1 to: argc @env0:+ kwonly).
+	rec @env0:at: 5 put: (self ___grailReboundDefaultsValue___: (init @env0:at: 1)).
+	rec @env0:at: 6 put: (self ___grailReboundDefaultsValue___: (init @env0:at: 2)).
+	rec @env0:at: 7 put: ((dyn @env0:value: #'co_qualname') ifNil: [sym @env0:asString]).
+	rec @env0:at: 8 put: anOffset.
+	rec @env0:at: 9 put: ((flags @env0:bitAnd: 4) @env0:~= 0).
+	rec @env0:at: (isKw ifTrue: [6] ifFalse: [5])
+		put: (self ___grailReboundDefaultsValue___: aValue).
+	reg := SessionTemps @env0:current @env0:at: #'GrailReboundDefaults' otherwise: nil.
+	reg == nil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailReboundDefaults' put: reg].
+	perClass := reg @env0:at: self otherwise: nil.
+	perClass == nil ifTrue: [
+		perClass := IdentityKeyValueDictionary @env0:new.
+		reg @env0:at: self put: perClass].
+	perClass @env0:at: sym put: rec.
+	"``_name:kw:'' -> ``_name: ___rbPos___ kw: ___rbKw___''."
+	stem := sym @env0:asString @env0:copyFrom: 1 to: sym @env0:size @env0:- 3.
+	src := stem @env0:, ' ___rbPos___ kw: ___rbKw___
+	^ self ___grailReboundCall___: #''' @env0:, sym @env0:asString
+		@env0:, ''' pos: ___rbPos___ kw: ___rbKw___'.
+	self ___compileSessionMethod: src category: 'Grail-Class Methods'
+		scope: nil environmentId: 1.
+	"The entry point now in effect, by which ___grailReboundRecordAt___: tells
+	a live record from one a later compile has displaced."
+	rec @env0:at: 10 put: (self @env0:compiledMethodAt: sym environmentId: 1).
+	^ true
+%
+
+category: 'Grail-Rebound Defaults'
+method: Behavior
+___grailReboundDefaultsValue___: aValue
+	"A __defaults__ / __kwdefaults__ value as the record holds it: nil for
+	None, otherwise the object itself -- the tuple, or the dict, whose later
+	mutation a CPython call sees too."
+
+	(aValue == nil or: [aValue == ExecBlock @env0:___pyNone___]) ifTrue: [^ nil].
+	^ aValue
+%
+
 category: 'Grail-Class Compilation'
 method: Behavior
 ___removeSelector: aSelector environmentId: envId
