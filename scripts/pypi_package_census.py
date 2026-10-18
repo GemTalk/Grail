@@ -44,12 +44,15 @@ all three denominators so a reader can check the arithmetic rather than trust it
 VERDICTS
 --------
     IMPORTS   `import <pkg>' returned, and it was the VENV's copy
-    SHADOWED  it returned, but Grail's own src/python/stdlib answered the
-              import instead of the venv -- Grail bundles `jinja2' and
-              `markupsafe', and grailDir/src/python/stdlib beats sys.path by
-              design (docs/Sys_Path_Bootstrap.md).  (Its stand-ins for `click'
-              and `requests' are named _grail_click and _grail_requests, so an
-              installed real one is what imports.)  Counting these
+    SHADOWED  it returned, but a copy outside the venv answered the import --
+              Grail's own tree.  Grail's stdlib beats sys.path by design
+              (docs/Sys_Path_Bootstrap.md), but the third-party packages it
+              bundles (jinja2, markupsafe, ...) are in src/python/bundled,
+              searched AFTER sys.path, so an installed one is what imports
+              (#1713); its stand-ins for `click' and `requests' are named
+              _grail_click and _grail_requests for the same reason.  A
+              SHADOWED row now means a stdlib name collision, or a bundled
+              package deployed in the namespace (D10).  Counting these
               as the pip package working would be a straight falsehood, so
               they get their own verdict and sit outside the headline.
     FAILS     it raised; the exception type, message and raising file are kept

@@ -4320,7 +4320,7 @@ testBlinkerNamedSignal
 	a subclass instance (class-side instVars are per-class)."
 
 	| blinker NS ns |
-	importlib loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/blinker/__init__.py') name: 'blinker'.
+	importlib loadModuleFromPath: (importlib grailDir , '/src/python/bundled/blinker/__init__.py') name: 'blinker'.
 	blinker := (importlib @env1:modules) at: 'blinker' asSymbol.
 	NS := blinker @env1:NamedSignal.
 	ns := NS @env1:value: { 'my_event'. 'docstring' } value: nil.
@@ -4335,7 +4335,7 @@ testBlinkerNamespaceSignalFactory
 	signal() looks up or creates a NamedSignal under that name."
 
 	| blinker Namespace space sig |
-	importlib loadModuleFromPath: (importlib grailDir , '/src/python/stdlib/blinker/__init__.py') name: 'blinker'.
+	importlib loadModuleFromPath: (importlib grailDir , '/src/python/bundled/blinker/__init__.py') name: 'blinker'.
 	blinker := (importlib @env1:modules) at: 'blinker' asSymbol.
 	Namespace := blinker @env1:Namespace.
 	space := Namespace @env1:value: #() value: nil.

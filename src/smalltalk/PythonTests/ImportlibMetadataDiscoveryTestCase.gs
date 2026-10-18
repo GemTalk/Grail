@@ -31,7 +31,7 @@ ImportlibMetadataDiscoveryTestCase category: 'Grail-SUnit'
 !
 ! Driven by tests/python/importlib_metadata_discovery.py, whose EXPECTED table
 ! is CPython 3.14's output.  testVendoredDistributionsHaveTheirVersions is
-! Grail-only: the distributions Grail ships in its stdlib carry dist-info at
+! Grail-only: the distributions Grail bundles (src/python/bundled) carry dist-info at
 ! the versions their sources were measured to be.
 ! ===============================================================================
 
@@ -89,7 +89,7 @@ testEveryRowMatchesCPython
 category: 'Grail-Tests'
 method: ImportlibMetadataDiscoveryTestCase
 testVendoredDistributionsHaveTheirVersions
-	"Each distribution vendored in src/python/stdlib has a dist-info there, so
+	"Each distribution bundled in src/python/bundled has a dist-info there, so
 	importlib.metadata.version answers its real version -- the stub answered
 	'+grail' strings, and Flask's test client reads Werkzeug's for its
 	User-Agent."

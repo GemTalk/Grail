@@ -91,9 +91,10 @@ def probe_one(name, check_location):
     where = ""
     if check_location:
         # WHERE it imported from is as load-bearing as whether it did: Grail's
-        # bundled src/python/stdlib beats sys.path by design, so it ships its
-        # own `requests', `click', `jinja2' and `markupsafe'.  Reporting those
-        # as the pip package importing cleanly would be a straight falsehood.
+        # stdlib beats sys.path by design, and a bundled package deployed in
+        # the namespace still answers (D10), although the bundled third-party
+        # tree (src/python/bundled) now comes after sys.path (#1713).
+        # Reporting either as the pip package importing would be a falsehood.
         where = getattr(mod, "__file__", "") or ""
         if not where:                 # a namespace package has __path__ only
             path = list(getattr(mod, "__path__", []) or [])

@@ -236,9 +236,11 @@ def _search_roots():
 
     A Python-side mirror of the root list ``importlib >>
     ___moduleNameToPath___:`` builds: grailDir, grailDir/src/python/stdlib,
-    then sys.path.  The order matters and is deliberate on the Smalltalk side
-    -- Grail's ported stdlib has to win, so a directory a caller appends to
-    sys.path cannot shadow Grail's own ``os`` or ``traceback``.  Anything that
+    then sys.path, then grailDir/src/python/bundled.  The order matters and is
+    deliberate on the Smalltalk side -- Grail's ported stdlib has to win, so a
+    directory a caller appends to sys.path cannot shadow Grail's own ``os`` or
+    ``traceback``, while the third-party packages Grail bundles come LAST, so a
+    user's own flask or jinja2 wins over them (#1713).  Anything that
     probes for a module's directory from Python has to honour the same rule or
     it will answer a different file than the one that got imported.
 
@@ -277,6 +279,10 @@ def _search_roots():
     for entry in getattr(_sys, 'path', []):
         if entry and str(entry) not in roots:
             roots.append(str(entry))
+    if stdlib:
+        bundled = _os.path.join(_os.path.dirname(stdlib), 'bundled')
+        if bundled not in roots:
+            roots.append(bundled)
     return roots
 
 
@@ -289,10 +295,11 @@ def _grail_find_distributions(context=None):
     ``context.path`` (sys.path by default) for ``*.dist-info``.  Grail's
     meta_path holds only GrailBuiltinImporter, so it answers for both: the
     same scan, with a DEFAULT path of the roots Grail imports from -- its own
-    tree, then sys.path (``_search_roots``).  Grail's stdlib directory plays
-    the part of CPython's lib directory, which is on sys.path there; that is
-    where the dist-info of the distributions Grail vendors (flask, werkzeug,
-    ...) lives.  A context that names a path is searched as given.
+    tree, then sys.path, then its bundled packages (``_search_roots``).  The
+    dist-info of the distributions Grail bundles (flask, werkzeug, ...) lives
+    in that last root, so a user's own installed copy is found first, as the
+    import finds its module first.  A context that names a path is searched as
+    given.
     """
     from importlib.metadata import DistributionFinder, MetadataPathFinder
 

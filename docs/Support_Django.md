@@ -3,7 +3,7 @@
 The goal: `import django`, `settings.configure(...)`, `django.setup()`,
 and serve a request through the WSGI application inside Grail.
 
-Django 5.2 is vendored under `src/python/stdlib/django/` (plus its two
+Django 5.2 is vendored under `src/python/bundled/django/` (plus its two
 runtime dependencies, `asgiref` and `sqlparse`).  It sits on the same
 stack Flask does — this document records what the Django push added on
 top of the Flask/Werkzeug foundation.
