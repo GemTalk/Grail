@@ -3301,8 +3301,11 @@ printSuperclassOn: aStream
 		Unicode16 is not enough."
 		((only isKindOf: NameAst) and: [only id asString = 'str'])
 			ifTrue: [^ aStream nextPutAll: 'Unicode32'].
-		"The value printClassHeaderOn: evaluated, not the expression again."
-		^ aStream nextPutAll: '(___hdrBases___ @env0:at: 1)'].
+		"The value printClassHeaderOn: evaluated, not the expression again --
+		widened as the literal ``str'' above is, since a base held in a
+		variable (``base = str; class K(base)'') is the same Unicode7, and a
+		subclass of it lost its identity on the first non-ASCII value (#1706)."
+		^ aStream nextPutAll: '((Python @env0:at: #importlib) @env0:___widenStrBase___: (___hdrBases___ @env0:at: 1))'].
 	"The bases were evaluated and resolved ONCE by printClassHeaderOn:; this
 	reads the result.  Handing the storage-base choice the RESOLVED list is
 	exactly what it computed for itself before: its own resolve step is a no-op
@@ -3776,20 +3779,13 @@ emitInstantiationMethodFor: classVarName initSelector: initSelector onStream: aS
 		ifTrue: [
 			self firstBaseIsStr
 				ifTrue: [
-					"str subclass: route through CharacterCollection>>__new__:
-					(self-typed).  Forward a SECOND and THIRD positional to the
-					``__new__:_:'' / ``__new__:_:_:'' arities -- ``str'' takes
-					(object, encoding, errors), and passing only the first meant
-					``S(b'x', 'ascii')'' silently stringified the bytes OBJECT
-					instead of decoding it, yielding the 4 characters b'x'."
+					"str subclass: CharacterCollection class >>
+					___grailStrSubclassNew___:kw: builds the self-typed string --
+					``str''s (object, encoding, errors), positionally or by
+					keyword.  It is shared with the runtime allocator a class
+					built by type() reaches (#1706)."
 					src
-						nextPutAll: 'instance := ___pos___ @env0:size @env0:= 0';
-						nextPutAll: ' ifTrue: [self @env1:__new__: '''']';
-						nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 1';
-						nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1)]';
-						nextPutAll: ' ifFalse: [___pos___ @env0:size @env0:= 2';
-						nextPutAll: ' ifTrue: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2)]';
-						nextPutAll: ' ifFalse: [self @env1:__new__: (___pos___ @env0:at: 1) _: (___pos___ @env0:at: 2) _: (___pos___ @env0:at: 3)]]].';
+						nextPutAll: 'instance := self @env1:___grailStrSubclassNew___: ___pos___ kw: ___kw___.';
 						nextPutAll: lf ]
 				ifFalse: [
 					"bytes/bytearray subclass: bytes>>__new__: is self-typed, so

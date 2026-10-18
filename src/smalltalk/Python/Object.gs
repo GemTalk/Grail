@@ -3049,6 +3049,16 @@ ___allocateInstance___: positional kw: keywords
 			^ positional @env0:isEmpty
 				ifTrue: [self @env1:__new__]
 				ifFalse: [self @env1:__new__: (positional @env0:at: 1)]].
+		"A str subclass is built the same way: CharacterCollection's class-side
+		``__new__:'' makes a self-typed string carrying the content, and plain
+		#new makes an EMPTY one.  A class STATEMENT naming ``str'' literally
+		takes ClassDefAst's firstBaseIsStr path and never gets here; one built
+		by ``type(name, (str,), ns)'', or over a base held in a variable,
+		came through with every instance empty -- ``K('xy')'' was '' (#1706).
+		Both now go through the one constructor, CharacterCollection class >>
+		___grailStrSubclassNew___:kw:."
+		(self @env0:inheritsFrom: CharacterCollection) ifTrue: [
+			^ self @env1:___grailStrSubclassNew___: positional kw: keywords].
 		"CPython's object_new: with neither __new__ nor __init__ of its own
 		anywhere in the class's lineage, nothing can consume an argument, so
 		any argument is an error -- ``A() takes no arguments''.  Grail allocated
