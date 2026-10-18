@@ -1181,6 +1181,68 @@ Still differing:
 * `memoryview` stays one-dimensional and integer-only. A 2-D array raises
   NotImplementedError.
 
+## Stage 10 (2026-10-18): a kernel allowing 64 user actions; the whole census agrees
+
+**This stage needs a GemStone kernel that does not exist in a release yet.**
+It was measured on a private 4.0.0.a5 build with `INT_MAX_USER_ACTION` raised
+from 2 to 64 (`src/interp.ht`). On a released kernel `numpy.random` still
+stops at its third nested user action, as Stage 8 describes.
+
+With the limit raised, `str` of a dtype agreed at once. Nothing else did.
+Every other remaining case, and two that used to pass, failed on a shim bug.
+The new stack layout exposed one; the deeper nesting reached the rest for
+the first time:
+
+| case | cause |
+|---|---|
+| `savetxt`/`loadtxt` | `PyOS_string_to_double` never set `*endptr`. numpy compares it with the start of its buffer, so a conversion passed or failed by what the stack held. It failed every time under the new kernel. |
+| `np.save`/`np.load` | `min`/`max` branched on a rich comparison's answer, and numpy's is a `numpy.bool`. Then `PySlice_Unpack` handed C a bound such as `np.int64(3)` as it stood, and C read it as a SmallInteger. Both errors were uncatchable. |
+| `char` | numpy's `str_` instances came out of `str`'s `tp_new` zeroed. `str`'s `tp_str` and `tp_repr` were NULL, and numpy's own slots call them. In Grail such an instance had none of `str`'s methods, operators or hash. |
+| `random seed` | Past the limit, `numpy.random` met five more walls in turn, listed below. |
+
+The five `numpy.random` walls:
+1. Cython's `with lock:` binds `__enter__` through the type's `tp_descr_get`
+   (`__Pyx_PyObject_LookupSpecial`). A Grail function's C type had none, so
+   `threading.Lock.__enter__` was called unbound. A type mirror now carries
+   `tp_descr_get` when its class defines `__get__`, as CPython's
+   `slot_tp_descr_get` does.
+2. Cython slices an untyped value through `tp_as_mapping->mp_subscript`. The
+   shim's `list`, `tuple`, `str`, `bytes` and `dict` had no mapping slots
+   ("'list' object is unsliceable").
+3. Cython then reads a list or tuple the slot answers inline, through
+   `PyList_GET_ITEM`. A Grail wrapper's offset 24 is its magic word, so this
+   segfaulted. The slot now answers lists and tuples in CPython's layout.
+4. A module-level `del name` is `PyObject_SetAttr(module, name, NULL)`, which
+   answered -1 with no error set.
+5. `PyObject_IsTrue` answered true for every wheel object, `numpy.bool(False)`
+   included. So `if np.prod(size) == 0:` took the empty path, and every
+   `integers(..., size=n)` answered `np.empty`'s zeros. It now asks the type's
+   `nb_bool`, then its length, then (for a float, complex or str subclass) its
+   value. A Grail instance asks Grail's `bool()`.
+
+One more fix: `PyLong_FromUnsignedLong` cast to signed. On this platform
+`unsigned long` is numpy's uint64, so `random_raw()` answered negative
+numbers.
+
+The census now agrees with CPython in every case. `numpy.random` matches
+CPython digit for digit, for `default_rng`, the legacy `RandomState`/`seed`,
+and every distribution probed. The census output still differs on one line:
+Grail prints a `PendingDeprecationWarning` that CPython hides. Grail's
+`warnings.filters` starts empty, where CPython's has five default entries.
+That gap is not numpy's and is not fixed here.
+
+`_grail_demo` tests (category `Grail-Tests - NumPy Census Gaps`) cover every
+fix without numpy. `_grail_demo.Text` is `numpy.str_` in miniature. None of
+the tests needs the new kernel: each fix is a shim bug on any kernel.
+
+Still open:
+* After import, a C module's own attribute changes don't reach Grail's module
+  object, which is a copy. A delete during the module's exec (mtrand's case)
+  is seen.
+* Two Grail gaps the tests stepped around: `threading.Lock().__enter__()`
+  answers the lock, not `True`, and `delattr`'s AttributeError text is the
+  bare name.
+
 ## Repro
 
 ```

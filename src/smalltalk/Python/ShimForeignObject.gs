@@ -921,6 +921,23 @@ __contains__: value
 	^ self ___foreignOp: '__contains__' with: value with: nil
 %
 
+category: 'Grail-Calling'
+method: ShimForeignObject
+___unboundSelfFor: aClass
+	"The receiver as ``self'' for ``aClass.method(self, ...)'' (UnboundMethod>>
+	value:value:).  An instance of a wheel's str subtype is a str, and str's
+	methods read its characters -- ``str.upper(np.str_(''ab''))'' is ''AB'' in
+	CPython, and np.char calls str's methods so on every element -- so a str
+	method runs on its text.  Anything else is itself."
+
+	| v |
+	(aClass @env0:isBehavior and: [aClass @env0:isSubclassOf: CharacterCollection])
+		ifFalse: [^ self].
+	v := [(CPythonShim @env0:current) @env0:foreignStrValue: cPtr]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ v == nil ifTrue: [self] ifFalse: [v]
+%
+
 category: 'Grail-Python Protocol'
 method: ShimForeignObject
 __str__

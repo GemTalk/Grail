@@ -3063,7 +3063,7 @@ max: anIterable
 				maxVal := item.
 				first := false
 			] ifFalse: [
-				(item ___cmpGt___: maxVal) ifTrue: [maxVal := item]
+				(item ___cmpGt___: maxVal) ___isTruthy___ ifTrue: [maxVal := item]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].
@@ -3087,9 +3087,15 @@ min: a _: b
 	Boolean'' where CPython raises TypeError.  The operator level is what turns
 	the sentinel into the reflected call and then into that TypeError, and it is
 	what CPython's min/max use (PyObject_RichCompare).
+
+	The comparison's RESULT is then tested for truth, as CPython's
+	PyObject_RichCompareBool does: a rich comparison may answer any object,
+	and numpy's answers numpy.bool, so ``min(5, np.int64(3))'' died with an
+	uncatchable ``Expected numpy.bool to be a Boolean'' (np.load's chunk
+	loop calls exactly that).
 	"
 
-	^ (a ___cmpLt___: b) ifTrue: [a] ifFalse: [b]
+	^ (a ___cmpLt___: b) ___isTruthy___ ifTrue: [a] ifFalse: [b]
 %
 
 category: 'Python-Built-in Functions'
@@ -3098,7 +3104,7 @@ max: a _: b
 	"Python builtin max(a, b) — 2-arg fast path.  See min:_: for why the
 	comparison goes through ___cmpGt___ and not __gt__."
 
-	^ (a ___cmpGt___: b) ifTrue: [a] ifFalse: [b]
+	^ (a ___cmpGt___: b) ___isTruthy___ ifTrue: [a] ifFalse: [b]
 %
 
 category: 'Grail-Built-in Functions'
@@ -3237,8 +3243,8 @@ ___minOrMax___: positional kw: kwargs lessThan: pickSmaller
 				gotAny := true
 			] @env0:ifTrue: [
 				isBetter := pickSmaller
-					@env0:ifTrue: [itemKey ___cmpLt___: bestKey]
-					@env0:ifFalse: [itemKey ___cmpGt___: bestKey].
+					@env0:ifTrue: [(itemKey ___cmpLt___: bestKey) ___isTruthy___]
+					@env0:ifFalse: [(itemKey ___cmpGt___: bestKey) ___isTruthy___].
 				isBetter @env0:ifTrue: [best := item. bestKey := itemKey]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
@@ -3269,7 +3275,7 @@ min: anIterable
 				minVal := item.
 				first := false
 			] ifFalse: [
-				(item ___cmpLt___: minVal) ifTrue: [minVal := item]
+				(item ___cmpLt___: minVal) ___isTruthy___ ifTrue: [minVal := item]
 			]
 		] @env0:on: StopIteration do: [:ex | done := true]
 	].

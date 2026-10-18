@@ -13339,6 +13339,16 @@ ___presizeLengthHint___
 	^ v
 %
 
+category: 'Grail-Calling'
+method: object
+___unboundSelfFor: aClass
+	"The receiver as ``self'' for ``aClass.method(self, ...)''
+	(UnboundMethod>>value:value:): itself.  A wheel's str subtype instance
+	answers its text (ShimForeignObject)."
+
+	^ self
+%
+
 category: 'Grail-Numeric Protocol'
 method: object
 ___asIndex___

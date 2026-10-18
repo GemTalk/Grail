@@ -740,7 +740,7 @@ value: positional value: kwargs
 		emitReceiverlessMethodTableOn:className:."
 		^ self ___callReceiverless___: #() kw: kwargs orSignal: nil
 	].
-	obj := positional @env0:at: 1.
+	obj := (positional @env0:at: 1) ___unboundSelfFor: definingClass.
 	rest := (positional @env0:size @env0:> 1)
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
 		ifFalse: [#()].

@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <ctype.h>
+#include <math.h>
 #ifdef PyMem_Malloc
 #undef PyMem_Malloc
 #endif
@@ -529,8 +531,31 @@ extern "C" PyObject * PyNumber_Long(PyObject *o) {
 extern "C" int PyOS_snprintf(char *str, size_t size, const char *format, ...) {
     va_list ap; va_start(ap,format); int r=vsnprintf(str,size,format,ap); va_end(ap); return r;
 }
+// CPython's contract (Python/pystrtod.c): *endptr is always set, and a string
+// with no number, or (without endptr) trailing text, is a ValueError answering
+// -1.0. numpy's loadtxt compares *endptr with the start of its buffer, so
+// leaving it unset made every conversion fail or succeed by stack contents.
 extern "C" double PyOS_string_to_double(const char *s, char **endptr, PyObject *overflow_exception) {
-    (void)endptr;(void)overflow_exception; return strtod(s,(char**)0);
+    char *fail_pos = (char *)s;
+    double x = 0.0, result = -1.0;
+    errno = 0;
+    // CPython accepts no leading whitespace and no hex float, both of which
+    // strtod would take: "0x1p3" is the number 0 and then the text "x1p3".
+    const char *digits = (*s == '+' || *s == '-') ? s + 1 : s;
+    if (digits[0] == '0' && (digits[1] == 'x' || digits[1] == 'X')) {
+        x = *s == '-' ? -0.0 : 0.0;
+        fail_pos = (char *)digits + 1;
+    } else if (*s != '\0' && !isspace((unsigned char)*s)) {
+        x = strtod(s, &fail_pos);
+    }
+    if (fail_pos == s || (!endptr && *fail_pos != '\0'))
+        PyErr_Format(PyExc_ValueError, "could not convert string to float: '%.200s'", s);
+    else if (errno == ERANGE && fabs(x) >= 1.0 && overflow_exception)
+        PyErr_Format(overflow_exception, "value too large to convert to float: '%.200s'", s);
+    else
+        result = x;
+    if (endptr) *endptr = fail_pos;
+    return result;
 }
 extern "C" long PyOS_strtol(const char *str, char **pend, int base) {
     return strtol(str,pend,base);
