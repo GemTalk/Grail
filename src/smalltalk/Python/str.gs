@@ -4503,7 +4503,7 @@ __dict__
 	(self @env0:class @env0:whichClassIncludesSelector: #'___pyDefinedClass___'
 		environmentId: 1) @env0:isNil ifTrue: [
 			^ AttributeError ___signal___: '''str'' object has no attribute ''__dict__'''].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 %
 
 category: 'Grail-Type'

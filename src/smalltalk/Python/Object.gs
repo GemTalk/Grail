@@ -94,10 +94,8 @@ ___pyStrictSlotsAllowed___
 
 	Reaching PythonInstance means nothing above this class declared slots
 	of its own, which is CPython's `object' case and IS allowed to be
-	strict.  A non-PythonInstance base that is not itself strict -- a
-	builtin like dict or Exception -- answers false, which is the LENIENT
-	direction and matches the documented fallback for a __slots__ value
-	Grail cannot read at compile time."
+	strict.  A built-in base allows it too unless its instances carry a
+	__dict__ (exceptions do; list, dict, str do not)."
 
 	| sup |
 	sup := self @env0:superclass.
@@ -114,11 +112,37 @@ ___pyStrictSlotsAllowed___
 		class -- the marker it shares with declared slots only says where
 		values live."
 		((sup @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1)
-			@env0:== sup) ifTrue: [
-			((sup @env0:whichClassIncludesSelector: #'___pyDeclaresSlots___' environmentId: 1)
-				@env0:== sup) ifFalse: [^ false]].
+			@env0:== sup)
+			ifTrue: [
+				((sup @env0:whichClassIncludesSelector: #'___pyDeclaresSlots___' environmentId: 1)
+					@env0:== sup) ifFalse: [^ false]]
+			ifFalse: [
+				"...except a built-in whose instances DO carry a __dict__ --
+				every BaseException, as CPython's table has it
+				(___grailProvidesInstanceSlot___:) -- which a slotted subclass
+				keeps: ``class E(Exception): __slots__ = ('a',)'' still stores
+				``e.zz'' (#1693)."
+				(sup ___grailProvidesInstanceSlot___: '__dict__') ifTrue: [^ false]].
 		sup := sup @env0:superclass].
 	^ true
+%
+
+category: 'Grail-Introspection'
+method: object
+___grailInstanceDictView___
+	"``obj.__dict__'' for an instance of a subclass of a BUILT-IN (dict, list,
+	str, float, ...): the live view of its per-object attributes -- unless its
+	class has strict __slots__, which gives instances no __dict__ at all.
+	PythonInstance >> __dict__ always refused there; each built-in's own
+	__dict__ answered an empty view, so ``hasattr(d, '__dict__')'' was True
+	for a slotted dict subclass and for defaultdict itself (#1693)."
+
+	((self @env0:class @env0:whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) notNil
+		and: [self ___pySlotsStrict___]) ifTrue: [
+			^ AttributeError ___signal___:
+				'''' @env0:, self ___pyTypeNameForError___ @env0:asString @env0:,
+					''' object has no attribute ''__dict__'''].
+	^ PyInstanceDict @env0:on: self
 %
 
 category: 'Grail-Slots'
@@ -5379,8 +5403,7 @@ ___grailValidateStatementSlots___: boundNames
 	boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None].
 	ns @env1:__setitem__: '__slots__' _: slots.
 	((Python @env0:at: #builtins) @env0:___instance___)
-		___validateSlots___: ns bases: (self ___pyAttrLoad___: #'__bases__')
-		allBuiltinStorage: false.
+		___validateSlots___: ns bases: (self ___pyAttrLoad___: #'__bases__').
 	^ self
 %
 
@@ -19253,8 +19276,14 @@ ___pyAttrStore___: aName put: aValue
 		__slots__ of its own overrides it with false (CPython gives such a
 		class a __dict__ even under a slotted base), and a presence test
 		cannot see that override."
+		"A DECLARED slot with no position is still a slot: over a base whose
+		instances cannot carry one -- a byte-format str or bytearray, a
+		fixed-layout complex or exception -- the layout has no room, and the
+		value is kept per object below instead.  The strict refusal is for
+		names the class did not declare (#1693)."
 		(self ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
-			self ___pySlotsStrict___ ifTrue: [
+			(self ___pySlotsStrict___
+				and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]) ifTrue: [
 				^ AttributeError ___signal___:
 					'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
 						''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''

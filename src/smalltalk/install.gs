@@ -747,6 +747,7 @@ run
 	at: #'BuildClassBuiltinTestCase' put: nil;
 	at: #'BuiltinArgValidationTestCase' put: nil;
 	at: #'BuiltinArityMismatchTestCase' put: nil;
+	at: #'BuiltinBaseSlotsTestCase' put: nil;
 	at: #'BuiltinExtrasTestCase' put: nil;
 	at: #'BuiltinNameCaptureTestCase' put: nil;
 	at: #'BuiltinProtocolDispatchTestCase' put: nil;
@@ -2349,6 +2350,7 @@ input src/smalltalk/PythonTests/BufferExportOnJoinTestCase.gs
 input src/smalltalk/PythonTests/BuildClassBuiltinTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArgValidationTestCase.gs
 input src/smalltalk/PythonTests/BuiltinArityMismatchTestCase.gs
+input src/smalltalk/PythonTests/BuiltinBaseSlotsTestCase.gs
 input src/smalltalk/PythonTests/BuiltinExtrasTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNameCaptureTestCase.gs
 input src/smalltalk/PythonTests/BuiltinNamespaceNarrowingTestCase.gs

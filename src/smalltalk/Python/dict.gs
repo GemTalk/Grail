@@ -1049,7 +1049,7 @@ __dict__
 		^ AttributeError ___signal___:
 			'''dict'' object has no attribute ''__dict__'''
 	].
-	^ PyInstanceDict @env0:on: self
+	^ self ___grailInstanceDictView___
 %
 
 set compile_env: 0

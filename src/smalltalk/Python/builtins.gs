@@ -6442,14 +6442,6 @@ ___validateTypeArgs___: className bases: bases namespace: namespace
 category: 'Grail-Built-in Functions'
 method: builtins
 ___validateSlots___: namespace bases: bases
-	"type()'s check -- see ___validateSlots___:bases:allBuiltinStorage:."
-
-	^ self ___validateSlots___: namespace bases: bases allBuiltinStorage: true
-%
-
-category: 'Grail-Built-in Functions'
-method: builtins
-___validateSlots___: namespace bases: bases allBuiltinStorage: allStorage
 	"CPython's __slots__ checking, none of which Grail did.
 
 	Every refusal here is one that otherwise produces a class with a slot
@@ -6482,19 +6474,16 @@ ___validateSlots___: namespace bases: bases allBuiltinStorage: allStorage
 	nonempty __slots__ over a type whose instances carry their items inline --
 	int, bytes, tuple and type, and anything derived from them.
 
-	type() refuses more than that: a slot over any base with BUILT-IN storage
-	(list, dict, str, float, ...), which CPython accepts, because a class
-	type() builds there has nowhere to keep it -- measured, ``k.a = 5'' then
-	``k.a'' raises AttributeError.  A class statement can (a kernel-rooted
-	class keeps the slot as a named instVar), so it passes allBuiltinStorage:
-	false and is refused only where CPython refuses (#1658)."
+	Nothing else is refused.  type() used to refuse a slot over ANY base with
+	built-in storage (list, dict, str, float, ...), because a class it built
+	there had nowhere to keep one; a declared slot without a position is now
+	kept per object (object >> ___pyAttrStore___:put:), so both a class
+	statement and type() accept exactly what CPython accepts (#1693)."
 	(Array @env0:withAll: bases) @env0:do: [:b |
 		((b @env0:isKindOf: Behavior)
 			@env0:and: [(names @env0:isEmpty @env0:not)
-			@env0:and: [({ int. bytes. tuple. type } @env0:anySatisfy: [:v |
-					(self issubclass: b _: v) == true])
-				@env0:or: [allStorage
-					@env0:and: [(Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b]]]]) ifTrue: [
+			@env0:and: [{ int. bytes. tuple. type } @env0:anySatisfy: [:v |
+					(self issubclass: b _: v) == true]]]) ifTrue: [
 				^ TypeError ___signal___: 'nonempty __slots__ not supported for subtype of '''
 					@env0:, (b @env1:__name__) @env0:asString @env0:, '''']].
 	names @env0:do: [:each |
