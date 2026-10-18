@@ -459,10 +459,26 @@ _exec: positional kw: kwargs
 		"A code object compiled in ``single'' mode shows the value of each
 		expression statement through sys.displayhook, as the REPL does and
 		doctest relies on; everything else runs as plain exec."
-		ModuleAst @env0:evaluateSource: source usingModuleScope: scope
+		"AN EXCEPTION LEAVING THE BODY still delivers what the body bound before
+		it: CPython's exec writes into the dict as it goes, so after ``exec('x
+		= 1\nraise ValueError', g)'' the caller's except clause sees g['x'].
+		Grail reflects the scope into the dict when the exec returns, which a
+		raise never does (#1695).  So the reflect runs here, in the handler --
+		BEFORE the stack unwinds, because a Smalltalk handler runs on top of the
+		signal, and the caller's except body would otherwise already be running
+		when an ensure: block got its turn.  The exception is passed on
+		untouched.  A resumable signal that comes back simply reflects again
+		at the end; the yellow-zone warning gets no extra work."
+		[ModuleAst @env0:evaluateSource: source usingModuleScope: scope
 			as: (((self ___grailCompiledModeRegistry___ @env0:at: source otherwise: nil)
 					@env0:= #'single') ifTrue: [#single] ifFalse: [#exec])
-			globalNamesInto: globalNames
+			globalNamesInto: globalNames]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifFalse: [
+					self ___reflectDoitScope___: scope seeded: seeded into: localsDict
+						globalNames: globalNames globals: globalsDict.
+					self ___noteExecScopeReflected___: scope for: globalsDict].
+				ex @env0:pass]
 	] @env0:ensure: [
 		SessionTemps @env0:current @env0:removeKey: #'GrailPendingLineMap' ifAbsent: [].
 		CallAst @env0:sourcePath: savedPath.
