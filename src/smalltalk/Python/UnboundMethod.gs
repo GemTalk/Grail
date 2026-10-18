@@ -1925,17 +1925,66 @@ ___writeDefaultsThrough___: name value: value
 	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
 	cls := self ___metadataClass___.
 	cls == nil ifTrue: [^ false].
+	"Once REBOUND, every later write goes to the rebound record -- see
+	BoundMethod >> ___writeDefaultsThrough___:value:."
+	(self ___grailReboundOwner___ ~~ nil and: [(self ___grailReboundOwner___
+			___grailReboundRecordAt___: self ___grailVarargsSelector___) ~~ nil]) ifTrue: [
+		self ___grailRebindDefaults___: value kw: isKw.
+		^ false].
 	entry := self ___tableEntryFor___: cls table: #'___methodDefaultKeysTable___'.
-	entry == nil ifTrue: [^ false].
-	(module @env0:___writeDefaults: value entry: entry kw: isKw
-		into: [:key :v | module @env0:___storeClassDefaultOwnedBy: cls at: key put: v])
-			ifFalse: [^ false].
+	(entry == nil or: [(module @env0:___writeDefaults: value entry: entry kw: isKw
+		into: [:key :v | module @env0:___storeClassDefaultOwnedBy: cls at: key put: v]) @env0:not])
+			ifTrue: [
+				self ___grailRebindDefaults___: value kw: isKw.
+				^ false].
 	attrDict @env0:isNil ifFalse: [
 		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
 			attrDict @env1:__delitem__: name @env0:asString]].
 	[self @env0:removeDynamicInstVar: sym]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	^ true
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___grailVarargsSelector___
+	"``_name:kw:'', the entry point every call that could need a default
+	reaches."
+
+	^ ('_' @env0:, selector @env0:asString @env0:, ':kw:') @env0:asSymbol
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___grailReboundOwner___
+	"The class that DEFINES this method's ``_name:kw:'' -- where a rebind goes,
+	so that ``Sub.m'' for an inherited m rebinds the base's function, which in
+	CPython is the same function object.  nil for a class-side method (a
+	@classmethod or @staticmethod, whose defining class is a metaclass), which
+	is not rebound."
+
+	definingClass == nil ifTrue: [^ nil].
+	definingClass @env0:isMeta ifTrue: [^ nil].
+	^ definingClass @env0:whichClassIncludesSelector: self ___grailVarargsSelector___
+		environmentId: 1
+%
+
+category: 'Grail-Python Metadata'
+method: UnboundMethod
+___grailRebindDefaults___: value kw: isKw
+	"A method's defaults written in a shape its compiled prologue cannot carry:
+	rebind its calls in this session, on the class that defines it (Behavior
+	>> ___grailRebind___:code:receiverOffset:value:kw:initial:, #1714).  The
+	caller still stores the value as an attribute, which is what the read
+	answers.  False when the method cannot be rebound."
+
+	| owner code |
+	owner := self ___grailReboundOwner___.
+	owner == nil ifTrue: [^ false].
+	code := [self __code__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ owner ___grailRebind___: self ___grailVarargsSelector___ code: code receiverOffset: 1
+		value: value kw: isKw
+		initial: [{ self __defaults__ . self __kwdefaults__ }]
 %
 
 category: 'Grail-Python Metadata'
@@ -2095,6 +2144,10 @@ __delattr__: name
 			AttributeError ___signal___:
 				('attribute ''' @env0:, name @env0:asString
 					@env0:, ''' of ''function'' objects is not writable')].
+	"``del Cls.m.__defaults__'' sets None in CPython -- see BoundMethod >>
+	__delattr__: (#1714)."
+	((name @env0:asSymbol == #'__defaults__') or: [name @env0:asSymbol == #'__kwdefaults__'])
+		ifTrue: [^ self __setattr__: name _: ExecBlock @env0:___pyNone___].
 	attrDict @env0:isNil ifFalse: [
 		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
 			attrDict @env1:__delitem__: name @env0:asString.

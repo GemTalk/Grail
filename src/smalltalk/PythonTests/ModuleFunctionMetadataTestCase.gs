@@ -33,8 +33,9 @@ ModuleFunctionMetadataTestCase category: 'Grail-SUnit'
 !     UnboundMethod >> ___writeDefaultsThrough___:value:);
 !   * a nested def refuses a non-tuple __defaults__ before writing it through;
 !   * a lambda's code object has co_varnames, co_flags and its qualname.
-! An assignment that changes the SHAPE of the defaults still reads back without
-! binding; FunctionDefaultsTestCase documents that limit.
+! An assignment that changes the SHAPE of the defaults rebinds the function's
+! calls instead (#1714, ReboundDefaultsTestCase); for a nested def it still
+! reads back without binding, the limit FunctionDefaultsTestCase documents.
 ! tests/python/module_function_metadata.py holds the 11 checks.
 ! ===============================================================================
 

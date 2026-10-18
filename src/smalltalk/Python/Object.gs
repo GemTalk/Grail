@@ -7458,6 +7458,86 @@ ___pyKwargsSplat___
 	^ self ___pyKwargsSplatFor___: nil
 %
 
+category: 'Grail-Argument Binding'
+method: object
+___grailReboundCall___: aSelector pos: aPos kw: aKw
+	"A call of a function whose defaults were REBOUND to another shape
+	(Behavior >> ___grailRebind___:code:receiverOffset:value:kw:initial:): bind
+	CPython's way against the record's defaults, then run the original
+	``_name:kw:'' with every parameter supplied, so its own compiled defaults
+	are never consulted.
+
+	The positional defaults are the LAST n positional parameters, as CPython
+	aligns them -- a tuple longer than the parameters supplies the last ones.
+	A missing defaulted parameter is passed by keyword, except a
+	positional-only one, which can only be appended in order.  A missing
+	parameter with no default is CPython's TypeError, all of them named, the
+	positional ones before the keyword-only ones.  The caller's keyword dict
+	is copied before anything is added to it."
+
+	| rec names posonly kwonly defs kdefs qn offset varargs pos kw copied
+	  nPos nDefs m given missing addKw |
+	rec := self @env0:class ___grailReboundRecordFor___: aSelector.
+	names := rec @env0:at: 2.
+	posonly := rec @env0:at: 3.
+	kwonly := rec @env0:at: 4.
+	defs := rec @env0:at: 5.
+	kdefs := rec @env0:at: 6.
+	qn := rec @env0:at: 7.
+	offset := rec @env0:at: 8.
+	varargs := rec @env0:at: 9.
+	pos := aPos == nil ifTrue: [Array @env0:new] ifFalse: [aPos].
+	kw := aKw.
+	copied := false.
+	addKw := [:k :v |
+		copied ifFalse: [ | fresh |
+			fresh := PyDict @env0:new.
+			kw == nil ifFalse: [kw @env0:keysAndValuesDo: [:k2 :v2 | fresh @env0:at: k2 put: v2]].
+			kw := fresh.
+			copied := true].
+		kw @env0:at: k put: v].
+	nPos := names @env0:size.
+	nDefs := defs == nil ifTrue: [0] ifFalse: [defs @env0:size].
+	m := nPos @env0:- nDefs.
+	given := pos @env0:size.
+	(varargs @env0:not and: [given @env0:> nPos]) ifTrue: [ | lo |
+		lo := (m @env0:max: 0) @env0:+ offset.
+		^ TypeError ___signal___: (((((qn @env0:asString @env0:, '() takes ')
+			@env0:, (lo @env0:= (nPos @env0:+ offset)
+				ifTrue: [lo @env0:printString]
+				ifFalse: ['from ' @env0:, lo @env0:printString @env0:, ' to '
+					@env0:, (nPos @env0:+ offset) @env0:printString]))
+			@env0:, ((nPos @env0:+ offset) @env0:= 1
+				ifTrue: [' positional argument but ']
+				ifFalse: [' positional arguments but ']))
+			@env0:, (given @env0:+ offset) @env0:printString)
+			@env0:, ((given @env0:+ offset) @env0:= 1 ifTrue: [' was given'] ifFalse: [' were given']))].
+	missing := OrderedCollection @env0:new.
+	(given @env0:+ 1) to: nPos do: [:i | | nm |
+		nm := names @env0:at: i.
+		((i @env0:> posonly) and: [kw ~~ nil and: [kw @env0:includesKey: nm]]) ifFalse: [
+			i @env0:> m
+				ifTrue: [ | v |
+					v := defs @env0:at: i @env0:- m.
+					i @env0:<= posonly
+						ifTrue: [missing @env0:isEmpty ifTrue: [
+							pos := pos @env0:, (Array @env0:with: v)]]
+						ifFalse: [addKw @env0:value: nm value: v]]
+				ifFalse: [missing @env0:add: nm]]].
+	missing @env0:isEmpty ifFalse: [
+		^ TypeError ___signalMissingArguments___: missing @env0:asArray
+			kind: 'positional' qualifiedName: qn].
+	kwonly @env0:do: [:nm |
+		(kw ~~ nil and: [kw @env0:includesKey: nm]) ifFalse: [
+			(kdefs ~~ nil and: [(kdefs @env1:__contains__: nm) == true])
+				ifTrue: [addKw @env0:value: nm value: (kdefs @env1:__getitem__: nm)]
+				ifFalse: [missing @env0:add: nm]]].
+	missing @env0:isEmpty ifFalse: [
+		^ TypeError ___signalMissingArguments___: missing @env0:asArray
+			kind: 'keyword-only' qualifiedName: qn].
+	^ self @env0:with: pos with: kw performMethod: (rec @env0:at: 1)
+%
+
 category: 'Grail-Python Protocol'
 method: object
 ___pyFunctionStrPrefix___: aCallee
