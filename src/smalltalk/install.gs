@@ -823,6 +823,7 @@ run
 	at: #'ClassCallFastPathTestCase' put: nil;
 	at: #'ClassCellTestCase' put: nil;
 	at: #'ClassDecoratorTestCase' put: nil;
+	at: #'ClassDefLocalBindsAtEndTestCase' put: nil;
 	at: #'ClassDescriptorReadsTestCase' put: nil;
 	at: #'ClassDictEntriesTestCase' put: nil;
 	at: #'ClassDictNotWritableTestCase' put: nil;
@@ -2432,6 +2433,7 @@ input src/smalltalk/PythonTests/ClassBodyUnpackingTestCase.gs
 input src/smalltalk/PythonTests/ClassCallFastPathTestCase.gs
 input src/smalltalk/PythonTests/ClassCellTestCase.gs
 input src/smalltalk/PythonTests/ClassDecoratorTestCase.gs
+input src/smalltalk/PythonTests/ClassDefLocalBindsAtEndTestCase.gs
 input src/smalltalk/PythonTests/ClassDescriptorReadsTestCase.gs
 input src/smalltalk/PythonTests/ClassDictEntriesTestCase.gs
 input src/smalltalk/PythonTests/ClassDictNotWritableTestCase.gs

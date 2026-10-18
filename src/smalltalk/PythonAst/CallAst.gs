@@ -3154,9 +3154,20 @@ ___classBeingCompiledVar___
 	``thisContext'') travel under the same ``_<name>'' transport that
 	ClassDefAst >> ___stVarName___ declares and NameAst already reads."
 
-	| n |
+	| n stack |
 	n := self classBeingCompiled.
 	n == nil ifTrue: [^ nil].
+	"The class node's own answer when it is the innermost class scope: a class
+	bound to a local of the enclosing def is built in a temp of its own
+	(ClassDefAst >> ___buildsIntoBlockTemp___), and a class-body statement has
+	to name that temp, not the binding it has not been given yet."
+	stack := self ___scopeStack___.
+	stack == nil ifFalse: [
+		stack reverseDo: [:frame |
+			(frame at: 2) == #'class' ifTrue: [
+				^ (frame at: 3) = n asString
+					ifTrue: [(frame at: 1) ___stVarName___]
+					ifFalse: [NameAst ___transportIdentifierFor___: n asSymbol]]]].
 	^ NameAst ___transportIdentifierFor___: n asSymbol
 %
 
