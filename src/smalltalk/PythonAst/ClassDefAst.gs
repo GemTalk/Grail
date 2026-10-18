@@ -775,9 +775,12 @@ printSmalltalkRuntimeOn: aStream
 	declare, even when the class name itself needs no temp -- a class nested
 	in a function or in another class body reaches this the same way, and
 	Smalltalk block temps are visible to the nested blocks the body emits."
-	(self ___bindsClassNameToModule___ or: [self ___classBlockNeedsTemps___]) ifTrue: [
+	"A class bound to a local of the enclosing def is built in a block temp of
+	its own too, and bound only at the end (___buildsIntoBlockTemp___)."
+	(self ___bindsClassNameToModule___ or: [self ___classBlockNeedsTemps___
+		or: [self ___buildsIntoBlockTemp___]]) ifTrue: [
 		aStream nextPutAll: '[| '.
-		self ___bindsClassNameToModule___ ifTrue: [
+		(self ___bindsClassNameToModule___ or: [self ___buildsIntoBlockTemp___]) ifTrue: [
 			aStream nextPutAll: self ___stVarName___; nextPutAll: ' '].
 		self ___classBodyHelperTemps___ do: [:each |
 			aStream nextPutAll: each asString; nextPutAll: ' '].
@@ -1892,7 +1895,7 @@ printSmalltalkRuntimeOn: aStream
 						savedRuntimeClass := CallAst classBodyRuntimeClass.
 						((stmt isKindOf: DeleteAst)
 							or: [self ___isClassBodyRuntimeStatement___: stmt])
-								ifTrue: [CallAst classBodyRuntimeClass: name].
+								ifTrue: [CallAst classBodyRuntimeClass: self ___stVarName___].
 						[ | nonlocalTargets |
 						nonlocalTargets := self ___classBodyNonlocalTargetNames___: stmt.
 						nonlocalTargets isEmpty not
@@ -2691,7 +2694,7 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: tgt attr asString;
 			nextPutAll: ''' _: ('.
 		savedRuntimeClass := CallAst classBodyRuntimeClass.
-		CallAst classBodyRuntimeClass: name.
+		CallAst classBodyRuntimeClass: self ___stVarName___.
 		[stmt value printSmalltalkOn: aStream]
 			ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 		aStream nextPutAll: ').'; lf].
@@ -3150,10 +3153,20 @@ printSmalltalkRuntimeOn: aStream
 			nextPutAll: ''' put: '; nextPutAll: self ___stVarName___;
 			nextPutAll: '.] @env0:value.'; lf.
 	] ifFalse: [
-		"No module binding, but the block was still opened above to declare
-		this body's codegen helper temps -- close it."
-		self ___classBlockNeedsTemps___ ifTrue: [
-			aStream nextPutAll: '] @env0:value.'; lf].
+		self ___buildsIntoBlockTemp___
+			ifTrue: [
+				"The class is complete: bind the enclosing def's local, and only
+				now, so a body, metaclass or decorator that raised left it as it
+				was."
+				aStream
+					nextPutAll: self ___stBindName___;
+					nextPutAll: ' := '; nextPutAll: self ___stVarName___;
+					nextPutAll: '.] @env0:value.'; lf]
+			ifFalse: [
+				"No binding of its own, but the block was still opened above to
+				declare this body's codegen helper temps -- close it."
+				self ___classBlockNeedsTemps___ ifTrue: [
+					aStream nextPutAll: '] @env0:value.'; lf]].
 	].
 %
 
@@ -4208,7 +4221,22 @@ ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames
 				captured set (savedCapturedNames) so its own classdef emits the
 				next forward; the recursion terminates at the scope that binds
 				`cap` as a real temp, where the bare name is emitted.  Otherwise
-				`cap` is a reachable temp here (the single-level case): bare."
+				`cap` is a reachable temp here (the single-level case): bare.
+
+				The class's OWN name is the exception: its cell is also the one
+				``__class__'' and zero-argument super() read (keyed by the class
+				name), so it holds the CLASS -- the variable it is built in --
+				not the enclosing binding, which a class bound to a def local
+				does not get until the class is complete
+				(___buildsIntoBlockTemp___).  A method that runs during class
+				construction (a metaclass mro() hook, Enum's member __init__)
+				needs __class__ already.  The cost is that a method reading the
+				class NAME during construction also sees the class, where CPython
+				reads the enclosing binding -- the two would need separate
+				cells."
+				cap asString = name asString
+					ifTrue: [aStream nextPutAll: clsName]
+					ifFalse: [
 				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
 					and: [savedCapturedNames notNil])
 					ifTrue: [
@@ -4218,7 +4246,7 @@ ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames
 							nextPutAll: '___'''.
 						savedCapturedNames add: cap asSymbol]
 					ifFalse: [aStream
-						nextPutAll: (self ___cellReaderSourceFor___: cap asSymbol)].
+						nextPutAll: (self ___cellReaderSourceFor___: cap asSymbol)]].
 				aStream nextPutAll: '].'; lf]].
 	"SETTER CELLS: for every enclosing-function local a method body ASSIGNS
 	(``nonlocal x; x = ...''), store a one-arg block that writes the binding
@@ -5596,7 +5624,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 		(self ___isClassBodyRuntimeStatement___: stmt) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
-			CallAst classBodyRuntimeClass: name.
+			CallAst classBodyRuntimeClass: self ___stVarName___.
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
@@ -5641,7 +5669,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) not]) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
-			CallAst classBodyRuntimeClass: name.
+			CallAst classBodyRuntimeClass: self ___stVarName___.
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
@@ -5654,7 +5682,7 @@ emitClassBodyIfBranch: aSuite on: aStream
 			or: [stmt isKindOf: ImportFromAst]) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
-			CallAst classBodyRuntimeClass: name.
+			CallAst classBodyRuntimeClass: self ___stVarName___.
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
@@ -7051,9 +7079,94 @@ ___stVarName___
 
 	Deliberately NOT applied where ``name'' is the PYTHON name: the
 	___asSmalltalkClassName___ argument, the canonical-class probe key, the
-	attribute symbol a class is stored under, and printOn:."
+	attribute symbol a class is stored under, and printOn:.
 
+	For a class bound to a LOCAL of the enclosing def it is not the binding
+	at all but a block temp of its own (___buildsIntoBlockTemp___), so the
+	name is bound only once the class is complete."
+
+	self ___buildsIntoBlockTemp___ ifTrue: [
+		^ '___classBuild_' , name asString , '___'].
 	^ NameAst ___transportIdentifierFor___: name asSymbol
+%
+
+category: 'Grail-other'
+method: ClassDefAst
+___stBindName___
+	"The Smalltalk IDENTIFIER of the BINDING this class statement assigns when
+	the class is complete: the enclosing def's temp, spelled as FunctionDefAst
+	declared it -- PRIVATE-MANGLED (``class __P'' in a method of ``Host'' is
+	the local ``_Host__P'') and under the reserved-name transport (``super''
+	-> ``___super___'').
+
+	The mangled spelling is what the def declares and every read of the name
+	emits, so the class statement assigning the bare ``__P'' named an undefined
+	symbol and the whole method failed to compile (a codegen-gap stub on the
+	text arm).  Asked only outside the class's own emit, where
+	classBeingCompiled names the ENCLOSING class, which is what mangles."
+
+	^ self ___buildsIntoBlockTemp___
+		ifTrue: [NameAst ___transportIdentifierFor___: (self ___manglePrivate___: name) asSymbol]
+		ifFalse: [self ___stVarName___]
+%
+
+category: 'Grail-other'
+method: ClassDefAst
+___buildsIntoBlockTemp___
+	"Is this class built in a block temp of its own and bound to its name only
+	at the end?  True for a class whose name is a LOCAL of the enclosing def.
+
+	CPython binds the class name once, after the body has run, the metaclass
+	has built the class and every decorator has been applied (the STORE_NAME
+	or STORE_FAST after the call to __build_class__).  If any of that raises,
+	the name keeps whatever it held before: the previous value, or nothing.
+
+	A module-scope class already worked that way, because its name is a module
+	attribute and the class is built in a block temp first.  Inside a def the
+	name IS a Smalltalk temp, and the emit used it as the build variable, so
+	the half-built class was bound from the first line of the build onward:
+
+	    def f():
+	        L = 'prev'
+	        try:
+	            class L:
+	                raise ValueError
+	        except ValueError:
+	            pass
+	        return L        # CPython 'prev'; Grail text answered <class L>
+
+	It also made a class-body read of the name see the class being built,
+	where CPython reads the enclosing binding.  (#1696)
+
+	Not for a module-scope class, whose binding is the module store and whose
+	block is opened for that already.  Not for a class nested in another
+	class body: its name is a class
+	attribute, bound by the outer class's own emit, and that path already
+	declares its own block temp.
+
+	The IR arm's class helper (___irHelperSourceWithSelector___:carrying:)
+	is this same text, so it builds the same way: its own temp for the name
+	is the BINDING, a carried copy of the enclosing local when the class
+	reads it, and is assigned at the end like the def's temp would be."
+
+	"A class at the TOP of source compiled with no module class -- the body
+	of an exec -- is the third shape.  Its name is a bare variable of the
+	doit's scope, assigned the same way, and builtins >> _exec:kw: reflects
+	that scope back into the caller's globals even when the source raises
+	(#1695), so it needs the same build-then-bind to leave the name alone:
+	``exec('class E: raise ValueError', g)'' must not leave g['E'] bound."
+
+	| node |
+	self ___bindsClassNameToModule___ ifTrue: [^ false].
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		(node isKindOf: FunctionDefAst) ifTrue: [^ true].
+		node := node parent].
+	"Asked of the module class, not of ___bindsClassNameToModule___ above: that
+	reads classBeingCompiled, which this class sets to ITSELF while its own
+	body is emitted, so a module-scope class reaches this line mid-emit too."
+	^ CallAst moduleClassBeingCompiled isNil
 %
 
 category: 'Grail-other'
@@ -7709,8 +7822,7 @@ ___irClassCapturedNames___: localNames
 			((own includes: n) not
 				and: [(globals includes: n) not
 					and: [(localNames includes: n asString)
-						and: [n asString ~= (self ___manglePrivate___: name) asString
-							and: [n asString ~= recv]]]])
+						and: [n asString ~= recv]]])
 				ifTrue: [free add: n asString]].
 		"THE PARSER'S SET HAS ONE HOLE: an f-string replacement field is parsed
 		by a CHILD parser, so a name mentioned only inside one never reaches
@@ -7738,10 +7850,8 @@ ___irClassCapturedNames___: localNames
 		and that direction only costs coverage."
 		self ___irCollectInnerBindingsOf___: b into: boundInside.
 		raw do: [:n |
-			((boundInside includes: n asString)
-				or: [(n asString = (self ___manglePrivate___: name) asString)
-					or: [n asString = recv]])
-						ifFalse: [free add: n asString]]].
+			((boundInside includes: n asString) or: [n asString = recv])
+				ifFalse: [free add: n asString]]].
 	^ free
 %
 
@@ -8169,7 +8279,15 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 			out nextPutAll: base;
 				nextPutAll: ': ___irCaptured___ setters: ___irSetters___'].
 	out lf.
-	out tab; nextPutAll: '| '; nextPutAll: self ___stVarName___ asString.
+	"The class's own NAME, which the emit below assigns once the class is
+	complete (___buildsIntoBlockTemp___) and the helper answers.  When the
+	class reads that name, it is also a carried capture, whose identifier temp
+	below already declares it -- holding the enclosing binding until the
+	class is bound, as CPython's class body sees it."
+	out tab; nextPutAll: '|'.
+	(carriedNames anySatisfy: [:c |
+		(self ___enclosingScopeIdentifierFor___: c asSymbol) = self ___stBindName___])
+			ifFalse: [out space; nextPutAll: self ___stBindName___].
 	carriedNames doWithIndex: [:c :i |
 		out space; nextPutAll: '___irCell_'; print: i; nextPutAll: '___';
 			space; nextPutAll: '___irSetter_'; print: i; nextPutAll: '___';
@@ -8240,7 +8358,7 @@ ___irHelperSourceWithSelector___: aSelector carrying: carriedNames
 	emit's own stream, and the prologue moves all of them."
 	shift := out contents size.
 	out nextPutAll: emitted.
-	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stVarName___ asString.
+	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stBindName___.
 	stream ifNotNil: [out nextPutAll: (stream mapCommentShiftedBy: shift)].
 	^ out contents
 %
