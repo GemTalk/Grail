@@ -104,7 +104,43 @@ printSmalltalkOn: aStream
 	allows.  It cost test_scope two tests the first time it was written."
 	self ___builtinsAreOverridden___ ifTrue: [
 		aStream nextPutAll: '(NameError @env0:___requireBuildClass___). '].
-	^self printSmalltalkRuntimeOn: aStream
+	"A CLASS NESTED IN A CLASS-BODY try / for / while / with.  Those
+	statements are emitted verbatim under the class-body runtime class, and a
+	class among them assigned its name as a bare variable that nothing
+	declares -- an UNDEFINED SYMBOL, so the whole module failed to compile
+	(uncatchable at module scope; a codegen-gap SystemError under exec).  The
+	if-branch emit already builds such a class in a block temp and stores it
+	into the enclosing class; this is the same emit, for the same reason."
+	CallAst classBodyRuntimeClass notNil ifTrue: [
+		(self ___directlyEnclosingClassDef___) ifNotNil: [:outer |
+			aStream nextPutAll: '[ | '; nextPutAll: self ___stVarName___; nextPutAll: ' |'; lf.
+			self printSmalltalkRuntimeOn: aStream.
+			aStream lf;
+				nextPutAll: outer ___stVarName___;
+				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+				nextPutAll: (self ___manglePrivate___: name) asString;
+				nextPutAll: ''' put: ';
+				nextPutAll: self ___stVarName___;
+				nextPutAll: '.'; lf;
+				nextPutAll: ' ] @env0:value.'; lf.
+			^ self]].
+	^ self printSmalltalkRuntimeOn: aStream
+%
+
+category: 'Grail-code generation'
+method: ClassDefAst
+___directlyEnclosingClassDef___
+	"The class whose BODY this class statement sits in -- through any if /
+	try / for / while / with -- or nil when the nearest enclosing scope is a
+	function, a lambda or the module."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [^ nil].
+		(node isKindOf: ClassDefAst) ifTrue: [^ node].
+		node := node parent].
+	^ nil
 %
 
 category: 'Grail-code generation'
