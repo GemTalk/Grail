@@ -9168,12 +9168,17 @@ category: 'Grail-Convenience Methods - Attribute'
 method: object
 ___grailIsPythonClass___
 	"A class a class statement OR type() built: the first carries the
-	___pyDefinedClass___ marker, the second only its own attribute holder."
+	___pyDefinedClass___ marker, the second ___pyTypeBuiltClass___ (builtins >>
+	type:_:_:kw:).  The metaclass's own ___dynInstVars___ accessor stays as the
+	test for a type()-built class from before that marker, but it is not
+	enough alone: a class over a PYTHON base inherits the accessor rather
+	than defining it."
 
 	(self @env0:isKindOf: Behavior) ifFalse: [^ false].
 	self == object ifTrue: [^ false].
 	^ (self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
-		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]
+		or: [(self @env0:includesSelector: #'___pyTypeBuiltClass___' environmentId: 1)
+		or: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]]
 %
 
 category: 'Grail-Convenience Methods - Attribute'
@@ -16783,6 +16788,21 @@ ___pyChangeClassOf: anObject to: newClass
 	otherwise, which surfaces as CPython's ``__class__ assignment ... layout''
 	TypeError.  Returns None (test_sort test_unsafe_object_compare)."
 
+	| oldClass bothModules values idx |
+	"A class whose __slots__ names ``__class__'' has a real per-instance slot
+	by that name, and its descriptor shadows object's __class__ setter: the
+	assignment STORES there and changes no class -- whatever the value is
+	(dir_slots_and_traceback.py).  Written raw, as the reader reads it
+	(___grailRawSlotValue___:)."
+	(anObject ___declaresOwnSlotNamed___: '__class__') ifTrue: [
+		idx := anObject ___pySlotIndexFor___: #'__class__'.
+		idx @env0:> 0
+			ifTrue: [anObject @env0:instVarAt: idx put: newClass]
+			ifFalse: [
+				idx @env0:negated @env0:> anObject @env0:_basicSize
+					ifTrue: [anObject @env0:size: idx @env0:negated].
+				anObject @env0:at: idx @env0:negated put: newClass].
+		^ None].
 	(newClass isKindOf: Behavior) ifFalse: [
 		^ TypeError ___signal___:
 			'__class__ must be set to a class, not ''' @env0:,
@@ -16802,6 +16822,25 @@ ___pyChangeClassOf: anObject to: newClass
 	reproduce it (measured: ``C().__class__ = int'' then an import survives
 	the old handler), so this is defence: a kernel error is answered, not
 	re-raised from under the kernel."
+	oldClass := anObject @env0:class.
+	"CPython's two refusals, before anything is touched (#1574).
+	changeClassTo: alone accepts any class with a compatible SMALLTALK
+	format, so ``o.__class__ = dict'' and ``= list'' went through, and so
+	did a __slots__ class.  Both types must be mutable -- classes a class
+	statement or type() built -- unless both are module types; and their
+	layouts must match (___grailSameInstanceLayoutAs___:)."
+	bothModules := (anObject @env0:isKindOf: module)
+		and: [newClass == module or: [newClass @env0:inheritsFrom: module]].
+	bothModules ifFalse: [
+		(oldClass ___grailIsPythonClass___ and: [newClass ___grailIsPythonClass___]) ifFalse: [
+			^ TypeError ___signal___:
+				'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+		(oldClass ___grailSameInstanceLayoutAs___: newClass) ifFalse: [
+			^ TypeError ___signal___:
+				'__class__ assignment: ''' @env0:, newClass ___grailPyNameForError___
+					@env0:, ''' object layout differs from '''
+					@env0:, oldClass ___grailPyNameForError___ @env0:, '''']].
+	values := oldClass ___grailSlotValuesOf___: anObject.
 	([anObject @env0:changeClassTo: newClass. true]
 		@env0:on: Error
 		do: [:ex | ex @env0:return: false]) ifFalse: [
@@ -16810,7 +16849,126 @@ ___pyChangeClassOf: anObject to: newClass
 				(newClass @env0:name @env0:asString) @env0:,
 				''' object layout differs from ''' @env0:,
 				(anObject @env0:class @env0:name @env0:asString) @env0:, ''''].
+	newClass ___grailRestoreSlotValues___: values into: anObject from: oldClass.
 	^ None
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailPyNameForError___
+	"A class's Python __name__, as CPython's tp_name prints it in a message."
+
+	^ [(self ___pyAttrLoad___: #'__name__') @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: self @env0:name @env0:asString]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailSameInstanceLayoutAs___: otherClass
+	"CPython's compatible_for_assignment for two Python classes.  Each side is
+	walked up past every class that adds no layout of its own; if that lands
+	both on one class they match, and otherwise the two classes reached must
+	share a base and add the same layout: the same own __slots__, in order,
+	and the same __dict__ / __weakref__ storage.  So ``class C'' and ``class
+	C2'' match (each adds __dict__ and __weakref__ to object), a __slots__
+	class matches only one with the same slots, and a list subclass matches
+	only another list subclass."
+
+	| a b |
+	a := self ___grailLayoutBase___.
+	b := otherClass ___grailLayoutBase___.
+	a == b ifTrue: [^ true].
+	(a ___grailIsPythonClass___ and: [b ___grailIsPythonClass___]) ifFalse: [^ false].
+	a @env0:superclass == b @env0:superclass ifFalse: [^ false].
+	^ (a ___grailOwnDeclaredSlotNames___ @env0:= b ___grailOwnDeclaredSlotNames___)
+		and: [(a ___grailIntroducesInstanceSlot___: '__dict__')
+				== (b ___grailIntroducesInstanceSlot___: '__dict__')
+			and: [(a ___grailIntroducesInstanceSlot___: '__weakref__')
+				== (b ___grailIntroducesInstanceSlot___: '__weakref__')]]
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailLayoutBase___
+	"The receiver class, or the nearest ancestor that adds instance layout:
+	a Python class with no __slots__ of its own that introduces neither
+	__dict__ nor __weakref__ adds nothing, so CPython compares its base."
+
+	| cls |
+	cls := self.
+	[cls ___grailIsPythonClass___
+		and: [cls ___grailOwnDeclaredSlotNames___ @env0:isEmpty
+		and: [(cls ___grailIntroducesInstanceSlot___: '__dict__') @env0:not
+		and: [(cls ___grailIntroducesInstanceSlot___: '__weakref__') @env0:not]]]]
+			whileTrue: [cls := cls @env0:superclass].
+	^ cls
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailOwnDeclaredSlotNames___
+	"This class's OWN declared __slots__ names, as an Array of Symbols."
+
+	(self @env0:class @env0:includesSelector: #'___pyDeclaredSlotNames___' environmentId: 1)
+		ifFalse: [^ #()].
+	^ (self ___pyDeclaredSlotNames___ @env0:collect: [:n | n @env0:asSymbol]) @env0:asArray
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailSlotLayoutArray___
+	"This class's full indexed slot layout (inherited positions first), or an
+	empty Array when it has none."
+
+	(self @env0:class @env0:whichClassIncludesSelector: #'___pySlotLayout___' environmentId: 1) == nil
+		ifTrue: [^ #()].
+	^ (self @env0:perform: #'___pySlotLayout___' env: 1) @env0:asArray
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailSlotValuesOf___: anInstance
+	"name -> value for every SET indexed slot of anInstance, an instance of
+	this class -- what has to move when its class changes to one whose
+	layout puts the names at other positions."
+
+	| layout values |
+	layout := self ___grailSlotLayoutArray___.
+	values := OrderedCollection @env0:new.
+	layout @env0:doWithIndex: [:e :pos |
+		((object ___grailSlotIsTombstone___: e) @env0:not
+			and: [pos @env0:<= anInstance @env0:_basicSize]) ifTrue: [
+				(anInstance @env0:at: pos) ifNotNil: [:v |
+					values @env0:add: (e @env0:asSymbol @env0:-> v)]]].
+	^ values
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailRestoreSlotValues___: values into: anInstance from: oldClass
+	"Put the values ___grailSlotValuesOf___: took, by NAME, where this class
+	-- anInstance's class now -- keeps them.  Two Python classes with a
+	__dict__ give the same attribute different positions (``class A'' sets x,
+	``class B'' sets y), so after ``a.__class__ = B'' A's position for x read
+	as B's y and a.x was gone (#1574).  A name this class has no position
+	for becomes a per-object attribute, as a store of it would."
+
+	| idx pos |
+	self ___grailSlotLayoutArray___ @env0:= oldClass ___grailSlotLayoutArray___
+		ifTrue: [^ self].
+	anInstance @env0:_basicSize @env0:> 0 ifTrue: [anInstance @env0:size: 0].
+	values @env0:do: [:assoc |
+		idx := anInstance ___pySlotIndexFor___: assoc @env0:key.
+		idx @env0:= 0
+			ifTrue: [anInstance @env0:dynamicInstVarAt: assoc @env0:key put: assoc @env0:value]
+			ifFalse: [
+				idx @env0:> 0
+					ifTrue: [anInstance @env0:instVarAt: idx put: assoc @env0:value]
+					ifFalse: [
+						pos := idx @env0:negated.
+						pos @env0:> anInstance @env0:_basicSize ifTrue: [anInstance @env0:size: pos].
+						anInstance @env0:at: pos put: assoc @env0:value]]].
+	^ self
 %
 
 category: 'Grail-Attribute Access'
