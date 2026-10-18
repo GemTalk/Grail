@@ -417,12 +417,13 @@ GetSetDescriptorType = getset_descriptor
 del getset_descriptor
 
 
-class MemberDescriptorType:
+class member_descriptor:
     """``member_descriptor``: a ``__slots__`` entry, as its class's
-    ``__dict__`` reports it.  Grail stores slots in instance variables and
-    reaches them through compiled accessors, so instances never consult this;
-    it exists so that the class dict says what CPython's does, which is what
-    ``inspect.getattr_static`` and typing's runtime protocols read."""
+    ``__dict__`` reports it, and what ``Cls.slotname`` answers.  Grail stores
+    slots in instance variables and reaches them through compiled accessors,
+    so instances never consult this; it exists so that the class says what
+    CPython's does, which is what ``inspect.getattr_static``, typing's runtime
+    protocols and ``getattr(cls, name)`` over ``cls.__slots__`` read."""
 
     def __init__(self, name, objclass):
         self.__name__ = name
@@ -442,6 +443,12 @@ class MemberDescriptorType:
 
     def __repr__(self):
         return f"<member {self.__name__!r} of {self.__objclass__.__name__!r} objects>"
+
+
+# CPython's type is named member_descriptor; MemberDescriptorType is only
+# the name types binds it to (#1694).
+MemberDescriptorType = member_descriptor
+del member_descriptor
 
 
 def _derive_code_type():
