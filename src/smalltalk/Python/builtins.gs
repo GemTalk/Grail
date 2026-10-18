@@ -6426,6 +6426,14 @@ ___validateTypeArgs___: className bases: bases namespace: namespace
 category: 'Grail-Built-in Functions'
 method: builtins
 ___validateSlots___: namespace bases: bases
+	"type()'s check -- see ___validateSlots___:bases:allBuiltinStorage:."
+
+	^ self ___validateSlots___: namespace bases: bases allBuiltinStorage: true
+%
+
+category: 'Grail-Built-in Functions'
+method: builtins
+___validateSlots___: namespace bases: bases allBuiltinStorage: allStorage
 	"CPython's __slots__ checking, none of which Grail did.
 
 	Every refusal here is one that otherwise produces a class with a slot
@@ -6443,25 +6451,34 @@ ___validateSlots___: namespace bases: bases
 	iterates to INTEGERS, which the per-item string check below refuses with
 	the message CPython uses for exactly that input -- ``__slots__ items must
 	be strings, not 'int'''.  An earlier draft named the bytes class
-	explicitly and was both redundant and wrong about the class's name."
+	explicitly and was both redundant and wrong about the class's name.
+
+	The iteration is PYTHON's, through list(): a dict __slots__ (statistics'
+	NormalDist, typing's tests) names its KEYS -- the values are docstrings --
+	where Smalltalk's withAll: of a dict answers its values.  It also raises
+	CPython's own complaint for something not iterable at all, ``'int' object
+	is not iterable'', since the fault is the object's rather than
+	__slots__'s."
 	names := (slots @env0:isKindOf: CharacterCollection)
 		ifTrue: [{ slots }]
-		ifFalse: [[Array @env0:withAll: slots]
-			@env0:on: Error do: [:ex | ex @env0:return: nil]].
-	"NOT ITERABLE AT ALL is a different complaint, and CPython words it as one
-	-- ``'int' object is not iterable'' -- because the fault is the object's
-	rather than __slots__'s."
-	names @env0:isNil ifTrue: [
-		^ TypeError ___signal___: '''' @env0:,
-			(slots ___pyTypeNameForError___) @env0:asString
-			@env0:, ''' object is not iterable'].
-	"A SLOT ON A BUILT-IN-STORAGE BASE has nowhere to live: the instance's
-	storage is the primitive one, so CPython refuses rather than producing an
-	object whose slot writes go nowhere."
+		ifFalse: [Array @env0:withAll: (list @env1:__new__: slots)].
+	"A SLOT ON A VARIABLE-SIZED BASE has nowhere to live: CPython refuses
+	nonempty __slots__ over a type whose instances carry their items inline --
+	int, bytes, tuple and type, and anything derived from them.
+
+	type() refuses more than that: a slot over any base with BUILT-IN storage
+	(list, dict, str, float, ...), which CPython accepts, because a class
+	type() builds there has nowhere to keep it -- measured, ``k.a = 5'' then
+	``k.a'' raises AttributeError.  A class statement can (a kernel-rooted
+	class keeps the slot as a named instVar), so it passes allBuiltinStorage:
+	false and is refused only where CPython refuses (#1658)."
 	(Array @env0:withAll: bases) @env0:do: [:b |
 		((b @env0:isKindOf: Behavior)
-			@env0:and: [((Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b)
-			@env0:and: [names @env0:isEmpty @env0:not]]) ifTrue: [
+			@env0:and: [(names @env0:isEmpty @env0:not)
+			@env0:and: [({ int. bytes. tuple. type } @env0:anySatisfy: [:v |
+					(self issubclass: b _: v) == true])
+				@env0:or: [allStorage
+					@env0:and: [(Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b]]]]) ifTrue: [
 				^ TypeError ___signal___: 'nonempty __slots__ not supported for subtype of '''
 					@env0:, (b @env1:__name__) @env0:asString @env0:, '''']].
 	names @env0:do: [:each |
@@ -6894,9 +6911,22 @@ type: className _: bases _: namespace kw: classKeywords
 			and: [newClass ___pyStrictSlotsAllowed___]) ifTrue: [
 				newClass ___compileMethod: '___pySlotsStrict___
 	^ true' category: 'Grail-Slots'].
+		"Naming __dict__ asks for one outright, so a strict marker inherited
+		from a slotted base is overridden, as a class statement does (#1658)."
+		((declared @env0:includes: #'__dict__') and: [newClass ___pyInheritsStrictSlots___]) ifTrue: [
+			newClass ___compileMethod: '___pySlotsStrict___
+	^ false' category: 'Grail-Slots'].
 		declared @env0:isEmpty ifFalse: [
 			newClass ___grailInstallInferredSlots___: #() declared: declared
 				properties: #() indexed: false]].
+	"...and with no __slots__ at all a class has a __dict__ whatever its bases
+	declare -- the class statement's mirror rule (ClassDefAst), which type()
+	did not apply: ``type('U', (Empty,), {})'' over ``__slots__ = ()'' could
+	take no attribute (#1658)."
+	((namespace isNil or: [((namespace @env1:__contains__: '__slots__') ___isTruthy___) @env0:not])
+		and: [newClass ___pyInheritsStrictSlots___]) ifTrue: [
+			newClass ___compileMethod: '___pySlotsStrict___
+	^ false' category: 'Grail-Slots'].
 	"PEP 487, WHICH type() RUNS AND THIS DID NOT.  CPython fires both halves
 	from type.__new__ -- __set_name__ over the namespace, then
 	__init_subclass__ on the nearest base that defines one -- so a class built
