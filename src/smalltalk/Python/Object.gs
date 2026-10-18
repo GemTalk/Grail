@@ -12709,6 +12709,12 @@ ___pyAttrLoad___: aSym
 	at the miss, so no successful read pays for it (#1694)."
 	(self @env0:isKindOf: Behavior) ifTrue: [
 		(self ___grailSlotMemberDescriptorFor___: aSym) @env0:ifNotNil: [:md | ^ md]].
+	"A CLASS's miss falls back to its METACLASS's __getattr__: ``Cls.x'' is
+	type(Cls).__getattribute__(Cls, 'x'), and the slot that runs __getattr__
+	is the metaclass's.  ___pyAttrHasGetattr___ below looks at the class's
+	own class side, which a Python metaclass's methods are not on (#1702)."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		(self ___grailMetaclassGetattr___: s) @env0:ifNotNil: [:assoc | ^ assoc @env0:value]].
 	self ___pyAttrHasGetattr___ ifTrue: [^ self ___pyAttrCallGetattr___: s].
 	"Carries CPython's ``name'' / ``obj'' -- see
 	AttributeError class>>___signalMissing___:on:.  This is the terminal miss for
@@ -18914,6 +18920,25 @@ ___grailMetaclassSetattr___: aName value: aValue
 	[self @env0:with: aName @env0:asString with: aValue performMethod: m]
 		@env0:ensure: [active @env0:removeIdentical: pair ifAbsent: [nil]].
 	^ true
+%
+
+category: 'Grail-Attribute Access'
+method: object
+___grailMetaclassGetattr___: aName
+	"The recorded metaclass's own __getattr__, run for a class receiver whose
+	attribute read missed, as an Association holding its answer -- or nil when
+	the metaclass defines none below type and object, so the miss goes on.
+	The read-side counterpart of ___grailMetaclassSetattr___:value:, and like
+	it only the class-body ``def __getattr__(cls, name)'' form is seen."
+
+	| meta owner m |
+	meta := self ___grailMetaclass___.
+	(meta @env0:notNil and: [meta @env0:isKindOf: Behavior]) ifFalse: [^ nil].
+	owner := meta @env0:whichClassIncludesSelector: #'__getattr__:' environmentId: 1.
+	(owner @env0:isNil or: [owner == object or: [owner == (Python @env0:at: #type)]])
+		ifTrue: [^ nil].
+	m := owner @env0:compiledMethodAt: #'__getattr__:' environmentId: 1.
+	^ #'value' @env0:-> (self @env0:with: aName @env0:asString performMethod: m)
 %
 
 category: 'Grail-Attribute Access'
