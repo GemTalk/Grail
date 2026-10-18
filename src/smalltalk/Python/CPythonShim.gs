@@ -677,6 +677,11 @@ ___buildTypeMirrorFor: aClass
 		m int64At: (lay at: 23) put: (lay at: 25)].
 	(self ___classDefinesReal: #'__next__' in: aClass) ifTrue: [
 		m int64At: (lay at: 24) put: (lay at: 26)].
+	"tp_descr_get for a class whose instances bind -- a function, an
+	UnboundMethod, a descriptor class: Cython binds a special method it looked
+	up on the type through it (``with lock:'' in numpy.random)."
+	(self ___classDefinesReal: #'__get__:_:' in: aClass) ifTrue: [
+		m int64At: (lay at: 27) put: (lay at: 28)].
 	"tp_new: the shim's trampoline into cls.__new__(cls) (PyType_GenericNew:)."
 	m int64At: (lay at: 9) put: (lay at: 10).
 	m int64At: (lay at: 6) put: 16r524F5252494D4C47.
@@ -1910,6 +1915,15 @@ foreignBuffer: cPtr mode: mode index: anIndex value: aByte
 	PyObject_GetBuffer raised -- a TypeError for an object with no buffer."
 
 	^ self ___shimUserAction: #shimForeignBuffer withArgs: { cPtr . mode . anIndex . aByte }
+%
+
+category: 'Grail-Calling'
+method: CPythonShim
+foreignStrValue: cPtr
+	"The text of a wheel's str subtype instance (numpy.str_), read from its
+	CPython layout, as a str; nil for any other object."
+
+	^ self ___shimUserAction: #shimForeignStrValue withArgs: { cPtr }
 %
 
 category: 'Grail-Calling'
@@ -3748,13 +3762,31 @@ PySlice_Unpack: aSlice
 	are applied on the C side so the PY_SSIZE_T sentinel values never
 	round-trip through Smalltalk. Returns nil for a non-slice."
 
-	| s |
 	(aSlice isKindOf: slice) ifFalse: [^ nil].
-	s := Array new: 3.
-	s at: 1 put: ((aSlice @env1:start) == None ifTrue: [nil] ifFalse: [aSlice @env1:start]).
-	s at: 2 put: ((aSlice @env1:stop) == None ifTrue: [nil] ifFalse: [aSlice @env1:stop]).
-	s at: 3 put: ((aSlice @env1:step) == None ifTrue: [nil] ifFalse: [aSlice @env1:step]).
-	^ s
+	^ self ___guardCallback: [
+		{ aSlice @env1:start. aSlice @env1:stop. aSlice @env1:step }
+			collect: [:each | self ___sliceIndex: each]]
+%
+
+category: 'Grail-CPython API'
+method: CPythonShim
+___sliceIndex: anObject
+	"CPython's _PyEval_SliceIndex: nil for None, else the object's __index__
+	clamped to a Py_ssize_t.  A bound was handed to C as it stood, and C read
+	it with GciOopToI64, so a numpy integer -- ``a[i:i + np.int64(3)]'', which
+	np.load's chunk loop does -- died with an uncatchable ArgumentError 2163."
+
+	| n |
+	anObject == None ifTrue: [^ nil].
+	(anObject isKindOf: SmallInteger) ifTrue: [^ anObject].
+	n := (anObject isKindOf: Integer)
+		ifTrue: [anObject]
+		ifFalse: [
+			(((builtins @env1:instance) @env1:hasattr: anObject _: '__index__') @env1:___isTruthy___) ifFalse: [
+				(Python at: #TypeError) @env1:___signal___:
+					'slice indices must be integers or None or have an __index__ method'].
+			anObject @env1:__index__].
+	^ (n max: -9223372036854775808) min: 9223372036854775807
 %
 
 ! --------------- Set API ---------------

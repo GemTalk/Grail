@@ -4932,3 +4932,214 @@ testARebindingDecoratorMayAnswerACObject
 	self assert: (self eval: 'import shim_rebound_def as m
 repr((m.caller(), m.caller2()))') equals: '((''vectorcall'', 1, (''k'',)), (''vectorcall'', 1, None))'
 %
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testAStringToDoubleSetsItsEndAsCPythonDoes
+	"PyOS_string_to_double sets *endptr, as CPython's does: numpy's loadtxt
+	compares it with the start of its buffer.  It was never set, so loadtxt
+	read every number or none by what the stack held, and np.loadtxt failed
+	outright under a new kernel's stack layout.  Without an end pointer the
+	whole string must be a number; a hex float and leading space are not
+	numbers, which strtod alone would take.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr(([t(d.capi, ''string_to_double'', s) for s in [''1.5e3xyz'', ''abc'', '' 1'', '''', ''-inf'', ''nan'', ''1e999'', ''0x1p3'', ''-0X2'', ''12'']], t(d.capi, ''string_to_double_whole'', ''2.5''), t(d.capi, ''string_to_double_whole'', ''2.5x''), t(d.capi, ''string_to_double_whole'', ''1e999'')))') equals: '([(1500.0, 5), (''raised'', <class ''ValueError''>, 0), (''raised'', <class ''ValueError''>, 0), (''raised'', <class ''ValueError''>, 0), (-inf, 4), (nan, 3), (inf, 5), (0.0, 1), (-0.0, 2), (12.0, 2)], 2.5, (''raised'', ''ValueError'', "could not convert string to float: ''2.5x''"), (''raised'', ''OverflowError'', "value too large to convert to float: ''1e999''"))'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testMinAndMaxTakeTheTruthOfAComparison
+	"min and max test the truth of a rich comparison's answer, as CPython's
+	PyObject_RichCompareBool does: a comparison may answer any object, and
+	numpy's answers numpy.bool.  They branched on it directly, so
+	min(5, np.int64(3)) -- which np.load's chunk loop calls -- died with an
+	uncatchable ``Expected numpy.bool to be a Boolean''.  Values are
+	CPython's."
+
+	self assert: (self eval: 'def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class T:
+    def __init__(s, v): s.v = v
+    def __bool__(s): return s.v
+class R:
+    def __init__(s, n): s.n = n
+    def __lt__(s, o): return T(s.n < o.n)
+    def __gt__(s, o): return T(s.n > o.n)
+    def __repr__(s): return ''R%d'' % s.n
+repr((t(min, R(2), R(1)), t(max, R(1), R(2)), t(min, [R(3), R(1), R(2)]), t(max, [R(3), R(5), R(2)]), t(min, R(2), R(1), R(3)), t(max, [1, 2], key=lambda i: R(-i))))') equals: '(R1, R2, R1, R5, R1, 1)'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testCReadsASlicesBoundsThroughIndex
+	"PySlice_Unpack reads each bound through __index__ and clamps it to a
+	Py_ssize_t, as CPython's _PyEval_SliceIndex does.  A bound reached C as it
+	stood and was read as a SmallInteger, so a[i:i + np.int64(3)] -- np.load's
+	chunk loop -- died with an uncatchable ArgumentError 2163.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class Idx:
+    def __init__(s, v): s.v = v
+    def __index__(s): return s.v
+repr([t(d.capi, ''slice_unpack'', x) for x in [slice(Idx(1), Idx(4)), slice(True, 3), slice(None, 2**70), slice(-2**70, None, -1), slice(''a'', 2), slice(1, 2, 0), slice(None, None, Idx(2))]])') equals: '[(1, 4, 1), (1, 3, 1), (0, 9223372036854775807, 1), (-9223372036854775808, -9223372036854775808, -1), (''raised'', ''TypeError'', ''slice indices must be integers or None or have an __index__ method''), (''raised'', ''ValueError'', ''slice step cannot be zero''), (0, 9223372036854775807, 2)]'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testAStrSubtypeIsAStrToCAndToGrail
+	"An instance of a C str subtype (numpy.str_; here Text) is built by str's
+	tp_new in CPython's layout, so C reads its text; str's own tp_str and
+	tp_repr exist for its type to call; and in Grail it answers str's methods,
+	operators, len and truth from that text, unbound str methods included
+	(np.char calls str.upper on each element).  It was a zeroed instance, str()
+	of it called a NULL tp_str, and np.char raised a MessageNotUnderstood.
+	Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+x = d.Text(''h\u00e9llo'')
+ascii((str(x), repr(x), x.upper(), str.upper(x), t(str.split, d.Text(''a b'')), isinstance(x, str), type(x).__name__, t(d.capi, ''str_read'', x), t(d.capi, ''str_slots'', d.Text(''ab'')), t(d.capi, ''str_slots'', ''ab''), len(x), x + ''!'', ''>'' + x, x * 2, x == ''h\u00e9llo'', hash(x) == hash(''h\u00e9llo''), ''ll'' in x, x[1], list(d.Text(''ab'')), bool(d.Text('''')), bool(x)))') equals: '(''h\xe9llo'', "Text(''h\xe9llo'')", ''H\xc9LLO'', ''H\xc9LLO'', [''a'', ''b''], True, ''Text'', (5, ''h\xe9llo''), (''ab'', "''ab''"), (''ab'', "''ab''"), 5, ''h\xe9llo!'', ''>h\xe9llo'', ''h\xe9lloh\xe9llo'', True, True, True, ''\xe9'', [''a'', ''b''], False, True)'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testCBindsAGrailFunctionItFindsOnTheType
+	"A Grail function C finds on a type (_PyType_Lookup) has a tp_descr_get that
+	binds it, as CPython's function type does.  Cython's ``with lock:'' looks
+	__enter__ up so (__Pyx_PyObject_LookupSpecial), and numpy.random's
+	BitGenerator called threading.Lock's __enter__ unbound, with no self:
+	``unbound method __enter__ must be called with an instance''.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class CM:
+    def __init__(s, n): s.n = n
+    def __enter__(s): return (''entered'', s.n)
+    def __exit__(s, *a): return (''exited'', s.n, a)
+repr((t(d.capi, ''lookup_special'', CM(3), ''__enter__''), t(d.capi, ''lookup_special'', CM(1), ''__nothing__'')))') equals: '((''entered'', 3), None)'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testCSubscriptsAGrailContainerThroughItsMappingSlot
+	"str, bytes, list, tuple and dict have the mapping slots, which Cython calls
+	inline to subscript a value it cannot type, and a list or tuple they answer
+	is in CPython's layout, which it then reads inline.  numpy.random's mtrand
+	failed at import with ``'list' object is unsliceable'', and then segfaulted
+	reading the slice's items.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((t(d.capi, ''mp_subscript'', [1, 2, 3, 4], slice(1, 3)), t(d.capi, ''mp_subscript'', (1, 2, 3), slice(None, None, -1)), t(d.capi, ''mp_subscript'', {''a'': [5, 6]}, ''a''), t(d.capi, ''mp_subscript'', ''abc'', 1), t(d.capi, ''mp_subscript'', [1], 5), t(d.capi, ''mp_subscript'', b''xy'', 0)))') equals: '((''list'', 2, 3), (''tuple'', 3, 2, 1), (''list'', 5, 6), (''other'', ''b''), (''raised'', ''IndexError'', ''list index out of range''), (''other'', 120))'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testCDeletesAnAttributeBySettingNull
+	"PyObject_SetAttr with a NULL value deletes, from a Grail object and from a C
+	module alike, and a missing name is an AttributeError.  It answered -1 with
+	no error set, so numpy.random.mtrand's top-level ``del method, method_name''
+	failed its import with no exception to show.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class O: pass
+o = O(); o.a = 1
+repr((t(d.capi, ''delattr'', o, ''a''), hasattr(o, ''a''), t(d.capi, ''delattr'', o, ''a'')[:2], t(d.capi, ''setattr_module'', ''_grail_scratch'', 1), t(d.capi, ''delattr_module'', ''_grail_scratch''), t(d.capi, ''delattr_module'', ''_grail_scratch'')[:2]))') equals: '(True, False, (''raised'', ''AttributeError''), True, True, (''raised'', ''AttributeError''))'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testCTakesATruthValueAsCPythonDoes
+	"PyObject_IsTrue of a wheel's object asks its type's nb_bool, then its length,
+	then -- for a subclass of float, complex or str -- its value; of a Grail
+	instance, Grail's bool().  It answered true for both, so numpy.random's
+	``if np.prod(size) == 0:'' took the empty path on a numpy.bool False, and
+	every integers(..., size=n) came back zeros.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+class L0:
+    def __len__(s): return 0
+class B0:
+    def __bool__(s): return False
+class O: pass
+repr([t(d.capi, ''is_true'', v) for v in [d.Dual(0.0), d.Dual(1.5), d.DualC(0j), d.DualC(1j), d.Text(''''), d.Text(''a''), L0(), B0(), O(), [], [0], d.Cell(1)]])') equals: '[0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1]'
+%
+
+category: 'Grail-Tests - NumPy Census Gaps'
+method: CPythonShimTestCase
+testAnUnsignedLongOfTwoToTheSixtyThreeStaysPositive
+	"PyLong_FromUnsignedLong keeps a value of 2**63 or more positive: unsigned
+	long is 64 bits here, and numpy's uint64 is one.  A signed cast made
+	Generator.bit_generator.random_raw() answer negative numbers.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr(d.capi(''ulong''))') equals: '(18446744073709551615, 9223372036854775808)'
+%

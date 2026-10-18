@@ -296,6 +296,38 @@ static PyTypeObject DualC_Type = {
     .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
 };
 
+/* Text: numpy.str_ in miniature -- a str subtype whose instance str's own
+   tp_new builds, printing through str's tp_str and tp_repr on a fresh exact
+   str, as numpy's unicodetype_str does. */
+static PyObject *text_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    return PyUnicode_Type.tp_new(type, args, kwds);
+}
+static PyObject *text_print(PyObject *self, int want_repr) {
+    Py_ssize_t len = PyUnicode_GetLength(self);
+    Py_UCS4 *ip = PyUnicode_AsUCS4Copy(self);
+    if (ip == NULL) return NULL;
+    PyObject *fresh = PyUnicode_FromKindAndData(PyUnicode_4BYTE_KIND, ip, len);
+    PyMem_Free(ip);
+    if (fresh == NULL) return NULL;
+    PyObject *r = want_repr ? PyUnicode_Type.tp_repr(fresh) : PyUnicode_Type.tp_str(fresh);
+    Py_DECREF(fresh);
+    if (r == NULL || !want_repr) return r;
+    PyObject *w = PyUnicode_FromFormat("Text(%U)", r);
+    Py_DECREF(r);
+    return w;
+}
+static PyObject *text_str(PyObject *self) { return text_print(self, 0); }
+static PyObject *text_repr(PyObject *self) { return text_print(self, 1); }
+static PyTypeObject Text_Type = {
+    PyVarObject_HEAD_INIT(NULL, 0)
+    .tp_name = "_grail_demo.Text",
+    .tp_basicsize = sizeof(PyUnicodeObject),
+    .tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,
+    .tp_new = text_new,
+    .tp_str = text_str,
+    .tp_repr = text_repr,
+};
+
 /* Buf: an object exporting a writable buffer of three C ints. */
 typedef struct {
     PyObject_HEAD
@@ -619,7 +651,6 @@ static PyObject *ucs4_list(const Py_UCS4 *buf, Py_ssize_t n) {
 static PyObject *
 grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
 {
-    (void)module;
     if (nargs < 1 || !PyUnicode_Check(args[0])) {
         PyErr_SetString(PyExc_TypeError, "capi() takes a name");
         return NULL;
@@ -881,6 +912,106 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         if (!PyArg_ParseTuple(a, "O!:parse_subtype", &Marker_Type, &o)) return NULL;
         return Py_NewRef(Py_True);
     }
+    /* PyOS_string_to_double with an end pointer: the value and how many
+       characters it took (numpy's loadtxt compares the end with the start);
+       without one, the whole string must be a number. */
+    if (IS("string_to_double")) {
+        const char *str = PyUnicode_AsUTF8(a);
+        char *end = NULL;
+        double v = PyOS_string_to_double(str, &end, NULL);
+        if (v == -1.0 && PyErr_Occurred()) {
+            PyObject *t, *val, *tb;
+            PyErr_Fetch(&t, &val, &tb);
+            PyObject *r = Py_BuildValue("(sOn)", "raised", t, (Py_ssize_t)(end - str));
+            Py_XDECREF(t); Py_XDECREF(val); Py_XDECREF(tb);
+            return r;
+        }
+        return Py_BuildValue("(dn)", v, (Py_ssize_t)(end - str));
+    }
+    if (IS("string_to_double_whole")) {
+        double v = PyOS_string_to_double(PyUnicode_AsUTF8(a), NULL, PyExc_OverflowError);
+        if (v == -1.0 && PyErr_Occurred()) return NULL;
+        return PyFloat_FromDouble(v);
+    }
+    /* A slice's bounds as C reads them: through __index__, clamped. */
+    if (IS("slice_unpack")) {
+        Py_ssize_t start, stop, step;
+        if (PySlice_Unpack(a, &start, &stop, &step) < 0) return NULL;
+        return Py_BuildValue("(nnn)", start, stop, step);
+    }
+    /* A str subtype's text read through the C API, and str's own slots. */
+    if (IS("str_read")) {
+        Py_ssize_t n = 0;
+        const char *u = PyUnicode_AsUTF8AndSize(a, &n);
+        if (u == NULL) return NULL;
+        return Py_BuildValue("(ns#)", PyUnicode_GetLength(a), u, n);
+    }
+    if (IS("str_slots")) {
+        PyObject *s1 = PyUnicode_Type.tp_str(a);
+        PyObject *s2 = s1 ? PyUnicode_Type.tp_repr(a) : NULL;
+        if (s2 == NULL) { Py_XDECREF(s1); return NULL; }
+        return Py_BuildValue("(NN)", s1, s2);
+    }
+    /* Cython's __Pyx_PyObject_LookupSpecial: the type's attribute, bound
+       through its type's tp_descr_get, then called (``with obj:''). */
+    if (IS("lookup_special")) {
+        PyTypeObject *tp = Py_TYPE(a);
+        PyObject *r = _PyType_Lookup(tp, b);
+        if (r == NULL) Py_RETURN_NONE;
+        descrgetfunc f = Py_TYPE(r)->tp_descr_get;
+        PyObject *bound = f ? f(r, a, (PyObject *)tp) : Py_NewRef(r);
+        if (bound == NULL) return NULL;
+        PyObject *res = PyObject_CallNoArgs(bound);
+        Py_DECREF(bound);
+        return res;
+    }
+    /* Cython's slice of an untyped object: the mapping slot, its answer
+       then read inline as a list or tuple. */
+    if (IS("mp_subscript")) {
+        PyMappingMethods *mp = Py_TYPE(a)->tp_as_mapping;
+        if (mp == NULL || mp->mp_subscript == NULL)
+            return PyErr_Format(PyExc_TypeError, "'%.200s' object is unsliceable", Py_TYPE(a)->tp_name);
+        PyObject *r = mp->mp_subscript(a, b);
+        if (r == NULL) return NULL;
+        PyObject *out = NULL;
+        if (PyList_CheckExact(r)) {
+            out = PyTuple_New(PyList_GET_SIZE(r) + 1);
+            PyTuple_SET_ITEM(out, 0, PyUnicode_FromString("list"));
+            for (Py_ssize_t i = 0; i < PyList_GET_SIZE(r); i++)
+                PyTuple_SET_ITEM(out, i + 1, Py_NewRef(PyList_GET_ITEM(r, i)));
+        } else if (PyTuple_CheckExact(r)) {
+            out = PyTuple_New(PyTuple_GET_SIZE(r) + 1);
+            PyTuple_SET_ITEM(out, 0, PyUnicode_FromString("tuple"));
+            for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(r); i++)
+                PyTuple_SET_ITEM(out, i + 1, Py_NewRef(PyTuple_GET_ITEM(r, i)));
+        } else {
+            out = Py_BuildValue("(sO)", "other", r);
+        }
+        Py_DECREF(r);
+        return out;
+    }
+    /* PyObject_SetAttr with NULL: a delete. */
+    if (IS("delattr")) {
+        if (PyObject_SetAttr(a, b, NULL) < 0) return NULL;
+        Py_RETURN_TRUE;
+    }
+    /* The same, on the module object C was given (``del name'' at a Cython
+       module's top level). */
+    if (IS("setattr_module")) {
+        if (PyObject_SetAttr(module, a, b) < 0) return NULL;
+        Py_RETURN_TRUE;
+    }
+    if (IS("delattr_module")) {
+        if (PyObject_SetAttr(module, a, NULL) < 0) return NULL;
+        Py_RETURN_TRUE;
+    }
+    if (IS("is_true")) {
+        int t = PyObject_IsTrue(a);
+        if (t < 0) return NULL;
+        return PyLong_FromLong(t);
+    }
+    if (IS("ulong")) return Py_BuildValue("(NN)", PyLong_FromUnsignedLong((unsigned long)-1),
+                                          PyLong_FromUnsignedLong(1UL << 63));
 #undef IS
     PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
     return NULL;
@@ -1501,6 +1632,9 @@ grail_demo_exec(PyObject *mod) {
     DualC_Type.tp_bases = PyTuple_Pack(2, (PyObject *)&Marker_Type, (PyObject *)&PyComplex_Type);
     if (Dual_Type.tp_bases == NULL || DualC_Type.tp_bases == NULL) return -1;
     if (PyType_Ready(&Dual_Type) < 0 || PyType_Ready(&DualC_Type) < 0 || PyType_Ready(&Buf_Type) < 0)
+        return -1;
+    Text_Type.tp_base = &PyUnicode_Type;
+    if (PyType_Ready(&Text_Type) < 0 || PyModule_AddObjectRef(mod, "Text", (PyObject *)&Text_Type) < 0)
         return -1;
     if (PyModule_AddObjectRef(mod, "Marker", (PyObject *)&Marker_Type) < 0
             || PyModule_AddObjectRef(mod, "Dual", (PyObject *)&Dual_Type) < 0
