@@ -796,6 +796,7 @@ run
 	at: #'ClassBodyDecoratedSiblingTestCase' put: nil;
 	at: #'ClassBodyDecoratorScopeTestCase' put: nil;
 	at: #'ClassBodyDefAsPlainFunctionTestCase' put: nil;
+	at: #'ClassBodyDroppedStatementsTestCase' put: nil;
 	at: #'ClassBodyDroppedStatementTestCase' put: nil;
 	at: #'ClassBodyDunderClassTestCase' put: nil;
 	at: #'ClassBodyExpressionStatementTestCase' put: nil;
@@ -2399,6 +2400,7 @@ input src/smalltalk/PythonTests/ClassBodyControlFlowTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratedSiblingTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDecoratorScopeTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDefAsPlainFunctionTestCase.gs
+input src/smalltalk/PythonTests/ClassBodyDroppedStatementsTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDroppedStatementTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyDunderClassTestCase.gs
 input src/smalltalk/PythonTests/ClassBodyExpressionStatementTestCase.gs

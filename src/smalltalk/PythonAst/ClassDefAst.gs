@@ -5500,10 +5500,21 @@ ___isClassBodyRuntimeStatement___: aStatement
 	constant is excluded with it, since evaluating one can have no effect."
 	(aStatement isKindOf: ExprAst) ifTrue: [
 		^ (aStatement value isKindOf: ConstantAst) not].
+	"``raise'' and ``assert'' bind nothing either, and were dropped the same
+	way -- silently, which is the worst of it: ``class C: raise X'' built C,
+	bound it, and carried on, so a class body that refuses to define itself
+	(a platform check, a version guard) defined itself anyway.  At the top of
+	the body and inside an ``if'' branch, which asks this same question
+	(#1696).  A ``match'' and a ``type X = ...'' alias were dropped likewise,
+	with every name they bind."
 	^ (aStatement isKindOf: TryAst)
 		or: [(aStatement isKindOf: ForAst)
 		or: [(aStatement isKindOf: WhileAst)
-		or: [aStatement isKindOf: WithAst]]]
+		or: [(aStatement isKindOf: WithAst)
+		or: [(aStatement isKindOf: RaiseAst)
+		or: [(aStatement isKindOf: AssertAst)
+		or: [(aStatement isKindOf: MatchAst)
+		or: [aStatement isKindOf: TypeAliasAst]]]]]]]
 %
 
 category: 'Grail-Class Compilation'
@@ -5592,6 +5603,19 @@ emitClassBodyIfBranch: aSuite on: aStream
 		NameAst reads it from."
 		((stmt isKindOf: AssignAst)
 			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) not]) ifTrue: [
+			| savedRuntimeClass |
+			savedRuntimeClass := CallAst classBodyRuntimeClass.
+			CallAst classBodyRuntimeClass: name.
+			[stmt printSmalltalkOn: aStream]
+				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+			aStream lf].
+		"A ``del'' or an ``import'' in a branch: dropped the same way, so ``if
+		flag: import os'' left no C.os and ``if flag: del x'' left C.x in place
+		(#1696).  The top-level forms have emits of their own, which is why
+		they are not in ___isClassBodyRuntimeStatement___:; in a branch they
+		take the verbatim emit everything else there does."
+		(((stmt isKindOf: DeleteAst) or: [stmt isKindOf: ImportAst])
+			or: [stmt isKindOf: ImportFromAst]) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
 			CallAst classBodyRuntimeClass: name.
