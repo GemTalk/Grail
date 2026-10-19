@@ -66,7 +66,8 @@ STN_TRAN_FULL_LOGGING = TRUE;
 STN_TRAN_LOG_DIRECTORIES = .;
 STN_TRAN_LOG_SIZES = 100 MB;
 EOF
-cp "$GEMSTONE/bin/extent0.dbf" ./extent0.dbf
+# Grail is a Rowan project, so it needs the extent with Rowan in it
+cp "$GEMSTONE/bin/extent0.rowan3.dbf" ./extent0.dbf
 chmod +w ./extent0.dbf
 # topaz reads ~/.topazini for the default login used by install.sh/run_tests.sh
 cat > ~/.topazini <<EOF

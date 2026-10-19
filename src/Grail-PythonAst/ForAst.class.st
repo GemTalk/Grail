@@ -1,0 +1,1003 @@
+"For(expr target, expr iter, stmt* body, stmt* orelse) 									// 3.7
+For(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)	// 3.8"
+Class {
+	#name : 'ForAst',
+	#superclass : 'StatementAst',
+	#instVars : [
+		'target',
+		'iter',
+		'body',
+		'orelse',
+		'type_comment'
+	],
+	#category : 'Grail-Parser'
+}
+
+{ #category : 'Grail-code generation' }
+ForAst >> ___drainGuardedStepFor___: iterTemp [
+	"The per-iteration step with CPython's exhaustion PLACEMENT: only a
+	StopIteration (StopAsyncIteration for the async subclass, via the
+	___exhaustedExceptionName___ hook) raised BY THE STEP ITSELF means the
+	loop is drained.  It is rescued here, at the narrowest possible extent,
+	and re-signalled as the internal PythonLoopDrained that the loop-level
+	handler catches -- so the same exception raised by the target store or
+	the body sails past that handler to the caller."
+
+	^ '([' , (self ___nextExpressionFor___: iterTemp) , '] @env0:on: '
+		, self ___exhaustedExceptionName___
+		, ' do: [:___dx___ | PythonLoopDrained @env0:___signal___])'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRForLengthLess___: anInteger source: aSourceBlock on: aBuilder [
+	"``((src __len__) @env0:- N)'' -- the arithmetic the text's star shape uses
+	to index from the end.  An env-0 SmallInteger subtraction on the Python
+	``__len__'', exactly as printSmalltalkOn: spells it; N is emitted even when
+	it is 0, because the text emits ``- 0'' for a trailing star and this
+	reproduces the sends rather than simplifying them."
+
+	^ aBuilder
+		send: #'-'
+		to: (aBuilder send: #'__len__' to: aSourceBlock value with: { })
+		with: { aBuilder obj: anInteger }
+		env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
+	"emitUnpackOn:target:source:depth:, star shapes included.  aSourceBlock
+	answers a FRESH node for the source expression on each call: IR nodes
+	cannot be shared between sends, and the text re-evaluates the subscript per
+	leaf.
+
+	THE STAR SHAPE IS THE TEXT'S, send for send -- and it is NOT the one
+	___emitIRUnpack___:from:holder:on: makes for an ASSIGNMENT.  That one goes
+	through ``___unpackSequence___ ___unpackCheck___:star:after:'' and reads
+	the star with ``___getslice___:_:_:''; printSmalltalkOn:'s FOR-loop branch
+	instead spells it with an explicit slice object and an arithmetic length,
+	which is what this reproduces:
+
+	    a   := (src __getitem__: 0).
+	    mid := (list @env1:__new__:
+	              (src __getitem__: (slice @env1:__new__: 1 _: ((src __len__) @env0:- 1)))).
+	    z   := (src __getitem__: ((src __len__) @env0:- 1)).
+
+	An element BEFORE the star takes its own index; the star takes the slice
+	from nBefore to ``len - nAfter''; an element AFTER it takes
+	``len - nAfter + j - 1'' for its j-th position past the star.  The text
+	emits the ``- 0'' of a trailing star literally, so this does too.
+
+	COPYING THE ASSIGNMENT'S SHAPE INSTEAD WOULD HAVE BEEN MORE CORRECT AND
+	STILL WRONG HERE: ``___unpackCheck___:star:after:'' raises CPython's
+	``ValueError: not enough values to unpack'', while the for-loop's slice
+	shape runs off the end with an IndexError.  Both paths share that gap
+	because both spell the loop this way; the fixture pins it as an XFAIL
+	rather than letting this emit quietly diverge from its oracle."
+
+	| elts starIdx nBefore nAfter |
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
+	elts := aTarget elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	starIdx = 0 ifTrue: [
+		^ elts doWithIndex: [:elt :i |
+			self ___emitIRForUnpack___: elt
+				source: [aBuilder
+					send: #'__getitem__:' to: aSourceBlock value
+					with: { aBuilder obj: i - 1 }]
+				on: aBuilder]].
+	nBefore := starIdx - 1.
+	nAfter := elts size - starIdx.
+	elts doWithIndex: [:elt :i |
+		i < starIdx
+			ifTrue: [
+				self ___emitIRForUnpack___: elt
+					source: [aBuilder
+						send: #'__getitem__:' to: aSourceBlock value
+						with: { aBuilder obj: i - 1 }]
+					on: aBuilder]
+			ifFalse: [
+				i = starIdx
+					ifTrue: [
+						self ___emitIRForUnpack___: elt value
+							source: [aBuilder
+								send: #'__new__:' to: (aBuilder globalNamed: #list)
+								with: { aBuilder
+									send: #'__getitem__:' to: aSourceBlock value
+									with: { aBuilder
+										send: #'__new__:_:' to: (aBuilder globalNamed: #slice)
+										with: { aBuilder obj: nBefore.
+											self ___emitIRForLengthLess___: nAfter
+												source: aSourceBlock on: aBuilder }
+										env: 1 } }
+								env: 1]
+							on: aBuilder]
+					ifFalse: [
+						self ___emitIRForUnpack___: elt
+							source: [aBuilder
+								send: #'__getitem__:' to: aSourceBlock value
+								with: { self ___emitIRForLengthLess___: nAfter - (i - starIdx - 1)
+									source: aSourceBlock on: aBuilder }]
+							on: aBuilder]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRIteratorFrom___: iterNode on: aBuilder [
+	"The IR twin of ___emitIteratorFrom___:on: -- ``(iter) __iter__'' for a
+	sync loop; AsyncForAst routes through PythonCoroutine ___grailAiter___:."
+
+	^ aBuilder send: #'__iter__' to: iterNode with: { }
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRNextFrom___: iterLeaf on: aBuilder [
+	"The IR twin of ___nextExpressionFor___: -- ``___iterN___ __next__'';
+	AsyncForAst awaits __anext__ through the enclosing coroutine."
+
+	^ aBuilder send: #'__next__' to: (aBuilder var: iterLeaf) with: { }
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRStatementOn___: aBuilder [
+	"printSmalltalkOn:'s exception-based loop for the simple-target, no-else
+	case, shape for shape:
+
+	  [[ ___iterN___ := (iter) __iter__.
+	     [true] whileTrue: [
+	       [ target := ([___iterN___ __next__]
+	             @env0:on: StopIteration
+	             do: [:___dx___ | PythonLoopDrained @env0:___signal___]).
+	         body...
+	       ] @env0:on: PythonContinue do: [:___ex___ | nil].
+	     ].
+	  ] @env0:on: PythonLoopDrained do: [:___ex___ | nil].
+	  ] @env0:on: PythonBreak do: [:___ex___ | nil].
+
+	Only the STEP's own StopIteration means drained (re-signalled as the
+	internal PythonLoopDrained) -- one raised by the body sails past to the
+	caller, exactly as in the text.  The iterator temp is a METHOD temp here
+	(text uses a block temp): the name is depth-unique against nesting, reuse
+	by a sibling loop is safe (assigned before use), and a user local of the
+	same name was excluded by eligibility.  The text path's ___curPos___
+	position stores are omitted -- an IR method derives positions natively
+	from its step points, so the __iter__ / __next__ sends are stamped at the
+	iterable's offset instead."
+
+	| iterTempSym leaf outerBlk |
+	iterTempSym := self ___irIterTempSymbol___.
+	leaf := (aBuilder leafFor: iterTempSym)
+		ifNil: [aBuilder tempNamed: iterTempSym].
+	"THE ITERABLE, not the ``for'' keyword, for the loop's own on:do: sends too.
+	 An iterator-protocol raise is attributed to the ITERATOR EXPRESSION's
+	 column (tests/python/for_traceback_positions.py), and a StopIteration from
+	 a tuple-target step unwinds as far as these outer handlers before the home
+	 frame's ip is taken -- so stamping them at the ``for'' left that frame
+	 pointing at an offset no map entry covers, and it got no columns at all."
+	aBuilder atNode: iter.
+	outerBlk := aBuilder inBlockDo: [
+		| innerBlk |
+		innerBlk := aBuilder inBlockDo: [
+			| condBlk iterationBlk |
+			aBuilder atNode: iter.
+			aBuilder add: (aBuilder assign: leaf
+				from: (self ___emitIRIteratorFrom___: (iter ___emitIRValueOn___: aBuilder)
+					on: aBuilder)).
+			condBlk := aBuilder inBlockDo: [aBuilder add: aBuilder trueLit].
+			iterationBlk := aBuilder inBlockDo: [
+				| bodyBlk |
+				bodyBlk := aBuilder inBlockDo: [
+					| stepBlk drainHandler guarded |
+					stepBlk := aBuilder inBlockDo: [
+						aBuilder atNode: iter.
+						aBuilder add: (self ___emitIRNextFrom___: leaf on: aBuilder)].
+					drainHandler := aBuilder blockWithArg: #'___dx___' do: [:dxLeaf |
+						aBuilder add: (aBuilder
+							send: #'___signal___'
+							to: (aBuilder globalNamed: #PythonLoopDrained)
+							with: { } env: 0)].
+					guarded := aBuilder
+						send: #on:do:
+						to: stepBlk
+						with: { aBuilder globalNamed: self ___irExhaustedExceptionSymbol___.
+							drainHandler }
+						env: 0.
+					aBuilder atNode: target.
+					self ___emitIRTargetBindFrom___: guarded on: aBuilder.
+					body ___emitIRStatementsOn___: aBuilder].
+				aBuilder add: (aBuilder
+					send: #on:do:
+					to: bodyBlk
+					with: { aBuilder globalNamed: #PythonContinue.
+						aBuilder handlerBlockNamed: #'___ex___' }
+					env: 0)].
+			aBuilder add: (aBuilder whileTrue: condBlk do: iterationBlk)].
+		aBuilder add: (aBuilder
+			send: #on:do:
+			to: innerBlk
+			with: { aBuilder globalNamed: #PythonLoopDrained.
+				aBuilder handlerBlockNamed: #'___ex___' }
+			env: 0).
+		"The else clause (cut 68): after a natural drain, inside the PythonBreak
+		handler's block so a break skips it -- the text's placement."
+		(self ___irElseStatements___) do: [:s | s ___emitIRStatementOn___: aBuilder]].
+	aBuilder add: (aBuilder
+		send: #on:do:
+		to: outerBlk
+		with: { aBuilder globalNamed: #PythonBreak.
+			aBuilder handlerBlockNamed: #'___ex___' }
+		env: 0).
+	"Release the iterator once the loop is over, drained or broken out of.
+	 CPython pops it off the value stack at loop exit; a METHOD temp would
+	 otherwise keep it -- and the generator behind it -- alive until the
+	 function returns, so ``for x in agen(): break'' followed by
+	 gc.collect() in the same function could not reclaim the generator
+	 (test_async_gen_asyncio_shutdown_exception_02 expects its finalizer to
+	 have run).  The text path's iterator is a BLOCK temp, which the loop's
+	 own block takes with it."
+	aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRTargetBindFrom___: stepNode on: aBuilder [
+	"Bind the loop target from the drain-guarded step.  A Name: ``target :=
+	step''.  A tuple / list: printSmalltalkOn:'s tuple branch --
+	  ___itemN___ := step.
+	  ___itemN___ := ___itemN___ ___unpackCheck___: n star: b after: m.
+	then one ``name := (src __getitem__: i)'' per leaf, a nested tuple reading
+	its own elements off the parenthesised subscript re-evaluated per leaf
+	(emitUnpackOn:target:source:depth:)."
+
+	| itemSym itemLeaf |
+	(target isKindOf: NameAst) ifTrue: [
+		"``global n; for n in ...'' binds the MODULE each step, not a temp --
+		the same rule and the same store every other module-bound binding
+		form uses.  A leaf would exist for the name anyway (the parser
+		records the loop target as a write), so the plain assign compiles
+		and runs; it just writes the wrong object."
+		(self ___nameStoreRoutesToModule___: target id asSymbol) ifTrue: [
+			"``add:'' IS THE STATEMENT.  The helper BUILDS a node and answers
+			it -- every arm of it is a send:/assign: constructor, because a
+			match capture needs it as an expression -- so a call site that
+			does not append it drops the store.  Here that also dropped
+			stepNode, the drain-guarded fetch of the next item, and the loop
+			never advanced: one SUnit shard spun at 100% CPU for four hours
+			instead of failing."
+			^ aBuilder add: (self ___emitIRModuleScopeStoreOf___: target id asSymbol
+				from: stepNode on: aBuilder)].
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: target id asSymbol) from: stepNode)].
+	itemSym := self ___irItemTempSymbol___.
+	itemLeaf := (aBuilder leafFor: itemSym) ifNil: [aBuilder tempNamed: itemSym].
+	"THE ITERATOR PROTOCOL IS STAMPED AT THE ITERABLE; ONLY THE NAME BINDINGS ARE
+	 STAMPED AT THE TARGET.  The caller stamps ``target'' before calling this,
+	 which is right for the Name branch above -- that statement IS the binding --
+	 and wrong for both statements here: ``___itemN___'' is Grail's own temp.
+
+	 It is also observable.  An iterator-protocol raise must be attributed to the
+	 ITERATOR EXPRESSION's columns (tests/python/for_traceback_positions.py's
+	 tuple_target_span), and with both statements left at the target a
+	 ``for a, b in LateBreak():'' whose __next__ raises reported the TARGET:
+
+	     IR before:  colno 12..16  ``a, b''
+	     IR after:   colno 20..31  ``LateBreak()''   == the text path
+
+	 What the fixture's LateBreak actually raises is the UNPACK of its first
+	 item, the int 1 -- the step that used to be a separate ``normalize'' and is
+	 now the value-count check below, still stamped here.  CPython attributes
+	 that TypeError to the TARGET (colno 12..16), so this span agrees with the
+	 text path but not with CPython (#1583)."
+	aBuilder atNode: iter.
+	aBuilder add: (aBuilder assign: itemLeaf from: stepNode).
+	"The text's value-count check, send for send -- see ___unpackCheckArgs___.
+	It also unpacks an item that is not a sequence through its iterator."
+	self ___emitIRUnpackCheck___: itemLeaf on: aBuilder.
+	aBuilder atNode: target.
+	self ___emitIRForUnpack___: target source: [aBuilder var: itemLeaf] on: aBuilder
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRUnpackCheck___: itemLeaf on: aBuilder [
+	"The IR twin of ___emitUnpackCheckOn:item:, send for send."
+
+	| args |
+	args := self ___unpackCheckArgs___.
+	aBuilder add: (aBuilder assign: itemLeaf from: (aBuilder
+		send: #'___unpackCheck___:star:after:'
+		to: (aBuilder var: itemLeaf)
+		with: { aBuilder obj: (args at: 1).
+			(args at: 2) ifTrue: [aBuilder trueLit] ifFalse: [aBuilder falseLit].
+			aBuilder obj: (args at: 3) }))
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> ___emitIteratorFrom___: iterNode on: aStream [
+	"Emit the expression that turns the iterable into an ITERATOR.  Synchronous
+	iteration sends __iter__ directly; AsyncForAst routes through a runtime
+	helper that also raises CPython's TypeErrors.
+
+	One of three hooks that are the ENTIRE difference between ``for'' and
+	``async for'' -- the protocol differs, while break / continue / for-else /
+	tuple unpacking / the PEP 657 position stores are identical and are shared
+	rather than copied.  Duplicating printSmalltalkOn: for the async case would
+	have forked a hundred lines of loop machinery over three strings, and every
+	later fix to for-else or unpacking would have had to be made twice."
+
+	iterNode printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ' __iter__'
+
+]
+
+{ #category : 'Grail-traceback' }
+ForAst >> ___emitIterPosOn: aStream [
+	"Store this loop's ITERABLE position into ___curPos___, so a traceback frame
+	built while the iterator protocol runs carries PEP 657 columns and the source
+	line rather than just the statement's line.
+
+	CPython attributes an exception raised from a for loop's __init__ / __iter__ /
+	__next__ to the ITERATOR EXPRESSION, not to the whole statement -- which is
+	what test_iter's test_exception_locations checks:
+
+	    f.line[f.colno - indent : f.end_colno - indent] == 'BrokenIter(...)'
+
+	This is the for-statement twin of the wrapper ComprehensionAst already emits
+	for a comprehension's iterable clause, but it needs no handler and no
+	re-raise: TryAst's ___pushCatchingFrame___ already builds the frame from
+	___curPos___, and ___pushFrameFromPos___ already understands the 5-element
+	position array.  So the whole fix is pointing that existing read at a richer
+	value -- no ``on: Exception'' around every loop, which would both cost a
+	per-iteration handler and catch AlmostOutOfStack.
+
+	No-op outside a function (module-level code has no ___curPos___ temp) or when
+	the iterable carries no position -- the same guard ___emitCurPosBefore:on:
+	uses."
+
+	(CallAst functionBeingCompiled isNil or: [iter beginLine isNil])
+		ifTrue: [^ self].
+	self ___emitCurPosStore___: iter ___pyPositionLiteralArray on: aStream
+
+]
+
+{ #category : 'Grail-Code Generation' }
+ForAst >> ___emitUnpackCheckOn: aStream item: itemTemp [
+	"``item := item ___unpackCheck___: n star: b after: m.'' -- assigned back,
+	because with a star the check answers the materialised LIST the elements
+	are then read from.  See ___unpackCheckArgs___."
+
+	| args |
+	args := self ___unpackCheckArgs___.
+	aStream nextPutAll: itemTemp; nextPutAll: ' := '; nextPutAll: itemTemp;
+		nextPutAll: ' ___unpackCheck___: '; nextPutAll: (args at: 1) printString;
+		nextPutAll: ' star: '; nextPutAll: ((args at: 2) ifTrue: ['true'] ifFalse: ['false']);
+		nextPutAll: ' after: '; nextPutAll: (args at: 3) printString;
+		nextPutAll: '.'; lf
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> ___exhaustedExceptionName___ [
+	"The exception that means ``the iterator is drained'', caught on the inner
+	handler so a natural drain runs the else clause while a break skips it.
+	StopAsyncIteration for ``async for''.  See ___iterSelector___."
+
+	^ 'StopIteration'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irEligibleStatementLocals___: localNames [
+	"A for (or, since cut 54, an async for -- the protocol differs in exactly
+	the three IR hooks below, as in the text) with no else clause over a simple
+	local Name target or a tuple / list of them (nested, no star -- see
+	___irForTargetEligible___:).  for-else and module-scope targets stay on text.  A user local
+	named like the iterator or item temp would collide with the method temp
+	this emit registers (text uses a shadowing BLOCK temp), so such a def
+	stays on text too."
+
+	(self class == ForAst or: [self class == AsyncForAst]) ifFalse: [^ false].
+	"An else clause (cut 68) is emittable when its statements are: the text
+	runs it inside the PythonBreak-protected block, after the drain handler."
+	((self ___irElseStatements___) allSatisfy: [:s | s ___irEligibleStatementLocals___: localNames])
+		ifFalse: [^ false].
+	(self ___irForTargetEligible___: localNames) ifFalse: [^ false].
+	(localNames includes: self ___irIterTempSymbol___ asString) ifTrue: [^ false].
+	(iter ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
+	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst]) ifFalse: [^ false].
+	^ body ___irEligibleStatementsWithLocals___: localNames
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irElseStatements___ [
+	"The else clause's statements as a collection -- ``orelse'' is a SuiteAst
+	in a parsed for, an Array in a synthesized one, or nil."
+
+	orelse isNil ifTrue: [^ #()].
+	(orelse isKindOf: SuiteAst) ifTrue: [^ orelse body ifNil: [#()]].
+	^ orelse
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irExhaustedExceptionSymbol___ [
+	"___exhaustedExceptionName___ as the global's Symbol."
+
+	^ #StopIteration
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irFlowBound___: boundIn locals: localSet [
+	"The iterable's reads must be bound; the body walks from boundIn plus the
+	loop target names, which the step store binds before every iteration.  A
+	zero-trip loop binds nothing, so the set after the loop is the set before
+	it."
+
+	| entry bodyOut |
+	(self ___irFlowReadsBound___: iter in: boundIn locals: localSet)
+		ifFalse: [^ nil].
+	entry := boundIn copy.
+	(self ___irTargetNames___: localSet) do: [:n | entry add: n].
+	"Its own breaks are its own (cut 71): collected and discarded, so they do
+	not reach an enclosing ``while True'' loop's collector."
+	AbstractNode ___irCollectBreakSetsDuring___: [
+		bodyOut := body ___irFlowBound___: entry locals: localSet].
+	bodyOut isNil ifTrue: [^ nil].
+	"The else clause (cut 68) runs from what was bound BEFORE the loop (a
+	zero-trip loop still runs it); a break skips it, so nothing it binds is
+	known bound after the statement."
+	(self ___irFlowBoundElse___: boundIn locals: localSet) isNil ifTrue: [^ nil].
+	^ boundIn
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irFlowBoundElse___: boundIn locals: localSet [
+	| bound |
+	bound := boundIn.
+	(self ___irElseStatements___) do: [:s |
+		bound := s ___irFlowBound___: bound locals: localSet.
+		bound isNil ifTrue: [^ nil]].
+	^ bound
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irForTargetEligible___: localNames [
+	"A Store-context local Name, or a tuple / list nest of them -- nested
+	tuples allowed, a STAR not (the text's star shape needs a Smalltalk
+	arithmetic send the IR emit does not yet make) -- with the item temp free."
+
+	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [
+		(self ___irForTupleTargetEligible___: target locals: localNames) ifFalse: [^ false].
+		^ (localNames includes: self ___irItemTempSymbol___ asString) not].
+	(target isKindOf: NameAst) ifFalse: [^ false].
+	((target ctx) isKindOf: StoreAst) ifFalse: [^ false].
+	"...or a name the store routes to the MODULE.  ``global n; for n in ...''
+	binds the module for the whole declaring scope, and the loop's per-step
+	store is the same dynamicInstVarAt:put: every other module-bound binding
+	form uses.  Only the STORE differs; the loop itself is unchanged."
+	^ (localNames includes: target id asString)
+		or: [self ___nameStoreRoutesToModule___: target id asSymbol]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irForTupleTargetEligible___: aTarget locals: localNames [
+	"A nest of Store-context local Names, with AT MOST ONE star per level.
+
+	The star used to refuse -- ``the text's star shape needs a Smalltalk
+	arithmetic send the IR emit does not yet make''.  It makes it now
+	(___emitIRForLengthLess___:source:on:), so a star whose target is an
+	ordinary local is admitted like any other leaf.  More than one star at a
+	level is a SyntaxError CPython rejects at parse time, but this is checked
+	rather than assumed: the emit's index arithmetic is only correct for one."
+
+	| stars |
+	aTarget elts isNil ifTrue: [^ false].
+	stars := aTarget elts inject: 0 into: [:n :e |
+		(e isKindOf: StarredAst) ifTrue: [n + 1] ifFalse: [n]].
+	stars > 1 ifTrue: [^ false].
+	^ aTarget elts allSatisfy: [:e |
+		| t |
+		t := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
+		((t isKindOf: TupleAst) or: [t isKindOf: ListAst])
+			ifTrue: [self ___irForTupleTargetEligible___: t locals: localNames]
+			ifFalse: [(t isKindOf: NameAst)
+				and: [((t ctx) isKindOf: StoreAst)
+				and: [localNames includes: t id asString]]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irItemTempSymbol___ [
+	"The per-depth item temp a tuple target unpacks from, exactly as
+	printSmalltalkOn: derives it (___item0___, ___item1___ nested, ...)."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: ForAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___item' , depth printString , '___') asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irIterTempSymbol___ [
+	"The per-depth iterator temp name, exactly as printSmalltalkOn: derives it
+	(___iter0___, ___iter1___ inside a nested loop, ...)."
+
+	| depth p |
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: ForAst) ifTrue: [depth := depth + 1].
+		p := p parent].
+	^ ('___iter' , depth printString , '___') asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
+	"The body's reads of the loop TARGET names are satisfied by the per-
+	iteration step store, so they impose no bound-before obligation; every
+	other read does.  The target itself contributes no binding visible after
+	the loop (a zero-trip loop leaves it unbound)."
+
+	| sub names |
+	iter ___irReadLocalNamesInto___: aSet locals: localSet.
+	sub := Set new.
+	body ___irReadLocalNamesInto___: sub locals: localSet.
+	names := self ___irTargetNames___: localSet.
+	sub do: [:r | (names includes: r) ifFalse: [aSet add: r]].
+	"The else clause's reads are ordinary reads after the loop (cut 68)."
+	(self ___irElseStatements___) do: [:s | s ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irRefusalDetail___: localSet [
+	self class == ForAst ifFalse: [^ #'ForAst:async'].
+	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [^ #'ForAst:tupleTargetShape'].
+	(target isKindOf: NameAst) ifFalse: [^ ('ForAst:target-' , target class name asString) asSymbol].
+	^ #'ForAst:other'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irTargetNames___: localSet [
+	"The local names the loop target binds each iteration (Strings)."
+
+	| names |
+	names := Set new.
+	self ___irUnpackLeafNamesInto___: names target: target locals: localSet.
+	^ names
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ForAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
+	"Body writes must be pre-bound like any nested write -- except the loop
+	target names, whose write/read pair is self-contained within an iteration."
+
+	| sub names |
+	sub := Set new.
+	body ___irWriteLocalNamesInto___: sub locals: localSet.
+	names := self ___irTargetNames___: localSet.
+	sub do: [:w | (names includes: w) ifFalse: [aSet add: w]].
+	(self ___irElseStatements___) do: [:s | s ___irWriteLocalNamesInto___: aSet locals: localSet].
+	^ self
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> ___nextExpressionFor___: iterTemp [
+	"The Smalltalk expression that advances the iterator by one.  Synchronous
+	iteration sends __next__; AsyncForAst AWAITS __anext__.  See
+	___iterSelector___."
+
+	^ iterTemp , ' __next__'
+
+]
+
+{ #category : 'Grail-Code Generation' }
+ForAst >> ___unpackCheckArgs___ [
+	"{ nBefore. hasStar. nAfter } for this loop's tuple target -- the arguments
+	of ``___unpackCheck___:star:after:'', computed as an assignment computes
+	them (AbstractNode>>emitUnpackCoercionAndStoresOn:elts:holder:).
+
+	A LOOP TARGET IS AN ASSIGNMENT TARGET, and CPython runs the same
+	UNPACK_SEQUENCE for both.  Grail's loop used to index the elements with no
+	count check, so a short item ran off the end with IndexError -- ``for k, v
+	in [('a',)]'' where CPython says ``not enough values to unpack (expected 2,
+	got 1)'' -- and a LONG one was silently truncated where CPython raises
+	``too many values to unpack''.  pickle's _batch_setitems is a real caller:
+	test_pickle's test_bad_object_dict_items asserts the ValueError.  Both
+	codegen paths emit the check, so they still agree with each other."
+
+	| elts starIdx hasStar |
+	elts := target elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	^ Array
+		with: (hasStar ifTrue: [starIdx - 1] ifFalse: [elts size])
+		with: hasStar
+		with: (hasStar ifTrue: [elts size - starIdx] ifFalse: [0])
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> body [
+	^body
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> body: newValue [
+	body := newValue
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> emitForTargetStore: aNameAst source: sourceExpr on: aStream [
+	"Phase A: emit ``target := sourceExpr.'' OR
+	``self @env0:dynamicInstVarAt: #'target' put: sourceExpr.''
+	depending on whether the for-loop target is a module-scope name.
+	sourceExpr is a raw Smalltalk fragment (already evaluated to the
+	next iteration value), not parenthesized — wrap it here when the
+	store needs the value as a keyword-message arg."
+
+	"The target need not be a NAME: ``for h.slot in xs:'',
+	``for d['k'] in xs:'' and ``for [a, b] in xs:'' are all legal Python,
+	and printSmalltalkOn: routes every non-TupleAst target here.  Those
+	shapes used to reach isModuleScopeForTarget:, which sends
+	isModuleVariableName: -- a NameAst-only selector -- and died with a
+	doesNotUnderstand at COMPILE time, taking the enclosing module with
+	it.  Hand them to the shared store emitter."
+	(aNameAst isKindOf: NameAst) ifFalse: [
+		^ self ___emitTargetStore___: aNameAst from: sourceExpr on: aStream].
+
+	(self isModuleScopeForTarget: aNameAst) ifTrue: [
+		aStream
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:dynamicInstVarAt: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: sourceExpr;
+			nextPutAll: ').'; lf.
+		^ self
+	].
+	"A ``for'' at CLASS-BODY level: CPython leaves the loop variable bound on
+	the class when the loop finishes, and there is no block temp to bind here
+	anyway -- ClassDefAst emits the statement straight into the class-build
+	code, where ``i := ...'' is an undefined symbol.  Route it to the same
+	per-class definitional store the body's assignments use."
+	(self isClassBodyRuntimeForTarget: aNameAst) ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: sourceExpr;
+			nextPutAll: ').'; lf.
+		^ self
+	].
+	"The name's own STORE emit, as AssignAst writes ``x = v'', not its bare id:
+	the Smalltalk identifier is not always the Python spelling.  A method that
+	rebinds ``self'' carries it in a ``___self___'' temp, and ``for self in
+	xs'' wrote ``self := ...'' -- the pseudo-variable -- so the method did not
+	compile."
+	aNameAst printSmalltalkOn: aStream.
+	aStream
+		nextPutAll: ' := ';
+		nextPutAll: sourceExpr;
+		nextPut: $.; lf.
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> emitUnpackOn: aStream target: aTarget source: sourceExpr depth: aDepth [
+	"Recursively unpack ``aTarget`` (a NameAst or a nested
+	TupleAst / ListAst) by reading from the parenthesized
+	Smalltalk expression ``sourceExpr``.  For a plain NameAst emit
+	a single assignment; for a tuple-shaped target generate
+	per-element ``__getitem__:`` reads, and recurse for nested
+	tuples by reusing the wrapped subscript expression as the
+	source.  Re-evaluates the subscript per name on each level —
+	acceptable because the source is typically a fast indexable
+	(tuple / list) and the alternative would require declaring
+	fresh outer-block temps after the temp pane has been emitted."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		self emitForTargetStore: aTarget source: sourceExpr on: aStream.
+		^ self
+	].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		| n |
+		n := aTarget elts size.
+		aTarget elts doWithIndex: [:elt :i |
+			| childExpr starIdx |
+			(elt isKindOf: StarredAst) ifTrue: [
+				"PEP 3132 star target — ``for head, *tail in ...''.
+				The starred name takes the middle slice: everything
+				from its position up to len - (elements after it).
+				Emitted as a Python-level slice through __getitem__:
+				with a slice object, so any sequence works."
+				starIdx := i - 1.
+				childExpr := '(___list___ @env1:__new__: (' , sourceExpr ,
+					' __getitem__: (___slice___ @env1:__new__: ' , starIdx printString ,
+					' _: ((' , sourceExpr , ' __len__) @env0:- ' ,
+					(n - i) printString , '))))'.
+				self
+					emitUnpackOn: aStream
+					target: elt value
+					source: childExpr
+					depth: aDepth
+			] ifFalse: [
+				| after |
+				"Elements AFTER a star index from the sequence end."
+				after := (aTarget elts copyFrom: 1 to: i - 1)
+					anySatisfy: [:e | e isKindOf: StarredAst].
+				childExpr := after
+					ifTrue: ['(' , sourceExpr , ' __getitem__: ((' ,
+						sourceExpr , ' __len__) @env0:- ' ,
+						(n - i + 1) printString , '))']
+					ifFalse: ['(' , sourceExpr , ' __getitem__: ' ,
+						(i - 1) printString , ')'].
+				self
+					emitUnpackOn: aStream
+					target: elt
+					source: childExpr
+					depth: aDepth
+			]
+		].
+		^ self
+	].
+	"Attribute / subscript target -- ``for h.slot in xs:'' and
+	``for d['k'] in xs:'' are legal Python.  This used to emit the target
+	via its own printSmalltalkOn:, which asserts a LOAD context and so
+	raised ``Expression Context should be <Load> but is <Store>'' at
+	compile time, taking the whole enclosing module down.  Route it to the
+	shared store emitter instead, the same one AssignAst and WithAst use."
+	self ___emitTargetStore___: aTarget from: sourceExpr on: aStream.
+	aStream lf
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> isClassBodyRuntimeForTarget: aNameAst [
+	"True when this for-loop target is bound directly by a class body that
+	ClassDefAst is emitting verbatim -- see CallAst >> classBodyRuntimeClass."
+
+	(aNameAst isKindOf: NameAst) ifFalse: [^ false].
+	^ self ___inClassBodyRuntimeScope___
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> isModuleScopeForTarget: aNameAst [
+	"True if this for-loop target is a module-scope name: we're
+	compiling inside a module body (no enclosing user class method),
+	the name is declared in the module body's scope, and no
+	enclosing function shadows it."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global x'' in the nearest enclosing function forces the module
+	route -- even inside a class method (the emitters pick the module-
+	instance receiver via ___moduleStoreReceiverExpr___) and past any
+	enclosing-function shadow (Python: the declaration binds the name
+	to the module for the whole declaring scope)."
+	(aNameAst ___nearestEnclosingFunctionDeclaresGlobal___: aNameAst id)
+		ifTrue: [^ true].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
+	"PRECISE local-shadow check (writes + params; comprehension targets
+	and global-declared names excluded) -- not the over-approximating
+	___declaredInEnclosingFunction___: variables walk."
+	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
+	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> iter [
+	^iter
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> iter: newValue [
+	iter := newValue
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> orelse [
+	^orelse
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> orelse: newValue [
+	orelse := newValue
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> printSmalltalkOn: aStream [
+	"Generate: for target in iter: body [else: else_body]
+
+	Translates to:
+	  [
+	   [| ___iter___ |
+	    ___iter___ := iter __iter__.
+	    [true] whileTrue: [
+	      [target := ___iter___ __next__. body]
+	          @env0:on: PythonContinue do: [...].
+	    ].
+	   ] @env0:on: StopIteration do: [:___ex___ | nil].
+	   else_body.   ""only runs when the loop drained naturally""
+	  ] @env0:on: PythonBreak do: [:___ex___ | nil].
+
+	Python ``for-else`` requires the else clause to execute ONLY
+	when the loop drains naturally — ``break`` must skip it.  Catch
+	StopIteration (natural end) on the INNER handler, let
+	PythonBreak propagate through it to an OUTER handler that wraps
+	BOTH the loop and the else clause; the outer handler catches
+	the break and the else clause never runs.
+
+	For tuple unpacking (for a, b in items), uses a temp ___item___
+	and unpacks with __getitem__:."
+
+	| isTupleTarget depth iterTemp itemTemp p hasElse |
+	isTupleTarget := target isKindOf: TupleAst.
+	hasElse := orelse notNil and: [orelse size > 0].
+
+	"Walk the AST parent chain to count enclosing ForAst nodes — depth
+	is used to disambiguate `___iter___` / `___item___` temp names from
+	any outer for-loop, since Smalltalk block temps in nested scopes
+	cannot shadow the outer block's temps."
+	depth := 0.
+	p := parent.
+	[p notNil] whileTrue: [
+		(p isKindOf: ForAst) ifTrue: [depth := depth + 1].
+		p := p parent.
+	].
+	iterTemp := '___iter' , depth printString , '___'.
+	itemTemp := '___item' , depth printString , '___'.
+
+	"Outer PythonBreak handler — wraps the iteration AND the else
+	clause so a ``break`` from the body skips both."
+	aStream nextPutAll: '['; lf; increaseIndent.
+
+	"Inner StopIteration handler block"
+	aStream nextPutAll: '[| '; nextPutAll: iterTemp.
+	isTupleTarget ifTrue: [aStream space; nextPutAll: itemTemp].
+	aStream nextPutAll: ' |'; lf; increaseIndent.
+
+	"iter := iterable __iter__.  Preceded by a PEP 657 position store so an
+	exception from EVALUATING the iterable (``for x in BrokenIter(init_raises=
+	True)'') or from its __iter__ is reported at the iterable expression."
+	self ___emitIterPosOn: aStream.
+	aStream nextPutAll: iterTemp; nextPutAll: ' := '.
+	self ___emitIteratorFrom___: iter on: aStream.
+	aStream nextPutAll: '.'; lf.
+
+	"[true] whileTrue: ["
+	aStream nextPutAll: '[true] whileTrue: ['; lf; increaseIndent.
+
+	"Per-iteration block: wrap in a PythonContinue handler so `continue`
+	cleanly skips to the next iteration."
+	aStream nextPutAll: '['; lf; increaseIndent.
+
+	"Re-point ___curPos___ at the iterable before EVERY __next__: the body's own
+	statements overwrite it as they run, so without this an exception from
+	__next__ on the second or later iteration would be reported at whatever body
+	statement ran last.  Costs one pointer store per iteration (literal array)."
+	self ___emitIterPosOn: aStream.
+
+	"Assign next item to target"
+	isTupleTarget ifTrue: [
+		"Tuple unpacking: item := iter __next__ (drain-guarded), then
+		CHECKED as an assignment checks it (see ___unpackCheckArgs___): the
+		per-element reads below go through __getitem__:, and CPython's
+		UNPACK_SEQUENCE is defined by ITERATION, so an item that is not a
+		sequence is unpacked through its iterator by the check, which
+		answers a list of exactly the values.  That is where its errors must
+		come from: ``async for i, j in badpairs()'' with an item whose
+		__iter__ raises StopAsyncIteration(42) has to surface exactly that
+		(test_coroutines' test_for_assign_raising_stop_async_iteration_2)
+		-- and a DICT item unpacks to its KEYS, as upstream.  The item used
+		to be materialised by PythonCoroutine ___unpackNormalize___: first,
+		which read ALL of an iterator item and answered ``'int' object is
+		not iterable'' where CPython says ``cannot unpack non-iterable int
+		object''."
+		aStream nextPutAll: itemTemp; nextPutAll: ' := ';
+			nextPutAll: (self ___drainGuardedStepFor___: iterTemp); nextPutAll: '.'; lf.
+		self ___emitUnpackCheckOn: aStream item: itemTemp.
+		"Unpack each element, recursing into nested tuples like
+		``for target, (action, param) in items``."
+		self
+			emitUnpackOn: aStream
+			target: target
+			source: itemTemp
+			depth: depth.
+	] ifFalse: [
+		"Simple: target := iter __next__.  Phase A: when the target is
+		a module-scope name (declared in body variables, not shadowed
+		by an enclosing function), route the per-iteration binding
+		through the module instance's dynamic-instVar storage.
+
+		The step is drain-guarded but the STORE is not: a subscript or
+		attribute target whose store raises the exhaustion exception must
+		propagate it, not end the loop (test_for_assign_raising_stop_...)."
+		self
+			emitForTargetStore: target
+			source: (self ___drainGuardedStepFor___: iterTemp)
+			on: aStream.
+	].
+
+	"Body"
+	body printSmalltalkOn: aStream.
+
+	"Close per-iteration block + continue handler"
+	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonContinue do: [:___ex___ | nil].'; lf.
+
+	"Close whileTrue:"
+	aStream decreaseIndent; nextPutAll: '].'; lf.
+
+	"Close inner block with the DRAIN handler only — PythonBreak propagates
+	past this handler so the else clause is skipped.  PythonLoopDrained
+	rather than StopIteration: only the STEP's exhaustion (re-signalled by
+	___drainGuardedStepFor___:) ends the loop; a StopIteration raised by the
+	iterable's __iter__, the target store, or the body propagates to the
+	caller, as CPython's does."
+	aStream decreaseIndent;
+		nextPutAll: '] @env0:on: PythonLoopDrained do: [:___ex___ | nil].'; lf.
+
+	"Else clause — runs only after a natural loop drain."
+	hasElse ifTrue: [
+		orelse printSmalltalkOn: aStream.
+		aStream lf.
+	].
+
+	"Close outer block with PythonBreak handler."
+	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> target [
+	^target
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> target: newValue [
+	target := newValue
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> type_comment [
+	^type_comment
+
+]
+
+{ #category : 'Grail-code generation' }
+ForAst >> type_comment: newValue [
+	type_comment := newValue
+
+]

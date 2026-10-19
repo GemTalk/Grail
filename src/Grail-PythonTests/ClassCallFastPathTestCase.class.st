@@ -1,0 +1,563 @@
+Class {
+	#name : 'ClassCallFastPathTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Helpers' }
+ClassCallFastPathTestCase >> callAstFor: pythonExpression [
+	"Parse `pythonExpression` (a single Python expression statement) and
+	return its CallAst.  Split out of generatedSourceFor: so a test can
+	drive one emitter method directly instead of going through
+	printSmalltalkOn:'s whole dispatch chain."
+
+	| modAst stmts |
+	modAst := ModuleAst parseSource: pythonExpression , (String with: Character lf).
+	"BlockAst's `body` instVar is the statement list (no public getter)."
+	stmts := modAst body instVarAt:
+		(modAst body class allInstVarNames indexOf: #'body').
+	"First statement is an ExprAst-like wrapper; its `value` is the call."
+	^ stmts first value
+
+]
+
+{ #category : 'Grail-Helpers' }
+ClassCallFastPathTestCase >> generatedSourceFor: pythonExpression [
+	"Parse `pythonExpression` (a single Python expression statement),
+	walk to the CallAst, and return the Smalltalk source that
+	`printSmalltalkOn:` emits for it. Used by codegen tests so they can
+	assert against the exact emitted form."
+
+	| sb |
+	sb := WriteStream on: String new.
+	(self callAstFor: pythonExpression) printSmalltalkOn: sb.
+	^ sb contents
+
+]
+
+{ #category : 'Grail-Tests - Discriminators' }
+ClassCallFastPathTestCase >> testClassNewSelectorForArity [
+	"Selector convention: 0 args → #__new__, 1 arg → #__new__:,
+	N args → #__new__: with (N-1) trailing `_:` keywords."
+
+	self assert: (CallAst classNewSelectorForArity: 0) equals: #__new__.
+	self assert: (CallAst classNewSelectorForArity: 1) equals: #'__new__:'.
+	self assert: (CallAst classNewSelectorForArity: 2) equals: #'__new__:_:'.
+	self assert: (CallAst classNewSelectorForArity: 3) equals: #'__new__:_:_:'
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testCodegenArityMismatchEmitsTypeError [
+	"`slice(1, 2, 3, 4)` has no matching `__new__:_:_:_:` on slice and no
+	varargs `_new:kw:` either, so the codegen emits a TypeError-raising
+	expression instead of falling through to the broken legacy
+	`slice value: { ... } value: nil` form.
+
+	This used `bool(1, 2, 3, 4)`.  A class WITH a varargs `_new:kw:` -- bool
+	has one -- now takes the runtime call instead, because that entry accepts
+	any arity (CallAst >> knownClassName), and bool's answers CPython's own
+	``bool expected at most 1 argument, got 4''; see
+	testVarargsClassCallReachesItsOwnArityMessage."
+
+	| src |
+	src := self generatedSourceFor: 'slice(1, 2, 3, 4)'.
+	self assert: (src includesString: 'TypeError ___signal___:').
+	self assert: (src includesString: 'slice()').
+	self deny: (src includesString: 'value: { ')
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testCodegenBoolOneArg [
+	"`bool(1)` emits `(bool @env1:___truthOf___: arg)`, NOT the `__new__:`
+	every other class gets.  A one-argument `__new__:` on Boolean is
+	ambiguous: CPython's `bool.__new__(bool)` allocation form passes the
+	target class as its first positional, so `bool(bool)` (True -- types
+	are always truthy) and `bool.__new__(bool)` (False) would compile to
+	the identical send.  Routing the CALL SITE to ___truthOf___: leaves
+	`__new__:` to mean allocation."
+
+	| src |
+	src := self generatedSourceFor: 'bool(1)'.
+	self assert: (src includesString: 'bool @env1:___truthOf___: ').
+	self deny: (src includesString: '__new__').
+	self deny: (src includesString: 'value: { ').
+	self deny: (src includesString: 'value: nil')
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testCodegenBuiltinsFastPathTakesPrecedence [
+	"A name builtins publishes a fast-path method for must keep going through
+	the builtins instance; the class-call fast path must not steal it.
+
+	``str(42)'' used to be this test's example and no longer can be: builtins
+	>>str: was REMOVED so that the bare name ``str'' resolves to the class
+	rather than a BoundMethod wrapper (``type('a') is str'' was false, and
+	dir(str) described a function).  ``repr'' is the same shape and still has
+	its fast path, so it pins the precedence rule the test is actually about.
+	testCodegenStrIsAClassCall below pins what str does now, so the pair covers
+	both sides of the boundary."
+
+	| src |
+	src := self generatedSourceFor: 'repr(42)'.
+	self assert: (src includesString: '#builtins) @env0:___instance___').
+	self assert: (src includesString: 'repr: ').
+	self deny: (src includesString: '@env1:__new__')
+
+]
+
+{ #category : 'Grail-Tests - Discriminators' }
+ClassCallFastPathTestCase >> testCodegenForInheritedNew [
+	"`set` inherits __new__ from Set (its GemStone superclass — set
+	and frozenset are siblings under Set, where the shared class-side
+	__new__/__new__: constructors live). The discriminator walks the
+	metaclass chain so the inherited selector is detected; direct
+	method-dict lookup on `set class` would miss it. Verify codegen
+	by checking the emitted source — if the discriminator misses
+	inherited methods, codegen falls through to the legacy
+	`value:value:` form."
+
+	| src |
+	src := self generatedSourceFor: 'set([1])'.
+	self assert: (src includesString: 'set @env1:__new__:').
+	self deny: (src includesString: 'value: { ')
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testCodegenIntTwoArg [
+	"int( ff , 16) emits (int @env1:__new__: 'ff' _: 16) because
+	Integer has class-side `__new__: obj _: base` in env 1."
+
+	| src |
+	src := self generatedSourceFor: 'int("ff", 16)'.
+	self assert: (src includesString: 'int @env1:__new__: ').
+	self assert: (src includesString: ' _: ')
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testCodegenObjectZeroArg [
+	"`object()` emits the no-colon form `(object @env1:__new__)`."
+
+	| src |
+	src := self generatedSourceFor: 'object()'.
+	self assert: (src includesString: 'object @env1:__new__').
+	self deny: (src includesString: '__new__:')
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testCodegenStrIsAClassCall [
+	"``str(42)'' is ordinary class instantiation now that builtins>>str: is
+	gone -- the same shape ``int(x)'' and ``list(x)'' have always had.  Pins the
+	codegen half of that change; BuiltinsTestCase>>testStr pins the runtime
+	half (str IS the string type, and builtins>>str: stays removed)."
+
+	| src |
+	src := self generatedSourceFor: 'str(42)'.
+	self assert: (src includesString: '@env1:__new__').
+	self deny: (src includesString: 'instance) str: ')
+
+]
+
+{ #category : 'Grail-Tests - Codegen' }
+ClassCallFastPathTestCase >> testEmitterHonorsChosenSelector [
+	"printBareCallClassNewOn:selector: must EMIT the selector it is handed.
+
+	It used to ignore the argument entirely and hard-code ``__new__'',
+	which is a silent contract violation: bareCallClassNewSelector could
+	return any selector it liked and codegen would emit __new__ anyway,
+	with no error anywhere -- the only symptom was the generated source
+	being subtly wrong.  That is how the bool routing below first failed.
+
+	Drive the emitter directly with a selector no class-call would
+	otherwise produce, so this pins the contract independently of which
+	selectors bareCallClassNewSelector currently chooses."
+
+	| ast stream |
+	ast := self callAstFor: 'object(1, 2)'.
+	stream := WriteStream on: String new.
+	ast printBareCallClassNewOn: stream selector: #'___probeSelector___:_:'.
+	self assert: (stream contents includesString: '@env1:___probeSelector___:')
+		description: 'emitter ignored its selector argument: ' , stream contents.
+	self deny: (stream contents includesString: '__new__')
+		description: 'emitter still hard-codes __new__: ' , stream contents.
+	"The arity tail is built from the argument list, not from the
+	selector, so only the BASE name comes from the selector."
+	self assert: (stream contents includesString: ' _: ')
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalBareDecimalNoLongerNamesAKernelClass [
+	"``Decimal'' is not a Python built-in name any more.
+
+	REPLACES testEvalDecimalOfString and testEvalDecimalOfInteger, which
+	asserted the opposite and passed only because install.gs bound the name:
+
+	  was:  (self eval: 'Decimal(''123.45'')') isKindOf: ScaledDecimal -- true
+	        (self eval: 'Decimal(42)')         isKindOf: ScaledDecimal -- true
+	  now:  both are a NameError, because decimal.Decimal is CPython's own
+	        class and reaching it takes ``from decimal import Decimal''
+
+	This is the point of dropping the binding, not a casualty of it: two
+	unrelated classes cannot both answer to one name.  Asserted as a raise
+	rather than deleted so that a future re-binding of the name breaks a
+	test instead of quietly reviving the ambiguity.
+
+	Asserted with an explicit on:do: rather than should:raise: because
+	PythonTestCase>>runCase and >>performTest wrap the test in
+	``on: BaseException do: [:ex | Error signal: ex description]'' to keep a
+	Python exception from taking a whole shard down, and a NameError reaching
+	should:raise: through that bridge errored with ``a SmallDouble does not
+	understand #self'' -- measured: the two statements pass when driven
+	directly and fail under runCase.  Catching the class and asserting a
+	marker sidesteps the interaction and says exactly which clause matched."
+
+	| viaString viaInteger |
+	viaString := [self eval: 'Decimal("123.45")'. 'NO-RAISE']
+		on: NameError do: [:ex | 'NameError'].
+	viaInteger := [self eval: 'Decimal(42)'. 'NO-RAISE']
+		on: NameError do: [:ex | 'NameError'].
+	self assert: viaString equals: 'NameError'.
+	self assert: viaInteger equals: 'NameError'
+
+]
+
+{ #category : 'Grail-Tests - Runtime' }
+ClassCallFastPathTestCase >> testEvalBoolOfFalsyValues [
+	"bool(x) for falsy values returns False."
+
+	self assert: (self eval: 'bool(0)') equals: false.
+	self assert: (self eval: 'bool("")') equals: false
+
+]
+
+{ #category : 'Grail-Tests - Runtime' }
+ClassCallFastPathTestCase >> testEvalBoolOfTruthyValues [
+	"bool(x) for truthy values returns True."
+
+	self assert: (self eval: 'bool(1)') equals: true.
+	self assert: (self eval: 'bool("x")') equals: true.
+	self assert: (self eval: 'bool(42)') equals: true
+
+]
+
+{ #category : 'Grail-Tests - Negative' }
+ClassCallFastPathTestCase >> testEvalBoolWrongArityRaisesTypeError [
+	"`bool(1, 2)` raises Python TypeError instead of MessageNotUnderstood
+	(Boolean class doesn't understand value:value:)."
+
+	self should: [self eval: 'bool(1, 2)'] raise: TypeError
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalBytearrayEmpty [
+	"bytearray() returns an empty bytearray."
+
+	| b |
+	b := self eval: 'bytearray()'.
+	self assert: b size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalBytesEmpty [
+	"bytes() returns an empty ByteArray."
+
+	| b |
+	b := self eval: 'bytes()'.
+	self assert: (b isKindOf: ByteArray).
+	self assert: b size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalBytesFromInteger [
+	"bytes(5) creates 5 zero bytes."
+
+	| b |
+	b := self eval: 'bytes(5)'.
+	self assert: b size equals: 5.
+	self assert: (b at: 1) equals: 0.
+	self assert: (b at: 5) equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalDictEmpty [
+	"dict() returns an empty dict."
+
+	| d |
+	d := self eval: 'dict()'.
+	self assert: (d isKindOf: KeyValueDictionary).
+	self assert: d size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalDictFromMapping [
+	"dict({'a': 1, 'b': 2}) copies entries from another mapping."
+
+	| d |
+	d := self eval: 'dict({"a": 1, "b": 2})'.
+	self assert: (d isKindOf: KeyValueDictionary).
+	self assert: d size equals: 2.
+	self assert: (d at: 'a') equals: 1.
+	self assert: (d at: 'b') equals: 2
+
+]
+
+{ #category : 'Grail-Tests - Runtime' }
+ClassCallFastPathTestCase >> testEvalFloatOfString [
+	"float('3.14') parses the string and returns the float."
+
+	self assert: ((self eval: 'float("3.14")') - 3.14) abs < 0.0001
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalFrozensetEmpty [
+	"frozenset() returns an empty Set."
+
+	| s |
+	s := self eval: 'frozenset()'.
+	self assert: (s isKindOf: Set).
+	self assert: s size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalFrozensetFromList [
+	"frozenset([1, 2, 2, 3]) deduplicates and produces a 3-element Set."
+
+	| s |
+	s := self eval: 'frozenset([1, 2, 2, 3])'.
+	self assert: s size equals: 3.
+	self assert: (s includes: 1).
+	self assert: (s includes: 2).
+	self assert: (s includes: 3)
+
+]
+
+{ #category : 'Grail-Tests - Runtime' }
+ClassCallFastPathTestCase >> testEvalIntOfStringDecimal [
+	"int('123') parses the decimal string and returns 123."
+
+	self assert: (self eval: 'int("123")') equals: 123.
+	self assert: (self eval: 'int("0")') equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalListEmpty [
+	"list() returns an empty list."
+
+	| lst |
+	lst := self eval: 'list()'.
+	self assert: (lst isKindOf: OrderedCollection).
+	self assert: lst size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalListFromString [
+	"list('abc') builds a list of single-char strings, using the
+	generic iterable protocol (CharacterCollection iterates as chars)."
+
+	| lst |
+	lst := self eval: 'list("abc")'.
+	self assert: lst size equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalListFromTuple [
+	"list((1, 2, 3)) builds a list from the tuple's elements."
+
+	| lst |
+	lst := self eval: 'list((1, 2, 3))'.
+	self assert: lst size equals: 3.
+	self assert: (lst at: 1) equals: 1.
+	self assert: (lst at: 2) equals: 2.
+	self assert: (lst at: 3) equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Runtime' }
+ClassCallFastPathTestCase >> testEvalObjectZeroArg [
+	"object() returns a fresh Object instance."
+
+	| result |
+	result := self eval: 'object()'.
+	self assert: result notNil.
+	self assert: (result isKindOf: Object)
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalRangeOneArg [
+	"range(stop) creates an Interval from 0 to stop-1. After refactor
+	`__new__: stop` is on Interval class without a leading cls arg."
+
+	| r |
+	r := self eval: 'range(5)'.
+	self assert: (r isKindOf: Interval).
+	self assert: r size equals: 5.
+	self assert: r first equals: 0.
+	self assert: r last equals: 4
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalRangeThreeArgs [
+	"range(start, stop, step) creates an Interval with explicit step."
+
+	| r |
+	r := self eval: 'range(0, 10, 2)'.
+	self assert: r size equals: 5.
+	self assert: r first equals: 0.
+	self assert: r last equals: 8
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Group A refactor' }
+ClassCallFastPathTestCase >> testEvalRangeTwoArgs [
+	"range(start, stop) creates an Interval from start to stop-1."
+
+	| r |
+	r := self eval: 'range(2, 7)'.
+	self assert: r size equals: 5.
+	self assert: r first equals: 2.
+	self assert: r last equals: 6
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalSetEmpty [
+	"set() returns an empty set (subclass of frozenset)."
+
+	| s |
+	s := self eval: 'set()'.
+	self assert: (s isKindOf: Set).
+	self assert: s size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalSetFromList [
+	"set([1, 2, 2, 3]) deduplicates. Inherits __new__ from Set (where
+	shared set/frozenset class-side constructors live) but creates a
+	`set` (mutable) instance because the receiver is set."
+
+	| s |
+	s := self eval: 'set([1, 2, 2, 3])'.
+	self assert: s size equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Runtime' }
+ClassCallFastPathTestCase >> testEvalStrUnaffected [
+	"str(42) still works (it routes through the builtins fast path).
+	Regression check: my class-call addition must not break this."
+
+	self assert: (self eval: 'str(42)') equals: '42'.
+	self assert: (self eval: 'str(True)') equals: 'True'
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalTupleEmpty [
+	"tuple() returns an empty tuple of size 0."
+
+	| t |
+	t := self eval: 'tuple()'.
+	self assert: (t isKindOf: tuple).
+	self assert: t size equals: 0
+
+]
+
+{ #category : 'Grail-Tests - Runtime - Collection __new__' }
+ClassCallFastPathTestCase >> testEvalTupleFromList [
+	"tuple([1, 2, 3]) builds a tuple from the list's elements."
+
+	| t |
+	t := self eval: 'tuple([1, 2, 3])'.
+	self assert: (t isKindOf: tuple).
+	self assert: t size equals: 3.
+	self assert: (t at: 1) equals: 1.
+	self assert: (t at: 3) equals: 3
+
+]
+
+{ #category : 'Grail-Tests - Discriminators' }
+ClassCallFastPathTestCase >> testResolveClassForNameMapsToGemStoneClass [
+	"`Python at: #bool` resolves to Boolean; `int` to Integer; `object`
+	to Object. resolveClassForName: returns these classes for the
+	class-call fast path discriminator."
+
+	self assert: (CallAst resolveClassForName: #bool) equals: Boolean.
+	self assert: (CallAst resolveClassForName: #int) equals: Integer.
+	self assert: (CallAst resolveClassForName: #float) equals: Float.
+	self assert: (CallAst resolveClassForName: #object) equals: Object
+
+]
+
+{ #category : 'Grail-Tests - Discriminators' }
+ClassCallFastPathTestCase >> testResolveClassForNameRejectsModuleSubclasses [
+	"Module subclasses (`builtins`, `math`, etc.) have their own dispatch
+	paths and must NOT be returned as class-call candidates — otherwise
+	`math(x)` would shadow the module-call fast path."
+
+	self assert: (CallAst resolveClassForName: #builtins) equals: nil.
+	self assert: (CallAst resolveClassForName: #math) equals: nil
+
+]
+
+{ #category : 'Grail-Tests - Discriminators' }
+ClassCallFastPathTestCase >> testResolveClassForNameReturnsNilForNonClassEntries [
+	"`Python at: #True` is the boolean `true` (not a class); `None` is
+	`nil`; an unknown name is absent. All return nil."
+
+	self assert: (CallAst resolveClassForName: #True) equals: nil.
+	self assert: (CallAst resolveClassForName: #None) equals: nil.
+	self assert: (CallAst resolveClassForName: #thisNameDoesNotExist) equals: nil
+
+]
+
+{ #category : 'Grail-Tests - Negative' }
+ClassCallFastPathTestCase >> testShadowedNameSkipsFastPath [
+	"If a local rebinds `bool`, `bool(x)` resolves to the local — the
+	fast path must not fire. `bool = 5; bool(1)` should attempt to call
+	the integer 5, which fails with a runtime error (not a TypeError
+	from the arity-mismatch branch and not the @env1:__new__ form)."
+
+	"The local rebinding produces a non-class call.  Calling the
+	integer now raises the CPython TypeError ('SmallInteger object is
+	not callable' via object>>value:value:) -- previously it escaped
+	as a raw Smalltalk error, which is what this test used to assert."
+	self should: [self eval: 'bool = 5
+result = bool(1)']
+		raise: TypeError
+
+]
+
+{ #category : 'Grail-Tests' }
+ClassCallFastPathTestCase >> testVarargsClassCallReachesItsOwnArityMessage [
+	"A class whose metaclass answers a varargs `_new:kw:` is not an arity
+	mismatch at compile time: the call is emitted as the runtime class call,
+	which hands `_new:kw:` the arity its fixed forms lack.  So `bool(1, 2, 3,
+	4)` raises bool's own message, which is CPython's, and an exception takes
+	any number of arguments, as CPython's BaseException does."
+
+	| src |
+	src := self generatedSourceFor: 'bool(1, 2, 3, 4)'.
+	self deny: (src includesString: 'takes wrong number of arguments').
+	src := self generatedSourceFor: 'ValueError(1, 2, 3, 4)'.
+	self deny: (src includesString: 'takes wrong number of arguments')
+
+]

@@ -1,0 +1,1716 @@
+Class {
+	#name : 'PythonParserTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-helpers' }
+PythonParserTestCase >> fieldOf: anObject named: aSymbol [
+	"Access an instance variable by name using reflection."
+
+	| varNames index |
+	varNames := anObject class allInstVarNames.
+	index := varNames indexOf: aSymbol.
+	index > 0 ifTrue: [^anObject instVarAt: index].
+	^nil
+
+]
+
+{ #category : 'Grail-helpers' }
+PythonParserTestCase >> firstExprValue: aString [
+	"Parse source and return the value of the first ExprAst statement."
+
+	| stmt |
+	stmt := self firstStatement: aString.
+	^self fieldOf: stmt named: #value
+
+]
+
+{ #category : 'Grail-helpers' }
+PythonParserTestCase >> firstStatement: aString [
+	"Parse source and return the first statement from the module body."
+
+	| module body |
+	module := self parse: aString.
+	body := module body body.
+	^body first
+
+]
+
+{ #category : 'Grail-helpers' }
+PythonParserTestCase >> parse: aString [
+
+	^PythonParser parse: aString
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_addition [
+	"Parse addition."
+
+	| expr |
+	expr := self firstExprValue: '1 + 2'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: AddAst).
+	self assert: ((self fieldOf: expr named: #left) isKindOf: ConstantAst).
+	self assert: ((self fieldOf: expr named: #right) isKindOf: ConstantAst).
+
+]
+
+{ #category : 'Grail-tests - boolean ops' }
+PythonParserTestCase >> test_and [
+	"Parse 'and' expression."
+
+	| expr |
+	expr := self firstExprValue: 'x and y'.
+	self assert: (expr isKindOf: AndAst).
+	self assert: (self fieldOf: expr named: #values) size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_annotated_assignment [
+	"Parse annotated assignment: x: int = 1."
+
+	| stmt |
+	stmt := self firstStatement: 'x: int = 1'.
+	self assert: (stmt isKindOf: AnnAssignAst).
+	self assert: ((self fieldOf: stmt named: #annotation) isKindOf: NameAst).
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_assert [
+	"Parse assert statement."
+
+	| stmt |
+	stmt := self firstStatement: 'assert x > 0'.
+	self assert: (stmt isKindOf: AssertAst).
+	self assert: (self fieldOf: stmt named: #test) notNil.
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_assert_with_message [
+	"Parse assert with message."
+
+	| stmt |
+	stmt := self firstStatement: 'assert x > 0, "must be positive"'.
+	self assert: (stmt isKindOf: AssertAst).
+	self assert: (self fieldOf: stmt named: #msg) notNil.
+
+]
+
+{ #category : 'Grail-tests - async' }
+PythonParserTestCase >> test_async_function [
+	"Parse async function definition."
+
+	| stmt |
+	stmt := self firstStatement: 'async def foo():
+    pass'.
+	self assert: (stmt isKindOf: AsyncFunctionDefAst).
+
+]
+
+{ #category : 'Grail-tests - attribute' }
+PythonParserTestCase >> test_attribute_access [
+	"Parse attribute access: a.b."
+
+	| expr |
+	expr := self firstExprValue: 'a.b'.
+	self assert: (expr isKindOf: AttributeAst).
+	self assert: (self fieldOf: expr named: #attr) equals: #b.
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_augmented_assignment [
+	"Parse augmented assignment: x += 1."
+
+	| stmt |
+	stmt := self firstStatement: 'x += 1'.
+	self assert: (stmt isKindOf: AugAssignAst).
+	self assert: ((self fieldOf: stmt named: #op) isKindOf: AddAst).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_bitwise_and [
+	"Parse bitwise AND."
+
+	| expr |
+	expr := self firstExprValue: '1 & 2'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: BitAndAst).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_bitwise_or [
+	"Parse bitwise OR."
+
+	| expr |
+	expr := self firstExprValue: '1 | 2'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: BitOrAst).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_bitwise_xor [
+	"Parse bitwise XOR."
+
+	| expr |
+	expr := self firstExprValue: '1 ^ 2'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: BitXorAst).
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_break [
+	"Parse break statement."
+
+	| stmt |
+	stmt := self firstStatement: 'break'.
+	self assert: (stmt isKindOf: BreakAst).
+
+]
+
+{ #category : 'Grail-tests - calls' }
+PythonParserTestCase >> test_call_double_star_kwargs [
+	"Parse function call with **kwargs: f(**kwargs)."
+
+	| expr kw |
+	expr := self firstExprValue: 'f(**kwargs)'.
+	self assert: (expr isKindOf: CallAst).
+	kw := self fieldOf: expr named: #keywords.
+	self assert: kw size equals: 1.
+	self assert: (self fieldOf: kw first named: #arg) isNil.
+
+]
+
+{ #category : 'Grail-tests - calls' }
+PythonParserTestCase >> test_call_keyword_args [
+	"Parse function call with keyword args: f(x=1, y=2)."
+
+	| expr |
+	expr := self firstExprValue: 'f(x=1, y=2)'.
+	self assert: (expr isKindOf: CallAst).
+	self assert: (self fieldOf: expr named: #keywords) size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - calls' }
+PythonParserTestCase >> test_call_no_args [
+	"Parse function call with no args: f()."
+
+	| expr |
+	expr := self firstExprValue: 'f()'.
+	self assert: (expr isKindOf: CallAst).
+	self assert: (self fieldOf: expr named: #arguments) isEmpty.
+	self assert: (self fieldOf: expr named: #keywords) isEmpty.
+
+]
+
+{ #category : 'Grail-tests - calls' }
+PythonParserTestCase >> test_call_positional_args [
+	"Parse function call with positional args: f(1, 2, 3)."
+
+	| expr |
+	expr := self firstExprValue: 'f(1, 2, 3)'.
+	self assert: (expr isKindOf: CallAst).
+	self assert: (self fieldOf: expr named: #arguments) size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - calls' }
+PythonParserTestCase >> test_call_star_args [
+	"Parse function call with *args: f(*args)."
+
+	| expr args |
+	expr := self firstExprValue: 'f(*args)'.
+	self assert: (expr isKindOf: CallAst).
+	args := self fieldOf: expr named: #arguments.
+	self assert: args size equals: 1.
+	self assert: (args first isKindOf: StarredAst).
+
+]
+
+{ #category : 'Grail-tests - boolean ops' }
+PythonParserTestCase >> test_chained_and [
+	"Parse chained 'and': x and y and z."
+
+	| expr |
+	expr := self firstExprValue: 'x and y and z'.
+	self assert: (expr isKindOf: AndAst).
+	self assert: (self fieldOf: expr named: #values) size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_chained_assignment [
+	"Parse chained assignment: x = y = 1."
+
+	| stmt targets |
+	stmt := self firstStatement: 'x = y = 1'.
+	self assert: (stmt isKindOf: AssignAst).
+	targets := self fieldOf: stmt named: #targets.
+	self assert: targets size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - attribute' }
+PythonParserTestCase >> test_chained_attribute [
+	"Parse chained attribute: a.b.c."
+
+	| expr inner |
+	expr := self firstExprValue: 'a.b.c'.
+	self assert: (expr isKindOf: AttributeAst).
+	self assert: (self fieldOf: expr named: #attr) equals: #c.
+	inner := self fieldOf: expr named: #value.
+	self assert: (inner isKindOf: AttributeAst).
+	self assert: (self fieldOf: inner named: #attr) equals: #b.
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_chained_comparison [
+	"Parse chained comparison: 1 < x < 10."
+
+	| expr ops |
+	expr := self firstExprValue: '1 < x < 10'.
+	self assert: (expr isKindOf: CompareAst).
+	ops := self fieldOf: expr named: #cmpopList.
+	self assert: ops size equals: 2.
+	self assert: (ops first isKindOf: LtAst).
+	self assert: (ops last isKindOf: LtAst).
+
+]
+
+{ #category : 'Grail-tests - boolean ops' }
+PythonParserTestCase >> test_chained_or [
+	"Parse chained 'or': x or y or z."
+
+	| expr |
+	expr := self firstExprValue: 'x or y or z'.
+	self assert: (expr isKindOf: OrAst).
+	self assert: (self fieldOf: expr named: #values) size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - class def' }
+PythonParserTestCase >> test_class_with_base [
+	"Parse class with base class."
+
+	| stmt bases |
+	stmt := self firstStatement: 'class Foo(Bar):
+    pass'.
+	self assert: (stmt isKindOf: ClassDefAst).
+	bases := self fieldOf: stmt named: #bases.
+	self assert: bases size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - class def' }
+PythonParserTestCase >> test_class_with_metaclass [
+	"Parse class with metaclass keyword."
+
+	| stmt keywords |
+	stmt := self firstStatement: 'class Foo(metaclass=Meta):
+    pass'.
+	self assert: (stmt isKindOf: ClassDefAst).
+	keywords := self fieldOf: stmt named: #keywords.
+	self assert: keywords size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - complex' }
+PythonParserTestCase >> test_class_with_methods [
+	"Parse a class with multiple methods."
+
+	| module stmt body |
+	module := self parse: 'class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+    def __str__(self):
+        return str(self.x)'.
+	stmt := module body body first.
+	self assert: (stmt isKindOf: ClassDefAst).
+	body := (self fieldOf: stmt named: #body) body.
+	self assert: body size equals: 2.
+	self assert: (body first isKindOf: InstanceFunctionDefAst).
+	self assert: (body last isKindOf: InstanceFunctionDefAst).
+
+]
+
+{ #category : 'Grail-tests - class nesting' }
+PythonParserTestCase >> test_classmethod_decorator [
+	"@classmethod produces ClassFunctionDefAst."
+
+	| stmt body method |
+	stmt := self firstStatement: 'class Foo:
+    @classmethod
+    def bar(cls):
+        pass'.
+	body := (self fieldOf: stmt named: #body) body.
+	method := body first.
+	self assert: (method isKindOf: ClassFunctionDefAst).
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_compile_illegal_assignment_messages [
+	"compile() surfaces the SyntaxError message to Python str(e): ``{...} = 5''
+	says ``cannot assign'' and ``{...} += 5'' says ``illegal expression''
+	(test_dictcomps test_illegal_assignment's assertRaisesRegex), while a valid
+	program still compiles."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'compile_illegal_assignment' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/compile_illegal_assignment.py')
+		name: 'compile_illegal_assignment'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'regular_comprehension_message') = true)
+		description: 'compile({...} = 5) str(e) must contain ''cannot assign'''.
+	self assert: ((results @env1:__getitem__: 'augmented_comprehension_message') = true)
+		description: 'compile({...} += 5) str(e) must contain ''illegal expression'''.
+	self assert: ((results @env1:__getitem__: 'valid_assignment_still_compiles') = true)
+		description: 'a valid program must still compile'
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_comprehension_assignment_target_illegal [
+	"A comprehension / generator expression can never be an assignment target,
+	so ``{k: v for ...} = 5'' is a SyntaxError (test_dictcomps
+	test_illegal_assignment's ``='' case).  An ordinary target still parses."
+
+	self assert: ((self firstStatement: 'x = 5') notNil).
+	self should: [self parse: '{x: y for y, x in ((1, 2),)} = 5'] raise: SyntaxError.
+	self should: [self parse: '[x for x in y] = 5'] raise: SyntaxError.
+	self should: [self parse: '(x for x in y) = 5'] raise: SyntaxError.
+
+]
+
+{ #category : 'Grail-tests - comprehensions' }
+PythonParserTestCase >> test_comprehension_with_condition [
+	"Parse list comprehension with if: [x for x in y if x > 0]."
+
+	| expr gens ifs |
+	expr := self firstExprValue: '[x for x in y if x > 0]'.
+	self assert: (expr isKindOf: ListCompAst).
+	gens := self fieldOf: expr named: #generators.
+	ifs := self fieldOf: gens first named: #ifs.
+	self assert: ifs size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_continue [
+	"Parse continue statement."
+
+	| stmt |
+	stmt := self firstStatement: 'continue'.
+	self assert: (stmt isKindOf: ContinueAst).
+
+]
+
+{ #category : 'Grail-tests - decorators' }
+PythonParserTestCase >> test_decorator_with_args [
+	"Parse function with decorator that takes arguments."
+
+	| stmt decList |
+	stmt := self firstStatement: '@mydecorator(arg)
+def foo():
+    pass'.
+	self assert: (stmt isKindOf: FunctionDefAst).
+	decList := self fieldOf: stmt named: #decorator_list.
+	self assert: decList size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_delete [
+	"Parse delete statement."
+
+	| stmt |
+	stmt := self firstStatement: 'del x'.
+	self assert: (stmt isKindOf: DeleteAst).
+
+]
+
+{ #category : 'Grail-tests - comprehensions' }
+PythonParserTestCase >> test_dict_comprehension [
+	"Parse dict comprehension: {k: v for k, v in items}."
+
+	| expr |
+	expr := self firstExprValue: '{k: v for k, v in items}'.
+	self assert: (expr isKindOf: DictCompAst).
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_dict_with_entries [
+	"Parse dict: {'a': 1, 'b': 2}."
+
+	| expr |
+	expr := self firstExprValue: '{''a'': 1, ''b'': 2}'.
+	self assert: (expr isKindOf: DictAst).
+	self assert: (self fieldOf: expr named: #keys) size equals: 2.
+	self assert: (self fieldOf: expr named: #values) size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_division [
+	"Parse division."
+
+	| expr |
+	expr := self firstExprValue: '10 / 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: DivAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_ellipsis_literal [
+	"Parse ellipsis literal (...)."
+
+	| expr |
+	expr := self firstExprValue: '...'.
+	self assert: (expr isKindOf: ConstantAst).
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_empty_dict [
+	"Parse empty dict: {}."
+
+	| expr |
+	expr := self firstExprValue: '{}'.
+	self assert: (expr isKindOf: DictAst).
+	self assert: (self fieldOf: expr named: #keys) isEmpty.
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_empty_list [
+	"Parse empty list: []."
+
+	| expr |
+	expr := self firstExprValue: '[]'.
+	self assert: (expr isKindOf: ListAst).
+	self assert: (self fieldOf: expr named: #elts) isEmpty.
+
+]
+
+{ #category : 'Grail-tests - module' }
+PythonParserTestCase >> test_empty_module [
+	"Parsing empty string produces a ModuleAst."
+
+	| module |
+	module := self parse: ''.
+	self assert: module class equals: ModuleAst.
+	self assert: module name equals: '__main__'.
+	self assert: module body body isEmpty.
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_empty_tuple [
+	"Parse empty tuple: ()."
+
+	| expr |
+	expr := self firstExprValue: '()'.
+	self assert: (expr isKindOf: TupleAst).
+	self assert: (self fieldOf: expr named: #elts) isEmpty.
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_equals [
+	"Parse equality comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x == y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: EqAst).
+
+]
+
+{ #category : 'Grail-tests - expr statement' }
+PythonParserTestCase >> test_expression_statement [
+	"Parse expression used as statement."
+
+	| stmt |
+	stmt := self firstStatement: 'print("hello")'.
+	self assert: (stmt isKindOf: ExprAst).
+	self assert: ((self fieldOf: stmt named: #value) isKindOf: CallAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_false_literal [
+	"Parse False literal."
+
+	| expr |
+	expr := self firstExprValue: 'False'.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: (self fieldOf: expr named: #value) equals: false.
+
+]
+
+{ #category : 'Grail-tests - complex' }
+PythonParserTestCase >> test_fibonacci [
+	"Parse a fibonacci function."
+
+	| module stmt |
+	module := self parse: 'def fib(n):
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)'.
+	stmt := module body body first.
+	self assert: (stmt isKindOf: FunctionDefAst).
+	self assert: stmt name equals: #fib.
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_float_literal [
+	"Parse float literal."
+
+	| expr |
+	expr := self firstExprValue: '3.14'.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: ((self fieldOf: expr named: #value) - 3.14) abs < 0.001.
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_floor_division [
+	"Parse floor division."
+
+	| expr |
+	expr := self firstExprValue: '10 // 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: FloorDivAst).
+
+]
+
+{ #category : 'Grail-tests - for' }
+PythonParserTestCase >> test_for_loop [
+	"Parse for loop."
+
+	| stmt |
+	stmt := self firstStatement: 'for x in y:
+    pass'.
+	self assert: (stmt isKindOf: ForAst).
+	self assert: ((self fieldOf: stmt named: #target) isKindOf: NameAst).
+	self assert: ((self fieldOf: stmt named: #iter) isKindOf: NameAst).
+
+]
+
+{ #category : 'Grail-tests - for' }
+PythonParserTestCase >> test_for_tuple_unpack [
+	"Parse for with tuple unpacking."
+
+	| stmt target |
+	stmt := self firstStatement: 'for x, y in z:
+    pass'.
+	self assert: (stmt isKindOf: ForAst).
+	target := self fieldOf: stmt named: #target.
+	self assert: (target isKindOf: TupleAst).
+
+]
+
+{ #category : 'Grail-tests - import' }
+PythonParserTestCase >> test_from_import [
+	"Parse from...import statement."
+
+	| stmt |
+	stmt := self firstStatement: 'from os import path'.
+	self assert: (stmt isKindOf: ImportFromAst).
+	self assert: (self fieldOf: stmt named: #module) equals: 'os'.
+
+]
+
+{ #category : 'Grail-tests - import' }
+PythonParserTestCase >> test_from_import_star [
+	"Parse from...import * statement."
+
+	| stmt names |
+	stmt := self firstStatement: 'from os import *'.
+	self assert: (stmt isKindOf: ImportFromAst).
+	names := self fieldOf: stmt named: #names.
+	self assert: names size equals: 1.
+	self assert: names first name equals: #'*'.
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_body_variables [
+	"Function body has its own variable scope."
+
+	| stmt body |
+	stmt := self firstStatement: 'def foo():
+    x = 1'.
+	body := self fieldOf: stmt named: #body.
+	self assert: (body isKindOf: BlockAst).
+	self assert: (body variables includes: #x).
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_registers_variable [
+	"Function def registers function name as variable."
+
+	| module vars |
+	module := self parse: 'def foo():
+    pass'.
+	vars := module body variables.
+	self assert: (vars includes: #foo).
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_return_annotation [
+	"Parse function with return type annotation."
+
+	| stmt |
+	stmt := self firstStatement: 'def foo() -> int:
+    pass'.
+	self assert: (stmt isKindOf: FunctionDefAst).
+	self assert: (self fieldOf: stmt named: #returns) notNil.
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_with_args [
+	"Parse function with arguments."
+
+	| stmt args |
+	stmt := self firstStatement: 'def foo(x, y):
+    pass'.
+	self assert: (stmt isKindOf: FunctionDefAst).
+	args := self fieldOf: stmt named: #args.
+	self assert: (self fieldOf: args named: #args) size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_with_defaults [
+	"Parse function with default arguments."
+
+	| stmt args defaults |
+	stmt := self firstStatement: 'def foo(x, y=1):
+    pass'.
+	args := self fieldOf: stmt named: #args.
+	defaults := self fieldOf: args named: #defaults.
+	self assert: defaults size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_with_kwargs [
+	"Parse function with **kwargs."
+
+	| stmt args kwarg |
+	stmt := self firstStatement: 'def foo(**kwargs):
+    pass'.
+	args := self fieldOf: stmt named: #args.
+	kwarg := self fieldOf: args named: #kwarg.
+	self assert: kwarg notNil.
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_function_with_star_args [
+	"Parse function with *args."
+
+	| stmt args vararg |
+	stmt := self firstStatement: 'def foo(*args):
+    pass'.
+	args := self fieldOf: stmt named: #args.
+	vararg := self fieldOf: args named: #vararg.
+	self assert: vararg notNil.
+
+]
+
+{ #category : 'Grail-tests - comprehensions' }
+PythonParserTestCase >> test_generator_expression [
+	"Parse generator expression: (x for x in y)."
+
+	| expr |
+	expr := self firstExprValue: '(x for x in y)'.
+	self assert: (expr isKindOf: GeneratorExpAst).
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_global [
+	"Parse global statement."
+
+	| stmt |
+	stmt := self firstStatement: 'global x, y'.
+	self assert: (stmt isKindOf: GlobalAst).
+	self assert: (self fieldOf: stmt named: #names) size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_hex_literal [
+	"Parse hex integer literal."
+
+	| expr |
+	expr := self firstExprValue: '0xFF'.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: (self fieldOf: expr named: #value) equals: 255.
+
+]
+
+{ #category : 'Grail-tests - if' }
+PythonParserTestCase >> test_if_elif_else [
+	"Parse if/elif/else chain."
+
+	| stmt orelseBody elifStmt |
+	stmt := self firstStatement: 'if x:
+    pass
+elif y:
+    pass
+else:
+    pass'.
+	self assert: (stmt isKindOf: IfAst).
+	orelseBody := (self fieldOf: stmt named: #orelse) body.
+	self assert: orelseBody size equals: 1.
+	elifStmt := orelseBody first.
+	self assert: (elifStmt isKindOf: IfAst).
+
+]
+
+{ #category : 'Grail-tests - if' }
+PythonParserTestCase >> test_if_else [
+	"Parse if/else statement."
+
+	| stmt orelse |
+	stmt := self firstStatement: 'if x:
+    pass
+else:
+    pass'.
+	self assert: (stmt isKindOf: IfAst).
+	orelse := self fieldOf: stmt named: #orelse.
+	self assert: (orelse isKindOf: SuiteAst).
+	self assert: orelse body notEmpty.
+
+]
+
+{ #category : 'Grail-tests - import' }
+PythonParserTestCase >> test_import [
+	"Parse import statement."
+
+	| stmt names |
+	stmt := self firstStatement: 'import os'.
+	self assert: (stmt isKindOf: ImportAst).
+	names := self fieldOf: stmt named: #names.
+	self assert: names size equals: 1.
+	self assert: names first name equals: #os.
+
+]
+
+{ #category : 'Grail-tests - import' }
+PythonParserTestCase >> test_import_as [
+	"Parse import with alias."
+
+	| stmt alias |
+	stmt := self firstStatement: 'import os as operating_system'.
+	self assert: (stmt isKindOf: ImportAst).
+	alias := (self fieldOf: stmt named: #names) first.
+	self assert: alias name equals: #os.
+	self assert: alias asName equals: #operating_system.
+
+]
+
+{ #category : 'Grail-tests - import' }
+PythonParserTestCase >> test_import_registers_variable [
+	"Import registers module name as variable."
+
+	| module vars |
+	module := self parse: 'import os'.
+	vars := module body variables.
+	self assert: (vars includes: #os).
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_in_operator [
+	"Parse 'in' comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x in y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: InAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_integer_literal [
+	"Parse integer literal."
+
+	| expr |
+	expr := self firstExprValue: '42'.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: (self fieldOf: expr named: #value) equals: 42.
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_integerFromRadix [
+	"Focused regression for PythonParser class >> integerFrom:radix: —
+	the override-proof radix converter.  Grail used to convert 0x/0o/0b
+	literals via ('16r' , digits) asInteger, which returns the RADIX
+	(16) on host extents that override CharacterCollection>>asInteger
+	with Squeak semantics (first run of decimal digits in the string).
+	The helper must not depend on any overridable String/Number
+	protocol."
+
+	self assert: (PythonParser integerFrom: '3F' radix: 16) equals: 63.
+	self assert: (PythonParser integerFrom: '3f' radix: 16) equals: 63.
+	self assert: (PythonParser integerFrom: 'FF' radix: 16) equals: 255.
+	self assert: (PythonParser integerFrom: '0' radix: 16) equals: 0.
+	self assert: (PythonParser integerFrom: '17' radix: 8) equals: 15.
+	self assert: (PythonParser integerFrom: '101' radix: 2) equals: 5.
+	self assert: (PythonParser integerFrom: 'deadBEEF' radix: 16) equals: 3735928559.
+	self should: [PythonParser integerFrom: '3G' radix: 16] raise: SyntaxError.
+	self should: [PythonParser integerFrom: '8' radix: 8] raise: SyntaxError.
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_is_not_operator [
+	"Parse 'is not' comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x is not y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: IsNotAst).
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_is_operator [
+	"Parse 'is' comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x is y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: IsAst).
+
+]
+
+{ #category : 'Grail-tests - lambda' }
+PythonParserTestCase >> test_lambda_no_args [
+	"Parse lambda with no arguments."
+
+	| expr |
+	expr := self firstExprValue: 'lambda: 42'.
+	self assert: (expr isKindOf: LambdaAst).
+	self assert: (self fieldOf: (self fieldOf: expr named: #args) named: #args) isEmpty.
+
+]
+
+{ #category : 'Grail-tests - lambda' }
+PythonParserTestCase >> test_lambda_with_args [
+	"Parse lambda with arguments."
+
+	| expr args |
+	expr := self firstExprValue: 'lambda x, y: x + y'.
+	self assert: (expr isKindOf: LambdaAst).
+	args := self fieldOf: (self fieldOf: expr named: #args) named: #args.
+	self assert: args size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - lambda' }
+PythonParserTestCase >> test_lambda_with_default [
+	"Parse lambda with default argument."
+
+	| expr defaults |
+	expr := self firstExprValue: 'lambda x, y=1: x + y'.
+	self assert: (expr isKindOf: LambdaAst).
+	defaults := self fieldOf: (self fieldOf: expr named: #args) named: #defaults.
+	self assert: defaults size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_left_shift [
+	"Parse left shift."
+
+	| expr |
+	expr := self firstExprValue: '1 << 2'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: LShiftAst).
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_less_than [
+	"Parse less-than comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x < y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: LtAst).
+
+]
+
+{ #category : 'Grail-tests - comprehensions' }
+PythonParserTestCase >> test_list_comprehension [
+	"Parse list comprehension: [x for x in y]."
+
+	| expr |
+	expr := self firstExprValue: '[x for x in y]'.
+	self assert: (expr isKindOf: ListCompAst).
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_list_with_elements [
+	"Parse list with elements: [1, 2, 3]."
+
+	| expr |
+	expr := self firstExprValue: '[1, 2, 3]'.
+	self assert: (expr isKindOf: ListAst).
+	self assert: (self fieldOf: expr named: #elts) size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - class nesting' }
+PythonParserTestCase >> test_method_becomes_instance_function [
+	"Function inside class becomes InstanceFunctionDefAst."
+
+	| stmt body method |
+	stmt := self firstStatement: 'class Foo:
+    def bar(self):
+        pass'.
+	body := (self fieldOf: stmt named: #body) body.
+	method := body first.
+	self assert: (method isKindOf: InstanceFunctionDefAst).
+
+]
+
+{ #category : 'Grail-tests - module' }
+PythonParserTestCase >> test_module_body_is_block [
+	"Module body should be a BlockAst."
+
+	| module |
+	module := self parse: 'x = 1'.
+	self assert: (module body isKindOf: BlockAst).
+
+]
+
+{ #category : 'Grail-tests - module' }
+PythonParserTestCase >> test_module_source [
+	"Module retains the source string."
+
+	| module |
+	module := self parse: 'x = 1'.
+	self assert: module source equals: 'x = 1'.
+
+]
+
+{ #category : 'Grail-tests - module' }
+PythonParserTestCase >> test_module_variables [
+	"Module-level assignments should register variables."
+
+	| module vars |
+	module := self parse: 'x = 1
+y = 2'.
+	vars := module body variables.
+	self assert: (vars includes: #x).
+	self assert: (vars includes: #y).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_modulo [
+	"Parse modulo."
+
+	| expr |
+	expr := self firstExprValue: '10 % 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: ModAst).
+
+]
+
+{ #category : 'Grail-tests - multiple statements' }
+PythonParserTestCase >> test_multiple_statements [
+	"Parse multiple statements."
+
+	| module body |
+	module := self parse: 'x = 1
+y = 2
+z = 3'.
+	body := module body body.
+	self assert: body size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_multiplication [
+	"Parse multiplication."
+
+	| expr |
+	expr := self firstExprValue: '2 * 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: MultAst).
+
+]
+
+{ #category : 'Grail-tests - names' }
+PythonParserTestCase >> test_name_reference [
+	"Parse name reference."
+
+	| expr |
+	expr := self firstExprValue: 'x'.
+	self assert: (expr isKindOf: NameAst).
+	self assert: expr id equals: #x.
+	self assert: ((self fieldOf: expr named: #ctx) isKindOf: LoadAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_negative_number [
+	"Parse negative number (unary minus)."
+
+	| expr |
+	expr := self firstExprValue: '-42'.
+	self assert: (expr isKindOf: USubAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_none_literal [
+	"Parse None literal."
+
+	| expr |
+	expr := self firstExprValue: 'None'.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: (self fieldOf: expr named: #value) equals: nil.
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_nonlocal [
+	"Parse nonlocal statement."
+
+	| stmt |
+	stmt := self firstStatement: 'nonlocal x'.
+	self assert: (stmt isKindOf: NonlocalAst).
+	self assert: (self fieldOf: stmt named: #names) size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - unary ops' }
+PythonParserTestCase >> test_not [
+	"Parse not operator."
+
+	| expr |
+	expr := self firstExprValue: 'not x'.
+	self assert: (expr isKindOf: NotAst).
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_not_equals [
+	"Parse not-equals comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x != y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: NotEqAst).
+
+]
+
+{ #category : 'Grail-tests - comparisons' }
+PythonParserTestCase >> test_not_in_operator [
+	"Parse 'not in' comparison."
+
+	| expr |
+	expr := self firstExprValue: 'x not in y'.
+	self assert: (expr isKindOf: CompareAst).
+	self assert: ((self fieldOf: expr named: #cmpopList) first isKindOf: NotInAst).
+
+]
+
+{ #category : 'Grail-tests - boolean ops' }
+PythonParserTestCase >> test_or [
+	"Parse 'or' expression."
+
+	| expr |
+	expr := self firstExprValue: 'x or y'.
+	self assert: (expr isKindOf: OrAst).
+	self assert: (self fieldOf: expr named: #values) size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_parenthesized_precedence [
+	"Parse (1 + 2) * 3."
+
+	| expr left |
+	expr := self firstExprValue: '(1 + 2) * 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: MultAst).
+	left := self fieldOf: expr named: #left.
+	self assert: (left isKindOf: BinOpAst).
+	self assert: ((self fieldOf: left named: #op) isKindOf: AddAst).
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_pass [
+	"Parse pass statement."
+
+	| stmt |
+	stmt := self firstStatement: 'pass'.
+	self assert: (stmt isKindOf: PassAst).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_power [
+	"Parse power operator."
+
+	| expr |
+	expr := self firstExprValue: '2 ** 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: PowAst).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_precedence [
+	"Parse expression with precedence: 1 + 2 * 3 should be 1 + (2 * 3)."
+
+	| expr right |
+	expr := self firstExprValue: '1 + 2 * 3'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: AddAst).
+	right := self fieldOf: expr named: #right.
+	self assert: (right isKindOf: BinOpAst).
+	self assert: ((self fieldOf: right named: #op) isKindOf: MultAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_radix_literal_values [
+	"0x / 0o / 0b literals must parse to their VALUES, not their radix.
+	(Regression: on a GLASS host extent every such literal evaluated to
+	16 / 8 / 2 — see test_integerFromRadix.)"
+
+	{ { '0x3F'. 63 }. { '0xff'. 255 }. { '0o17'. 15 }. { '0b101'. 5 } } do: [:pair |
+		| expr |
+		expr := self firstExprValue: (pair at: 1).
+		self assert: (expr isKindOf: ConstantAst).
+		self assert: (self fieldOf: expr named: #value) equals: (pair at: 2)].
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_raise [
+	"Parse raise statement."
+
+	| stmt |
+	stmt := self firstStatement: 'raise ValueError()'.
+	self assert: (stmt isKindOf: RaiseAst).
+	self assert: (self fieldOf: stmt named: #exc) notNil.
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_return [
+	"Parse return statement."
+
+	| stmt |
+	stmt := self firstStatement: 'return 42'.
+	self assert: (stmt isKindOf: ReturnAst).
+	self assert: ((self fieldOf: stmt named: #value) isKindOf: ConstantAst).
+
+]
+
+{ #category : 'Grail-tests - simple statements' }
+PythonParserTestCase >> test_return_none [
+	"Parse bare return statement."
+
+	| stmt |
+	stmt := self firstStatement: 'return'.
+	self assert: (stmt isKindOf: ReturnAst).
+	self assert: (self fieldOf: stmt named: #value) isNil.
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_right_shift [
+	"Parse right shift."
+
+	| expr |
+	expr := self firstExprValue: '1 >> 2'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: RShiftAst).
+
+]
+
+{ #category : 'Grail-tests - multiple statements' }
+PythonParserTestCase >> test_semicolon_separated [
+	"Parse semicolon-separated statements."
+
+	| module body |
+	module := self parse: 'x = 1; y = 2'.
+	body := module body body.
+	self assert: body size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - comprehensions' }
+PythonParserTestCase >> test_set_comprehension [
+	"Parse set comprehension: {x for x in y}."
+
+	| expr |
+	expr := self firstExprValue: '{x for x in y}'.
+	self assert: (expr isKindOf: SetCompAst).
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_set_with_elements [
+	"Parse set: {1, 2, 3}."
+
+	| expr |
+	expr := self firstExprValue: '{1, 2, 3}'.
+	self assert: (expr isKindOf: SetAst).
+	self assert: (self fieldOf: expr named: #elts) size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_simple_assignment [
+	"Parse simple assignment: x = 1."
+
+	| stmt |
+	stmt := self firstStatement: 'x = 1'.
+	self assert: (stmt isKindOf: AssignAst).
+	self assert: (self fieldOf: stmt named: #targets) size equals: 1.
+	self assert: ((self fieldOf: stmt named: #targets) first isKindOf: NameAst).
+	self assert: ((self fieldOf: stmt named: #targets) first id) equals: #x.
+
+]
+
+{ #category : 'Grail-tests - class def' }
+PythonParserTestCase >> test_simple_class [
+	"Parse simple class definition."
+
+	| stmt |
+	stmt := self firstStatement: 'class Foo:
+    pass'.
+	self assert: (stmt isKindOf: ClassDefAst).
+	self assert: (self fieldOf: stmt named: #name) equals: #Foo.
+
+]
+
+{ #category : 'Grail-tests - decorators' }
+PythonParserTestCase >> test_simple_decorator [
+	"Parse function with simple decorator."
+
+	| stmt decList |
+	stmt := self firstStatement: '@mydecorator
+def foo():
+    pass'.
+	self assert: (stmt isKindOf: FunctionDefAst).
+	decList := self fieldOf: stmt named: #decorator_list.
+	self assert: decList size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - function def' }
+PythonParserTestCase >> test_simple_function [
+	"Parse simple function definition."
+
+	| stmt |
+	stmt := self firstStatement: 'def foo():
+    pass'.
+	self assert: (stmt isKindOf: FunctionDefAst).
+	self assert: stmt name equals: #foo.
+
+]
+
+{ #category : 'Grail-tests - if' }
+PythonParserTestCase >> test_simple_if [
+	"Parse simple if statement."
+
+	| stmt |
+	stmt := self firstStatement: 'if x:
+    pass'.
+	self assert: (stmt isKindOf: IfAst).
+	self assert: ((self fieldOf: stmt named: #test) isKindOf: NameAst).
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_single_element_tuple [
+	"Parse single-element tuple: (1,)."
+
+	| expr |
+	expr := self firstExprValue: '(1,)'.
+	self assert: (expr isKindOf: TupleAst).
+	self assert: (self fieldOf: expr named: #elts) size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - single-line' }
+PythonParserTestCase >> test_single_line_def [
+	"Parse single-line def: def f(): return 1."
+
+	| stmt |
+	stmt := self firstStatement: 'def f(): return 1'.
+	self assert: (stmt isKindOf: FunctionDefAst).
+
+]
+
+{ #category : 'Grail-tests - single-line' }
+PythonParserTestCase >> test_single_line_for [
+	"Parse single-line for: for x in y: pass."
+
+	| stmt |
+	stmt := self firstStatement: 'for x in y: pass'.
+	self assert: (stmt isKindOf: ForAst).
+
+]
+
+{ #category : 'Grail-tests - single-line' }
+PythonParserTestCase >> test_single_line_if [
+	"Parse single-line if: if x: pass."
+
+	| stmt |
+	stmt := self firstStatement: 'if x: pass'.
+	self assert: (stmt isKindOf: IfAst).
+
+]
+
+{ #category : 'Grail-tests - subscript' }
+PythonParserTestCase >> test_slice [
+	"Parse slice: a[1:2]."
+
+	| expr slice |
+	expr := self firstExprValue: 'a[1:2]'.
+	self assert: (expr isKindOf: SubscriptAst).
+	slice := self fieldOf: expr named: #slice.
+	self assert: (slice isKindOf: SliceAst).
+	self assert: (self fieldOf: slice named: #lower) notNil.
+	self assert: (self fieldOf: slice named: #upper) notNil.
+	self assert: (self fieldOf: slice named: #step) isNil.
+
+]
+
+{ #category : 'Grail-tests - subscript' }
+PythonParserTestCase >> test_slice_open_ended [
+	"Parse open-ended slice: a[:]."
+
+	| expr slice |
+	expr := self firstExprValue: 'a[:]'.
+	self assert: (expr isKindOf: SubscriptAst).
+	slice := self fieldOf: expr named: #slice.
+	self assert: (slice isKindOf: SliceAst).
+	self assert: (self fieldOf: slice named: #lower) isNil.
+	self assert: (self fieldOf: slice named: #upper) isNil.
+
+]
+
+{ #category : 'Grail-tests - subscript' }
+PythonParserTestCase >> test_slice_with_step [
+	"Parse slice with step: a[1:10:2]."
+
+	| expr slice |
+	expr := self firstExprValue: 'a[1:10:2]'.
+	self assert: (expr isKindOf: SubscriptAst).
+	slice := self fieldOf: expr named: #slice.
+	self assert: (slice isKindOf: SliceAst).
+	self assert: (self fieldOf: slice named: #step) notNil.
+
+]
+
+{ #category : 'Grail-tests - starred' }
+PythonParserTestCase >> test_starred_assignment [
+	"Parse starred assignment target: *a, b = [1, 2, 3]."
+
+	| stmt target elts |
+	stmt := self firstStatement: '*a, b = [1, 2, 3]'.
+	self assert: (stmt isKindOf: AssignAst).
+	target := (self fieldOf: stmt named: #targets) first.
+	self assert: (target isKindOf: TupleAst).
+	elts := self fieldOf: target named: #elts.
+	self assert: (elts first isKindOf: StarredAst).
+
+]
+
+{ #category : 'Grail-tests - class nesting' }
+PythonParserTestCase >> test_staticmethod_decorator [
+	"@staticmethod produces StaticFunctionDefAst."
+
+	| stmt body method |
+	stmt := self firstStatement: 'class Foo:
+    @staticmethod
+    def bar():
+        pass'.
+	body := (self fieldOf: stmt named: #body) body.
+	method := body first.
+	self assert: (method isKindOf: StaticFunctionDefAst).
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_string_literal [
+	"Parse string literal."
+
+	| expr |
+	expr := self firstExprValue: '''hello'''.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: (self fieldOf: expr named: #value) equals: 'hello'.
+
+]
+
+{ #category : 'Grail-tests - subscript' }
+PythonParserTestCase >> test_subscript [
+	"Parse subscript: a[0]."
+
+	| expr |
+	expr := self firstExprValue: 'a[0]'.
+	self assert: (expr isKindOf: SubscriptAst).
+
+]
+
+{ #category : 'Grail-tests - binary ops' }
+PythonParserTestCase >> test_subtraction [
+	"Parse subtraction."
+
+	| expr |
+	expr := self firstExprValue: '3 - 1'.
+	self assert: (expr isKindOf: BinOpAst).
+	self assert: ((self fieldOf: expr named: #op) isKindOf: SubAst).
+
+]
+
+{ #category : 'Grail-tests - ternary' }
+PythonParserTestCase >> test_ternary [
+	"Parse ternary expression: a if b else c."
+
+	| expr |
+	expr := self firstExprValue: 'x if True else y'.
+	self assert: (expr isKindOf: IfExpAst).
+	self assert: ((self fieldOf: expr named: #test) isKindOf: ConstantAst).
+
+]
+
+{ #category : 'Grail-tests - class nesting' }
+PythonParserTestCase >> test_top_level_function_stays_functiondef [
+	"Top-level function stays FunctionDefAst (not InstanceFunctionDefAst)."
+
+	| stmt |
+	stmt := self firstStatement: 'def foo():
+    pass'.
+	self assert: stmt class equals: FunctionDefAst.
+
+]
+
+{ #category : 'Grail-tests - literals' }
+PythonParserTestCase >> test_true_literal [
+	"Parse True literal."
+
+	| expr |
+	expr := self firstExprValue: 'True'.
+	self assert: (expr isKindOf: ConstantAst).
+	self assert: (self fieldOf: expr named: #value) equals: true.
+
+]
+
+{ #category : 'Grail-tests - try' }
+PythonParserTestCase >> test_try_except [
+	"Parse try/except."
+
+	| stmt handlers |
+	stmt := self firstStatement: 'try:
+    pass
+except:
+    pass'.
+	self assert: (stmt isKindOf: TryAst).
+	handlers := self fieldOf: stmt named: #handlers.
+	self assert: handlers size equals: 1.
+
+]
+
+{ #category : 'Grail-tests - try' }
+PythonParserTestCase >> test_try_except_as [
+	"Parse try/except with as-binding."
+
+	| stmt handlers handler |
+	stmt := self firstStatement: 'try:
+    pass
+except ValueError as e:
+    pass'.
+	handlers := self fieldOf: stmt named: #handlers.
+	handler := handlers first.
+	self assert: (self fieldOf: handler named: #name) equals: #e.
+
+]
+
+{ #category : 'Grail-tests - try' }
+PythonParserTestCase >> test_try_except_typed [
+	"Parse try/except with type."
+
+	| stmt handlers handler |
+	stmt := self firstStatement: 'try:
+    pass
+except ValueError:
+    pass'.
+	handlers := self fieldOf: stmt named: #handlers.
+	handler := handlers first.
+	self assert: (self fieldOf: handler named: #type) notNil.
+
+]
+
+{ #category : 'Grail-tests - try' }
+PythonParserTestCase >> test_try_finally [
+	"Parse try/finally."
+
+	| stmt finalbody |
+	stmt := self firstStatement: 'try:
+    pass
+finally:
+    pass'.
+	self assert: (stmt isKindOf: TryAst).
+	finalbody := self fieldOf: stmt named: #finalbody.
+	self assert: (finalbody isKindOf: SuiteAst).
+	self assert: finalbody body notEmpty.
+
+]
+
+{ #category : 'Grail-tests - assignment' }
+PythonParserTestCase >> test_tuple_unpacking [
+	"Parse tuple unpacking: x, y = 1, 2."
+
+	| stmt target |
+	stmt := self firstStatement: 'x, y = 1, 2'.
+	self assert: (stmt isKindOf: AssignAst).
+	target := (self fieldOf: stmt named: #targets) first.
+	self assert: (target isKindOf: TupleAst).
+
+]
+
+{ #category : 'Grail-tests - collections' }
+PythonParserTestCase >> test_tuple_with_elements [
+	"Parse tuple: (1, 2, 3)."
+
+	| expr |
+	expr := self firstExprValue: '(1, 2, 3)'.
+	self assert: (expr isKindOf: TupleAst).
+	self assert: (self fieldOf: expr named: #elts) size equals: 3.
+
+]
+
+{ #category : 'Grail-tests - unary ops' }
+PythonParserTestCase >> test_unary_invert [
+	"Parse bitwise invert."
+
+	| expr |
+	expr := self firstExprValue: '~x'.
+	self assert: (expr isKindOf: InvertAst).
+
+]
+
+{ #category : 'Grail-tests - unary ops' }
+PythonParserTestCase >> test_unary_minus [
+	"Parse unary minus."
+
+	| expr |
+	expr := self firstExprValue: '-x'.
+	self assert: (expr isKindOf: USubAst).
+
+]
+
+{ #category : 'Grail-tests - unary ops' }
+PythonParserTestCase >> test_unary_plus [
+	"Parse unary plus."
+
+	| expr |
+	expr := self firstExprValue: '+x'.
+	self assert: (expr isKindOf: UAddAst).
+
+]
+
+{ #category : 'Grail-tests - walrus' }
+PythonParserTestCase >> test_walrus_in_expression [
+	"Parse walrus operator inside parenthesized expression: (x := 5)."
+
+	| expr |
+	expr := self firstExprValue: '(x := 5)'.
+	self assert: (expr isKindOf: NamedExprAst).
+	self assert: ((self fieldOf: expr named: #target) isKindOf: NameAst).
+	self assert: ((self fieldOf: expr named: #value) isKindOf: ConstantAst).
+
+]
+
+{ #category : 'Grail-tests - while' }
+PythonParserTestCase >> test_while_else [
+	"Parse while/else."
+
+	| stmt orelse |
+	stmt := self firstStatement: 'while x:
+    pass
+else:
+    pass'.
+	self assert: (stmt isKindOf: WhileAst).
+	orelse := self fieldOf: stmt named: #orelse.
+	self assert: (orelse isKindOf: SuiteAst).
+
+]
+
+{ #category : 'Grail-tests - while' }
+PythonParserTestCase >> test_while_loop [
+	"Parse while loop."
+
+	| stmt |
+	stmt := self firstStatement: 'while True:
+    pass'.
+	self assert: (stmt isKindOf: WhileAst).
+	self assert: ((self fieldOf: stmt named: #test) isKindOf: ConstantAst).
+
+]
+
+{ #category : 'Grail-tests - with' }
+PythonParserTestCase >> test_with_multiple [
+	"Parse with statement with multiple items."
+
+	| stmt items |
+	stmt := self firstStatement: 'with a as x, b as y:
+    pass'.
+	self assert: (stmt isKindOf: WithAst).
+	items := self fieldOf: stmt named: #items.
+	self assert: items size equals: 2.
+
+]
+
+{ #category : 'Grail-tests - with' }
+PythonParserTestCase >> test_with_statement [
+	"Parse with statement."
+
+	| stmt items |
+	stmt := self firstStatement: 'with open("f") as fp:
+    pass'.
+	self assert: (stmt isKindOf: WithAst).
+	items := self fieldOf: stmt named: #items.
+	self assert: items size equals: 1.
+	self assert: (self fieldOf: items first named: #optional_vars) notNil.
+
+]

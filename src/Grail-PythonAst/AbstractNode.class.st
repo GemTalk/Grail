@@ -1,0 +1,3898 @@
+"https://docs.python.org/3/library/ast.html#ast.AST
+
+This is the base of all AST node classes. The actual node classes are
+derived from the Parser/Python.asdl file. They are defined in the _ast C
+module and re-exported in ast.
+
+There is one class defined for each left-hand side symbol in the abstract
+grammar (for example, ast.stmt or ast.expr). In addition, there is one class
+defined for each constructor on the right-hand side; these classes inherit
+from the classes for the left-hand side trees.
+
+Hierarchy:
+Object
+  AbstractNode
+
+"
+Class {
+	#name : 'AbstractNode',
+	#superclass : 'Object',
+	#instVars : [
+		'parent'
+	],
+	#category : 'Grail-Parser'
+}
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___cleanDoc___: aString [
+	"aString as CPython 3.13+ stores a docstring (_PyCompile_CleanDoc): tabs
+	expanded to 8, the first line's leading spaces removed, and the margin
+	common to every later non-blank line removed from each later line.  The
+	compiler does this to the value it puts in __doc__, while the AST keeps
+	the literal, so ast.parse is unaffected.  Grail kept the indentation, so
+	every indented docstring -- most of them -- differed from CPython's.
+
+	Answers aString itself when there is nothing to remove."
+
+	| text lines margin first out |
+	text := self ___expandTabs___: aString.
+	lines := OrderedCollection new.
+	[ | nl |
+		nl := text indexOf: Character lf.
+		nl = 0
+			ifTrue: [lines add: text. false]
+			ifFalse: [
+				lines add: (text copyFrom: 1 to: nl - 1).
+				text := text copyFrom: nl + 1 to: text size.
+				true]] whileTrue.
+	margin := nil.
+	2 to: lines size do: [:i | | line indent |
+		line := lines at: i.
+		indent := 0.
+		[indent < line size and: [(line at: indent + 1) == $ ]] whileTrue: [indent := indent + 1].
+		indent < line size ifTrue: [
+			margin := margin isNil ifTrue: [indent] ifFalse: [margin min: indent]]].
+	margin isNil ifTrue: [margin := 0].
+	first := lines first.
+	((first isEmpty or: [first first ~~ $ ]) and: [margin = 0]) ifTrue: [^ aString].
+	out := WriteStream on: aString species new.
+	[first notEmpty and: [first first == $ ]] whileTrue: [first := first copyFrom: 2 to: first size].
+	out nextPutAll: first.
+	2 to: lines size do: [:i | | line skip |
+		line := lines at: i.
+		skip := 0.
+		[skip < margin and: [skip < line size and: [(line at: skip + 1) == $ ]]]
+			whileTrue: [skip := skip + 1].
+		out nextPut: Character lf; nextPutAll: (line copyFrom: skip + 1 to: line size)].
+	^ out contents
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___currentModuleSource___ [
+	"The source text of the module now being parsed and emitted, or nil.
+
+	Session-local, set by ModuleAst >> parseSource: -- which every entry
+	(import, exec, eval, compile) passes through -- and read only where a node
+	needs its own text and the parent walk cannot supply it."
+
+	^ SessionTemps current at: #'GrailCurrentModuleSource' otherwise: nil
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___currentModuleSource___: aString [
+	SessionTemps current at: #'GrailCurrentModuleSource' put: aString
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___expandTabs___: aString [
+	"str.expandtabs(8): each tab to the next multiple of 8 columns, counting
+	from the last newline or carriage return."
+
+	| out col |
+	(aString includes: Character tab) ifFalse: [^ aString].
+	out := WriteStream on: aString species new.
+	col := 0.
+	aString do: [:ch |
+		ch == Character tab
+			ifTrue: [ | n | n := 8 - (col \\ 8). n timesRepeat: [out nextPut: $ ]. col := col + n]
+			ifFalse: [
+				out nextPut: ch.
+				(ch == Character lf or: [ch == Character cr])
+					ifTrue: [col := 0]
+					ifFalse: [col := col + 1]]].
+	^ out contents
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode class >> ___irBreakSetStack___ [
+	"One entry per loop whose body the flow analysis is currently walking: an
+	OrderedCollection of the bound sets in force at each ``break'' reached
+	(cut 71).  A ``while True'' loop leaves through its breaks alone, so what
+	is bound after it is what EVERY break had bound."
+
+	^ SessionTemps current at: #'___grailIRBreakSets___' ifAbsent: [
+		SessionTemps current at: #'___grailIRBreakSets___' put: OrderedCollection new]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode class >> ___irCollectBreakSetsDuring___: aBlock [
+	"Run aBlock (a loop body's flow walk) with a fresh collector on the stack;
+	answer the collector -- the bound sets at the body's breaks."
+
+	| stack coll |
+	stack := self ___irBreakSetStack___.
+	coll := OrderedCollection new.
+	stack addLast: coll.
+	[aBlock value] ensure: [stack removeLast].
+	^ coll
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode class >> ___irRecordBreakSet___: aSet [
+	| stack |
+	stack := self ___irBreakSetStack___.
+	stack isEmpty ifFalse: [stack last add: aSet]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode class >> ___mangle___: aName forClass: aClassName [
+	"CPython's _Py_Mangle as a pure function of the name and the class -- the
+	one copy of the rule.  Shared by codegen (___manglePrivate___:, which finds
+	the class by walking the AST) and by the PARSER (PythonParser >>
+	___mangle___:, which knows it from its own class-name stack), so the two
+	can never disagree about what a name mangles to.
+
+	ANSWERS aName UNCHANGED -- same object, same class -- whenever nothing is
+	mangled, so a Symbol in stays a Symbol out on the common path.  Mangling is
+	IDEMPOTENT: a result has exactly one leading underscore and so never
+	qualifies again, which is what lets codegen's calls run harmlessly over
+	names the parser has already mangled."
+
+	| s stripped i |
+	aClassName isNil ifTrue: [^ aName].
+	s := aName asString.
+	"Must start with two underscores..."
+	(s size > 2 and: [(s at: 1) == $_ and: [(s at: 2) == $_]]) ifFalse: [^ aName].
+	"...and must NOT end with two."
+	((s at: s size) == $_ and: [(s at: s size - 1) == $_]) ifTrue: [^ aName].
+	"A dotted name is never mangled (CPython checks this too)."
+	(s includesValue: $.) ifTrue: [^ aName].
+	stripped := aClassName asString.
+	i := 1.
+	[i <= stripped size and: [(stripped at: i) == $_]] whileTrue: [i := i + 1].
+	stripped := stripped copyFrom: i to: stripped size.
+	stripped isEmpty ifTrue: [^ aName].
+	^ '_' , stripped , s
+
+]
+
+{ #category : 'Grail-code generation' }
+AbstractNode class >> emitSourceFilenameLiteralOn: aStream [
+	"Write the Smalltalk string literal for this code object's ``co_filename'':
+	the module's real path when one is known (CallAst >> sourcePath, set for the
+	duration of ___buildModuleClass:name:), else the ``'<grail>''' placeholder
+	that file-less code -- exec, eval, the REPL doit path -- keeps.
+
+	Shared by every PyCode emitter (FunctionDefAst's def-time cascade and
+	emitPyCodeExprOn:qualname:, ComprehensionAst's traceback-frame push,
+	TryAst's catching-frame push) so they cannot disagree about the filename of
+	the same module, and so the quoting is done in exactly one place.
+
+	A path can legally contain a single quote, which would terminate the
+	literal early and produce uncompilable generated code, so quotes are
+	doubled -- the same escaping the other string-literal emitters do."
+
+	| p |
+	p := CallAst sourcePath.
+	aStream nextPut: $'.
+	p isNil
+		ifTrue: [aStream nextPutAll: '<grail>']
+		ifFalse: [
+			p asString do: [:c |
+				c == $' ifTrue: [aStream nextPut: $'].
+				aStream nextPut: c]].
+	aStream nextPut: $'
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode class >> isAbstract [
+
+	^self == AbstractNode
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___addCompTargetLeafNames___: aTarget into: aCollection [
+	"Add the leaf NAME symbols aTarget binds -- recursing tuple/list/star
+	shapes, since ``for (a, b), *c in ...'' binds three."
+
+	aTarget isNil ifTrue: [^ self].
+	(aTarget isKindOf: NameAst) ifTrue: [
+		"``___unused___'' is Grail's spelling of the ``_'' wildcard.  It is an
+		internal name, not one Python code can read back, so it must not appear
+		in a locals() dict."
+		aTarget id asSymbol == #'___unused___' ifTrue: [^ self].
+		(aCollection includes: aTarget id asSymbol) ifFalse: [
+			aCollection add: aTarget id asSymbol].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___addCompTargetLeafNames___: aTarget value into: aCollection].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts ifNotNil: [:es |
+			es do: [:e | self ___addCompTargetLeafNames___: e into: aCollection]]].
+	^ self
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___annotationSourceString___ [
+	"The annotation as SOURCE TEXT -- what Format.STRING answers, and what
+	``from __future__ import annotations'' stores.
+
+	CPython's own text for these comes from ``ast.unparse'': the STRING format
+	re-runs the annotate function against fake globals and unparses the
+	expression the stringifiers recorded, and PEP 563 unparses the parse tree.
+	So this is a port of ast._Unparser -- its PRECEDENCE rules, which decide
+	every parenthesis (``(a + b) * c'', ``a[b, c]'' against a bare ``(a, b)''),
+	and its rendering of each node -- started at TEST, the precedence
+	ast.unparse starts at.
+
+	It replaces a handful of per-node renderers that covered Name / Attribute /
+	Subscript / Tuple / BinOp and answered ``<annotation>'' for everything else:
+	a comparison, a unary minus, a call, a slice, a list or dict display all
+	lost their text entirely, and a nested string literal lost its quotes.
+	Measured against CPython 3.14.6 over test_annotationlib's TestStringFormat.
+
+	A string constant at the ROOT stays verbatim -- ConstantAst overrides this,
+	because ``x: 'Foo''' is a forward reference whose content IS the text."
+
+	^ self ___unparse___: 4
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___anyDescendantSatisfies___: aBlock [
+	"Depth-first search of this node's SUBTREE, answering true as soon as
+	aBlock accepts a node.  Generic: it enumerates instance variables rather
+	than knowing each AST class's shape, so a new node type is covered without
+	being taught here.
+
+	``parent'' is skipped by name -- it points UP, and following it would walk
+	the tree forever.  Strings are collections but not node containers, so they
+	are skipped too rather than iterated character by character.
+
+	Used for questions that must be answered BEFORE emitting anything, where
+	discovering the answer during the emit would come too late: a class's
+	method sources are all generated in one pass, so a fact learned while
+	generating the third method cannot change how the first was written."
+
+	| ivars |
+	(aBlock value: self) ifTrue: [^ true].
+	ivars := self class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| v |
+		(ivars at: i) == #'parent' ifFalse: [
+			v := self instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [
+					(v ___anyDescendantSatisfies___: aBlock) ifTrue: [^ true]]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not])
+						ifTrue: [
+							v do: [:e |
+								((e isKindOf: AbstractNode)
+									and: [e ___anyDescendantSatisfies___: aBlock])
+										ifTrue: [^ true]]]]]].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___anyHasModuleScopeAwait___: aNodeOrCollection [
+	"___hasModuleScopeAwait___ over one child slot, which may be nil, a node, or
+	an Array / OrderedCollection of nodes."
+
+	(aNodeOrCollection isKindOf: AbstractNode)
+		ifTrue: [^ aNodeOrCollection ___hasModuleScopeAwait___].
+	((aNodeOrCollection isKindOf: Array)
+			or: [aNodeOrCollection isKindOf: OrderedCollection]) ifTrue: [
+		^ aNodeOrCollection anySatisfy: [:each |
+			(each isKindOf: AbstractNode) and: [each ___hasModuleScopeAwait___]]].
+	^ false
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___asPythonAst___ [
+	"This node as a Python ``ast'' object -- the tree ``ast.parse(source)'' and
+	``compile(source, f, mode, flags=PyCF_ONLY_AST)'' answer.
+
+	GENERIC, not 120 hand-written conversions.  Grail's node class names line up
+	with CPython's almost one for one (``BinOpAst'' -> ``BinOp'',
+	``MultAst'' -> ``Mult''), so the translation is: map the name, instantiate
+	that class from the ast module, and copy every child field across.  Where
+	they do not line up -- Grail's ClassFunctionDef / InstanceFunctionDef /
+	StaticFunctionDef are all a CPython FunctionDef -- a small table says so.
+
+	THE POSITION IVARS ARE NOT FIELDS.  ``parent'' points UP, and beginLine /
+	beginColumn / endLine / endColumn are AbstractLocationNode's; they become
+	``lineno'' / ``col_offset'' / ``end_lineno'' / ``end_col_offset'' on the
+	Python node, which is where a reader looks for them, rather than being
+	copied under Grail's own spellings.
+
+	A node class the ast module does not know still translates -- into a
+	same-named class declared there with no fields -- so an unfamiliar corner of
+	the tree is thin rather than fatal.  Answering nil for a node would make the
+	walker's caller crash somewhere else entirely."
+
+	| astMod cls out |
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ nil].
+	cls := [astMod @env1:___pyAttrLoad___: self ___pythonAstClassName___ asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	cls isNil ifTrue: [
+		cls := [astMod @env1:___pyAttrLoad___: #'AST']
+			on: AbstractException do: [:ex | ex return: nil]].
+	cls isNil ifTrue: [^ nil].
+	"AN OPERATOR-CARRYING NODE IS SPLIT IN TWO.  Grail makes the operator the
+	SUBCLASS -- ``-a'' is a USubAst with an operand, ``a and b'' an AndAst with
+	values -- while CPython has one node with an ``op'' field holding a
+	singleton: UnaryOp(op=USub(), operand=...).  So those translate to the
+	general node with the marker inside, not to a marker with an operand
+	hanging off it, which is what a reader walks for.
+
+	BinOp is already the second shape (its ``op'' holds a MultAst), which is
+	why only these two families need the split."
+	((self isKindOf: UnaryOpAst) and: [(self class == UnaryOpAst) not])
+		ifTrue: [^ self ___asSplitOperatorAst___: 'UnaryOp' operandField: 'operand'].
+	((self isKindOf: BoolOpAst) and: [(self class == BoolOpAst) not])
+		ifTrue: [^ self ___asSplitOperatorAst___: 'BoolOp' operandField: 'values'].
+	out := cls @env1:___pyCallValue___: #() kw: nil.
+	self ___copyAstFieldsInto___: out.
+	self ___fixUpPythonAst___: out.
+	^ out
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___asSplitOperatorAst___: outerName operandField: fieldName [
+	"A UnaryOp / BoolOp built from a Grail node whose CLASS is the operator."
+
+	| astMod outerCls markerCls out |
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ nil].
+	outerCls := [astMod @env1:___pyAttrLoad___: outerName asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	markerCls := [astMod @env1:___pyAttrLoad___: self ___pythonAstClassName___ asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	(outerCls isNil or: [markerCls isNil]) ifTrue: [^ nil].
+	out := outerCls @env1:___pyCallValue___: #() kw: nil.
+	out @env1:___pyAttrStore___: #'op'
+		put: (markerCls @env1:___pyCallValue___: #() kw: nil).
+	out @env1:___pyAttrStore___: fieldName asSymbol
+		put: (self ___translatedAstValue___:
+			(self instVarAt: (self class allInstVarNames indexOf: fieldName asSymbol))).
+	self ___copyAstPositionInto___: out.
+	^ out
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___astDeclares___: declaredFields field: aName [
+	"Whether the Python node declares aName -- true for every name when it
+	declares none, which is how a Grail-only node keeps its children."
+
+	declaredFields isNil ifTrue: [^ true].
+	^ [(declaredFields @env1:__len__) = 0
+		or: [declaredFields @env1:__contains__: aName]]
+		on: AbstractException do: [:ex | ex return: true]
+
+]
+
+{ #category : 'Grail-Naming' }
+AbstractNode >> ___bindsSmalltalkTempNamed___: aSymbol [
+	"Does any def, lambda or comprehension at or below this node bind aSymbol
+	as a SMALLTALK TEMP -- a parameter, a body local (the block's declared
+	variables or its Python ``writes''), or a comprehension target?  Text
+	codegen spells every Python local as a temp of the same name, and it spells
+	the module singleton by its backing class's BARE name
+	(``random @env0:___instance___''), so such a temp captures every module
+	reference in that scope.  importlib>>___moduleDefinesItsOwnName___:as:
+	asks this of the whole module.  Reflective over the instVars, skipping the
+	``parent'' back-pointer, like ___importBoundNamesInto___:."
+
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst]) ifTrue: [
+		((self ___functionDeclaresLocal___: self named: aSymbol)
+			or: [self ___functionBindsPythonLocal___: self named: aSymbol])
+				ifTrue: [^ true]].
+	(self isKindOf: ComprehensionAst) ifTrue: [
+		(self ___nameNodesIn___: self target anySatisfy: [:n | n id asSymbol == aSymbol])
+			ifTrue: [^ true]].
+	2 to: self class instSize do: [:i |
+		| v |
+		v := self instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(v ___bindsSmalltalkTempNamed___: aSymbol) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						((each isKindOf: AbstractNode)
+							and: [each ___bindsSmalltalkTempNamed___: aSymbol])
+								ifTrue: [^ true]]]]].
+	^ false
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___binOpSpec___: anOp [
+	"{ glyph. precedence } for a binary operator node, or nil."
+
+	(anOp isKindOf: AddAst) ifTrue: [^ #('+' 13)].
+	(anOp isKindOf: SubAst) ifTrue: [^ #('-' 13)].
+	(anOp isKindOf: MultAst) ifTrue: [^ #('*' 14)].
+	(anOp isKindOf: MatMultAst) ifTrue: [^ #('@' 14)].
+	(anOp isKindOf: DivAst) ifTrue: [^ #('/' 14)].
+	(anOp isKindOf: ModAst) ifTrue: [^ #('%' 14)].
+	(anOp isKindOf: FloorDivAst) ifTrue: [^ #('//' 14)].
+	(anOp isKindOf: LShiftAst) ifTrue: [^ #('<<' 12)].
+	(anOp isKindOf: RShiftAst) ifTrue: [^ #('>>' 12)].
+	(anOp isKindOf: BitOrAst) ifTrue: [^ #('|' 9)].
+	(anOp isKindOf: BitXorAst) ifTrue: [^ #('^' 10)].
+	(anOp isKindOf: BitAndAst) ifTrue: [^ #('&' 11)].
+	(anOp isKindOf: PowAst) ifTrue: [^ #('**' 16)].
+	^ nil
+
+]
+
+{ #category : 'Grail-code generation' }
+AbstractNode >> ___braceChunkSize___ [
+	"The most elements one Smalltalk brace array ``{a. b. ...}'' is given, and
+	the most parts one ``,'' chain joins (that one is half of this).
+
+	GemStone's compiler refuses a brace array of about 1,800 elements --
+	``CompileError 1001, expression nesting too deep'' -- whatever the elements
+	are: measured on 4.0, 1,700 integers, pairs or message sends compile and
+	1,900 integers or 2,000 of either other kind do not.  A left-associated
+	``a , b , c ...'' chain nests one level per part and fails between 500 and
+	1,000 parts.  A Python display of 2,000 elements was therefore an
+	uncatchable CompileError that ended the session (#1423): pygments' lexer
+	builtin tables and idna.uts46data, a single 17,000-line tuple, among others.
+
+	256 is far enough under both limits that element shape cannot matter, and
+	every display Grail compiled before is at or under it, so their emitted
+	code is unchanged."
+
+	^ 256
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___builtinsAreOverridden___ [
+	"True while compiling a DOIT whose globals mapping supplied its own
+	``__builtins__''.
+
+	CPython takes a piece of code's builtins namespace from its globals, so
+	``exec(src, {'__builtins__': {}})'' runs source that cannot reach print,
+	open or __import__ -- the whole of the sandboxing story.  Grail resolves a
+	builtin CALL at compile time, straight to a send on the one real builtins
+	singleton, so the restriction was accepted and then silently ignored: the
+	generated code never asked.
+
+	Asked HERE, at compile time, because a doit is compiled by the exec() that
+	is about to run it -- the override is already installed when this is
+	consulted, and the answer cannot change under the compiled method.  Module
+	code is never affected: its builtins are not replaceable and its compile
+	long predates any exec.
+
+	The fast paths answer nil when this is true, so the call falls through to
+	the generic read, which resolves the name at RUN time and finds the
+	override.  Slower, and only for code that asked to be sandboxed."
+
+	ModuleAst compilingDoitScope isNil ifTrue: [^ false].
+	^ [(((Python at: #builtins) @env1:instance) @env1:___grailBuiltinsOverride___) notNil]
+		on: Error do: [:ex | ex return: false]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___catchTargetUnbindsALocal___: aNameSymbol [
+	"Is ``except X as NAME'' bound to a plain local temp, so that PEP 3110's
+	implicit ``del NAME'' can be emitted as ``NAME := nil''?
+
+	Only the LOCAL case is unbound that way.  A module-routed or class-body
+	target lives in a dynamic instVar / definitional store, where nil is a
+	BOUND nil rather than an absent name, so storing one would answer nil to a
+	later read instead of raising -- a worse answer than leaving the stale
+	binding.  Those keep the traceback-snapshot removal alone."
+
+	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol) not
+		and: [self ___inClassBodyRuntimeScope___ not]
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___cmpOpGlyph___: anOp [
+	(anOp isKindOf: EqAst) ifTrue: [^ '=='].
+	(anOp isKindOf: NotEqAst) ifTrue: [^ '!='].
+	(anOp isKindOf: LtEAst) ifTrue: [^ '<='].
+	(anOp isKindOf: LtAst) ifTrue: [^ '<'].
+	(anOp isKindOf: GtEAst) ifTrue: [^ '>='].
+	(anOp isKindOf: GtAst) ifTrue: [^ '>'].
+	(anOp isKindOf: IsNotAst) ifTrue: [^ 'is not'].
+	(anOp isKindOf: IsAst) ifTrue: [^ 'is'].
+	(anOp isKindOf: NotInAst) ifTrue: [^ 'not in'].
+	(anOp isKindOf: InAst) ifTrue: [^ 'in'].
+	^ '?'
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___codeConstNameFor___ [
+	"The ``co_name'' of the code object this node contributes to an enclosing
+	function's co_consts.  CPython names a genexp ``<genexpr>'' and a lambda
+	``<lambda>''; a def is named after itself."
+
+	(self isKindOf: GeneratorExpAst) ifTrue: [^ '<genexpr>'].
+	(self isKindOf: LambdaAst) ifTrue: [^ '<lambda>'].
+	^ [self name asString] on: AbstractException do: [:ex | ex return: '<unknown>']
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___collectCodeConstScopesInto___: aCollection [
+	"Add to aCollection every node in this subtree that CPython gives its own
+	CODE OBJECT in the enclosing function's co_consts -- a generator
+	expression, a nested def, a lambda -- WITHOUT descending into one.
+
+	Since 3.12 that list is shorter than it used to be: list, set and dict
+	comprehensions are INLINED and no longer appear, so counting them would
+	answer three where CPython answers zero.  Measured on 3.14.6.
+
+	A nested scope is collected but not entered, because its own comprehensions
+	belong to ITS co_consts and not to this one.
+
+	Generic instVar traversal, the same one
+	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
+	skipped by index."
+
+	((self isKindOf: GeneratorExpAst)
+		or: [(self isKindOf: FunctionDefAst)
+			or: [(self isKindOf: AsyncFunctionDefAst)
+				or: [self isKindOf: LambdaAst]]])
+		ifTrue: [
+			aCollection add: self.
+			^ self].
+	(self isKindOf: ClassDefAst) ifTrue: [^ self].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___collectCodeConstScopesInto___: aCollection].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___collectCodeConstScopesInto___: aCollection]]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___collectModuleScopeStarImportsInto___: aCollection [
+	"Add to aCollection every ``from X import *'' statement reachable from
+	this node WITHOUT leaving module scope, in source order.
+
+	importlib >> expandStarImports: used to look only at the module body's
+	own top-level statement list, so a star import written inside a ``try'',
+	``if'', ``with'', ``for'' or ``while'' was never seen: it kept its lone
+	``*'' alias and ImportFromAst >> printSmalltalkOn: emitted a per-name
+	binding for it -- a Smalltalk variable literally NAMED ``*'':
+
+	    * := ((((Python @env0:at: #builtins) @env0:___instance___) ___import__: ...
+
+	which is a CompileError (``expected a right bracket''), uncatchable, and
+	takes the session with it.  ``try: from .cyaml import * / except
+	ImportError: pass'' is an extremely common idiom -- it is line one of
+	pyyaml and of pydantic.
+
+	A function, lambda or class body ENDS the walk rather than being
+	searched: CPython makes a star import there a SyntaxError (``import *
+	only allowed at module level'') and PythonParser >> parseFromImport
+	already raises exactly that, so no star import can exist below one of
+	those nodes.  Everything else is module scope -- Python's compound
+	statements introduce no scope of their own -- so it is searched.
+
+	Generic instVar traversal, the same one setParent: and
+	___rejectExceptStarFlowControl___ use: a node's children are its
+	AbstractNode-valued instVars plus the ones held in collections.  ``parent''
+	points UP and is skipped by index (it is instVar 1 of AbstractNode)."
+
+	((self isKindOf: FunctionDefAst)
+		or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]])
+			ifTrue: [^ self].
+	((self isKindOf: ImportFromAst)
+		and: [self names size = 1 and: [(self names first name) == #'*']])
+			ifTrue: [aCollection add: self].
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___collectModuleScopeStarImportsInto___: aCollection].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___collectModuleScopeStarImportsInto___: aCollection]]
+		]
+	]
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___copyAstFieldsInto___: pyNode [
+	"Copy this node's children onto the Python node, translating as it goes,
+	and carry the source position across under CPython's names.
+
+	``parent'' is skipped by NAME rather than by index: it points UP, and
+	following it would translate the whole tree from every node in it."
+
+	| names declared |
+	"THE ast MODULE'S OWN ``_fields'' IS THE SPEC of what to copy.  Grail's
+	nodes carry codegen bookkeeping beside their children -- CompareAst has
+	``rhsTemp'' and ``opTemps'' for the temporaries its emit needs -- and
+	copying every instVar put those in the tree as attributes CPython has no
+	name for.  Filtering against _fields drops them without a list here that
+	would have to be maintained beside the nodes.
+
+	A node whose class declares no fields copies everything, which is what
+	keeps a Grail-only corner of the tree present rather than empty."
+	declared := [pyNode @env1:___pyAttrLoad___: #'_fields']
+		on: AbstractException do: [:ex | ex return: nil].
+	names := self class allInstVarNames.
+	1 to: names size do: [:i |
+		| nm mapped |
+		nm := (names at: i) asString.
+		mapped := self ___pythonAstFieldName___: nm.
+		((self ___isAstLocationName___: nm) not
+			and: [(self ___astDeclares___: declared field: mapped)])
+				ifTrue: [
+					pyNode @env1:___pyAttrStore___: mapped asSymbol
+						put: (mapped = 'decorator_list'
+							ifTrue: [self ___translatedDecoratorList___: (self instVarAt: i)]
+							ifFalse: [mapped = 'type_params'
+								ifTrue: [self ___translatedTypeParams___: (self instVarAt: i)]
+								ifFalse: [self ___translatedAstValue___: (self instVarAt: i)]])]].
+	self ___defaultMissingAstFields___: declared into: pyNode.
+	self ___copyAstPositionInto___: pyNode
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___copyAstPositionInto___: pyNode [
+	"lineno / col_offset / end_lineno / end_col_offset, under the names a
+	reader looks for.  Absent on a node that carries no location, which is what
+	CPython does for the operator singletons."
+
+	#( #('beginLine' 'lineno') #('beginColumn' 'col_offset')
+	   #('endLine' 'end_lineno') #('endColumn' 'end_col_offset') )
+		do: [:pair |
+			| v |
+			v := [self perform: (pair at: 1) asSymbol]
+				on: AbstractException do: [:ex | ex return: nil].
+			v isNil ifFalse: [
+				pyNode @env1:___pyAttrStore___: (pair at: 2) asSymbol put: v]]
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___curPosNarrowSpanNode___ [
+	"The sub-expression of this node that a statement-level ``___curPos___''
+	store should name, or self.
+
+	Self for every node but a short-circuit ``and''/``or'', which answers its
+	FIRST operand -- see BoolOpAst's override, and ___curPosSpanNodeFor___:
+	for why."
+
+	^ self
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___curPosSpanNodeFor___: aStmt [
+	"The sub-expression a traceback should blame for aStmt, or nil to keep the
+	line-only store.
+
+	CPython's span is the RAISING OPERATION, not the statement.  For
+	``return a / b'' it reports ``a / b'', so the statement's own span would
+	underline the ``return'' too and draw a caret line CPython never draws.
+	The value of a ``return'' or of a simple assignment IS that operation
+	whenever the statement holds exactly one, which is the common shape.
+
+	Deliberately an APPROXIMATION, and it stops short for a statement whose
+	failure is a strict sub-expression: ``return o.attr.meth()'' blames the
+	whole call here where CPython blames ``o.attr.meth'' if the attribute is
+	what failed.  Going further needs a store before each nested operation, and
+	Smalltalk expression emission is inline -- there is no statement boundary to
+	hang one on without wrapping every operand in a block, which would allocate
+	per evaluation.
+
+	Answering nil for every other statement keeps them exactly as they were: a
+	wrong span is worse than none (§9.10)."
+
+	| ivars idx cls |
+	aStmt isNil ifTrue: [^ nil].
+	cls := aStmt class name asString.
+	"A bare CALL statement IS the raising operation, so its own span is the one
+	CPython reports -- ``boom()'' renders ``~~~~^^''.  This is the shape
+	test_traceback's six exception-group tests assert on: their expected output
+	carries a caret line under ``exception_or_callable()'', a call statement, so
+	the return/assign rule alone left every one of them failing.  An expression
+	statement is an ExprAst wrapping the call, so it takes the same ``value''
+	path as a return."
+	"A ``raise'' IS the operation, and CPython underlines the WHOLE statement --
+	keyword included -- rather than the exception expression inside it:
+	``raise ValueError('boom')'' reports cols 4..28 of its line, and
+	``raise X from e'' runs to the end of the ``from'' clause.  So the span node
+	here is the statement itself, not one of its children, which is why this
+	test comes before the ``value'' lookup below rather than joining it.
+	Measured against CPython 3.14.6 for plain, ``from'' and bare re-raise."
+	cls = 'RaiseAst' ifTrue: [^ aStmt].
+	"An ``assert'' is the other way round: CPython blames the TEST, not the
+	statement -- ``assert x > 0, 'must be positive''' reports cols 11..16, which
+	is ``x > 0''.  Underlining the whole statement would be a caret line CPython
+	never draws."
+	cls = 'AssertAst' ifTrue: [
+		ivars := aStmt class allInstVarNames.
+		idx := ivars indexOf: #test.
+		idx = 0 ifTrue: [^ nil].
+		^ aStmt instVarAt: idx].
+	((cls = 'ReturnAst') or: [(cls = 'AssignAst') or: [cls = 'ExprAst']])
+		ifFalse: [^ nil].
+	ivars := aStmt class allInstVarNames.
+	idx := ivars indexOf: #value.
+	idx = 0 ifTrue: [^ nil].
+	"NARROWED PAST A SHORT-CIRCUIT, because its operands are separately blamed.
+	``x = 1 / 0 and 2.0'' must report the DIVISION (cols 9..14), not the whole
+	``and'' (9..22): CPython blames whichever operand raised.  The first operand
+	is the one evaluated before any block runs, so it is what this store should
+	name; the later operands are emitted inside ___pyAnd___:/___pyOr___: blocks
+	and BoolOpAst>>printSmalltalkOn: gives each its own store there.
+
+	Only on the value path.  An ``assert'' narrowed the same way would be wrong
+	for the case that matters most there -- a test that is FALSE rather than
+	raising -- where CPython underlines the whole test."
+	^ (aStmt instVarAt: idx)
+		ifNil: [nil]
+		ifNotNil: [:v | v ___curPosNarrowSpanNode___]
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___defaultMissingAstFields___: declaredFields into: pyNode [
+	"None for every declared field the Grail node had nothing for.
+
+	CPython's parser sets EVERY field of the nodes it builds, an absent optional
+	one to None -- Assign.type_comment, FunctionDef.returns -- so
+	``ast.iter_fields(node)'' names them all and ``node.type_comment'' answers
+	None.  Grail's nodes carry no slot for several of those, so the translated
+	node simply lacked the attribute: iter_fields skipped it and a plain read
+	raised AttributeError.  List fields are not affected; Grail always has
+	those."
+
+	| d n |
+	declaredFields isNil ifTrue: [^ self].
+	d := [pyNode @env1:___pyAttrLoad___: #'__dict__']
+		on: AbstractException do: [:ex | ex return: nil].
+	d isNil ifTrue: [^ self].
+	n := [declaredFields @env1:__len__] on: AbstractException do: [:ex | ex return: 0].
+	1 to: n do: [:k |
+		| f |
+		f := declaredFields @env1:__getitem__: k - 1.
+		((d @env1:__contains__: f) == true) ifFalse: [
+			pyNode @env1:___pyAttrStore___: f asSymbol put: None]]
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___defaultSourceString___ [
+	"Source text for a DEFAULT VALUE expression, as inspect.signature prints it.
+
+	Separate from ___annotationSourceString___ because the two callers want
+	different renderings of the same node, and sharing one unparser produced
+	wrong text for both defaults and, in one case, a structurally CORRUPT
+	signature.  A string literal is the clearest split: an annotation stores a
+	forward reference verbatim (``x: 'Foo''' -> ``Foo'', PEP 563), while a
+	default must be its repr (``a='abc''' -> ``'abc''').  Rendering a default
+	the annotation way gave ``a=abc'' and, for the empty string, ``b='' --
+	nothing at all.
+
+	Delegates by default, so every shape the annotation unparser already renders
+	correctly (Name, Attribute, Subscript, BinOp) keeps working and only the
+	nodes that genuinely differ override."
+
+	^ self ___annotationSourceString___
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___emitCurPosBefore: aStmt on: aStream [
+	"Emit a runtime update of the enclosing function's ``___curPos___'' (its
+	current execution position) BEFORE aStmt is emitted, so a traceback frame
+	built while aStmt is executing points at the right line.  At statement
+	granularity ___curPos___ holds just the beginLine as a bare SmallInteger --
+	no array is allocated, so this store is free enough to sit before EVERY
+	statement (including inside hot loop / if / try bodies via SuiteAst) without
+	adding per-iteration GC pressure.  ___pushFrameFromPos___ reconstructs a
+	line-only frame from the integer (columns / source line nil); sub-statement
+	precision (e.g. a comprehension iterable) is recorded separately, at the
+	sites where it matters, via ___pushTracebackFrame___ directly.
+
+	No-op where there is no ___curPos___ temp to store into, or when aStmt
+	carries no position.  That used to be the same question as ``are we inside a
+	function'', and is not any more: the module body declares one too (see
+	ModuleAst>>printSmalltalkOn:), so the test is functionBeingCompiled OR
+	moduleBodyBeingCompiled."
+
+	| node lit |
+	((CallAst functionBeingCompiled isNil
+		and: [CallAst moduleBodyBeingCompiled not])
+			or: [aStmt beginLine isNil]) ifTrue: [^ self].
+	"PEP 657 columns when the statement offers a span narrower than itself.
+	___pyPositionLiteralArray answers a LITERAL array -- every element a
+	compile-time constant -- so the store stays a pointer assignment that
+	allocates nothing, exactly like the bare line store it replaces, and can
+	still sit inside a hot loop.
+
+	___pythonLineForMethod___ must be able to read the line back out of this
+	form: a frame is IDENTIFIED as Python by that scan succeeding, so an
+	unreadable store deletes the frame rather than just its columns.  That is
+	what §9.38 mismeasured and §9.39 diagnosed; the scanner now steps over the
+	``#('' and both shapes read alike."
+	node := self ___curPosSpanNodeFor___: aStmt.
+	node notNil ifTrue: [
+		lit := [node ___pyPositionLiteralArray] on: Error do: [:ex | ex return: nil].
+		lit notNil ifTrue: [
+			self ___emitCurPosStore___: lit on: aStream.
+			^ self]].
+	self ___emitCurPosStore___: aStmt beginLine printString on: aStream
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___emitCurPosRestoreCommentFor___: aLiteralString on: aStream [
+	"Put the enclosing ``___curPos___'' store back, for the SOURCE SCAN only, as
+	a Smalltalk COMMENT.
+
+	A frame's position is recovered by scanning the generated text backwards from
+	the ip for the last ``___curPos___ := ...'' (BaseException class >>
+	___derivePythonSpanForMethod___:ip:), and _sourceAtIp: reports comments along
+	with everything else.  So a store emitted inside a block -- LambdaAst's, for
+	the <lambda> frame -- is also found by every LATER ip in the ENCLOSING frame,
+	whose own store now lies further back, and the caller ends up underlining the
+	lambda's body.  A comment restores what the scan sees and costs nothing at run
+	time, which a real statement could not: the lambda is an EXPRESSION, so there
+	is no statement position after its closing bracket to put one in.
+
+	The block's store writes a SHADOWED block temp, so there is nothing to undo at
+	run time and this is purely textual.
+
+	A source line holding a DOUBLE QUOTE would end the comment early, and the
+	scan's literal parser un-doubles a doubled SINGLE quote but not a doubled
+	DOUBLE quote, so such a line is dropped from the restored literal --
+	``#(l c el ec nil)'' -- keeping the columns and losing the embedded text.
+	traceback.FrameSummary prefers linecache over the embedded line anyway, so a
+	frame in a file on disk renders identically; only source Grail cannot re-read
+	(exec of a string) loses the line."
+
+	| text q |
+	aLiteralString isNil ifTrue: [^ self].
+	text := aLiteralString.
+	(text includes: $") ifTrue: [
+		q := text indexOf: $'.
+		q = 0 ifTrue: [^ self].
+		text := (text copyFrom: 1 to: q - 1) , 'nil)'].
+	aStream nextPutAll: ' "___curPos___ := '; nextPutAll: text; nextPutAll: '" '
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___emitCurPosStore___: aLiteralString on: aStream [
+	"Write one ``___curPos___ := <lit>.'' store and RECORD it as the store now in
+	effect (CallAst class >> curPosLiteralInEffect).
+
+	Every emitter of this store goes through here, so that the one emitter which
+	displaces it -- LambdaAst, whose block is its own frame -- can put back
+	whatever was standing rather than guessing at the statement's own span."
+
+	aStream nextPutAll: '___curPos___ := '; nextPutAll: aLiteralString;
+		nextPutAll: '.'; lf.
+	CallAst curPosLiteralInEffect: aLiteralString
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRChunkedArrayOf___: irValues on: aBuilder [
+	"The IR twin of ___printElementsArrayOf___:on: -- one array node when there
+	are at most ___braceChunkSize___ values, else array nodes of that size
+	joined by env-0 ``,'' sends, chunked again when a part is still too big.
+	An IR array node compiles to the same brace the text does, with the same
+	limit (#1423)."
+
+	| chunk part acc |
+	chunk := self ___braceChunkSize___.
+	irValues size <= chunk ifTrue: [^ aBuilder arrayOf: irValues].
+	part := ((irValues size + (chunk // 2) - 1) // (chunk // 2)) max: chunk.
+	1 to: irValues size by: part do: [:start |
+		| sub |
+		sub := self
+			___emitIRChunkedArrayOf___: (irValues copyFrom: start to: ((start + part - 1) min: irValues size))
+			on: aBuilder.
+		acc := acc isNil
+			ifTrue: [sub]
+			ifFalse: [aBuilder send: #, to: acc with: { sub } env: 0]].
+	^ acc
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRClassObjectOn___: aBuilder [
+	"The CLASS OBJECT itself -- the IR twin of
+	CallAst>>___printClassObjectOn___:, and it has to stay in step with it.
+
+	The CONTAINER, not what ``__class__'' reads out of it: a write to the class
+	cell targets the class, and going through the rebindable-cell read would
+	send the setter to whatever the cell currently holds.  test_super puts 42
+	there, which is how the text version of this learned the same lesson.
+
+	Two routes, as everywhere else: a module-scope class is an attribute of the
+	module instance; a METHOD-LOCAL class comes out of the closure cell keyed
+	``___cell_<ClassName>___'', which only the defining class carries."
+
+	CallAst classDefIsModuleScope == false ifFalse: [
+		^ aBuilder
+			send: CallAst classBeingCompiled asSymbol
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { } env: 1].
+	CallAst addCapturedClassName: CallAst classBeingCompiled.
+	CallAst classNeedsClassCell: true.
+	^ aBuilder
+		send: #'___classCell___:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString , '___') asSymbol }
+		env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRElementsArrayOn___: aBuilder elts: aCollection [
+	"The Array of aCollection's values, as the text builds it: a brace literal
+	``{ a. b }'' when no element is a ``*x'' splat, else printArgumentsArrayOn:'s
+	concatenation ``({} @env0:, { a } @env0:, (x @env0:___pyStarToArray___)
+	@env0:, { c })'' -- an empty seed, then one run per element, so the shape
+	is the same whatever the element order (cut 56).  Shared by call
+	arguments, tuple and list displays, which all print through that shape."
+
+	| acc |
+	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
+		^ self ___emitIRChunkedArrayOf___:
+			(aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])
+			on: aBuilder].
+	acc := aBuilder arrayOf: #().
+	aCollection do: [:e |
+		| run |
+		run := (e isKindOf: StarredAst)
+			ifTrue: [e ___emitIRStarArrayOn___: aBuilder]
+			ifFalse: [aBuilder arrayOf: { e ___emitIRValueOn___: aBuilder }].
+		acc := aBuilder send: #, to: acc with: { run } env: 0].
+	^ acc
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder [
+	"The IR twin of ___emitFreeVariableRead___:parent:on:, and deliberately the
+	same trick: build a NameAst AT THE RESOLUTION POINT and let it emit itself.
+
+	Emitting the bare local instead is wrong often enough to matter, and the
+	text's docstring lists the cases -- the self/cls parameter of a class-body
+	def IS Smalltalk ``self'', a reserved-named parameter is its transport
+	temp, an enclosing local reached past a class body comes through
+	___classCell___ (cut 81), a module-level name is a module attribute load.
+	NameAst's own IR emit knows all of those, so routing through it keeps the
+	two paths resolving a free variable identically BY CONSTRUCTION rather
+	than by a second copy of the rules."
+
+	| nameNode |
+	nameNode := NameAst with: aSymbol.
+	nameNode ctx: LoadAst basicNew.
+	nameNode setParent: aNode.
+	"GIVE IT THIS CALL'S SOURCE POSITION.  The text twin needs none -- it only
+	prints -- but the IR path STAMPS every node it emits, and a synthesized
+	node carries nil for all four position instVars.  ``column'' computes
+	``beginPosition - prevEolPos - 1'', so a nil beginPosition raises
+	``UndefinedObject does not understand #-'' out of the stamp, the seam
+	catches it, and the whole method silently falls back to text: correct
+	answers, no IR, and nothing in the census to say so.  Measured that way
+	first -- two fallbacks on a fixture whose results were already right.
+	The call site is also the honest position: this read IS emitted there."
+  nameNode setPositionFrom: self .
+	^ nameNode ___emitIRValueOn___: aBuilder
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRMatchCaptureStore___: aNameAst from: rhsNode on: aBuilder [
+	"emitNameStoreOn:target:rhs:'s IR twin, answered as an EXPRESSION so it can
+	sit inside a pattern's and: chain.  The four-way routing is
+	___emitIRModuleScopeStoreOf___:from:on:'s, which is the same rule the text
+	helper applies -- a match capture binds like any other non-assignment
+	binder, and routing it separately is how the two would drift."
+
+	^ self ___emitIRModuleScopeStoreOf___: aNameAst id asSymbol
+		from: rhsNode on: aBuilder
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
+	^ Error signal: 'IR codegen: no match test for ' , self class name asString
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRModuleReceiverOn___: aBuilder [
+	"___moduleStoreReceiverExpr___'s IR twin: the object a module-scope name
+	lives on.  Inside a class's compiled method that is the module instance
+	reached through the module class; at module scope it is the receiver itself.
+
+	One copy, for the reason ___nameStoreRoutesToModule___: gives: the store and
+	the DELETE have to name the same object, and a second spelling of that rule
+	is how they would come to disagree."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [aBuilder
+			send: #'___instance___'
+			to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+			with: { } env: 0]
+		ifFalse: [aBuilder selfNode]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on: aBuilder [
+	"IR twin of ___emitModuleScopeStoreOf___:from:on:, deciding by the SAME
+	four-way rule rather than a second copy of it: a ``global''-declared name
+	and an unshadowed module variable go to the module instance, a class-body
+	statement's target to the definitional store, anything else to the local
+	leaf.
+
+	The IR path had only the last of those.  ``except ZeroDivisionError as e''
+	where the method declares ``global e'' stored into the METHOD LOCAL -- the
+	parser records the as-name as a local, so a leaf exists and the plain
+	assign compiled and ran without complaint -- and the module never saw it.
+	CPython puts it in globals for the duration of the handler:
+	``globals()['name_caught_exc']'' raised KeyError under the flag
+	(test.test_global test_caught_exception, OK -> ERROR on the flag-on arm).
+
+	Shared by the except-as, with-as and for-target bindings exactly as the
+	text helper is, so the three cannot drift apart from each other or from
+	the text.
+
+	ANSWERS A NODE; IT DOES NOT APPEND ONE.  Every arm is a send:/assign:
+	constructor, because ___emitIRMatchCaptureStore___: needs the store as an
+	EXPRESSION inside a pattern's and: chain.  A caller emitting a STATEMENT
+	must therefore wrap the answer in ``aBuilder add:''.  Three call sites
+	once did not, and the ForAst one dropped the drain-guarded fetch of the
+	next item along with the store, so ``global n; for n in ...'' looped
+	forever -- a SUnit shard at 100% CPU for four hours rather than a failure."
+
+	| sym moduleRoute |
+	sym := aNameSymbol asSymbol.
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
+	moduleRoute ifTrue: [
+		^ aBuilder
+			send: #dynamicInstVarAt:put: to: (self ___emitIRModuleReceiverOn___: aBuilder)
+			with: { aBuilder obj: sym. aValueNode } env: 0].
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		^ aBuilder
+			send: #'___classBodyDefinitionalStore___:put:'
+			to: (aBuilder globalNamed: CallAst classBodyRuntimeClass asSymbol)
+			with: { aBuilder obj: sym. aValueNode } env: 1].
+	^ aBuilder assign: (aBuilder leafFor: sym) from: aValueNode
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder [
+	"``<recv> @env0:dynamicInstVarAt: #name put: (v)'' with an ALREADY-EMITTED
+	value -- the counterpart of ___emitIRModuleScopeStoreOf___:from:on:, which
+	takes the value as an AST node and does the four-way routing itself.  This
+	one is for the callers that have the value in hand and have already decided
+	the store goes to the module.
+
+	LIFTED FROM AssignAst (unpack cut) so the unpack's leaf store can reach it.
+	It carried its OWN copy of the receiver rule -- ``self'' in a module def,
+	``<Mod> ___instance___'' in a class method -- beside the copy in
+	___emitIRModuleReceiverOn___:; the two agreed, and two copies of a rule that
+	must not drift is how the store and the delete came to disagree once
+	already.  One reader now."
+
+	^ aBuilder
+		send: #dynamicInstVarAt:put:
+		to: (self ___emitIRModuleReceiverOn___: aBuilder)
+		with: { aBuilder obj: aNameAst id asSymbol. aNode }
+		env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRStatementOn___: aBuilder [
+	"Default: this node type is not an emittable statement.  Reached only on an
+	___irEligible___ gap; ___buildModuleClassBody:name: catches it and falls
+	back to text compilation."
+
+	^ Error signal: 'IR codegen: ' , self class name asString
+		, ' is not an emittable statement'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRUnpack___: aTarget from: valueNode holder: holderName on: aBuilder [
+	"emitUnpackCoercionAndStoresOn:elts:holder:'s shape, into IR:
+	  holder := (value) ___unpackSequence___ ___unpackCheck___: nBefore star: b after: nAfter.
+	  <one store per element>
+	An element before the star (or with none) reads ``holder __getitem__:
+	i-1''; the star reads ``holder ___getslice___: i-1 _: -nAfter _: nil'' (a
+	nil upper bound when nothing follows it); an element after the star reads
+	a NEGATIVE index from the end.  The holder is a method temp reused by every
+	unpack at the same nesting depth (assigned before use); nested targets
+	take holder_n, holder_n_n, ... exactly as the text names its block temps,
+	and eligibility excluded a user local of any of those names."
+
+	| elts starIdx hasStar nBefore nAfter holderSym holderLeaf coerced |
+	elts := aTarget elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
+	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
+	holderSym := holderName asSymbol.
+	holderLeaf := (aBuilder leafFor: holderSym) ifNil: [aBuilder tempNamed: holderSym].
+	coerced := aBuilder
+		send: #'___unpackCheck___:star:after:'
+		to: (aBuilder send: #'___unpackSequence___' to: valueNode with: { })
+		with: { aBuilder obj: nBefore.
+			hasStar ifTrue: [aBuilder trueLit] ifFalse: [aBuilder falseLit].
+			aBuilder obj: nAfter }.
+	aBuilder add: (aBuilder assign: holderLeaf from: coerced).
+	elts doWithIndex: [:elt :i |
+		| rhs |
+		(hasStar and: [i = starIdx])
+			ifTrue: [
+				rhs := aBuilder
+					send: #'___getslice___:_:_:' to: (aBuilder var: holderLeaf)
+					with: { aBuilder obj: i - 1.
+						nAfter = 0 ifTrue: [aBuilder nilLit] ifFalse: [aBuilder obj: nAfter negated].
+						aBuilder nilLit }.
+				self ___emitIRUnpackStore___: elt value from: rhs holder: holderName on: aBuilder]
+			ifFalse: [
+				rhs := aBuilder
+					send: #'__getitem__:' to: (aBuilder var: holderLeaf)
+					with: { aBuilder obj: ((hasStar and: [i > starIdx])
+						ifTrue: [(elts size - i + 1) negated]
+						ifFalse: [i - 1]) }.
+				self ___emitIRUnpackStore___: elt from: rhs holder: holderName on: aBuilder]].
+	"RELEASE THE SEQUENCE.  The text wraps this whole emit in a block whose
+	``___unpack___'' is a BLOCK temp, so the coerced sequence becomes garbage
+	the moment the block returns.  The holder here is a METHOD temp, and the
+	naming parallel above hid that the LIFETIME does not match: it keeps the
+	sequence -- and therefore every element of it -- reachable until the method
+	returns, however early the names are rebound or deleted.
+
+	Measured, a weakref to an unpacked element after ``del'': live under IR,
+	collected on the text path, so `a, b, c, d = [C(i) for i in range(4)]`
+	followed by `del c, d` left a WeakKeyDictionary at 2 entries where CPython
+	has 1 (test_copy's four weak-dict cases).  Storing nil ends the reference
+	at the point the block exit would have."
+	aBuilder add: (aBuilder assign: holderLeaf from: aBuilder nilLit).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderName on: aBuilder [
+	"emitTupleElementStoreOn:target:holder:indexExpr:directRhs:'s per-leaf
+	shapes: a local ``name := rhs''; ``(obj) @env1:__setattr__: 'attr' _: rhs''
+	(the name a Smalltalk String, as AssignAst's emit explains); ``(obj)
+	__setitem__: idx _: rhs''; a nested tuple / list recurses through
+	___emitIRUnpack___ with the next holder name."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		"A module-routed leaf (a ``global'' declaration, or an unshadowed module
+		variable) has no leaf to assign; it takes the same dynamicInstVarAt:put:
+		the plain assignment's module branch emits."
+		(aTarget ___nameStoreRoutesToModule___: aTarget id asSymbol) ifTrue: [
+			^ aBuilder add: (self
+				___emitIRModuleStoreOf___: rhsNode to: aTarget on: aBuilder)].
+		^ aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		"A slot on self (declared __slots__, or inferred under
+		GRAIL_INFERRED_SLOTS) is the accessor send."
+		(((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
+			ifTrue: [aTarget ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
+				^ aBuilder add: (aBuilder
+					send: (acc , ':') asSymbol to: aBuilder selfNode with: { rhsNode } env: 1)].
+		^ aBuilder add: (aBuilder
+			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
+			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		| objV idxV |
+		objV := aTarget value ___emitIRValueOn___: aBuilder.
+		idxV := aTarget slice ___emitIRValueOn___: aBuilder.
+		^ aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. rhsNode })].
+	^ self ___emitIRUnpack___: aTarget from: rhsNode holder: holderName , '_n' on: aBuilder
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRValueOn___: aBuilder [
+	"Default: this node type is not an emittable value.  See
+	___emitIRStatementOn___: for the fallback contract."
+
+	^ Error signal: 'IR codegen: ' , self class name asString
+		, ' is not an emittable value'
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: aStream [
+	"Emit a Smalltalk store of the raw expression fragment sourceExpr
+	into the Python name aNameSymbol.  When compiling a module body
+	(not a user class) and aNameSymbol is a module-scope variable that
+	no enclosing function shadows, route the store through
+	``self @env0:dynamicInstVarAt: #name put: (...)'' — module-body
+	methods carry module variables as dynamic instVars, not temps, so a
+	bare ``name := ...'' would reference an undeclared temp and fail to
+	compile.  Otherwise emit a bare assignment to the enclosing-scope
+	temp.  Shared by with-as and except-as target bindings, mirroring
+	ForAst>>emitForTargetStore:source:on:."
+
+	| sym moduleRoute |
+	sym := aNameSymbol asSymbol.
+	moduleRoute := self ___nameStoreRoutesToModule___: sym.
+	moduleRoute
+		ifTrue: [
+			aStream
+				nextPutAll: self ___moduleStoreReceiverExpr___;
+				nextPutAll: ' @env0:dynamicInstVarAt: #''';
+				nextPutAll: sym asString;
+				nextPutAll: ''' put: (';
+				nextPutAll: sourceExpr;
+				nextPutAll: ').'.
+			^ self].
+	"Same problem one scope in: a class-body ``with ... as x'' / ``except ...
+	as e'' has no temp to bind either, because ClassDefAst emits the statement
+	straight into the class-build code.  Route it to the per-class definitional
+	store, which is also where NameAst reads it from (ClassDefAst >>
+	___classBodyConditionalNames___ lists both forms)."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: sym asString;
+			nextPutAll: ''' put: (';
+			nextPutAll: sourceExpr;
+			nextPutAll: ').'.
+		^ self].
+	aStream
+		nextPutAll: sym asString;
+		nextPutAll: ' := ';
+		nextPutAll: sourceExpr;
+		nextPut: $.
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___emitPythonPragmaOn___: aStream [
+	"Write the ``<grailPython>'' pragma that MARKS a compiled method as generated
+	from Python.
+
+	IT ANSWERS ``is this frame Python?'', which every stack walk has to decide
+	before it can report anything, and which used to be inferred rather than
+	stated.  Two inferences, both indirect:
+
+	  * ``argsAndTemps includes: #'___curPos___''' -- the position temp doubling
+	    as a marker.  It reads METHOD-level debugInfo, so it misses the emit
+	    shape that wraps the body in an outer block (``^ [ | ___curPos___ ... |
+	    ...]''), where the temp is a BLOCK temp: 11 of 46 methods in one module.
+	  * a fallback SOURCE probe (``sourceString includesString: ___curPos___''),
+	    which those 11 fall through to.  It faults under concurrent shards, and
+	    a frame whose identity probe fails is DROPPED -- which does not shorten
+	    a live chain, it SHIFTS it, so every sys._getframe(n) past the gap names
+	    the wrong function.
+
+	A pragma is neither inference: it is compiled into the method, answered from
+	memory by ``GsNMethod >> pragmas'', and it does not care which emit shape
+	produced the body -- which is why it is written HERE, at method level, before
+	either shape opens.  A block's own pragmas are empty, so a walk that lands on
+	a block asks ``homeMethod'' first; see
+	BaseException class >> ___isGeneratedPythonMethod___.
+
+	Placed after the message pattern and before the temps declaration.  GemStone
+	accepts a pragma on either side of the temps (both were tried); before is the
+	conventional spelling."
+
+	aStream nextPutAll: '<grailPython>'; lf
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___emitTargetStore___: aTarget from: sourceExpr on: aStream [
+	"Store the raw Smalltalk expression fragment ``sourceExpr'' into an
+	arbitrary Python assignment TARGET: a name, an attribute, a subscript,
+	or a (possibly nested, possibly starred) tuple/list.
+
+	``with EXPR as TARGET'' is an assignment whose right-hand side is a
+	value the emitter already holds in a Smalltalk temp rather than a
+	Python expression node, so it cannot go through AssignAst.  WithAst
+	handled only a bare NameAst and fell back to
+	``TARGET printSmalltalkOn: ... := ...'' -- which is a LOAD emit of a
+	STORE-context node.  Every other target shape was therefore broken:
+	an attribute or subscript target died on ``Expression Context should
+	be <Load> but is <Store>'', and a tuple target emitted
+	``(tuple withAll: {a. b}) := val'', which is not valid Smalltalk.
+	That is what stopped test.test_with importing at all.
+
+	Names route through ___emitModuleScopeStoreOf___:from:on:, the only
+	path that also covers a class-body ``with''.  Every other shape goes
+	to the same per-element store AssignAst uses for tuple unpacking, so
+	a with-target now gets its iterable coercion, ValueError value-count
+	check, PEP 3132 star support and @property setter dispatch."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		^ self ___emitModuleScopeStoreOf___: aTarget id from: sourceExpr on: aStream].
+	^ self
+		emitTupleElementStoreOn: aStream
+		target: aTarget
+		holder: '___tgt___'
+		indexExpr: nil
+		directRhs: sourceExpr
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___enclosingComprehensionTargetNames___ [
+	"The target names of every comprehension this node sits INSIDE, innermost
+	first and deduplicated, as Symbols.
+
+	These are Smalltalk block temps of the comprehension's own emitted block
+	(ComprehensionAst >> emitGenerators:...), so a locals() built here can read
+	each one as a bare identifier.  CPython reports them: ``[locals()['x'] for
+	x in l]'' answers the iteration values (test_listcomps
+	test_iter_var_available_in_locals), and PEP 709 keeps that true now that
+	the comprehension shares the enclosing frame.
+
+	INSIDE is the whole question, and it is why this is a parent-chain walk
+	rather than a scope-set lookup.  A comprehension target is NOT a local of
+	the enclosing function -- ``def b(): [a for b in [1]]; return locals()''
+	answers {} in CPython, which is test_no_leakage_to_locals -- so only a
+	locals() lexically within the comprehension may see it.
+
+	The FIRST clause's iterable is excluded for the reason NameAst >>
+	___isEnclosingComprehensionTarget___: gives: CPython evaluates it in the
+	ENCLOSING scope, so a call there is not inside the comprehension at all and
+	the walk continues outward."
+
+	| node child names gens inClauseIter |
+	names := OrderedCollection new.
+	child := self.
+	node := parent.
+	inClauseIter := false.
+	[node notNil] whileTrue: [
+		"``iter'' hangs off the ComprehensionAst CLAUSE, one level below the
+		comprehension node, so the test is made here and carried one step."
+		(node isKindOf: ComprehensionAst) ifTrue: [
+			inClauseIter := (self ___nodeInstVar___: node named: #iter) == child].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [
+			gens := self ___nodeInstVar___: node named: #generators.
+			(inClauseIter
+				and: [gens notNil
+				and: [gens notEmpty and: [gens first == child]]])
+				ifFalse: [
+					gens ifNotNil: [
+						gens do: [:g |
+							self ___addCompTargetLeafNames___: g target into: names]]].
+			inClauseIter := false].
+		child := node.
+		node := node parent].
+	^ names
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___enclosingFunctionLocalBeyondClass___: aSymbol [
+	"True iff aSymbol is a python-local of an enclosing function BEYOND
+	the nearest enclosing ClassDefAst -- i.e. this node sits in a
+	class-method body (or a class nested in one) and the name belongs
+	to an ENCLOSING def, not to the method itself (or a def nested in
+	it).  The first binding function wins: bound before crossing a
+	classdef -> a real temp of the compiled method -> false.
+
+	On a NameAst this drives the closure-cell read for a method body's
+	free variable; on a ClassDefAst it drives the cell-FORWARD store
+	emitted in the enclosing method (the store's value must itself be
+	read from the method's own cell, since a class-method body
+	string-compiles with no lexical link to the outer temp)."
+
+	| node passedClass |
+	node := parent.
+	passedClass := false.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [passedClass := true].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(self ___functionBindsPythonLocal___: node named: aSymbol)
+					ifTrue: [^ passedClass]].
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___fixUpPythonAst___: pyNode [
+	"Adjust the translated node where Grail keeps a field in a different form
+	from CPython.  Nothing to do for most nodes; the pattern nodes override."
+
+	^ self
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___functionBindsParameter___: funcAst named: aSymbol [
+	"True iff aSymbol is a PARAMETER of funcAst -- positional-only,
+	ordinary, keyword-only, ``*args'' or ``**kwargs''.  The parameter
+	half of ___functionBindsPythonLocal___:, split out because the
+	unbound-local guard analysis needs to tell a parameter binding
+	apart from a body binding: a parameter is bound before the Python
+	body runs, a body binding may not be."
+
+	| ivars argsIdx argsNode argsIvars |
+	ivars := funcAst class allInstVarNames.
+	argsIdx := ivars indexOf: #args.
+	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
+	argsNode isNil ifTrue: [^ false].
+	argsIvars := argsNode class allInstVarNames.
+	#(#args #posonlyargs #kwonlyargs) do: [:fld |
+		| idx list |
+		idx := argsIvars indexOf: fld.
+		idx > 0 ifTrue: [
+			list := argsNode instVarAt: idx.
+			list ifNotNil: [
+				(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true]
+			].
+		].
+	].
+	#(#vararg #kwarg) do: [:fld |
+		| idx v |
+		idx := argsIvars indexOf: fld.
+		idx > 0 ifTrue: [
+			v := argsNode instVarAt: idx.
+			(v notNil and: [v name asSymbol == aSymbol asSymbol])
+				ifTrue: [^ true].
+		].
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___functionBindsPythonLocal___: funcAst named: aSymbol [
+	"True iff aSymbol is a TRUE PYTHON LOCAL of the given FunctionDefAst
+	or LambdaAst: a parameter, or a genuine body binding (the block's
+	``writes'' set — assignment / for / with-as / except-as / walrus
+	targets, def / class / import names).
+
+	Distinct from ___functionDeclaresLocal___:, which consults the
+	block's ``variables'' set — that set over-approximates Python's
+	locals (it also holds comprehension targets, f-string resolution
+	hints, and every name needing a Smalltalk temp declaration), so it
+	must not drive LEGB decisions.  ``writes'' excludes comprehension
+	targets (comprehension-scoped in Python 3; see the parser's
+	declareWrite:) and global- / nonlocal-declared names (stripped by
+	popScope)."
+
+	| ivars bodyIdx bodyNode writesSet ownIdx |
+	(self ___functionBindsParameter___: funcAst named: aSymbol) ifTrue: [^ true].
+	ivars := funcAst class allInstVarNames.
+	bodyIdx := ivars indexOf: #body.
+	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
+	(bodyNode isKindOf: BlockAst) ifTrue: [
+		writesSet := bodyNode writes.
+		(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
+			ifTrue: [^ true]
+	].
+	"A LAMBDA's body is an EXPRESSION, not a BlockAst, so the branch above
+	never fires for one and a lambda looked like a scope that binds
+	nothing but its parameters.  It can bind: ``lambda: (n := 1) + n'' is
+	a walrus, and PEP 572 puts that binding in the lambda.  LambdaAst
+	carries its own write set for exactly this -- without it the load
+	walked PAST the lambda and claimed an enclosing function's same-named
+	local, so ``n = 99; fn = lambda: (n := 1) + n'' answered 1 for the
+	outer n where CPython leaves 99."
+	ownIdx := ivars indexOf: #writes.
+	ownIdx > 0 ifTrue: [
+		writesSet := funcAst instVarAt: ownIdx.
+		(writesSet notNil and: [writesSet includes: aSymbol asSymbol])
+			ifTrue: [^ true]
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___functionDeclaresGlobal___: aFunctionNode named: aSymbol [
+	"Does aFunctionNode's own scope declare ``global aSymbol''?  The
+	per-scope set the parser records on the body BlockAst.  A LambdaAst
+	cannot contain statements, so it never declares one."
+
+	(aFunctionNode isKindOf: FunctionDefAst) ifFalse: [^ false].
+	^ self ___scopeNodeDeclaresGlobal___: aFunctionNode named: aSymbol
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___functionDeclaresLocal___: funcAst named: aSymbol [
+	"True iff the given FunctionDefAst or LambdaAst declares
+	aSymbol as a parameter or in its body's BlockAst variables.
+	Uses instVar access (no public getters on AST nodes).
+	Lives on AbstractNode so any node (NameAst load codegen, but also
+	with-as / except-as store codegen) can walk an enclosing function."
+
+	| ivars argsIdx bodyIdx argsNode bodyNode argsIvars |
+	ivars := funcAst class allInstVarNames.
+	argsIdx := ivars indexOf: #args.
+	bodyIdx := ivars indexOf: #body.
+	argsNode := argsIdx > 0 ifTrue: [funcAst instVarAt: argsIdx] ifFalse: [nil].
+	bodyNode := bodyIdx > 0 ifTrue: [funcAst instVarAt: bodyIdx] ifFalse: [nil].
+	argsNode ifNotNil: [
+		argsIvars := argsNode class allInstVarNames.
+		#(#args #posonlyargs #kwonlyargs) do: [:fld |
+			| idx list |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				list := argsNode instVarAt: idx.
+				list ifNotNil: [
+					(list anySatisfy: [:a | a name asSymbol == aSymbol asSymbol])
+						ifTrue: [^ true]
+				].
+			].
+		].
+		#(#vararg #kwarg) do: [:fld |
+			| idx v |
+			idx := argsIvars indexOf: fld.
+			idx > 0 ifTrue: [
+				v := argsNode instVarAt: idx.
+				(v notNil and: [v name asSymbol == aSymbol asSymbol])
+					ifTrue: [^ true].
+			].
+		].
+	].
+	((bodyNode isKindOf: BlockAst)
+		and: [bodyNode variables includes: aSymbol asSymbol])
+			ifTrue: [^ true].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___globalDeclarationWinsFor___: aSymbol [
+	"Walking outward from this node, is the first enclosing function scope
+	that has anything to say about aSymbol one that declares it ``global''?
+
+	Python resolves a name against the INNERMOST enclosing scope that either
+	binds it or declares it, so the two possibilities have to be tested in the
+	same walk rather than one after the other:
+
+	    def f():
+	        x = 1
+	        def g():
+	            global x
+	            def h(): return x     # global -- g declared it
+	            def k():
+	                x = 5
+	                return x          # k's own local, g's declaration is moot
+
+	Answers false when neither is found, which leaves the name to the ordinary
+	module/builtins lookup."
+
+	| node prev |
+	prev := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				"Same two exclusions as ___pythonLocalInEnclosingFunctions___:
+				-- an annotation and a lambda default are evaluated in the
+				ENCLOSING scope, so the scope they are written in has no say."
+				(node == CallAst annotationOwnerDefNode
+					or: [prev isKindOf: ArgumentsAst])
+					ifFalse: [
+						(self ___functionDeclaresGlobal___: node named: aSymbol)
+							ifTrue: [^ true].
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [^ false]]].
+		prev := node.
+		node := node parent.
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___globalsOnlyViewReceiverExpr___ [
+	"Receiver expression for ``globals()'' ALONE -- not for module-scope
+	locals()/vars() or bare dir(), which keep ___globalsViewReceiverExpr___.
+
+	The three coincide in a module and in almost every doit, and they come
+	apart in exactly one case: exec()/eval() handed a ``locals'' mapping that
+	is not the ``globals'' one.  The doit scope is then the two MERGED --
+	locals over globals, which is the lookup order a name wants and what
+	locals() should report -- while globals() is defined to answer the globals
+	mapping alone.
+
+	The fork is made at RUN TIME rather than here, by
+	builtins >> ___doitGlobalsView___:, because compiling the source says
+	nothing about whether the caller will pass one mapping or two."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['(((Python @env0:at: #builtins) @env0:___instance___) ___doitGlobalsView___: ___pyGlobals___)']
+		ifFalse: [self ___moduleStoreReceiverExpr___]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___globalsViewReceiverExpr___ [
+	"Smalltalk receiver expression for the LIVE NAMESPACE VIEW that
+	``globals()'', module-scope ``locals()''/``vars()'' and bare ``dir()''
+	wrap in a PyModuleDict.
+
+	Not the same choice as ___moduleStoreReceiverExpr___, because a DOIT has
+	no module instance at all: ``self'' is nil there, so those three all built
+	a view over nil and every read or enumeration of it died sending
+	``___globalNames___'' / ``___globalAt___:otherwise:'' to nil -- an
+	uncatchable-looking UnboundLocalError from any exec'd code that called
+	them (test_listcomps test_code_replace and test_code_replace_extended_arg
+	call bare dir(); so does anything using locals() under exec).
+
+	A doit's namespace is the symbol-list SymbolDictionary that
+	ModuleAst >> ensureModuleScope: parks under ``___pyGlobals___'' for
+	exactly this kind of use -- NameAst and AssignAst already reach doit
+	globals through it.  PyModuleDict serves either shape; see its
+	``___isDoitScope___''."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['___pyGlobals___']
+		ifFalse: [self ___moduleStoreReceiverExpr___]
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___grailAstModule___ [
+	"The ``ast'' module, imported on demand.  Nil when it cannot be imported,
+	which leaves the translation answering nil rather than raising out of a
+	parse."
+
+	^ [((Python at: #builtins) @env1:instance) @env1:___import__: { 'ast' } kw: nil]
+		on: AbstractException do: [:ex | ex return: nil]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___grailOptimizeLevel___ [
+	"The ``optimize'' level the compile now running was given -- -1 when the
+	caller said nothing, which means ``whatever the interpreter is''.
+
+	Read at EMIT time, not at parse time: the three things it changes are all
+	decisions a code generator makes (fold __debug__, drop an assert, drop a
+	docstring), and the level travels on the code object from compile() to the
+	exec() that eventually generates."
+
+	^ [((Python at: #builtins) @env1:instance) @env1:___grailOptimizeLevel___]
+		on: AbstractException do: [:ex | ex return: -1]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___grailSourceLinesFrom___: first to: last [
+	"Lines first..last of the module's source, or nil when either the text or
+	the range is unavailable.
+
+	Split out because the node that WANTS a span is not always the one that
+	HAS one: a Block carries no position -- SuiteAst descends from AbstractNode
+	rather than AbstractLocationNode -- so a def asking for its body's text has
+	to build the range from its first statement and its own end."
+
+	| src lines out lf |
+	(first isNil or: [last isNil]) ifTrue: [^ nil].
+	src := self ___rootModuleSource___.
+	src isNil ifTrue: [^ nil].
+	lf := Character lf.
+	lines := (src asString) subStrings: (String with: lf).
+	((first < 1) or: [(last > lines size) or: [last < first]]) ifTrue: [^ nil].
+	out := WriteStream on: String new.
+	first to: last do: [:i |
+		out nextPutAll: (lines at: i); nextPut: lf].
+	^ out contents
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___grailSourceSpanText___ [
+	"This node's own source text, sliced out of the module's by LINE.
+
+	Line granularity rather than column: the caller is after a COMPILABLE
+	fragment -- a def's body -- and a body always starts on its own line.  A
+	column slice would cut a statement in half whenever one shared a line with
+	its header, which ``def f(): return 1'' does.
+
+	Answers nil when the module source or this node's span is unavailable,
+	which is what tells the caller to fall back rather than emit a wrong
+	fragment."
+
+	| first last |
+	first := [self beginLine] on: AbstractException do: [:ex | ex return: nil].
+	last := [self endLine] on: AbstractException do: [:ex | ex return: nil].
+	^ self ___grailSourceLinesFrom___: first to: last
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___guardedLocalNeedsCheck___: aSymbol [
+	"False when the unbound-local guard can be SKIPPED for a load of
+	aSymbol -- i.e. the binding it resolves to is a PARAMETER that no
+	``del'' can unbind.
+
+	Only called once ___pythonLocalInEnclosingFunctions___: has already
+	said this name is a true Python local of some enclosing function, so
+	the global-declaration and lambda-default exclusions it applies have
+	already been made; this walk repeats their shape to identify WHICH
+	function owns the binding.
+
+	A parameter is non-nil before the Python body runs in every calling
+	convention Grail emits -- Smalltalk method argument, prologue temp
+	(assigned, or TypeError for a missing argument), or rebind transport
+	temp -- so the only way to unbind one is ``del''.  Defaults, ``*args'',
+	``**kwargs'' and keyword-only parameters all resolve to a value or
+	raise; a ``None'' default is the singleton, not nil.
+
+	The INNERMOST enclosing function that binds the name decides.  If it
+	binds it as a body local rather than a parameter, the guard stays --
+	``def outer(): def inner(): return x; x = 1'' reads a binding that may
+	genuinely be unset."
+
+	| node prev owner |
+	prev := self.
+	node := parent.
+	owner := nil.
+	[node notNil and: [owner isNil]] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				(node == CallAst annotationOwnerDefNode
+					or: [prev isKindOf: ArgumentsAst])
+					ifFalse: [
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [owner := node]]].
+		prev := node.
+		node := node parent.
+	].
+	owner isNil ifTrue: [^ true].
+	(self ___functionBindsParameter___: owner named: aSymbol) ifFalse: [^ true].
+	^ owner deletedNamesInSubtree includes: aSymbol asSymbol
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___hasFragmentPositions___ [
+	"Was this node parsed from a fragment -- see ___markFragmentPositions___."
+
+	^ (self dynamicInstVarAt: #'___fragmentPositions___') == true
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___hasFullPositionSpan___ [
+	"Does this node carry all four position numbers?
+
+	The scan that reads a position literal back wants four INTEGERS and answers
+	nil for anything else, so a store built from a partial span records nothing
+	and merely DISPLACES the enclosing one.  A bare constant is the usual
+	offender: it has no ``endLine'' at all.  All-or-nothing rather than a
+	repair, for the reason LambdaAst>>___bodyHasAFullSpan___ gives -- the
+	information is absent, not malformed, and a zero-width span would be a
+	confidently wrong underline where the enclosing store is merely coarse."
+
+	^ [self notNil
+		and: [self beginLine notNil
+		and: [self column notNil
+		and: [self endLine notNil
+		and: [self endColumn notNil]]]]]
+			on: Error do: [:ex | ex return: false]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___hasModuleScopeAwait___ [
+	"Whether this subtree AWAITS at module scope -- an ``await'', an ``async
+	for'' or an ``async with'' reachable without entering a def, a lambda or a
+	class body.
+
+	That is exactly CPython's condition for setting CO_COROUTINE on a module
+	compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT, and the careful half is what it
+	must NOT match: an ``async def'' whose awaits are all inside it is an
+	ordinary module, and so is a comprehension with no async in it.
+	test_compile_top_level_await_no_coro asserts the bit is clear for five
+	shapes that each contain something async-looking.
+
+	A comprehension IS searched, and deliberately: ``[x async for x in
+	arange(2)]'' at module level awaits, and CPython marks it.  Only the three
+	node kinds that introduce a new FUNCTION scope end the walk.
+
+	Generic instVar traversal, the same one
+	___collectModuleScopeStarImportsInto___ uses; ``parent'' points UP and is
+	skipped by index."
+
+	"A new scope ends the walk -- but only for the part that RUNS in it.  A
+	def's decorators and defaults, a lambda's defaults, and a class's
+	decorators, bases and keywords are evaluated in the ENCLOSING scope, so an
+	await there awaits at module level and CPython marks the module
+	(``a = (lambda x=[await sleep(0, 1) for _ in [0]]: x)()[0]'',
+	test_compile_top_level_await).  A generator expression likewise runs only
+	its OUTERMOST iterable here; an await in its body makes it an async
+	genexp, not the module a coroutine (``g = (await x for x in y)'' is 0)."
+	(self isKindOf: FunctionDefAst) ifTrue: [   "AsyncFunctionDefAst included"
+		^ (self ___anyHasModuleScopeAwait___: self decoratorList)
+			or: [self ___anyHasModuleScopeAwait___: self args]].
+	(self isKindOf: LambdaAst) ifTrue: [
+		^ self ___anyHasModuleScopeAwait___: self args].
+	(self isKindOf: ClassDefAst) ifTrue: [
+		^ (self ___anyHasModuleScopeAwait___: self decorator_list)
+			or: [(self ___anyHasModuleScopeAwait___: self bases)
+			or: [self ___anyHasModuleScopeAwait___: self keywords]]].
+	(self isKindOf: GeneratorExpAst) ifTrue: [
+		^ self ___anyHasModuleScopeAwait___: self generators first iter].
+	((self isKindOf: AwaitAst)
+		or: [(self isKindOf: AsyncForAst) or: [self isKindOf: AsyncWithAst]])
+			ifTrue: [^ true].
+	"``[x async for x in ait]'' AWAITS TOO, and its async-ness is a FLAG on the
+	comprehension clause rather than a node kind -- there is no AsyncForAst in
+	a comprehension.  Without this the three shapes test_compile_top_level_await
+	spells as comprehensions compiled with the coroutine bit clear, so the
+	caller was told to exec code that has to be awaited."
+	((self isKindOf: ComprehensionAst) and: [self is_async = 1]) ifTrue: [^ true].
+	2 to: self class allInstVarNames size do: [:i |
+		| val |
+		val := self instVarAt: i.
+		((val isKindOf: AbstractNode)
+			and: [val ___hasModuleScopeAwait___]) ifTrue: [^ true].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				((each isKindOf: AbstractNode)
+					and: [each ___hasModuleScopeAwait___]) ifTrue: [^ true]]]].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___headerLocalBeyondClass___: aSymbol [
+	"As ___enclosingFunctionLocalBeyondClass___, for a node in an expression
+	that is evaluated INLINE in the enclosing scope -- a class's bases and
+	keywords, or a class's or function's decorators.
+
+	Only a METHOD BODY is compiled apart from its surroundings (it
+	string-compiles onto its class with no lexical link to the enclosing
+	temps), so a class is crossed only when the walk comes up out of the body
+	of one of its methods.  A header is evaluated where the class statement
+	stands, so the plain walk -- which counts the header's own class as soon as
+	it reaches it -- answered true for every header name, and the callers
+	stood down from the cell read altogether.  That was right for a local of
+	the method the class statement sits in, and wrong for a name from beyond
+	that method's class:
+
+	    def test_factory(abc_ABCMeta):
+	        class TestABC(unittest.TestCase):
+	            def test_x(self):
+	                class A(metaclass=abc_ABCMeta): ...
+
+	``abc_ABCMeta'' is no temp of test_x, so emitting it bare failed to
+	compile (undefined symbol) and test_x became a codegen-gap stub -- 62 of
+	test.test_abc's 64 errors.  Here it is beyond TestABC, and reads
+	TestABC's cell like any other free name in test_x."
+
+	| prev node passedClass fromFunctionBody lastDef |
+	prev := self.
+	node := parent.
+	passedClass := false.
+	fromFunctionBody := false.
+	lastDef := nil.
+	[node notNil] whileTrue: [
+		"Only a def that is a DIRECT statement of the class body is a method,
+		compiled apart.  A def nested in a compound statement of the body --
+		``if flag: def __init_subclass__'' -- is emitted INLINE, as a closure in
+		the enclosing scope, so its free names are real temps there
+		(init_subclass_class_body.py, a_star_args_hook_gets_the_class_positionally)."
+		(node isKindOf: ClassDefAst) ifTrue: [
+			(fromFunctionBody and: [lastDef notNil
+				and: [node body notNil and: [node body body notNil
+				and: [node body body includesIdentical: lastDef]]]])
+					ifTrue: [passedClass := true].
+			fromFunctionBody := false].
+		(node isKindOf: FunctionDefAst) ifTrue: [
+			fromFunctionBody := self ___is: prev inBodyOf: node.
+			lastDef := node.
+			(fromFunctionBody and: [self ___functionBindsPythonLocal___: node named: aSymbol])
+				ifTrue: [^ passedClass]].
+		(node isKindOf: LambdaAst) ifTrue: [
+			(self ___functionBindsPythonLocal___: node named: aSymbol)
+				ifTrue: [^ passedClass]].
+		prev := node.
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-Direct Calls' }
+AbstractNode >> ___importBoundNamesInto___: aSet [
+	"Add to aSet every name an ``import'' / ``from ... import'' statement in THIS
+	node's scope binds -- walking statement bodies (if / try / for / with / while
+	arms included) but NOT into a nested def, lambda or class, which bind their
+	own locals.  Reflective over the node's instVars, skipping the ``parent''
+	back-pointer, so no per-node-class visitor is needed.  Used by
+	CallAst>>___directCallSelector___ (exclusion 6): a name an import binds
+	holds a MODULE, whose bare unary DNU is a read, so ``mod.Cls()'' must keep
+	load-then-call.  Called once per module (importlib) and once per call site
+	for the enclosing defs, which are small."
+
+	((self isKindOf: ImportAst) or: [self isKindOf: ImportFromAst]) ifTrue: [
+		self ___boundTargetNames___ do: [:each | aSet add: each asSymbol]].
+	2 to: self class instSize do: [:i |
+		| v |
+		v := self instVarAt: i.
+		self ___importScanInto___: aSet value: v].
+	^ aSet
+
+]
+
+{ #category : 'Grail-Direct Calls' }
+AbstractNode >> ___importScanInto___: aSet value: v [
+	"One instVar value of ___importBoundNamesInto___:'s walk: a child node is
+	scanned unless it opens a new scope; a collection is scanned element-wise."
+
+	(v isKindOf: AbstractNode) ifTrue: [
+		((v isKindOf: FunctionDefAst)
+			or: [(v isKindOf: LambdaAst) or: [v isKindOf: ClassDefAst]]) ifFalse: [
+			v ___importBoundNamesInto___: aSet].
+		^ self].
+	((v isKindOf: SequenceableCollection) and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+		v do: [:each | self ___importScanInto___: aSet value: each]].
+	^ self
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___importSelectorPrefix___ [
+	"The builtins selector an ``import'' statement compiles to: the ordinary
+	``___import__'' or, under a ``__builtins__'' override, ``___gatedImport___''.
+
+	Chosen at EMIT TIME rather than checked inside ___import__:kw: so that
+	only an import the exec'd SOURCE wrote is gated.  A check in the shared
+	method also catches Grail's own lazy imports -- raising a NameError inside
+	exec'd code imports ``re'' for the traceback -- and replaces the
+	exception the caller was waiting for with an ImportError about a module
+	the source never mentions."
+
+	^ self ___builtinsAreOverridden___
+		ifTrue: ['___gatedImport___']
+		ifFalse: ['___import__']
+
+]
+
+{ #category : 'Grail-Class Body' }
+AbstractNode >> ___inClassBodyAttributeValueScope___ [
+	"True when this node sits DIRECTLY in a class body -- not inside a def,
+	lambda or nested class within it.
+
+	The twin of ___inClassBodyRuntimeScope___ for the other class-body emit
+	phase: that one covers a compound statement emitted verbatim, this one the
+	attribute VALUE expressions, where CallAst classBodyRuntimeClass is nil and
+	inClassBodyValueEmit is the flag that is set.  The callers pair it with
+	that flag; kept separate because the scope question and the phase question
+	have different answers -- the flag stays set across a nested def's whole
+	emit, and it is this walk that keeps class-attribute routing off that def's
+	genuine locals.
+
+	LambdaAst ends the walk as well as FunctionDefAst: a walrus in a class-body
+	lambda (``f = lambda: (n := 1)'') binds inside the lambda, which does have a
+	Smalltalk temp for it."
+
+	| node |
+	node := self parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ false].
+		(node isKindOf: ClassDefAst) ifTrue: [^ true].
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-Class Body' }
+AbstractNode >> ___inClassBodyRuntimeScope___ [
+	"True while ClassDefAst is emitting a class-body ``try'' / ``for'' /
+	``while'' / ``with'' verbatim (CallAst >> classBodyRuntimeClass is set)
+	AND this node sits directly in that class body rather than inside a def
+	nested within it.
+
+	The flag stays set for the whole statement emit, INCLUDING any nested def
+	or class, so this scope test is what keeps the class-attribute routing off
+	genuine locals: walking out, the first FunctionDefAst-or-ClassDefAst
+	reached must be the ClassDefAst."
+
+	| node |
+	CallAst classBodyRuntimeClass ifNil: [^ false].
+	node := self parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: FunctionDefAst) ifTrue: [^ false].
+		(node isKindOf: ClassDefAst) ifTrue: [^ true].
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irChildLocals___: localSet [
+	"The local-name set this node's CHILDREN are judged against by the census
+	walk (FunctionDefAst>>___irFirstRefusedChildOf___:).  Default: the same
+	set.  A comprehension answers the set plus its clause targets, which are
+	locals of the comprehension's own scope and not of the def -- without
+	this the walk blamed a plain target read (``NameAst:other'') for a
+	comprehension refused for something else."
+
+	^ localSet
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irEligibleStatementLocals___: localNames [
+	"Default: a node is NOT an IR-emittable statement.  Overridden by the
+	statement nodes the direct-to-IR path handles (see MIGRATION.md).
+	``localNames'' is the Set of in-scope local/parameter name Strings."
+
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irEligibleValueLocals___: localNames [
+	"Default: a node is NOT an IR-emittable value.  Overridden by the
+	expression nodes the direct-to-IR path handles."
+
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irFlowBound___: boundIn locals: localSet [
+	"The bound-before-read flow analysis, one statement at a time.  Answer the
+	Set of locals (Strings) DEFINITELY bound after this statement has run, given
+	boundIn (those bound before it), or nil when the statement cannot be proven
+	safe: a read of a local not in boundIn, or a binding somewhere the analysis
+	does not follow the path of.  FunctionDefAst>>___irAssignFlowSafe___: starts
+	the walk with the parameters; a nil anywhere makes the def ineligible, which
+	is what lets the IR path emit a bare local read with no unbound guard.
+
+	This default is the SIMPLE-statement rule: every local the subtree reads
+	must be in boundIn; every local written below the top level (a walrus, say)
+	must already be bound too, since this rule sees no path through the
+	statement; then the statement's own top-level bindings join the set.  The
+	statement CONTAINERS (Block, Suite, If, While, For, Try) override to walk
+	their bodies in order, each from the set that holds on entry to it, and the
+	TERMINATORS (return, raise, break, continue) answer every local -- nothing
+	after them on the same path is reachable."
+
+	| reads writes out |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	out := boundIn copy.
+	writes := Set new.
+	self ___irWriteLocalNamesInto___: writes locals: localSet.
+	(self ___irTopLevelWriteNames___: localSet) do: [:n |
+		writes remove: n ifAbsent: [].
+		out add: n].
+	(writes allSatisfy: [:w | boundIn includes: w]) ifFalse: [^ nil].
+	^ out
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irFlowMeet___: aSet with: anotherSet [
+	"The locals bound on BOTH of two joining paths."
+
+	^ aSet select: [:n | anotherSet includes: n]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irFlowReadsBound___: aNode in: boundIn locals: localSet [
+	"True when every local aNode (an expression) reads is in boundIn."
+
+	| reads |
+	reads := Set new.
+	aNode ___irReadLocalNamesInto___: reads locals: localSet.
+	^ reads allSatisfy: [:r | boundIn includes: r]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irFlowTerminates___: boundIn locals: localSet [
+	"___irFlowBound___:locals: for a statement that leaves its block -- return,
+	raise, break, continue.  Its own reads must be bound; after it, every local
+	counts as bound, because whatever follows on this path is dead code and a
+	branch that ends this way must not narrow what the OTHER branch bound
+	(``if c: return 0'' then ``x = 1'' leaves x bound)."
+
+	| reads |
+	reads := Set new.
+	self ___irReadLocalNamesInto___: reads locals: localSet.
+	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
+	^ localSet copy
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irLocalWriteTarget___: localSet [
+	"The NameAst this statement writes as a plain top-level local binding, or
+	nil.  ___irTopLevelWriteNames___: derives the flow analysis's definite
+	bindings from it (___irFlowBound___:locals:).  Overridden by the
+	write-carrying statements the IR path handles (Assign, AugAssign, Import)."
+
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irMatchCaptureEligible___: aNameAst locals: localNames [
+	"Can a capture of aNameAst be stored?  Either the store routes off the
+	method (a ``global''-declared name, an unshadowed module variable, a class
+	body) or the name is a local with a leaf to assign."
+
+	| sym |
+	aNameAst isNil ifTrue: [^ true].
+	(aNameAst isKindOf: NameAst) ifFalse: [^ false].
+	sym := aNameAst id asSymbol.
+	(self ___nameStoreRoutesToModule___: sym) ifTrue: [^ true].
+	self ___inClassBodyRuntimeScope___ ifTrue: [^ true].
+	^ localNames includes: sym asString
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irMatchTestEligible___: localNames [
+	"A pattern node with no IR emit of its own.  Answering false here rather
+	than letting the walk miss it is what keeps a new pattern class refusing
+	instead of compiling as something else."
+
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irReadLocalNamesInto___: aSet locals: localSet [
+	"Collect the LOCAL names (members of localSet) read in this subtree into
+	aSet.  Default: a leaf that reads nothing.  Overridden by the expression /
+	statement nodes the IR path handles; the flow analysis only walks those."
+
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irRefusalDetail___: localSet [
+	"Census only (FunctionDefAst>>___irRefusalIn___:locals:): WHY a node whose
+	class has an IR predicate refused this particular instance, when none of
+	its children did.  Default: just the class.  Overridden where the predicate
+	has several exits worth telling apart."
+
+	^ ('shape:' , self class name asString) asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irStampChild___ [
+	"The child this node's own send must be stamped PAST, or nil.
+
+	Answered by the compound nodes whose leading child begins at the same
+	character they do -- see PyMethodIRBuilder>>atNode:, which is the only
+	caller and explains why it matters.  nil means ``stamp at my own
+	beginPosition'', which is right for every node that starts with a token of
+	its own (a statement keyword, a bracket, an operator)."
+
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irTopLevelWriteNames___: localSet [
+	"The local names (Strings) this statement binds UNCONDITIONALLY when it
+	completes -- what the flow analysis adds to the bound set after it.  The
+	default derives from the single-target ___irLocalWriteTarget___:; a
+	statement that binds several names at once (a from-import, a tuple unpack)
+	overrides."
+
+	^ (self ___irLocalWriteTarget___: localSet)
+		ifNil: [#()]
+		ifNotNil: [:tgt | { tgt id asString }]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irUnpackDepth___: aTarget [
+	"How many tuple levels aTarget nests: 1 for a flat tuple."
+
+	| deepest |
+	deepest := 0.
+	aTarget elts do: [:e |
+		| leaf |
+		leaf := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
+		((leaf isKindOf: TupleAst) or: [leaf isKindOf: ListAst]) ifTrue: [
+			deepest := deepest max: (self ___irUnpackDepth___: leaf)]].
+	^ deepest + 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irUnpackHoldersFree___: baseName depth: aDepth locals: localNames [
+	"True when none of the holder temps the unpack emit registers (baseName,
+	baseName_n, baseName_n_n, ...) is a user local -- they are METHOD temps
+	here, where the text uses shadowing block temps."
+
+	| h |
+	h := baseName.
+	1 to: aDepth do: [:i |
+		(localNames includes: h) ifTrue: [^ false].
+		h := h , '_n'].
+	^ true
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irUnpackLeafEligible___: aLeaf locals: localNames [
+	(aLeaf isKindOf: NameAst) ifTrue: [
+		((aLeaf ctx) isKindOf: StoreAst) ifFalse: [^ false].
+		"A ``global''-declared leaf has no local to assign -- the parser strips
+		it from the scope's variables -- so the plain ``localNames includes:''
+		test below refuses it, which is what made ``global a, b; a, b = x, y''
+		keep the whole statement on text.  It stores to the MODULE instead, by
+		the same four-way rule every other store in this file consults."
+		(aLeaf ___nameStoreRoutesToModule___: aLeaf id asSymbol) ifTrue: [^ true].
+		^ localNames includes: aLeaf id asString].
+	(aLeaf isKindOf: AttributeAst) ifTrue: [
+		^ aLeaf attr asString ~= '__class__'
+			and: [aLeaf value ___irEligibleValueLocals___: localNames]].
+	(aLeaf isKindOf: SubscriptAst) ifTrue: [
+		^ (aLeaf value ___irEligibleValueLocals___: localNames)
+			and: [aLeaf slice ___irEligibleValueLocals___: localNames]].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irUnpackLeafNamesInto___: aSet target: aTarget locals: localSet [
+	"The local Names (Strings) a target nest binds."
+
+	(aTarget isKindOf: NameAst) ifTrue: [
+		(localSet includes: aTarget id asString) ifTrue: [aSet add: aTarget id asString].
+		^ self].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irUnpackLeafNamesInto___: aSet target: aTarget value locals: localSet].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___irUnpackLeafNamesInto___: aSet target: e locals: localSet]].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irUnpackReadsInto___: aSet target: aTarget locals: localSet [
+	"The reads a target nest performs: attribute receivers, subscript receivers
+	and indices.  A Name leaf is a write only."
+
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		^ aTarget value ___irReadLocalNamesInto___: aSet locals: localSet].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		aTarget value ___irReadLocalNamesInto___: aSet locals: localSet.
+		^ aTarget slice ___irReadLocalNamesInto___: aSet locals: localSet].
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irUnpackReadsInto___: aSet target: aTarget value locals: localSet].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		aTarget elts do: [:e |
+			self ___irUnpackReadsInto___: aSet target: e locals: localSet]].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irUnpackTargetEligible___: aTarget locals: localNames [
+	"True when aTarget -- a Tuple/List assignment target -- is a nest the IR
+	unpack emitter handles: every leaf a Store-context local Name (parameter
+	or body local), an attribute store of the shape AssignAst's IR emit
+	already handles (not ``__class__''), or a subscript store; at most one
+	starred element per level (Python's own rule), wrapping such a leaf;
+	nested tuples / lists recurse."
+
+	| stars |
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifFalse: [^ false].
+	aTarget elts isNil ifTrue: [^ false].
+	stars := 0.
+	aTarget elts do: [:e |
+		| leaf |
+		leaf := e.
+		(e isKindOf: StarredAst) ifTrue: [stars := stars + 1. leaf := e value].
+		((leaf isKindOf: TupleAst) or: [leaf isKindOf: ListAst])
+			ifTrue: [
+				(e isKindOf: StarredAst) ifTrue: [^ false].
+				(self ___irUnpackTargetEligible___: leaf locals: localNames)
+					ifFalse: [^ false]]
+			ifFalse: [
+				(self ___irUnpackLeafEligible___: leaf locals: localNames)
+					ifFalse: [^ false]]].
+	^ stars <= 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irWalksChildrenForRefusal___ [
+	"May the census's first-refusing-child walk descend into this node?  True
+	for every node whose children ARE judged as IR; ClassDefAst answers false."
+
+	^ true
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irWalrusTargetNames___: localSet [
+	"The locals a walrus in this expression binds UNCONDITIONALLY when the
+	expression is evaluated (cut 69) -- what an ``if (m := f()):'' test leaves
+	bound for both branches.  Default: none; NamedExprAst answers its target,
+	and the operators whose operands are evaluated unconditionally (a
+	comparison, ``not'') pass their operands' through.  A short-circuit
+	operand (``and'' / ``or'' past the first) is conditional and answers none."
+
+	^ #()
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irWriteLocalNamesInto___: aSet locals: localSet [
+	"Collect the LOCAL names (members of localSet) WRITTEN anywhere in this
+	subtree into aSet.  Default: a node that writes nothing.  Overridden by the
+	write-carrying statements (Assign, AugAssign) and the statement containers
+	(If, While, Block, Suite).  Sound within an IR-ELIGIBLE def: eligibility is
+	established before the flow analysis runs, and every eligible statement
+	shape's writes are covered by those overrides."
+
+	^ self
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___is: aChild inBodyOf: aDef [
+	"Whether aChild, met on the way up from a node, is aDef's BODY -- the
+	suite itself or one of its statements, whichever the parent links name --
+	rather than part of its header (bases, keywords, decorators, defaults)."
+
+	| suite |
+	suite := aDef body.
+	suite isNil ifTrue: [^ false].
+	aChild == suite ifTrue: [^ true].
+	(suite isKindOf: SuiteAst)
+		ifTrue: [^ suite body notNil and: [suite body includesIdentical: aChild]].
+	^ (suite isKindOf: Collection) and: [suite includesIdentical: aChild]
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___isAstLocationName___: aName [
+	"Whether an instVar is bookkeeping rather than a child: the upward link and
+	the four source-position fields."
+
+	^ #('parent' 'beginLine' 'beginColumn' 'endLine' 'endColumn')
+		includes: aName
+
+]
+
+{ #category : 'Grail-line map' }
+AbstractNode >> ___isLineMapped___ [
+	"Only a ModuleAst can be; see there."
+
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___localsOnlyViewExpr___ [
+	"The whole ``locals()'' expression for a DOIT -- receiver and wrap
+	together, unlike its two siblings, because a live locals mapping is
+	answered AS ITSELF and so there is no wrap to put round it.
+
+	Answers nil outside a doit, where locals() at module scope IS globals()
+	and the existing emit is already right."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: ['(((Python @env0:at: #builtins) @env0:___instance___) ___doitLocalsView___: ___pyGlobals___)']
+		ifFalse: [nil]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___manglePrivate___: aName [
+	"Python PRIVATE-NAME MANGLING (CPython's _Py_Mangle).
+
+	An identifier written inside a class body with TWO OR MORE leading
+	underscores and NOT two trailing underscores is rewritten to
+	_<Class><name>, so ``self.__x'' in class C stores _C__x.  That is what
+	makes a private attribute per-class rather than shared: a subclass
+	writing its own __x gets a different slot, and cannot read the base's.
+
+	Not applied outside a class body, and never to a dunder (__x__) --
+	which is why Grail's own ___internal___ names, and every __init__ /
+	__slots__ / __new__, pass through untouched.
+
+	Leading underscores are stripped from the CLASS name (class _C and
+	class C both yield _C__x); an all-underscore class name mangles
+	nothing, matching CPython."
+
+	^ AbstractNode ___mangle___: aName forClass: self ___manglingClassName___
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___manglingClassName___ [
+	"The class whose name mangles a private identifier written at this node --
+	CPython's ``the innermost enclosing class scope''.
+
+	LEXICAL: the nearest ClassDefAst above this node.  ClassDefAst's ambient
+	``classBeingCompiled'' is the older answer and stays as the fallback for
+	synthesised nodes that have no parent chain, but it cannot be the primary
+	one: it is deliberately CLEARED around the class-body name scans (see
+	ClassDefAst -- isModuleScopeClassDef reads it as its `nested inside another
+	class' test), and those scans are exactly where the class-attribute names are
+	decided.  So the ambient alone declared ``__x = 1'' UNMANGLED while every
+	read of it -- ``self.__x'', emitted later with the ambient set -- asked for
+	_C__x.
+
+	The walk starts at the PARENT: a node is mangled by an enclosing class,
+	never by itself, so a nested ``class __Inner'' is mangled by its outer
+	class."
+
+	| node |
+	node := self parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ node name asSymbol].
+		node := node parent].
+	^ CallAst classBeingCompiled
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___markFragmentPositions___ [
+	"Note that this node and everything under it was parsed from a FRAGMENT, so
+	its line and column numbers do not describe the module's source.
+
+	An f-string replacement field is parsed by a child PythonParser over
+	``(expr)'' alone (PythonParser >> parseFStringLiteral), which is what makes
+	nested quotes and PEP 701 line breaks work -- and leaves every node in the
+	field claiming line 1, column 1.  Codegen never notices, because it reads
+	the tree and not the positions; the position map does, and a bogus span
+	nested inside a true one is worse than no span at all, since the map answers
+	the SMALLEST range containing the send.
+
+	Recursive along the same ivar walk as setParent:, and by dynamic instVar so
+	no node class grows a slot for something only f-strings ever set."
+
+	self dynamicInstVarAt: #'___fragmentPositions___' put: true.
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [val ___markFragmentPositions___].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___markFragmentPositions___]]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___moduleStoreReceiverExpr___ [
+	"Smalltalk receiver expression for a module dynamic-instVar store /
+	delete.  Inside the module body's initialize and top-level defs,
+	``self'' IS the module instance; inside a user class METHOD it is
+	the Python instance, so the store must reach the module singleton
+	explicitly -- the case that arises when a method declares
+	``global x'' (previously a CompileError: the guard bailed on
+	classBeingCompiled and the bare temp had been stripped)."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [CallAst moduleClassBeingCompiled name , ' @env0:___instance___']
+		ifFalse: ['self']
+
+]
+
+{ #category : 'Grail-Naming' }
+AbstractNode >> ___nameNodesIn___: aNode anySatisfy: aBlock [
+	"Is there a NameAst at or below aNode (a comprehension target: a name, or a
+	tuple / list / starred nesting of them) for which aBlock answers true?"
+
+	(aNode isKindOf: NameAst) ifTrue: [^ aBlock value: aNode].
+	(aNode isKindOf: AbstractNode) ifFalse: [^ false].
+	2 to: aNode class instSize do: [:i |
+		| v |
+		v := aNode instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(self ___nameNodesIn___: v anySatisfy: aBlock) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						(self ___nameNodesIn___: each anySatisfy: aBlock)
+							ifTrue: [^ true]]]]].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___nameStoreRoutesToModule___: aNameSymbol [
+	"Does a store of the Python name aNameSymbol go to the MODULE instance
+	rather than to an enclosing-scope temp?
+
+	Module-route the store when (a) ``global sym'' is declared in the nearest
+	enclosing function -- even inside a class method, and past any
+	enclosing-function shadow -- or (b) we're in module context and sym is a
+	module variable not shadowed by a TRUE python-local of an enclosing function
+	(precise writes-based check, not the over-approximating
+	___functionDeclaresLocal___: variables walk).
+
+	ONE COPY, because there are now four callers and they must not drift: the
+	text and IR store helpers below, and the two catch-target unbinds that have
+	to undo exactly what those stores did.  It was already written twice, once
+	per store helper, when the unbinds needed it -- a third and fourth copy of a
+	four-way scope rule is how the paths diverge silently."
+
+	| sym names |
+	sym := aNameSymbol asSymbol.
+	names := CallAst moduleVariableNames.
+	(CallAst moduleClassBeingCompiled notNil
+		and: [self ___nearestEnclosingFunctionDeclaresGlobal___: sym])
+		ifTrue: [^ true].
+	^ (CallAst moduleClassBeingCompiled notNil)
+		and: [(CallAst classBeingCompiled isNil)
+		and: [(names notNil and: [names includes: sym])
+		and: [(self ___pythonLocalInEnclosingFunctions___: sym) not]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol [
+	"True iff the NEAREST enclosing function's scope declares
+	``global aSymbol''.  Python's rule: the declaration binds the name
+	to the module for the WHOLE declaring scope -- reads, stores, and
+	del of the name must route to the module even when an intermediate
+	enclosing function has a same-named local (which would otherwise
+	win the LEGB walk).  Reads the parser-recorded per-scope set
+	(BlockAst>>globalNames); lambdas cannot contain statements, so a
+	LambdaAst never declares one."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: LambdaAst) ifTrue: [^ false].
+		(node isKindOf: FunctionDefAst) ifTrue: [
+			^ self ___functionDeclaresGlobal___: node named: aSymbol].
+		node := node parent.
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-Scope' }
+AbstractNode >> ___nearestEnclosingFunctionDeclaresNonlocal___: aSymbol [
+	"``nonlocal aSymbol'' declared by the nearest enclosing FUNCTION -- the
+	scope whose declaration decides where a store in this node lands.
+
+	Distinct from ___declaredInEnclosingFunction___:, which answers true for a
+	``global'' declaration too and walks past the nearest scope.  The
+	``__class__'' cell branches need the narrower question: a method declaring
+	the name NONLOCAL shares the class's implicit cell, whereas one declaring
+	it GLOBAL means the module binding and must keep standing down."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				^ node body notNil
+					and: [node body nonlocalNames notNil
+					and: [node body nonlocalNames includes: aSymbol]]].
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___nearestEnclosingScopeDeclaresGlobal___: aSymbol [
+	"``global aSymbol'' declared by the nearest enclosing scope, counting a
+	CLASS BODY as a scope -- which ___nearestEnclosingFunctionDeclaresGlobal___
+	deliberately does not, since a class body is not a scope a nested function
+	resolves free names through.
+
+	For a STORE it is the right question, and a class body can be the scope
+	that answers it:
+
+	    x = 12
+	    class Global:
+	        global x
+	        x = 13        # rebinds the MODULE x; Global gets no ''x'' attribute
+
+	Grail read the declaration for neither part: it bound x as a class
+	attribute and left the module binding at 12."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: LambdaAst) ifTrue: [^ false].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: ClassDefAst])
+			ifTrue: [^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		"THE MODULE BODY IS A SCOPE TOO, and it is the one that answers for a
+		declaration written at top level.  Reaching the top used to answer
+		false, which is wrong wherever the module body can carry a ``global''
+		of its own -- and in a DOIT it always can, because exec'd source is a
+		module body:
+
+		    exec('global a; a = 1', g)
+
+		The store then missed AssignAst's doit branch and emitted a bare
+		``a := 1''.  popScope strips a global-declared name from the scope's
+		variables (so no inner assignment declares a temp for it), so
+		ensureModuleScope: never seeded a symbol-list slot, and the bare
+		identifier was an UNDEFINED SYMBOL -- an uncatchable CompileError that
+		took the whole exec down (test_builtin test_exec and test_exec_kwargs).
+
+		ModuleAst keeps its statements in a ``body'' BlockAst exactly as a
+		function or class does, so ___scopeNodeDeclaresGlobal___: reads it
+		unchanged.  For a real module the answer only ever routes a store to
+		the module, which is where a module-level name already goes."
+		(node isKindOf: ModuleAst) ifTrue: [
+			^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		node := node parent.
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___nodeInstVar___: aNode named: aSymbol [
+	"One instVar of an AST node by NAME -- nodes have no public getters for
+	the fields the comprehension walks need (``iter'', ``generators'')."
+
+	| idx |
+	aNode isNil ifTrue: [^ nil].
+	idx := aNode class allInstVarNames indexOf: aSymbol.
+	idx = 0 ifTrue: [^ nil].
+	^ aNode instVarAt: idx
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___printCompTargetLocalsOn___: aStream names: compNames [
+	"Emit ``___buildLocals___: { {'x'. x}. ... }'' over compNames -- a dict of
+	the comprehension targets in scope at this node.  Each name is a block temp
+	of the comprehension's emitted block, so the bare identifier reads it, and
+	___buildLocals___: drops any still holding Smalltalk nil (unbound)."
+
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildLocals___: { '.
+	compNames do: [:each |
+		aStream
+			nextPutAll: '{ '''; nextPutAll: each asString;
+			nextPutAll: '''. '; nextPutAll: each asString;
+			nextPutAll: ' }. '].
+	aStream nextPutAll: '})'
+
+]
+
+{ #category : 'Grail-code generation' }
+AbstractNode >> ___printElementsArrayOf___: elements on: aStream [
+	"Print an expression answering the Array of elements' values, evaluated
+	left to right: the brace literal ``{a. b. ...}'' when there are at most
+	___braceChunkSize___ of them, else brace chunks joined with ``,'' --
+	``({...} @env0:, {...} @env0:, ...)'' -- at most half that many parts to a
+	chain, each part itself chunked the same way when it is still too big.
+	Two levels cover 32,768 elements, three 4 million, and no brace or chain
+	comes near the compiler's limits (#1423)."
+
+	| chunk part |
+	chunk := self ___braceChunkSize___.
+	elements size <= chunk ifTrue: [
+		aStream nextPut: ${.
+		elements doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: '. '].
+			each printSmalltalkOn: aStream].
+		aStream nextPut: $}.
+		^ self].
+	part := ((elements size + (chunk // 2) - 1) // (chunk // 2)) max: chunk.
+	aStream nextPut: $(.
+	1 to: elements size by: part do: [:start |
+		start > 1 ifTrue: [aStream nextPutAll: ' @env0:, '].
+		self
+			___printElementsArrayOf___: (elements copyFrom: start to: ((start + part - 1) min: elements size))
+			on: aStream].
+	aStream nextPut: $)
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___pythonAstClassName___ [
+	"The ast-module class name for this node: the Smalltalk name without its
+	``Ast'' suffix, except where Grail splits one CPython node into several.
+
+	The three FunctionDef variants are Grail's way of recording HOW a def was
+	reached (class body, instance, static); CPython has one node and puts that
+	distinction in the decorator list, so they all report FunctionDef."
+
+	| n |
+	n := self class name asString.
+	(n endsWith: 'Ast') ifTrue: [n := n copyFrom: 1 to: n size - 3].
+	"An ``async def'' is a FunctionDef node with its flag set, wherever the
+	def sits, and CPython makes it a node of its own: written back as a plain
+	def it would no longer be a coroutine."
+	(#('FunctionDef' 'ClassFunctionDef' 'InstanceFunctionDef' 'StaticFunctionDef') includes: n)
+		ifTrue: [^ (self isAsync == true) ifTrue: ['AsyncFunctionDef'] ifFalse: ['FunctionDef']].
+	"``try: ... except* E:'' is one TryAst whose handlers are star handlers;
+	CPython's TryStar."
+	(n = 'Try' and: [(self handlers notEmpty) and: [(self handlers at: 1) isStar]])
+		ifTrue: [^ 'TryStar'].
+	"CPython spells the nodes that are not statements, expressions or
+	patterns in lower case -- ast.arguments, ast.alias, ast.match_case -- and
+	a visitor dispatches on exactly that name (``visit_arguments''), so the
+	unparser saw none of them under Grail's capitalised class names."
+	#( #('Alias' 'alias') #('Arg' 'arg') #('Arguments' 'arguments')
+		#('Comprehension' 'comprehension') #('Keyword' 'keyword')
+		#('MatchCase' 'match_case') #('WithItem' 'withitem') )
+			do: [:pair | (pair at: 1) = n ifTrue: [^ pair at: 2]].
+	^ n
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___pythonAstFieldName___: aName [
+	"The CPython field name for one of Grail's instVars.
+
+	Four disagree, and they are the four a reader reaches for first: a call's
+	callee and arguments, and a comparison's operators and operands.  The
+	rest were dropped silently, which an unparse turns into different code:
+	an import alias's ``asName'' (``import a as b'' became ``import a'') and
+	a class pattern's keywords (``case P(x=0)'' became ``case P()'')."
+
+	aName = 'function' ifTrue: [^ 'func'].
+	aName = 'arguments' ifTrue: [^ 'args'].
+	aName = 'cmpopList' ifTrue: [^ 'ops'].
+	aName = 'comparatorList' ifTrue: [^ 'comparators'].
+	aName = 'asName' ifTrue: [^ 'asname'].
+	aName = 'kwdAttrs' ifTrue: [^ 'kwd_attrs'].
+	aName = 'kwdPatterns' ifTrue: [^ 'kwd_patterns'].
+	^ aName
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___pythonLocalInEnclosingFunctions___: aSymbol [
+	"True iff aSymbol is a TRUE PYTHON LOCAL (parameter or genuine body
+	binding — the precise ``writes'' set, not the over-approximating
+	``variables'' set) of ANY function/lambda enclosing this NameAst.
+	Per LEGB, such a name shadows a same-named module-level function or
+	module global; per the closure rule a binding in ANY enclosing
+	function claims the name (Smalltalk block capture reaches outer
+	temps), so keep walking past the innermost function.
+
+	Comprehension targets are NOT python-locals of the function (they
+	are comprehension-scoped; see ___isEnclosingComprehensionTarget___: for
+	reads inside the comprehension itself), and global- / nonlocal-
+	declared names were stripped from ``writes'' by the parser."
+
+	| node prev |
+	"``global aSymbol'' in the nearest enclosing function makes the name
+	a MODULE binding for that whole scope -- never a local, and never
+	resolved to an outer function's same-named local."
+	(self ___nearestEnclosingFunctionDeclaresGlobal___: aSymbol) ifTrue: [^ false].
+	prev := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [
+				"A scope node reached through its ArgumentsAst -- i.e. this node
+				is in the PARAMETER LIST (a default expression), not in the body
+				-- does NOT bind the name.  Python evaluates a default in the
+				ENCLOSING scope at definition time, so
+				``missing = 1; def f(missing=missing)'' must read the enclosing
+				``missing'' for the default and the parameter inside the body.
+
+				This covers ``def'' as well as ``lambda''.  It was restricted to
+				LambdaAst on the belief that a def's defaults already resolved
+				through FunctionDefAst's own default-capture path; they did not,
+				and the ``def f(x=x)'' idiom was broken three different ways:
+
+				  * module-level def -- the default read the PARAMETER, which is
+				    still nil while its own default is being computed, so
+				    ``limit = 7; def f(v, limit=limit)'' answered nil
+				  * def nested in a def, and lambda in a def, over a MODULE
+				    global -- the hoisted def-time block emitted a bare
+				    identifier for a name that is a module attribute there, so
+				    the module failed to compile outright: CompileError 1001,
+				    ``undefined symbol''.  A whole module lost to one def
+				  * copy.py's own ``def _deepcopy_list(x, memo,
+				    deepcopy=deepcopy)'' -- ten test_copy failures reading
+				    ``'UndefinedObject' object is not callable''
+
+				A lambda or def nested in a def still sees the OUTER def's
+				locals: the walk only skips the scope it climbed out of, then
+				carries on -- ``def f(): x = 1; return lambda x=x: x'' reads
+				f's x."
+				"An ANNOTATION of this very def: Python evaluates parameter and
+				return annotations in the ENCLOSING scope, so the def's own
+				parameters do not shadow.  Same rule as the lambda-default case
+				above, and needed for the same reason -- the annotate function is
+				built outside the def, where a parameter temp does not exist.  See
+				CallAst >> annotationOwnerDefNode."
+				(node == CallAst annotationOwnerDefNode
+					or: [prev isKindOf: ArgumentsAst])
+					ifFalse: [
+						"``global aSymbol'' declared by THIS enclosing scope ends the
+						walk.  The declaration makes the name a module binding for the
+						whole of that scope, INCLUDING the functions nested inside it,
+						so an outer function's same-named local must not claim it:
+
+							x = 7
+							def f():
+								x = 1
+								def g():
+									global x
+									def h(): return x    # 7, not f's 1
+
+						Only the NEAREST enclosing function was consulted before (the
+						guard above), which is the right rule for a STORE -- ``x = 1''
+						in h binds h's own local -- but not for this walk, which is
+						about which enclosing scope a free READ resolves to.  h read
+						f's 1, and the further nesting the test uses (test_scope's
+						testScopeOfGlobalStmt, four cases) is exactly what put an
+						undeclaring scope in between."
+						(self ___functionDeclaresGlobal___: node named: aSymbol)
+							ifTrue: [^ false].
+						(self ___functionBindsPythonLocal___: node named: aSymbol)
+							ifTrue: [^ true]]].
+		prev := node.
+		node := node parent.
+	].
+	^ false
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___rebaseFragmentPositionsBy: dPos line: dLine [
+	"Move this node and everything under it from an f-string replacement FIELD's
+	coordinates onto the module's, so the subtree carries real spans instead of
+	being excluded from the position map (___markFragmentPositions___).
+
+	The child parse sees ``(expr)'' as a whole source, so its offsets count from
+	that snippet.  Inside a field the tokenizer keeps the text VERBATIM, so one
+	constant maps the whole subtree; the caller works it out from the anchor the
+	tokenizer recorded (PythonToken >> fieldStarts).
+
+	Recursive along the same ivar walk as ___markFragmentPositions___ and
+	setParent:, and only AbstractLocationNode carries a span -- the other node
+	classes are pass-throughs."
+
+	(self isKindOf: AbstractLocationNode) ifTrue: [
+		self ___rebasePositionsBy: dPos line: dLine].
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			val ___rebaseFragmentPositionsBy: dPos line: dLine].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each ___rebaseFragmentPositionsBy: dPos line: dLine]]]]
+
+]
+
+{ #category : 'Grail-traceback' }
+AbstractNode >> ___recordingPrintSmalltalkOn___: aStream [
+	"Emit this node and record the Smalltalk offsets it occupied.
+
+	Wrapped rather than woven into each emitter: a node's own
+	``___emitSmalltalkOn___:'' stays exactly the code it was, and the pairing of
+	``where did this node start'' with ``where did it stop'' lives in ONE place.
+	The blame-worthy classes -- the ones a raise can be attributed to -- delegate
+	their ``printSmalltalkOn:'' here; every other node emits directly and costs
+	nothing.
+
+	START IS THE POSITION BEFORE THE FIRST WRITE, so a node beginning a line
+	includes the indentation PrettyWriteStream inserts lazily on that write.
+	That widens the range leftward into whitespace only, which cannot change
+	which node CONTAINS a send offset, and avoids having to predict the tabs."
+
+	| start |
+	start := aStream position.
+	self ___emitSmalltalkOn___: aStream.
+	"NOT EVERY CODEGEN STREAM IS A PrettyWriteStream.  Roughly three dozen
+	helpers build a FRAGMENT on a plain WriteStream -- an annotation table
+	entry, a parameter default, a selector -- and splice its text into some
+	other source later, so a position in one of them describes nothing in any
+	compiled method.  Only a stream that is building a method records, and
+	asking it first also skips the span checks below for every one of those.
+
+	Found by the suite, not by a probe: it takes a class with an ANNOTATED
+	method to reach ClassDefAst >> emitMethodAnnotationsTableOn:className:, and
+	none of argparse, zipfile or the hand-written cases has one.  flask does."
+	(aStream isKindOf: PrettyWriteStream) ifFalse: [^ self].
+	(self ___hasFullPositionSpan___
+		and: [self ___hasFragmentPositions___ not])
+			ifTrue: [aStream mapPythonNode: self from: start + 1]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___rejectExceptStarFlowControl___: loopExitAllowed [
+	"Reject ``return'', ``break'' and ``continue'' that would escape an
+	``except*'' block, which CPython makes a SyntaxError.
+
+	The reason is the semantics: an except* block may run MORE THAN ONCE
+	for one raised group -- once per matching clause -- and the remainder
+	still has to propagate afterwards, so there is no coherent answer to
+	what a ``return'' out of the middle of that should do.
+
+	Three things are exempt, and each is exempt for its own reason:
+
+	  * a nested ``def'' or ``lambda'' -- a return there belongs to THAT
+	    function, and never leaves the except* block at all;
+	  * a ``break''/``continue'' inside a loop written INSIDE the block --
+	    the loop is its own target, so control stays put;
+	  * anything in the try BODY, ``else'' or ``finally'' -- those are not
+	    the handler, and CPython allows all three there.
+
+	A nested TRY is NOT exempt: it introduces no scope and no loop, so a
+	``return'' inside it still escapes.
+
+	loopExitAllowed says whether an enclosing loop inside this block has
+	been entered yet; return is rejected regardless of it."
+
+	| childAllowed |
+	"A nested function scope ends the walk: nothing inside it escapes."
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst])
+		ifTrue: [^ self].
+	(self isKindOf: ReturnAst) ifTrue: [^ self ___signalExceptStarFlowControl___].
+	((self isKindOf: BreakAst) or: [self isKindOf: ContinueAst]) ifTrue: [
+		loopExitAllowed ifTrue: [^ self].
+		^ self ___signalExceptStarFlowControl___
+	].
+	childAllowed := loopExitAllowed
+		or: [(self isKindOf: ForAst) or: [self isKindOf: WhileAst]].
+	"Same instVar traversal setParent: uses -- a node's children are its
+	AbstractNode-valued instVars plus the ones held in collections."
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode)
+			ifTrue: [val ___rejectExceptStarFlowControl___: childAllowed].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode)
+					ifTrue: [each ___rejectExceptStarFlowControl___: childAllowed]]
+		]
+	]
+
+]
+
+{ #category : 'Grail-line map' }
+AbstractNode >> ___remapLines___: aMap [
+	"Renumber this node and everything under it through aMap (ModuleAst >>
+	___applyLineMap___:).  The same child walk as setParent:."
+
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [val ___remapLines___: aMap].
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [each ___remapLines___: aMap]]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___rootModuleSource___ [
+	"The source text of the module this node was parsed from, or nil.
+
+	Found by walking ``parent'' to the root, which is the only link a node has
+	upward; ModuleAst records the text in parseSource:.  Nil for a tree built
+	by hand, and for one whose root is not a ModuleAst."
+
+	| node |
+	node := self.
+	[node parent notNil] whileTrue: [node := node parent].
+	((node isKindOf: ModuleAst) and: [node source notNil])
+		ifTrue: [^ node source].
+	"THE PARENT WALK IS NOT ALWAYS AVAILABLE AT EMIT TIME: setParent: runs
+	over the tree after construction, and a def reached through the nested
+	emit path can be generated from a node whose chain does not reach the
+	root.  parseSource: therefore also records the text class-side, for the
+	duration of the compile that is about to happen, and that is what this
+	falls back to."
+	^ AbstractNode ___currentModuleSource___
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___scopeNodeDeclaresGlobal___: aScopeNode named: aSymbol [
+	"Does aScopeNode's own scope declare ``global aSymbol''?  Works for a
+	FunctionDefAst or a ClassDefAst -- both hold their statements in a
+	``body'' BlockAst, and the parser records the per-scope global set there."
+
+	| ivars bodyIdx bodyNode gset |
+	ivars := aScopeNode class allInstVarNames.
+	bodyIdx := ivars indexOf: #body.
+	bodyNode := bodyIdx > 0
+		ifTrue: [aScopeNode instVarAt: bodyIdx]
+		ifFalse: [nil].
+	(bodyNode isKindOf: BlockAst) ifFalse: [^ false].
+	gset := bodyNode globalNames.
+	^ gset notNil and: [gset includes: aSymbol asSymbol]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___signalExceptStarFlowControl___ [
+	"CPython names all three in one message regardless of which appeared."
+
+	^ SyntaxError signal:
+		'''break'', ''continue'' and ''return'' cannot appear in an except* block'
+
+]
+
+{ #category : 'Grail-code generation' }
+AbstractNode >> ___storesModuleSlot___: aSymbol [
+	"Does this module-body statement -- or one nested in its if / try / for /
+	with / while arms -- bind aSymbol by STORING the module slot?  Every
+	binding form does except an undecorated top-level def, which compiles to a
+	method and stores nothing (see FunctionDefAst >>
+	___rebindsAnEarlierModuleBinding___).  Does not descend into a def, lambda
+	or class, which bind their own scope; reflective over the instVars, like
+	___importBoundNamesInto___:."
+
+	| v |
+	(self isKindOf: StatementAst) ifTrue: [
+		(((self isKindOf: FunctionDefAst)
+			and: [self isModuleLevelDef
+			and: [self applicableModuleDecorators isEmpty]]) not
+			and: [self ___boundTargetNames___ anySatisfy: [:n | n asSymbol == aSymbol]])
+				ifTrue: [^ true]].
+	((self isKindOf: FunctionDefAst)
+		or: [(self isKindOf: LambdaAst) or: [self isKindOf: ClassDefAst]])
+		ifTrue: [^ false].
+	2 to: self class instSize do: [:i |
+		v := self instVarAt: i.
+		(v isKindOf: AbstractNode)
+			ifTrue: [(v ___storesModuleSlot___: aSymbol) ifTrue: [^ true]]
+			ifFalse: [
+				((v isKindOf: SequenceableCollection)
+					and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+					v do: [:each |
+						((each isKindOf: AbstractNode)
+							and: [each ___storesModuleSlot___: aSymbol])
+								ifTrue: [^ true]]]]].
+	^ false
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___translatedAstValue___: aValue [
+	"One field value: a node becomes its Python twin, a collection becomes a
+	list of translated elements, everything else goes across unchanged.
+
+	A Symbol becomes a STRING.  Grail stores a name as a Symbol and Python code
+	compares it with ``==`` against a str -- a Symbol passes isinstance(str) and
+	breaks the hash/eq invariant the moment it reaches a dict, so it must not
+	leave here as one."
+
+	| out |
+	aValue isNil ifTrue: [^ nil].
+	"A BLOCK IS NOT A NODE CPYTHON HAS.  Grail wraps a statement list in one --
+	it carries the scope's variable sets -- and CPython's ``body'' IS the list.
+	Translating the Block itself gave ``Module.body'' a Block object, which is
+	not subscriptable, so every reader of a parse tree failed at the first
+	step.  Flattening here rather than at each use keeps the rule in one
+	place: wherever a Block appears, its contents are what belongs there."
+	((aValue isKindOf: BlockAst) or: [aValue isKindOf: SuiteAst]) ifTrue: [
+		^ self ___translatedAstValue___: aValue body].
+	(aValue isKindOf: AbstractNode) ifTrue: [^ aValue ___asPythonAst___].
+	"Two Symbols are Grail's own spellings, not names.  ``...'' is the
+	parser's marker for the Ellipsis constant, which a reader compares with
+	``is Ellipsis'' and the unparser writes back as ``...''.  ``___unused___''
+	is how the parser renames the ``_'' wildcard, and the name the source
+	wrote is ``_''."
+	aValue isSymbol ifTrue: [
+		aValue == #'...' ifTrue: [^ Ellipsis].
+		aValue == #'___unused___' ifTrue: [^ '_'].
+		^ aValue asString].
+	((aValue isKindOf: Array) or: [aValue isKindOf: OrderedCollection]) ifTrue: [
+		"An absent element is None, as CPython writes it in kw_defaults and in
+		a Dict's keys for ``**'' -- a Smalltalk nil reached Python as an
+		object Python has no name for."
+		out := OrderedCollection new.
+		aValue do: [:each |
+			out add: (each isNil
+				ifTrue: [None]
+				ifFalse: [self ___translatedAstValue___: each])].
+		^ list @env1:__new__: out asArray].
+	^ aValue
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___translatedDecoratorList___: aValue [
+	"A def's or class's decorator_list, where a BARE decorator name is a Name.
+
+	The parser keeps ``@property'' / ``@classmethod'' / ``@overload'' as a
+	Symbol (FunctionDefAst's decorator tests read it that way), and the generic
+	translation turns a Symbol into a str -- so decorator_list held strings
+	where CPython has Name(id=..., ctx=Load()).  pytest's
+	get_statement_startend2 reads ``d.lineno'' off every decorator and raised
+	AttributeError on the first @property in the file being reported.
+
+	The parser keeps no position for a bare name, so the line is inferred:
+	the decorators as the lines directly above the def, one each, which is how
+	they are written.  Columns are left out rather than guessed."
+
+	| astMod out n line |
+	aValue isNil ifTrue: [^ self ___translatedAstValue___: aValue].
+	((aValue isKindOf: Array) or: [aValue isKindOf: OrderedCollection])
+		ifFalse: [^ self ___translatedAstValue___: aValue].
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ self ___translatedAstValue___: aValue].
+	n := aValue size.
+	line := [self beginLine] on: AbstractException do: [:ex | ex return: nil].
+	out := OrderedCollection new.
+	aValue doWithIndex: [:each :i |
+		each isSymbol
+			ifTrue: [
+				| nameNode |
+				nameNode := (astMod @env1:___pyAttrLoad___: #'Name')
+					@env1:___pyCallValue___: #() kw: nil.
+				nameNode @env1:___pyAttrStore___: #'id' put: each asString.
+				nameNode @env1:___pyAttrStore___: #'ctx'
+					put: ((astMod @env1:___pyAttrLoad___: #'Load')
+						@env1:___pyCallValue___: #() kw: nil).
+				(line isKindOf: Integer) ifTrue: [
+					nameNode @env1:___pyAttrStore___: #'lineno' put: line - n + i - 1.
+					nameNode @env1:___pyAttrStore___: #'end_lineno' put: line - n + i - 1].
+				out add: nameNode]
+			ifFalse: [out add: (self ___translatedAstValue___: each)]].
+	^ list @env1:__new__: out asArray
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___translatedTypeParams___: aValue [
+	"A def's, class's or type alias's PEP 695 parameters as CPython's TypeVar /
+	ParamSpec / TypeVarTuple nodes.
+
+	The parser keeps each as a STRING -- ``T'', ``*Ts'', ``**P'', with a bound
+	appended as its hex-encoded source (PythonParser >>
+	___recordTypeParamBound___:in:) -- because that is the form the generated
+	code embeds.  The ast module rebuilds the nodes from it."
+
+	| astMod strings |
+	strings := self ___translatedAstValue___: aValue.
+	(aValue isNil or: [aValue isEmpty]) ifTrue: [^ strings].
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ strings].
+	^ [(astMod @env1:___pyAttrLoad___: #'_grail_type_params')
+		@env1:___pyCallValue___: { strings } kw: nil]
+		on: AbstractException do: [:ex | ex return: strings]
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___unparse___: prec [
+	| s |
+	s := WriteStream on: String new.
+	self ___unparseOn___: s prec: prec.
+	^ s contents
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___unparseOn___: aStream prec: prec [
+	"ast._Unparser's visit_* for the expression subset annotations use.
+
+	Precedence values are CPython's _Precedence, numbered in its order:
+	NAMED_EXPR 1, TUPLE 2, YIELD 3, TEST 4, OR 5, AND 6, NOT 7, CMP 8,
+	EXPR = BOR 9, BXOR 10, BAND 11, SHIFT 12, ARITH 13, TERM 14, FACTOR 15,
+	POWER 16, AWAIT 17, ATOM 18.  A node is parenthesised exactly when the
+	precedence its context demands exceeds its own (require_parens)."
+
+	| cls |
+	cls := self class name asString.
+	(self isKindOf: NameAst) ifTrue: [
+		^ aStream nextPutAll: self writtenId asString].
+	(self isKindOf: ConstantAst) ifTrue: [
+		^ aStream nextPutAll: self ___constantRepr___].
+	(self isKindOf: AttributeAst) ifTrue: [ | v |
+		v := self ___upIv___: #value.
+		self ___up___: v on: aStream prec: 18.
+		"``1 .real'': a bare int would lex ``1.'' as a float."
+		((v isKindOf: ConstantAst) and: [(self ___nodeInstVar___: v named: #value) isKindOf: Integer])
+			ifTrue: [aStream space].
+		^ aStream nextPut: $.; nextPutAll: (self ___upIv___: #attr) asString].
+	(self isKindOf: SubscriptAst) ifTrue: [ | sl elts |
+		self ___up___: (self ___upIv___: #value) on: aStream prec: 18.
+		aStream nextPut: $[.
+		sl := self ___upIv___: #slice.
+		((sl isKindOf: TupleAst)
+			and: [(elts := self ___nodeInstVar___: sl named: #elts) notNil and: [elts notEmpty]])
+			ifTrue: [self ___upItems___: elts on: aStream prec: 4]
+			ifFalse: [self ___up___: sl on: aStream prec: 4].
+		^ aStream nextPut: $]].
+	(self isKindOf: SliceAst) ifTrue: [ | st |
+		self ___up___: (self ___upIv___: #lower) on: aStream prec: 4.
+		aStream nextPut: $:.
+		self ___up___: (self ___upIv___: #upper) on: aStream prec: 4.
+		(st := self ___upIv___: #step) notNil ifTrue: [
+			aStream nextPut: $:.
+			self ___up___: st on: aStream prec: 4].
+		^ self].
+	(self isKindOf: TupleAst) ifTrue: [ | elts paren |
+		elts := (self ___upIv___: #elts) ifNil: [#()].
+		paren := elts isEmpty or: [prec > 2].
+		paren ifTrue: [aStream nextPut: $(].
+		self ___upItems___: elts on: aStream prec: 4.
+		elts size = 1 ifTrue: [aStream nextPut: $,].
+		paren ifTrue: [aStream nextPut: $)].
+		^ self].
+	(self isKindOf: ListAst) ifTrue: [
+		aStream nextPut: $[.
+		self ___upItems___: (self ___upIv___: #elts) on: aStream prec: 4.
+		^ aStream nextPut: $]].
+	(self isKindOf: SetAst) ifTrue: [ | elts |
+		elts := (self ___upIv___: #elts) ifNil: [#()].
+		elts isEmpty ifTrue: [^ aStream nextPutAll: '{*()}'].
+		aStream nextPut: ${.
+		self ___upItems___: elts on: aStream prec: 4.
+		^ aStream nextPut: $}].
+	(self isKindOf: DictAst) ifTrue: [ | ks vs |
+		ks := (self ___upIv___: #keys) ifNil: [#()].
+		vs := (self ___upIv___: #values) ifNil: [#()].
+		aStream nextPut: ${.
+		1 to: ks size do: [:i |
+			i > 1 ifTrue: [aStream nextPutAll: ', '].
+			(ks at: i) isNil
+				ifTrue: [aStream nextPutAll: '**'.
+					self ___up___: (vs at: i) on: aStream prec: 9]
+				ifFalse: [
+					self ___up___: (ks at: i) on: aStream prec: 4.
+					aStream nextPutAll: ': '.
+					self ___up___: (vs at: i) on: aStream prec: 4]].
+		^ aStream nextPut: $}].
+	(self isKindOf: BinOpAst) ifTrue: [ | spec glyph p lp rp |
+		spec := self ___binOpSpec___: (self ___upIv___: #op).
+		spec isNil ifTrue: [^ aStream nextPutAll: '<annotation>'].
+		glyph := spec at: 1.
+		p := spec at: 2.
+		"POWER is right-associative, so it is the RIGHT operand that keeps the
+		 operator's own precedence."
+		p = 16 ifTrue: [lp := p + 1. rp := p] ifFalse: [lp := p. rp := p + 1].
+		prec > p ifTrue: [aStream nextPut: $(].
+		self ___up___: (self ___upIv___: #left) on: aStream prec: lp.
+		aStream space; nextPutAll: glyph; space.
+		self ___up___: (self ___upIv___: #right) on: aStream prec: rp.
+		prec > p ifTrue: [aStream nextPut: $)].
+		^ self].
+	(self isKindOf: UnaryOpAst) ifTrue: [ | glyph p |
+		(self isKindOf: NotAst) ifTrue: [glyph := 'not '. p := 7].
+		(self isKindOf: InvertAst) ifTrue: [glyph := '~'. p := 15].
+		(self isKindOf: UAddAst) ifTrue: [glyph := '+'. p := 15].
+		(self isKindOf: USubAst) ifTrue: [glyph := '-'. p := 15].
+		glyph isNil ifTrue: [^ aStream nextPutAll: '<annotation>'].
+		prec > p ifTrue: [aStream nextPut: $(].
+		aStream nextPutAll: glyph.
+		self ___up___: (self ___upIv___: #operand) on: aStream prec: p.
+		prec > p ifTrue: [aStream nextPut: $)].
+		^ self].
+	(self isKindOf: BoolOpAst) ifTrue: [ | word p q |
+		(self isKindOf: AndAst) ifTrue: [word := ' and '. p := 6] ifFalse: [word := ' or '. p := 5].
+		prec > p ifTrue: [aStream nextPut: $(].
+		q := p.
+		(self ___upIv___: #values) doWithIndex: [:v :i |
+			i > 1 ifTrue: [aStream nextPutAll: word].
+			"ast._Unparser raises the precedence for EACH operand in turn."
+			q := q + 1.
+			self ___up___: v on: aStream prec: q].
+		prec > p ifTrue: [aStream nextPut: $)].
+		^ self].
+	(self isKindOf: CompareAst) ifTrue: [ | ops comps |
+		ops := self ___upIv___: #cmpopList.
+		comps := self ___upIv___: #comparatorList.
+		prec > 8 ifTrue: [aStream nextPut: $(].
+		self ___up___: (self ___upIv___: #left) on: aStream prec: 9.
+		1 to: ops size do: [:i |
+			aStream space; nextPutAll: (self ___cmpOpGlyph___: (ops at: i)); space.
+			self ___up___: (comps at: i) on: aStream prec: 9].
+		prec > 8 ifTrue: [aStream nextPut: $)].
+		^ self].
+	(self isKindOf: CallAst) ifTrue: [ | first |
+		self ___up___: (self ___upIv___: #function) on: aStream prec: 18.
+		aStream nextPut: $(.
+		first := true.
+		((self ___upIv___: #arguments) ifNil: [#()]) do: [:a |
+			first ifFalse: [aStream nextPutAll: ', '].
+			first := false.
+			self ___up___: a on: aStream prec: 4].
+		((self ___upIv___: #keywords) ifNil: [#()]) do: [:k | | name |
+			first ifFalse: [aStream nextPutAll: ', '].
+			first := false.
+			name := self ___nodeInstVar___: k named: #arg.
+			name isNil
+				ifTrue: [aStream nextPutAll: '**']
+				ifFalse: [aStream nextPutAll: name asString; nextPut: $=].
+			self ___up___: (self ___nodeInstVar___: k named: #value) on: aStream prec: 4].
+		^ aStream nextPut: $)].
+	(self isKindOf: StarredAst) ifTrue: [
+		aStream nextPut: $*.
+		^ self ___up___: (self ___upIv___: #value) on: aStream prec: 9].
+	(self isKindOf: IfExpAst) ifTrue: [
+		prec > 4 ifTrue: [aStream nextPut: $(].
+		self ___up___: (self ___upIv___: #body) on: aStream prec: 5.
+		aStream nextPutAll: ' if '.
+		self ___up___: (self ___upIv___: #test) on: aStream prec: 5.
+		aStream nextPutAll: ' else '.
+		self ___up___: (self ___upIv___: #orelse) on: aStream prec: 4.
+		prec > 4 ifTrue: [aStream nextPut: $)].
+		^ self].
+	(self isKindOf: NamedExprAst) ifTrue: [
+		prec > 1 ifTrue: [aStream nextPut: $(].
+		self ___up___: (self ___upIv___: #target) on: aStream prec: 18.
+		aStream nextPutAll: ' := '.
+		self ___up___: (self ___upIv___: #value) on: aStream prec: 18.
+		prec > 1 ifTrue: [aStream nextPut: $)].
+		^ self].
+	"Outside the subset (f-strings, lambdas, comprehensions): the placeholder the
+	 annotation machinery has always answered, rather than guessed text."
+	^ aStream nextPutAll: '<annotation>'
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractNode >> ___unwrapAstField___: aFieldName of: pyNode [
+	"Replace a Name in the field with its id and a Constant with its value: the
+	forms CPython keeps a pattern's capture name and singleton in.  Done by the
+	ast module, beside the classes it tests for."
+
+	| astMod |
+	astMod := self ___grailAstModule___.
+	astMod isNil ifTrue: [^ self].
+	[(astMod @env1:___pyAttrLoad___: #'_grail_unwrap')
+		@env1:___pyCallValue___: { pyNode. aFieldName } kw: nil]
+		on: AbstractException do: [:ex | ex return: nil]
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___up___: aNode on: aStream prec: prec [
+	"Unparse a CHILD, which may be nil (an absent slice bound)."
+
+	aNode isNil ifTrue: [^ self].
+	(aNode isKindOf: AbstractNode)
+		ifTrue: [aNode ___unparseOn___: aStream prec: prec]
+		ifFalse: [aStream nextPutAll: '<annotation>']
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___upItems___: nodes on: aStream prec: prec [
+	"CPython's interleave(', ') over a sequence of child nodes."
+
+	nodes isNil ifTrue: [^ self].
+	nodes doWithIndex: [:n :i |
+		i > 1 ifTrue: [aStream nextPutAll: ', '].
+		self ___up___: n on: aStream prec: prec]
+
+]
+
+{ #category : 'Grail-annotations' }
+AbstractNode >> ___upIv___: aSymbol [
+	^ self ___nodeInstVar___: self named: aSymbol
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> allocateTemp [
+
+	^parent allocateTemp
+
+]
+
+{ #category : 'Grail-initialization' }
+AbstractNode >> declareVariable: aSymbol [
+
+	parent declareVariable: aSymbol.
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> emitNameStoreOn: aStream target: aNameAst rhs: rhsSource [
+	"Emit a store of rhsSource into aNameAst as a single EXPRESSION, with
+	no trailing period, so it can sit inside a larger expression.
+
+	A ``global''-declared name has no Smalltalk temp -- the parser
+	correctly does not declare one -- so a bare ``n := v'' there names an
+	UNDEFINED SYMBOL and the enclosing method fails to compile.  Every
+	binding construct that is not a plain assignment (match captures,
+	walrus, def, class, import-as) needs this same routing, which is why
+	it lives here rather than being open-coded per node."
+
+	(self isModuleScopeStoreTarget: aNameAst)
+		ifTrue: [
+			aStream
+				nextPutAll: self ___moduleStoreReceiverExpr___;
+				nextPutAll: ' @env0:dynamicInstVarAt: #''';
+				nextPutAll: aNameAst id;
+				nextPutAll: ''' put: (';
+				nextPutAll: rhsSource;
+				nextPutAll: ')'.
+			^ self].
+	"A CLASS BODY has no temp to bind either -- ClassDefAst emits the statement
+	straight into the class-build code -- so the same reasoning as the module
+	branch applies one scope in, and ___emitModuleScopeStoreOf___: already had
+	this case for the STATEMENT form.  Without it here, every target shape that
+	routes through the tuple-unpack path failed to COMPILE in a class body:
+	``with cm() as (u, v):'' reported ``undefined symbol u; undefined symbol v''
+	and took the whole enclosing module down with it."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: rhsSource;
+			nextPutAll: ')'.
+		^ self].
+	"...and the same is true one emit-phase earlier, while ClassDefAst is
+	emitting the class-ATTRIBUTE VALUE expressions.  The only binding form that
+	reaches here from inside an expression is the walrus, and PEP 572 puts its
+	target in the enclosing scope -- which for ``z = (n := 7) + n'' is the class
+	namespace, so CPython leaves C.n == 7 beside C.z == 14.  Grail emitted a
+	bare ``n := 7'' instead: an undeclared block temp, so the enclosing MODULE
+	failed to compile (CompileError 1001, uncatchable from Python).  Routed
+	through the definitional store, which answers the VALUE rather than the
+	receiver, so it composes as an expression -- the case its comment already
+	named.  Parenthesized because it is a keyword send and the walrus can sit
+	anywhere an expression can."
+	(CallAst inClassBodyValueEmit == true
+		and: [CallAst ___classBeingCompiledVar___ notNil
+		and: [self ___inClassBodyAttributeValueScope___]]) ifTrue: [
+		aStream
+			nextPutAll: '(';
+			nextPutAll: CallAst ___classBeingCompiledVar___;
+			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+			nextPutAll: aNameAst id;
+			nextPutAll: ''' put: (';
+			nextPutAll: rhsSource;
+			nextPutAll: '))'.
+		^ self].
+	aNameAst printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: rhsSource
+
+]
+
+{ #category : 'Grail-code generation' }
+AbstractNode >> emitSourceFilenameLiteralOn: aStream [
+	"Instance-side twin of the class-side implementation below -- the emitters
+	that need this are a mix (ComprehensionAst's is a classmethod, TryAst's and
+	FunctionDefAst's are instance methods), and it depends on no instance state."
+
+	^ self class emitSourceFilenameLiteralOn: aStream
+
+]
+
+{ #category : 'Grail-code generation' }
+AbstractNode >> emitStringLiteral: aString on: aStream [
+	"Emit aString as a Smalltalk string literal, doubling embedded single
+	quotes.
+
+	ON AbstractNode rather than on one node type, because three of them now
+	emit a docstring into generated source: FunctionDefAst (where this started),
+	ClassDefAst, and ModuleAst.  It lived on FunctionDefAst, so the module-level
+	docstring emit reached it as a doesNotUnderstand: -- a compile that died
+	inside ___buildModuleClassBody:name: rather than a missing literal."
+
+	aStream nextPut: $'.
+	aString do: [:ch |
+		ch = $' ifTrue: [aStream nextPut: $'].
+		aStream nextPut: ch].
+	aStream nextPut: $'
+
+]
+
+{ #category : 'other' }
+AbstractNode >> emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr [
+	"Convenience entry for the regular (non-star) per-element store
+	— builds the holder __getitem__: <index> RHS."
+
+	^ self
+		emitTupleElementStoreOn: aStream
+		target: aTarget
+		holder: holder
+		indexExpr: indexExpr
+		directRhs: nil
+
+]
+
+{ #category : 'other' }
+AbstractNode >> emitTupleElementStoreOn: aStream target: aTarget holder: holder indexExpr: indexExpr directRhs: directRhs [
+	"Emit a single target's store inside a tuple-unpack.  Handles
+	NameAst (plain assignment), AttributeAst (env-1 setter or
+	classmethod self-ref instVar write), SubscriptAst
+	(``obj[i] = ...``), and nested Tuple/List targets (recurse).
+
+	``directRhs`` is a pre-built Smalltalk source expression used
+	for the star-slice path; when nil, the RHS is
+	``holder __getitem__: indexExpr``."
+
+	| rhs |
+	rhs := directRhs ifNil: [holder , ' __getitem__: ' , indexExpr].
+	(aTarget isKindOf: AttributeAst) ifTrue: [
+		"obj.attr = rhs (per-element store inside a tuple unpack) —
+		route through ``__setattr__:_:'' (both self and foreign receivers)
+		so @property setters fire.  Object>>__setattr__:_: detects the
+		paired getter+setter at runtime and dispatches to the setter;
+		otherwise falls through to dynamic-instVar storage."
+		((aTarget value isKindOf: NameAst)
+			and: [(CallAst isSelfReference: aTarget value id)
+				and: [(aTarget value ___boundInNestedFunction___: aTarget value id) not]]) ifTrue: [
+			"A slot (declared __slots__, or inferred under GRAIL_INFERRED_SLOTS)
+			-> the accessor send."
+			(CallAst ___inferredSlotAccessorFor___: aTarget value attr: aTarget ___mangledAttr___) ifNotNil: [:acc |
+				aStream
+					nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': (';
+					nextPutAll: rhs;
+					nextPutAll: '). '.
+				^ self
+			].
+			aStream
+				nextPutAll: 'self @env1:__setattr__: ''';
+				nextPutAll: aTarget ___mangledAttr___;
+				nextPutAll: ''' _: (';
+				nextPutAll: rhs;
+				nextPutAll: '). '.
+			^ self
+		].
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream
+			nextPutAll: ' @env1:__setattr__: ''';
+			nextPutAll: aTarget ___mangledAttr___;
+			nextPutAll: ''' _: (';
+			nextPutAll: rhs;
+			nextPutAll: '). '.
+		^ self
+	].
+	(aTarget isKindOf: SubscriptAst) ifTrue: [
+		"obj[idx] = rhs — __setitem__:_: dispatch."
+		aTarget value printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' __setitem__: '.
+		aTarget slice printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' _: ('; nextPutAll: rhs; nextPutAll: '). '.
+		^ self
+	].
+	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		"Nested unpacking: recurse using a fresh holder, through the SAME
+		coercion + value-count + star emitter the top-level target uses.
+		The RHS is parenthesized because it is a keyword message
+		(``holder __getitem__: 0''), and ___unpackSequence___ is unary."
+		| nestedHolder |
+		nestedHolder := holder , '_n'.
+		aStream nextPutAll: '[| '; nextPutAll: nestedHolder; nextPutAll: ' | ';
+			nextPutAll: nestedHolder; nextPutAll: ' := ('; nextPutAll: rhs; nextPutAll: ')'.
+		self emitUnpackCoercionAndStoresOn: aStream elts: aTarget elts holder: nestedHolder.
+		aStream nextPutAll: '] @env0:value. '.
+		^ self
+	].
+	"Default: NameAst / starred wrapper.  Routed through
+	emitNameStoreOn:target:rhs:, which knows every home a Python name can
+	have -- a module dynamic instVar, the per-class definitional store, or an
+	enclosing Smalltalk temp.  This was open-coded and knew only the module
+	one, so a class-body unpack emitted a bare ``u := ...'' naming an
+	undefined symbol and the enclosing module failed to compile:
+	``with cm() as (u, v):'' in a class body was a CompileError, not a
+	NameError."
+	(aTarget isKindOf: NameAst) ifTrue: [
+		self emitNameStoreOn: aStream target: aTarget rhs: rhs.
+		aStream nextPutAll: '. '.
+		^ self].
+	aTarget printSmalltalkOn: aStream.
+	aStream nextPutAll: ' := '; nextPutAll: rhs; nextPutAll: '. '
+
+]
+
+{ #category : 'other' }
+AbstractNode >> emitUnpackCoercionAndStoresOn: aStream elts: elts holder: holder [
+	"Shared tail of EVERY tuple/list unpack -- the top-level target and each
+	nested one.  The caller has just written ``holder := <rhs>'' and left the
+	statement open; append the iterable coercion + value-count check that
+	closes it, then one store per target element.
+
+	Factored out because the nested path used to do neither: it bound the
+	inner holder straight to ``outer __getitem__: i'' and indexed that, so
+	``(a, b), (c,) = IteratingSequenceClass(2), {42: 24}'' (test_iter
+	test_unpack_iter) raised ``not subscriptable'' on an iterable that has
+	__iter__ but no __getitem__, a nested target could not raise ValueError
+	for the wrong number of values, and a nested STAR target did not compile
+	at all -- StarredAst fell through to the plain-expression printer, which
+	emits a ``*-unpack in call sites is not yet supported'' TypeError signal
+	into the left-hand side of an assignment, a CompileError that took the
+	whole enclosing module down with it.  A nested target is entitled to
+	exactly the semantics of an outer one, so it now runs the same code."
+
+	| starIdx nBefore hasStar nAfter |
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	hasStar := starIdx ~= 0.
+	nBefore := hasStar ifTrue: [starIdx - 1] ifFalse: [elts size].
+	nAfter := hasStar ifTrue: [elts size - starIdx] ifFalse: [0].
+	"___unpackSequence___: sequences answer themselves (Object default);
+	iterables WITHOUT positional __getitem__ (enum classes: `R, W, X =
+	Perm`) materialize their iteration order as an indexable list --
+	CPython unpacks via __iter__, this codegen indexes.  ___unpackCheck___
+	then enforces CPython's value count (ValueError on too few / too many)."
+	aStream nextPutAll: ' ___unpackSequence___ ___unpackCheck___: ';
+		nextPutAll: nBefore printString;
+		nextPutAll: ' star: '; nextPutAll: (hasStar ifTrue: ['true'] ifFalse: ['false']);
+		nextPutAll: ' after: '; nextPutAll: nAfter printString; nextPutAll: '. '.
+	starIdx = 0 ifTrue: [
+		elts doWithIndex: [:elt :i |
+			self
+				emitTupleElementStoreOn: aStream
+				target: elt
+				holder: holder
+				indexExpr: (i - 1) printString
+		].
+	] ifFalse: [
+		elts doWithIndex: [:elt :i |
+			i < starIdx ifTrue: [
+				"Before the star — positive index from start."
+				self
+					emitTupleElementStoreOn: aStream
+					target: elt
+					holder: holder
+					indexExpr: (i - 1) printString
+			] ifFalse: [(i = starIdx)
+				ifTrue: [
+					"Star itself: slice from current index to (size-after-star) before end."
+					| afterCount sliceExpr |
+					afterCount := elts size - i.
+					sliceExpr := holder , ' ___getslice___: ' , (i - 1) printString , ' _: '
+						, (afterCount = 0 ifTrue: ['nil'] ifFalse: ['-' , afterCount printString])
+						, ' _: nil'.
+					self
+						emitTupleElementStoreOn: aStream
+						target: elt value
+						holder: holder
+						indexExpr: nil
+						directRhs: sliceExpr
+				] ifFalse: [
+					"After the star — negative index from end."
+					| offsetFromEnd |
+					offsetFromEnd := elts size - i + 1.
+					self
+						emitTupleElementStoreOn: aStream
+						target: elt
+						holder: holder
+						indexExpr: '-' , offsetFromEnd printString
+				]
+			].
+		].
+	]
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> globals [
+
+	^self module globals
+
+]
+
+{ #category : 'Grail-testing' }
+AbstractNode >> isInClass [
+
+	^parent isInClass
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> isModuleScopeStoreTarget: aNameAst [
+	"Phase A: true if this assignment target is a module-scope name —
+	i.e. we're compiling inside a module body or top-level def (not a
+	user class method), and the name was declared in the module body's
+	scope (parser-recorded into ``CallAst moduleVariableNames''), and
+	no enclosing function shadows it as a local."
+
+	CallAst moduleClassBeingCompiled ifNil: [^ false].
+	"``global x'' in the nearest enclosing SCOPE forces the module
+	route -- even inside a class method (the emitters pick the module-
+	instance receiver via ___moduleStoreReceiverExpr___) and past any
+	enclosing-function shadow (Python: the declaration binds the name
+	to the module for the whole declaring scope).
+
+	A CLASS BODY counts as that scope.  ``class C: global x; x = 13''
+	rebinds the module's x and leaves C without an ``x'' attribute;
+	asking only about enclosing FUNCTIONS missed the declaration and
+	stored a class attribute instead."
+	(aNameAst ___nearestEnclosingScopeDeclaresGlobal___: aNameAst id)
+		ifTrue: [^ true].
+	CallAst classBeingCompiled ifNotNil: [^ false].
+	(aNameAst isModuleVariableName: aNameAst id) ifFalse: [^ false].
+	"PRECISE local-shadow check (writes + params; comprehension targets
+	and global-declared names excluded) -- not the over-approximating
+	___declaredInEnclosingFunction___: variables walk."
+	(aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id) ifTrue: [^ false].
+	^ true
+
+]
+
+{ #category : 'Grail-testing' }
+AbstractNode >> isNone [
+
+	^false
+
+]
+
+{ #category : 'Grail-testing' }
+AbstractNode >> isUnconditionalReturn [
+	"True only for a top-level ReturnAst statement.  Statement emitters
+	stop after one: Smalltalk rejects statements after ^ inside a
+	block, so Python's (legal) unreachable code after `return` must be
+	dropped at codegen."
+
+	^ false
+
+]
+
+{ #category : 'Grail-initialization' }
+AbstractNode >> isVariableIsDeclared: aSymbol [
+	"Walk up the parent chain looking for an enclosing scope (a BlockAst)
+	that declares aSymbol as a local. Returns false if we reach the root
+	without finding a declaration — i.e., aSymbol is a free name (resolved
+	via the symbol list / builtins at runtime).
+
+	When the walk crosses a FunctionDefAst boundary (we are climbing out
+	of a function into its surrounding scope), switch to the
+	``FromMethod`` variant on BlockAst nodes so any enclosing class
+	body is invisible — Python class scope doesn't propagate into
+	method bodies."
+
+	parent isNil ifTrue: [^false].
+	((self isKindOf: FunctionDefAst) or: [self isKindOf: LambdaAst]) ifTrue: [
+		^ parent isVariableIsDeclaredFromMethod: aSymbol
+	].
+	^parent isVariableIsDeclared: aSymbol
+
+]
+
+{ #category : 'Grail-initialization' }
+AbstractNode >> isVariableIsDeclaredFromMethod: aSymbol [
+	"Default propagation for the ``FromMethod`` walk — delegate to
+	parent.  BlockAst overrides to skip class-body locals."
+
+	parent isNil ifTrue: [^false].
+	^ parent isVariableIsDeclaredFromMethod: aSymbol
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> locals [
+
+	^parent locals
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> module [
+
+	^parent module
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> parent [
+
+	^parent
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> printSmalltalkOn: aStream [
+	"Default backstop — every concrete AST node should override
+	printSmalltalkOn:.  When a newly-parsed shape (e.g. async
+	comprehensions, ``yield from``, ``@`` matmul) lands without
+	an override, this default fires; quote the receiver's class
+	name in the message so grep across src/smalltalk/PythonAst
+	finds the file to add the override in without a debugger trip."
+
+	self error:
+		'AbstractNode is abstract; subclasses must implement printSmalltalkOn: -- offender = '
+		, self class name asString.
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> printSmalltalkWithParenthesisOn: aStream [
+
+	aStream nextPut: $(.
+	self printSmalltalkOn: aStream.
+	aStream nextPut: $).
+
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> setBlock: aBlock [
+
+]
+
+{ #category : 'Grail-initialization' }
+AbstractNode >> setParent: aNode [
+	"Set parent and recursively set parent on all child AST nodes."
+
+	parent := aNode.
+	2 to: self class instSize do: [:i |
+		| val |
+		val := self instVarAt: i.
+		(val isKindOf: AbstractNode) ifTrue: [
+			val setParent: self.
+		].
+		"Array AND OrderedCollection — comprehension nodes hold their
+		generators in an OrderedCollection; skipping it left every
+		node under a genexp with a nil parent, silently disabling all
+		parent-walk checks (comprehension-target shadowing, reserved-
+		name rename, ...) inside comprehensions."
+		((val isKindOf: Array) or: [val isKindOf: OrderedCollection]) ifTrue: [
+			val do: [:each |
+				(each isKindOf: AbstractNode) ifTrue: [
+					each setParent: self.
+				].
+			].
+		].
+	].
+
+]

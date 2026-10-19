@@ -1,0 +1,219 @@
+Extension { #name : 'mappingproxy' }
+
+{ #category : 'Grail-Initialization' }
+mappingproxy class >> ___on: aMapping [
+	"Wrap aMapping (the LIVE backing dict) — a mutation to it is visible
+	through this proxy, matching CPython's read-only view semantics."
+
+	| v |
+	v := self ___new___.
+	v ___setMapping: aMapping.
+	^ v
+
+]
+
+{ #category : 'Grail-Initialization' }
+mappingproxy class >> __new__: aMapping [
+	"``types.MappingProxyType(d)'' -- the PUBLIC constructor, as distinct from
+	___on: beside it, which is the internal one Grail's own __dict__ accessors
+	use.  Both wrap the live mapping; only this one validates, because only
+	this one can be handed anything.
+
+	Reached because types.py now names this class (``MappingProxyType =
+	type(type.__dict__)'', CPython's own spelling) instead of stubbing the
+	constructor to answer its argument.  Without a __new__: here that call
+	fell through the generic instantiation path and died with ``a PyDict does
+	not understand #'new''', an uncatchable Smalltalk error."
+
+	((aMapping @env0:isKindOf: AbstractDictionary)
+		@env0:or: [aMapping @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+		^ TypeError ___signal___: 'mappingproxy() argument must be a mapping, not '
+			@env0:, (aMapping ___pyTypeNameForError___) @env0:asString].
+	^ self ___on: aMapping
+
+]
+
+{ #category : 'Grail-Private' }
+mappingproxy >> ___setMapping: aMapping [
+	mapping := aMapping
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> __contains__: key [
+	^ mapping @env0:includesKey: key
+
+]
+
+{ #category : 'Grail-Mutation' }
+mappingproxy >> __delitem__: key [
+	^ TypeError ___signal___: '''mappingproxy'' object does not support item deletion'
+
+]
+
+{ #category : 'Grail-Comparison' }
+mappingproxy >> __eq__: other [
+	| o |
+	o := (other @env0:isKindOf: mappingproxy) ifTrue: [other @env1:mapping] ifFalse: [other].
+	^ mapping @env1:__eq__: o
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> __getitem__: key [
+	^ mapping @env1:__getitem__: key
+
+]
+
+{ #category : 'Grail-Hashing' }
+mappingproxy >> __hash__ [
+	"CPython DELEGATES a proxy's hash to the mapping it wraps -- mappingproxy
+	does not set __hash__ = None, it forwards.  The observable tell is the
+	error message: ``hash(types.MappingProxyType({}))'' raises
+
+	    TypeError: unhashable type: 'dict'
+
+	naming the WRAPPED type, not 'mappingproxy'.  So a proxy over a dict is
+	unhashable because dicts are, and a proxy over a hashable mapping would
+	hash.  Forwarding reproduces both, and the message, for free.
+
+	Needed because __eq__ above is defined without a matching __hash__, so the
+	proxy inherited object's IDENTITY hash: it was silently hashable, and two
+	proxies over equal dicts compared equal while hashing differently."
+
+	^ mapping __hash__
+
+]
+
+{ #category : 'Grail-Iterator Protocol' }
+mappingproxy >> __iter__ [
+	^ (mapping keys) __iter__
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> __len__ [
+	^ mapping @env0:size
+
+]
+
+{ #category : 'Grail-Comparison' }
+mappingproxy >> __ne__: other [
+	"Forward a PUNT instead of negating it: __eq__ delegates to the wrapped
+	dict, whose __eq__ now answers NotImplemented for a non-mapping,
+	and ``not'' on that symbol is a doesNotUnderstand."
+
+	| r |
+	r := self __eq__: other.
+	r == true ifTrue: [^ false].
+	r == false ifTrue: [^ true].
+	^ r
+
+]
+
+{ #category : 'Grail-Merge Operators' }
+mappingproxy >> __or__: other [
+	"PEP 584 ``mp | other''.  CPython's mappingproxy does not merge anything
+	itself -- it runs the operator against the WRAPPED MAPPING and lets the
+	ordinary binary protocol decide, which is why ``mp | UserDict'' answers a
+	UserDict and ``mp | dict'' a plain dict.
+
+	Reproduced here as the two steps the protocol makes, because Grail's dict
+	refuses a non-AbstractDictionary operand and so returns NotImplemented for
+	the interesting half: without the reflected step, ``mp | UserDict'' would
+	answer NotImplemented instead of a UserDict.
+
+	This did not need to exist while types.MappingProxyType was a stub that
+	answered its argument -- every ``|'' in test_userdict was running against
+	a plain dict, three times over, and the mappingproxy third of
+	test_mixed_or and test_mixed_ior was passing VACUOUSLY."
+
+	| r ni |
+	ni := Python @env0:at: #'NotImplemented' otherwise: nil.
+	r := [mapping @env1:__or__: other]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni].
+	(r @env0:== ni) ifFalse: [^ r].
+	^ [other @env1:__ror__: mapping]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni]
+
+]
+
+{ #category : 'Grail-String Representation' }
+mappingproxy >> __repr__ [
+	^ 'mappingproxy(' @env0:, (mapping __repr__) @env0:, ')'
+
+]
+
+{ #category : 'Grail-Merge Operators' }
+mappingproxy >> __ror__: other [
+	"PEP 584 reflected merge ``other | mp'' -- the proxy's entries win.
+
+	The path that matters is ``UserDict | mp'': UserDict's own __or__ accepts
+	only a UserDict or a dict, so it answers NotImplemented and this is what
+	runs, with the wrapped mapping standing in for the proxy.  That is how
+	CPython keeps the result a UserDict rather than a dict."
+
+	| r ni |
+	ni := Python @env0:at: #'NotImplemented' otherwise: nil.
+	r := [other @env1:__or__: mapping]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni].
+	(r @env0:== ni) ifFalse: [^ r].
+	^ [mapping @env1:__ror__: other]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: ni]
+
+]
+
+{ #category : 'Grail-Mutation' }
+mappingproxy >> __setitem__: key _: value [
+	^ TypeError ___signal___: '''mappingproxy'' object does not support item assignment'
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> copy [
+	"CPython ``mappingproxy.copy()'' returns a shallow copy of the
+	underlying mapping (a plain dict), not another proxy."
+	^ mapping copy
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> get: key [
+	^ mapping get: key
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> get: key _: default [
+	^ mapping get: key _: default
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> items [
+	^ mapping items
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> keys [
+	^ mapping keys
+
+]
+
+{ #category : 'Grail-Accessors' }
+mappingproxy >> mapping [
+	"CPython 3.12+ ``mappingproxy.mapping'' — the wrapped mapping."
+	^ mapping
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+mappingproxy >> values [
+	^ mapping values
+
+]

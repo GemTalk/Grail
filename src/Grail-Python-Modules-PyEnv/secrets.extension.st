@@ -1,0 +1,210 @@
+Extension { #name : 'secrets' }
+
+{ #category : 'Grail-Private' }
+secrets >> ___b64UrlsafeEncode___: bytes [
+	| alpha out n i b1 b2 b3 triple stream |
+	alpha := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'.
+	n := bytes @env0:size.
+	stream := WriteStream @env0:on: Unicode7 @env0:new.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [
+		b1 := (bytes @env0:at: i) @env0:asInteger.
+		b2 := i @env0:+ 1 @env0:<= n
+			ifTrue: [(bytes @env0:at: i @env0:+ 1) @env0:asInteger]
+			ifFalse: [0].
+		b3 := i @env0:+ 2 @env0:<= n
+			ifTrue: [(bytes @env0:at: i @env0:+ 2) @env0:asInteger]
+			ifFalse: [0].
+		triple := (b1 @env0:bitShift: 16) @env0:bitOr: ((b2 @env0:bitShift: 8) @env0:bitOr: b3).
+		stream @env0:nextPut: (alpha @env0:at: ((triple @env0:bitShift: -18) @env0:bitAnd: 16r3F) @env0:+ 1).
+		stream @env0:nextPut: (alpha @env0:at: ((triple @env0:bitShift: -12) @env0:bitAnd: 16r3F) @env0:+ 1).
+		i @env0:+ 1 @env0:<= n ifTrue: [
+			stream @env0:nextPut: (alpha @env0:at: ((triple @env0:bitShift: -6) @env0:bitAnd: 16r3F) @env0:+ 1)
+		].
+		i @env0:+ 2 @env0:<= n ifTrue: [
+			stream @env0:nextPut: (alpha @env0:at: (triple @env0:bitAnd: 16r3F) @env0:+ 1)
+		].
+		i := i @env0:+ 3
+	].
+	out := stream @env0:contents.
+	^ out
+
+]
+
+{ #category : 'Grail-Private' }
+secrets >> _defaultBytes: nbytes [
+	"Resolve the default byte count.  Python's secrets defaults to
+	DEFAULT_ENTROPY (=32) when nbytes is None."
+
+	(nbytes == nil or: [nbytes == None]) ifTrue: [^ 32].
+	^ nbytes
+
+]
+
+{ #category : 'Grail-Private' }
+secrets >> _generator [
+	"Return this session's underlying CSPRNG, creating it on first use.
+
+	Backed by HostRandom, which draws from the OS CSPRNG — the correct
+	source for the `secrets` module (cf. CPython's secrets, which is backed
+	by os.urandom).  The `random` module is CPython's random.py over
+	_random's seedable Mersenne Twister (PyMersenneTwister), which is NOT
+	cryptographically secure.
+
+	Stored in SessionTemps (not the committed module slot) so each Gem
+	session gets its own generator and using `secrets` never commits RNG
+	state — as _random keeps the entropy source it seeds from.  HostRandom also wraps a
+	closable OS resource, so re-create it if a prior one was closed."
+
+	| temps gen |
+	temps := SessionTemps @env0:current.
+	gen := temps @env0:at: #'___GrailSecretsGenerator___' ifAbsent: [nil].
+	(gen == nil or: [(gen @env0:respondsTo: #isOpen) and: [(gen @env0:isOpen) not]]) ifTrue: [
+		gen := HostRandom @env0:new.
+		temps @env0:at: #'___GrailSecretsGenerator___' put: gen
+	].
+	^ gen
+
+]
+
+{ #category : 'Grail-Random ints' }
+secrets >> choice: seq [
+	"choice(seq) - random element from a non-empty sequence."
+
+	| len idx |
+	len := [seq __len__]
+		@env0:on: MessageNotUnderstood
+		do: [:ex | seq @env0:size].
+	len @env0:= 0 ifTrue: [
+		IndexError ___signal___: 'Cannot choose from an empty sequence'
+	].
+	idx := self _generator @env0:integerBetween: 0 and: len @env0:- 1.
+	^ seq __getitem__: idx
+
+]
+
+{ #category : 'Grail-Constant time' }
+secrets >> compare_digest: a _: b [
+	"compare_digest(a, b) - constant-time string-equal.  Accepts
+	str (Unicode7) or bytes (ByteArray); mixing raises TypeError
+	per the CPython contract."
+
+	| aIsBytes bIsBytes aSize bSize result aByte bByte |
+	aIsBytes := a isKindOf: ByteArray.
+	bIsBytes := b isKindOf: ByteArray.
+	aIsBytes @env0:= bIsBytes ifFalse: [
+		TypeError ___signal___: 'compare_digest operands must both be str or both bytes'
+	].
+	aSize := a @env0:size.
+	bSize := b @env0:size.
+	"XOR every position; mismatched length still iterates the longer
+	side so timing is independent of where the mismatch falls."
+	result := aSize @env0:bitXor: bSize.
+	1 @env0:to: (aSize @env0:max: bSize) do: [:i |
+		aByte := i @env0:<= aSize ifTrue: [(a @env0:at: i) @env0:asInteger] ifFalse: [0].
+		bByte := i @env0:<= bSize ifTrue: [(b @env0:at: i) @env0:asInteger] ifFalse: [0].
+		result := result @env0:bitOr: (aByte @env0:bitXor: bByte)
+	].
+	^ result @env0:= 0
+
+]
+
+{ #category : 'Grail-Initialization' }
+secrets >> initialize [
+	"Lazy-init the underlying generator."
+
+]
+
+{ #category : 'Grail-Random ints' }
+secrets >> randbelow: n [
+	"randbelow(n) - random int in [0, n).  Raises ValueError if n <= 0."
+
+	| k r |
+	n @env0:<= 0 ifTrue: [
+		ValueError ___signal___: 'Upper bound must be positive'
+	].
+	n @env0:<= 16r100000000 ifTrue: [
+		^ self _generator @env0:integerBetween: 0 and: n @env0:- 1].
+	"Past 2**32, which the kernel's integerBetween:and: does not take:
+	CPython's _randbelow_with_getrandbits, uniform by rejection."
+	k := (n @env0:- 1) @env0:highBit.
+	[r := self randbits: k. r @env0:>= n] whileTrue.
+	^ r
+
+]
+
+{ #category : 'Grail-Random ints' }
+secrets >> randbits: k [
+	"randbits(k) - non-negative int with exactly k random bits.
+	Raises ValueError if k < 0."
+
+	| gen x chunks |
+	k @env0:< 0 ifTrue: [
+		ValueError ___signal___: 'k must be non-negative'
+	].
+	k @env0:= 0 ifTrue: [^ 0].
+	"32 bits at a time, then the excess shifted off, as CPython's
+	getrandbits trims its bytes: the kernel's integerBetween:and: refuses an
+	interval over 2**32 (``Intervals > 2**32 not yet supported''), and
+	numpy.random's SeedSequence() asks for 128."
+	gen := self _generator.
+	chunks := (k @env0:+ 31) @env0:// 32.
+	x := 0.
+	chunks @env0:timesRepeat: [
+		x := (x @env0:bitShift: 32) @env0:+ (gen @env0:integerBetween: 0 and: 16rFFFFFFFF)].
+	^ x @env0:bitShift: (k @env0:- (chunks @env0:* 32))
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+secrets >> token_bytes [
+	"token_bytes() - 32 cryptographically strong random bytes."
+
+	^ self token_bytes: None
+
+]
+
+{ #category : 'Grail-Tokens' }
+secrets >> token_bytes: nbytes [
+	"token_bytes(nbytes=None) - random byte string of length nbytes
+	(or DEFAULT_ENTROPY=32 if nbytes is None)."
+
+	| n gen ba |
+	n := self _defaultBytes: nbytes.
+	gen := self _generator.
+	ba := ByteArray @env0:new: n.
+	1 @env0:to: n do: [:i | ba @env0:at: i put: (gen @env0:integerBetween: 0 and: 255)].
+	^ ba
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+secrets >> token_hex [
+	^ self token_hex: None
+
+]
+
+{ #category : 'Grail-Tokens' }
+secrets >> token_hex: nbytes [
+	"token_hex(nbytes=None) - lowercase hex string of nbytes random
+	bytes (length 2*nbytes)."
+
+	^ (self token_bytes: nbytes) @env0:asHexString @env0:asLowercase
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+secrets >> token_urlsafe [
+	^ self token_urlsafe: None
+
+]
+
+{ #category : 'Grail-Tokens' }
+secrets >> token_urlsafe: nbytes [
+	"token_urlsafe(nbytes=None) - URL-safe base64-encoded random
+	token (with `-` and `_` in place of `+` and `/`, and no `=`
+	padding).  Each byte encodes to ~1.3 chars."
+
+	^ self ___b64UrlsafeEncode___: (self token_bytes: nbytes)
+
+]

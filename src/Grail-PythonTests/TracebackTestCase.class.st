@@ -1,0 +1,2299 @@
+Class {
+	#name : 'TracebackTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> ___catchInSmalltalk___: pythonSource [
+	"Run pythonSource and answer the exception a SMALLTALK handler receives --
+	possibly a carrier -- or nil when nothing was raised.  The handler returns,
+	so the protocol under test is exercised after the stack has unwound, which
+	is the launcher's shape."
+
+	^ [self eval: pythonSource. nil] on: BaseException do: [:ex | ex return: ex]
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> ___catchInSmalltalk___: pythonSource filename: aStringOrNil [
+	"___catchInSmalltalk___:, under the co_filename aStringOrNil names."
+
+	^ [self eval: pythonSource filename: aStringOrNil. nil]
+		on: BaseException do: [:ex | ex return: ex]
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> ___filenamesOf___: frames [
+	"The distinct co_filenames a frame array reports, in first-seen order."
+
+	| out |
+	out := OrderedCollection new.
+	frames do: [:f |
+		| n |
+		n := (f at: 1) asString.
+		(out includes: n) ifFalse: [out add: n]].
+	^ out asArray
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> ___namesAndLines___: frames [
+	"{ name. lineno } per frame, as Smalltalk strings, for comparison."
+
+	^ frames collect: [:f | { (f at: 3) asString. f at: 2 }]
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> ___nestedRaiseSource___ [
+	^ 'def outer():
+    return middle()
+
+def middle():
+    return inner()
+
+def inner():
+    d = {}
+    return d["missing"]
+
+outer()
+'
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> loadForIterExceptionLocationFixture [
+	importlib @env1:modules removeKey: #'for_iter_exception_location' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/for_iter_exception_location.py')
+		name: 'for_iter_exception_location'
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> loadFrameDepthFixture [
+	importlib @env1:modules removeKey: #'frame_depth' ifAbsent: [].
+	^ importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/frame_depth.py')
+		name: 'frame_depth'
+
+]
+
+{ #category : 'Grail-Tests - Frame Lines' }
+TracebackTestCase >> testABulletedDocstringDoesNotMoveTheReportedLine [
+	"``___derivePythonLineForMethod___:ip:'' locates the caret that
+	``GsNMethod >> _sourceAtIp:'' inserts, then takes the last ``___curPos___ :=
+	N'' at or above it.  The caret is marked
+
+	    * ^1                                                          *******
+
+	and the scan identified it as ``first line whose first non-blank character is
+	an asterisk''.  That is not sufficient, because a Python DOCSTRING is emitted
+	as a MULTI-LINE Smalltalk string literal -- so its own lines appear in the
+	generated source verbatim, and a bullet list in one is indistinguishable from
+	the marker.  Taking the FIRST match then lets a bullet ABOVE the real caret
+	win, and the line reported comes from higher up the function.
+
+	Measured deterministically: a four-line function with a bulleted docstring
+	reported line 40 where CPython reports 46.  Three of the fixture's five
+	checks flip when ___isCaretLine___ is reverted; the two that hold are the
+	control cases -- a plain docstring, and a bulleted COMMENT, which never
+	reaches the generated Smalltalk at all.  That asymmetry between comments and
+	string literals is why it took a docstring to surface.
+
+	This is the deterministic half of the intermittent frame-walk family: when
+	the misplaced caret lands above EVERY ___curPos___ the scan answers nil
+	instead of a wrong number, and a nil DROPS the frame -- which is how
+	sys._getframe comes to raise ``call stack is not deep enough''.  See
+	tests/python/frame_line_bulleted_docstring.py, whose expected values are
+	CPython 3.14.6's."
+
+	| mod results expected |
+	importlib @env1:modules removeKey: #'frame_line_bulleted_docstring' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath:
+			(importlib grailDir , '/tests/python/frame_line_bulleted_docstring.py')
+		name: 'frame_line_bulleted_docstring'.
+	results := mod @env1:___pyAttrLoad___: #'r'.
+	expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	"Compare by repr so an int and a tuple check the same way."
+	#( 'bulleted_docstring' 'plain_docstring' 'bulleted_comment'
+	   'bulleted_string_that_is_not_a_docstring' 'inner_caller' ) do: [:k |
+		| got want b |
+		b := (Python at: #'builtins') @env1:instance.
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: 'frame line for ' , k , ': got ' , got , ' want ' , want].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testAHandlerRaiseLeavesTheTry [
+	"The ``except'' clauses of one ``try'' are ALTERNATIVES for the try BODY.  An
+	exception raised inside a handler propagates out of the whole statement; it is
+	never offered to that statement's other handlers.
+
+	Grail offered it to them.  Handlers compile to NESTED protected blocks --
+
+		[[ body ] on: T1 do: [H1] ] on: T2 do: [H2]
+
+	-- so H1's BODY ran inside H2's protected block and H2 caught whatever H1
+	raised.  Every handler but the last was exposed to every handler after it,
+	silently breaking the commonest narrowing idiom in the language:
+
+		try: parse(text)
+		except ValueError as e: raise ConfigError(str(e)) from None
+		except Exception: log_unexpected()
+
+	The shield is a DEPTH.  Each handler body brackets itself with
+	BaseException ___enterHandler___ / ___exitHandler___ (through the ensure: that
+	already restores sys.exc_info(), so a return / break / continue or a re-raise
+	still unwinds it), and the selectors of handlers 2..N record the depth at
+	which they were INSTALLED, handling nothing once the depth rises above it.
+	Nesting therefore comes out right: a try inside a handler installs its own
+	selectors at the raised depth, so its own handlers still catch from its own
+	body while the enclosing try's later handlers stay shielded.
+
+	Two other designs were built and measured first; both are worse, and both
+	looked obviously correct until run.  Moving the handler bodies outside the
+	on:do: -- recording which matched and dispatching afterwards -- is semantically
+	exact and makes a bare ``raise'' IMPOSSIBLE, because GemStone will not signal
+	an exception whose handler has unwound (UncontinuableError 6011); test_listcomps'
+	test_comp_in_try_except is what caught that, not this fixture.  A per-statement
+	flag in a block enclosing the whole try works and costs a stack frame per try,
+	which turned test_richcmp's MiscTest.test_recursion into a RecursionError.  An
+	integer captured in the selector costs neither.
+
+	This is also the answer to the question section 9.19 left open.  The
+	import-suggestion tests do ``except ImportError as e: raise e from None'' with
+	an ``except Exception'' after it and got their own re-raise back in the second
+	handler -- surfacing as ``Expected ImportError but got <ImportError class
+	object>''.  All three theories recorded there were wrong (ImportError matching,
+	the exec boundary, ModuleNotFoundError's hierarchy); the fault was in
+	try/except codegen and had nothing to do with imports.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/handler_raise.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'handler_raise' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/handler_raise.py')
+		name: 'handler_raise'.
+	#( 'a_raise_in_a_handler_leaves_the_try'
+	   'a_reraise_in_a_handler_leaves_the_try'
+	   'a_bare_reraise_in_a_handler_leaves_the_try'
+	   'the_later_handler_is_skipped_even_when_it_would_match'
+	   'three_handlers_expose_neither_of_the_first_two'
+	   'a_matching_handler_still_catches'
+	   'the_first_matching_handler_wins'
+	   'an_unmatched_exception_still_propagates'
+	   'the_body_result_is_unaffected'
+	   'an_else_clause_still_runs_when_nothing_raised'
+	   'a_finally_still_runs_when_a_handler_raises'
+	   'a_return_from_a_handler_still_returns'
+	   'a_break_from_a_handler_still_breaks'
+	   'a_continue_from_a_handler_still_continues'
+	   'a_nested_try_inside_a_handler_still_works'
+	   'a_handler_raise_is_catchable_further_out'
+	   'the_context_of_a_handler_raise_is_the_original'
+	   'from_none_suppresses_the_context' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'handler-raise check failed: ' , k , ' -> ' , answer printString].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testAMethodFrameReportsItsCallSite [
+	"A method that called a nested def: which line does its live frame report?
+
+	CPython says the CALL.  Grail said the method's LAST statement -- not an
+	off-by-one, always the final statement whatever the distance -- because a
+	class-body def whose body contains a nested def compiles with the body inside
+	a BLOCK, so the method's ip sits at the end of that block and the ip -> line
+	derivation answers the last ``___curPos___ := N'' at or above the caret.  The
+	enclosing zero-argument block frame, one hop inside the method, carries the
+	call site exactly, and ___liveFrameChain___ computed it and threw it away: it
+	had copied the RECORDING half of the traceback walk's pendingLine logic
+	(``pendingHome == home and: [pendingLine notNil]'') and not the CONSUMING
+	half.
+
+	THE ANSWER USED TO DEPEND ON THE GEM, and this test pinned both answers so
+	that an improvement could not pass silently.  It then fired exactly as
+	designed: a native-code gem began reporting the CALL SITE where the assertion
+	still expected the degradation, and the failure message said what to do.
+
+	The degradation was never really about protected blocks.  A _gsStack capture
+	holds a NATIVE ip when the gem generates native code, and every ip -> source
+	lookup wants a PORTABLE one, so the caret landed past the block and the
+	wrapping frame derived the method's last statement.  Converting the ip
+	(BaseException ___toPortableIps___:) makes the caret resolve, the wrapper
+	carries the call site, and both gems answer alike.
+
+	So the assertion is now UNCONDITIONAL, which is the stronger guard: if the
+	conversion regresses, a native-code gem goes back to the method's last
+	statement and this fails on CI -- the only place it can, since native code is
+	unavailable on macOS/arm64.
+
+	The line numbers come from the fixture's ``__code__'', never hardcoded here:
+	tests/python/live_frames.py is edited constantly and absolute lines in a
+	driver rot the moment anything is inserted above the shape."
+
+	| mod triple reported callSite lastStatement |
+	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/live_frames.py')
+		name: 'live_frames'.
+	triple := mod @env1:method_frame_call_site.
+	reported := triple @env1:__getitem__: 0.
+	callSite := triple @env1:__getitem__: 1.
+	lastStatement := triple @env1:__getitem__: 2.
+	self assert: reported notNil
+		description: 'no frame named meth in the live stack at all'.
+	self assert: reported equals: callSite
+		description: 'expected the call site (line ' , callSite printString
+			, ') as CPython reports, but got ' , reported printString
+			, ' -- the method''s last statement is line ' , lastStatement printString
+			, '.  Getting the LAST STATEMENT on a native-code gem means the captured '
+			, 'ip reached the line derivation unconverted; see BaseException '
+			, '___toPortableIps___:.'
+
+]
+
+{ #category : 'Grail-Tests - Frame Lines' }
+TracebackTestCase >> testAModuleFrameInAStatementReportsThatStatement [
+	"A module body embeds the source of every method it compiles as a string
+	literal, ___curPos___ stores and all, and ___derivePythonLineForMethod___:ip:
+	took the last store at or above the caret by searching the text -- so it
+	found the embedded ones.  While a class or def statement was still running
+	(__init_subclass__, a class decorator, a function decorator) the module
+	frame reported the last line of the last method embedded before the caret:
+	``class Sub(Base):'' on line 44 read as line 50, ``return args'', on both
+	codegen paths, because a module body is text-compiled either way.  The scan
+	now reads the method's OWN stores only (issue #1137).
+
+	See tests/python/frame_line_in_module_statement.py, whose expected values
+	are CPython 3.14's."
+
+	| mod results expected b |
+	importlib @env1:modules removeKey: #'frame_line_in_module_statement' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath:
+			(importlib grailDir , '/tests/python/frame_line_in_module_statement.py')
+		name: 'frame_line_in_module_statement'.
+	results := mod @env1:___pyAttrLoad___: #'r'.
+	expected := mod @env1:___pyAttrLoad___: #'EXPECTED'.
+	b := (Python at: #'builtins') @env1:instance.
+	#( 'init_subclass' 'init_subclass_stack' 'class_decorator'
+	   'function_decorator' 'plain_call_control' ) do: [:k |
+		| got want |
+		got := (b @env1:repr: (results @env1:__getitem__: k)) asString.
+		want := (b @env1:repr: (expected @env1:__getitem__: k)) asString.
+		self assert: got equals: want
+			description: 'frame line for ' , k , ': got ' , got , ' want ' , want].
+	importlib @env1:modules removeKey: #'frame_line_in_module_statement' ifAbsent: [].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testAttributeErrorSuggestions [
+	"CPython's ``Did you mean: 'blech'?'' on a misspelled attribute.
+
+	Three separate gaps had to close before a suggestion was computable, and the
+	fixture pins each one because each was independently missing:
+
+	dir(instance) reported NEITHER the class's data attributes (they compile to
+	accessors on the metaclass, so only dir(TheClass) saw them) NOR the
+	instance's own (dynamic instVars) -- object>>__dir__ scanned env-1 selectors
+	only, so every candidate list was empty.
+
+	AttributeError carried no ``name'' / ``obj''.  CPython has exposed both since
+	3.10, and the suggestion needs both: ``name'' is the misspelling to match,
+	``obj'' supplies the candidates.
+
+	A bare ``raise AttributeError()'' from a user __getattr__ gets those stamped
+	on by the attribute machinery, as CPython's set_attribute_error_context does
+	-- otherwise the shape test_getattr_suggestions_no_args uses (no message, no
+	name) could never be helped.
+
+	The edit costs and tie-breaks are CPython's own (Python/suggestions.c), which
+	is what makes the ordering checks meaningful: substitution beats elimination
+	beats addition, and a case change beats all three.  Verified against real
+	CPython by running the fixture directly; see
+	tests/python/attr_suggestions.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'attr_suggestions' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/attr_suggestions.py')
+		name: 'attr_suggestions'.
+	#( 'dir_of_an_instance_reports_class_and_instance_attributes'
+	   'an_attributeerror_carries_name_and_obj'
+	   'a_close_attribute_is_suggested'
+	   'the_suggestion_follows_cpythons_edit_costs'
+	   'an_instance_attribute_can_be_suggested'
+	   'a_bare_attributeerror_still_gets_a_suggestion'
+	   'a_wildly_wrong_name_gets_no_suggestion'
+	   'an_exact_match_is_never_suggested'
+	   'an_underscored_candidate_is_hidden_from_a_plain_typo'
+	   'a_non_string_candidate_is_ignored'
+	   'an_unrenderable_message_does_not_break_the_line'
+	   "NameError candidates from the frame's LOCALS -- snapshotted at raise
+	    time, because a rendered traceback is built after the stack unwound
+	    from a capture that holds no temporaries."
+	   'a_local_name_is_suggested'
+	   'a_local_wins_over_a_worse_global'
+	   'a_local_bound_to_none_is_still_a_candidate'
+	   'a_wildly_wrong_bare_name_gets_no_local_suggestion' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'attribute-suggestion check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testBareReraiseSplicesFrames [
+	"A bare ``raise'' re-raises the SAME exception, which already carries a
+	traceback.  CPython adds a frame for every function it then unwinds through --
+	each at the line where the exception ENTERED that function, not at the
+	``raise'' -- and each function once.  Grail used to stop at the first
+	traceback it found, losing everything above the re-raise; the walk now rebuilds
+	from the live captured stack, which still holds the original chain because
+	Smalltalk runs a handler ON TOP of the frames that signalled (§9.9 item 5).
+
+	Every expectation in the fixture is verified against real CPython by running
+	the file directly -- see its docstring.  See tests/python/reraise_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'reraise_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/reraise_frames.py')
+		name: 'reraise_frames'.
+	#( 'a_bare_reraise_keeps_the_deeper_frames_and_adds_the_catcher'
+	   'the_reraising_frame_is_reported_at_the_original_call'
+	   'each_function_appears_once'
+	   'a_passed_through_function_gets_a_frame_too'
+	   'nested_reraises_each_add_their_frame'
+	   'the_reraised_exception_is_the_same_object'
+	   'a_reraised_traceback_renders_every_frame' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'bare-re-raise check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testCaughtExceptionHasFrame [
+	"General traceback population: a caught exception now carries a traceback
+	whose frame is the CATCHING function located at the EXACT line it propagated
+	from (TryAst's except-binding fallback + per-statement ___curPos___ tracking
+	through SuiteAst bodies), so traceback.extract_tb / sys.exc_info() /
+	traceback.format_exc are non-empty for ANY caught exception -- not just
+	comprehensions.  _catch_deep pins the raise line inside a for loop several
+	statements into the try body (would report the ``try'' header before the
+	SuiteAst setPos fix).  See tests/python/general_traceback.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'general_traceback' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/general_traceback.py')
+		name: 'general_traceback'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'nonempty' 'name_is_func' 'lineno_is_raise' 'exc_info_nonempty'
+	   'format_exc_has_valueerror'
+	   'deep_nonempty' 'deep_name' 'deep_lineno_is_raise' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'caught-exception-frame check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests' }
+TracebackTestCase >> testCodeObjectCarriesTheModulePath [
+	"co_filename was the '<grail>' placeholder for every code object, on the
+	grounds that Grail has no file-backed ones.  But the emitters DO know the
+	module's path at compile time -- it is on the ModuleAst -- and a real path
+	is what lets linecache read the source, which is what makes
+	FrameSummary.line possible.  Checked for all three def shapes, since each
+	has its own PyCode emit site."
+
+	| mod path |
+	path := importlib grailDir , '/tests/python/code_filename.py'.
+	mod := importlib loadModuleFromPath: path name: 'code_filename'.
+	self assert: (mod @env1:module_level_filename) equals: path.
+	self assert: (mod @env1:class_body_filename) equals: path.
+	self assert: (mod @env1:nested_def_filename) equals: path.
+	"A file-less compile keeps the placeholder -- there is no path to report."
+	self assert: (self eval: 'def f(): pass
+f.__code__.co_filename') equals: '<grail>'
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testComprehensionExceptionTraceback [
+	"Phase 2 runtime population: an exception from a comprehension's iterator
+	protocol carries a real traceback whose frame [0] is located at the iterable
+	expression (PEP 657) inside the enclosing function.  This is the end-to-end
+	path (def-time PyCode stamp + ComprehensionAst frame wrapper + extract_tb)
+	that greens test_dictcomps/test_setcomps test_exception_locations.  See
+	tests/python/comprehension_traceback.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'comprehension_traceback' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/comprehension_traceback.py')
+		name: 'comprehension_traceback'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'has_frame' 'name_is_g' 'line_has_boom' 'colno_is_int'
+	   'iterable_span_width' 'iterable_span_is_boom' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'comprehension-traceback check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - finally semantics' }
+TracebackTestCase >> testControlFlowSignalIsNotAHandledException [
+	"A pending ``return'' passing through a try is not an exception being
+	handled, so it must not reach sys.exc_info() nor become the __context__ of
+	anything the finally raises.
+
+	___ensureFinally___ catches BaseException, and its comment claimed the
+	control-flow carriers were excluded for free because they ``subclass the
+	kernel Exception directly, NOT this BaseException''.  They do not --
+	PythonReturn's chain runs through Grail's BaseException -- so a
+	``return'' was being installed as the session's current exception, and
+	surfaced as a PythonReturn in both places."
+
+	| mod |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+
+	self assert: mod @env1:raise_in_finally_on_return_has_no_context equals: None.
+	self assert: mod @env1:exc_info_in_finally_on_return_is_none equals: None
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testDoitFilenameRegistryIsEvictedByUnnamedDoitsToo [
+	"The filename registry is capped by the SAME order list as the scope
+	registry it rides on, so an evicted doit loses both together.
+
+	The case that broke that is a NAMED doit followed by unnamed ones: the
+	eviction runs on every ___rememberDoitScope:for:, but it could only prune
+	the filename registry on the calls that had also just WRITTEN to it, and an
+	exec() with no filename writes nothing.  So the names the eviction dropped
+	from the scope registry stayed in the filename one -- no longer reachable
+	from the order list, hence never evictable again, and holding their
+	GsNMethods alive for the life of the session.
+
+	Driven through the registry directly rather than through 257 compiles: the
+	keys are identities and nothing here reads them back, which makes the cap
+	testable in milliseconds instead of seconds."
+
+	| temps savedScopes savedOrder savedFiles named files |
+	temps := SessionTemps current.
+	savedScopes := temps at: #GrailDoitScopes ifAbsent: [nil].
+	savedOrder := temps at: #GrailDoitScopeOrder ifAbsent: [nil].
+	savedFiles := temps at: #GrailDoitFiles ifAbsent: [nil].
+	[
+		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
+		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
+		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
+		"One doit somebody named..."
+		named := Object new.
+		ModuleAst whileCompilingWithFilename: 'named.py' do: [
+			ModuleAst ___rememberDoitScope: SymbolDictionary new for: named].
+		self assert: (ModuleAst ___doitFileFor: named) equals: 'named.py'.
+		"...then enough unnamed ones to push it past the cap."
+		1 to: 300 do: [:i |
+			ModuleAst ___rememberDoitScope: SymbolDictionary new for: Object new].
+		self assert: (temps at: #GrailDoitScopeOrder ifAbsent: [nil]) size
+			equals: 256.
+		self assert: (ModuleAst ___doitScopeFor: named) isNil
+			description: 'the scope registry evicted it'.
+		files := temps at: #GrailDoitFiles ifAbsent: [nil].
+		self assert: (files isNil or: [files isEmpty])
+			description: 'and the filename registry evicted it too'.
+		self assert: (ModuleAst ___doitFileFor: named) isNil
+	] ensure: [
+		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
+		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
+		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
+		savedScopes ifNotNil: [:v | temps at: #GrailDoitScopes put: v].
+		savedOrder ifNotNil: [:v | temps at: #GrailDoitScopeOrder put: v].
+		savedFiles ifNotNil: [:v | temps at: #GrailDoitFiles put: v]]
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingExceptionChain [
+	"__cause__ first, __context__ when not suppressed, nothing for ``from None''."
+
+	| caught chain |
+	caught := self ___catchInSmalltalk___: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError as e:
+        raise KeyError("k") from e
+
+f()
+'.
+	chain := caught pythonExceptionChain.
+	self assert: chain size = 1.
+	self assert: (chain at: 1) last == #cause.
+	self assert: (chain at: 1) first class == ZeroDivisionError.
+	caught := self ___catchInSmalltalk___: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError:
+        raise KeyError("k")
+
+f()
+'.
+	chain := caught pythonExceptionChain.
+	self assert: chain size = 1.
+	self assert: (chain at: 1) last == #context.
+	self assert: (chain at: 1) first class == ZeroDivisionError.
+	caught := self ___catchInSmalltalk___: 'def f():
+    try:
+        1/0
+    except ZeroDivisionError:
+        raise KeyError("k") from None
+
+f()
+'.
+	self assert: caught pythonExceptionChain isEmpty
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingFilenameAgreesWithThePythonCatchPath [
+	"The name a Smalltalk catcher reads is the one a Python ``except'' reads for
+	the same source -- the door must not invent a filename of its own.  Checked
+	through traceback.extract_tb, which is what a Python caller would use, and
+	through the function's own __code__ , which is where codegen put it."
+
+	| caught fromPython |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___
+		filename: 'named.py'.
+	fromPython := self
+		eval: 'def inner():
+    d = {}
+    return d["missing"]
+
+def main():
+    import traceback
+    try:
+        inner()
+    except KeyError as e:
+        return sorted({f.filename for f in traceback.extract_tb(e.__traceback__)})
+
+main()
+'
+		filename: 'named.py'.
+	self assert: (fromPython collect: [:each | each asString]) asArray
+			= #( 'named.py' )
+		description: fromPython printString.
+	self assert: (self ___filenamesOf___: caught pythonTracebackFrames)
+		= (fromPython collect: [:each | each asString]) asArray.
+	self assert: (self eval: 'def f(): pass
+f.__code__.co_filename' filename: 'named.py') equals: 'named.py'
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingFilenameIsSavedAndRestored [
+	"The name is scoped to the evaluation, both ways round.
+
+	A nested evaluation returns the outer name on the way out, and an
+	evaluation given NO name leaves whatever the enclosing compile had set
+	alone -- the case that matters is a class body compiled at run time from
+	inside a module still being compiled, which clearing would rename
+	'<grail>' halfway through the module it belongs to."
+
+	| outerSeen |
+	self assert: CallAst sourcePath isNil
+		description: 'a test runs with no compile in progress'.
+	outerSeen := ModuleAst whileCompilingWithFilename: 'outer.py' do: [
+		self assert: (self eval: 'def g(): pass
+g.__code__.co_filename' filename: 'inner.py') equals: 'inner.py'.
+		"unnamed, so the outer name is still in force"
+		self eval: 'def h(): pass
+h.__code__.co_filename'].
+	self assert: outerSeen equals: 'outer.py'.
+	self assert: CallAst sourcePath isNil
+		description: 'restored on the way out'.
+	"And restored even when the evaluation raises."
+	[ModuleAst whileCompilingWithFilename: 'boom.py' do: [self eval: '1/0']]
+		on: BaseException do: [:ex | ex return: nil].
+	self assert: CallAst sourcePath isNil
+		description: 'restored after a raise'
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingFilenameNamesEveryFrame [
+	"An embedder can name the source it evaluates, and the name reaches EVERY
+	frame -- the module body and the functions the body defined.
+
+	Three sources of a filename have to agree for that.  The body takes it from
+	the ``___pyFile___'' stamp codegen writes into the doit; a def in a real
+	module takes it from the module class it is installed in; and a def in
+	EVALUATED code is neither -- it is a block inside the doit's own method, so
+	___pythonFileForDoitOf___ reads the body's stamp for it.  With only the
+	first of those, this traceback said 'named.py' on its first line and
+	'<grail>' on the next three, about the same source."
+
+	| caught frames |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___
+		filename: 'named.py'.
+	self assert: caught notNil.
+	frames := caught pythonTracebackFrames.
+	self assert: (self ___filenamesOf___: frames) = #( 'named.py' )
+		description: (self ___filenamesOf___: frames) printString.
+	"The rest of the frame is untouched by the naming."
+	self assert: (self ___namesAndLines___: frames)
+			= #( #('<module>' 11) #('outer' 2) #('middle' 5) #('inner' 9) )
+		description: (self ___namesAndLines___: frames) printString.
+	self assert: (caught pythonTracebackString asString indexOfSubCollection:
+			'File "named.py", line 9, in inner') > 0
+		description: caught pythonTracebackString asString
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingIsIdempotent [
+	"A second ensure neither rebuilds nor grows the chain, and the accessors
+	may be sent in any order and any number of times."
+
+	| caught tb frames |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___.
+	frames := caught pythonTracebackFrames.
+	tb := caught @env1:__traceback__.
+	caught ensurePythonTraceback; ensurePythonTraceback.
+	self assert: (caught @env1:__traceback__) == tb.
+	self assert: caught pythonTracebackFrames = frames.
+	self assert: caught pythonTracebackString = caught pythonTracebackString
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingNeverRaisesWithoutACapture [
+	"An exception that was never signalled has no capture and no args: every
+	selector still answers rather than raising."
+
+	| exc |
+	exc := KeyError new.
+	self assert: exc ensurePythonTraceback == exc.
+	self assert: exc pythonTracebackFrames isEmpty.
+	self assert: exc pythonExceptionChain isEmpty.
+	self assert: (exc pythonTracebackString asString beginsWith: 'KeyError').
+	self assert: exc releasePythonCapture == exc
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingReleasePythonCapture [
+	"The raw capture goes; the PyTraceback chain built from it stays, and the
+	text still renders."
+
+	| caught frames |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___.
+	frames := caught pythonTracebackFrames.
+	self assert: caught _gsStack notNil.
+	self assert: caught releasePythonCapture == caught.
+	self assert: caught _gsStack isNil.
+	self assert: caught pythonTracebackFrames = frames.
+	self assert: (caught pythonTracebackString asString endsWith: 'KeyError: ''missing''
+')
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingSmalltalkRendererQualifiesTheTypeName [
+	"The last line follows the 9.8 rule: a builtin or __main__ class is bare, a
+	library class is module-qualified, and an empty str() drops the colon."
+
+	| caught |
+	caught := self ___catchInSmalltalk___: 'raise ValueError()'.
+	self assert: (caught ___formatInSmalltalk___ asString endsWith: '
+ValueError
+').
+	caught := self ___catchInSmalltalk___: 'class LibError(Exception):
+    __module__ = "mypkg.errors"
+
+raise LibError("x")
+'.
+	self assert: caught ___pythonTypeNameForTraceback___ asString = 'mypkg.errors.LibError'
+		description: caught ___pythonTypeNameForTraceback___ printString.
+	self assert: (caught ___formatInSmalltalk___ asString endsWith: '
+mypkg.errors.LibError: x
+').
+	self assert: caught ___formatInSmalltalk___ asString = caught ___formatWithTracebackModule___ asString
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingStringMatchesTheTracebackModule [
+	"pythonTracebackString delegates to traceback.format_exception when the module
+	imports and renders in Smalltalk otherwise.  For ``<grail>'' frames -- no
+	source text on either side -- the two must agree byte for byte: a plain
+	raise, a ``from'' chain with its separator sentence, and a __notes__ line."
+
+	#( 'def outer():
+    return middle()
+
+def middle():
+    return inner()
+
+def inner():
+    d = {}
+    return d["missing"]
+
+outer()
+'
+	'def f():
+    try:
+        1/0
+    except ZeroDivisionError as e:
+        raise KeyError("k") from e
+
+f()
+'
+	'class MyError(Exception):
+    pass
+
+def f():
+    e = MyError("mine")
+    e.add_note("a note")
+    raise e
+
+f()
+' ) do: [:src |
+		| caught viaModule viaSmalltalk |
+		caught := self ___catchInSmalltalk___: src.
+		caught ensurePythonTraceback.
+		viaModule := caught ___formatWithTracebackModule___ asString.
+		viaSmalltalk := caught ___formatInSmalltalk___ asString.
+		self assert: (viaModule beginsWith: 'Traceback (most recent call last):
+  File "<grail>", line ').
+		self assert: viaSmalltalk = viaModule
+			description: 'traceback.py: ' , viaModule printString , ' Smalltalk: ' , viaSmalltalk printString.
+		self assert: caught pythonTracebackString asString = viaModule]
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingTracebackMatchesThePythonCatch [
+	"A Smalltalk catcher gets the frames a Python except would: the whole
+	propagation path, outermost first, at the lines CPython reports -- and its
+	tail is exactly what a Python handler in an enclosing function sees for the
+	same calls.  Before the door, __traceback__ was None on this path."
+
+	| caught payload frames fromPython |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___.
+	self assert: caught notNil.
+	self assert: (caught @env1:__traceback__) == None
+		description: 'a Smalltalk handler is not on the Python catch path'.
+	payload := caught ensurePythonTraceback.
+	self assert: payload == caught.
+	self assert: (payload @env1:__traceback__) ~~ None.
+	frames := self ___namesAndLines___: caught pythonTracebackFrames.
+	self assert: frames = #( #('<module>' 11) #('outer' 2) #('middle' 5) #('inner' 9) )
+		description: frames printString.
+	self assert: ((caught pythonTracebackFrames collect: [:f | (f at: 1) asString]) asSet asArray = #( '<grail>' )).
+	"Lines 1-9 are the nested source verbatim, so the tails compare line for line."
+	fromPython := self eval: 'def outer():
+    return middle()
+
+def middle():
+    return inner()
+
+def inner():
+    d = {}
+    return d["missing"]
+
+def main():
+    import traceback
+    try:
+        outer()
+    except KeyError as e:
+        return [(f.name, f.lineno) for f in traceback.extract_tb(e.__traceback__)]
+
+main()
+'.
+	fromPython := fromPython collect: [:t | { (t at: 1) asString. t at: 2 }].
+	self assert: (fromPython copyFrom: 2 to: fromPython size) asArray
+			= (frames copyFrom: 2 to: frames size) asArray
+		description: 'Python catch: ' , fromPython printString , ' Smalltalk catch: ' , frames printString
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingUnwrapsACarrierAndRebuildsAReraise [
+	"``except ...: raise'' out to Smalltalk delivers a CARRIER whose payload has
+	frames only as far as the Python catcher (f@6 g@2).  The door answers the
+	payload, and rebuilds the path from the original capture the way
+	___pushCatchingFrame___'s case 3 does, so the module frame above the
+	catcher is not lost."
+
+	| caught payload frames |
+	caught := self ___catchInSmalltalk___: 'def g():
+    raise ValueError("bare")
+
+def f():
+    try:
+        g()
+    except ValueError:
+        raise
+
+f()
+'.
+	payload := BaseException ___payloadOf___: caught.
+	self assert: payload ~~ caught description: 'expected a carrier'.
+	self assert: caught ensurePythonTraceback == payload.
+	self assert: payload class == ValueError.
+	frames := self ___namesAndLines___: caught pythonTracebackFrames.
+	self assert: frames = #( #('<module>' 10) #('f' 6) #('g' 2) )
+		description: frames printString.
+	self assert: (caught pythonTracebackString asString endsWith: 'ValueError: bare
+')
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEmbeddingWithoutAFilenameKeepsThePlaceholder [
+	"No filename is ``no opinion'', not ``no file'': the placeholder every
+	file-less compile has always reported stays exactly as it was, so the
+	no-filename spelling -- which is what every caller but the REPL and eval()
+	uses -- is unchanged."
+
+	| caught |
+	caught := self ___catchInSmalltalk___: self ___nestedRaiseSource___
+		filename: nil.
+	self assert: (self ___filenamesOf___: caught pythonTracebackFrames)
+		= #( '<grail>' )
+
+]
+
+{ #category : 'Grail-Tests - Embedding' }
+TracebackTestCase >> testEvalHonoursTheFilenameCompileWasGiven [
+	"exec() has passed compile()'s second argument through to codegen since the
+	filename registry existed; eval() dropped it, so the same source reported
+	'sums.py' one way and '<grail>' the other.  Both now answer the name.
+
+	TWO frames, as in CPython: this doit's own, which catches, and the eval'd
+	code's.  Both are <module>, and until #1401 the walk took the inner one for
+	the catcher and stopped there, so this test read one frame.  The doit's
+	file is the '<grail>' placeholder where CPython says '<string>'."
+
+	self assert: ((self eval: 'try:
+    eval(compile("1/0", "sums.py", "eval"))
+except ZeroDivisionError as e:
+    import traceback
+    r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
+r
+') asArray collect: [:each | each asString]) = #( '<grail>' 'sums.py' ).
+	self assert: ((self eval: 'try:
+    exec(compile("1/0", "sums.py", "exec"))
+except ZeroDivisionError as e:
+    import traceback
+    r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
+r
+') asArray collect: [:each | each asString]) = #( '<grail>' 'sums.py' ).
+	"A bare string keeps the placeholder, as it always did."
+	self assert: ((self eval: 'try:
+    eval("1/0")
+except ZeroDivisionError as e:
+    import traceback
+    r = [f.filename for f in traceback.extract_tb(e.__traceback__)]
+r
+') asArray collect: [:each | each asString]) = #( '<grail>' '<grail>' )
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testExceptionChaining [
+	"__cause__ / __context__ chaining, both halves.  Grail had __cause__
+	(``raise X from Y'') and __suppress_context__, but never set __context__ and
+	rendered only the outermost exception -- so a wrapped error lost the one that
+	caused it.  Implicit context now comes from the exception TryAst records in
+	___currentException___, on every raise path (constructed, bare class, and an
+	already-built instance), and format_exception / TracebackException.format walk
+	the chain with CPython's two connector lines.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly -- see its docstring.  See tests/python/exception_chaining.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_chaining' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_chaining.py')
+		name: 'exception_chaining'.
+	#( 'a_raise_inside_a_handler_records_the_context'
+	   'an_implicit_context_renders_the_during_handling_line'
+	   'an_explicit_cause_sets_both_and_suppresses'
+	   'raise_from_none_suppresses_the_context_but_keeps_it'
+	   'a_bare_class_raise_chains_too'
+	   'a_cyclic_chain_terminates_and_renders_once'
+	   'reraising_the_handled_exception_does_not_self_chain'
+	   'a_context_link_keeps_its_own_traceback'
+	   'chain_false_renders_only_the_outermost'
+	   'tracebackexception_captures_the_chain' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'exception-chaining check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testExceptionGroupTreeRendering [
+	"A PEP 654 group is the one exception that does not render as a single block
+	of text: its children are drawn inside a box, each under a numbered rule.
+	Grail rendered the group's own line and stopped, so a group reported strictly
+	less than it knew.
+
+	Three pieces were missing, and each is independently checked by the fixture.
+
+	format_exception_only(eg, show_group=True) indents each nesting level by
+	THREE spaces; Grail used two, and indented CUMULATIVELY -- each level
+	prefixing the level below -- rather than from the absolute depth.  The depth
+	is not only the width: it also decides whether a multi-line MESSAGE is split
+	into one string per line, which is what lets every line carry the indent.
+	The group's OWN message is deliberately not split.
+
+	TracebackException>>exceptions did not exist -- a list of TracebackException
+	for a group, None for anything else -- so nothing downstream could draw a
+	tree even in principle, and max_group_width / max_group_depth were accepted
+	and then discarded.
+
+	format() and the module-level format_exception() now draw the box.  The
+	margin is positional state shared across the WHOLE chain (CPython keeps it in
+	a private _ExceptionPrintContext), which is why format_exception hands a
+	group over to TracebackException instead of rendering it link by link: its
+	own walk has nowhere to keep that state.
+
+	Deliberately NOT asserted: the caret lines CPython puts under the failing
+	expression, and ZeroDivisionError's wording (Grail says ``integer division or
+	modulo by zero'' where CPython says ``division by zero'').  Both are
+	independent gaps that merely show up inside group output, and asserting them
+	here would make this test fail for reasons unrelated to groups.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/exception_groups.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_groups' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_groups.py')
+		name: 'exception_groups'.
+	#( 'a_nested_exception_is_indented_three_spaces'
+	   'each_nesting_level_adds_three_more'
+	   'a_nested_multiline_message_is_split_per_line'
+	   'a_nested_note_is_indented_with_its_exception'
+	   'a_nested_syntax_error_indents_its_location_block'
+	   'an_indented_syntax_error_still_renders_at_top_level'
+	   'show_group_is_off_by_default'
+	   'a_group_reports_its_children_as_tracebackexceptions'
+	   'the_children_carry_their_own_messages'
+	   'a_nested_group_child_is_itself_a_group'
+	   'format_draws_a_numbered_rule_per_child'
+	   'format_draws_the_whole_box'
+	   'a_nested_group_is_indented_two_spaces_per_level'
+	   'max_group_width_truncates_the_children'
+	   'one_truncated_exception_is_singular'
+	   'max_group_depth_stops_the_nesting'
+	   'the_depth_limit_keeps_the_siblings_of_what_it_elided'
+	   'format_exception_renders_the_tree_too'
+	   'a_group_still_reports_its_own_traceback'
+	   'a_group_with_a_non_group_chain_link_still_chains'
+	   'two_tracebackexceptions_from_one_group_are_equal'
+	   'different_children_make_them_unequal' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'exception-group check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testExceptionMessageRendering [
+	"str(exc) for a single argument is str(args[0]) -- the PYTHON str protocol.
+	Smalltalk #asString answered the argument's printString instead, so
+	``raise Exception(None)'' rendered ``Exception: aNoneType''.  And a None
+	EXCEPTION is not special-cased: type(None) is NoneType, so
+	print_exception(None) renders ``NoneType: None''."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_naming' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_naming.py')
+		name: 'exception_naming'.
+	"a_legacy_type_is_ignored_when_a_value_is_given pins a rule with a TRAP in
+	 it: the module-level entry points derive the type from the value and
+	 ignore the one they were handed, so format_exception_only(ValueError, nil)
+	 renders 'NoneType: None' -- but the TracebackException CLASS keeps its
+	 constructed type and renders 'ValueError: None' for the same arguments.
+	 Two doors, two answers, both CPython.  Collapsing them into one 'simpler'
+	 rule breaks whichever half was not in mind, so the check asserts all
+	 three shapes."
+	#( 'a_none_exception_renders_as_nonetype_none'
+	   'a_legacy_type_is_ignored_when_a_value_is_given'
+	   'a_none_argument_is_not_a_missing_message'
+	   'non_string_arguments_use_python_str'
+	   'a_broken_str_is_reported_not_propagated'
+	   'print_exc_takes_limit_first'
+	   'print_last_reads_sys_last_exc' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'message rendering check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testExceptionNaming [
+	"How a traceback names an exception: CPython uses __qualname__ and
+	qualifies it with the defining module unless that module is builtins or
+	__main__ -- so ValueError is unchanged while a library's own exception
+	renders module-qualified.  A non-str __module__ renders as <unknown>.
+	See tests/python/exception_naming.py.
+
+	NOTE the nesting check asserts against Outer.Inner.__qualname__ rather than
+	a literal: Grail answers 'Inner' nested one level short of CPython (an
+	'Outer.Inner' where CPython would include every enclosing scope).  That is
+	a separate __qualname__ gap, so this test pins the FORMATTER's rule -- use
+	__qualname__, qualify with __module__ -- and not that bug."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_naming' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_naming.py')
+		name: 'exception_naming'.
+	#( 'builtin_exceptions_are_not_module_qualified'
+	   'library_exceptions_are_module_qualified'
+	   'nested_exceptions_use_qualname'
+	   'a_non_str_module_renders_as_unknown' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'exception naming check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testExceptionNotes [
+	"PEP 678: add_note text renders under the exception's own line, __notes__
+	is a genuinely writable/deletable attribute, and a note that cannot be
+	rendered is reported rather than escaping the formatter.  See
+	tests/python/exception_notes.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_notes' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_notes.py')
+		name: 'exception_notes'.
+	#( 'notes_render_under_the_message'
+	   'notes_are_absent_until_the_first_add_note'
+	   'notes_attribute_is_writable_and_deletable'
+	   'non_list_notes_render_as_repr'
+	   'unprintable_notes_do_not_escape_the_formatter'
+	   'broken_getattr_is_reported_not_propagated' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: '__notes__ check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testExtractTbOnADuckTypedTraceback [
+	"extract_tb must not require Grail's own tb_line / tb_colno extras -- only
+	tb_frame / tb_lineno / tb_next are the documented protocol, with the PEP 657
+	columns coming off the code object's co_positions().  Requiring them made
+	extract_tb raise AttributeError, which TracebackException swallowed into an
+	empty stack, so the caller saw IndexError from stack[0]."
+
+	| mod |
+	importlib @env1:modules removeKey: #'module_loader' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/module_loader.py')
+		name: 'module_loader'.
+	#( 'extract_tb_accepts_a_duck_typed_traceback'
+	   'lookup_lines_false_defers_the_linecache_read'
+	   'capture_locals_snapshots_reprs' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'extract_tb check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> testExtractTbWalksPyTracebackChain [
+	"Build a two-node PyTraceback chain (shallow frame -> deep frame, as an
+	exception unwinds) and walk it through traceback.extract_tb.  extract_tb
+	returns frames OUTERMOST first, so [0] is the shallow frame (the one that
+	would catch), positioned at the comprehension iterable BrokenIter(...),
+	with PEP 657 columns recovering that sub-expression.
+
+	The filenames are PATHS, not the ``<test>'' placeholder they used to be,
+	because this exercises Grail's embedded-source extension: extract_tb keeps
+	a frame's ``tb_line'' only when linecache cannot supply one AND the name is
+	a path that merely happens to be unreadable.  A ``<...>'' name is not a file
+	at all -- CPython renders such a frame with no source line, and Grail now
+	does too (module_frames.py, an_exec_body_shows_no_source_line), so a
+	placeholder in that shape would be testing the rule's other side."
+
+	| tbMod line codeInit frameInit tbInner codeF frameF tbHead stack fs sliced |
+	tbMod := importlib
+		loadModuleFromPath: (importlib @env1:___moduleNameToPath___: 'traceback')
+		name: 'traceback'.
+	line := '                {x:x for x in BrokenIter(init_raises=True)}'.
+
+	"Deep frame: BrokenIter.__init__ at the ``1 / 0``."
+	codeInit := PyCode name: '__init__' qualname: 'BrokenIter.__init__'
+		filename: '/nonexistent/support.py' firstlineno: 190.
+	frameInit := PyFrame code: codeInit lineno: 192 back: None globals: None.
+	tbInner := PyTraceback frame: frameInit lineno: 192 next: None
+		endLineno: 192 colno: 12 endColno: 17 line: '            1 / 0'.
+
+	"Shallow frame: init_raises at the comprehension iterable expression."
+	codeF := PyCode name: 'init_raises' qualname: 't.<locals>.init_raises'
+		filename: '/nonexistent/t.py' firstlineno: 10.
+	frameF := PyFrame code: codeF lineno: 12 back: None globals: None.
+	tbHead := PyTraceback frame: frameF lineno: 12 next: tbInner
+		endLineno: 12 colno: 30 endColno: 58 line: line.
+
+	stack := tbMod @env1:extract_tb: tbHead.
+	self assert: (stack @env1:__len__) equals: 2.
+
+	fs := stack @env1:__getitem__: 0.
+	self assert: (fs @env1:___pyAttrLoad___: #'lineno') equals: 12.
+	self assert: (fs @env1:___pyAttrLoad___: #'end_lineno') equals: 12.
+	self assert: (fs @env1:___pyAttrLoad___: #'colno') equals: 30.
+	self assert: (fs @env1:___pyAttrLoad___: #'end_colno') equals: 58.
+	self assert: (fs @env1:___pyAttrLoad___: #'name') equals: 'init_raises'.
+	self assert: (fs @env1:___pyAttrLoad___: #'filename') equals: '/nonexistent/t.py'.
+
+	"f.line[colno - 16 : end_colno - 16] -> Smalltalk 1-based copyFrom:to:."
+	sliced := (fs @env1:___pyAttrLoad___: #'line') copyFrom: 30 - 16 + 1 to: 58 - 16.
+	self assert: sliced equals: 'BrokenIter(init_raises=True)'.
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testFinallyDuringPropagation [
+	"sys.exc_info() / sys.exception() inside a ``finally'' that runs because an
+	exception is propagating report that in-flight exception (CPython), via
+	BaseException>>___ensureFinally___:finally: emitted by TryAst in non-generator
+	scopes.  Phase 3a covered except bodies; this covers finally bodies -- for a
+	bare try/finally, a try/except/finally whose except does NOT match, and the
+	save/restore interaction with an enclosing handler.  Also asserts the finally
+	does not swallow the exception.  See tests/python/finally_propagation.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'bare_sees_valueerror' 'normal_finally_none' 'finally_doesnt_swallow'
+	   'except_finally_uncaught' 'nested_restore' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'finally-during-propagation check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testForLoopExceptionPositions [
+	"PEP 657 for a FOR statement: an exception from evaluating the iterable, from
+	__iter__, or from __next__ is attributed to the ITERATOR EXPRESSION's column
+	span -- the for-statement twin of testComprehensionExceptionTraceback, and
+	what greens test_iter's test_exception_locations (which died on ``None - int''
+	because colno/end_colno/line were all None).
+
+	Also asserts the two boundaries that make the mechanism trustworthy rather
+	than merely passing: the position is re-pointed before EVERY __next__ (so an
+	exception arriving after the body has run is still located at the iterable,
+	not at the last body statement), and a BODY exception is NOT attributed to the
+	iterable.  See tests/python/for_traceback_positions.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'for_traceback_positions' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/for_traceback_positions.py')
+		name: 'for_traceback_positions'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'init_span' 'next_span' 'iter_span'
+	   'late_next_span' 'late_next_lineno_is_for'
+	   'body_span' 'body_lineno_is_body'
+	   'tuple_target_span' 'tuple_target_has_colno' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'for-loop traceback position check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> testForLoopIteratorErrorsReportTheForLine [
+	"An exception from a for statement's __init__ / __iter__ / __next__ belongs
+	to the ITERATOR EXPRESSION, not to the loop body -- which is what
+	test.test_iter's test_exception_locations checks, and what the nightly
+	conformance run reported as ``AssertionError: 1161 != 1160'': the ``pass''
+	inside the loop instead of the ``for'' line, one line low.
+
+	ForAst>>___emitIterPosOn: exists for this and works -- all three cases match
+	CPython 3.14.6 here and in a full local suite run.  The CI failure has never
+	reproduced on a developer box: not in isolation, not under a 4-way-concurrent
+	suite, and not at the commit CI failed on (2aaace33).  It is the same shape as
+	the intermittent live-frame family -- correct frame, wrong line -- and the
+	only place it has ever appeared is the ~4x-slower CI box.
+
+	So this is a WATCH, not a regression test for a known-broken path.  Its value
+	is that the fixture names what it saw: the conformance harness could only
+	report that two numbers differed, which said nothing about which of the three
+	cases failed or what the frame held.  Expected lines are computed from
+	co_firstlineno, so editing the fixture cannot make this wrong."
+
+	| mod |
+	mod := self loadForIterExceptionLocationFixture.
+	"The NESTED spelling is the one that guards the ip conversion: with native
+	code enabled the three module-level spellings report the right line anyway,
+	so this suite passed on Linux throughout the months the CPython row failed."
+	#( 'init_raises_reports_the_for_line'
+	   'next_raises_reports_the_for_line'
+	   'iter_raises_reports_the_for_line'
+	   'nested_init_raises_reports_the_for_line' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'for-loop iterator location: ' , k , ' -> '
+				, answer printString]
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testFrameGlobalsAndNameErrorSuggestions [
+	"A traceback frame's f_globals, and the NameError suggestions it enables.
+
+	DERIVED, not captured.  Grail has no real interpreter frames: a frame is
+	reconstructed from the VM's (method, ip, receiver) triples, and threading a
+	namespace through that walk would mean touching the most delicate code in the
+	traceback path (§9.10-§9.12 took three CI rounds to stabilise).  The frame's
+	PyCode already carries co_filename, which identifies the module unambiguously
+	-- exactly one sys.modules entry has that __file__ -- so PyFrame resolves the
+	LIVE PyModuleDict on demand instead.
+
+	Two limits are pinned as deliberate behaviour, not left to be discovered:
+
+	f_locals does not exist.  A Python function's locals are Smalltalk method
+	temporaries and the capture records only (method, ip, receiver), so a
+	misspelled LOCAL name gets no suggestion where CPython offers one.
+
+	No suggestion at all without a traceback -- CPython gates the whole NameError
+	branch on having a frame, so format_exception_only(exc) stays silent even for a
+	misspelled builtin.  Being MORE helpful than CPython is a conformance bug, and
+	the fixture check for it caught exactly that in an earlier draft, which
+	answered from dir(builtins) regardless of frame.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/frame_globals.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'frame_globals' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/frame_globals.py')
+		name: 'frame_globals'.
+	#( 'a_frame_reports_its_module_globals'
+	   'the_globals_view_is_live'
+	   'a_misspelled_global_is_suggested'
+	   'a_misspelled_builtin_is_suggested'
+	   'no_suggestion_without_a_traceback'
+	   'a_wildly_wrong_global_gets_no_suggestion' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'frame-globals check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests' }
+TracebackTestCase >> testFrameSummaryHonoursLookupLine [
+	"``lookup_line=False'' defers the linecache read; ``locals=`` captures
+	repr()s.  Both are CPython parameters that were simply absent, so every
+	lazy-lookup test raised TypeError on an unexpected keyword."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:lookup_line_is_honoured)
+
+]
+
+{ #category : 'Grail-Tests' }
+TracebackTestCase >> testFrameSummaryLineCarriesSourceText [
+	"traceback.FrameSummary.line is CPython's LAZY property backed by
+	linecache, not a plain attribute -- so a traceback prints the code line
+	under its ``File ..., line N''.  It was always None before."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:frame_summary_has_source_line)
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> testFuncCodeFirstlineno [
+	"Phase 2: a nested def carries a real func.__code__ (a PyCode) stamped at
+	def-time; co_firstlineno is the 1-based line of the ``def'' keyword (what
+	test_dictcomps.test_exception_locations reads as co.co_firstlineno).  See
+	tests/python/func_code_firstlineno.py -- inner's def is on line 10."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'func_code_firstlineno' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/func_code_firstlineno.py')
+		name: 'func_code_firstlineno'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	self assert: ((results @env1:__getitem__: 'has_code') = true).
+	self assert: ((results @env1:__getitem__: 'co_firstlineno_is_int') = true).
+	self assert: ((results @env1:__getitem__: 'co_firstlineno') = 10)
+		description: 'func.__code__.co_firstlineno must be the def line (10)'.
+	self assert: ((results @env1:__getitem__: 'co_name') = 'inner').
+
+]
+
+{ #category : 'Grail-Tests - finally semantics' }
+TracebackTestCase >> testGeneratorFinallyYieldKeepsExceptionIdentity [
+	"A generator whose finally YIELDS suspends mid-propagation; the exception
+	that resumes out of the next advance is the SAME object, not a copy.
+
+	Re-raising a caught exception costs identity in GemStone whenever the
+	object still holds handler frames, since the VM refuses to signal one of
+	those and the only recourse is a copy.  ___ensureFinally___ returns from
+	its handler rather than passing, which pops those frames, so the common
+	case re-signals the original."
+
+	| mod pair |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+
+	pair := mod @env1:generator_finally_yield_keeps_exception_identity.
+	self assert: (pair @env1:__getitem__: 0) equals: 'second'.
+	self assert: (pair @env1:__getitem__: 1) equals: true
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testGeneratorRaiseSpansTheBoundary [
+	"A raise inside a generator body spans BOTH sides.  The body runs in a forked
+	GsProcess whose captured stack holds none of the consumer's frames, so the two
+	captures are spliced (§9.12).
+
+	This test used to pin the OPPOSITE -- the single-frame fallback -- and §9.9
+	called it the one that would catch the behaviour change when the consumer's
+	stack was spliced.  It would not have: it asserted ``len(frames) >= 1''.  It
+	is exact now.  The detailed shapes are testGeneratorTracebackSpansTheBoundary."
+
+	self assert: ((self loadFrameDepthFixture
+		@env0:perform: #'a_generator_raise_spans_the_consumer_and_the_generator'
+		env: 1) = true)
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testGeneratorTracebackSpansTheBoundary [
+	"§9.9's item 6, the last of them.  A generator body runs in its own forked
+	GsProcess, so the stack captured when it raises holds the body and the fork
+	plumbing and NOTHING of the consumer.  PythonGenerator stows such an exception
+	and re-signals it on the consumer, which is where the consumer's half is
+	captured; the two are spliced, one stashed level per generator so that
+	``yield from'' reports both bodies.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly -- see its docstring.  See tests/python/generator_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'generator_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/generator_frames.py')
+		name: 'generator_frames'.
+	#( 'the_generators_own_frame_is_reported'
+	   'the_consumers_frame_is_reported_too'
+	   'advancing_with_next_gives_the_same_chain'
+	   'every_consumer_frame_appears'
+	   'yield_from_reports_both_generators'
+	   'throw_reports_the_generators_frame'
+	   'an_exception_caught_inside_the_generator_is_invisible'
+	   'pep479_still_converts_stopiteration'
+	   'the_rendered_traceback_names_both' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'generator-frame check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testImplicitContextReleasesTheCapturedStack [
+	"An exception stored as another's __context__ must keep its TRACEBACK and drop
+	its raise-time CAPTURE.
+
+	Primitive 2022 fills _gsStack with the whole Smalltalk stack at every raise.
+	That is what makes multi-frame tracebacks affordable (§9.2) -- nothing per
+	call -- but the capture is only raw material, and holding it after the
+	traceback is built makes a long chain quadratic: every link retains a
+	full-stack capture, so a runaway that raises once per level retains O(depth^2)
+	triples.  At the depth Grail reaches (~6645 levels, ~16 Smalltalk frames each)
+	that is ~350 million triples and the gem runs out of temporary object memory
+	outright -- tripling GEM_TEMPOBJ_CACHE_SIZE does not help.
+
+	___applyImplicitContext___ releases it, which is the one point where the
+	exception is provably spent: we are raising from inside its handler, so its
+	traceback is built and it is no longer propagating.  Releasing EARLIER, when
+	the traceback is first built, is wrong -- a bare re-raise rebuilds by walking
+	that same capture again with a wider trim, and testBareReraiseSplicesFrames
+	catches it.
+
+	Asserted on the Smalltalk slot because _gsStack is not reachable from Python.
+	The companion fixture check (the context keeps its own traceback) is in
+	tests/python/exception_chaining.py."
+
+	| mod exc ctx |
+	"Capture is enabled lazily, on the first traceback build, so in a fresh
+	session the very first raise happens with it OFF and _gsStack stays nil for a
+	reason that has nothing to do with releasing it.  Enable it up front, or this
+	test asserts nothing -- it passed with the release removed until this line was
+	added."
+	BaseException ___ensureStackCapture___.
+	importlib @env1:modules removeKey: #'exception_chaining' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_chaining.py')
+		name: 'exception_chaining'.
+	exc := mod @env0:perform: #'implicit_context' env: 1.
+	ctx := exc @env0:dynamicInstVarAt: #'___context___'.
+	self deny: ctx isNil
+		description: 'the ValueError should have the ZeroDivisionError as __context__'.
+	self assert: ctx _gsStack isNil
+		description: 'a context link must not retain its raise-time _gsStack capture'.
+	"The traceback built FROM that capture has to survive it."
+	self deny: (ctx @env0:instVarAt: 2) isNil
+		description: 'releasing the capture must not discard the context traceback'.
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testImportOfAnUnfindableParentRaises [
+	"``import a.b as m'' where the leaf ``a.b'' can be found and its package
+	``a'' cannot.
+
+	__import__ with no fromlist answers the TOP package, and it answered a bare
+	registry lookup of it -- nil, when nothing had loaded ``a''.  Nothing raised,
+	so the alias form reported ``UnboundLocalError: local variable referenced
+	before assignment (received #'b' on nil)'' and ``import a.b'' bound an unset
+	name.  CPython imports the top package at that point, and raises
+	ModuleNotFoundError naming it.
+
+	Met from a session whose sys.path did not reach a package compiled into the
+	repository; the fixture puts the leaf in sys.modules with no parent, which
+	is the same shape and runs under CPython.  The last three checks are the
+	guard: the from-import, and both forms with the parent present, already
+	matched CPython and must go on doing so.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/import_unfindable_parent.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'import_unfindable_parent' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/import_unfindable_parent.py')
+		name: 'import_unfindable_parent'.
+	#( 'dunder_import_of_the_leaf_raises'
+	   'the_error_names_the_parent_package'
+	   'the_error_carries_the_parent_as_its_name'
+	   'import_as_in_a_function_raises_module_not_found'
+	   'import_as_at_module_level_raises_module_not_found'
+	   'a_plain_dotted_import_raises_module_not_found'
+	   'a_from_import_still_raises_module_not_found'
+	   'with_the_parent_present_import_as_binds_the_leaf'
+	   'with_the_parent_present_a_plain_import_binds_the_parent' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'unfindable-parent import check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testKeyErrorMessageQuotesItsKey [
+	"``str(KeyError(k))'' is ``repr(k)'', not ``str(k)''.
+
+	KeyError is the one built-in exception whose message shows its argument's
+	REPR, and it is deliberate: a missing key is usually a string, so
+	``KeyError: missing'' reads as prose where ``KeyError: 'missing''' shows the
+	value actually looked up.  It also tells ``KeyError('')'' apart from
+	``KeyError()''.  Grail inherited BaseException's plain str, so every KeyError
+	message was unquoted and every traceback ending in one differed from CPython.
+
+	The rule is uniform for a single argument rather than special-cased for
+	strings -- KeyError(1) is ``1'', KeyError(None) is ``None'',
+	KeyError(('t', 1)) is ``('t', 1)'' -- and with no arguments or several,
+	CPython falls straight back to BaseException_str, so KeyError>>__str__ sends
+	``super __str__'' rather than reimplementing the empty and tuple cases.
+
+	Reaches further than it looks: traceback.py renders an exception through
+	str(), so this changes the last line of every traceback that ends in a
+	KeyError.  That is the point -- CPython's line is ``KeyError: 'missing'''.
+
+	Found while writing tests/python/handler_raise.py, which had to raise
+	RuntimeError instead of KeyError to avoid asserting this bug by accident.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/keyerror_str.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'keyerror_str' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/keyerror_str.py')
+		name: 'keyerror_str'.
+	#( 'a_string_key_is_quoted'
+	   'the_quoting_distinguishes_an_empty_key_from_no_key'
+	   'an_int_key_uses_repr_too'
+	   'a_none_key_uses_repr'
+	   'a_tuple_key_uses_repr'
+	   'a_newline_in_the_key_is_escaped_by_repr'
+	   'several_args_fall_back_to_the_args_tuple'
+	   'repr_of_the_exception_is_unchanged'
+	   'args_are_unchanged'
+	   'a_real_dict_miss_reports_the_quoted_key'
+	   'a_traceback_line_shows_the_quoted_key'
+	   'a_subclass_inherits_the_rule'
+	   'other_exceptions_are_untouched' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'KeyError-str check failed: ' , k , ' -> ' , answer printString].
+
+]
+
+{ #category : 'Grail-Tests' }
+TracebackTestCase >> testLinecacheReadsSourceForARealPath [
+	"The payoff: with a real co_filename, linecache can read the file.  It
+	could not before, and two further gaps had to close for it to work at all
+	-- there was no ``tokenize'' module (linecache imports it and returns []
+	on ImportError, so EVERY lookup answered nothing), and os.stat answered a
+	raw GsFileStat with no ``st_size'' / ``st_mtime''."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:linecache_reads_own_source)
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testLiveFramesAndGetframe [
+	"sys._getframe, and walking a LIVE stack.
+
+	Every frame Grail had until now came from an EXCEPTION: the traceback
+	machinery reconstructs them from the VM's raise-time capture.  _getframe asks
+	a different question -- what is on the stack right now, with nothing raised --
+	and it did not exist, so traceback.walk_stack answered an empty iterator and
+	everything built on it (print_stack / format_stack / extract_stack) reported
+	nothing at all.
+
+	The mechanism is worth knowing, because it looks like a hack until the
+	alternative is checked: a RUNNING gem cannot read its own stack through
+	GsProcess.  ``GsProcess current'' inside running code answers stackDepth 0 and
+	no frames -- _frameContentsAt: reads a SUSPENDED process.  The VM's raise-time
+	capture, on the other hand, fills _gsStack with (method, ip, receiver) triples
+	for the whole live stack.  So ___liveFrameChain___ signals a throwaway Error,
+	catches it in the same expression, and reads the capture.  CPython's _getframe
+	is free; Grail's costs a raise.
+
+	Env 1 plus a decodable selector is NOT enough to identify a Python frame:
+	Grail compiles its own runtime helpers into env 1 too, and ``Object >>
+	perform:'' / ``ExecBlock >> value'' decode to the plausible names ``perform''
+	and ``value'', which duly appeared at the innermost end of every walk.  The
+	filter requires a derivable PYTHON LINE -- only generated code carries the
+	``___curPos___ := N'' literals -- and the fixture checks that the machinery
+	stays out.
+
+	ONE limit is asserted as deliberate rather than left to be discovered.
+	f_locals does not exist and is not faked: a Python function's locals are
+	Smalltalk method TEMPS and the capture holds neither their values nor their
+	names, so an empty dict would let a caller believe a frame had no variables.
+	(A nested function used to be the second such limit -- it got no frame of its
+	own -- and is now checked for the CPython behaviour instead.)
+
+	Two of the checks below cover what the RENDERING of a live stack got wrong
+	while the walk itself was right, which is why they live here and not with the
+	traceback fixtures: format_list rendered each entry as ``'  ' + str(entry)''
+	over a FrameSummary that already carried the two-space indent, so every frame
+	came out indented four; and the trailing newline sat in ``format'' rather than
+	in the ``format_frame_summary'' hook, so a subclass that renders a frame its
+	own way got a newline it never asked for.
+
+	A third -- a method that called a nested def reporting its own LAST statement
+	instead of the call site -- is GEM-DEPENDENT and so is asserted separately, by
+	testAMethodFrameReportsItsCallSite.
+
+	The CPython-parity checks are verified against real CPython by running the
+	fixture directly; the one marked GRAIL-SPECIFIC is the only one that answers
+	differently there.  See tests/python/live_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'live_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/live_frames.py')
+		name: 'live_frames'.
+	#( 'getframe_returns_a_frame'
+	   'getframe_names_its_caller'
+	   'depth_counts_outwards'
+	   'too_great_a_depth_raises_valueerror'
+	   'a_frame_reports_its_line'
+	   'a_frame_reports_its_file'
+	   'a_frame_chains_to_its_caller'
+	   'the_chain_ends_rather_than_looping'
+	   'walk_stack_reports_the_call_chain'
+	   'walk_stack_yields_frame_lineno_pairs'
+	   'walk_stack_from_an_explicit_frame_starts_there'
+	   'format_stack_renders_the_live_stack'
+	   'the_traceback_module_keeps_its_own_frames_out'
+	   'format_stack_ends_at_its_caller'
+	   'extract_stack_produces_frame_summaries'
+	   'a_method_s_live_frame_names_its_real_file'
+	   'the_machinery_keeps_itself_out_of_the_walk'
+	   'a_live_frame_has_f_locals'
+	   'a_frame_with_no_bound_locals_has_empty_f_locals'
+	   'a_traceback_frame_has_f_locals'
+	   'a_traceback_frame_declines_another_frames_locals'
+	   'clear_frames_empties_a_traceback_frame'
+	   'a_nested_function_gets_its_own_frame'
+	   'a_mixin_method_s_frame_names_its_real_file'
+	   'format_stack_indents_each_frame_by_two'
+	   'format_list_renders_a_frame_summary'
+	   'format_list_renders_a_legacy_four_tuple'
+	   'format_list_rejects_a_bare_string'
+	   'a_frame_summary_renders_as_its_repr'
+	   'format_frame_summary_carries_its_own_newline' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		"Report what the check ANSWERED, not just that it failed.  A check may
+		return evidence instead of false -- the only place some of these have ever
+		failed is CI, where native code is on and macOS/arm64 cannot reproduce it,
+		so the log has to carry the diagnosis."
+		self assert: (answer = true)
+			description: 'live-frame check failed: ' , k , ' -> ' , answer printString].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> testMethodCodeFirstlineno [
+	"Phase 2a follow-up: a def that compiles to a real Smalltalk METHOD -- a
+	class-body def or a module top-level def -- carries func.__code__ too, not
+	just a nested def's ExecBlock.  Its PyCode lives in a class-side
+	___methodCodeTable___ (ClassDefAst for a class body, importlib's top-level
+	pass for a module), which BoundMethod / UnboundMethod >> __code__ find by
+	walking the superclass chain.
+
+	The CLASS-BODY read is the case that matters: ``callable_line =
+	get_exception.__code__.co_firstlineno + 2'' runs while the class body is
+	still executing, which is what blocked test.test_traceback at IMPORT.  It is
+	why the table is emitted BEFORE the class-attribute statements rather than
+	beside its sibling doc / signature / annotations tables at the end.
+
+	See tests/python/method_code_firstlineno.py -- line numbers there are
+	load-bearing."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'method_code_firstlineno' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/method_code_firstlineno.py')
+		name: 'method_code_firstlineno'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+
+	"Module top-level def."
+	self assert: ((results @env1:__getitem__: 'mod_firstlineno') = 10)
+		description: 'module-level def __code__.co_firstlineno must be its def line (10)'.
+	self assert: ((results @env1:__getitem__: 'mod_name') = 'module_level').
+	self assert: ((results @env1:__getitem__: 'mod_argcount') = 2)
+		description: 'co_argcount counts positional params (a, b)'.
+	self assert: ((results @env1:__getitem__: 'mod_kwonlyargcount') = 1).
+
+	"Class-body read of a sibling def -- the test.test_traceback blocker shape."
+	self assert: ((results @env1:__getitem__: 'classbody_callable_line') = 20)
+		description: 'a class body must be able to read a sibling def''s __code__ (18 + 2)'.
+	self assert: ((results @env1:__getitem__: 'classbody_line') = 27).
+	self assert: ((results @env1:__getitem__: 'classbody_name') = 'm').
+	self assert: ((results @env1:__getitem__: 'classbody_qualname') = 'Later.m')
+		description: 'co_qualname of a class-body def is Class.method'.
+	self assert: ((results @env1:__getitem__: 'classbody_argcount') = 3)
+		description: 'co_argcount includes the implicit self, as in CPython'.
+	self assert: ((results @env1:__getitem__: 'classbody_kwonlyargcount') = 1).
+
+	"Bound and unbound access agree."
+	self assert: ((results @env1:__getitem__: 'bound_firstlineno') = 27).
+	self assert: ((results @env1:__getitem__: 'unbound_firstlineno') = 27)
+		description: 'Cls.method.__code__ must match instance.method.__code__'.
+
+	"An inherited method reports the code object from where it was DEFINED."
+	self assert: ((results @env1:__getitem__: 'inherited_firstlineno') = 38).
+	self assert: ((results @env1:__getitem__: 'inherited_qualname') = 'Base.inherited')
+		description: 'an inherited method''s code object comes from its defining class'.
+
+	"__code__ must stay ABSENT on a non-function: hasattr(x, ''__code__'') is
+	how inspect / functools.wraps decide whether something is a function."
+	self assert: ((results @env1:__getitem__: 'function_has_code') = true).
+	self assert: ((results @env1:__getitem__: 'int_has_code') = false)
+		description: 'an int must not grow a __code__'.
+	self assert: ((results @env1:__getitem__: 'builtin_method_has_code') = false)
+		description: 'a builtin method has no ___methodCodeTable___ entry -> AttributeError'.
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testModuleDictOpsAndNameErrorName [
+	"The mapping operations a module namespace must support, and the ``name'' every
+	NameError must carry.
+
+	CPython's globals() IS a dict.  Grail's is a LIVE view over the module
+	(PyModuleDict) -- the right object, since a write through it must reach the
+	module -- but it was missing the operations that deliberately do NOT write
+	through.  copy() was absent entirely, so the ordinary
+	``custom = globals().copy(); custom[k] = v'' idiom raised AttributeError
+	instead of handing back a namespace of the caller's own.  popitem / __or__ /
+	__ior__ were missing for the same reason and are added with it.
+
+	The second half is ``e.name''.  CPython has carried it on NameError since 3.10
+	and the stdlib reads it.  In Grail only the MODULE-global miss set it: a
+	bare-name miss inside a function body is emitted by NameAst codegen, which
+	raised inline with no attribute, so every such miss was anonymous.  Both paths
+	are checked because they are genuinely different code, and the message is
+	asserted unchanged -- adding an attribute must not reword the error.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/module_dict_ops.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'module_dict_ops' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/module_dict_ops.py')
+		name: 'module_dict_ops'.
+	#( 'a_copy_is_a_plain_dict'
+	   'a_copy_carries_the_current_bindings'
+	   'writing_to_a_copy_does_not_touch_the_module'
+	   'deleting_from_a_copy_does_not_touch_the_module'
+	   'eval_accepts_a_copied_namespace'
+	   'or_merges_into_a_new_dict'
+	   'ior_merges_in_place'
+	   'popitem_returns_a_pair_and_removes_it'
+	   'popitem_on_an_empty_mapping_raises_keyerror'
+	   'a_module_global_miss_names_the_binding'
+	   'a_miss_inside_a_function_names_the_binding_too'
+	   'the_message_is_unchanged_by_carrying_the_name' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'module-dict/NameError-name check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testModuleLoaderAndLazyLinecache [
+	"Every module carries a PEP 302 __loader__, and linecache resolves a
+	filename that is not on disk through the CALLING module's loader -- which
+	is how a traceback shows source for a frame whose co_filename does not
+	name a readable file.  See tests/python/module_loader.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'module_loader' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/module_loader.py')
+		name: 'module_loader'.
+	#( 'module_has_a_loader'
+	   'loader_answers_the_modules_source'
+	   'loader_reports_filename_and_package'
+	   'loader_rejects_a_foreign_name'
+	   'lazycache_resolves_through_the_loader'
+	   'lazycache_without_globals_finds_nothing' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: '__loader__ / linecache check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests' }
+TracebackTestCase >> testOsStatAnswersStatResultFields [
+	"os.stat answers CPython's os.stat_result, not the raw GsFileStat: the
+	fields are the same but Python reads them as st_size / st_mtime, which is
+	what linecache and django's session backend do."
+
+	| mod |
+	mod := importlib loadModuleFromPath: (importlib grailDir , '/tests/python/code_filename.py')
+		name: 'code_filename'.
+	self assert: (mod @env1:stat_result_fields)
+
+]
+
+{ #category : 'Grail-Tests - finally semantics' }
+TracebackTestCase >> testRaiseInFinallyReplacesInFlightException [
+	"A ``raise'' inside a finally REPLACES the exception that was propagating,
+	chaining to it through __context__ -- Python lets exactly one exception
+	leave a try/finally, and it is the finally's.
+
+	Grail ran the finally from an ensure:, i.e. while the stack was already
+	unwinding, and by then ``ex pass'' had delivered the original exception to
+	the enclosing handler.  So the outer ``except'' ran TWICE -- once for the
+	ValueError it had already been handed, then again for the KeyError arriving
+	as a second, unrelated propagation.  The finally now runs inside the
+	handler, before anything outside the try can see the exception.
+
+	The generator case is the same rule reached by a different route: TryAst
+	used to fall back to a plain ensure: inside a generator, so a generator's
+	finally kept the old ordering.  See tests/python/finally_propagation.py."
+
+	| mod pair |
+	importlib @env1:modules removeKey: #'finally_propagation' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/finally_propagation.py')
+		name: 'finally_propagation'.
+
+	pair := mod @env1:raise_in_finally_replaces.
+	self assert: (pair @env1:__getitem__: 0) equals: 'KeyError'.
+	self assert: (pair @env1:__getitem__: 1) equals: 'ValueError'.
+
+	self assert: (mod @env1:outer_handler_runs_once) size equals: 1.
+
+	pair := mod @env1:generator_raise_in_finally_replaces.
+	self assert: (pair @env1:__getitem__: 0) equals: 'KeyError'.
+	self assert: (pair @env1:__getitem__: 1) equals: 'ValueError'.
+
+	self assert: mod @env1:return_in_finally_wins equals: 'finally won'
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testRaiseInsideHandlerHasItsOwnFrames [
+	"An exception raised while another is being handled gets its OWN traceback;
+	the handled exception's frames belong to __context__, not to it.  Grail read
+	them off the live Smalltalk stack, which still holds them -- a handler runs ON
+	TOP of the frames that signalled rather than after unwinding them -- so a
+	wrapping raise reported the frames it was wrapping, and located its own frame
+	at the try body instead of at the ``raise'' (§9.10 item 7).
+
+	Not simply ``stop at the handler'': a function CALLED from the handler does
+	contribute its frames, which a_function_called_from_the_handler_gets_its_own_frame
+	pins.  Every expectation is verified against real CPython by running the fixture
+	directly -- see its docstring.  See tests/python/handler_context_frames.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'handler_context_frames' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/handler_context_frames.py')
+		name: 'handler_context_frames'.
+	#( 'the_wrapping_raise_reports_only_its_own_frames'
+	   'the_handler_frame_is_at_the_raise_not_at_the_try'
+	   'no_frame_from_the_handled_exception_leaks_in'
+	   'raise_from_behaves_the_same'
+	   'a_function_called_from_the_handler_gets_its_own_frame'
+	   'the_handled_exceptions_own_traceback_survives'
+	   'raise_from_sets_cause'
+	   'the_rendered_traceback_names_only_the_new_frames' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'handler-context check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testRecursionContextChain [
+	"The context chain a RUNAWAY RECURSION produces, and rendering a chain too
+	long to walk recursively.
+
+	Two fixes meet here.  ___recursionGuard___ converts GemStone's
+	AlmostOutOfStack into a catchable RecursionError, but built the replacement
+	with ___new___ alone -- so unlike every other raise it took no implicit
+	__context__, and a chain CPython renders as one block per level rendered as a
+	single traceback.  And TracebackException captured the chain by RECURSING per
+	link, which overflows on a chain longer than the stack (reachable because
+	__context__ is a writable attribute, so a loop can build one of any length);
+	it now expands from a queue, as CPython's does for this same reason.
+
+	Each check is evaluated INSIDE ___recursionGuard___, which is what the
+	CPython-suite harness does around every test for the same reason -- without
+	it the runaway's AlmostOutOfStack escapes into Smalltalk instead of reaching
+	the fixture's ``except RecursionError''.
+
+	The depth reached is a property of the gem's stack configuration, not of
+	Grail (188 levels here, 6645 under the CPython suite's deeper stack), so the
+	fixture asserts RELATIONS -- one link per level, one block per link -- rather
+	than counts.  Every expectation is verified against real CPython by running
+	the fixture directly; see tests/python/recursion_chain.py.
+
+	AND THAT DEPTH IS WHY THIS TEST IS ALSO A COST TRIPWIRE.  Because N is the
+	gem's stack budget rather than sys.getrecursionlimit(), an O(N^2) step in the
+	rendering path does not merely get slower here -- it gets slower by the SQUARE
+	of whatever the runner is configured with.  format_exception had one, and at
+	GEM_MAX_SMALLTALK_STACK_DEPTH=74000 this single test took 24.9 minutes and made
+	the SUnit gate's slowest shard longer than the other seven put together.  See
+	`format_exception_walks_the_chain_once_per_link' in the fixture."
+
+	| mod |
+	importlib @env1:modules removeKey: #'recursion_chain' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/recursion_chain.py')
+		name: 'recursion_chain'.
+	#( 'a_runaway_recursion_raises_a_catchable_recursionerror'
+	   'the_recursionerror_records_the_handled_exception_as_context'
+	   'the_context_chain_is_as_long_as_the_recursion'
+	   'the_long_chain_renders_one_block_per_link'
+	   'format_exception_renders_the_long_chain_too'
+	   'a_chain_longer_than_the_stack_is_still_constructible'
+	   'the_long_chain_still_renders_every_link'
+	   'format_exception_walks_the_chain_once_per_link'
+	   'a_cycle_in_an_assigned_context_still_terminates' ) do: [:k |
+		self assert: ((BaseException @env1:___recursionGuard___: [
+				mod @env0:perform: k asSymbol env: 1]) = true)
+			description: 'recursion-chain check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testSysExcInfo [
+	"sys.exc_info() / sys.exception() report the exception currently being
+	handled (set by TryAst around an except handler, restored on exit so nested
+	handlers stack), instead of the old (None, None, None) stub.  Also drives
+	traceback.format_exc().  See tests/python/sys_excinfo.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'sys_excinfo' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_excinfo.py')
+		name: 'sys_excinfo'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'baseline_none' 'inside_type' 'inside_value' 'inside_message'
+	   'inside_exception_is_value' 'outside_is_none' 'nested'
+	   'format_exc_has_message' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'sys.exc_info check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testSysPathImportAndFromImportErrors [
+	"Three import-machinery rules, each independently broken, none of them about
+	tracebacks -- they surfaced while chasing the ImportError suggestion tests.
+
+	sys.path was not consulted AT ALL.  The resolver searched grailDir, the bundled
+	stdlib, and a Grail-specific ``extraSearchRoots'' list only code written for
+	Grail could reach, so ``sys.path.append(d); import m'' raised
+	ModuleNotFoundError however d was populated.  sys.path is now searched too,
+	LAST -- deliberately not first as in CPython, so a directory a caller adds
+	cannot shadow Grail's own ported ``os'' or ``traceback''.
+
+	``from PKG import missing'' raised ModuleNotFoundError naming ``PKG.missing''
+	as a missing MODULE.  It is a missing NAME: CPython raises ImportError with
+	``cannot import name 'x' from 'PKG' (path)'' and carries name / name_from /
+	path.  ImportError is ModuleNotFoundError's BASE, so the
+	``try: from . import x except ImportError: pass'' hooks the old behaviour
+	served keep working.
+
+	Deleting a str key from a Symbol-keyed dictionary removed nothing and signalled
+	an UNCATCHABLE Smalltalk LookupError -- lookup compares by equality so the key
+	was FOUND, removal matches by identity so it matched nothing.  sys.modules is
+	such a dictionary, so ``del sys.modules[name]'' and
+	``sys.modules.pop(name, None)'' did this to every caller, test.support's
+	unload/forget among them.  That one is why the other two showed no scoreboard
+	gain at first: fixing the import let those tests reach their cleanup, which
+	then died here.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/sys_path_import.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'sys_path_import' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/sys_path_import.py')
+		name: 'sys_path_import'.
+	#( 'a_directory_on_sys_path_is_searched'
+	   'a_module_found_via_sys_path_lands_in_sys_modules'
+	   'a_from_import_of_a_present_name_works'
+	   'a_from_import_of_a_missing_name_raises_importerror'
+	   'the_missing_name_error_reads_like_cpythons'
+	   'the_missing_name_error_carries_name_and_name_from'
+	   'deleting_a_module_from_sys_modules_works'
+	   'popping_a_module_from_sys_modules_works'
+	   'popping_an_absent_key_returns_the_default'
+	   'deleting_an_absent_key_raises_keyerror' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'import-machinery check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Cache Keys Must Not Recycle' }
+TracebackTestCase >> testTheLineCacheIsNotPoisonedByRecycledMethodOops [
+	"The ip -> line cache must not answer for a method other than the one
+	asked about.  It used to: the five frame-walk caches in SessionTemps keyed
+	on ``aMethod asOop'', and a bare OOP integer retains nothing, so once the
+	GsNMethod was collected the OOP could be reused while the session-lifetime
+	entry lived on.
+
+	Deterministic -- no concurrency, no shards, no rate.  loadFrameDepthFixture
+	evicts and recompiles frame_depth on every call, which is the churn the
+	bug needs: 120 such generations compile 2160 methods across only 439
+	distinct OOPs.  Measured over 3000 (method, ip) pairs, the asOop keys gave
+	1624 poisoned answers and the method-object keys 0.  First poisoning lands
+	by generation 30, so 40 generations is the cheap deterministic size.
+
+	NOT the intermittent frame-walk failure, though an earlier version of this
+	comment said it was.  An instrumented pre-fix control counted the mechanism
+	firing during full run_tests.sh runs: 2 events in roughly 246,000 cache
+	hits, i.e. order 1 in 10^5.  Very rare but NOT zero -- the fix is not
+	pointless, it simply cannot account for a flake that failed 1 run in 4.  Recycling needs the
+	methods COLLECTED, and a real suite keeps its modules in sys.modules, so
+	their GsNMethods stay reachable and their OOPs are never freed -- only
+	repeated eviction of the SAME module makes them garbage, which is what this
+	test does 40 times and what the suite does about three times a run.  So the
+	1624/3000 is a property of a repeated-eviction workload and must not be
+	quoted as practical incidence; the flake itself remains unexplained.  What
+	this test guards is a real latent correctness bug, which is reason enough
+	for it to exist.
+
+	Compares the CACHED accessor against the UNCACHED derivation: a mismatch
+	means the cache served a line belonging to a different method.  Note the
+	probe holds no method objects and neither should any successor: a retained
+	method cannot be collected, so its OOP cannot be recycled, and the probe
+	then measures its own grip rather than the bug.  (An earlier 25-generation
+	probe of this did find nothing; retention is the likely reason but was
+	never isolated, so do not read that zero as evidence for anything.)"
+
+	| st checked poisoned reused seen firstFew savedIRFlag |
+	st := SessionTemps current.
+	checked := 0.
+	poisoned := 0.
+	reused := 0.
+	"oop -> selector name.  INTEGERS AND STRINGS ONLY: see the comment above."
+	seen := KeyValueDictionary new.
+	firstFew := WriteStream on: String new.
+	"The derivation compared here is the TEXT path's ``___curPos___'' scan
+	 (___derivePythonLineForMethod___:ip:), which answers nil for an IR-built
+	 method -- its source is the Python def, with no such store.  Under
+	 GRAIL_IR_CODEGEN the frame_depth fixture is almost entirely IR (its defs
+	 are comprehensions over extract_tb, IR since cut 57), so the checked count
+	 fell to 280 and the vacuous-pass guard below fired.  The fixture is
+	 therefore loaded on the text path whatever the flag says, and the flag
+	 restored afterwards: the OOP-recycling bug this guards is the cache's,
+	 not either codegen path's."
+	savedIRFlag := importlib ___irCodegenFlag___.
+	importlib ___irCodegenForce___: false.
+	[1 to: 40 do: [:g |
+		| dict |
+		dict := self loadFrameDepthFixture class persistentMethodDictForEnv: 1.
+		dict keysAndValuesDo: [:sel :meth |
+			| oop prior |
+			oop := meth asOop.
+			prior := seen at: oop otherwise: nil.
+			(prior notNil and: [prior ~= sel asString]) ifTrue: [reused := reused + 1].
+			seen at: oop put: sel asString.
+			1 to: 100 by: 11 do: [:ip |
+				| truth cached |
+				truth := BaseException ___derivePythonLineForMethod___: meth ip: ip.
+				truth isNil ifFalse: [
+					cached := BaseException ___pythonLineForMethod___: meth ip: ip.
+					checked := checked + 1.
+					cached = truth ifFalse: [
+						poisoned := poisoned + 1.
+						poisoned <= 4 ifTrue: [
+							firstFew nextPutAll: ' | gen'; print: g;
+								nextPutAll: ' '; nextPutAll: sel asString;
+								nextPutAll: ' ip='; print: ip;
+								nextPutAll: ' cached='; print: cached;
+								nextPutAll: ' truth='; print: truth]]]]].
+		"Makes the reuse deterministic rather than incidental.  NOT load-bearing,
+		 measured: 477 reuses over 40 generations with this scavenge and 461
+		 without, so GemStone reclaims the abandoned generation on its own at
+		 this scale.  Kept anyway, so the test does not rest on GC timing it
+		 does not control -- but the assertion on ``reused'' below, not this
+		 line, is what stops the test going vacuous."
+		System _generationScavenge]]
+			ensure: [
+				importlib ___irCodegenForce___: savedIRFlag.
+				st removeKey: #'GrailIpLineCache' otherwise: nil.
+				st removeKey: #'GrailIpSpanCache' otherwise: nil].
+	self assert: checked > 500
+		description: 'only ' , checked printString , ' derivations checked -- the '
+			, 'fixture stopped yielding lines, so this test proves nothing'.
+	"PRECONDITION, asserted because the interesting failure of this test is not
+	 a wrong answer but a vacuous pass.  ``0 poisoned'' only means something
+	 alongside ``and the run contained real reuse''.  If a future VM stops
+	 recycling method OOPs, or the scavenge above quietly no-ops, poisoned
+	 stays 0 for entirely the wrong reason and this becomes a permanent green
+	 that tests nothing."
+	self assert: reused > 0
+		description: 'no method OOP was reused across ' , checked printString
+			, ' derivations, so this run could not have detected poisoning '
+			, 'whatever the keys were -- the test has gone vacuous, not green'.
+	self assert: poisoned equals: 0
+		description: poisoned printString , ' of ' , checked printString
+			, ' cached lines came from a different method (' , reused printString
+			, ' OOP reuses observed)' , firstFew contents
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> testTracebackDataModelFixture [
+	"Pure-Python data-model checks: FrameSummary PEP 657 column slicing, the
+	4-tuple shape, StackSummary format, default __traceback__ is None, and
+	with_traceback returning self.  See tests/python/traceback_data_model.py."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'traceback_data_model' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/traceback_data_model.py')
+		name: 'traceback_data_model'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#( 'frame_summary_slicing' 'frame_summary_tuple_shape' 'stacksummary_format'
+	   'default_traceback_is_none' 'with_traceback_returns_self'
+	   'extract_tb_of_none_is_empty' ) do: [:k |
+		self assert: ((results @env1:__getitem__: k) = true)
+			description: 'traceback data-model check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testTracebackEdgeCases [
+	"Three small traceback.py conformance gaps, grouped because each is a few
+	lines and none deserves its own test.
+
+	``print_exception(42)'' is a TypeError -- ``Exception expected for value, int
+	found'' -- not a render of ``int: 42''.  Grail rendered it and then failed
+	writing to a file it had not been given, so the reported error was an
+	AttributeError on None rather than the TypeError the caller should see.  Only
+	the ONE-argument form is guarded: the legacy three-argument form fails under
+	CPython too, but with whatever the value happens to raise, and tightening it
+	would break Grail callers that pass a type and a message.
+
+	FrameSummary keeps a frame's source text in ``_lines'' -- CPython 3.14's slot
+	name -- and it stays nil while lookup_line=False.  Grail called it ``_line'',
+	so code reading the documented name found nothing.  Stored raw and stripped by
+	the ``line'' property on the way out.
+
+	A SyntaxError's location fields are a plain writable tuple, so any of them can
+	be any object: ``SyntaxError('error', 'abcd')'' gives lineno='b', offset='c',
+	text='d' (gh-128894).  Rendering must not raise, and Grail called int() on the
+	offset and died with ValueError.  The rules were MEASURED against CPython
+	rather than guessed, because one of them is counter-intuitive:
+
+		text not a str           -> no source block at all
+		offset None              -> source line, no caret
+		offset an int            -> source line + caret
+		offset present, not int  -> no source block at all
+
+	An unusable offset suppresses the source LINE too, not just the caret; and
+	``lineno'' needs no check at all, since it is only ever printed -- ``line b''
+	is what CPython shows.
+
+	Every expectation is verified against real CPython by running the fixture
+	directly; see tests/python/traceback_edge_cases.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'traceback_edge_cases' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/traceback_edge_cases.py')
+		name: 'traceback_edge_cases'.
+	#( 'print_exception_of_a_non_exception_is_a_typeerror'
+	   'format_exception_of_a_non_exception_is_a_typeerror'
+	   'the_type_name_in_the_message_is_the_value_s'
+	   'none_is_still_legal'
+	   'a_real_exception_still_prints'
+	   'a_frame_summary_starts_with_no_cached_lines'
+	   'the_line_property_fills_the_cache_on_first_use'
+	   'a_supplied_line_is_kept_as_given'
+	   'lookup_line_true_resolves_immediately'
+	   'a_string_location_tuple_does_not_raise'
+	   'an_all_none_location_renders_the_message_alone'
+	   'an_int_text_field_suppresses_the_source_block'
+	   'a_six_field_location_behaves_the_same'
+	   'a_non_int_offset_suppresses_the_source_line_too'
+	   'a_none_offset_shows_the_source_line_without_a_caret'
+	   'a_non_int_lineno_is_printed_as_is'
+	   'a_wellformed_syntax_error_is_unaffected' ) do: [:k |
+		| answer |
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'traceback edge-case check failed: ' , k , ' -> ' , answer printString].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testTracebackExceptionEquality [
+	"TracebackException compares by CONTENT: CPython's __eq__ is a __dict__
+	comparison, which works there because it stores the exception's MESSAGE
+	rather than the exception.  A foreign operand gets NotImplemented, not
+	False, so the other side's __eq__ still gets a turn."
+
+	| mod |
+	importlib @env1:modules removeKey: #'exception_notes' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/exception_notes.py')
+		name: 'exception_notes'.
+	#( 'traceback_exception_equality_is_by_content'
+	   'traceback_exception_equality_defers_to_other_types'
+	   'notes_take_part_in_equality' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'TracebackException equality check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testTracebackFrameLimits [
+	"CPython's limit rules, which are subtler than one number: a positive limit
+	keeps the FIRST N frames, a negative one the LAST abs(N) (so the walk cannot
+	stop early), and sys.tracebacklimit supplies the default -- except that a
+	NEGATIVE tracebacklimit means ``show nothing'' rather than ``show the last
+	N''.  test.test_traceback's LimitTests asserts both halves."
+
+	| mod |
+	mod := self loadFrameDepthFixture.
+	#( 'a_positive_limit_keeps_the_first_frames'
+	   'a_negative_limit_keeps_the_last_frames'
+	   'sys_tracebacklimit_supplies_the_default'
+	   'format_exception_honours_limit' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'traceback limit check failed: ' , k].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Runtime' }
+TracebackTestCase >> testTracebackSpansEveryFrame [
+	"A traceback is the WHOLE propagation path, outermost first, built from the
+	VM's raise-time stack capture (#GemExceptionSignalCapturesStack).  It used
+	to be a single frame -- the catching function -- so tb_next was always None.
+	Per-frame Python line numbers come from the ``___curPos___ := N'' literals in
+	the generated source, located via GsNMethod>>_sourceAtIp: (§9.9), so no
+	compile-time ip->line map is needed.  See tests/python/frame_depth.py."
+
+	| mod |
+	mod := self loadFrameDepthFixture.
+	#( 'traceback_spans_every_frame'
+	   'the_traceback_stops_at_the_catching_function'
+	   'tb_next_chains_inward'
+	   'every_frame_names_its_source_file'
+	   'every_frame_resolves_its_source_line' ) do: [:k |
+		| answer |
+		"Report the ANSWER, not just the check name.  These fixtures return the
+		frame list they actually saw when it does not match, and this test fails
+		intermittently under a concurrent suite run -- where it cannot be
+		reproduced afterwards, so whatever the description omits is lost."
+		answer := mod @env0:perform: k asSymbol env: 1.
+		self assert: (answer = true)
+			description: 'frame-depth check failed: ' , k , ' -> ' , answer printString].
+
+]
+
+{ #category : 'Grail-Tests - Traceback Data Model' }
+TracebackTestCase >> testWithTracebackRoundTripRealTb [
+	"with_traceback(tb) stores into the ___traceback___ slot and returns self;
+	both the __traceback__ method and the ___pyAttrLoad___ (whitelist) read
+	path return the stored PyTraceback -- NOT a BoundMethod-wrapped selector."
+
+	| exc code frame tb returned |
+	code := PyCode name: 'g' qualname: 'g' filename: '<test>' firstlineno: 1.
+	frame := PyFrame code: code lineno: 3 back: None globals: None.
+	tb := PyTraceback frame: frame lineno: 3 next: None
+		endLineno: 3 colno: 4 endColno: 9 line: '    x = 1'.
+
+	exc := ValueError new.
+	returned := exc @env1:with_traceback: tb.
+	self assert: returned == exc.
+	self assert: (exc @env1:__traceback__) == tb.
+	self assert: (exc @env1:___pyAttrLoad___: #'__traceback__') == tb.
+
+]

@@ -1,0 +1,221 @@
+Extension { #name : 'Repository' }
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> file_size [
+	"Python repository.file_size() — the repository's total size in bytes
+	(Repository >> fileSize: the sum of all extent sizes)."
+
+	^ self @env0:fileSize
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> free_space [
+	"Python repository.free_space() — bytes of free space inside the
+	repository's extents (Repository >> freeSpace)."
+
+	^ self @env0:freeSpace
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> full_backup: aPath [
+	"Python repository.full_backup(path) — write a full backup.  A path
+	ending in '.gz' gets a compressed backup (fullBackupGzCompressedTo:),
+	anything else a plain one (fullBackupTo:) — the extension chooses the
+	format, the way tarfile does.  Kernel failures (bad directory, no
+	FileControl privilege, ...) are re-raised as Python OSError so the
+	caller can except them; without the translation they tear through
+	Python as uncatchable Smalltalk errors."
+
+	| p n isGz |
+	p := aPath @env0:asString.
+	n := p @env0:size.
+	isGz := false.
+	(n @env0:>= 3) ifTrue: [
+		isGz := (p @env0:copyFrom: (n @env0:- 2) to: n) @env0:= '.gz'].
+	^ [ isGz
+			ifTrue: [self @env0:fullBackupGzCompressedTo: p]
+			ifFalse: [self @env0:fullBackupTo: p] ]
+		@env0:on: Error do: [:ex | | osErr msg |
+			msg := ex @env0:messageText.
+			msg == nil ifTrue: [msg := ex @env0:asString].
+			osErr := System @env0:myUserProfile @env0:symbolList
+				@env0:objectNamed: #'OSError'.
+			osErr == nil ifTrue: [ex @env0:outer].
+			osErr ___signal___: msg]
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> mark_for_collection [
+	"Python repository.mark_for_collection() — run the garbage-collection
+	scan (Repository >> markForCollection) and return its report string.
+	Long-running on a large repository; requires the GarbageCollection
+	privilege and a session with no uncommitted changes (gemdb.admin
+	checks that first, so the refusal is a Python exception with advice
+	rather than a kernel error).  Kernel failures are re-raised as Python
+	RuntimeError, same translation as full_backup:.
+
+	The kernel RETURNS the report as a Warning object (measured on 4.0:
+	'markForCollection found N live objects, M dead objects...'), so the
+	text is unwrapped from its messageText rather than handed to Python
+	as an opaque exception instance."
+
+	| r |
+	r := [self @env0:markForCollection]
+		@env0:on: Error do: [:ex | | errCls msg |
+			msg := ex @env0:messageText.
+			msg == nil ifTrue: [msg := ex @env0:asString].
+			errCls := System @env0:myUserProfile @env0:symbolList
+				@env0:objectNamed: #'RuntimeError'.
+			errCls == nil ifTrue: [ex @env0:outer].
+			errCls ___signal___: msg].
+	(r @env0:isKindOf: AbstractException) ifTrue: [
+		r := r @env0:messageText.
+		r == nil ifTrue: [r := '']].
+	^ r
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> modules_forget: aName [
+	"Python repository.modules_forget('models') -- un-deploy a module and its
+	submodules, once nothing is stored against their classes (importlib class
+	>> ___grailForgetModule___:).  gemdb.modules.forget() wraps it."
+
+	^ importlib @env0:___grailForgetModule___: aName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> modules_relocate: aName [
+	"Python repository.modules_relocate('models') -- the deployed module now
+	lives in another file and is the same module: lift the source-path refusal
+	for this session (importlib class >> ___grailRelocateModule___:).
+	gemdb.modules.relocate() wraps it."
+
+	^ importlib @env0:___grailRelocateModule___: aName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> namespaces_current [
+	"Python repository.namespaces_current() -- the current namespace's name,
+	or None in the default one.  gemdb.namespace() wraps it."
+
+	| appName |
+	appName := importlib @env0:___grailCurrentAppName___.
+	appName == nil ifTrue: [^ None].
+	^ appName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> namespaces_drop: aName [
+	"Python repository.namespaces_drop('shop') -- remove a namespace and
+	everything deployed in it, once nothing is stored against its classes
+	(importlib class >> ___grailDropApp___:).  gemdb.admin.drop_namespace()
+	wraps it."
+
+	^ importlib @env0:___grailDropApp___: aName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> namespaces_globals [
+	"Python repository.namespaces_globals() -- the current namespace's globals,
+	its __main__ module, or None outside a named namespace or before its top
+	file has run.  gemdb.root in a named namespace is a view of them."
+
+	| m |
+	m := importlib @env0:___grailAppGlobals___.
+	m == nil ifTrue: [^ None].
+	^ m
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> namespaces_list [
+	"Python repository.namespaces_list() -- this user's namespace names, sorted
+	(importlib class >> ___grailAppNames___).  gemdb.admin.namespaces() wraps
+	it."
+
+	^ importlib @env0:___grailAppNames___
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> namespaces_use: aName [
+	"Python repository.namespaces_use('shop') -- make namespace 'shop' current
+	for the rest of the session, creating it if it does not exist (importlib
+	class >> ___grailSetApp___:).  gemdb.use_namespace() wraps it."
+
+	importlib @env0:___grailSetApp___: aName.
+	^ None
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> schema_drop_class: aName [
+	"Python repository.schema_drop_class('module.Class') -- forget a class the
+	source no longer defines, but only once nothing is stored against it
+	(importlib class >> ___grailDropCanonicalClass___:).  gemdb.schema.drop_class()
+	wraps it."
+
+	^ importlib @env0:___grailDropCanonicalClass___: aName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> schema_rebase: aName [
+	"Python repository.schema_rebase('module.Class') -- perform the base change
+	an import refuses, moving every instance of the class and of its subtree
+	onto the rebuilt class instead of stranding them
+	(importlib class >> ___grailRebaseClass___:; docs/Schema_Evolution_Design.md).
+	gemdb.schema.rebase() wraps it, owns the clean-transaction check and
+	commits.
+
+	A KEYWORD method, so the module-class hazard schema_report's comment
+	describes does not arise here -- nothing performs it by a bare attribute
+	read -- but it stays beside its sibling on the Repository instance so the
+	whole schema surface has one home."
+
+	^ importlib @env0:___grailRebaseClass___: aName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> schema_rename_class: aName _: newName [
+	"Python repository.schema_rename_class('module.Old', 'New') -- move a
+	renamed class's instances onto the class the new source defines
+	(importlib class >> ___grailRenameCanonicalClass___:to:).
+	gemdb.schema.rename_class() wraps it."
+
+	^ importlib @env0:___grailRenameCanonicalClass___: aName to: newName
+
+]
+
+{ #category : 'Grail-Repository Administration' }
+Repository >> schema_report [
+	"Python repository.schema_report() -- every persistent Python class whose
+	slot layout holds an attribute nothing assigns any more, or a hole a drop
+	left, with the instance counts that say how much data each is carrying
+	(object class >> ___grailSchemaReport___; docs/Schema_Evolution_Design.md).
+	gemdb.schema.report() wraps it.
+
+	ON THE REPOSITORY INSTANCE, not on the gemstone module, and for the reason
+	docs/GemDB_Module.md gives for the administration primitives: a unary
+	method on a MODULE class is performed by a bare attribute read, so a
+	module-level spelling would run this -- a full repository scan -- from
+	``inspect.getmembers(gemstone)'' or a REPL completer.  An instance
+	attribute read only wraps; nothing runs until the caller writes
+	parentheses.
+
+	Needs a session with no uncommitted changes (the scan aborts first);
+	gemdb.schema checks that ahead of the call, so the refusal is a Python
+	exception with advice rather than a kernel error."
+
+	^ object ___grailSchemaReport___
+
+]

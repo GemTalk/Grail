@@ -1,0 +1,274 @@
+"Constant(constant value, string? kind)
+
+A constant value. The value attribute of the Constant literal contains the Python object it represents.
+The values represented can be simple types such as a number, string or None, but also immutable
+container types (tuples and frozensets) if all of their elements are constant."""
+Class {
+	#name : 'ConstantAst',
+	#superclass : 'ExpressionAst',
+	#instVars : [
+		'value',
+		'kind'
+	],
+	#category : 'Grail-Parser'
+}
+
+{ #category : 'Grail-annotations' }
+ConstantAst >> ___annotationSourceString___ [
+	"A string constant at the ROOT of an annotation is a forward reference whose
+	content IS the annotation -- ``x: 'Foo''' renders as Foo, unquoted -- so it stays
+	verbatim here.  Everything else, and a string NESTED in an expression
+	(``Annotated[int, 'doc']''), is rendered by the unparser, which quotes it."
+
+	(value isKindOf: CharacterCollection) ifTrue: [^ value asString].
+	^ self ___unparse___: 4
+
+]
+
+{ #category : 'Grail-annotations' }
+ConstantAst >> ___constantRepr___ [
+	"The literal as Python's repr -- what ast.unparse writes for a Constant:
+	quoted strings, b'...' for bytes, 4j for a complex, True / False / None, and
+	``...'' for the Ellipsis marker.  Rendered through builtins' repr, so the
+	quote choice and escapes are Python's own rather than a second copy of
+	them; Smalltalk's printString gave ``aByteArray( 104, ...)'' for b'hello'
+	and ``acomplex'' for 4j."
+
+	value == #'...' ifTrue: [^ '...'].
+	value isNil ifTrue: [^ 'None'].
+	value == true ifTrue: [^ 'True'].
+	value == false ifTrue: [^ 'False'].
+	^ [((Python at: #builtins) @env1:instance @env1:repr: value) asString]
+		on: AbstractException do: [:ex | ex return: value printString]
+
+]
+
+{ #category : 'Grail-annotations' }
+ConstantAst >> ___defaultSourceString___ [
+	"A literal default renders as its PYTHON REPR, which for a string means
+	QUOTED.  ___annotationSourceString___ deliberately strips the quotes -- an
+	annotation's string literal is a forward reference whose content IS the name
+	-- so a default taking that path rendered a='abc' as a=abc, and the empty
+	string as nothing at all after the equals sign.
+
+	Quote choice follows repr: single quotes normally, DOUBLE quotes when the
+	value itself contains a single quote.  That avoids emitting a backslash
+	escape and is what CPython prints for these cases."
+
+	| str |
+	(value isKindOf: CharacterCollection) ifFalse: [
+		^ self ___annotationSourceString___].
+	str := value asString.
+	(str includes: $') ifTrue: [
+		| dq |
+		dq := String with: $".
+		^ dq , str , dq].
+	^ (String with: $') , str , (String with: $')
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ConstantAst >> ___emitIRValueOn___: aBuilder [
+	"Reproduce printSmalltalkOn:'s literal cases as IR nodes.
+
+	Two of them are not literals.  A lone-surrogate str and a complex cannot be
+	written as a Smalltalk literal at all -- there is no Character for a
+	surrogate code point, and no literal syntax for a complex -- so the text
+	emits a CONSTRUCTOR SEND for each, and so does this (cut 80).  The receiver,
+	selector, argument shape and SEND ENVIRONMENT are read off
+	printSmalltalkOn: rather than chosen: ``@env0:___fromCodePoints___:'' is an
+	env-0 send and ``___new___: _:'' an env-1 one, and an env mismatch is not a
+	compile error -- it dispatches into the wrong method dictionary at run time.
+
+	The two arguments travel as the OBJECTS the parser already holds, where the
+	text has to print them and have the compiler read them back. That is
+	strictly safer, not merely shorter: a Float literal's round trip through
+	printString is the one place this emit could disagree with the text about a
+	value, and passing the Float itself removes the question."
+
+	aBuilder atNode: self.
+	value == true ifTrue: [^ aBuilder trueLit].
+	value == false ifTrue: [^ aBuilder falseLit].
+	value == nil ifTrue: [^ aBuilder globalNamed: #None].
+	value == #'...' ifTrue: [^ aBuilder globalNamed: #Ellipsis].
+	(value isKindOf: PyStrSurrogate) ifTrue: [
+		| cps |
+		"``#(cp cp ...)'' in the text is a literal array, which the Smalltalk
+		compiler makes invariant; match that, so the constructor cannot be
+		handed something a later reader could mutate."
+		cps := Array withAll: value ___codePoints___.
+		cps immediateInvariant.
+		aBuilder atNode: self.
+		^ aBuilder
+			send: #'___fromCodePoints___:'
+			to: (aBuilder globalNamed: #PyStrSurrogate)
+			with: { aBuilder obj: cps }
+			env: 0].
+	(value isKindOf: complex) ifTrue: [
+		| re im |
+		re := aBuilder obj: (value @env1:real).
+		im := aBuilder obj: (value @env1:imag).
+		"Stamped LAST, after both arguments exist: a stamp is consumed by the
+		next send the builder makes, so building an argument after it would
+		relabel this send with the argument's position."
+		aBuilder atNode: self.
+		^ aBuilder
+			send: #'___new___:_:'
+			to: (aBuilder globalNamed: #complex)
+			with: { re. im }
+			env: 1].
+	^ aBuilder obj: value
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ConstantAst >> ___irEligibleValueLocals___: localNames [
+	"The literal shapes ___emitIRValueOn___: reproduces: booleans, None, the
+	Ellipsis marker, plain str / int / float / bytes, and -- since cut 80 -- the
+	two shapes the text builds with a CONSTRUCTOR SEND rather than a literal,
+	complex and PyStrSurrogate.
+
+	Only the Ellipsis marker's own class is still refused.  #'...' is the one
+	Symbol-valued constant the parser produces (a compile-time marker, handled
+	just above), so any OTHER Symbol arriving here is not a Python literal at
+	all and has no text emit to reproduce -- printSmalltalkOn: would fall
+	through to ``print: value'' and write a bare identifier."
+
+	(value == true or: [value == false or: [value == nil]]) ifTrue: [^ true].
+	"The Ellipsis marker (cut 68): the text emits the GLOBAL ``Ellipsis''."
+	value == #'...' ifTrue: [^ true].
+	"Both of these emit a send, not a literal -- see ___emitIRValueOn___:.  The
+	surrogate test must stay AHEAD of the String one below it: PyStrSurrogate is
+	a kind of String, and the String branch answers with a plain literal, which
+	is exactly the emit that cannot represent it."
+	(value isKindOf: PyStrSurrogate) ifTrue: [^ true].
+	(value isKindOf: complex) ifTrue: [^ true].
+	(value isKindOf: Symbol) ifTrue: [^ false].
+	(value isKindOf: String) ifTrue: [^ true].
+	(value isKindOf: ByteArray) ifTrue: [^ true].
+	(value isKindOf: Integer) ifTrue: [^ true].
+	(value isKindOf: Float) ifTrue: [^ true].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ConstantAst >> ___irRefusalDetail___: localSet [
+	(value isKindOf: PyStrSurrogate) ifTrue: [^ #'ConstantAst:surrogateStr'].
+	(value isKindOf: Symbol) ifTrue: [^ #'ConstantAst:Symbol'].
+	^ ('ConstantAst:' , value class name asString) asSymbol
+
+]
+
+{ #category : 'Grail-annotations' }
+ConstantAst >> kind [
+	^kind
+
+]
+
+{ #category : 'Grail-annotations' }
+ConstantAst >> kind: newValue [
+	kind := newValue
+
+]
+
+{ #category : 'Grail-other' }
+ConstantAst >> printSmalltalkOn: aStream [
+
+	value == true ifTrue: [
+		aStream nextPutAll: 'true'.
+		^self.
+	].
+	value == false ifTrue: [
+		aStream nextPutAll: 'false'.
+		^self.
+	].
+	value == nil ifTrue: [
+		"Python ``None`` literal — emit a reference to the singleton bound
+		in the Python dictionary, not Smalltalk ``nil``."
+		aStream nextPutAll: 'None'.
+		^self.
+	].
+	value == #'...' ifTrue: [
+		"Python ``...'' literal.  The parser records it as the interned SYMBOL
+		#'...' -- a compile-time MARKER, and the only Symbol-valued ConstantAst
+		there is -- so identity against it cannot collide with a real string:
+		a source ``'...''' parses to a String, never to the Symbol.
+
+		Emit the GLOBAL, not the marker.  Emitting the marker is what made
+		``type(...)'' answer Symbol and ``isinstance(..., str)'' answer True;
+		the String branch below would otherwise claim it, since a GemStone Symbol
+		IS a kind of String."
+		aStream nextPutAll: 'Ellipsis'.
+		^self.
+	].
+	(value isKindOf: PyStrSurrogate) ifTrue: [
+		"A str holding a lone surrogate cannot be written as a Smalltalk
+		string literal -- there is no Character for the code point, which is
+		the whole reason this class exists.  Emit a CONSTRUCTOR instead, so
+		the literal is rebuilt at run time from its code points."
+		aStream nextPutAll: '(PyStrSurrogate @env0:___fromCodePoints___: #('.
+		value ___codePoints___ doWithIndex: [:cp :i |
+			i > 1 ifTrue: [aStream space].
+			aStream print: cp].
+		aStream nextPutAll: '))'.
+		^self.
+	].
+	(value isKindOf: String) ifTrue: [
+		aStream nextPutAll: value printString.
+		^self.
+	].
+	(value isKindOf: ByteArray) ifTrue: [
+		aStream nextPutAll: '#['.
+		value doWithIndex: [:each :i |
+			i > 1 ifTrue: [aStream nextPutAll: ' '].
+			aStream print: each.
+		].
+		aStream nextPutAll: ']'.
+		^self.
+	].
+	(value isKindOf: complex) ifTrue: [
+		aStream
+			nextPutAll: '(___complex___ ___new___: ';
+			print: (value @env1:real);
+			nextPutAll: ' _: ';
+			print: (value @env1:imag);
+			nextPutAll: ')'.
+		^self.
+	].
+	"A literal TOO BIG FOR A DOUBLE -- ``1e400'', or pydantic's
+	``2.2250738585072011e308'' -- parses to infinity, and an infinity's
+	printString is the GemStone global's name, PlusInfinity / MinusInfinity,
+	which module code does not compile against: the whole module failed with
+	``undefined symbol PlusInfinity'' (pydantic's tests/test_validators.py).
+	Emitted as the overflow itself, which needs no global."
+	((value isKindOf: Float) and: [value _isNaN not and: [(value - value) _isNaN]]) ifTrue: [
+		aStream nextPutAll: (value > 0
+			ifTrue: ['(1.0e308 @env0:* 10.0)']
+			ifFalse: ['(-1.0e308 @env0:* 10.0)']).
+		^self].
+	aStream print: value.
+
+]
+
+{ #category : 'Grail-other' }
+ConstantAst >> set: container to: anObject scope: aScope [
+
+	container
+		set: value
+		to: anObject.
+
+]
+
+{ #category : 'Grail-other' }
+ConstantAst >> value [
+
+	^value
+
+]
+
+{ #category : 'Grail-annotations' }
+ConstantAst >> value: newValue [
+	value := newValue
+
+]

@@ -1,7 +1,9 @@
 # GemStone Information
 
-**Grail requires GemStone 4.0** (build 2026-07-29 or later). Support for 3.7.x
-was removed; `install.sh` and `install_base.sh` refuse a 3.x product up front.
+**Grail requires GemStone 4.0.0.a5** (build 2026-10-15) or later: Grail is a Rowan
+project, loaded from the product's `extent0.rowan3.dbf`, whose Rowan (masterV4
+7d50ec0c8+) a5 is the first to ship. Support for 3.7.x was removed; `install.sh`
+refuses an older product up front, and `install_base.sh` a 3.x one.
 
 **That floor is not sufficient for the IR path, which is ON by default since PR
 #1087.** Measured on 4.0.0 build 2026-08-05 — i.e. NEWER than the floor above —
@@ -52,7 +54,7 @@ each install their own Grail (per-user session methods + `Python*` dictionaries)
 on one shared stone.
 
 * `./install.sh` # the one command you need. Per-user install (runs as the `.topazini` user): env-1 kernel-extension session methods + the `Python`/`PythonTests` dictionaries. Re-run after every Smalltalk edit. It probes for the extent-global base and, when absent, runs `./install_base.sh` for you — so on a fresh stone this alone is enough.
-* `./install_base.sh` # the extent-global base, as SystemUser. Idempotent, entirely SystemUser, so it does NOT need the per-user login accounts to exist. **Run it directly only when you want the base on its own** (provisioning a stone before the accounts exist); otherwise `install.sh` invokes it. It installs **no Grail code at all** — MR #6 permits env-1 session methods on the restricted classes (`GsNMethod`/`System`/`SymbolDictionary`) and the 2/3/4-arg `with:…performMethod:` variants are kernel-native, so every kernel-extension file is a per-user session method filed by `install.sh` (`scripts/kernel_class_extensions.gs`). What is left is the irreducibly SystemUser part: Unicode comparison mode and the `#GrailBaseInstalled` marker. **That split is about PRIVILEGE, not idempotency** — measured on 4.0 as an ordinary user, `CharacterCollection enableUnicodeComparisonMode` answers *"Only SystemUser should execute this method"* and a `Globals at:put:` answers SecurityError 2116. It cannot be folded into `install.sh`'s own login; it needs a separate SystemUser one.
+* `./install_base.sh` # the extent-global base, as SystemUser. Idempotent, entirely SystemUser, so it does NOT need the per-user login accounts to exist. **Run it directly only when you want the base on its own** (provisioning a stone before the accounts exist); otherwise `install.sh` invokes it. It installs **no Grail code at all** — MR #6 permits env-1 session methods on the restricted classes (`GsNMethod`/`System`/`SymbolDictionary`) and the 2/3/4-arg `with:…performMethod:` variants are kernel-native, so every kernel extension is a per-user session method loaded by `install.sh` (the `Grail-Kernel` and `Grail-Kernel-PyEnv` packages). What is left is the irreducibly SystemUser part: Unicode comparison mode and the `#GrailBaseInstalled` marker. **That split is about PRIVILEGE, not idempotency** — measured on 4.0 as an ordinary user, `CharacterCollection enableUnicodeComparisonMode` answers *"Only SystemUser should execute this method"* and a `Globals at:put:` answers SecurityError 2116. It cannot be folded into `install.sh`'s own login; it needs a separate SystemUser one.
 * `./scripts/run_tests.sh` # run all Python-related tests (fresh worker sessions; picks up the install automatically)
 * `source .setenv` # needed for stand-alone Topaz scripts
 
@@ -67,25 +69,47 @@ fails with that instruction, instead of building the C shim and then dying on
 topaz's bare "userId/password is invalid". CI is unaffected — it logs in as
 `DataCurator`, which every extent has.
 
-## Adding a file to `install.gs`: put it in its sorted place
+## Grail's Smalltalk source is Tonel, loaded by Rowan
 
-Most of `src/smalltalk/install.gs`'s lists are **kept sorted**, so that PRs
-open at the same time insert at different places. A list kept in insertion
-order makes every one of them add its line at the same anchor, and then every
-pair conflicts as soon as one merges. The sort was done once (86933fd2) and
-drifted back because nothing enforced it; now CI does.
+Grail is a Rowan project. `install.sh` loads `rowan/specs/Grail.ston` with
+`scripts/install_rowan.gs`; the source is Tonel, one package directory per
+symbol dictionary and method environment:
 
-* **Sorted (case-insensitive):** every forward-reference block in Step 2
-  (`at: #'Name' put: nil;`), by name; and the Step 6 test-class inputs between
-  `! >>> SORTED TEST INPUTS` and `! <<< END SORTED TEST INPUTS`, by FILE name.
-  Add a new entry at its alphabetical place, never at the end.
-* **Not sorted:** the `Python/` and `PythonAst/` inputs (Steps 4 and 5). They
-  are in dependency order -- superclasses first, `None` bound before any file
-  that mentions it -- and the comments say why each one is where it is.
-* A test class that subclasses ANOTHER test class goes in the pinned head above
-  the markers (as `CPythonTestCase` does), not inside the sorted run.
-* `python3 scripts/sort_install_gs.py --fix` sorts everything; `--check` is the
-  CI step in the `scripts` job and fails a PR that adds out of order.
+| package | symbol dictionary | environment | what |
+| --- | --- | --- | --- |
+| `src/Grail-Python`, `-PyEnv` | `Python` | 0, 1 | runtime classes |
+| `src/Grail-Python-Modules`, `-PyEnv` | `Python` | 0, 1 | module classes (`enum`, `sys`, ...) |
+| `src/Grail-PythonAst` | `PythonAst` | 0 | parser and codegen |
+| `src/Grail-PythonTests`, `-PyEnv` | `PythonTests` | 0, 1 | SUnit tests |
+| `src/Grail-EmbeddedPython`, `-PyEnv`, `src/Grail-EmbeddedPythonTests` | `EmbeddedPython`, `EmbeddedPythonTests` | 0, 1 | CPython embedding |
+| `src/Grail-Kernel`, `-PyEnv` | `GrailSessionMethods` | 0, 1 | extensions of kernel classes, as per-user session methods |
+
+* **A class's env-1 (Python-visible) methods live in its `-PyEnv` twin**, as
+  `<Class>.extension.st`. A package's environment is set once, in
+  `rowan/components/Grail.ston` (`methodEnv`), not per method.
+* **Module classes have their own packages** because `enum` (module) and
+  `Enum` (class) are both in `Python`, and `Enum.class.st` / `enum.class.st`
+  are one file on a case-insensitive filesystem.
+* **`#category` is the class category, not the package** -- the package is the
+  directory. `shadowsGlobals` (in the component) makes Grail's `Exception`,
+  `Warning`, ... new classes that shadow the kernel's, and
+  `#gs_superclassDictionary : 'Globals'` names the kernel superclass where the
+  bare name would be ambiguous (`BaseException`).
+* **Methods are in canonical order** -- class side first, then Rowan's unicode
+  order (case-insensitive, `_` before letters). Rowan's strict reader rejects
+  a file out of order, naming the method.
+* **No load order to maintain.** Rowan creates every class before compiling any
+  method, so there is no file order and no forward references. Install steps
+  that are not class or method definitions are the component's pre-/post-load
+  doits, `rowan/components/doits/{preload,postload}.st`: each step is its own
+  string, evaluated in turn.
+* **Generated methods** (identifier, Unicode and HTML tables, builtin
+  docstrings) are written by their generators through `scripts/tonel_methods.py`;
+  re-run the generator rather than editing them.
+* **Needs Rowan `masterV4` 7d50ec0c8 or later** -- GemStone 4.0.0.a5 and later
+  ship it in `extent0.rowan3.dbf`, which is the extent CI and a fresh stone use
+  (`shadowsGlobals`, `unicodeSource`, `gs_superclassDictionary`, and session-method
+  extensions of kernel classes by an ordinary user).
 
 ## How much CPython suite to run before a PR
 
@@ -95,15 +119,15 @@ stays flat, so tiering keeps the common case cheap while still covering the
 changes that can actually reach across modules.
 
 * **Tier 1 — targeted module + `./scripts/run_tests.sh`.** The change is
-  confined to one stdlib module or its Smalltalk peer (`enum.gs`,
-  `PyEnumTypes.gs`, `operator.py`, …). Nothing outside that module can plausibly
+  confined to one stdlib module or its Smalltalk peer (`enum`,
+  `PyEnumTypes`, `operator.py`, …). Nothing outside that module can plausibly
   move, so a full run buys nothing the nightly won't give you. Most conformance
   work lands here.
 * **Tier 2 — full `./scripts/run_cpython_suite.sh`, then
   `./scripts/check_cpython_regressions.sh`, before opening the PR.** The change
   touches SHARED MACHINERY, where the blast radius is the whole corpus by
-  construction: `Object.gs`, anything in `PythonAst/` (codegen runs for every
-  module), `importlib.gs`, builtins, the attribute/descriptor path. Quote the
+  construction: `Object`, anything in `Grail-PythonAst` (codegen runs for every
+  module), `importlib`, builtins, the attribute/descriptor path. Quote the
   "0 regressions" result in the PR body — for a change that fires on every class
   definition, the number is the evidence, not a reassurance.
 
@@ -221,9 +245,9 @@ Two traps in this harness, both of which look like a passing run:
 ## No Grail code goes in the shared base
 `install_base.sh` files nothing of Grail's: MR #6 permits env-1 session methods
 on `GsNMethod`/`System`/`SymbolDictionary`, and the 2/3/4-arg
-`with:…performMethod:` variants are kernel-native. Every kernel-extension file is
-a per-user session method (`scripts/kernel_class_extensions.gs`, `input`ed by
-`install.gs`), verified isolated: an installed user sees its env-1 methods
+`with:…performMethod:` variants are kernel-native. Every kernel extension is a
+per-user session method (the `Grail-Kernel` and `Grail-Kernel-PyEnv` packages,
+loaded as session methods into the user's `GrailSessionMethods`), verified isolated: an installed user sees its env-1 methods
 entirely in the *transient session* dictionary, and a second user who has not run
 `install.sh` sees none of them and has no `Python` dictionary. So several users
 can work on one stone without overwriting each other.

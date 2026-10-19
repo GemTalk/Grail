@@ -1,0 +1,82 @@
+RwSimpleProjectLoadComponentV2 {
+	#name : 'Grail',
+	#condition : 'common',
+	#preloadDoitName : 'doits/preload',
+	#postloadDoitName : 'doits/postload',
+	#packageNames : [
+		'Grail-EmbeddedPython',
+		'Grail-EmbeddedPython-PyEnv',
+		'Grail-EmbeddedPythonTests',
+		'Grail-Kernel',
+		'Grail-Kernel-PyEnv',
+		'Grail-Python',
+		'Grail-Python-Modules',
+		'Grail-Python-Modules-PyEnv',
+		'Grail-Python-PyEnv',
+		'Grail-PythonAst',
+		'Grail-PythonTests',
+		'Grail-PythonTests-PyEnv'
+	],
+	#conditionalPackageMapSpecs : {
+		'gemstone' : {
+			'allusers' : {
+				#packageNameToPlatformPropertiesMap : {
+					'Grail-EmbeddedPython' : {
+						'symbolDictName' : 'EmbeddedPython',
+						'shadowsGlobals' : true
+					},
+					'Grail-EmbeddedPython-PyEnv' : {
+						'symbolDictName' : 'EmbeddedPython',
+						'shadowsGlobals' : true,
+						'methodEnv' : 1
+					},
+					'Grail-EmbeddedPythonTests' : {
+						'symbolDictName' : 'EmbeddedPythonTests',
+						'shadowsGlobals' : true
+					},
+					'Grail-Kernel' : {
+						'symbolDictName' : 'GrailSessionMethods',
+						'useSessionMethodsForExtensions' : true
+					},
+					'Grail-Kernel-PyEnv' : {
+						'symbolDictName' : 'GrailSessionMethods',
+						'useSessionMethodsForExtensions' : true,
+						'methodEnv' : 1
+					},
+					'Grail-Python' : {
+						'symbolDictName' : 'Python',
+						'shadowsGlobals' : true
+					},
+					'Grail-Python-Modules' : {
+						'symbolDictName' : 'Python',
+						'shadowsGlobals' : true
+					},
+					'Grail-Python-Modules-PyEnv' : {
+						'symbolDictName' : 'Python',
+						'shadowsGlobals' : true,
+						'methodEnv' : 1
+					},
+					'Grail-Python-PyEnv' : {
+						'symbolDictName' : 'Python',
+						'shadowsGlobals' : true,
+						'methodEnv' : 1
+					},
+					'Grail-PythonAst' : {
+						'symbolDictName' : 'PythonAst',
+						'shadowsGlobals' : true
+					},
+					'Grail-PythonTests' : {
+						'symbolDictName' : 'PythonTests',
+						'shadowsGlobals' : true
+					},
+					'Grail-PythonTests-PyEnv' : {
+						'symbolDictName' : 'PythonTests',
+						'shadowsGlobals' : true,
+						'methodEnv' : 1
+					}
+				}
+			}
+		}
+	},
+	#comment : 'Grail, converted from src/smalltalk by scripts/rowan/gs2tonel.py'
+}

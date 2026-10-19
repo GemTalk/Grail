@@ -1,0 +1,84 @@
+Class {
+	#name : 'ClassMethodAttrViaInstanceTestCase',
+	#superclass : 'PythonTestCase',
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Tests - classmethod' }
+ClassMethodAttrViaInstanceTestCase >> testClassMethodReadableThroughInstance [
+	"``p.cm()'' where cm is a @classmethod must bind the CLASS and work,
+	at every arity and through every load shape.
+
+	The def lives on the METACLASS (category 'Grail-Class Methods'), so
+	none of ___pyAttrLoad___'s instance-side probes could see it.
+	PythonInstance>>doesNotUnderstand: forwards the direct-SEND shape,
+	but its branch is guarded by ``s last = $:'' -- KEYWORD selectors
+	only -- so a ZERO-ARG classmethod had no route at all, and the pure
+	LOAD shapes (getattr, or binding the method to a name) had none at
+	any arity:
+
+	    p.cm1(7)             worked   (keyword selector -> DNU forward)
+	    p.cm0()              AttributeError
+	    getattr(p, 'cm0')()  AttributeError
+	    f := p.cm0. f()      AttributeError
+
+	The probe answers what the CLASS's own load answers, rather than
+	wrapping the raw selector, so a decorator stacked under @classmethod
+	is applied rather than bypassed.
+
+	Also pinned: cls binds to the RECEIVER's class (a subclass instance
+	must see the subclass), and a genuinely missing attribute still
+	raises AttributeError -- the probe must not swallow real misses."
+
+	| mod results |
+	importlib @env1:modules removeKey: #'classmethod_attr_via_instance' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/classmethod_attr_via_instance.py')
+		name: 'classmethod_attr_via_instance'.
+	results := mod @env1:___pyAttrLoad___: #RESULTS.
+	#('zero_arg_via_class' 'zero_arg_via_instance' 'zero_arg_via_getattr'
+	  'zero_arg_bound_then_called' 'one_arg_via_instance'
+	  'two_arg_via_instance' 'subclass_binds_subclass'
+	  'subclass_via_getattr' 'missing_still_raises') do: [:key |
+		self assert: ((results @env1:__getitem__: key) = true) description: key]
+
+]
+
+{ #category : 'Grail-Tests - classmethod' }
+ClassMethodAttrViaInstanceTestCase >> testMetaChainProbeAnswersPerSelector [
+	"Pins ___metaChainOwnsAnyOf___:from: -- the probe behind the branch the
+	test above exercises -- on both sides of its answer.
+
+	It must say YES for a @classmethod the receiver's own metaclass defines
+	(``cm1'' compiles to ``cm1:'' on P class) and for one a SUBCLASS reaches
+	through the metaclass chain (Sub class -> P class), and NO both for a
+	name nothing owns and for a name whose nearest owner is the kernel tail
+	rather than a metaclass: ``__eq__:'' is object's default on Object, and
+	answering true for it is exactly the ``self.__eq__(...) binds to the
+	CLASS'' bug the isMeta gate exists to prevent.
+
+	The probe no longer copies any method dictionary (that cost one merged
+	copy of ``Object class'''s session methods per attribute load), so this
+	keeps its per-selector answer honest against the chain walk it replaced."
+
+	| mod cls sub probe |
+	importlib @env1:modules removeKey: #'classmethod_attr_via_instance' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/classmethod_attr_via_instance.py')
+		name: 'classmethod_attr_via_instance'.
+	cls := mod @env1:___pyAttrLoad___: #P.
+	sub := mod @env1:___pyAttrLoad___: #Sub.
+	probe := [:name :aClass |
+		aClass @env1:___metaChainOwnsAnyOf___:
+				(aClass @env1:___selectorFamilyFor___: name string: name asString)
+			from: aClass class].
+	self assert: (probe value: #cm1 value: cls)
+		description: 'cm1 is a @classmethod on P class'.
+	self assert: (probe value: #cm1 value: sub)
+		description: 'Sub class inherits cm1 from P class'.
+	self deny: (probe value: #nope value: cls)
+		description: 'nothing in the chain owns nope'.
+	self deny: (probe value: #'__eq__' value: cls)
+		description: '__eq__: is owned by the kernel tail (Object), not a metaclass'
+
+]

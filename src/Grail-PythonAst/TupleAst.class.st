@@ -1,0 +1,204 @@
+"https://docs.python.org/3/library/ast.html#ast.Tuple
+
+A tuple.
+
+elts holds a list of nodes representing the elements.
+ctx is Store if the tuple is an assignment target (i.e. (x,y)=something),
+and Load otherwise.
+
+Example:
+>>> print(ast.dump(ast.parse('(1, 2, 3)', mode='eval'), indent=4))
+Expression(
+    body=Tuple(
+        elts=[Constant(value=1), Constant(value=2), Constant(value=3)],
+        ctx=Load()))
+
+Hierarchy:
+Object
+  AbstractNode(parent)
+    AbstractLocationNode(beginLine beginColumn endLine endColumn)
+      ExpressionAst
+        TupleAst(elts ctx)
+
+"
+Class {
+	#name : 'TupleAst',
+	#superclass : 'ExpressionAst',
+	#instVars : [
+		'elts',
+		'ctx'
+	],
+	#category : 'Grail-Parser'
+}
+
+{ #category : 'Grail-annotations' }
+TupleAst >> ___defaultSourceString___ [
+	"PARENTHESISED, unlike the annotation form.
+
+	The annotation unparser renders a tuple bare (``int, str'' inside a
+	subscript, where the brackets already delimit it).  A DEFAULT has no
+	surrounding brackets, so the bare form made the rendered signature
+	structurally ambiguous: ``def f(j=(1,2))'' printed ``(j=1, 2)'', which reads
+	as two parameters rather than one tuple default.  That is worse than the
+	other placeholder cases -- the text is not merely wrong, it changes the
+	apparent arity."
+
+	| parts |
+	parts := elts collect: [:e | e ___defaultSourceString___].
+	parts isEmpty ifTrue: [^ '()'].
+	parts size = 1 ifTrue: [^ '(' , parts first , ',)'].
+	^ '(' , (parts inject: '' into: [:acc :p |
+		acc isEmpty ifTrue: [p] ifFalse: [acc , ', ' , p]]) , ')'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+TupleAst >> ___emitIRValueOn___: aBuilder [
+	"``(a, b)'' -> ``(tuple perform: #withAll: env: 0 withArguments: {{a. b}})''
+	-- an env-0 withAll: to the tuple class over the array builder; ``()'' ->
+	``(tuple perform: #new env: 0)''.  Same shapes as printSmalltalkOn:'s
+	non-splat branches."
+
+	| eltsArray |
+	elts isEmpty ifTrue: [
+		aBuilder atNode: self.
+		^ aBuilder send: #new to: (aBuilder globalNamed: #tuple) with: { } env: 0].
+	"The brace literal, or with a ``*b'' element the splat concatenation
+	(___emitIRElementsArrayOn___:elts:, the text's ``(({} , ...))'' run)."
+	eltsArray := self ___emitIRElementsArrayOn___: aBuilder elts: elts.
+	aBuilder atNode: self.
+	^ aBuilder send: #withAll:
+		to: (aBuilder globalNamed: #tuple)
+		with: { eltsArray } env: 0
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> ___emitSmalltalkOn___: aStream [
+
+	| hasStar |
+	elts isEmpty ifTrue: [
+		aStream nextPutAll: '(___tuple___ perform: #new env: 0)'.
+		^self.
+	].
+	hasStar := elts anySatisfy: [:each | each isKindOf: StarredAst].
+	hasStar ifFalse: [
+		"Chunked when it is too big for one brace array (#1423)."
+		aStream nextPutAll: '(___tuple___ perform: #withAll: env: 0 withArguments: {'.
+		self ___printElementsArrayOf___: elts on: aStream.
+		aStream nextPutAll: '})'.
+		^ self.
+	].
+	"Splat path: ``(a, *b, c)'' → concatenate run-arrays around each
+	starred expression's asArray, then wrap as a tuple.
+
+	The opening string ``(tuple perform: ... withArguments: {(({}''
+	balances as: one outer paren around ``tuple perform:'', one
+	array brace, and TWO inner parens around the concat chain.  The
+	closing must therefore emit ``))})'' (close the two inner
+	parens, the array brace, then the outer paren) — earlier
+	revisions emitted only ``)})'' which left the outer paren
+	unclosed, generating syntactically invalid Smalltalk for
+	``(a, *b)'' expressions.  Werkzeug.datastructures.headers'
+	``__eq__'' surfaced this via ``return item[0].lower(), *item[1:]''."
+	aStream nextPutAll: '(___tuple___ perform: #withAll: env: 0 withArguments: {(({}'.
+	elts do: [:each |
+		aStream nextPutAll: ' @env0:, '.
+		(each isKindOf: StarredAst)
+			ifTrue: [
+				aStream nextPut: $(.
+				each value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ' @env0:___pyStarToArray___)'.
+			] ifFalse: [
+				aStream nextPutAll: '{ '.
+				each printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '. }'.
+			].
+	].
+	aStream nextPutAll: '))})'.
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+TupleAst >> ___irEligibleValueLocals___: localNames [
+	"A LOAD-context tuple display with all-eligible elements; a ``*b'' element
+	(splat concat, cut 56) is eligible when its operand is.  Store-context
+	unpacking targets stay on text."
+
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	^ elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+TupleAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
+	elts do: [:e | e ___irReadLocalNamesInto___: aSet locals: localSet].
+	^ self
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> ctx [
+	^ctx
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> ctx: newValue [
+	ctx := newValue
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> declareVariable [
+
+	elts do: [:each | each declareVariable].
+
+]
+
+{ #category : 'Grail-accessing' }
+TupleAst >> elts [
+
+	^elts
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> elts: newValue [
+	elts := newValue
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> printSmalltalkAssignmentOn: aStream [ 
+
+	1 to: elts size do: [:i | 
+		(elts at: i) printSmalltalkOn: aStream.
+		aStream 
+			nextPutAll: '(value at: ';
+			print: i;
+			nextPutAll: ').'; lf.
+	].
+	aStream skip: -2.
+
+]
+
+{ #category : 'Grail-traceback' }
+TupleAst >> printSmalltalkOn: aStream [
+	"Recorded, then emitted -- see AbstractNode >> ___recordingPrintSmalltalkOn___:."
+
+	^ self ___recordingPrintSmalltalkOn___: aStream
+
+]
+
+{ #category : 'Grail-other' }
+TupleAst >> setTo: aValue scope: aScope [
+
+	elts size ~~ aValue ___size ifTrue: [
+		ValueError signal: 'not enough values to unpack (expected ' , elts size printString , ', got ' , aValue ___size printString , ')'.
+	].
+	1 to: elts size do: [:i | 
+		(elts at: i) setTo: (aValue ___at: i) scope: aScope.
+	].
+
+]

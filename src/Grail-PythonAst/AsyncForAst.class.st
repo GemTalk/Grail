@@ -1,0 +1,114 @@
+"AsyncFor(expr target, expr iter, stmt* body, stmt* orelse, string? type_comment)"
+Class {
+	#name : 'AsyncForAst',
+	#superclass : 'ForAst',
+	#category : 'Grail-Parser'
+}
+
+{ #category : 'Grail-IR Codegen' }
+AsyncForAst >> ___emitIRIteratorFrom___: iterNode on: aBuilder [
+	"``PythonCoroutine @env1:___grailAiter___: (iter)'' -- the text's
+	___emitIteratorFrom___:on:, a catchable TypeError for a missing __aiter__."
+
+	^ aBuilder
+		send: #'___grailAiter___:' to: (aBuilder globalNamed: #PythonCoroutine)
+		with: { iterNode } env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AsyncForAst >> ___emitIRNextFrom___: iterLeaf on: aBuilder [
+	"``(___gen___ @env1:___grailAwaitAnext___: (PythonCoroutine
+	@env1:___grailAnext___: ___iterN___))'' --
+	the text's ___nextExpressionFor___:, awaited through the enclosing
+	coroutine (the strict variant: a non-awaitable __anext__ is a TypeError,
+	not an endless loop).  ``async for'' is only legal in an async def, whose
+	body is wrapped, so the ___gen___ leaf is bound; without one the emit
+	raises and the seam falls back, as the text's unbound ___gen___ would."
+
+	| gen |
+	gen := aBuilder genLeaf.
+	gen isNil ifTrue: [
+		^ Error signal: 'IR codegen: async for outside a coroutine body'].
+	^ aBuilder
+		send: #'___grailAwaitAnext___:' to: (aBuilder var: gen)
+		with: { aBuilder
+			send: #'___grailAnext___:' to: (aBuilder globalNamed: #PythonCoroutine)
+			with: { aBuilder var: iterLeaf } env: 1 }
+		env: 1
+
+]
+
+{ #category : 'Grail-code generation' }
+AsyncForAst >> ___emitIteratorFrom___: iterNode on: aStream [
+	"``async for'' asks the iterable for an ASYNC iterator.  CPython's GET_AITER
+	sends __aiter__, which -- unlike __anext__ -- is an ordinary method
+	answering the iterator directly, NOT a coroutine, so there is nothing to
+	await here.
+
+	Routed through a runtime helper rather than sending __aiter__ inline,
+	because a MISSING __aiter__ has to be a catchable Python TypeError instead
+	of the uncatchable MessageNotUnderstood a bare send produces -- ``async for
+	v in [1, 2]'' is an ordinary mistake.  See PythonCoroutine class >>
+	___grailAiter___:, which also makes CPython's second check, on the object
+	__aiter__ returned."
+
+	aStream nextPutAll: 'PythonCoroutine @env1:___grailAiter___: ('.
+	iterNode printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: ')'
+
+]
+
+{ #category : 'Grail-code generation' }
+AsyncForAst >> ___exhaustedExceptionName___ [
+	"An async iterator signals exhaustion with StopAsyncIteration, which is NOT
+	a StopIteration subclass -- it descends from Exception -- so the inherited
+	handler would never have caught it even once __anext__ was being awaited.
+
+	It also passes cleanly through the await delegation on its way here:
+	___yieldFrom___: watches for StopIteration to detect a finished
+	sub-iterator, and StopAsyncIteration is deliberately outside that
+	hierarchy, so it propagates to this loop's handler rather than being
+	mistaken for the coroutine returning."
+
+	^ 'StopAsyncIteration'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AsyncForAst >> ___irExhaustedExceptionSymbol___ [
+	^ #StopAsyncIteration
+
+]
+
+{ #category : 'Grail-code generation' }
+AsyncForAst >> ___nextExpressionFor___: iterTemp [
+	"``async for'' AWAITS each step: __anext__ answers an awaitable (normally a
+	coroutine, since it is written ``async def __anext__''), and the value the
+	loop binds is what awaiting it produces.
+
+	Emitted through ``___gen___'', the enclosing coroutine, exactly as AwaitAst
+	does inside a wrapped body -- so a suspension inside __anext__ suspends the
+	whole loop and reaches the driver, which is the point of async iteration
+	rather than a detail of it.  ``async for'' is only legal inside an ``async
+	def'', and an async def always wraps its body (FunctionDefAst
+	___wrapsBody___), so ___gen___ is always bound where this can appear.
+
+	___grailAwaitAnext___: rather than ___grailAwait___:, and the difference
+	matters here in a way it does not anywhere else.  The general await passes a
+	NON-awaitable through unchanged, deliberately, because shipped library code
+	awaits values Grail resolves synchronously.  In a loop whose only exit is
+	StopAsyncIteration, an __anext__ answering something inert then spins
+	FOREVER -- test_coroutines' test_for_4 (``def __anext__: return ()'') took
+	the module from failing to CRASHING on exhausted VM memory.  The strict
+	variant raises CPython's TypeError instead.
+
+	The step itself comes from PythonCoroutine ___grailAnext___:, not a bare
+	__anext__ send: for a real async generator that makes the step without the
+	never-awaited watch, which this loop -- awaiting it in the same breath --
+	has no use for."
+
+	^ '(___gen___ @env1:___grailAwaitAnext___: (PythonCoroutine @env1:___grailAnext___: '
+		, iterTemp , '))'
+
+]

@@ -1,0 +1,99 @@
+Class {
+	#name : 'IntOperandNotIndexTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Private' }
+IntOperandNotIndexTestCase >> assertOperandMatchesCPython: aName [
+	"Every row for operand aName agrees with CPython; the failure lists the
+	ones that do not, with both answers."
+
+	| expected bad |
+	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
+	self assert: ((expected @env1:keys) @env1:__len__) > 0.
+	bad := (testModule @env1:___pyAttrLoad___: #mismatches)
+		@env1:___pyCallValue___: { aName } kw: nil.
+	self
+		assert: (bad @env1:__len__) = 0
+		description: aName , ': ' , (builtins @env1:instance @env1:repr: bad) asString
+
+]
+
+{ #category : 'Grail-Setup' }
+IntOperandNotIndexTestCase >> setUp [
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'int_operand_not_index' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/int_operand_not_index.py')
+		name: 'int_operand_not_index'.
+
+]
+
+{ #category : 'Grail-Setup' }
+IntOperandNotIndexTestCase >> tearDown [
+	(importlib @env1:modules) removeKey: #'int_operand_not_index' ifAbsent: [].
+	testModule := nil
+
+]
+
+{ #category : 'Grail-Tests' }
+IntOperandNotIndexTestCase >> testAnIndexOnlyObjectIsNotAnInt [
+	"``1 + o'' is a TypeError and ``3 == o'' False when o only has __index__,
+	defined in the class body or set on it afterwards; indexing still uses it."
+
+	self assertOperandMatchesCPython: 'I'.
+	self assertOperandMatchesCPython: 'IB'.
+	self assertOperandMatchesCPython: 'CA'
+
+]
+
+{ #category : 'Grail-Tests' }
+IntOperandNotIndexTestCase >> testAnIntSubclassIsAnInt [
+	"``7 & MyInt(3)'', ``1 << MyInt(3)'', ``2 ** MyInt(3)'' == 8 (not 8.0),
+	``pow(2, MyInt(2), 5)'', and its number properties as values."
+
+	self assertOperandMatchesCPython: 'A'.
+	self assertOperandMatchesCPython: 'B'
+
+]
+
+{ #category : 'Grail-Tests' }
+IntOperandNotIndexTestCase >> testASubclassKeepsItsOwnNumberProperty [
+	"A def, a property or a class attribute named ``numerator''/``real''/...
+	in an int subclass wins over int's property; an enum member of that name
+	does not (test_enum's test_shadowed_attr)."
+
+	self assertOperandMatchesCPython: 'shadow'
+
+]
+
+{ #category : 'Grail-Tests' }
+IntOperandNotIndexTestCase >> testBoolIsAnInt [
+	self assertOperandMatchesCPython: 'bool'
+
+]
+
+{ #category : 'Grail-Tests' }
+IntOperandNotIndexTestCase >> testEnumMembersAreInts [
+	"IntEnum and IntFlag members; ``7 & F.X'' is the flag, through
+	IntFlag's own __rand__."
+
+	self assertOperandMatchesCPython: 'E'.
+	self assertOperandMatchesCPython: 'F'
+
+]
+
+{ #category : 'Grail-Tests' }
+IntOperandNotIndexTestCase >> testEveryRowIsExpected [
+	| r expected |
+	r := testModule @env1:___pyAttrLoad___: #r.
+	expected := testModule @env1:___pyAttrLoad___: #EXPECTED.
+	self assert: (r @env1:__len__) = (expected @env1:__len__).
+	self assert: (expected @env1:__len__) >= 158
+
+]

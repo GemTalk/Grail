@@ -1,0 +1,1032 @@
+Extension { #name : 'KeyValueDictionary' }
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary class >> ___updateSeqPairAt___: idx from: element [
+	"Convert one dict-update sequence element to a (key, value) pair the way
+	CPython does: materialize it by ITERATING (so a non-iterable element, or a
+	generator that raises mid-iteration, fails right here).  On failure attach
+	the PEP 678 note ``Cannot convert dictionary update sequence element #N to a
+	sequence'' to the raised exception and reraise -- the note carries the
+	positional context (test_update_type_error).  Require exactly two elements.
+	Answers a 2-element Array {key. value}.
+
+	A NON-iterable element gets CPython's dict-update wording ``<type> is not
+	iterable'' (bare Python type name, no ``'...' object'' wrapper -- distinct
+	from the generic iter() message list() would raise).  An element that IS
+	iterable but errors mid-iteration keeps its OWN error message (the badgen
+	``oops'' case).  Both then carry the note (attached by the shared handler)."
+
+	| seq |
+	seq := [
+		"Get-iterator phase (CPython's PySequence_Fast -> PyObject_GetIter): a
+		genuinely non-iterable element fails HERE.  `element __iter__` raising
+		with no `__getitem__` old-style sequence fallback means not iterable;
+		re-signal with CPython's dict-update wording ``<type> is not iterable''
+		(bare Python type name, no ``'...' object'' wrapper), distinct from the
+		iter() message list() would raise.  A working __iter__ (or a
+		__getitem__ sequence) falls through to materialization, where a
+		mid-iteration error keeps its OWN message (the badgen ``oops'' case)."
+		([ element @env1:__iter__. true ]
+			@env0:on: TypeError
+			do: [:iterEx |
+				(element @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:isNil
+					ifTrue: [TypeError ___signal___: (element @env0:class @env1:__name__) @env0:, ' is not iterable']
+					ifFalse: [true]]).
+		list @env1:__new__: element ]
+		@env0:on: BaseException
+		do: [:ex | | ___target |
+			"UNWRAPPED, for the reason importlib >> ___noteCodecFailure___: is:
+			a re-raised exception arrives as a CARRIER -- a fresh instance of
+			the payload's class -- and noting that writes to an object Python
+			never sees.  Object >> ___grailNoteSetName___ already did this;
+			this site did not."
+			___target := BaseException @env0:___payloadOf___: ex.
+			___target @env1:add_note: ('Cannot convert dictionary update sequence element #'
+				@env0:, idx @env0:printString @env0:, ' to a sequence').
+			ex @env0:pass].
+	(seq @env0:size @env0:= 2) ifFalse: [
+		^ ValueError ___signal___: 'dictionary update sequence element #'
+			@env0:, idx @env0:printString @env0:, ' has length '
+			@env0:, seq @env0:size @env0:printString @env0:, '; 2 is required'].
+	^ { seq @env0:at: 1. seq @env0:at: 2 }
+
+]
+
+{ #category : 'Grail-Generics' }
+KeyValueDictionary class >> __getitem__: item [
+	"``dict[K, V]'' -- a REAL types.GenericAlias, as list's and tuple's are.
+
+	It used to answer the class itself, on the reasoning that runtime
+	subscription of a built-in is only typing scaffolding and that
+	``class Namespace(dict[str, Foo]):'' needs the bare class as a base.  The
+	base case is PEP 560's __mro_entries__ now (see list class >> __getitem__:),
+	and the collapse was observable: an annotation's ForwardRef evaluated to
+	``dict'' with its arguments gone, where CPython answers
+	``dict[int, ForwardRef('undef')]'' (test_annotationlib
+	test_evaluate_undefined_generic)."
+
+	"A SUBCLASS with its own __class_getitem__ must get it.  This shortcut
+	sits on the metaclass chain AHEAD of Metaclass3 >>
+	___grailClassGetitemDispatch___:, so it swallowed the PEP 560 dispatch
+	for every subclass of this built-in -- ``class A(dict): def
+	__class_getitem__(cls, item)'' then ``A[int]'' answered A itself and the
+	hook never ran (test_genericclass test_class_getitem_with_builtins).
+	Delegating only when a hook actually exists keeps the plain
+	``dict[K, V]'' spelling on the cheap path below; the dispatcher's own
+	fallback answers the class, so the two agree for that case anyway."
+	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
+		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
+		or: [((self ___classChainAttrLookup___: #'__class_getitem__') ~~ nil)
+			or: [(self ___classAttrOverlayLookup___: self name: #'__class_getitem__') ~~ nil]])
+			ifTrue: [^ self ___grailClassGetitemDispatch___: item].
+	"Late-bound: this file compiles before GenericAlias.gs defines the class."
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary class >> __new__ [
+	"dict() — create an empty dict. Receiver is the class."
+
+	^ self ___new___
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary class >> __new__: source [
+	"dict(source) — create a dict from another mapping or from an
+	iterable of (key, value) pairs. Receiver is the class.
+
+	If `source` is a mapping (responds to `keys` / `__getitem__`), copy
+	its entries. Otherwise treat it as an iterable of 2-element
+	sequences."
+
+	| result iter done keysMethod keysIter k idx |
+	"``X.__new__(cls)'' -- CPython's first argument to a type's __new__ is the
+	TARGET CLASS, not the contents: a class that inherits from the receiver
+	can only be that.  Built as a plain constructor argument it was
+	iterated -- ``'type' object is not iterable'' -- which is what
+	SQLAlchemy's ``ImmutableDictBase.__new__(cls)'' (FacadeDict) raised at
+	MetaData() construction.  A STRICT subclass only: ``list(list)'' reaches
+	here too and must raise as CPython's does, and a class that does not
+	inherit from the receiver stays an iterable (``list(SomeEnum)'')."
+	((source @env0:isKindOf: Behavior)
+		@env0:and: [source @env0:inheritsFrom: self])
+			@env0:ifTrue: [^ source ___new___].
+	result := self ___new___.
+
+	"Mapping fast path: a plain dict / raw KeyValueDictionary copies straight
+	from Smalltalk storage (insertion order).  A dict SUBCLASS that overrides
+	Python iteration order -- collections.OrderedDict after move_to_end, or any
+	class overriding keys()/__iter__ -- must be copied through its Python
+	keys() so the override is honored, exactly as CPython dict() does
+	(test_dict_copy_order).  Detect an override by whether keys() resolves
+	BELOW the base ``dict'' class; if so, fall through to the keys() protocol."
+	(source isKindOf: KeyValueDictionary) ifTrue: [
+		| keysOwner |
+		keysOwner := source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1.
+		(keysOwner == nil or: [keysOwner == dict]) ifTrue: [
+			source @env0:keysAndValuesDo: [:_k :_v |
+				result @env0:at: _k put: _v
+			].
+			^ result
+		]
+	].
+
+	"Python mapping protocol: source has a ``keys`` method.  Iterate
+	keys and copy each via ``__getitem__``.  Catches collections.
+	ChainMap, OrderedDict subclasses, and any user mapping that
+	exposes ``keys`` + ``__getitem__`` (jinja2's render path passes
+	a ChainMap through ``dict(globals, **{})``)."
+	"AttributeError too: under GRAIL_DIRECT_CALLS a bare ``keys'' miss on a
+	Python object is reported by the DNU hook's recovery as the loader's
+	AttributeError rather than as MessageNotUnderstood."
+	keysMethod := [source keys] @env0:on: (MessageNotUnderstood @env0:, AttributeError) do: [:ex | ex @env0:return: #__noKeys__].
+	keysMethod == #__noKeys__ ifFalse: [
+		keysIter := keysMethod __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[
+				k := keysIter __next__.
+				result @env0:at: k put: (source __getitem__: k).
+			] @env0:on: StopIteration do: [:ex | done := true].
+		].
+		^ result
+	].
+
+	"Iterable of (key, value) pairs -- each element is converted like CPython's
+	dict (materialize-then-check, PEP 678 note on failure)."
+	iter := source __iter__.
+	idx := 0.
+	done := false.
+	[done] @env0:whileFalse: [
+		[
+			| pair |
+			pair := dict ___updateSeqPairAt___: idx from: iter __next__.
+			result @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2).
+			idx := idx @env0:+ 1
+		] @env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ result
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary class >> _new: positional kw: keywords [
+	"dict(**kwargs) and dict(source, **kwargs) varargs entry point.
+	Builds a dict from any positional source plus keyword overrides.
+	Used by the class-call varargs fast path when keyword arguments
+	are passed (e.g. `dict(a=1, b=2)`).
+
+	Per CPython, the resulting dict's keys are Python ``str''s — even
+	though CallAst's varargs codegen builds the kwargs IdentityKeyValueDictionary
+	with Symbol keys for fast Smalltalk-side lookup, the dict() boundary
+	converts those to Strings so subsequent Python-level
+	``dict[key]'' / ``key in dict'' lookups by string literal match
+	(jinja2's render-context lookup is exactly this shape)."
+
+	| result |
+	(positional @env0:size @env0:> 1) ifTrue: [
+		TypeError ___signal___: 'dict expected at most 1 positional argument'
+	].
+	result := positional @env0:isEmpty
+		ifTrue: [self ___new___]
+		ifFalse: [self __new__: (positional @env0:at: 1)].
+	keywords ifNotNil: [
+		keywords @env0:keysAndValuesDo: [:k :v |
+			"CPython: ``dict(**mapping)'' requires string keys -- a non-string
+			key (dict(**{1:2})) is a TypeError, not silently stringified
+			(test_invalid_keyword_arguments).  Symbols (the normal a=1 kwarg
+			carrier) and Strings are both CharacterCollections."
+			(k @env0:isKindOf: CharacterCollection) ifFalse: [
+				TypeError ___signal___: 'keywords must be strings'].
+			result @env0:at: k @env0:asString put: v
+		]
+	].
+	^ result
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary class >> fromkeys: iterable [
+	"dict.fromkeys(iterable) — return a new dict with keys from
+	iterable, each mapped to None.  Used by re._parser to dedupe
+	a list while preserving insertion order (`list(dict.fromkeys(xs))`)."
+
+	^ self fromkeys: iterable _: None
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary class >> fromkeys: iterable _: value [
+	"dict.fromkeys(iterable, value): a new mapping with keys from iterable,
+	each mapped to ``value''.  Mirrors CPython dict.fromkeys(cls, ...): build
+	the result via cls() -- honoring a user __new__ (which may return a
+	DIFFERENT type, e.g. ``class mydict(dict): __new__ -> UserDict'') and
+	__init__ -- then d[key] = value for each key via __setitem__ (so an
+	overriding __setitem__ fires, test_fromkeys' baddict2).
+
+	Grail's dict-subclass cls() (ClassDefAst instantiation) bypasses __new__ (a
+	documented limitation), so allocate through ___allocateInstance___ (which
+	DOES run a user __new__) and run __init__() only when __new__ yielded a
+	genuine cls instance -- CPython's type.__call__ skips __init__ when
+	__new__'s result isn't an instance of cls (test_fromkeys mydict/baddict3
+	return a foreign type; baddict1 __init__ raises; baddict4 __init__ fills)."
+
+	| result iter done |
+	result := self @env1:___allocateInstance___: #() kw: nil.
+	(result @env0:isKindOf: self) ifTrue: [
+		"object supplies a no-op ___init__:kw: so this resolves for every
+		class; a user __init__ runs with no args, as cls() would."
+		[result @env0:perform: #'___init__:kw:' env: 1
+			withArguments: (Array @env0:with: #() @env0:with: nil)]
+			@env0:on: MessageNotUnderstood do: [:ex | nil]].
+	"A string yields its 1-character SUBSTRINGS as keys, not Smalltalk
+	 Characters (CPython quirk: dict.fromkeys('abc') == {'a':v,'b':v,'c':v})."
+	((iterable isKindOf: CharacterCollection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			| s |
+			s := Unicode7 ___new___: 1.
+			s @env0:at: 1 put: (iterable @env0:at: i).
+			result @env1:__setitem__: s _: value
+		].
+		^ result
+	].
+	((iterable isKindOf: SequenceableCollection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			result @env1:__setitem__: (iterable @env0:at: i) _: value
+		].
+		^ result
+	].
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[result @env1:__setitem__: iter __next__ _: value]
+			@env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ result
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> ___absentMarker___ [
+	"A private sentinel distinguishing ``removed nothing'' from ``removed a value
+	that happens to be nil/None''.  Session-local and identity-compared."
+
+	| st m |
+	st := SessionTemps @env0:current.
+	m := st @env0:at: #'Grail_dict_absentMarker' otherwise: nil.
+	m == nil ifTrue: [
+		m := Object @env0:new.
+		st @env0:at: #'Grail_dict_absentMarker' put: m].
+	^ m
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary >> ___init__: positional kw: keywords [
+	"Varargs dict.__init__ -- the form the Super resolver picks for
+	``super().__init__(*args, **kwargs)'' from a dict subclass when the
+	call carries keyword args (Super>>pickMethod prefers the
+	``___init__:kw:'' varargs selector over the fixed ``__init__''/
+	``__init__:'' forms precisely when kwOk is false).  A dict subclass
+	whose own __init__ chains up with kwargs
+	(``super().__init__(**kw)'') reached the 0-arg ``__init__'' before
+	and silently dropped them.  Populates self in place.
+
+	The no-kwargs paths are unaffected: super().__init__() resolves to
+	the 0-arg ``__init__'' and super().__init__(source) to the 1-arg
+	``__init__:'' (both preferred over this varargs form when kwOk is
+	true), so flask.config.Config's ``super().__init__(defaults)''
+	keeps its existing dispatch."
+
+	^ self ___initFrom___: positional kw: keywords
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary >> ___initFrom___: positional kw: keywords [
+	"Populate self IN PLACE from an optional positional mapping/iterable
+	plus keyword args -- the in-place equivalent of dict's constructor.
+	A dict SUBCLASS that does not override __init__ is instantiated by
+	ClassDefAst-emitted code that allocates an empty instance and calls
+	this, matching CPython where the inherited dict.__init__ populates
+	(dict.__new__ allocates empty, __init__ fills).  Reuses dict class
+	>> __new__: for the mapping/iterable-of-pairs handling, then applies
+	the keyword overrides with str keys (the dict() boundary rule)."
+
+	(positional @env0:size @env0:> 1) ifTrue: [
+		TypeError ___signal___: 'dict expected at most 1 positional argument'].
+	positional @env0:isEmpty ifFalse: [
+		(dict __new__: (positional @env0:at: 1)) @env0:keysAndValuesDo: [:k :v |
+			self @env0:at: k put: v]].
+	keywords ifNotNil: [
+		keywords @env0:keysAndValuesDo: [:k :v |
+			self @env0:at: k @env0:asString put: v]].
+	^ self
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> ___pyUpdate___: other [
+	"update: under a Grail-internal selector, for codegen: a dict display ``{**m}'' and a call's ``**m'' beside named keywords.
+	Generated code must not send its own plumbing in env 1 under a selector
+	that decodes as a Python name, or a sender search cannot tell it from a
+	Python ``.update(...)'' call (issue #1155)."
+
+	^ self update: other
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> ___removeStoredKey___: key [
+	"Remove the entry ``key'' names and answer its value, or answer the marker
+	object ___absentMarker___ when there is none.
+
+	Exists because ``includesKey:'' and ``removeKey:'' do not agree on what a key
+	IS.  A SymbolDictionary -- which is what sys.modules and a Smalltalk-built
+	kwargs dict are -- stores Symbol keys and removes by IDENTITY, while lookup
+	compares by equality.  So a Python str key is FOUND and then cannot be
+	REMOVED, and GemStone signals an uncatchable LookupError instead of deleting
+	anything: ``del sys.modules[name]'' and ``sys.modules.pop(name, None)'' both
+	did this to every caller (test.support.import_helper's unload/forget, which
+	every temp-module test relies on for cleanup).
+
+	Resolution order: the key as given, then its Symbol form, then a scan
+	comparing as text -- a Symbol and an equal String are not interchangeable to
+	removeKey:, so the scan is what covers the residue.
+
+	The Symbol form is only tried for a key SHORT ENOUGH TO HAVE ONE.  GemStone
+	refuses a Symbol over 1024 characters -- ImproperOperation 2402, which no
+	Python handler can catch -- and asking for one killed the program on a
+	plain ``d.pop(long_str, None)'' against an empty dict.  No Symbol key can
+	equal such a string, so skipping the probe loses nothing.  test_linecache
+	test_invalid_names is the case: linecache.updatecache('a' * 1_000_000)
+	opens with ``cache.pop(filename, None)''."
+
+	| absent stored value symbolic |
+	absent := self ___absentMarker___.
+	symbolic := ((key isKindOf: CharacterCollection)
+			and: [(key isKindOf: Symbol) not
+			and: [key @env0:size @env0:<= 1024]])
+		ifTrue: [key @env0:asSymbol]
+		ifFalse: [nil].
+	(self @env0:includesKey: key) ifFalse: [
+		(symbolic notNil and: [self @env0:includesKey: symbolic]) ifFalse: [^ absent]].
+	stored := nil.
+	"Prefer an exact removal; only look further when it cannot be done."
+	(self @env0:includesKey: key) ifTrue: [
+		value := self @env0:at: key.
+		(self @env0:removeKey: key ifAbsent: [absent]) == absent
+			ifFalse: [^ value]].
+	(symbolic notNil and: [self @env0:includesKey: symbolic]) ifTrue: [stored := symbolic].
+	stored isNil ifTrue: [
+		self @env0:keysDo: [:k |
+			(stored isNil and: [
+				((k isKindOf: CharacterCollection)
+					and: [key isKindOf: CharacterCollection])
+					and: [(k @env0:asString) @env0:= (key @env0:asString)]])
+						ifTrue: [stored := k]]].
+	stored isNil ifTrue: [^ absent].
+	value := self @env0:at: stored.
+	self @env0:removeKey: stored.
+	^ value
+
+]
+
+{ #category : 'Grail-Type' }
+KeyValueDictionary >> __class__ [
+	"Return the receiver's ACTUAL class, so a ``class Counter(dict): ...''
+	instance reports Counter (not the ``dict'' global, which is re-bound to
+	PyDict after this file loads -- see Bytes.gs's / SetProtocol.gs's twin
+	__class__ overrides for the same fix, and Class.gs's dict comment for
+	why hardcoding a fixed answer was wrong here: unlike Int/Float/Bool,
+	dict subclasses are genuine, distinct Smalltalk classes, not a kernel
+	concrete-representation detail to paper over
+	(test_collections.TestCounter/TestNamedTuple: type(Counter(...)) and
+	type(OrderedDict(...)) were both reporting PyDict).
+
+	EXCEPT when the receiver's class is EXACTLY KeyValueDictionary (not a
+	genuine Python subclass): Grail hands plain, un-upgraded KVDs to Python
+	from many places (globals(), a module's __dict__, C-shim results, dicts
+	committed before the PyDict flip -- same rationale as dict>>__eq__'s
+	KeyValueDictionary guard above) that must still identify as the
+	canonical ``dict'' type, not the internal kernel class name
+	(test_functools regression: type(globals()) reporting
+	KeyValueDictionary instead of PyDict).  Answers via the ``dict'' global
+	(not a literal ``PyDict'' reference) because PyDict.gs files in AFTER
+	this file and re-binds ``dict'' to it -- a literal ``PyDict'' here would
+	be an undefined symbol at THIS file's compile time; ``dict'' already
+	exists as a global (initially KeyValueDictionary) whose binding is
+	transparently updated later, exactly like every other ``dict'' send in
+	this file (e.g. __new__:'s ``dict ___new___``)."
+
+	(self @env0:class == KeyValueDictionary) ifTrue: [^ dict].
+	^ self @env0:class
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+KeyValueDictionary >> __contains__: key [
+	"Return True if key is in the dictionary, else False.  An unhashable key
+	can never be present; CPython raises TypeError (checked only on the miss
+	path so a present key stays fast).
+
+	A native hash-table miss doesn't necessarily mean absence: IEEE NaN
+	is never = to itself, so a NaN key can never be found via
+	includesKey:'s hash+= lookup -- but CPython's dict lookup compares
+	candidate keys by IDENTITY before ==, so 'the exact same NaN
+	object' IS considered present (test_float.py's
+	test_float_containment: nan in {nan: None}).  Only a linear
+	fallback, so only pay for it once the fast path has already
+	missed.
+
+	Iterate with keysDo: (a raw walk of the stored keys), NOT
+	``self keys anySatisfy:'': AbstractDictionary>>keys builds a Set, and
+	adding HETEROGENEOUS Python keys to it compares them with =, which for
+	an incomparable pair (e.g. a complex key vs a str key) answers the
+	``___NotImplemented___'' sentinel where the Set primitive needs a
+	Boolean -- an uncatchable error 2085.  ``1 in {'one': 1, 1j: 2j}''
+	(test_iter test_in_and_not_in) hit exactly that.  keysDo: only does the
+	identity == below, never a cross-key =."
+	(self @env0:includesKey: key) ifTrue: [^ true].
+	self @env0:keysDo: [:k | (k @env0:== key) ifTrue: [^ true]].
+	key ___requireHashableAsDictKey___.
+	^ false
+
+]
+
+{ #category : 'Grail-Subscript Protocol' }
+KeyValueDictionary >> __delitem__: key [
+	"Remove d[key] from dictionary. Raises KeyError if key is not in the dictionary"
+
+	| absent |
+	absent := self ___absentMarker___.
+	(self ___removeStoredKey___: key) == absent ifTrue: [
+		KeyError ___signal___: key
+	]
+
+]
+
+{ #category : 'Grail-Introspection' }
+KeyValueDictionary >> __dict__ [
+	"``obj.__dict__'' for a dict SUBCLASS instance -- a live view of its
+	dynamic-instVar storage, the same one PythonInstance and bytes publish.
+	Subclassing dict is how user code hangs attributes off a mapping, and a
+	copy / pickle round trip has to enumerate them: test_copy.py's
+	test_reduce_5tuple reduces a dict subclass through ``self.__dict__''.
+	An EXACT dict has no instance dict, exactly as in CPython."
+
+	self @env0:class == dict ifTrue: [
+		^ AttributeError ___signal___:
+			'''dict'' object has no attribute ''__dict__'''
+	].
+	^ self ___grailInstanceDictView___
+
+]
+
+{ #category : 'Grail-Comparison' }
+KeyValueDictionary >> __eq__: other [
+	"Return True if dictionaries have the same (key, value) pairs"
+
+	| mySize otherSize |
+	"Identity fast path: also sidesteps a NaN key's value being
+	fundamentally unretrievable by GemStone's native hash lookup (see
+	the keysAndValuesDo: comment below) when self and other are the
+	SAME dict (test_float.py's test_float_containment: ``d == d``)."
+	(self @env0:== other) ifTrue: [^ true].
+	"Accept EVERY KeyValueDictionary, not just the PyDict subclass: Grail
+	hands plain KVDs to Python from many places (globals(), a module's
+	__dict__, C-shim results, dicts committed before the PyDict flip).  A
+	Python dict must compare equal to any of them by contents -- exactly
+	what this guard meant when ``dict'' was itself KeyValueDictionary."
+	"PUNT, do not settle it as false: the dunder declines and the OPERATOR layer
+	(___cmpEq___) decides, which is what lets the REFLECTED __eq__ on the right
+	run.  Answering false here made ``{} == UserDict()'' False while
+	``UserDict() == {}'' was True -- CPython has dict.__eq__ return
+	NotImplemented for a non-dict, then calls UserDict.__eq__.  It broke any
+	mapping that compares equal to a dict from the left (test_userdict test_all's
+	rich-comparison matrix), and equally a plain class with an __eq__.  list, int
+	and str already punt here; dict was the odd one out."
+	(other isKindOf: KeyValueDictionary) ifFalse: [
+		^ NotImplemented
+	].
+
+	mySize := self @env0:size.
+	otherSize := other @env0:size.
+	(mySize @env0:= otherSize) ifFalse: [
+		^ false
+	].
+	
+	self @env0:keysAndValuesDo: [:key :value |
+		| found otherValue |
+		"IEEE NaN is never = to itself, so a NaN key can hit an
+		inconsistent state in GemStone's native hash lookup (includesKey:
+		can report true via a hash-bucket match while the follow-up at:
+		then fails to confirm it by =, raising rtErrKeyNotFound) --
+		treat ANY failure from the fast path as a miss and fall back to
+		an identity-first manual scan, matching CPython's key-lookup
+		semantics (identity before ==; test_float.py's
+		test_float_containment: {nan: None} == {nan: None})."
+		found := false.
+		[(other @env0:includesKey: key) ifTrue: [
+			otherValue := other @env0:at: key.
+			found := true]]
+			@env0:on: Error do: [:ex |
+				"CONVERT a stack overflow to RecursionError HERE -- do not merely
+				re-pass it.  With the ERROR flavour enabled (importlib
+				___ensureStackErrorFlavour___) AlmostOutOfStackError IS an Error,
+				so this handler -- written for a NaN key's failed hash lookup --
+				would otherwise swallow the one signal that must never be
+				swallowed: execution would resume at the same depth and the VM
+				would kill the gem at the Red Zone instead of raising the
+				RecursionError CPython promises for reflexive containers
+				(test_copy test_deepcopy_reflexive_dict).
+
+				Passing is NOT enough, and the difference is visible from Python.
+				Conversion then happens far out at ___recursionGuard___, whose
+				resignalAs: restarts the handler search from the ORIGINAL signal
+				point -- so whether the user's `except RecursionError:` is still
+				in that restarted search depends on how many frames sit between
+				it and here.  For `x == y` it is; for `y != x`, which routes
+				through the generic object>>__ne__: and one more layer, it is
+				not, and the clause is never offered the exception at all.  A
+				clause-level trace of the two spellings on the same reflexive
+				dict:
+
+					eq:  clause=RecursionError exc=RecursionError -> true
+					ne:  clause=BaseException  exc=RecursionError -> true
+
+				i.e. `except RecursionError:` silently did not match a genuine
+				RecursionError.  Converting at this handler -- which already
+				exists, so no frame is added, and PyFrame.gs's deep-walk probes
+				stay frame-for-frame as they were (test_richcmp is sensitive to
+				frame width) -- makes both spellings catchable."
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [
+					RecursionError ___signal___: 'maximum recursion depth exceeded in comparison'].
+				found := false].
+		found ifFalse: [
+			other @env0:keysAndValuesDo: [:k2 :v2 |
+				(found @env0:not and: [k2 @env0:== key]) ifTrue: [otherValue := v2. found := true]]].
+		found ifFalse: [^ false].
+		"___pyRichEqBool___, not the raw dunder: a value's __eq__ may answer
+		NotImplemented for a foreign operand, and a Symbol in a Boolean
+		position is an uncatchable ImproperOperation."
+		(value ___pyRichEqBool___: otherValue) ifFalse: [
+			^ false
+		]
+	].
+
+	^ true
+
+]
+
+{ #category : 'Grail-Subscript Protocol' }
+KeyValueDictionary >> __getitem__: key [
+	"Return the value for key. Raises KeyError if key is not in the dictionary"
+
+	| hasKey |
+	hasKey := self @env0:includesKey: key.
+	hasKey ifFalse: [
+		key ___requireHashableAsDictKey___.
+		"__missing__ protocol: a dict SUBCLASS may define __missing__(key) to
+		supply/raise for absent keys (base dict has none).  An instance-var
+		__missing__ is (correctly) ignored -- this is a method-dict lookup."
+		(self @env0:class @env0:whichClassIncludesSelector: #'__missing__:' environmentId: 1) notNil
+			ifTrue: [^ self __missing__: key].
+		KeyError ___signal___: key
+	].
+	^ self @env0:at: key
+
+]
+
+{ #category : 'Grail-Hashing' }
+KeyValueDictionary >> __hash__ [
+	"Dicts are mutable and therefore unhashable (matches CPython)."
+
+	TypeError ___signal___: 'unhashable type: ''dict'''
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary >> __init__ [
+	"0-arg dict initializer — receiver is already empty; nothing
+	to do.  Provided so user subclasses calling ``super().__init__()''
+	via the ``Super'' proxy find a parent method on dict's chain."
+	^ None
+
+]
+
+{ #category : 'Grail-Initialization' }
+KeyValueDictionary >> __init__: source [
+	"1-arg dict initializer — populate self from ``source''.
+	Mirrors CPython ``dict.__init__(other)'' which copies entries
+	from a mapping (anything with ``items()'') or an iterable of
+	(key, value) pairs.  Provided so user subclasses that call
+	``super().__init__(defaults)'' (e.g. flask.config.Config) get
+	the source-copy behaviour instead of bouncing off the
+	``no parent method __init__'' miss."
+
+	source == nil ifTrue: [^ None].
+	source == None ifTrue: [^ None].
+	"Plain dict / raw KVD: copy from Smalltalk storage (insertion order).  A
+	subclass overriding Python iteration (OrderedDict, keys()/__iter__ override)
+	falls through to the keys() protocol so the override is honored, as CPython
+	does -- keys() resolving below base ``dict'' signals the override."
+	(source isKindOf: KeyValueDictionary) ifTrue: [
+		| keysOwner |
+		keysOwner := source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1.
+		(keysOwner == nil or: [keysOwner == dict]) ifTrue: [
+			source @env0:keysAndValuesDo: [:_k :_v |
+				self @env0:at: _k put: _v].
+			^ None]].
+	"Mapping protocol: iterate keys + index by [k]."
+	((source @env0:class @env0:whichClassIncludesSelector: #'keys' environmentId: 1) notNil) ifTrue: [
+		(source keys) @env0:do: [:k |
+			self @env0:at: k put: (source __getitem__: k)].
+		^ None].
+	"Iterable of (k, v) pairs — fall back to plain do."
+	source @env0:do: [:pair |
+		self @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2)].
+	^ None
+
+]
+
+{ #category : 'Grail-Merge Operators' }
+KeyValueDictionary >> __ior__: other [
+	"PEP 584 in-place merge ``self |= other'' — like update(), accepts a
+	mapping OR an iterable of key/value pairs; returns self."
+
+	self update: other.
+	^ self
+
+]
+
+{ #category : 'Grail-Iterator Protocol' }
+KeyValueDictionary >> __iter__ [
+	"Return an iterator over the keys of the dictionary"
+	^ dict_keyiterator ___on: self
+
+]
+
+{ #category : 'Grail-Collection Protocol' }
+KeyValueDictionary >> __len__ [
+	"Return the number of items in the dictionary"
+	^ self @env0:size
+
+]
+
+{ #category : 'Grail-Comparison' }
+KeyValueDictionary >> __ne__: other [
+	"Return True if dictionaries do not have the same (key, value) pairs.
+	Forwards the PUNT rather than negating it: __eq__ now answers
+	NotImplemented for a non-mapping, and sending ``not'' to that
+	symbol is a doesNotUnderstand.  Same shape as AbstractPyStr>>__ne__."
+
+	| r |
+	r := self __eq__: other.
+	r == true ifTrue: [^ false].
+	r == false ifTrue: [^ true].
+	^ r
+
+]
+
+{ #category : 'Grail-Merge Operators' }
+KeyValueDictionary >> __or__: other [
+	"PEP 584 ``self | other'' — a new dict with other's entries merged over
+	self's (other wins on key conflicts).  Only mappings merge; a non-mapping
+	yields NotImplemented (so the ``|'' operator raises TypeError, but a direct
+	``d.__or__(x)'' answers NotImplemented, per test_dict.test_merge_operator)."
+
+	| result |
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	result := dict ___new___.
+	result update: self.
+	result update: other.
+	^ result
+
+]
+
+{ #category : 'Grail-String Representation' }
+KeyValueDictionary >> __repr__ [
+	"Return a string representation of the dictionary"
+
+	| stream isEmpty seen |
+	isEmpty := self @env0:isEmpty.
+	isEmpty ifTrue: [
+		^ '{}'
+	].
+	"Cycle + depth guard -- shared #GrailReprSeen set with list/tuple
+	(a self-referential dict prints '{...}'; 200k-deep nesting raises
+	the catchable RecursionError before the real stack overflows)."
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [^ '{...}'].
+	seen @env0:size @env0:> 200 ifTrue: [
+		RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object'].
+	seen @env0:add: self.
+
+	^ [[ "cannot use AppendStream here  because of the use of skip:"
+      stream := WriteStream @env0:on: (Unicode7 ___new___).
+	    stream @env0:nextPutAll: '{'.
+
+	    self @env0:keysAndValuesDo: [:key :value |
+		    | keyRepr valueRepr |
+		    keyRepr := key __repr__ @env0:___reprResult___.
+		    valueRepr := value __repr__ @env0:___reprResult___.
+		    stream @env0:nextPutAll: keyRepr.
+		    stream @env0:nextPutAll: ': '.
+		    stream @env0:nextPutAll: valueRepr.
+		    stream @env0:nextPutAll: ', '
+	    ].
+    
+	    "Remove the trailing ', '"
+	    stream @env0:skip: -2.
+	    stream @env0:nextPutAll: '}'.
+    
+	    stream @env0:contents
+   ] @env0:on: (AlmostOutOfStack @env0:, AlmostOutOfStackError) do: [:ex |
+			"A default gem's stack (GEM_MAX_SMALLTALK_STACK_DEPTH 1000)
+			overflows before the seen-size guard fires -- convert the
+			resumable notification into CPython's RecursionError."
+			RecursionError ___signal___: 'maximum recursion depth exceeded while getting the repr of an object']]
+		@env0:ensure: [seen @env0:remove: self otherwise: nil]
+
+]
+
+{ #category : 'Grail-Python-Protocol' }
+KeyValueDictionary >> __reversed__ [
+	"reversed(d) -- iterate keys in reverse insertion order.  GemStone's
+	KeyValueDictionary is hash-ordered, so 'reverse' here is relative to
+	whatever order keysDo: yields (same caveat as __iter__); the point
+	is a working iterator instead of an uncatchable reverseDo: MNU."
+
+	| ks |
+	ks := OrderedCollection @env0:new.
+	self @env0:keysDo: [:k | ks @env0:add: k].
+	^ (ks @env0:reverse) __iter__
+
+]
+
+{ #category : 'Grail-Merge Operators' }
+KeyValueDictionary >> __ror__: other [
+	"PEP 584 reflected merge ``other | self'' — self wins on conflicts."
+
+	| result |
+	(other isKindOf: AbstractDictionary) ifFalse: [
+		^ Python @env0:at: #'NotImplemented' otherwise: nil].
+	result := dict ___new___.
+	result update: other.
+	result update: self.
+	^ result
+
+]
+
+{ #category : 'Grail-Subscript Protocol' }
+KeyValueDictionary >> __setitem__: key _: value [
+	"Set d[key] to value"
+	key ___requireHashableAsDictKey___.
+	self @env0:at: key put: value.
+	^ None
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> _update: positional kw: kwargs [
+	"Python ``dict.update([E], **F)'' varargs form — merge a positional
+	mapping/iterable E (if given) and the keyword args F into self.  flask's
+	``create_jinja_environment'' does ``rv.globals.update(url_for=...,
+	get_flashed_messages=..., config=...)''."
+
+	positional @env0:isEmpty ifFalse: [
+		self update: (positional @env0:at: 1)
+	].
+	(kwargs @env0:isNil not and: [kwargs @env0:isEmpty not]) ifTrue: [
+		kwargs @env0:keysAndValuesDo: [:key :value |
+			"``d.update(**mapping)'' requires string keys; a non-string key
+			(update(**{1:2})) is a TypeError (test_invalid_keyword_arguments)."
+			(key @env0:isKindOf: CharacterCollection) ifFalse: [
+				TypeError ___signal___: 'keywords must be strings'].
+			self @env0:at: key @env0:asString put: value
+		]
+	].
+	^ None
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> clear [
+	"Remove all items from the dictionary"
+	self @env0:removeAllKeys: (self @env0:keys)
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> copy [
+	"Return a shallow copy of the dictionary.
+
+	For a Python SUBCLASS the copy is a plain dict, as CPython's dict.copy
+	answers, built from the raw entries without consulting the subclass's
+	overrides.  It answered the subclass: OpenTelemetry's Context forbids
+	every write and set_value copies the current one to write into, so every
+	set_value raised ValueError (FastAPI's opentelemetry tutorials).
+	Subclasses that want their own type back say so with their own copy
+	(OrderedDict, Counter and defaultdict do, as in CPython).  Grail's
+	Smalltalk subclasses keep the class-preserving copy."
+
+	| result |
+	(self @env0:class ___grailIsPythonClass___) ifFalse: [^ self @env0:copy].
+	result := dict ___new___.
+	self @env0:keysAndValuesDo: [:k :v | result @env0:at: k put: v].
+	^ result
+
+]
+
+{ #category : 'Grail-Access Methods' }
+KeyValueDictionary >> get: key [
+	"Return the value for key if key is in the dictionary, else None"
+	^ self get: key _: None
+
+]
+
+{ #category : 'Grail-Access Methods' }
+KeyValueDictionary >> get: key _: default [
+	"Return the value for key if key is in the dictionary, else default"
+
+	| hasKey |
+	hasKey := self @env0:includesKey: key.
+	hasKey ifFalse: [key ___requireHashableAsDictKey___].
+	hasKey ifTrue: [
+		^ self @env0:at: key
+	].
+	^ default
+
+]
+
+{ #category : 'Grail-View Methods' }
+KeyValueDictionary >> items [
+	"Return a live view of the dictionary's (key, value) pairs (a dict_items,
+	set-like, repr'd as ``dict_items([...])'')."
+
+	^ dict_items ___on: self
+
+]
+
+{ #category : 'Grail-View Methods' }
+KeyValueDictionary >> keys [
+	"Return a live view of the dictionary's keys (a dict_keys, set-like,
+	repr'd as ``dict_keys([...])'')."
+
+	^ dict_keys ___on: self
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> pop: key [
+	"If key is in the dictionary, remove it and return its value, else raise KeyError"
+
+	| value absent |
+	absent := self ___absentMarker___.
+	value := self ___removeStoredKey___: key.
+	value == absent ifTrue: [
+		key ___requireHashableAsDictKey___.
+		KeyError ___signal___: key
+	].
+	^ value
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> pop: key _: default [
+	"If key is in the dictionary, remove it and return its value, else
+	return default.
+
+	GRAIL: the Symbol form of the key is tried too -- kwargs dicts built from
+	Smalltalk-side ``__init__:kw:`` callers store Symbol keys, but Python source
+	calling ``kwargs.pop('name', default)`` passes a String.  Symbol = String for
+	human eyes but distinct OOPs for identity-keyed dictionaries.  That whole
+	resolution now lives in ___removeStoredKey___, which also covers the case this
+	method used to get WRONG: when includesKey: accepted the String, the old code
+	took the first branch and called ``removeKey: key'', which fails by identity
+	and raised an uncatchable LookupError instead of popping anything --
+	``sys.modules.pop(name, None)'' did that to every caller."
+
+	| value absent |
+	absent := self ___absentMarker___.
+	value := self ___removeStoredKey___: key.
+	value == absent ifTrue: [^ default].
+	^ value
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> popitem [
+	"Remove and return a (key, value) pair from the dictionary in LIFO order.
+	Raises KeyError if the dictionary is empty"
+
+	| isEmpty lastKey lastValue pair |
+	isEmpty := self @env0:isEmpty.
+	isEmpty ifTrue: [
+		KeyError ___signal___: 'popitem(): dictionary is empty'
+	].
+
+	lastKey := nil.
+	lastValue := nil.
+	self @env0:keysAndValuesDo: [:key :value |
+		lastKey := key.
+		lastValue := value
+	].
+
+	self @env0:removeKey: lastKey.
+	pair := tuple @env0:with: lastKey with: lastValue.
+	^ pair
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> setdefault: key [
+	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
+	^ self setdefault: key _: None
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> setdefault: key _: default [
+	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
+
+	| hasKey |
+	hasKey := self @env0:includesKey: key.
+	hasKey ifTrue: [
+		^ self @env0:at: key
+	].
+	key ___requireHashableAsDictKey___.
+	self @env0:at: key put: default.
+	^ default
+
+]
+
+{ #category : 'Grail-Mutation Methods' }
+KeyValueDictionary >> update: other [
+	"Update the dictionary with key/value pairs from other, overwriting existing keys"
+
+	| keysMethod keysIter iter done k idx ver pairs |
+	(other isKindOf: KeyValueDictionary) ifTrue: [
+		"CPython raises RuntimeError if `other` is structurally mutated while it
+		is being merged -- a key's __eq__/__hash__, run as THIS dict inserts,
+		can clear or resize `other` (test_dict test_merge_and_mutate).  Snapshot
+		the pairs first (so the live-storage walk can't fault on the mutation),
+		then insert, re-checking `other`'s structural version after each step."
+		ver := (other @env0:respondsTo: #'___version___')
+			ifTrue: [other @env0:___version___] ifFalse: [nil].
+		pairs := OrderedCollection @env0:new.
+		other @env0:keysAndValuesDo: [:key :value |
+			pairs @env0:add: key. pairs @env0:add: value].
+		1 @env0:to: (pairs @env0:size @env0:- 1) by: 2 do: [:i |
+			self @env0:at: (pairs @env0:at: i) put: (pairs @env0:at: i @env0:+ 1).
+			(ver @env0:notNil @env0:and: [(other @env0:___version___) @env0:~= ver]) ifTrue: [
+				^ RuntimeError ___signal___: 'dictionary changed size during iteration']].
+		^ None].
+	"Python mapping protocol: other exposes keys + __getitem__
+	(PyInstanceDict, user mappings) -- mirrors ___fromMapping___."
+	keysMethod := [other keys]
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError) do: [:ex | ex @env0:return: #__noKeys__].
+	(keysMethod == #__noKeys__) ifFalse: [
+		keysIter := keysMethod __iter__.
+		done := false.
+		[done] @env0:whileFalse: [
+			[k := keysIter __next__.
+			self @env0:at: k put: (other __getitem__: k)]
+				@env0:on: StopIteration do: [:ex | done := true]].
+		^ None].
+	"Iterable of 2-element pairs, via the __iter__ protocol.  A plain
+	do: here was an uncatchable MNU for d.update(None) / d.update(42)
+	(test_dict, mapping_tests)."
+	((other @env0:class
+		@env0:whichClassIncludesSelector: #'__iter__' environmentId: 1) ~~ nil) ifFalse: [
+		TypeError ___signal___: '''' @env0:, other @env0:class @env0:name @env0:asString
+			@env0:, ''' object is not iterable'].
+	iter := other __iter__.
+	idx := 0.
+	done := false.
+	[done] @env0:whileFalse: [
+		[| pair |
+		pair := dict ___updateSeqPairAt___: idx from: iter __next__.
+		self @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2).
+		idx := idx @env0:+ 1]
+			@env0:on: StopIteration do: [:ex | done := true]]
+
+]
+
+{ #category : 'Grail-View Methods' }
+KeyValueDictionary >> values [
+	"Return a live view of the dictionary's values (a dict_values, repr'd as
+	``dict_values([...])'')."
+
+	^ dict_values ___on: self
+
+]

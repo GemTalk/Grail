@@ -1,0 +1,178 @@
+Class {
+	#name : 'AttributeInheritanceTestCase',
+	#superclass : 'PythonTestCase',
+	#instVars : [
+		'testModule'
+	],
+	#category : 'Grail-SUnit'
+}
+
+{ #category : 'Grail-Setup' }
+AttributeInheritanceTestCase >> setUp [
+	"Reload tests/python/attribute_inheritance.py fresh each test."
+
+	| mods |
+	mods := importlib @env1:modules.
+	mods removeKey: #'attribute_inheritance' ifAbsent: [].
+	testModule := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_inheritance.py')
+		name: 'attribute_inheritance'.
+
+]
+
+{ #category : 'Grail-Tests - Class chain' }
+AttributeInheritanceTestCase >> testAncestorAttributeStillInheritedWhenNoNearerMethod [
+	"The guard on the fix: the walk must still find an ancestor's attribute
+	when nothing nearer supplies the name."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #ancestor_attribute_still_inherited)
+		equals: 'attr-on-base'.
+	self assert: (testModule @env1:___pyAttrLoad___: #base_attribute_unaffected)
+		equals: 'attr-on-base'
+
+]
+
+{ #category : 'Grail-Tests - Instance shadow' }
+AttributeInheritanceTestCase >> testDelOnInstanceRevealsClassAttr [
+	"After del h_inst.tag removes the instance shadow, h_inst.tag
+	falls through to Holder.tag again."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #inst_tag_after_del)
+		equals: 'class-tag'.
+
+]
+
+{ #category : 'Grail-Tests - Override isolation' }
+AttributeInheritanceTestCase >> testGrandchildSeesNearestParentOverride [
+	"C inherits via B; after B.alpha = 'from-B', C.alpha walk stops at B."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #c_reads_b_override) equals: 'from-B'.
+
+]
+
+{ #category : 'Grail-Tests - Class chain' }
+AttributeInheritanceTestCase >> testGrandchildWalksFullChain [
+	"C inherits from B inherits from A.  C.alpha walks past B's empty
+	___dynInstVars___ all the way up to A."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #c_reads_alpha) equals: 'from-A'.
+
+]
+
+{ #category : 'Grail-Tests - Instance shadow' }
+AttributeInheritanceTestCase >> testInstanceAttrShadowsClassAttr [
+	"Setting h_inst.tag = 'instance-tag' shadows the class-level tag
+	on read, without mutating the class slot."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #inst_tag_after_set)
+		equals: 'instance-tag'.
+	self assert: (testModule @env1:___pyAttrLoad___: #class_tag_after_inst_set)
+		equals: 'class-tag'.
+
+]
+
+{ #category : 'Grail-Tests - Instance fallthrough' }
+AttributeInheritanceTestCase >> testInstanceReadsParentClassAttr [
+	"a_inst is an A instance with no instance attrs; reading a_inst.alpha
+	misses the instance dict and walks up to A's ___dynInstVars___."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #inst_reads_alpha) equals: 'from-A'.
+
+]
+
+{ #category : 'Grail-Tests - Instance fallthrough' }
+AttributeInheritanceTestCase >> testInstanceWalksDeepChain [
+	"c_inst is a C instance.  c_inst.alpha walks instance dict → C →
+	B → A.___dynInstVars___ and finds 'from-A'."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #c_inst_reads_alpha)
+		equals: 'from-A'.
+
+]
+
+{ #category : 'Grail-Tests - Miss' }
+AttributeInheritanceTestCase >> testMissingOnClassRaises [
+	"Lonely.never_set has no value anywhere in the chain — AttributeError."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #missing_in_chain)
+		equals: 'attribute_error'.
+
+]
+
+{ #category : 'Grail-Tests - Miss' }
+AttributeInheritanceTestCase >> testMissingOnInstanceRaises [
+	"l_inst.never_set — instance dict miss, class chain miss — AttributeError."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #inst_missing_in_chain)
+		equals: 'attribute_error'.
+
+]
+
+{ #category : 'Grail-Tests - Class chain' }
+AttributeInheritanceTestCase >> testNearerMethodBeatsAncestorAttribute [
+	"CPython walks the MRO once and takes the first class whose __dict__ holds
+	the name -- attributes and functions live in the same dict, so the NEARER
+	class wins whichever kind it supplies.  Grail keeps them in separate stores
+	and consulted the attribute store for the WHOLE chain before falling back
+	to methods, so an ancestor's attribute beat a nearer class's compiled
+	method: MroMethodSub().m() answered 'attr-on-base'."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #nearer_method_beats_ancestor_attribute)
+		equals: 'method-on-sub'.
+	"``type(Sub.m).__name__``: 'function' since the type-name correction --
+	which is CPython's own answer for a method read through its class."
+	self assert: (testModule @env1:___pyAttrLoad___: #nearer_method_read_off_the_class)
+		equals: 'function'
+
+]
+
+{ #category : 'Grail-Tests - Class chain' }
+AttributeInheritanceTestCase >> testNonCallableAncestorAttributeDoesNotShadowAMethod [
+	"The sharper symptom of the same bug: the ancestor's attribute was a plain
+	string, so it shadowed the subclass's method and the CALL died with
+	``'Unicode7' object is not callable''."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #non_callable_ancestor_attr_does_not_shadow)
+		equals: 'method-on-sub'.
+	self assert: (testModule @env1:___pyAttrLoad___: #non_callable_attr_still_reads_on_its_own_class)
+		equals: 'a-plain-string'
+
+]
+
+{ #category : 'Grail-Tests - Override isolation' }
+AttributeInheritanceTestCase >> testParentUnaffectedBySubclassOverride [
+	"Setting B.alpha must not mutate A.alpha — A's ___dynInstVars___ stays at 'from-A'."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #a_still_reads_a) equals: 'from-A'.
+
+]
+
+{ #category : 'Grail-Tests - Class chain' }
+AttributeInheritanceTestCase >> testSameClassAssignmentStillWins [
+	"A class that has BOTH a stored attribute and a compiled method for the
+	name has had the attribute assigned OVER the method, and CPython's
+	last-write-wins makes the attribute the current class-dict entry.  That is
+	the ordinary monkey-patch, so the nearer-method check excludes the class
+	holding the attribute."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #same_class_assignment_still_wins)
+		equals: 'patched'
+
+]
+
+{ #category : 'Grail-Tests - Class chain' }
+AttributeInheritanceTestCase >> testSubclassInheritsParentClassAttr [
+	"After A.alpha = 'from-A', reading B.alpha (B is a subclass of A)
+	walks the class chain and finds 'from-A'."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #b_reads_alpha) equals: 'from-A'.
+
+]
+
+{ #category : 'Grail-Tests - Override isolation' }
+AttributeInheritanceTestCase >> testSubclassOverrideHidesParent [
+	"After B.alpha = 'from-B', B.alpha reads B's own value, not A's."
+
+	self assert: (testModule @env1:___pyAttrLoad___: #b_reads_b_override) equals: 'from-B'.
+
+]
