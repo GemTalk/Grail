@@ -44,19 +44,20 @@ GrailTmpDirTestCase >> fixedTmpPathOffenders [
 	scan widened and the fix reverted, this test fails on tarfile.py:179.
 
 	WHAT IS STILL OUT OF SCOPE, deliberately: the inline Python inside
-	PythonTests/*.gs, where the COUNTING half of the tarfile bug actually lived.
+	SUnit test classes (src/Grail-PythonTests*), where the COUNTING half of the tarfile bug actually lived.
 	Scanning those would be self-referential -- this file's own docstrings and
 	the literals testTheFixedTmpPathGuardCanActuallyFail feeds the predicates
 	are exactly the shapes being looked for, so the guard would flag itself.
 	Both predicates are pinned directly instead, which is the coverage that
-	matters; a reviewer adding a /tmp count to a .gs test is the remaining gap
+	matters; a reviewer adding a /tmp count to a test class is the remaining gap
 	and knowing where it is beats a scan that cries wolf."
 
 	| out |
 	out := OrderedCollection new.
 	#(#('tests/python' '.py' #both)
 	  #('src/python/stdlib' '.py' #both)
-	  #('src/smalltalk/PythonTests' '.gs' #countOnly)) do: [:spec |
+	  #('src/Grail-PythonTests' '.st' #countOnly)
+	  #('src/Grail-PythonTests-PyEnv' '.st' #countOnly)) do: [:spec |
 		| found |
 		found := self
 			fixedTmpPathOffendersUnder: (spec at: 1)
@@ -96,7 +97,7 @@ GrailTmpDirTestCase >> fixedTmpPathOffendersUnder: aRelativeDir extension: anExt
 	nil when that directory cannot be listed.
 
 	aMode is #both or #countOnly.  #countOnly runs ONLY
-	sharedPrefixCountLineOffends:, and exists for the .gs TestCases: their
+	sharedPrefixCountLineOffends:, and exists for the SUnit test classes: their
 	inline Python is where the counting shape actually occurred
 	(TarfileTestCase counted a shared /tmp prefix), so leaving them unscanned
 	left that predicate pinned by its unit assertions and guarding nothing.
@@ -130,7 +131,7 @@ GrailTmpDirTestCase >> fixedTmpPathOffendersUnder: aRelativeDir extension: anExt
 			ifFalse: [name].
 		((base size > extSize
 			and: [(base copyFrom: base size - extSize + 1 to: base size) = anExt])
-			and: [base ~= 'GrailTmpDirTestCase.gs'])
+			and: [(base beginsWith: 'GrailTmpDirTestCase.') not])
 				ifTrue: [
 					path := (name includes: $/) ifTrue: [name] ifFalse: [dir , '/' , name].
 					out addAll: (self
@@ -235,7 +236,8 @@ GrailTmpDirTestCase >> testNoFixtureNamesAFixedTmpPath [
 	"nil means the directory could not be listed.  FAIL rather than pass
 	vacuously -- a guard that silently stops guarding is worse than none."
 	self deny: offenders isNil
-		description: 'could not list ' , importlib grailDir , '/tests/python'.
+		description: 'could not list a directory this guard scans (tests/python, src/python/stdlib, '
+			, 'src/Grail-PythonTests, src/Grail-PythonTests-PyEnv) under ' , importlib grailDir.
 	self assert: offenders isEmpty
 		description: 'fixture(s) name a fixed /tmp path; give each a per-gem '
 			, 'directory (see fileio_constructor.py), or mark the line '
