@@ -90,12 +90,16 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
 
 [
   committedMod := UserGlobals at: #'Grail_flask_module'.
+  check value: 'a fresh session starts with nothing to commit'
+    value: System needsCommit not.
 
   mod := importlib
     loadModuleFromPath: (importlib grailDir , '/tests/python/grail_flask_deploy_fixture.py')
     name: 'grail_flask_deploy_fixture'.
   check value: 'WARM BIND: import returned the committed fixture module (identity)'
     value: (mod == committedMod).
+  check value: 'WARM BIND: binding the deployed app left nothing to commit (#1667)'
+    value: System needsCommit not.
 
   "The committed app -- built once at deploy time -- serves a request in
   THIS session: routing, request context, view dispatch, Response."
@@ -125,6 +129,17 @@ check := [:label :bool | bool ifTrue: [results add: label] ifFalse: [failures ad
   r := mod @env1:serve: '/add/1/1'.
   check value: 'third request (JSON) still serves'
     value: ((r @env1:__getitem__: 1) includesString: '2').
+
+  "A deployed app is committed, and so is the framework it runs on: serving
+  must write neither, or two server gems serving the app conflict over
+  nothing on every request (#1229).  These sessions share one process, so
+  this also holds for a process that logs in more than once."
+  check value: 'serving five requests on the deployed app left nothing to commit (#1229)'
+    value: System needsCommit not.
+  System abort.
+  r := mod @env1:serve: '/'.
+  check value: 'a request in a new transaction left nothing to commit either'
+    value: System needsCommit not.
 ] on: AbstractException do: [:e |
   failures add: 'UNEXPECTED ERROR: ' , e messageText printString.
   e return: nil].

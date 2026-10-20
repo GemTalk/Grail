@@ -914,7 +914,12 @@ class Flask(App):
 
         .. versionadded:: 0.7
         """
-        self._got_first_request = True
+        # GRAIL: only the first request stores the flag.  A store of the value
+        # already there still writes the object, and a deployed app is a
+        # committed one: every request left the session something to commit,
+        # and two server gems serving the same app conflicted on it (#1229).
+        if not self._got_first_request:
+            self._got_first_request = True
 
         try:
             request_started.send(self, _async_wrapper=self.ensure_sync)
