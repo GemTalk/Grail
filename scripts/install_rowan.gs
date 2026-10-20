@@ -18,11 +18,25 @@ iferr 3 where
 iferr 4 exit 1
 
 run
-| grailDir warnings |
+| grailDir warnings symList hidden project |
 grailDir := System gemEnvironmentVariable: 'GRAIL_DIR'.
 grailDir ifNil: [ ^ self error: 'GRAIL_DIR is not set' ].
 warnings := OrderedCollection new.
-[ (Rowan projectFromUrl: 'file:' , grailDir , '/rowan/specs/Grail.ston' diskUrl: 'file:' , grailDir) load ]
+"Read the project with Grail's own dictionaries out of the symbol list. Rowan's STON
+reader resolves the class names in its files (package.st's Package, ...) through the
+symbol list BEFORE the classes it was told to use, so on a reinstall a Grail class of
+the same name is found instead -- an installed Grail's Package AST class made every
+second ./install.sh fail with 'a Package does not understand #at:ifAbsent:'. They go
+back, at the same places, before the load, which needs them."
+symList := System myUserProfile symbolList.
+hidden := OrderedCollection new.
+#(#Python #PythonAst #EmbeddedPython #PythonTests #EmbeddedPythonTests #PythonModules) do: [:name |
+	| idx |
+	idx := symList names indexOf: name.
+	idx > 0 ifTrue: [ hidden addFirst: idx -> (symList at: idx). symList removeAtIndex: idx ] ].
+[ project := Rowan projectFromUrl: 'file:' , grailDir , '/rowan/specs/Grail.ston' diskUrl: 'file:' , grailDir ]
+	ensure: [ hidden do: [:each | System myUserProfile insertDictionary: each value at: each key ] ].
+[ project load ]
 	on: CompileWarning
 	do: [:ex |
 		(ex description includesString: 'not optimized') ifFalse: [ warnings add: ex description ].
