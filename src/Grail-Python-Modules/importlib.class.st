@@ -1045,6 +1045,9 @@ importlib class >> ___canonicalClassRegister___: aModuleName name: aClassName va
 	self ___canonicalClassRegistry___
 		at: (aModuleName asString , '.' , aClassName asString)
 		put: anObject.
+	"A rebuild of a reused class ends here too (___canonicalSubclassOf:...)."
+	(SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil) ifNotNil: [:rebuilding |
+		rebuilding remove: anObject ifAbsent: []].
 	"Membership in the canonical-class set is what routes RUNTIME
 	class-attribute stores into the session-local overlay
 	(object >> ___classAttrOverlayStore___).  Added HERE -- at the end of
@@ -1527,6 +1530,22 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 				minted add: key.
 				"Reused structure, fresh namespace -- see the comment above."
 				existing @env1:___grailResetClassNamespace___.
+				"Out of the canonical set until ___canonicalClassRegister___ puts it
+				back at the end of this class statement.  Membership is what makes a
+				class-attribute store session-local (D3), and a decorator runs
+				after the body: a NEW class is not a member yet then, so
+				``@dataclass'' stamps __hash__ and __eq__ onto it, and they commit
+				with it.  A REUSED class still was, from the build before, so the
+				stamps went to this session's overlay -- and once the rebuild
+				committed, a later session's FrozenPoint hashed by identity and
+				every stored key of one went missing from its dict."
+				(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+					[bag includes: existing] whileTrue: [bag remove: existing]].
+				"...and marked as rebuilding until then, so what the body and its
+				decorators compile onto it is compiled as for a new class: see
+				object >> ___grailClassIsRebuilding___."
+				(SessionTemps current at: #'GrailRebuildingClasses' ifAbsentPut: [IdentitySet new])
+					add: existing.
 				"Re-register the subclass link.  This branch does NOT go through
 				___subclass___, which is where creation normally records it, and
 				the body re-run has just had its previous registrations dropped
