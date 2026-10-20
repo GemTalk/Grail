@@ -18,7 +18,7 @@ iferr 3 where
 iferr 4 exit 1
 
 run
-| grailDir warnings symList hidden project |
+| grailDir warnings symList hidden project previousMigrator |
 grailDir := System gemEnvironmentVariable: 'GRAIL_DIR'.
 grailDir ifNil: [ ^ self error: 'GRAIL_DIR is not set' ].
 warnings := OrderedCollection new.
@@ -36,7 +36,14 @@ hidden := OrderedCollection new.
 	idx > 0 ifTrue: [ hidden addFirst: idx -> (symList at: idx). symList removeAtIndex: idx ] ].
 [ project := Rowan projectFromUrl: 'file:' , grailDir , '/rowan/specs/Grail.ston' diskUrl: 'file:' , grailDir ]
 	ensure: [ hidden do: [:each | System myUserProfile insertDictionary: each value at: each key ] ].
-[ project load ]
+"Migrate instances to a new version of a class: a release that changes a Grail class's shape
+(an instance variable added or removed) gets a new class version, and objects an application
+stored are instances of the old one. Rowan's default migrator leaves them there. Reached through
+the platform's own migrator because the class is not in an ordinary user's symbol list, and set
+on the platform because the public project has no load: that takes one."
+previousMigrator := Rowan platform instanceMigrator.
+Rowan platform instanceMigrator: previousMigrator class conservativeMigration.
+[ [ project load ] ensure: [ Rowan platform instanceMigrator: previousMigrator ] ]
 	on: CompileWarning
 	do: [:ex |
 		(ex description includesString: 'not optimized') ifFalse: [ warnings add: ex description ].
