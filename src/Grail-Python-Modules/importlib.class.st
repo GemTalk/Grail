@@ -1169,49 +1169,33 @@ importlib class >> ___canonicalClassStructure___ [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___canonicalGenerationCheck___ [
-	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md).
-	install.gs bumps ``GrailRuntimeGeneration'' on every install: the
-	install RECREATES the Python runtime classes (exceptions, builtins),
-	so every previously-deployed canonical module's compiled methods still
-	reference the OLD class objects -- a warm-bound module then raises
-	exceptions no ``except'' clause can match (the class identities
-	diverged; uncatchable).  When the committed registries were deployed
-	under a different generation, discard them IN-TRANSACTION (a
-	non-committing session simply acts cold; the next deploy commits the
-	reset) and stamp the deploy generation current so imports re-record
-	freshly.
+	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md D7).
+	Every install bumps ``GrailRuntimeGeneration''.  An install KEEPS Grail's
+	classes -- Rowan patches the loaded project in place -- so a deployed
+	module's classes, instance and stored instances stay valid; what may not
+	is its compiled code, built by the previous install's codegen against the
+	previous runtime.  So nothing is discarded here: each deployed module
+	records the runtime generation it was built under
+	(___recordDepsOf___:srcHash:names:changed:), ___isCurrentModule___:
+	answers false for one built under another, and its next import rebuilds
+	it INTO its committed instance and classes, as a source edit does (D2).
+
+	This only stamps the deploy generation current, and installs the
+	self-send dispatchers committed overrides need (object class >>
+	___grailInstallRecordedSelfSendOverrides___), which wait for it.
 
 	Memoised per session via SessionTemps -- one check per gem, not one
 	per import."
 
-	| st runtimeGen deployGen |
+	| st runtimeGen |
 	st := SessionTemps current.
 	(st at: #'GrailCanonicalGenChecked' otherwise: nil) == true ifTrue: [^ self].
 	st at: #'GrailCanonicalGenChecked' put: true.
 	self ___ensureStackErrorFlavour___.
 	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
-	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
-	"The same once-per-session point installs the self-send dispatchers that
-	committed overrides need (object class >>
-	___grailInstallRecordedSelfSendOverrides___) -- but only once the record is
-	known to be current: a stale generation wipes it below, and the classes it
-	names are the ones the install replaced."
-	deployGen == runtimeGen ifTrue: [
-		object ___grailInstallRecordedSelfSendOverrides___.
-		^ self].
-	"Stale (or first-ever) deployment: drop every canonical registry -- the
-	name-keyed ones in EVERY namespace, since an install invalidates every
-	app's deployment as much as the default's, and the identity-keyed ones,
-	which only UserGlobals holds."
-	self ___grailAllNamespacesDo___: [:ns |
-		#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
-		   #'GrailCanonicalClasses'
-		   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure'
-		   #'GrailCanonicalDirectMetaclasses' ) do: [:k |
-			ns removeKey: k ifAbsent: []]].
-	#( #'GrailCommittedSelfSendOverrides' #'GrailCanonicalClassSet' ) do: [:k |
-		UserGlobals removeKey: k ifAbsent: []].
-	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
+	(UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil) == runtimeGen
+		ifFalse: [UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen].
+	object ___grailInstallRecordedSelfSendOverrides___.
 	^ self
 
 ]
@@ -5275,10 +5259,11 @@ importlib class >> ___irTextSourcesFor___: aClassDefAst [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___isCurrentModule___: aName [
-	"Whether every dependency aName's body imported is unchanged since aName
-	was built (its OWN source is the caller's hash check).  A module with no
-	record -- never cold-loaded since records existed -- keeps the old
-	own-source-only rule.  A dependency that is no longer tracked is not
+	"Whether aName was built under the current runtime generation (an install
+	moves it: see ___canonicalGenerationCheck___), and every dependency its
+	body imported is unchanged since aName was built (its OWN source is the
+	caller's hash check).  A module with no record -- never cold-loaded since
+	records existed -- keeps the old own-source-only rule.  A dependency that is no longer tracked is not
 	evidence either way and is skipped.  A dependency already being checked
 	(a cycle the record did not break) counts as current.  Memoised per
 	session."
@@ -5288,6 +5273,8 @@ importlib class >> ___isCurrentModule___: aName [
 		^ self ___grailInNamespaceOf___: aName do: [self ___isCurrentModule___: aName]].
 	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
 	rec isNil ifTrue: [^ true].
+	(rec size >= 3 and: [(rec at: 3) = (UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0)])
+		ifFalse: [^ false].
 	memo := self ___currencyMemo___.
 	(memo at: aName asString otherwise: nil) ifNotNil: [:v | ^ v].
 	checking := SessionTemps current at: #'GrailModuleCurrencyChecking' ifAbsentPut: [Set new].
@@ -7319,7 +7306,11 @@ importlib class >> ___recordDepsOf___: aName srcHash: srcHash names: importedNam
 			rec isNil ifFalse: [stream nextPutAll: (rec at: 1) asString].
 			deps do: [:pair | stream nextPut: $|; nextPutAll: (pair at: 1); nextPut: $=; nextPutAll: (pair at: 2) asString].
 			gen := stream contents sha1Sum].
-	self ___canonicalModuleDepsForWrite___ at: aName asString put: { gen . deps asArray }.
+	"The third slot is the runtime generation it was built under: an install
+	moves that, and ___isCurrentModule___: then reads the module as stale."
+	self ___canonicalModuleDepsForWrite___
+		at: aName asString
+		put: { gen . deps asArray . UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0 }.
 	"Built here, so current for the rest of the session; and every OTHER
 	module's verdict may have depended on the old version."
 	SessionTemps current removeKey: #'GrailModuleCurrency' ifAbsent: [].

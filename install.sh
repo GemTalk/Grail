@@ -302,11 +302,11 @@ fi
 # Deploying here makes that import a warm BIND instead: measured 0 modified
 # objects against 8 for the cold path.
 #
-# It has to run AFTER the Rowan load, not before: the load recreates
-# the Python runtime classes and bumps GrailRuntimeGeneration, which invalidates
-# every existing deployment (docs/Persistent_Modules_and_Classes.md §5 D7).  A
-# deploy from before the bump would be discarded by the generation guard on the
-# next session's first import, leaving exactly the dirt this step removes.
+# It has to run AFTER the Rowan load, not before: the load bumps
+# GrailRuntimeGeneration, which makes every existing deployment stale
+# (docs/Persistent_Modules_and_Classes.md §5 D7).  A deploy from before the bump
+# would be rebuilt by the next session's first import, leaving exactly the dirt
+# this step removes.
 #
 # deployGemdb.gs is idempotent -- an already-deployed gemdb whose source hash
 # still matches warm-binds in milliseconds and commits nothing -- so re-running
