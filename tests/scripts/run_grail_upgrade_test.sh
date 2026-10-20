@@ -9,7 +9,9 @@
 #   2. the app writes: tests/upgrade/write_phase.py imports tests/upgrade/upgrade_app.py
 #      in a transaction and commits its objects under gemdb.root['upgrade']
 #   3. install Grail m over it                 (./install.sh again: the upgrade)
-#   4. the app reads: tests/upgrade/verify_phase.py checks that the data is intact,
+#   4. the app redeploys: tests/upgrade/redeploy_phase.py imports it in a transaction
+#      and commits, which rebuilds its modules (and the stdlib's) under m
+#   5. the app reads: tests/upgrade/verify_phase.py checks that the data is intact,
 #      that hashed containers still find fresh keys, that every stored object is an
 #      instance of the CURRENT class, and that old objects run with the app's code;
 #      tests/upgrade/check_classes.gs checks the same from Smalltalk, for every
@@ -31,7 +33,8 @@
 # lives outside it, so neither its path nor Grail's changes between the installs.
 #
 # Needs: $GEMSTONE (4.0.0.a5 or later) and $GEMSTONE_GLOBAL_DIR, from ./.setenv or
-# the environment. Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
+# the environment. GRAIL_UPGRADE_EXTENT names another extent to start from (default
+# $GEMSTONE/bin/extent0.rowan3.dbf) -- one with a newer Rowan loaded, say. Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
 # grail_upgrade); touches no other stone. Work goes in GRAIL_UPGRADE_DIR (default
 # out/upgrade), removed at the end unless --keep or a case failed.
 set -u
@@ -46,6 +49,7 @@ fi
 export PATH="$GEMSTONE/bin:$PATH"
 
 STONE=${GRAIL_UPGRADE_STONE:-grail_upgrade}
+EXTENT=${GRAIL_UPGRADE_EXTENT:-$GEMSTONE/bin/extent0.rowan3.dbf}
 WORK=${GRAIL_UPGRADE_DIR:-$PROJECT_ROOT/out/upgrade}
 KEEP=0
 CASES=()
@@ -70,12 +74,12 @@ stop_stone() {
     stopstone "$STONE" SystemUser swordfish -i > /dev/null 2>&1
 }
 
-fresh_stone() {     # a new stone from the product's Rowan extent
+fresh_stone() {     # a new stone from $EXTENT
     local d=$WORK/stone
     stop_stone
     rm -rf "$d"
     mkdir -p "$d"
-    cp "$GEMSTONE/bin/extent0.rowan3.dbf" "$d/extent0.dbf"
+    cp "$EXTENT" "$d/extent0.dbf"
     chmod 644 "$d/extent0.dbf"
     cat > "$d/stone.conf" <<EOF
 DBF_EXTENT_NAMES = $d/extent0.dbf;
@@ -104,7 +108,9 @@ tree_from_ref() {       # tree_from_ref <dir> <ref>
 install_tree() {        # install_tree <tree> <log> -- install it in place, over what is there
     local g=$WORK/grail
     mkdir -p "$g"
-    rsync -a --delete --exclude .setenv --exclude .topazini "$1/" "$g/"
+    # --checksum: n and m can differ by one character in a file written the same second, which a
+    # size-and-time comparison takes for unchanged -- and then m is never installed.
+    rsync -a --checksum --delete --exclude .setenv --exclude .topazini "$1/" "$g/"
     cat > "$g/.setenv" <<EOF
 export GEMSTONE='$GEMSTONE'
 export GEMSTONE_GLOBAL_DIR='$GEMSTONE_GLOBAL_DIR'
@@ -154,6 +160,11 @@ run_case() {            # run_case <case> -- 0 if every check passed
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
         | grep '^SNAPSHOT' > "$d/snapshot-m.txt"
 
+    log "redeploy"
+    in_grail ./grail "$WORK/app/redeploy_phase.py" > "$d/redeploy.log" 2>&1 \
+        && grep -q 'redeploy phase:' "$d/redeploy.log" || {
+        echo "upgrade: the redeploy phase failed:"; tail -30 "$d/redeploy.log"; return 1; }
+
     log "verify"
     in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" < /dev/null > "$d/classes.log" 2>&1
@@ -169,16 +180,17 @@ run_case() {            # run_case <case> -- 0 if every check passed
         fi
     fi
 
-    local pass fail
+    local pass fail known
     pass=$(grep -c '^UPGRADE PASS' "$d/results.txt")
     fail=$(grep -c '^UPGRADE FAIL' "$d/results.txt")
+    known=$(grep -c '^UPGRADE KNOWN' "$d/results.txt")
     if ! grep -q '^verify phase:' "$d/results.txt" || ! grep -q '^check_classes: [0-9]* failed' "$d/results.txt"; then
         echo "upgrade: a verify step did not finish; see $d/verify.log and $d/classes.log"
         tail -20 "$d/verify.log" "$d/classes.log"
         fail=$((fail + 1))
     fi
-    grep '^UPGRADE FAIL' "$d/results.txt" | sed 's/^/  /'
-    log "$name: $pass passed, $fail failed"
+    grep '^UPGRADE \(FAIL\|KNOWN\)' "$d/results.txt" | sed 's/^/  /'
+    log "$name: $pass passed, $fail failed, $known known gaps"
     [ "$fail" -eq 0 ]
 }
 

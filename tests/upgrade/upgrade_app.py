@@ -11,6 +11,7 @@ import datetime
 import decimal
 import enum
 import fractions
+import typing
 
 
 class Account:
@@ -80,6 +81,38 @@ Pair = collections.namedtuple('Pair', 'left right')
 
 def module_func(x):
     return x * 2 + 1
+
+
+_registry = {}
+
+
+def _registered(func):
+    """typing's _tp_cache shape: the wrapper looks its function up, by the
+    function, in a module-level dict -- which a rebuild of this module replaces."""
+    _registry[func] = func
+
+    def wrapper(*args):
+        return _registry[func](*args)
+    return wrapper
+
+
+@_registered
+def doubled(x):
+    return 2 * x
+
+
+def tagged_func():
+    return 'tf'
+
+
+tagged_func.tag = 'func-attr'
+
+
+class TypedPair(typing.NamedTuple):
+    """typing.NamedTuple is a function whose __mro_entries__ is set on it in
+    typing's body; the class statement needs that attribute."""
+    first: int
+    second: str = 'b'
 
 
 def make_scaler(k):
@@ -211,6 +244,9 @@ def describe(stored):
         'func': s['func'](5),
         'closure': s['closure'](5),
         'bound': s['bound'](),
+        'decorated': doubled(21),
+        'func_attr': getattr(tagged_func, 'tag', '<missing>'),
+        'typed_pair': list(TypedPair(1)),
         'keyed_dict': sorted(s['keyed_dict'].values()),
         'keyed_set': len(s['keyed_set']),
     }
