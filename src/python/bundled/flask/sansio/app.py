@@ -833,7 +833,12 @@ class App(Scaffold):
 
         for c in (code, None) if code is not None else (None,):
             for name in names:
-                handler_map = self.error_handler_spec[name][c]
+                # GRAIL: look up without inserting.  error_handler_spec is a
+                # defaultdict, so indexing a code or blueprint with no handler
+                # stored an empty entry into the deployed app, which is
+                # committed: the first request answering each status code left
+                # the session something to commit (#1229).
+                handler_map = self.error_handler_spec.get(name, {}).get(c)
 
                 if not handler_map:
                     continue

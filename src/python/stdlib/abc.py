@@ -92,15 +92,20 @@ class abstractproperty(property):
 # then read False out of the committed negative cache).  So each ABC records
 # the session its caches were built in and discards them the first time a
 # different session consults them.  The registry is not a cache and is kept.
-# The gem's process id identifies the session: each session runs in its own.
-_grail_getpid = None
+# The session is identified by a token made once per LOGIN and kept in a
+# SessionDict, which is never committed.  It used to be the gem's process id,
+# but one process can log in more than once (linked topaz, a long-lived tool
+# that logs out and back in), and every login after the first then took the
+# committed caches for its own and wrote them on each check (#1229).
+from _grail_session import SessionDict as _GrailSessionDict
+_grail_session_state = _GrailSessionDict("abc.session")
 
 
 def _grail_session_token():
-    global _grail_getpid
-    if _grail_getpid is None:
-        from os import getpid as _grail_getpid
-    return _grail_getpid()
+    token = _grail_session_state.get("token")
+    if token is None:
+        token = _grail_session_state["token"] = object()
+    return token
 
 
 def _grail_session_caches(cls):
