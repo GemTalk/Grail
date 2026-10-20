@@ -400,6 +400,10 @@ timed "app-namespaces" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/r
 # __main__ in an app: persistent globals, a re-run that writes nothing,
 # __transient__, gemdb.root as the alias, abort (cut 3). Commits.
 timed "app-main" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runAppMainTest.gs < /dev/null || EXIT=$?
+# A method of a class a script defined, called from another session, never
+# re-runs the script: builtins resolve, names only its body bound raise
+# NameError, and nothing is written or committed (#1662). Commits.
+timed "main-script-method" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runMainScriptMethodTest.gs < /dev/null || EXIT=$?
 # A frame of a deployed module the session never imported -- reached through
 # committed code after a warm bind -- still has its f_globals. Commits.
 timed "frame-globals-warm" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFrameGlobalsWarmTest.gs < /dev/null || EXIT=$?

@@ -1,5 +1,64 @@
 Extension { #name : 'module' }
 
+{ #category : 'Grail-Singleton' }
+module class >> ___importlibOrNil___ [
+	"importlib, or nil when this user's Python dictionary has none.  Resolved
+	late: this file compiles before importlib exists, possibly as a different
+	user."
+
+	| pyDict |
+	pyDict := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'Python'.
+	pyDict == nil ifTrue: [^ nil].
+	^ pyDict @env0:at: #'importlib' otherwise: nil
+
+]
+
+{ #category : 'Grail-Singleton' }
+module class >> ___initializesOnFirstTouch___ [
+	"Does an instance that ``instance'' mints run initialize?  When the class
+	HAS one (a Python module's compiled body, a Smalltalk module's
+	'Grail-Initialization' hook), unless it is another session's script
+	(___isAnotherSessionsScript___).  Under GRAIL_ATTR_ACCESSORS +
+	GRAIL_DIRECT_CALLS a bare unary send a module does not implement is a
+	Python CALL, so initialize is never sent to a class without one."
+
+	^ (self @env0:whichClassIncludesSelector: #initialize environmentId: 1) @env0:notNil
+		and: [self ___isAnotherSessionsScript___ @env0:not]
+
+]
+
+{ #category : 'Grail-Singleton' }
+module class >> ___isAnotherSessionsScript___ [
+	"Is this the module class of a script that ANOTHER session ran as __main__?
+
+	A script's __main__ is session-local (importlib ___isSessionLocalModule___:):
+	its class is filed in that session's own dictionary, never in PythonModules,
+	and its instance is never committed.  The class still is, with any class the
+	script defines whose instance the script commits, because that class's
+	methods read their globals through it.  So calling such a method from
+	another session minted a fresh __main__ and ran the WHOLE script in the
+	caller: a breakpoint() in it hung the call, its gemdb.commit() committed
+	the caller's work, and its class statements, re-run outside the script's
+	own session, left the class's methods broken, committed by that same
+	commit (#1662).  CPython never runs a module to call a method, so the
+	globals stay unbound instead: builtins and the script's own functions
+	still resolve, and a name only its body bound raises NameError.
+
+	By name: a script is always __main__, and only a script is meant here.
+	Every other module keeps the old first touch, the session-local ones
+	included (a fresh import, ___isSessionLocalModule___:)."
+
+	| implib |
+	self @env0:name == #'__main__' ifFalse: [^ false].
+	self @env0:isCommitted ifFalse: [^ false].
+	((self @env0:categoryOfSelector: #initialize environmentId: 1) @env0:= #'Grail-Module Body')
+		ifFalse: [^ false].
+	implib := self ___importlibOrNil___.
+	implib == nil ifTrue: [^ false].
+	^ (implib @env0:___grailFiledModuleClass___: self under: self @env0:name) @env0:not
+
+]
+
 { #category : 'Grail-Initialization' }
 module class >> __new__ [
 	"``types.ModuleType()'' with no arguments -- a TypeError in CPython,
@@ -122,12 +181,8 @@ module class >> instance [
 		importlib exists, possibly as a different user), and the helper
 		answers nil unless the canonical flag is on and a committed
 		instance applies -- so the default path is untouched."
-		| implib pyDict |
-		pyDict := System @env0:myUserProfile @env0:symbolList
-			@env0:objectNamed: #'Python'.
-		implib := pyDict == nil
-			ifTrue: [nil]
-			ifFalse: [pyDict @env0:at: #'importlib' otherwise: nil].
+		| implib |
+		implib := self ___importlibOrNil___.
 		implib == nil ifFalse: [
 			inst := implib @env0:___canonicalInstanceForModuleClass___: self.
 			"The helper already adopted inst as this class's session
@@ -137,13 +192,8 @@ module class >> instance [
 	inst == nil ifTrue: [
 		inst := self @env0:new.
 		reg @env0:at: self put: inst.
-		"Only when the module class HAS a body / setup ``initialize'' (a Python
-		module's compiled body, a Smalltalk module's 'Grail-Initialization'
-		hook): under GRAIL_ATTR_ACCESSORS + GRAIL_DIRECT_CALLS a bare unary send
-		a module does not implement is a Python CALL, and the old read protocol
-		that answered nil here is gone."
-		((inst @env0:class @env0:whichClassIncludesSelector: #initialize environmentId: 1) @env0:notNil)
-			ifTrue: [inst initialize]
+		"See ___initializesOnFirstTouch___: not every minted module runs one."
+		self ___initializesOnFirstTouch___ ifTrue: [inst initialize]
 	].
 	^ inst
 
