@@ -138,6 +138,44 @@ importlib class >> ___callerModuleName___ [
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___childOnParentOf___: aDottedName [
+	"What aDottedName's parent, when sys.modules has it, holds under the last
+	component of the name; nil otherwise."
+
+	| parts parent |
+	parts := $. @env0:split: aDottedName @env0:asString.
+	parts @env0:size @env0:> 1 ifFalse: [^ nil].
+	parent := self lookupModule:
+		('.' @env0:join: (parts @env0:copyFrom: 1 to: parts @env0:size @env0:- 1)).
+	(parent @env0:isKindOf: module) ifFalse: [^ nil].
+	^ parent @env0:dynamicInstVarAt: parts @env0:last @env0:asSymbol
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___committedNamespacePackage___: moduleName portions: portions [
+	"The namespace package moduleName's parent already holds, when its
+	__path__ names exactly these portions; nil otherwise.
+
+	A namespace package has no file and so no source hash, which is how every
+	other module warm-binds, so a session that imported one built a new one.
+	Registering it binds it on its parent, and on a DEPLOYED parent that is a
+	store into a committed object: ___bind:onParent:as:'s idempotence guard
+	skips only the identical child, and a new object never is (#1239).
+
+	The parent's own child IS the committed namespace package -- binding it
+	there is what committed it -- so it is reused when it still matches.  A
+	portion added or removed since, or a regular module in its place, falls
+	through to a fresh build, which writes, as it should."
+
+	| child |
+	child := self ___childOnParentOf___: moduleName.
+	(self ___isNamespacePackage___: child withPortions: portions) ifFalse: [^ nil].
+	^ child
+
+]
+
 { #category : 'Grail-Meta Path' }
 importlib class >> ___emptyModuleNamed___: aName spec: aSpec loader: aLoader [
 	"CPython's importlib.util.module_from_spec for a loader that defines
@@ -512,6 +550,21 @@ importlib class >> ___installSysPath0___: aDir [
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___isNamespacePackage___: aModule withPortions: portions [
+	"Is aModule a namespace package -- __file__ None -- whose __path__ names
+	exactly portions, in the same order?"
+
+	| path |
+	(aModule @env0:isKindOf: module) ifFalse: [^ false].
+	(aModule @env0:dynamicInstVarAt: #'__file__') == None ifFalse: [^ false].
+	path := [aModule @env1:___pyAttrLoad___: #'__path__']
+		@env0:on: AbstractException do: [:exception | exception @env0:return: nil].
+	path == nil ifTrue: [^ false].
+	^ (self ___stringListFrom___: path) @env0:= (self ___stringListFrom___: portions)
+
+]
+
 { #category : 'Grail-Module Registry' }
 importlib class >> ___isPackageForFromlist___: aModule [
 	"Does ``__import__'' consult its fromlist for aModule?  CPython's
@@ -667,7 +720,17 @@ importlib class >> ___loadNamespacePackage___: moduleName portions: dirs [
 	Note the difference from a regular package, whose __path__ holds the ONE
 	directory its __init__.py sits in; here it holds every portion found."
 
-	| moduleAst moduleClass moduleInstance |
+	| committed moduleAst moduleClass moduleInstance |
+	"Reuse the one the PARENT already holds, when it is this one -- see
+	___committedNamespacePackage___:portions:.  Here, not in
+	___loadNamespacePackageIfAny___:, because a meta-path finder's namespace
+	spec reaches this method too (___loadFromSpec___:name:).  Adopted first, as
+	the warm bind adopts a committed instance."
+	committed := self ___committedNamespacePackage___: moduleName portions: dirs.
+	committed == nil ifFalse: [
+		committed @env0:class @env0:___adoptInstance___: committed.
+		self @env0:registerModule: moduleName with: committed.
+		^ committed].
 	moduleAst := ModuleAst @env0:parseSource: ''.
 	"___buildModuleClass:name: and registerModule:with: are env-0 classmethods
 	while this one sits in the env-1 region beside ___moduleNameToPath___:,
@@ -1156,7 +1219,7 @@ importlib class >> lookupModule: aName [
 	(os.path) retry with dots mapped to underscores (the os_path
 	class).  Returns the module instance or nil."
 
-	| sym found cls inst pmDict pmCls |
+	| sym found classKey cls inst pmDict pmCls |
 	sym := aName @env0:asSymbol.
 	"Probe the registry with the NAME, not the Symbol: sys.modules is keyed by
 	genuine ``str'' (PySysModules.gs), and while a Symbol probe still resolves
@@ -1191,10 +1254,11 @@ importlib class >> lookupModule: aName [
 	deliberately not containing them (see install.gs's SHIM_LIB_PATH
 	comment)."
 	(CPythonShim @env0:builtinModuleNames @env0:includes: sym) ifTrue: [^ nil].
-	cls := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: sym.
+	classKey := sym.
+	cls := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: classKey.
 	((cls @env0:isNil) and: [aName @env0:includes: $.]) ifTrue: [
-		cls := System @env0:myUserProfile @env0:symbolList
-			@env0:objectNamed: (aName @env0:copyReplaceAll: '.' with: '_') @env0:asSymbol].
+		classKey := (aName @env0:copyReplaceAll: '.' with: '_') @env0:asSymbol.
+		cls := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: classKey].
 	"A class REGISTERED IN PythonModules is a LOADED .py module, not a builtin:
 	its lifecycle is sys.modules + the canonical registry, so it must NOT be
 	lazily resurrected here by name.  Doing so would defeat a genuine sys.modules
@@ -1203,9 +1267,14 @@ importlib class >> lookupModule: aName [
 	fallback exists only for pure-Smalltalk BUILTIN modules (grail, socket,
 	os_path, ...), which live in the Python dict.  Backing classes now keep their
 	exact Python name, so that name matches sym; exclude the PythonModules entry
-	explicitly (identity, so a builtin of the same spelling still resolves)."
+	explicitly (identity, so a builtin of the same spelling still resolves).
+	Probed under classKey, the key that FOUND the class: a dotted module's class
+	is filed under its underscored name, so a probe with sym missed every one,
+	and a dotted module with no file to stop it above -- a namespace package --
+	came back here as a fresh instance of its committed class, which
+	registering then bound onto its committed parent (#1239, #1667)."
 	pmDict := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'PythonModules'.
-	pmCls := pmDict @env0:isNil ifTrue: [nil] ifFalse: [pmDict @env0:at: sym otherwise: nil].
+	pmCls := pmDict @env0:isNil ifTrue: [nil] ifFalse: [pmDict @env0:at: classKey otherwise: nil].
 	(cls @env0:notNil and: [cls == pmCls]) ifTrue: [^ nil].
 	((cls @env0:notNil)
 		and: [(cls isKindOf: Behavior)

@@ -341,6 +341,10 @@ importlib class >> ___bindBodySubmodulesOf___: aName [
 	prefix := (aName asString subStrings: '.') first , '.'.
 	names := ((rec at: 2) collect: [:pair | (pair at: 1) asString])
 		select: [:n | n size > prefix size and: [(n copyFrom: 1 to: prefix size) = prefix]].
+	"With the packages on the way to each: the record never names a namespace
+	package, which has no file, and ``pkg.ns.mod'' bound without ``pkg.ns''
+	is a module whose package is missing from sys.modules."
+	names := self ___withEnclosingPackages___: names below: prefix.
 	"Parents first: a dependency outside aName's own subtree can sit at any
 	depth, and binding it binds its parents' body imports too."
 	names := names asSortedCollection: [:x :y |
@@ -351,7 +355,9 @@ importlib class >> ___bindBodySubmodulesOf___: aName [
 	names do: [:n | | path |
 		(self @env1:lookupModule: n) isNil ifTrue: [
 			path := self @env1:___moduleNameToPath___: n.
-			path isNil ifFalse: [self loadModuleFromPath: path name: n]]]
+			path isNil
+				ifTrue: [self @env1:___loadNamespacePackageIfAny___: n]
+				ifFalse: [self loadModuleFromPath: path name: n]]]
 
 ]
 
@@ -9082,6 +9088,22 @@ importlib class >> ___widenStrBase___: aClass [
 	replaces was silent and depended on the data."
 
 	^ aClass == Unicode7 ifTrue: [Unicode32] ifFalse: [aClass]
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___withEnclosingPackages___: dottedNames below: aPrefix [
+	"dottedNames together with every package on the way to each that is still
+	below aPrefix: ``top.ns.mod'' below ``top.'' brings ``top.ns''."
+
+	| namesAndPackages |
+	namesAndPackages := Set new.
+	dottedNames do: [:dottedName | | enclosing |
+		enclosing := nil.
+		($. split: dottedName) do: [:part |
+			enclosing := enclosing isNil ifTrue: [part] ifFalse: [enclosing , '.' , part].
+			enclosing size > aPrefix size ifTrue: [namesAndPackages add: enclosing]]].
+	^ namesAndPackages
 
 ]
 

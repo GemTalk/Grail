@@ -526,6 +526,12 @@ timed "carried-submodule" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/script
 # submodules, a sibling one of them imported, and an untouched one left alone.
 timed "body-submodule-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runBodySubmoduleBindTest.gs < /dev/null || EXIT=$?
 
+# A deployed package's NAMESPACE subpackage (no __init__.py, so no hash to
+# warm-bind by) binds without writing (#1239, #1667): the warm bind and a
+# direct import both reuse the committed one rather than storing a new one on
+# the committed parent. Commits.
+timed "namespace-package-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runNamespacePackageBindTest.gs < /dev/null || EXIT=$?
+
 # A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
 # D8): patching builtins.len and a class's method writes no persistent object,
 # and after a commit a fresh session sees both originals -- where persistent
