@@ -14,19 +14,21 @@ files it inputs); each step names the file and line it came from."
 policy := GsPackagePolicy current.
 policy disable.
 symList := System myUserProfile symbolList.
-"Drop any pre-existing GrailSessionMethods -- notably a shared, foreign-owned one
- left by an earlier GsPackageLibrary-based install -- from THIS user''s symbol list.
- Removing the reference only mutates this user''s own symbol list; it does not touch
- the (possibly foreign) old dictionary object."
-[ (idx := symList names indexOf: #''GrailSessionMethods'') > 0 ]
-	whileTrue: [ symList removeAtIndex: idx ].
-"Create a fresh, user-owned GrailSessionMethods dictionary at the front of this
- user''s symbol list and install a new GsPackage into it.  Recreating it each
- install also drops previously-captured session methods, so kernel extensions
- removed from source do not linger."
-home := SymbolDictionary new name: #''GrailSessionMethods''; yourself.
-System myUserProfile insertDictionary: home at: 1.
-GsPackage installIn: home.
+"An upgrade KEEPS this user''s own GrailSessionMethods.  Rowan loaded the kernel
+ extensions into it as session methods, and its diff of the new source against
+ them is what adds, changes and removes them: a fresh dictionary would lose every
+ extension the new source did not change.
+ Any other GrailSessionMethods -- notably a shared, foreign-owned one left by an
+ earlier GsPackageLibrary-based install -- is dropped from THIS user''s symbol list
+ and replaced by a fresh, user-owned one.  Removing the reference only mutates this
+ user''s own symbol list; it does not touch the (possibly foreign) old dictionary."
+home := symList objectNamed: #''GrailSessionMethods''.
+(home notNil and: [System canWrite: home]) ifFalse: [
+	[ (idx := symList names indexOf: #''GrailSessionMethods'') > 0 ]
+		whileTrue: [ symList removeAtIndex: idx ].
+	home := SymbolDictionary new name: #''GrailSessionMethods''; yourself.
+	System myUserProfile insertDictionary: home at: 1.
+	GsPackage installIn: home].
 policy homeSymbolDict: home.
 policy externalSymbolList: { Globals }.
 policy enable.
@@ -133,31 +135,22 @@ headroomMB < 1024 ifTrue: [
 ]
 '.
 	"src/smalltalk/install.gs:235"
-	'"Remove Grail dictionaries if they exist"
-#(#''Python'' #''PythonAst'' #''EmbeddedPython'' #''PythonTests'' #''EmbeddedPythonTests'' #''PythonModules'') do: [:each |
-	| symbolList names |
-	symbolList := System myUserProfile symbolList.
-	names := symbolList names.
-	(names includes: each) ifTrue: [
-		symbolList removeAtIndex: (names indexOf: each).
-		Transcript show: ''Removed '' , each , '' dictionary''.
-	] ifFalse: [
-		Transcript show: each , '' dictionary not found (OK)''.
-	].
-].
-'.
-	"src/smalltalk/install.gs:250"
-	'"Create Grail dictionaries in reverse order (so each ends up nearer the
- front of the symbol list than the next; importlib classes resolve
- from Python before falling through to PythonModules at runtime)."
+	'"Create the Grail dictionaries that do not exist yet, in reverse order (so each
+ ends up nearer the front of the symbol list than the next; importlib classes
+ resolve from Python before falling through to PythonModules at runtime).
+ An upgrade KEEPS the ones that exist: they hold the classes Rowan is about to
+ patch, and the singletons and modules every stored object refers to.  A new
+ dictionary would make the stored objects instances of classes nobody names."
 #(#''PythonModules'' #''EmbeddedPythonTests'' #''PythonTests'' #''EmbeddedPython'' #''PythonAst'' #''Python'') do: [:each |
 	| dict |
-	dict := SymbolDictionary new name: each; yourself.
-	System myUserProfile insertDictionary: dict at: 1.
-	Transcript show: ''Created '' , each , '' dictionary''.
-].
+	(System myUserProfile symbolList names includes: each)
+		ifTrue: [Transcript show: each , '' dictionary kept'']
+		ifFalse: [
+			dict := SymbolDictionary new name: each; yourself.
+			System myUserProfile insertDictionary: dict at: 1.
+			Transcript show: ''Created '' , each , '' dictionary'']].
 
-Transcript show: ''Step 1 complete: Recreated dictionaries in correct order''.
+Transcript show: ''Step 1 complete: Grail dictionaries in place''.
 '.
 	"src/smalltalk/install.gs:264"
 	'| symList |
@@ -169,9 +162,11 @@ symList := System myUserProfile symbolList .
 '.
 	"src/smalltalk/install.gs:287"
 	'(System myUserProfile symbolList objectNamed: #''Python'')
-	at: #''Ellipsis'' put: nil;
-	at: #''None'' put: nil;
-	at: #''NotImplemented'' put: nil;
+	"Unbound until the post-load binds the singletons -- and on an upgrade,
+	still bound to them: stored objects refer to those, so they are kept."
+	at: #''Ellipsis'' ifAbsentPut: [nil];
+	at: #''None'' ifAbsentPut: [nil];
+	at: #''NotImplemented'' ifAbsentPut: [nil];
 	yourself.
 Transcript show: ''Forward references created for Python dictionary''.
 '.
