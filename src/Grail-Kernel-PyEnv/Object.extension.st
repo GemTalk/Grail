@@ -12742,7 +12742,7 @@ Object >> ___metaclassCheckHook___: baseSym [
 	meta := self ___grailMetaclass___.
 	meta == nil ifTrue: [^ nil].
 	"Suppressed while type's DEFAULT check runs for this class -- see
-	type >> ___withCheckHookBypassed___:."
+	___withCheckHookBypassed___:."
 	bypass := SessionTemps @env0:current @env0:at: #'GrailCheckHookBypass' otherwise: nil.
 	(bypass @env0:notNil and: [bypass @env0:includes: self]) ifTrue: [^ nil].
 	fn := meta ___classChainAttrLookup___: baseSym.
@@ -14921,6 +14921,12 @@ Object >> ___pyAttrLoad___: aSym [
 	at the miss, so no successful read pays for it (#1694)."
 	(self @env0:isKindOf: Behavior) ifTrue: [
 		(self ___grailSlotMemberDescriptorFor___: aSym) @env0:ifNotNil: [:md | ^ md]].
+	"...then type's own methods, which type(cls).__mro__ supplies for a class
+	with no metaclass of its own -- before any metaclass __getattr__, as
+	type.__getattribute__ takes the metatype's methods first.  At the miss, so no
+	successful read pays for it."
+	(self @env0:isKindOf: Behavior) ifTrue: [
+		(self ___typeOwnMethod___: aSym family: family) @env0:ifNotNil: [:bound | ^ bound]].
 	"A CLASS's miss falls back to its METACLASS's __getattr__: ``Cls.x'' is
 	type(Cls).__getattribute__(Cls, 'x'), and the slot that runs __getattr__
 	is the metaclass's.  ___pyAttrHasGetattr___ below looks at the class's
@@ -16835,6 +16841,27 @@ Object >> ___typeDunderMayHold___: baseSym [
 
 ]
 
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___typeOwnMethod___: aSym family: aFamily [
+	"A method of ``type'' itself bound to the receiver CLASS -- ``Plain.__call__''
+	is type.__call__ bound to Plain -- or nil when type defines none of the name.
+
+	A class attribute is searched for in type(cls).__mro__ after cls.__mro__, and
+	for a class with no ``metaclass='' that type is ``type''.  A recorded
+	metaclass's chain reaches type's methods (the metaclass block of
+	___pyAttrLoad___:), but a class without one is not a Smalltalk instance of
+	type, so nothing consulted it: ``hasattr(Plain, '__call__')'' was False and
+	``Plain.__instancecheck__'' an AttributeError.
+
+	type's OWN methods only.  Its chain ends in Object, whose protocol refusals
+	(#1632) are attributes of no CPython type."
+
+	^ (self ___class___: type owns: aSym family: aFamily)
+		ifTrue: [BoundMethod receiver: self selector: aSym definingClass: type]
+		ifFalse: [nil]
+
+]
+
 { #category : 'Grail-String Representation' }
 Object >> ___typeReprString___ [
 	"CPython's type_repr, for a receiver that is a CLASS:
@@ -17250,6 +17277,28 @@ Object >> ___varargsDunder___: kwSelector with: other [
 		@env0:whichClassIncludesSelector: kwSelector environmentId: 1.
 	(owner @env0:isNil or: [owner @env0:== object]) ifTrue: [^ nil].
 	^ self @env0:perform: kwSelector env: 1 withArguments: { { other } . nil }
+
+]
+
+{ #category : 'Grail-Metaclass' }
+Object >> ___withCheckHookBypassed___: aBlock [
+	"Run aBlock with this class's metaclass __instancecheck__ / __subclasscheck__
+	hook suppressed -- ___metaclassCheckHook___: answers nil for a class in the
+	set.  A set of classes rather than a flag, so a default check that asks about
+	a DIFFERENT class on the way still gets that class's hook.
+
+	Here rather than on type, whose default checks run it: their receiver is the
+	class being checked, which for ``Plain.__instancecheck__(x)'' or
+	``type.__instancecheck__(Plain, x)'' is a class with no metaclass of its own,
+	and so not a Smalltalk instance of type."
+
+	| bypass |
+	bypass := SessionTemps @env0:current
+		@env0:at: #'GrailCheckHookBypass'
+		ifAbsentPut: [IdentitySet @env0:new].
+	(bypass @env0:includes: self) ifTrue: [^ aBlock @env0:value].
+	bypass @env0:add: self.
+	^ aBlock @env0:ensure: [bypass @env0:remove: self ifAbsent: []]
 
 ]
 

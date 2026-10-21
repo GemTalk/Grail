@@ -104,20 +104,21 @@ EXPECTED = {
     'len_none_still_raises': "TypeError: object of type 'NoneType' has no len()",
     'list': ('__iter__', '__getitem__', '__len__', '__contains__'),
     'object': (),
+    'plain_class': ('__call__',),
     'plain_instance': (),
     'str': ('__iter__', '__getitem__', '__len__', '__contains__'),
     'subscript_int_still_raises': "TypeError: 'int' object is not subscriptable",
     'subscriptable_instance': ('__getitem__',),
 }
 
-# Grail limitations this fixture documents: what GRAIL answers, which CPython
-# does not (it answers ``('__call__',)'' for both).  A Python class has no
-# ``__call__'' attribute here, and a builtin function's BoundMethod keeps a real
-# ``__getitem__'' (a PEP 585 pass-through, see Object >> ___hasOwnGetitem___).
-# Neither is a refusal or a root fallback, so #1632's rule leaves them alone.
+# A Grail limitation this fixture documents: what GRAIL answers, which CPython
+# does not (it answers ``('__call__',)'').  A builtin function's BoundMethod
+# keeps a real ``__getitem__'' (a PEP 585 pass-through, see Object >>
+# ___hasOwnGetitem___), which is neither a refusal nor a root fallback, so
+# #1632's rule leaves it alone.  ``plain_class'' was the other one: a class read
+# none of type's methods (type_methods_on_classes.py).
 GRAIL_ONLY = {
     'builtin_function': ('__getitem__', '__call__'),
-    'plain_class': (),
 }
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, "<missing>") != EXPECTED[k])
