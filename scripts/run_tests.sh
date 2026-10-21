@@ -536,6 +536,11 @@ timed "body-submodule-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scri
 # the committed parent. Commits.
 timed "namespace-package-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runNamespacePackageBindTest.gs < /dev/null || EXIT=$?
 
+# A deployed module's functions keep their defaults where it is BOUND (#1717):
+# __defaults__ / __kwdefaults__ read what a call binds, and the body's own
+# assignments to them (same-shape and shape-changing) are in effect. Commits.
+timed "function-defaults-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFunctionDefaultsBindTest.gs < /dev/null || EXIT=$?
+
 # A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
 # D8): patching builtins.len and a class's method writes no persistent object,
 # and after a commit a fresh session sees both originals -- where persistent
