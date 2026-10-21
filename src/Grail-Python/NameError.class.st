@@ -241,8 +241,8 @@ NameError class >> ___resolveDoitName___: aName [
 ]
 
 { #category : 'Grail-Name Errors' }
-NameError class >> ___signalUndefined___: aName [
-	"Raise NameError for an unbound name, carrying CPython's ``name'' attribute.
+NameError class >> ___signal___: aMessage name: aName [
+	"Raise NameError with aMessage, carrying CPython's ``name'' attribute.
 
 	``name'' is what traceback.py needs to say anything helpful: it is the
 	misspelling to match candidates against, and it is also tested directly
@@ -253,11 +253,34 @@ NameError class >> ___signalUndefined___: aName [
 	uses -- ___pyAttrLoad___ probes dynamic instVars before the method chain, so
 	``e.name'' answers the value rather than a BoundMethod."
 
-	| instance msg |
-	msg := 'name ''' @env0:, aName @env0:asString @env0:, ''' is not defined'.
+	| instance |
 	instance := self @env1:___new___.
-	instance @env1:___args___: { msg }.
+	instance @env1:___args___: { aMessage }.
 	instance @env0:dynamicInstVarAt: #'name' put: aName @env0:asString.
-	^ instance @env1:___signal___: msg
+	^ instance @env1:___signal___: aMessage
+
+]
+
+{ #category : 'Grail-Name Errors' }
+NameError class >> ___signalUnboundFree___: aName [
+	"Raise NameError for a FREE variable read while its enclosing scope's cell is
+	empty -- the closure ran before the enclosing function assigned the name, or
+	after it deleted it.  CPython's error for that read is a NameError, where a
+	local read is UnboundLocalError (#1712)."
+
+	^ self
+		___signal___: 'cannot access free variable ''' @env0:, aName @env0:asString
+			@env0:, ''' where it is not associated with a value in enclosing scope'
+		name: aName
+
+]
+
+{ #category : 'Grail-Name Errors' }
+NameError class >> ___signalUndefined___: aName [
+	"Raise NameError for an unbound name."
+
+	^ self
+		___signal___: 'name ''' @env0:, aName @env0:asString @env0:, ''' is not defined'
+		name: aName
 
 ]
