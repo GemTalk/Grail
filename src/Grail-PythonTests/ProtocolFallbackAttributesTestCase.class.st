@@ -50,6 +50,14 @@ ProtocolFallbackAttributesTestCase >> testABuiltInHasOnlyTheProtocolsItsCPythonT
 ]
 
 { #category : 'Grail-Tests' }
+ProtocolFallbackAttributesTestCase >> testAClassHasTypesCallAndNoRefusal [
+	"type's __call__ is an attribute of the class; object's refusals are not."
+
+	self assertAgreesWithCPythonAt: 'plain_class'
+
+]
+
+{ #category : 'Grail-Tests' }
 ProtocolFallbackAttributesTestCase >> testAPythonInstanceDoesNotReadPythonInstancesFallbacks [
 	"Every Python instance answered PythonInstance's __iter__, __getitem__,
 	__contains__ and __next__.  A class that defines one, or sets
@@ -93,7 +101,7 @@ ProtocolFallbackAttributesTestCase >> testEveryCheckIsPresentAndAgreesWithCPytho
 
 	self
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '22 checks, 0 disagreeing [], keys match: True'
+		equals: '23 checks, 0 disagreeing [], keys match: True'
 
 ]
 
@@ -106,12 +114,11 @@ ProtocolFallbackAttributesTestCase >> testGettingAFallbackRaisesAttributeError [
 ]
 
 { #category : 'Grail-Tests' }
-ProtocolFallbackAttributesTestCase >> testTheDocumentedGrailGapsAreUnchanged [
-	"GRAIL_ONLY: a Python class has no __call__ attribute, and a builtin
-	function keeps BoundMethod's real __getitem__.  When either is fixed this
-	fails, and the key moves into EXPECTED."
+ProtocolFallbackAttributesTestCase >> testTheDocumentedGrailGapIsUnchanged [
+	"GRAIL_ONLY: a builtin function keeps BoundMethod's real __getitem__.  When
+	that is fixed this fails, and the key moves into EXPECTED, as
+	``plain_class'' did."
 
-	self assert: 'builtin_function' answersAsIn: #GRAIL_ONLY.
-	self assert: 'plain_class' answersAsIn: #GRAIL_ONLY
+	self assert: 'builtin_function' answersAsIn: #GRAIL_ONLY
 
 ]

@@ -547,18 +547,12 @@ type >> ___call__: positional kw: kwargs [
 
 { #category : 'Grail-Class Construction' }
 type >> ___withCheckHookBypassed___: aBlock [
-	"Run aBlock with this class's metaclass __instancecheck__ / __subclasscheck__
-	hook suppressed -- object >> ___metaclassCheckHook___: answers nil for a
-	class in the set.  A set of classes rather than a flag, so a default check
-	that asks about a DIFFERENT class on the way still gets that class's hook."
+	"Object's, unchanged.  The bypass moved there because the default checks
+	below also run on classes that are not instances of type.  This override is
+	left only because a reinstall cannot yet delete an env-1 method (#1727);
+	delete it once that is fixed."
 
-	| bypass |
-	bypass := SessionTemps @env0:current
-		@env0:at: #'GrailCheckHookBypass'
-		ifAbsentPut: [IdentitySet @env0:new].
-	(bypass @env0:includes: self) ifTrue: [^ aBlock @env0:value].
-	bypass @env0:add: self.
-	^ aBlock @env0:ensure: [bypass @env0:remove: self ifAbsent: []]
+	^ super ___withCheckHookBypassed___: aBlock
 
 ]
 
