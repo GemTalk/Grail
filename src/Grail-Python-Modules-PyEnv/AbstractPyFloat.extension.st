@@ -118,7 +118,8 @@ AbstractPyFloat >> ___pyAttrLoad___: aSym [
 	^ [super ___pyAttrLoad___: aSym]
 		@env0:on: AttributeError
 		do: [:ex |
-			(self ___grailValueImplements___: aSym)
+			((self ___grailValueImplements___: aSym)
+				and: [(self @env0:value ___isProtocolFallback___: aSym) not])
 				ifTrue: [ex @env0:return: (BoundMethod receiver: self @env0:value selector: aSym)]
 				ifFalse: [ex @env0:pass]]
 

@@ -403,8 +403,12 @@ Float class >> __getformat__: typestr [
 
 ]
 
-{ #category : 'Grail-Python protocol' }
+{ #category : 'Grail-Protocol Refusal' }
 Float class >> __getitem__: index [
+	<grailProtocolRefusal>
+	"``float[x]'' raises CPython's catchable TypeError.  A refusal, so a read of
+	``__getitem__'' that reaches the class side is not an attribute (#1632)."
+
 	^ TypeError ___signal___: 'type ''float'' is not subscriptable'
 
 ]

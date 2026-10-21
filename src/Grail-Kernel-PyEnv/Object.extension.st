@@ -12258,6 +12258,65 @@ Object >> ___isPropertyGetterSelector___: aSym [
 
 ]
 
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___isProtocolFallback___: aSym [
+	"___isProtocolFallback___:family:in: for the receiver's own class."
+
+	^ self
+		___isProtocolFallback___: aSym
+		family: (self ___selectorFamilyFor___: aSym string: aSym @env0:asString)
+		in: self @env0:class
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___isProtocolFallback___: aSym family: aFamily in: aBehavior [
+	"Is aSym, read as an attribute of this object, nothing but one of Grail's
+	protocol FALLBACKS, and so ABSENT from its CPython type?
+
+	Grail gives the universal roots (object, the PythonInstance under every
+	Python class, and their metaclasses) and some built-ins (int, None)
+	protocol methods whose only job is to raise CPython's catchable TypeError
+	-- ``iter(1)'', ``1[0]'', ``len(None)'' -- where a missing method would be
+	an uncatchable send (see ___ownChainOwnsAnyOf___:orUnary:from:, and the
+	<grailProtocolRefusal> methods).  Read as attributes, they made
+	``hasattr(1, '__iter__')'' True for every object, so duck-typed code took
+	the collection branch: real requests did, in _encode_params (#1632).
+
+	True when aSym is a protocol dunder CPython's object does not itself
+	define, and every spelling of it (aFamily) resolves in aBehavior only to a
+	root or to a refusal."
+
+	| name |
+	name := aSym @env0:asString.
+	((name @env0:size @env0:> 4)
+		and: [(name @env0:first == $_)
+		and: [(name @env0:at: 2) == $_
+		and: [name @env0:last == $_]]]) ifFalse: [^ false].
+	(Object ___grailIsProtocolDunderName___: aSym) ifFalse: [^ false].
+	(Object ___cpythonObjectDictNames___ @env0:includes: aSym) ifTrue: [^ false].
+	^ ({ aSym } @env0:, aFamily) @env0:allSatisfy: [:selector |
+		self ___isProtocolFallbackSelector___: selector in: aBehavior]
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___isProtocolFallbackSelector___: aSelector in: aBehavior [
+	"Does aBehavior answer aSelector only through a universal root, only
+	through a <grailProtocolRefusal> method, or not at all?"
+
+	| owner method |
+	owner := aBehavior @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	owner == nil ifTrue: [^ true].
+	((owner == Object or: [owner == PythonInstance])
+		or: [owner == Object @env0:class or: [owner == PythonInstance @env0:class]])
+			ifTrue: [^ true].
+	method := owner @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
+	^ method @env0:notNil and: [method @env0:pragmas @env0:anySatisfy: [:pragma |
+		pragma @env0:keyword == #grailProtocolRefusal]]
+
+]
+
 { #category : 'Grail-Arithmetic' }
 Object >> ___isPyIntOperand___: other [
 	"Is ``other'' a Python int -- an Integer, a bool, or an instance of a
@@ -14714,7 +14773,9 @@ Object >> ___pyAttrLoad___: aSym [
 						or: [(metaOwns @env0:value: sym5)
 							or: [(metaOwns @env0:value: sym6)
 								or: [metaOwns @env0:value: symVA]]]]]])
-			and: [(self ___metaVarargsIsUnboundDunderHelper___: family) not]])
+			and: [(self ___metaVarargsIsUnboundDunderHelper___: family) not
+			and: [(self ___isProtocolFallback___: aSym family: family
+				in: self @env0:class @env0:class) not]]])
 			ifTrue: [^ BoundMethod receiver: self @env0:class selector: aSym].
 	].
 	"Other classes (built-in collections, strings, ...): if any class
@@ -14772,7 +14833,9 @@ Object >> ___pyAttrLoad___: aSym [
 	(self isKindOf: Behavior) ifFalse: [
 		(self ___classChainAttrLookup___: aSym)
 			@env0:ifNotNil: [:___cv | ^ ___cv]].
-	((self ___respondsTo___: aSym)
+	"...unless all it responds to is a protocol FALLBACK, which CPython's type
+	does not have at all: then the read misses (#1632)."
+	(((self ___respondsTo___: aSym)
 		or: [(self ___respondsTo___: sym1)
 			or: [(self ___respondsTo___: sym2)
 				or: [(self ___respondsTo___: sym3)
@@ -14780,6 +14843,7 @@ Object >> ___pyAttrLoad___: aSym [
 						or: [(self ___respondsTo___: sym5)
 							or: [(self ___respondsTo___: sym6)
 								or: [self ___respondsTo___: symVA]]]]]]])
+		and: [(self ___isProtocolFallback___: aSym family: family in: self @env0:class) not])
 		ifTrue: [^ BoundMethod ___forAttrRead___: self selector: aSym].
 	"Unbound class-method lookup: ``Cls.method'' where ``method'' is
 	an instance method defined on Cls itself (env 1).  Python returns

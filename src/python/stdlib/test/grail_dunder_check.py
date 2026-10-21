@@ -176,8 +176,15 @@ def _protocol_fallback_results():
         pass
 
     b = Bare()
+
+    # The item-assignment PROTOCOL, ``b[0] = 1'', not an explicit
+    # ``b.__setitem__(0, 1)'': Bare has no __setitem__ attribute in CPython,
+    # so that read raises AttributeError -- and since #1632 it does here too.
+    def assign_item():
+        b[0] = 1
+
     r = []
-    for thunk in [lambda: b[0], lambda: b.__setitem__(0, 1),
+    for thunk in [lambda: b[0], assign_item,
                   lambda: iter(3), lambda: math.acos(),
                   lambda: math.exp("x")]:
         try:

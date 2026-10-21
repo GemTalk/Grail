@@ -175,8 +175,12 @@ Boolean class >> ___truthOf___: obj [
 
 ]
 
-{ #category : 'Grail-Python protocol' }
+{ #category : 'Grail-Protocol Refusal' }
 Boolean class >> __getitem__: index [
+	<grailProtocolRefusal>
+	"``bool[x]'' raises CPython's catchable TypeError.  A refusal, so a read of
+	``__getitem__'' that reaches the class side is not an attribute (#1632)."
+
 	^ TypeError ___signal___: 'type ''bool'' is not subscriptable'
 
 ]
