@@ -293,8 +293,12 @@ Integer class >> ___parseIntFromBytes___: byteObj original: original [
 
 ]
 
-{ #category : 'Grail-Python protocol' }
+{ #category : 'Grail-Protocol Refusal' }
 Integer class >> __getitem__: index [
+	<grailProtocolRefusal>
+	"``int[x]'' raises CPython's catchable TypeError.  A refusal, so a read of
+	``__getitem__'' that reaches the class side is not an attribute (#1632)."
+
 	^ TypeError ___signal___: 'type ''int'' is not subscriptable'
 
 ]
