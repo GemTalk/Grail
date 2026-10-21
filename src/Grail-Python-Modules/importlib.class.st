@@ -5481,7 +5481,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 
 	| moduleAst moduleClass moduleInstance
 	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local rerun
-	  earlyEntry previousEntry |
+	  earlyEntry previousEntry parentBinding |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -5732,6 +5732,9 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 				ifTrue: [{ pathString copyFrom: 1 to: pathString size - '/__init__.py' size }]
 				ifFalse: [nil]))
 		on: moduleInstance.
+	"What registering binds on the parent, so a failed body can take it back
+	(___restoreParentBinding___:of:)."
+	parentBinding := self ___parentBindingOf___: moduleName.
 	"Register BEFORE execution so circular imports resolve"
 	self registerModule: moduleName with: moduleInstance]].
 	"An app's ``__main__'' is recorded as the app's globals BEFORE its body
@@ -5785,6 +5788,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 			Python raise still takes the unload path below."
 			(ex isKindOf: Notification) ifTrue: [ex pass].
 			self removeModule: moduleName.
+			self ___restoreParentBinding___: parentBinding of: moduleInstance.
 			earlyEntry ifTrue: [
 				previousEntry isNil
 					ifTrue: [self ___canonicalModules___ removeKey: moduleName ifAbsent: []]
@@ -6831,6 +6835,25 @@ importlib class >> ___openServerFile___: pathString mode: modeString [
 				ifTrue: ['no server error string available']
 				ifFalse: [why])].
 	^ file
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___parentBindingOf___: aDottedName [
+	"What aDottedName's registered parent holds under the last component of
+	the name, read BEFORE registering the module binds it there:
+	``{ parent . name . slotValue . instVarValue }'' (each value nil when
+	absent), or nil when the name is not dotted or its parent is not a
+	registered module.  ___restoreParentBinding___:of: puts it back if the
+	module's body fails."
+
+	| parts parent sym |
+	parts := $. split: aDottedName asString.
+	parts size > 1 ifFalse: [^ nil].
+	parent := self @env1:lookupModule: ('.' join: (parts copyFrom: 1 to: parts size - 1)).
+	(parent isKindOf: SymbolDictionary) ifFalse: [^ nil].
+	sym := parts last asSymbol.
+	^ { parent . sym . parent at: sym otherwise: nil . parent dynamicInstVarAt: sym }
 
 ]
 
@@ -8116,6 +8139,37 @@ importlib class >> ___restoreCanonicalMiRecords___ [
 						((cls isKindOf: Behavior) and: [(reg includesKey: cls) not])
 							ifTrue: [reg at: cls put: rec]]]]]].
 	^ self
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___restoreParentBinding___: aBinding of: aModule [
+	"Undo, after aModule's body FAILED, the binding that registering it made on
+	its parent (aBinding, from ___parentBindingOf___:).
+
+	CPython binds ``pkg.sub'' on ``pkg'' only once sub has finished loading, so
+	a failed sub never appears there and every later ``from pkg import sub''
+	fails the same way.  Grail binds at registration, before the body runs, so
+	that a circular import sees the partial module, and the binding used to
+	outlive the failure: the next ``from pkg import sub'' read the attribute
+	and answered the half-built module, and the error moved away from its
+	cause (#1651).  Only a store that still holds aModule is touched, and it
+	gets back what it held before, so a package that bound the name itself
+	keeps its own value."
+
+	| parent sym |
+	aBinding isNil ifTrue: [^ self].
+	parent := aBinding at: 1.
+	sym := aBinding at: 2.
+	(parent at: sym otherwise: nil) == aModule ifTrue: [
+		(aBinding at: 3)
+			ifNil: [parent removeKey: sym]
+			ifNotNil: [:previous | parent at: sym put: previous]].
+	(parent dynamicInstVarAt: sym) == aModule ifTrue: [
+		module ___withPersistentGlobalStores___: [
+			(aBinding at: 4)
+				ifNil: [parent removeDynamicInstVar: sym]
+				ifNotNil: [:previous | parent dynamicInstVarAt: sym put: previous]]]
 
 ]
 
