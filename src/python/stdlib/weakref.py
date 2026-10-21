@@ -18,20 +18,19 @@
 import _weakref
 
 
-def ref(obj, callback=None):
-    """weakref.ref(obj[, callback]) — create a weak reference. The returned
-    object is a Smalltalk WeakReference instance and responds to __call__,
-    __eq__, and __hash__."""
-    if callback is None:
-        return _weakref.ref(obj)
-    return _weakref.ref(obj, callback)
-
-
 # ``ReferenceType'' — CPython exposes the weak-reference class for
 # isinstance checks (django.dispatch tests receivers with it).  The
 # concrete Grail object is a Smalltalk WeakReference; expose that
 # class so isinstance(ref(x), ReferenceType) holds.
-ReferenceType = type(_weakref.ref(ref))
+ReferenceType = type(_weakref.ref(_weakref))
+
+# ...and ``ref'' IS that class, as in CPython (``weakref.ref is
+# weakref.ReferenceType'').  It used to be a function wrapping it, so
+# ``isinstance(r, weakref.ref)'' raised TypeError -- blinker's receivers_for
+# makes that test for every receiver of a Flask signal -- and ``weakref.ref[T]''
+# subscripted only because every function could.  The class takes the same
+# ``(obj[, callback])'', a None callback meaning none.
+ref = ReferenceType
 
 
 def proxy(obj, callback=None):
