@@ -3,11 +3,17 @@
 # Create a git worktree wired up for an independent Grail install.
 # ===========================================================================
 # Usage:
-#   ./scripts/new_worktree.sh <branch> [--stone gs40] [--user ClaudeN]
-#                                      [--base <ref>] [--force-user]
+#   ./scripts/new_worktree.sh <branch> [--user ClaudeN] [--base <ref>] [--force-user]
+#                             [--stone <name>] [--product <dir>] [--netldi <name>]
+#
+# The stone, the product and the NetLDI default to the MAIN checkout's .setenv
+# (GEMSTONE_NAME, GEMSTONE, GRAIL_NETLDI), which already names this machine's;
+# --stone, --product and --netldi each override one of them.  Run it from the
+# main checkout or from any worktree: the new one always goes under the main
+# checkout's .claude/worktrees.
 #
 # Example:
-#   ./scripts/new_worktree.sh fix/dict-repr --stone gs40
+#   ./scripts/new_worktree.sh fix/dict-repr
 #
 # Why this exists
 # ---------------
@@ -30,13 +36,6 @@
 # ===========================================================================
 
 set -euo pipefail
-
-# --- stone table: stone-name -> product dir + netldi -------------------------
-# Edit these when you install a new GemStone version.
-GEMSTONE_GLOBAL_DIR_DEFAULT='/Users/jfoster/Documents/GemStone'
-# gs375 was dropped along with support for GemStone 3.7.x.
-PRODUCT_gs40="$GEMSTONE_GLOBAL_DIR_DEFAULT/GemStone64Bit4.0.0-arm64.Darwin"
-NETLDI_gs40='ldi40'
 
 CLAUDE_USERS=(Claude0 Claude1 Claude2 Claude3)
 CLAUDE_PASSWORD='swordfish'
@@ -61,24 +60,34 @@ detect_python_bin_dir() {
 }
 PYTHON_BIN_DIR=$(detect_python_bin_dir)
 
-REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+# The MAIN checkout, wherever this copy of the script lives.  Run from inside a
+# worktree, the worktree's own root would put the new one inside it, and the
+# user claims below would miss every other checkout's .topazini.  The script's
+# own path is taken first: after the cd, a relative $0 names the main
+# checkout's copy.
+SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+REPO_ROOT=$(cd "$(dirname "$0")/.." && cd "$(git rev-parse --git-common-dir)/.." && pwd)
 cd "$REPO_ROOT"
 
 # --- args -------------------------------------------------------------------
 BRANCH=''
-STONE='gs40'
+STONE=''
+PRODUCT=''
+NETLDI=''
 USER_ID=''
 BASE_REF=''
 FORCE_USER=0
 
 usage() {
-    sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,36p' "$SCRIPT" | sed 's/^# \{0,1\}//'
     exit "${1:-1}"
 }
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --stone)      STONE="${2:?--stone needs a value}"; shift 2 ;;
+        --product)    PRODUCT="${2:?--product needs a value}"; shift 2 ;;
+        --netldi)     NETLDI="${2:?--netldi needs a value}"; shift 2 ;;
         --user)       USER_ID="${2:?--user needs a value}"; shift 2 ;;
         --base)       BASE_REF="${2:?--base needs a value}"; shift 2 ;;
         --force-user) FORCE_USER=1; shift ;;
@@ -93,13 +102,32 @@ done
 [ -n "$BRANCH" ] || { echo "Error: no branch name given." >&2; usage; }
 
 # --- resolve the stone ------------------------------------------------------
-eval "PRODUCT=\${PRODUCT_${STONE}:-}"
-eval "NETLDI=\${NETLDI_${STONE}:-}"
-if [ -z "$PRODUCT" ]; then
-    echo "Error: unknown stone '$STONE'. Known stones: gs40." >&2
-    echo "  (Add new ones to the stone table at the top of $0.)" >&2
+# Whatever the options left unset comes from the main checkout's .setenv: it is
+# per machine (gitignored), so it, and not this script, knows this machine's
+# product, stone and NetLDI.  Read in a subshell, so nothing it exports leaks.
+setenv_value() {
+    [ -f "$REPO_ROOT/.setenv" ] || return 0
+    ( set +u; . "$REPO_ROOT/.setenv" >/dev/null 2>&1; eval "printf '%s' \"\${$1:-}\"" )
+}
+STONE=${STONE:-$(setenv_value GEMSTONE_NAME)}
+PRODUCT=${PRODUCT:-$(setenv_value GEMSTONE)}
+NETLDI=${NETLDI:-$(setenv_value GRAIL_NETLDI)}
+
+missing=''
+[ -n "$STONE" ]   || missing="$missing --stone"
+[ -n "$PRODUCT" ] || missing="$missing --product"
+[ -n "$NETLDI" ]  || missing="$missing --netldi"
+if [ -n "$missing" ]; then
+    echo "Error: no stone to point the worktree at: $REPO_ROOT/.setenv does not set" >&2
+    echo "  GEMSTONE_NAME, GEMSTONE and GRAIL_NETLDI.  Pass$missing, or set them there." >&2
     exit 1
 fi
+
+# The directory holding GemStone's locks and logs, which install.sh needs when
+# /opt/gemstone/locks does not exist.  The product's parent unless .setenv says.
+GLOBAL_DIR=$(setenv_value GEMSTONE_GLOBAL_DIR)
+GLOBAL_DIR=${GLOBAL_DIR:-$(dirname "$PRODUCT")}
+
 if [ ! -d "$PRODUCT" ]; then
     echo "Error: product dir for '$STONE' does not exist: $PRODUCT" >&2
     exit 1
@@ -185,7 +213,7 @@ cat > "$WT_PATH/.setenv" <<EOF
 # checkout at the same (stone, user) pair -- their installs would overwrite
 # each other.  Keep GEMSTONE_NAME in step with 'set gemstone' in ./.topazini.
 
-export GEMSTONE_GLOBAL_DIR='$GEMSTONE_GLOBAL_DIR_DEFAULT'
+export GEMSTONE_GLOBAL_DIR='$GLOBAL_DIR'
 export GEMSTONE='$PRODUCT'
 export GEMSTONE_NAME='$STONE'
 export GRAIL_NETLDI='$NETLDI'

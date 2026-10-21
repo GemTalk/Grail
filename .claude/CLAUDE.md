@@ -297,8 +297,12 @@ Several Claude agents can work at once on different branches, each in its own
 git worktree under `.claude/worktrees/<branch>` (gitignored). Create them with:
 
 ```bash
-./scripts/new_worktree.sh <branch> [--stone gs40] [--user ClaudeN]
+./scripts/new_worktree.sh <branch> [--user ClaudeN] [--stone <name>] [--product <dir>] [--netldi <name>]
 ```
+
+The stone, product and NetLDI default to the main checkout's `.setenv`, which
+already names this machine's; each option overrides one. It can be run from the
+main checkout or from any worktree.
 
 **The rule that matters: a worktree must never share a (stone, user) pair with
 another checkout.** `install.sh` installs a PER-USER Grail — env-1 session
