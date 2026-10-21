@@ -1382,9 +1382,19 @@ importlib class >> ___canonicalRegistryRestore___: aSnapshot [
 	"Remove every canonical-registry entry, class-set member, and
 	PythonModules class added since aSnapshot (___canonicalRegistrySnapshot___).
 	Pre-existing entries -- e.g. a standing framework deployment -- are
-	untouched.  The caller commits."
+	untouched.  The caller commits.
 
-	| snap reg |
+	A class the registry still holds stays in the class set, snapshot or
+	not.  The registry is restored by KEY and the set by IDENTITY, so a class
+	re-minted under a key the snapshot had, as a rebuild of a standing module
+	can, is kept by the one and was dropped by the other.  Out of the set,
+	every later runtime store on it went to the committed class instead of the
+	session overlay: after a full run_tests.sh, three of flask.sessions'
+	classes were re-minted ABCs, each new session reset their caches on the
+	committed classes, and its first Flask request had something to commit
+	(#1731)."
+
+	| snap reg kept |
 	snap := aSnapshot.
 	reg := self ___canonicalClassRegistry___.
 	reg keys do: [:k |
@@ -1395,9 +1405,10 @@ importlib class >> ___canonicalRegistryRestore___: aSnapshot [
 	reg := self ___canonicalModules___.
 	reg keys do: [:k |
 		((snap at: 3) includes: k) ifFalse: [reg removeKey: k ifAbsent: []]].
+	kept := self ___canonicalClassRegistry___ values asIdentitySet.
 	(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
 		bag asIdentitySet do: [:cls |
-			((snap at: 4) includes: cls) ifFalse: [
+			(((snap at: 4) includes: cls) or: [kept includes: cls]) ifFalse: [
 				[bag removeAll: (Array with: cls)] on: Error do: [:e | nil]]]].
 	PythonModules keys do: [:k |
 		((snap at: 5) includes: k) ifFalse: [PythonModules removeKey: k ifAbsent: []]].

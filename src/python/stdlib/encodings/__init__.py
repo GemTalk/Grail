@@ -28,7 +28,7 @@ Written by Marc-Andre Lemburg (mal@lemburg.com).
 
 """#"
 #
-# GRAIL: upstream CPython 3.14.6 with three differences.
+# GRAIL: upstream CPython 3.14.6 with four differences.
 #
 #   1. The win32 code-page search function at the bottom is dropped -- it
 #      needs ``codecs.code_page_encode``, a Windows-only C entry point.
@@ -44,12 +44,23 @@ Written by Marc-Andre Lemburg (mal@lemburg.com).
 #      answers None, and lookup() raises LookupError -- exactly what an
 #      unknown encoding should do.  Shipping a trimmed alias table instead
 #      would answer LookupError for the ALIAS of a codec Grail does have.
+#
+#   4. ``_cache`` is session-local (a SessionDict, as re's caches are).  CPython's
+#      is process memory; here the dict is MUTATED on the deployed module, so
+#      a session that looked a codec up and then committed stored the entry --
+#      and with it the codec module's functions and classes, committed by
+#      reachability, so taking that module's deployment back (as a test's
+#      cleanup does) left them committed and undeployed.  Every later
+#      session's first use then re-ran the module's body and rebuilt its
+#      classes in place: 72 committed objects written by one Flask request
+#      (#1731).
 
 import codecs
 import sys
 from . import aliases
+from _grail_session import SessionDict as _GrailSessionDict
 
-_cache = {}
+_cache = _GrailSessionDict("encodings._cache")
 _MAXCACHE = 500
 _unknown = '--unknown--'
 _import_tail = ['*']
