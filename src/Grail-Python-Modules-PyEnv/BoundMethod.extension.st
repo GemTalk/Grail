@@ -1099,6 +1099,9 @@ BoundMethod >> ___writeDefaultsThrough___: name value: value [
 	isKw := sym == #'__kwdefaults__'.
 	(isKw or: [sym == #'__defaults__']) ifFalse: [^ false].
 	(receiver @env0:isKindOf: module) ifFalse: [^ false].
+	"A module body's assignment is part of what importing it means: recorded,
+	so a session binding the module replays it (#1717)."
+	receiver @env0:___recordDefaultsAssignment___: selector @env0:asString value: value kw: isKw.
 	"Once REBOUND, every later write goes to the rebound record, whatever its
 	shape: the session entry point binds from there, not from the memo."
 	cls := receiver @env0:class.

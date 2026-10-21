@@ -1247,6 +1247,7 @@ importlib class >> ___canonicalInstanceForModuleClass___: aModuleClass [
 				self ___restoreCanonicalMiRecords___.
 				self ___restoreAllCanonicalMetaclasses___.
 				self ___restoreAllBodyClassAttrs___.
+				inst ___replayDefaultsAssignments___.
 				self ___runSessionInit___: inst.
 				^ inst]]].
 	^ nil
@@ -5611,6 +5612,8 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 			"The submodules the body imported, before the package's own hook:
 			in the body those imports ran before its tail did."
 			self ___bindBodySubmodulesOf___: moduleName.
+			"What the body did to its own functions' defaults (#1717)."
+			committedInstance ___replayDefaultsAssignments___.
 			"Session tier (par.10.4): the body did not run, so this is the
 			one chance to re-bind per-session resources."
 			self ___runSessionInit___: committedInstance.

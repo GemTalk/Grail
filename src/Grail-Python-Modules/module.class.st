@@ -476,6 +476,32 @@ module >> ___bodyIsRunning___ [
 
 ]
 
+{ #category : 'Grail-Signatures' }
+module >> ___defaultsSnapshotOf___: aValue kw: isKw [
+	"aValue, assigned to a function's __defaults__ (isKw false) or
+	__kwdefaults__ (isKw true), as plain data a commit can carry -- None, a
+	tuple itself, a dict as its flat name/value pairs -- or nil when it is not
+	the attribute's type or not plain data (importlib
+	___isReplayableClassAttrValue___:depth:)."
+
+	| pairs |
+	aValue == ExecBlock ___pyNone___ ifTrue: [^ aValue].
+	isKw ifFalse: [
+		^ ((aValue isKindOf: tuple)
+			and: [importlib ___isReplayableClassAttrValue___: aValue depth: 0])
+				ifTrue: [aValue]
+				ifFalse: [nil]].
+	(aValue isKindOf: (Python at: #PyDict)) ifFalse: [^ nil].
+	pairs := OrderedCollection new.
+	aValue keysAndValuesDo: [:name :value |
+		((name isKindOf: CharacterCollection)
+			and: [importlib ___isReplayableClassAttrValue___: value depth: 0])
+				ifFalse: [^ nil].
+		pairs add: name asString; add: value].
+	^ pairs asArray
+
+]
+
 { #category : 'Grail-Phase A Dynamic InstVars' }
 module >> ___finalIsBound___: aSymbol [
 	"Does a module-level ``name: Final = ...'' find its name already bound in
@@ -487,6 +513,19 @@ module >> ___finalIsBound___: aSymbol [
 	does, and evaluates every Final as written."
 
 	^ self isCommitted and: [(self dynamicInstVarAt: aSymbol) notNil]
+
+]
+
+{ #category : 'Grail-Signatures' }
+module >> ___forgetDefaultsAssignmentsTo___: aName [
+	"A def statement starts aName's defaults afresh, so an assignment the body
+	made to an EARLIER function of that name is not replayed onto this one
+	(___replayDefaultsAssignments___).  Only while the body runs, as every
+	write to the record."
+
+	self ___bodyIsRunning___ ifFalse: [^ self].
+	#(#assignedDefaults #assignedKwdefaults) do: [:aKind |
+		(self ___recordedFunctionMetaOfKind___: aKind) removeKey: aName asString ifAbsent: []]
 
 ]
 
@@ -518,16 +557,38 @@ module >> ___functionAnnotationsFor___: aName [
 ]
 
 { #category : 'Grail-Signatures' }
+module >> ___functionDefaultKeysFor___: aName [
+	"The memo keys a module-level function's defaults are held under (see
+	___setFunctionDefaults___:keys:block:), or nil: this session's table, then
+	the committed record, as ___functionSignatureFor___: reads.  A session that
+	BINDS the deployed module never ran the def statements that fill the
+	table (#1717)."
+
+	| inner |
+	inner := module ___functionDefaultKeysTable___ at: self otherwise: nil.
+	^ (inner ifNotNil: [:keys | keys at: aName asString otherwise: nil])
+		ifNil: [self ___recordedFunctionMeta___: #defaultKeys name: aName]
+
+]
+
+{ #category : 'Grail-Signatures' }
+module >> ___functionDefaultsBlockFor___: aName [
+	"The block answering a module-level function's defaults (see
+	___setFunctionDefaults___:block:), or nil: this session's table, then the
+	committed record, as ___functionDefaultKeysFor___: (#1717)."
+
+	| inner |
+	inner := module ___functionDefaultsTable___ at: self otherwise: nil.
+	^ (inner ifNotNil: [:blocks | blocks at: aName asString otherwise: nil])
+		ifNil: [self ___recordedFunctionMeta___: #defaults name: aName]
+
+]
+
+{ #category : 'Grail-Signatures' }
 module >> ___functionDefaultsFor___: aName [
 	"``{ posValues . kwPairs }'' for a module-level function, or nil."
 
-	| tbl inner blk |
-	tbl := module ___functionDefaultsTable___.
-	inner := tbl at: self otherwise: nil.
-	inner isNil ifTrue: [^ nil].
-	blk := inner at: aName asString otherwise: nil.
-	blk isNil ifTrue: [^ nil].
-	^ blk value
+	^ (self ___functionDefaultsBlockFor___: aName) ifNotNil: [:block | block value]
 
 ]
 
@@ -661,27 +722,60 @@ module >> ___moduleDefaultAt: aSymbol compute: aBlock [
 ]
 
 { #category : 'Grail-Signatures' }
+module >> ___recordDefaultsAssignment___: aName value: aValue kw: isKw [
+	"Record, COMMITTED, a ``__defaults__'' (isKw false) or ``__kwdefaults__''
+	(isKw true) assignment this module's body made to its function aName.  A
+	session that BINDS the module does not run the body, so the assignment
+	never happened there: a same-shape one left the call binding the def-time
+	value, and a shape-changing one left it without the session entry point
+	#1714 installs (#1717).  ___replayDefaultsAssignments___ redoes it.
+
+	Plain data only (___defaultsSnapshotOf___:kw:), as importlib's record of a
+	body's class-attribute stores, since the record commits with the
+	deployment.  Anything else stays as before: in effect for the session
+	that ran the body, gone on bind."
+
+	| snapshot |
+	snapshot := self ___defaultsSnapshotOf___: aValue kw: isKw.
+	snapshot isNil ifTrue: [^ self].
+	self
+		___recordFunctionMeta___: (isKw ifTrue: [#assignedKwdefaults] ifFalse: [#assignedDefaults])
+		name: aName
+		value: snapshot
+
+]
+
+{ #category : 'Grail-Signatures' }
 module >> ___recordedFunctionMeta___: aKind name: aName [
 	"The committed record of ___recordFunctionMeta___:name:value:, or nil."
 
-	| nm reg rec kind |
+	^ (self ___recordedFunctionMetaOfKind___: aKind) at: aName asString otherwise: nil
+
+]
+
+{ #category : 'Grail-Signatures' }
+module >> ___recordedFunctionMetaOfKind___: aKind [
+	"The committed record of ___recordFunctionMeta___:name:value: for aKind, as
+	function name -> value: the dictionary itself, or an empty one when there
+	is none."
+
+	| nm reg rec |
 	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
-	reg isNil ifTrue: [^ nil].
+	reg isNil ifTrue: [^ KeyValueDictionary new].
 	nm := self at: #'__name__' otherwise: nil.
-	nm isNil ifTrue: [^ nil].
+	nm isNil ifTrue: [^ KeyValueDictionary new].
 	rec := reg at: nm asString otherwise: nil.
-	rec isNil ifTrue: [^ nil].
-	kind := rec at: aKind otherwise: nil.
-	kind isNil ifTrue: [^ nil].
-	^ kind at: aName asString otherwise: nil
+	rec isNil ifTrue: [^ KeyValueDictionary new].
+	^ (rec at: aKind otherwise: nil) ifNil: [KeyValueDictionary new]
 
 ]
 
 { #category : 'Grail-Signatures' }
 module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 	"Record, COMMITTED, what this module's body declared for its top-level
-	function aName: its signature spec (aKind #signatures) or its
-	``__annotate__'' block (#annotations).
+	function aName: its signature spec (aKind #signatures), its
+	``__annotate__'' block (#annotations), or its defaults block and the memo
+	keys behind it (#defaults, #defaultKeys).
 
 	The session tables above hold them for the session that ran the body.  A
 	session that BINDS the deployed module does not run it, so it had neither:
@@ -696,8 +790,9 @@ module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 
 	Only from the module's own body, and never for a session-local module
 	(``__main__''), which nothing binds.  A spec is strings and integers --
-	defaults are kept as source text -- and an annotate block is code over
-	the module, so both commit with the deployment."
+	defaults are kept as source text -- memo keys are symbols, and an annotate
+	or defaults block is code over the module, so all commit with the
+	deployment."
 
 	| nm reg rec kind |
 	self ___bodyIsRunning___ ifFalse: [^ self].
@@ -718,6 +813,35 @@ module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 		kind := KeyValueDictionary new.
 		rec at: aKind put: kind].
 	kind at: aName asString put: aValue
+
+]
+
+{ #category : 'Grail-Signatures' }
+module >> ___replayDefaultsAssignment___: aName snapshot: aSnapshot kw: isKw [
+	"Redo one recorded assignment through the write a Python assignment takes
+	(BoundMethod >> ___writeDefaultsThrough___:value:): a same-shape value
+	reaches the memo a call binds from, any other shape rebinds the
+	function's calls in this session."
+
+	| value |
+	value := (isKw and: [aSnapshot isKindOf: Array])
+		ifTrue: [ExecBlock ___pyKwDefaultsDict___: aSnapshot]
+		ifFalse: [aSnapshot].
+	(self @env1:___functionHandleFor___: aName asSymbol)
+		@env1:___writeDefaultsThrough___: (isKw ifTrue: ['__kwdefaults__'] ifFalse: ['__defaults__'])
+		value: value
+
+]
+
+{ #category : 'Grail-Signatures' }
+module >> ___replayDefaultsAssignments___ [
+	"Redo, in a session that BOUND this module, the __defaults__ and
+	__kwdefaults__ assignments its body made
+	(___recordDefaultsAssignment___:value:kw:, #1717)."
+
+	#( #( #assignedDefaults false ) #( #assignedKwdefaults true ) ) do: [:kindAndKw |
+		(self ___recordedFunctionMetaOfKind___: (kindAndKw at: 1)) keysAndValuesDo: [:aName :snapshot |
+			self ___replayDefaultsAssignment___: aName snapshot: snapshot kw: (kindAndKw at: 2)]]
 
 ]
 
@@ -819,6 +943,7 @@ module >> ___setFunctionDefaults___: aName block: aBlock [
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
 	inner at: aName asString put: aBlock.
+	self ___recordFunctionMeta___: #defaults name: aName value: aBlock.
 	^ self
 
 ]
@@ -838,6 +963,7 @@ module >> ___setFunctionDefaults___: aName keys: anEntry block: aBlock [
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
 	inner at: aName asString put: anEntry.
+	self ___recordFunctionMeta___: #defaultKeys name: aName value: anEntry.
 	^ self ___setFunctionDefaults___: aName block: aBlock
 
 ]
@@ -859,6 +985,7 @@ module >> ___setFunctionSignature___: aName spec: aSpec [
 		tbl at: self put: inner].
 	inner at: aName asString put: aSpec.
 	self ___recordFunctionMeta___: #signatures name: aName value: aSpec.
+	self ___forgetDefaultsAssignmentsTo___: aName.
 	^ self
 
 ]
@@ -1019,11 +1146,8 @@ module >> ___writeFunctionDefaults___: aName value: aValue kw: isKw [
 	binds from.  Answers true when it took effect, false when the shape cannot
 	be carried -- see module class >> ___writeDefaults:entry:kw:into:."
 
-	| tbl inner entry memo |
-	tbl := module ___functionDefaultKeysTable___.
-	inner := tbl at: self otherwise: nil.
-	inner isNil ifTrue: [^ false].
-	entry := inner at: aName asString otherwise: nil.
+	| entry memo |
+	entry := self ___functionDefaultKeysFor___: aName.
 	entry isNil ifTrue: [^ false].
 	memo := module ___moduleDefaultsTable___ at: self otherwise: nil.
 	memo isNil ifTrue: [
