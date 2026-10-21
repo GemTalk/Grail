@@ -40,6 +40,15 @@ ProtocolFallbackAttributesTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests' }
+ProtocolFallbackAttributesTestCase >> testABuiltinFunctionHasOnlyCall [
+	"A builtin function answered BoundMethod's subscript pass-through as
+	__getitem__."
+
+	self assertAgreesWithCPythonAt: 'builtin_function'
+
+]
+
+{ #category : 'Grail-Tests' }
 ProtocolFallbackAttributesTestCase >> testABuiltInHasOnlyTheProtocolsItsCPythonTypeHas [
 	"int, float, None and the rest answered __iter__, __getitem__ and
 	__contains__ from Grail's refusals and root fallbacks."
@@ -101,7 +110,7 @@ ProtocolFallbackAttributesTestCase >> testEveryCheckIsPresentAndAgreesWithCPytho
 
 	self
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '23 checks, 0 disagreeing [], keys match: True'
+		equals: '24 checks, 0 disagreeing [], keys match: True'
 
 ]
 
@@ -110,15 +119,5 @@ ProtocolFallbackAttributesTestCase >> testGettingAFallbackRaisesAttributeError [
 
 	self assertAgreesWithCPythonAt: 'getattr_int_iter'.
 	self assertAgreesWithCPythonAt: 'getattr_none_len'
-
-]
-
-{ #category : 'Grail-Tests' }
-ProtocolFallbackAttributesTestCase >> testTheDocumentedGrailGapIsUnchanged [
-	"GRAIL_ONLY: a builtin function keeps BoundMethod's real __getitem__.  When
-	that is fixed this fails, and the key moves into EXPECTED, as
-	``plain_class'' did."
-
-	self assert: 'builtin_function' answersAsIn: #GRAIL_ONLY
 
 ]

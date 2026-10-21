@@ -88,6 +88,7 @@ r = {
 EXPECTED = {
     'None': ('__bool__',),
     'bool': ('__bool__',),
+    'builtin_function': ('__call__',),
     'bytes': ('__iter__', '__getitem__', '__len__', '__contains__'),
     'complex': ('__bool__',),
     'contains_int_still_raises': "TypeError: argument of type 'int' is not a container or iterable",
@@ -111,15 +112,11 @@ EXPECTED = {
     'subscriptable_instance': ('__getitem__',),
 }
 
-# A Grail limitation this fixture documents: what GRAIL answers, which CPython
-# does not (it answers ``('__call__',)'').  A builtin function's BoundMethod
-# keeps a real ``__getitem__'' (a PEP 585 pass-through, see Object >>
-# ___hasOwnGetitem___), which is neither a refusal nor a root fallback, so
-# #1632's rule leaves it alone.  ``plain_class'' was the other one: a class read
-# none of type's methods (type_methods_on_classes.py).
-GRAIL_ONLY = {
-    'builtin_function': ('__getitem__', '__call__'),
-}
+# No Grail limitation is left to document.  The two this fixture carried, as
+# GRAIL_ONLY, were a builtin function's ``__getitem__'' (a BoundMethod
+# pass-through, function_not_subscriptable.py) and a class's missing
+# ``__call__'' (type_methods_on_classes.py).
+GRAIL_ONLY = {}
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, "<missing>") != EXPECTED[k])
 SUMMARY = "%d checks, %d disagreeing %r, keys match: %s" % (

@@ -11766,18 +11766,15 @@ Object >> ___hasOwnGetitem___ [
 	type would have, giving it sq_item and mp_subscript -- rather than one
 	Grail adds only to raise?
 
-	It cannot be asked of hasattr: Grail gives int and None refusal methods
-	(<grailProtocolRefusal>) that exist only to raise CPython's TypeError,
-	every Python instance inherits PythonInstance's, a builtin function's
-	BoundMethod subscripts as a PEP 585 pass-through, and a module is a
-	SymbolDictionary.  None of those subscripts in CPython.  Asked by
-	%-formatting's mapping test (CharacterCollection
-	class>>___percentOperandIsMapping___:forBytes:) and the C shim's
-	PySequence_Check (CPythonShim>>PySequence_Check:)."
+	Grail gives int, None and functions refusal methods (<grailProtocolRefusal>)
+	that exist only to raise CPython's TypeError, every Python instance inherits
+	PythonInstance's, and a module is a SymbolDictionary.  None of those
+	subscripts in CPython.  Asked by %-formatting's mapping test
+	(CharacterCollection class>>___percentOperandIsMapping___:forBytes:) and the
+	C shim's PySequence_Check (CPythonShim>>PySequence_Check:)."
 
 	| defCls meth |
-	((self @env0:isKindOf: BoundMethod) @env0:or: [self @env0:isKindOf: module])
-		ifTrue: [^ false].
+	(self @env0:isKindOf: module) ifTrue: [^ false].
 	defCls := (self @env0:class)
 		@env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1.
 	defCls @env0:isNil ifTrue: [
