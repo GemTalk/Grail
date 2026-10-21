@@ -28,7 +28,13 @@
 # ---------------------------------------------------------------- registry
 
 _search_path = []
-_registry_cache = {}
+# GRAIL: session-local, as re's caches are (see _grail_session).  CPython's
+# registry cache is process memory.  A plain dict here is MUTATED, not
+# rebound, so on a deployed _codecs a lookup wrote the committed dict, and a
+# commit stored the CodecInfo -- and through it the codec module's classes,
+# still reachable after that module's deployment was taken back (#1731).
+from _grail_session import SessionDict as _GrailSessionDict
+_registry_cache = _GrailSessionDict("_codecs._registry_cache")
 _bootstrapped = False
 
 

@@ -541,6 +541,12 @@ timed "namespace-package-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/s
 # assignments to them (same-shape and shape-changing) are in effect. Commits.
 timed "function-defaults-bind" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runFunctionDefaultsBindTest.gs < /dev/null || EXIT=$?
 
+# A codec lookup's cache entry is never committed (#1731): encodings' and
+# _codecs' caches are per session, so a lookup made before a commit cannot
+# leave a later session a CodecInfo whose codec module nothing deploys --
+# whose first use rebuilt that module's classes in place. Commits.
+timed "codec-cache-session" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCodecCacheSessionTest.gs < /dev/null || EXIT=$?
+
 # A monkey-patch belongs to its session (docs/Persistent_Modules_and_Classes.md
 # D8): patching builtins.len and a class's method writes no persistent object,
 # and after a commit a fresh session sees both originals -- where persistent
