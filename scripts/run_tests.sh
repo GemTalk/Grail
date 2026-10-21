@@ -577,5 +577,10 @@ timed "stone-lock" ./tests/scripts/run_stone_lock_test.sh || EXIT=$?
 # average and the gem count.
 timed "launch-gate" ./tests/scripts/run_launch_gate_test.sh || EXIT=$?
 
+# new_worktree.sh takes this machine's stone from the main checkout's .setenv,
+# from the main checkout or any worktree.  Needs no stone: it builds a scratch
+# repository and a fake product directory.
+timed "new-worktree" ./tests/scripts/run_new_worktree_test.sh || EXIT=$?
+
 printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
 exit $EXIT
