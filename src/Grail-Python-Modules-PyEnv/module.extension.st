@@ -937,6 +937,31 @@ module >> ___moduleAttrLoad___: aSym [
 ]
 
 { #category : 'Grail-Attribute Access' }
+module >> ___ownsFunction___: aSym family: aFamily [
+	"Is aSym, which this module responds to under some spelling in aFamily, one of
+	its own functions -- defined on its class or on module -- rather than the
+	Smalltalk dictionary protocol SymbolDictionary and its superclasses carry, or
+	a protocol refusal (__getitem__:)?
+
+	The keyword twin of #1233's rule for a unary selector in ___pyAttrLoad___::
+	``hasattr(json, 'get')'' answered KeyValueDictionary >> get:, and so did pop,
+	update and setdefault.  A dunder is exempt, as it is there: the object
+	protocol (__eq__:, __reduce_ex__:) legitimately lives above module."
+
+	| walker |
+
+	(self ___isProtocolFallback___: aSym) ifTrue: [^ false].
+	(self ___grailIsDunderName___: aSym) ifTrue: [^ true].
+	walker := self @env0:class.
+	[walker == nil] whileFalse: [
+		(self ___class___: walker owns: aSym family: aFamily) ifTrue: [^ true].
+		walker == module ifTrue: [^ false].
+		walker := walker @env0:superClass].
+	^ false
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 module >> ___pyAttrDelete___: aName [
 	"``del m.x'' removes the binding WHEREVER the module keeps it.
 
@@ -1054,6 +1079,17 @@ module >> ___pyMetaclass___ [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+module >> ___pyTypeNameForError___ [
+	"``type(m).__name__'' -- ``module'', or the ModuleType subclass it was given.
+	Object's asks the Smalltalk class, which for a module is the one Grail mints
+	for it and names after it, so every message about a module named the module
+	instead: ``'json' object is not callable''."
+
+	^ (self __class__ __name__) @env0:asString
+
+]
+
 { #category : 'Grail-Attribute Access' }
 module >> ___unmarkGlobalDeleted___: aSym [
 	"Storing a name revives it."
@@ -1164,6 +1200,26 @@ module >> __class__ [
 	"``m.__class__ is type(m)'', as CPython: see ___pyMetaclass___."
 
 	^ self ___pyMetaclass___
+
+]
+
+{ #category : 'Grail-Protocol Refusal' }
+module >> __contains__: key [
+	<grailProtocolRefusal>
+	"``'x' in mod'' raises CPython's catchable TypeError.  See __getitem__:."
+
+	^ TypeError ___signal___: ('argument of type ''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' is not a container or iterable')
+
+]
+
+{ #category : 'Grail-Protocol Refusal' }
+module >> __delitem__: key [
+	<grailProtocolRefusal>
+	"``del mod[k]'' raises CPython's catchable TypeError.  See __getitem__:."
+
+	^ TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' object does not support item deletion')
 
 ]
 
@@ -1325,6 +1381,24 @@ module >> __eq__: other [
 
 ]
 
+{ #category : 'Grail-Protocol Refusal' }
+module >> __getitem__: key [
+	<grailProtocolRefusal>
+	"``mod[k]'' raises CPython's catchable TypeError: a module is not a container.
+
+	``module'' is a SymbolDictionary, so it inherited the env-1 dict protocol --
+	against the kernel dictionary's own slots, not the module's globals.
+	``json['dumps']'' raised KeyError, ``len(json)'' counted those slots,
+	``json['x'] = 1'' stored an attribute, and a key that is not a string was an
+	uncatchable MessageNotUnderstood (SymbolDictionary >> __getitem__: sends it
+	asSymbol).  These six refusals stand for the protocol, so each raises what
+	CPython raises and none is an attribute (#1632)."
+
+	^ TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' object is not subscriptable')
+
+]
+
 { #category : 'Grail-Hashing & Identity' }
 module >> __hash__ [
 	"A module hashes BY IDENTITY, exactly as a plain object does -- and
@@ -1385,6 +1459,26 @@ module >> __init__: aName _: aDoc [
 
 	self ___initName___: aName doc: aDoc.
 	^ None
+
+]
+
+{ #category : 'Grail-Protocol Refusal' }
+module >> __iter__ [
+	<grailProtocolRefusal>
+	"``iter(mod)'' raises CPython's catchable TypeError.  See __getitem__:."
+
+	^ TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' object is not iterable')
+
+]
+
+{ #category : 'Grail-Protocol Refusal' }
+module >> __len__ [
+	<grailProtocolRefusal>
+	"``len(mod)'' raises CPython's catchable TypeError.  See __getitem__:."
+
+	^ TypeError ___signal___: ('object of type ''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' has no len()')
 
 ]
 
@@ -1544,6 +1638,17 @@ module >> __setattr__: aName _: aValue [
 
 	self ___unmarkGlobalDeleted___: aName @env0:asString @env0:asSymbol.
 	^ super __setattr__: aName _: aValue
+
+]
+
+{ #category : 'Grail-Protocol Refusal' }
+module >> __setitem__: key _: value [
+	<grailProtocolRefusal>
+	"``mod[k] = v'' raises CPython's catchable TypeError.  It used to
+	store k, and the store read back as a module attribute.  See __getitem__:."
+
+	^ TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' object does not support item assignment')
 
 ]
 

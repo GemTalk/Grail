@@ -13741,6 +13741,11 @@ Object >> ___pyAttrLoad___: aSym [
 				(owner @env0:inheritsFrom: module) @env0:not @env0:and: [
 					(self ___grailIsDunderName___: aSym) @env0:not]]])
 						ifTrue: [owner := nil].
+		"...nor a protocol REFUSAL: module's __len__ and __iter__ stand for a
+		protocol a module does not have (module >> __getitem__:).  Performed, the
+		read raised their TypeError, which hasattr does not catch."
+		(owner notNil @env0:and: [self ___isProtocolFallback___: aSym])
+			ifTrue: [owner := nil].
 		owner notNil ifTrue: [
 			"A 0-arg selector is either a data accessor (``__name__'',
 			``Grail-Constants'') that must be PERFORMED to yield its value,
@@ -13820,7 +13825,8 @@ Object >> ___pyAttrLoad___: aSym [
 			or: [(self ___respondsTo___: sym4)
 			or: [(self ___respondsTo___: sym5)
 			or: [self ___respondsTo___: sym6]]]]]) ifTrue: [
-			^ self ___functionHandleFor___: aSym].
+			(self ___ownsFunction___: aSym family: family) ifTrue: [
+				^ self ___functionHandleFor___: aSym]].
 		^ self @env0:at: aSym ifAbsent: [
 			"PEP 562: a module may define a module-level ``__getattr__(name)''
 			to serve names its namespace does not hold, and it is consulted
