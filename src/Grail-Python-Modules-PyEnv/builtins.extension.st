@@ -794,6 +794,46 @@ builtins >> ___checkDuplicateGrouping___: spec at: i first: firstChar [
 
 ]
 
+{ #category : 'Grail-Format Spec Engine' }
+builtins >> ___checkGrouping___: aGroupingChar with: aType [
+	"CPython's rule for a thousands separator (Python/formatter_unicode.c:
+	330-357): ',' and '_' go with d e f g E G % F or no type, and '_' also with
+	b o x X, where it groups every four digits.  Anything else is ``Cannot
+	specify ',' with 'x'.''  aType is the presentation type the value's
+	formatter would use, so a str passes 's' for an absent one.  Grail grouped
+	``format(1234567890, ',x')'' into '4996,02d2' and ignored a separator on a
+	str or an int's 'c'."
+
+	aGroupingChar == nil ifTrue: [^ self].
+	(aType == nil or: [#($d $e $f $g $E $G $% $F) @env0:includes: aType]) ifTrue: [^ self].
+	(aGroupingChar @env0:= $_ and: [#($b $o $x $X) @env0:includes: aType]) ifTrue: [^ self].
+	^ ValueError ___signal___: ('Cannot specify ''' @env0:,
+		(String @env0:with: aGroupingChar) @env0:, ''' with ''' @env0:,
+		(String @env0:with: aType) @env0:, '''.')
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
+builtins >> ___checkIntegerPresentation___: aParsedSpec [
+	"What CPython's format_long_internal refuses before it formats an int
+	(Python/formatter_unicode.c:982-1010): a precision, a ``z'', and for 'c' a
+	sign -- an explicit '-' included -- or '#'.  Grail ignored all four:
+	``format(3, '.2')'' was '3' and ``format(65, '+c')'' was 'A'."
+
+	(aParsedSpec @env0:at: 7) == nil ifFalse: [
+		^ ValueError ___signal___: 'Precision not allowed in integer format specifier'].
+	(aParsedSpec @env0:at: 10) == true ifTrue: [
+		^ ValueError ___signal___:
+			'Negative zero coercion (z) not allowed in integer format specifier'].
+	(aParsedSpec @env0:at: 8) @env0:= $c ifFalse: [^ self].
+	(aParsedSpec @env0:at: 12) == true ifTrue: [
+		^ ValueError ___signal___: 'Sign not allowed with integer format specifier ''c'''].
+	(aParsedSpec @env0:at: 4) == true ifTrue: [
+		^ ValueError ___signal___:
+			'Alternate form (#) not allowed with integer format specifier ''c''']
+
+]
+
 { #category : 'Grail-Built-in Functions' }
 builtins >> ___checkMinMaxKeywords___: kwargs positional: positional lessThan: pickSmaller [
 	"min/max take exactly two keywords, and CPython refuses the rest by
@@ -819,6 +859,26 @@ builtins >> ___checkMinMaxKeywords___: kwargs positional: positional lessThan: p
 				@env0:, name
 				@env0:, '() with multiple positional arguments')].
 	^ self
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
+builtins >> ___checkStringPresentation___: aParsedSpec [
+	"What CPython's format_string_internal refuses, in its order
+	(Python/formatter_unicode.c:874-901): a sign -- a space has its own
+	message -- then a ``z'', then '#'.  The '=' alignment it refuses next is
+	___formatStrValue___:parsed:'s, which has to tell a written '=' from the
+	'0' flag's default.  Grail formatted ``format('abc', '+')'' as 'abc'."
+
+	(aParsedSpec @env0:at: 12) == true ifTrue: [
+		^ ValueError ___signal___: ((aParsedSpec @env0:at: 3) @env0:= (Character @env0:space)
+			ifTrue: ['Space not allowed in string format specifier']
+			ifFalse: ['Sign not allowed in string format specifier'])].
+	(aParsedSpec @env0:at: 10) == true ifTrue: [
+		^ ValueError ___signal___:
+			'Negative zero coercion (z) not allowed in string format specifier'].
+	(aParsedSpec @env0:at: 4) == true ifTrue: [
+		^ ValueError ___signal___: 'Alternate form (#) not allowed in string format specifier']
 
 ]
 
@@ -1487,9 +1547,10 @@ builtins >> ___formatFloatValue___: value parsed: p [
 	'g' -- Grail does not insert locale grouping separators, but the general
 	digit format is the same (test_enum _MinimalOutputTests.test_format_specs
 	formats a float ReprEnum member with '{:n}')."
+	self ___checkGrouping___: grouping with: type.
 	type @env0:= $n ifTrue: [type := $g].
 	(#($b $o $x $X $c $d $s) @env0:includes: type) ifTrue: [
-		ValueError ___signal___: ('Unknown format code for object of type ''float''')].
+		ValueError ___signal___: (self ___unknownFormatCode___: type typeName: 'float')].
 	"Non-finite values format as their str with sign/width only."
 	(value @env0:= value) ifFalse: [
 		digits := 'nan'. neg := false]
@@ -1637,14 +1698,16 @@ builtins >> ___formatIntValue___: value parsed: p [
 	fill := p @env0:at: 1. align := p @env0:at: 2. sign := p @env0:at: 3.
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	type := p @env0:at: 8.
+	self ___checkGrouping___: grouping with: type.
 	(#($e $E $f $F $g $G $%) @env0:includes: type) ifTrue: [
 		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
+	type @env0:= $s ifTrue: [
+		ValueError ___signal___: 'Unknown format code ''s'' for object of type ''int'''].
+	self ___checkIntegerPresentation___: p.
 	type @env0:= $c ifTrue: [
 		body := String @env0:with: (Character @env0:codePoint: value).
 		align == nil ifTrue: [align := $<].
 		^ self ___formatPadBody___: body fill: fill align: align width: width signLength: 0].
-	type @env0:= $s ifTrue: [
-		ValueError ___signal___: 'Unknown format code ''s'' for object of type ''int'''].
 	prefix := ''.
 	(type == nil or: [type @env0:= $d or: [type @env0:= $n]]) ifTrue: [
 		digits := value @env0:abs @env0:printString]
@@ -1718,8 +1781,10 @@ builtins >> ___formatStrValue___: value parsed: p [
 	| fill align width precision type body |
 	fill := p @env0:at: 1. align := p @env0:at: 2. width := p @env0:at: 5.
 	precision := p @env0:at: 7. type := p @env0:at: 8.
+	self ___checkGrouping___: (p @env0:at: 6) with: (type @env0:ifNil: [$s]).
 	(type == nil or: [type @env0:= $s]) ifFalse: [
-		ValueError ___signal___: ('Unknown format code for object of type ''str''')].
+		ValueError ___signal___: (self ___unknownFormatCode___: type typeName: 'str')].
+	self ___checkStringPresentation___: p.
 	body := value.
 	((precision == nil) @env0:not and: [body @env0:size @env0:> precision]) ifTrue: [
 		body := body @env0:copyFrom: 1 to: precision].
@@ -1749,6 +1814,10 @@ builtins >> ___formatValue___: value spec: spec [
 		^ self ___formatFloatValue___: value parsed: p].
 	(value isKindOf: Integer) ifTrue: [
 		^ self ___formatIntValue___: value parsed: p].
+	"bool formats as the int it is (bool inherits int.__format__), so
+	``f'{True:>6}''' is '     1'; an empty spec is str() above, 'True'."
+	(value isKindOf: Boolean) ifTrue: [
+		^ self ___formatIntValue___: value __int__ parsed: p].
 	(value isKindOf: CharacterCollection) ifTrue: [
 		^ self ___formatStrValue___: value @env0:asString parsed: p].
 	^ self ___formatStrValue___: (value __str__) parsed: p
@@ -3224,8 +3293,8 @@ builtins >> ___notReversible___: aSequence [
 builtins >> ___parseFormatSpec___: spec typeName: typeName [
 	"Parse Python's format-spec mini-language
 	    [[fill]align][sign][#][0][width][,|_][.precision[,|_]][type]
-	into a 9-slot Array: {fill. align. sign. alt. width. grouping.
-	precision. type. fracGrouping}.  align/grouping/precision/type/
+	into an Array: {fill. align. sign. alt. width. grouping.
+	precision. type. fracGrouping. noNegZero. zeroAlign. signGiven}.  align/grouping/precision/type/
 	fracGrouping are nil when absent.  fracGrouping is a SEPARATE,
 	optional grouping char for the digits after the decimal point
 	(only meaningful for f/F/e/E; test_format's '.10_f' ->
@@ -3236,8 +3305,8 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 	neither digits nor a grouping char after it), or 'n' combined
 	with either grouping (CPython: ``Cannot specify ',' with 'n'.'')."
 
-	| fill align sign alt width grouping precision type i n c fracGrouping noNegZero zeroAlign |
-	fill := $ . align := nil. sign := $-. alt := false. zeroAlign := false.
+	| fill align sign alt width grouping precision type i n c fracGrouping noNegZero zeroAlign signGiven |
+	fill := $ . align := nil. sign := $-. alt := false. zeroAlign := false. signGiven := false.
 	width := 0. grouping := nil. precision := nil. type := nil.
 	fracGrouping := nil. noNegZero := false.
 	i := 1. n := spec @env0:size.
@@ -3252,7 +3321,7 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 					align := spec @env0:at: 1.
 					i := 2]].
 	(i @env0:<= n and: [#($+ $- $ ) @env0:includes: (spec @env0:at: i)]) ifTrue: [
-		sign := spec @env0:at: i. i := i @env0:+ 1].
+		sign := spec @env0:at: i. signGiven := true. i := i @env0:+ 1].
 	"PEP 682's ``z'' -- negative-zero coercion -- sits between the sign and the
 	``#'' flag.  ONLY there: ``z+f'' and ``fz'' are invalid specs, and they stay
 	invalid because a ``z'' anywhere else is simply not consumed and falls through
@@ -3317,15 +3386,14 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 	(type @env0:= $n and: [grouping @env0:notNil or: [fracGrouping @env0:notNil]]) ifTrue: [
 		ValueError ___signal___: ('Cannot specify ''' @env0:,
 			(String @env0:with: (grouping @env0:ifNil: [fracGrouping])) @env0:, ''' with ''n''.')].
-	"``z'' is meaningless for an INTEGER presentation type -- there is no negative
-	zero to coerce -- and CPython rejects it by name.  Note this is about the
-	TYPE, not the value: ``f'{-0:z.1f}''' passes an int and is fine."
-	(noNegZero and: [#($b $c $d $o $x $X $n $s) @env0:includes: type]) ifTrue: [
-		ValueError ___signal___: 'Negative zero coercion (z) not allowed'].
 	"Slot 11: the '=' in slot 2 was DEFAULTED by the '0' flag, not written.
-	A str needs the difference -- see ___formatStrValue___:parsed:."
+	A str needs the difference -- see ___formatStrValue___:parsed:.  Slot 12:
+	the sign in slot 3 was WRITTEN, not the '-' default; CPython refuses an
+	explicit one, '-' included, for a str and for an int's 'c'.  A ``z'' is
+	refused by the int and str formatters, where CPython refuses it, by
+	presentation type including the absent one: ``format(3, 'z')'' raises."
 	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping.
-		noNegZero. zeroAlign }
+		noNegZero. zeroAlign. signGiven }
 
 ]
 
@@ -4740,6 +4808,18 @@ builtins >> ___typeNamespaceValue___: aValue named: aKey [
 	((k @env0:= '__init_subclass__') or: [k @env0:= '__class_getitem__'])
 		ifTrue: [^ object ___grailImplicitClassmethod___: aValue].
 	^ aValue
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
+builtins >> ___unknownFormatCode___: aType typeName: aTypeName [
+	"CPython's message for a presentation type the value does not have,
+	naming the code (Python/formatter_unicode.c unknown_presentation_type):
+	``Unknown format code 'x' for object of type 'float'''.  Grail's left the
+	code out."
+
+	^ 'Unknown format code ''' @env0:, (String @env0:with: aType)
+		@env0:, ''' for object of type ''' @env0:, aTypeName @env0:, ''''
 
 ]
 
