@@ -389,6 +389,51 @@ PyTime >> ___cmpKey___ [
 
 ]
 
+{ #category : 'Grail-Conversion' }
+PyTime >> ___isoformat___: positional kw: kwargs [
+	"isoformat(timespec='auto'|'hours'|'minutes'|'seconds'|'milliseconds'
+	|'microseconds') — the keyword/positional timespec form."
+
+	| timespec h mi s us body suffix |
+	"CPython's signature accepts exactly one argument named `timespec';
+	anything else is a TypeError rather than being silently ignored
+	(test_1653736)."
+	(positional @env0:notNil @env0:and: [positional @env0:size @env0:> 1]) ifTrue: [
+		^ TypeError ___signal___: 'isoformat() takes at most 1 argument'].
+	kwargs @env0:isNil ifFalse: [
+		kwargs @env0:keysDo: [:k |
+			k @env0:asString @env0:= 'timespec' ifFalse: [
+				^ TypeError ___signal___:
+					'isoformat() got an unexpected keyword argument ''' @env0:,
+					k @env0:asString @env0:, '''']]].
+	timespec := 'auto'.
+	(positional @env0:notNil and: [positional @env0:isEmpty @env0:not])
+		ifTrue: [timespec := positional @env0:at: 1].
+	kwargs @env0:isNil ifFalse: [timespec := kwargs @env0:at: 'timespec' ifAbsent: [timespec]].
+	h := self @env0:dynamicInstVarAt: #_hour.
+	mi := self @env0:dynamicInstVarAt: #_minute.
+	s := self @env0:dynamicInstVarAt: #_second.
+	us := self @env0:dynamicInstVarAt: #_microsecond.
+	suffix := self ___isoTzSuffix___.
+	timespec @env0:= 'hours' ifTrue: [^ (self @env0:___pad___: h width: 2) @env0:, suffix].
+	body := (self @env0:___pad___: h width: 2) @env0:, ':' @env0:, (self @env0:___pad___: mi width: 2).
+	timespec @env0:= 'minutes' ifTrue: [^ body @env0:, suffix].
+	body := body @env0:, ':' @env0:, (self @env0:___pad___: s width: 2).
+	timespec @env0:= 'seconds' ifTrue: [^ body @env0:, suffix].
+	timespec @env0:= 'milliseconds' ifTrue: [
+		^ body @env0:, '.' @env0:, (self @env0:___pad___: (us @env0:// 1000) width: 3) @env0:, suffix].
+	timespec @env0:= 'microseconds' ifTrue: [
+		^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6) @env0:, suffix].
+	"Anything else is an error -- 'auto' is the only remaining valid value.
+	PyDateTime's counterpart already checked this; PyTime silently treated
+	every unknown spec as 'auto' (test_isoformat's timespec='monkey')."
+	timespec @env0:= 'auto' ifFalse: [
+		^ ValueError ___signal___: 'Unknown timespec value'].
+	us @env0:= 0 ifTrue: [^ body @env0:, suffix].
+	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6) @env0:, suffix
+
+]
+
 { #category : 'Grail-Private' }
 PyTime >> ___isoTzSuffix___ [
 	"'+HH:MM[:SS[.ffffff]]'-style UTC-offset suffix, or '' when naive --
@@ -609,47 +654,12 @@ PyTime >> __str__ [
 
 { #category : 'Grail-Conversion' }
 PyTime >> _isoformat: positional kw: kwargs [
-	"isoformat(timespec='auto'|'hours'|'minutes'|'seconds'|'milliseconds'
-	|'microseconds') — the keyword/positional timespec form."
+	"The varargs form ``isoformat(...)'' compiles to; the work is ___isoformat___:kw:.
+	Kept apart from it because a Python subclass's own ``def isoformat'' compiles a
+	``_isoformat:kw:'' too, and a fixed form re-sending THIS selector landed on that
+	override: ``time.isoformat(sub)'' answered the subclass's result (#1613)."
 
-	| timespec h mi s us body suffix |
-	"CPython's signature accepts exactly one argument named `timespec';
-	anything else is a TypeError rather than being silently ignored
-	(test_1653736)."
-	(positional @env0:notNil @env0:and: [positional @env0:size @env0:> 1]) ifTrue: [
-		^ TypeError ___signal___: 'isoformat() takes at most 1 argument'].
-	kwargs @env0:isNil ifFalse: [
-		kwargs @env0:keysDo: [:k |
-			k @env0:asString @env0:= 'timespec' ifFalse: [
-				^ TypeError ___signal___:
-					'isoformat() got an unexpected keyword argument ''' @env0:,
-					k @env0:asString @env0:, '''']]].
-	timespec := 'auto'.
-	(positional @env0:notNil and: [positional @env0:isEmpty @env0:not])
-		ifTrue: [timespec := positional @env0:at: 1].
-	kwargs @env0:isNil ifFalse: [timespec := kwargs @env0:at: 'timespec' ifAbsent: [timespec]].
-	h := self @env0:dynamicInstVarAt: #_hour.
-	mi := self @env0:dynamicInstVarAt: #_minute.
-	s := self @env0:dynamicInstVarAt: #_second.
-	us := self @env0:dynamicInstVarAt: #_microsecond.
-	suffix := self ___isoTzSuffix___.
-	timespec @env0:= 'hours' ifTrue: [^ (self @env0:___pad___: h width: 2) @env0:, suffix].
-	body := (self @env0:___pad___: h width: 2) @env0:, ':' @env0:, (self @env0:___pad___: mi width: 2).
-	timespec @env0:= 'minutes' ifTrue: [^ body @env0:, suffix].
-	body := body @env0:, ':' @env0:, (self @env0:___pad___: s width: 2).
-	timespec @env0:= 'seconds' ifTrue: [^ body @env0:, suffix].
-	timespec @env0:= 'milliseconds' ifTrue: [
-		^ body @env0:, '.' @env0:, (self @env0:___pad___: (us @env0:// 1000) width: 3) @env0:, suffix].
-	timespec @env0:= 'microseconds' ifTrue: [
-		^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6) @env0:, suffix].
-	"Anything else is an error -- 'auto' is the only remaining valid value.
-	PyDateTime's counterpart already checked this; PyTime silently treated
-	every unknown spec as 'auto' (test_isoformat's timespec='monkey')."
-	timespec @env0:= 'auto' ifFalse: [
-		^ ValueError ___signal___: 'Unknown timespec value'].
-	us @env0:= 0 ifTrue: [^ body @env0:, suffix].
-	^ body @env0:, '.' @env0:, (self @env0:___pad___: us width: 6) @env0:, suffix
-
+	^ self ___isoformat___: positional kw: kwargs
 ]
 
 { #category : 'Grail-Mutation' }
@@ -766,7 +776,7 @@ PyTime >> isoformat [
 	no-arg spelling (and __str__ through it) also carries the UTC-offset
 	suffix for aware times."
 
-	^ self _isoformat: nil kw: nil
+	^ self ___isoformat___: nil kw: nil
 
 ]
 
