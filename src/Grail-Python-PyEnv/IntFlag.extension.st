@@ -37,9 +37,28 @@ IntFlag >> ___compositeName___ [
 
 { #category : 'Grail-IntFlag Member' }
 IntFlag >> ___flagOperand___: other [
-	"Tolerant unwrap, mirroring Flag>>___flagOperand___: -- accepts a
-	member of any int-enum flavor or a plain int (IntFlag ops interoperate
-	with ints in CPython)."
+	"___flagOperandOrNil___: with the generic raise, mirroring
+	Flag>>___flagOperand___:."
+
+	| v |
+	v := self ___flagOperandOrNil___: other.
+	v @env0:isNil ifTrue: [
+		^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'].
+	^ v
+
+]
+
+{ #category : 'Grail-IntFlag Member' }
+IntFlag >> ___flagOperandOrNil___: other [
+	"The int to combine with, or NIL for an operand that is not an int --
+	CPython's Flag._get_value with int as the member type: a member of any
+	int-enum flavor, any int subclass, a plain int, or a bool (Lib/enum.py).
+
+	NIL so the operators answer NotImplemented, as CPython's do: ``F.A | 'x'''
+	then raises ``unsupported operand type(s) for |: 'F' and 'str''' from the
+	binary fallback, after the operand's own __ror__ has had its turn.  The
+	operators raised Grail's ``unsupported operand type(s) for flag
+	operation'' instead, for a bool as well (``F.A | True'' is <F.A: 1>)."
 
 	((other isKindOf: IntFlag)
 		or: [other @env0:class == self @env0:class]) ifTrue: [
@@ -49,7 +68,8 @@ IntFlag >> ___flagOperand___: other [
 		v := other @env0:dynamicInstVarAt: #value.
 		v @env0:isNil ifFalse: [^ v]].
 	(other isKindOf: Integer) ifTrue: [^ other].
-	^ TypeError ___signal___: 'unsupported operand type(s) for flag operation'
+	(other isKindOf: Boolean) ifTrue: [^ other __int__].
+	^ nil
 
 ]
 
@@ -87,18 +107,25 @@ IntFlag >> ___foreignFlagClassOf___: other [
 
 { #category : 'Grail-IntFlag Member' }
 IntFlag >> __and__: other [
+	| ov |
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [^ NotImplemented].
 	^ Enum ___grailIntFlagValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: (self ___flagOperand___: other))
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitAnd: ov)
 		foreign: (self ___foreignFlagClassOf___: other)
 
 ]
 
 { #category : 'Grail-IntFlag Member' }
 IntFlag >> __contains__: other [
-	"``B in (A|B)``: membership by bit coverage (same as Flag)."
+	"``B in (A|B)``: membership by bit coverage.  Only a member of the
+	receiver's own class, as Flag>>__contains__: has it: ``2 in F.B'' is a
+	TypeError in CPython, though ``F.A | 2'' is legal."
 
 	| ov v |
-	ov := self ___flagOperand___: other.
+	(other @env0:isKindOf: self @env0:class) ifFalse: [
+		^ Enum ___grailSignalUnsupportedIn: other flag: self].
+	ov := other @env0:dynamicInstVarAt: #value.
 	v := self @env0:dynamicInstVarAt: #value.
 	^ (v @env0:bitAnd: ov) @env0:= ov
 
@@ -148,8 +175,11 @@ IntFlag >> __len__ [
 
 { #category : 'Grail-IntFlag Member' }
 IntFlag >> __or__: other [
+	| ov |
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [^ NotImplemented].
 	^ Enum ___grailIntFlagValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: (self ___flagOperand___: other))
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: ov)
 		foreign: (self ___foreignFlagClassOf___: other)
 
 ]
@@ -218,8 +248,11 @@ IntFlag >> __rxor__: other [
 
 { #category : 'Grail-IntFlag Member' }
 IntFlag >> __xor__: other [
+	| ov |
+	ov := self ___flagOperandOrNil___: other.
+	ov @env0:isNil ifTrue: [^ NotImplemented].
 	^ Enum ___grailIntFlagValue: self @env0:class
-		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: (self ___flagOperand___: other))
+		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitXor: ov)
 		foreign: (self ___foreignFlagClassOf___: other)
 
 ]
