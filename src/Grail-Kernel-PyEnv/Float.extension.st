@@ -415,11 +415,12 @@ Float class >> __getitem__: index [
 
 { #category : 'Grail-Initialization' }
 Float class >> __instancecheck__: anObject [
-	"isinstance(x, float) -- consulted when ``isKindOf: Float`` fails;
-	recognize AbstractPyFloat wrappers (float subclasses), matching
-	CPython (see int's twin hook)."
+	"``float.__instancecheck__(x)'' -- what isinstance(x, float) answers: a Float
+	(SmallDouble included) or an AbstractPyFloat wrapper (a float subclass).  As
+	with int's twin hook, isinstance asks it only after its own ``isKindOf: Float''
+	has failed, and a direct ``float.__instancecheck__(1.5)'' was False."
 
-	^ anObject isKindOf: AbstractPyFloat
+	^ (anObject isKindOf: Float) or: [anObject isKindOf: AbstractPyFloat]
 
 ]
 

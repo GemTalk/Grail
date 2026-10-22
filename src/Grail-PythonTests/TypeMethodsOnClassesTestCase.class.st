@@ -40,6 +40,16 @@ TypeMethodsOnClassesTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests' }
+TypeMethodsOnClassesTestCase >> testABuiltinsOwnInstancecheckAnswersAsIsinstanceDoes [
+	"int's and float's class-side hooks answered for their WRAPPERS alone, so
+	``int.__instancecheck__(3)'' was False."
+
+	#('int_instancecheck' 'int_instancecheck_bool' 'float_instancecheck') do: [:key |
+		self assertAgreesWithCPythonAt: key]
+
+]
+
+{ #category : 'Grail-Tests' }
 TypeMethodsOnClassesTestCase >> testAClassWithNoMetaclassHasTypesMethods [
 	"Plain, int and object answered none of __call__, __instancecheck__ and
 	__subclasscheck__ (int only its own __instancecheck__)."
@@ -64,7 +74,7 @@ TypeMethodsOnClassesTestCase >> testEveryCheckIsPresentAndAgreesWithCPython [
 
 	self
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '17 checks, 0 disagreeing [], keys match: True'
+		equals: '20 checks, 0 disagreeing [], keys match: True'
 
 ]
 
@@ -94,15 +104,6 @@ TypeMethodsOnClassesTestCase >> testTheChecksAnswerForAClassWithNoMetaclass [
 	#('plain_instancecheck' 'plain_instancecheck_other' 'plain_subclasscheck'
 		'type_instancecheck_unbound' 'type_subclasscheck_unbound') do: [:key |
 			self assertAgreesWithCPythonAt: key]
-
-]
-
-{ #category : 'Grail-Tests' }
-TypeMethodsOnClassesTestCase >> testTheDocumentedGrailGapIsUnchanged [
-	"GRAIL_ONLY: int's own class-side __instancecheck__: answers False for an
-	int.  When that is fixed this fails, and the key moves into EXPECTED."
-
-	self assert: 'int_instancecheck' answersAsIn: #GRAIL_ONLY
 
 ]
 
