@@ -159,10 +159,20 @@ SUITE_T0=$SECONDS
 # exits when temporary memory is exhausted); at 2000000 it passes.  The budget is
 # a ceiling, not an allocation, so the other modules are unaffected.
 # docs/Issues.md, ``A module's session footprint'', has where that memory goes.
+#
+# test_copy runs INTERPRETED, as a stopgap for a VM defect (#1739).  Under
+# native code (Linux x86_64) its test_deepcopy_reflexive_dict sometimes skips
+# the yellow-zone trip altogether and runs on to the red zone: ERROR 2502 at
+# depth 107281, which no handler can catch.  Which Grail commits it hits
+# depends on stack alignment, not on any one change.  Native code is off by
+# default on Darwin arm64, so this changes nothing there.  Remove the case once
+# the VM is fixed.
 module_topaz_cfg() { # $1=mod
     case "$1" in
         test.test___all__)
             echo "${TOPAZ_CFG/GEM_TEMPOBJ_CACHE_SIZE=1000000/GEM_TEMPOBJ_CACHE_SIZE=2000000}" ;;
+        test.test_copy)
+            echo "${TOPAZ_CFG}GEM_NATIVE_CODE_ENABLED=0;" ;;
         *)
             echo "$TOPAZ_CFG" ;;
     esac
