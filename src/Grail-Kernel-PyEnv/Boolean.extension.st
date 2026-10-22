@@ -372,11 +372,21 @@ Boolean >> __and__: other [
 	int degrades to int semantics.  A Boolean argument must be coerced
 	before bitAnd: — GemStone's integer primitive retry would
 	otherwise forward #bitAnd: to the Boolean argument and DNU
-	(twilio.request_validator's ``result &= c1 == c2``)."
+	(twilio.request_validator's ``result &= c1 == c2``).
+
+	That retry DNUs on ANY operand that is not an integer, so one that is
+	not a Python int answers NotImplemented, as CPython's int.__and__ does;
+	the operator (___binOpAnd___:, ___augmentedOp___:inplace:binary:) then
+	tries other's __rand__ and raises CPython's TypeError.  ``True & 'x'''
+	-- and ``x &= 'a''' on a bool -- ended the process with ``a Unicode7
+	does not understand #bitAnd:'', where CPython raises ``unsupported
+	operand type(s) for &: 'bool' and 'str'''.  Fixture:
+	tests/python/bool_bitwise_operands.py."
 
 	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:and: [other]
 	].
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
 	^ (self ifTrue: [1] ifFalse: [0]) ___pyBitAnd___: other
 
 ]
@@ -608,11 +618,13 @@ Boolean >> __neg__ [
 { #category : 'Grail-Bitwise' }
 Boolean >> __or__: other [
 	"Bitwise OR.  bool | bool stays bool (see __and__: for the
-	coercion rationale); bool | int degrades to int semantics."
+	coercion rationale, and for why a non-int operand never reaches
+	bitOr:); bool | int degrades to int semantics."
 
 	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:or: [other]
 	].
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
 	^ (self ifTrue: [1] ifFalse: [0]) @env0:bitOr: other
 
 ]
@@ -691,11 +703,13 @@ Boolean >> __truediv__: other [
 { #category : 'Grail-Bitwise' }
 Boolean >> __xor__: other [
 	"Bitwise XOR.  bool ^ bool stays bool (see __and__: for the
-	coercion rationale); bool ^ int degrades to int semantics."
+	coercion rationale, and for why a non-int operand never reaches
+	___pyBitXor___:); bool ^ int degrades to int semantics."
 
 	(other isKindOf: Boolean) ifTrue: [
 		^ self @env0:xor: other
 	].
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
 	^ (self ifTrue: [1] ifFalse: [0]) ___pyBitXor___: other
 
 ]

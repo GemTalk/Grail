@@ -2498,8 +2498,7 @@ CharacterCollection >> __mul__: n [
 	"Repeat string n times. In Python: str * n"
 
 	| count result stream |
-	((n isKindOf: Integer)
-		or: [n ___hasIndexDunder___]) ifFalse: [
+	n ___isRepeatCount___ ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	"__index__ objects answer neither #asInteger (uncatchable DNU) nor
 	arithmetic -- fetch the count first, range-checked: 'a' * 2**100 is an

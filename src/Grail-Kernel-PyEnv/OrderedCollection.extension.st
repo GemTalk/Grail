@@ -487,6 +487,11 @@ OrderedCollection >> __imul__: n [
 	assigned in Smalltalk, hence the temp): ``lst *= o'' with an __index__
 	object used to send env-0 #<= to the object and die on an uncatchable DNU
 	(test_index.ListTestCase.test_inplace_repeat)."
+	"Anything else declines, so ``lst *= x'' becomes ``lst * x'': x's
+	__rmul__ answers, or the fallback raises CPython's ``can't multiply
+	sequence by non-int of type 'str''' -- not the conversion's ``'str'
+	object cannot be interpreted as an integer''."
+	n ___isRepeatCount___ ifFalse: [^ NotImplemented].
 	self ___noteSortMutation.
 	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [

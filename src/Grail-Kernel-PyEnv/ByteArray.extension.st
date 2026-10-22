@@ -2308,11 +2308,13 @@ ByteArray >> __mul__: count [
 	n := count.
 
 	"Validate count is an integer (an __index__ object counts, as in CPython;
-	a float does not)."
+	a float does not).  Anything else is the binary fallback's, as for str and
+	list: the operand's __rmul__ answers first (``b'ab' * Obj()''), and
+	CPython's TypeError names its type (``... non-int of type 'float''')."
 	(n isKindOf: Integer) ifFalse: [
 		(n ___hasIndexDunder___)
 			ifTrue: [n := bytes ___coerceIndex___: n]
-			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
+			ifFalse: [^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:']
 	].
 
 	"If count <= 0, return an empty object of the receiver's base type"
