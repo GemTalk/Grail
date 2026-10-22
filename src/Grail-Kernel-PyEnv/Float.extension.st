@@ -372,15 +372,12 @@ Float class >> ___parseHexInt___: s [
 
 { #category : 'Grail-Initialization' }
 Float class >> ___pyTypeNameFor___: obj [
-	"Best-effort PYTHON-facing type name for an error message -- a few
-	built-ins' Smalltalk class name doesn't match their Python name
-	(PyDict -> dict); anything else falls back to the raw class name."
+	"The PYTHON type name of obj for an error message: ``type(obj).__name__''.
+	This used to map two Smalltalk class names (PyDict, OrderedCollection) and
+	answer the raw class name for everything else, so ``float(object())'' named
+	``'Object''', a function ``'BoundMethod''' and a module the module itself."
 
-	| n |
-	n := obj @env0:class @env0:name @env0:asString.
-	(n @env0:= 'PyDict') ifTrue: [^ 'dict'].
-	(n @env0:= 'OrderedCollection') ifTrue: [^ 'list'].
-	^ n
+	^ obj ___pyTypeNameForError___
 
 ]
 

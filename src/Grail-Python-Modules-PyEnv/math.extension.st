@@ -64,7 +64,7 @@ math >> ___dunderRound___: x selector: dunder default: fallback coerceFloat: coe
 	coerceFloat ifTrue: [^ (self ___real___: x) @env0:perform: fallback].
 	(x isKindOf: Number) ifTrue: [^ x @env0:perform: fallback].
 	TypeError ___signal___: ('type '
-		@env0:, x @env0:class @env0:name @env0:asString
+		@env0:, x ___pyTypeNameForError___
 		@env0:, ' doesn''t define ' @env0:, dunder @env0:asString @env0:, ' method')
 
 ]
@@ -406,7 +406,7 @@ math >> ___real___: x [
 	((x @env0:class @env0:class @env0:whichClassIncludesSelector: #'__float__' environmentId: 1) ~~ nil)
 		ifTrue: [^ ((x ___pyAttrLoad___: #'__float__') value: { } value: nil) @env0:asFloat].
 	TypeError ___signal___: ('must be real number, not '
-		@env0:, x @env0:class @env0:name @env0:asString)
+		@env0:, x ___pyTypeNameForError___)
 
 ]
 

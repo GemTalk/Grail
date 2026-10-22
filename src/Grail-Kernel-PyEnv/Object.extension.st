@@ -6293,7 +6293,7 @@ Object >> ___asIndex___ [
 		(v isKindOf: Integer) ifTrue: [^ v].
 		TypeError ___signal___: ('__index__ returned non-int (type '
 			@env0:, (v @env0:class @env1:__name__) @env0:asString @env0:, ')')].
-	TypeError ___signal___: ('''' @env0:, (self @env0:class @env1:__name__) @env0:asString
+	TypeError ___signal___: ('''' @env0:, self ___pyTypeNameForError___
 		@env0:, ''' object cannot be interpreted as an integer')
 
 ]
@@ -13186,11 +13186,15 @@ Object >> ___protocolOwnedBy___: walker name: aName [
 		fallbacks; NoneType and Integer compile raising-TypeError stubs for
 		__iter__/__getitem__ (catchable errors instead of env-1 MNUs) --
 		none of those are real protocol implementations."
+		"...nor is a <grailProtocolRefusal> method (#1632), which exists only to
+		raise the operation's TypeError: a function's __getitem__ made
+		``reversed(f)'' look like a sequence and report ``has no len()''."
 		(found ~~ nil
 			and: [found ~~ PythonInstance
 			and: [found ~~ Object
 			and: [found ~~ Integer
-			and: [found @env0:name ~~ #'NoneType']]]])
+			and: [found @env0:name ~~ #'NoneType'
+			and: [(self ___isProtocolFallbackSelector___: sel in: walker) not]]]]])
 				ifTrue: [^ true]].
 	^ false
 

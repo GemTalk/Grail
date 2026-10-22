@@ -427,8 +427,9 @@ Integer class >> __new__: obj [
 		^ self ___parseIntFromBytes___: obj tobytes original: obj
 	].
 
-	"Otherwise, error"
-	TypeError ___signal___: 'int() argument must be a string or a number'
+	"Otherwise, error -- CPython 3.14's wording, naming the type."
+	TypeError ___signal___: ('int() argument must be a string, a bytes-like object or a real number, not '''
+		@env0:, obj ___pyTypeNameForError___ @env0:, '''')
 
 ]
 
