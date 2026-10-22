@@ -4647,13 +4647,24 @@ Object class >> ___grailValidateStatementSlots___: boundNames [
 	bound to its name, so a refusal leaves the name unbound, as CPython's
 	does.  boundNames is the body's own bindings -- its assignments, defs,
 	nested classes and imports, but not a bare annotation -- which is what
-	``conflicts with class variable'' is about."
+	``conflicts with class variable'' is about.
 
-	| slots ns |
+	Except under a metaclass that constructs: CPython makes that check in
+	type.__new__, against the namespace the metaclass hands it, and a
+	metaclass may take names out first.  pydantic's ModelMetaclass removes
+	BaseModel's ``__pydantic_fields_set__ = NoInitField(...)'' defaults before
+	type.__new__ sees the slots of the same names, so checking the body's
+	bindings here refused ``import pydantic'' altogether.  type >>
+	__new__:_:_:_: checks them there instead."
+
+	| slots ns meta |
 	slots := self ___classBodyValueAt___: #'__slots__'.
 	slots == nil ifTrue: [^ self].
 	ns := dict @env0:new.
-	boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None].
+	meta := self ___grailMetaclass___.
+	((meta notNil and: [meta isKindOf: Behavior])
+			and: [self ___grailMetaclassConstructs___: meta]) ifFalse: [
+		boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None]].
 	ns @env1:__setitem__: '__slots__' _: slots.
 	((Python @env0:at: #builtins) @env0:___instance___)
 		___validateSlots___: ns bases: (self ___pyAttrLoad___: #'__bases__').
