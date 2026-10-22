@@ -261,11 +261,13 @@ bytearray >> __imul__: count [
 	| n originalSize original |
 	n := count.
 
-	"Validate count is an integer (an __index__ object counts; a float does not)."
+	"Validate count is an integer (an __index__ object counts; a float does not).
+	Anything else declines, so ``b *= x'' becomes ``b * x'', whose fallback
+	tries x's __rmul__ and raises CPython's TypeError naming x's type."
 	(n isKindOf: Integer) ifFalse: [
 		(n ___hasIndexDunder___)
 			ifTrue: [n := bytes ___coerceIndex___: n]
-			ifFalse: [TypeError ___signal___: 'can''t multiply sequence by non-int']
+			ifFalse: [^ NotImplemented]
 	].
 
 	"If count <= 1, nothing to do (or clear if <= 0)"

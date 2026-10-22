@@ -11734,6 +11734,17 @@ Object >> ___grailWeakrefAttribute___ [
 
 ]
 
+{ #category : 'Grail-Arithmetic' }
+Object >> ___hasBuiltinRepeat___ [
+	"Is the receiver a sequence that ``*'' repeats by the built-in's own
+	slot -- a str, list, tuple, bytes or bytearray, or a subclass that
+	defines neither __mul__ nor __rmul__?  See ___sequenceOpMessage___:op:."
+
+	^ (self ___concatSequenceName___ ~~ nil or: [self @env0:isKindOf: ByteArray])
+		and: [(self ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]
+
+]
+
 { #category : 'Grail-Introspection' }
 Object >> ___hasIndexDunder___ [
 	"True if the receiver has an __index__ (PEP 357) in ANY compiled shape.
@@ -12361,6 +12372,15 @@ Object >> ___isPythonSourceMethodCategory___: aCategory [
 		or: [c @env0:= 'Grail-Fixed Arity Forwarders'
 		or: [c @env0:= 'Grail-Method Aliases'
 		or: [c @env0:= 'Grail-Class Side Forwarders']]]
+
+]
+
+{ #category : 'Grail-Numeric Protocol' }
+Object >> ___isRepeatCount___ [
+	"Can the receiver count a sequence repetition (``seq * self'')?  An int,
+	or anything with an __index__ -- what ___asRepeatCount___ converts."
+
+	^ (self isKindOf: Integer) or: [self ___hasIndexDunder___]
 
 ]
 
@@ -16523,7 +16543,8 @@ Object >> ___sequenceOpMessage___: other op: opString [
 	because the text is a literal in its concat slot.  Only the left operand:
 	``1 + 'a''' keeps the ordinary message.  ``*'' with one of them on EITHER
 	side: ``can't multiply sequence by non-int of type 'float''', naming the
-	other operand.  bytes and bytearray already say ``can't concat''.
+	other operand -- and bytes and bytearray repeat too (___hasBuiltinRepeat___),
+	though for ``+'' they already say ``can't concat''.
 
 	A Python class that defines __add__ has no concat slot, and one that
 	defines __mul__ or __rmul__ has no repeat slot, so its instances take the
@@ -16540,12 +16561,10 @@ Object >> ___sequenceOpMessage___: other op: opString [
 			ifFalse: ['can only concatenate ' @env0:, name @env0:, ' (not "'
 				@env0:, (other ___pyTypeNameForError___) @env0:, '") to ' @env0:, name]].
 	opString @env0:= '*' ifTrue: [
-		(self ___concatSequenceName___ ~~ nil
-			and: [(self ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]) ifTrue: [
+		self ___hasBuiltinRepeat___ ifTrue: [
 			^ 'can''t multiply sequence by non-int of type '''
 				@env0:, (other ___pyTypeNameForError___) @env0:, ''''].
-		(other ___concatSequenceName___ ~~ nil
-			and: [(other ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]) ifTrue: [
+		other ___hasBuiltinRepeat___ ifTrue: [
 			^ 'can''t multiply sequence by non-int of type '''
 				@env0:, (self ___pyTypeNameForError___) @env0:, '''']].
 	^ nil

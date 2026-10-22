@@ -10,9 +10,21 @@ SequenceableCollection >> ___builtinRepeat___: n [
 	(#1552).
 
 	Runs the __mul__ of the nearest class above the Python-defined ones, so a
-	plain builtin value (the common case) is just the send."
+	plain builtin value (the common case) is just the send.
+
+	A count that is not an int DECLINES.  This is the reflected half, reached
+	from the binary fallback of the LEFT operand's __mul__, and that __mul__
+	is itself a sequence's whenever the count is one: ``[1] * 'x''' ran
+	list.__mul__, whose fallback asked str.__rmul__, which sent str.__mul__
+	the list, whose fallback asked list.__rmul__ ... until RecursionError.
+	CPython never consults a builtin sequence's repeat as a reflected
+	multiply at all; it raises ``can't multiply sequence by non-int of type
+	'str''' once both numeric slots decline, which is the message the
+	fallback gives when this answers NotImplemented.  Fixture:
+	tests/python/sequence_repeat_operands.py."
 
 	| cls |
+	n ___isRepeatCount___ ifFalse: [^ NotImplemented].
 	cls := self @env0:class.
 	(cls @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
 		ifFalse: [^ self __mul__: n].
@@ -518,8 +530,7 @@ SequenceableCollection >> __mul__: n [
 	"Repeat the sequence n times. Returns a new sequence."
 
 	| result count |
-	((n isKindOf: Integer)
-		or: [n ___hasIndexDunder___]) ifFalse: [
+	n ___isRepeatCount___ ifFalse: [
 		^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:'].
 	"Fetch the count via __index__ (see __getitem__:) -- the probe above only
 	proved n is index-LIKE, and the arithmetic below cannot run on the object
