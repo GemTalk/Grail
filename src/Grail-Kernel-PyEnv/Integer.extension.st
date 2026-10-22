@@ -31,6 +31,25 @@ Integer class >> ___allocate___: cls value: v [
 ]
 
 { #category : 'Grail-Class Methods' }
+Integer class >> ___bytesFromDunderOf___: anObject [
+	"PyObject_Bytes's first resort, before any buffer or iterable reading
+	(Objects/object.c:870-899): the object's own __bytes__, whose result has
+	to be bytes -- a bytearray is not.  int.from_bytes ignored __bytes__ and
+	said ``cannot convert 'ValidBytes' object to bytes'' (test_long
+	test_from_bytes)."
+
+	| result |
+
+	result := anObject __bytes__.
+	((result @env0:isKindOf: ByteArray) and: [(result @env0:isKindOf: bytearray) @env0:not])
+		ifFalse: [
+			^ TypeError ___signal___: ('__bytes__ returned non-bytes (type '
+				@env0:, (bytes ___pyTypeNameOf___: result) @env0:asString @env0:, ')')].
+	^ result
+
+]
+
+{ #category : 'Grail-Class Methods' }
 Integer class >> ___byteValueOf: anElement [
 	"One element of that iterable, as the byte it has to be.  __index__ is
 	what CPython coerces with, so an int-like element is accepted and
@@ -66,6 +85,8 @@ Integer class >> ___byteValuesOf: anObject [
 	| values |
 
 	(anObject @env0:isKindOf: ByteArray) ifTrue: [^ anObject].
+	(anObject ___hasProtocolForCall___: '__bytes__') ifTrue: [
+		^ self ___bytesFromDunderOf___: anObject].
 	(anObject @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ TypeError ___signal___: (self ___cannotConvertToBytesMessage: anObject)].
 	values := list ___new___.
@@ -145,6 +166,24 @@ Integer class >> ___invalidLiteral___: obj base: baseInt [
 		baseInt @env0:printString @env0:,
 		': ' @env0:,
 		(obj __repr__))
+
+]
+
+{ #category : 'Grail-Class Methods' }
+Integer class >> ___isBigEndian___: aByteorder [
+	"True for 'big', false for 'little', and CPython's ValueError for anything
+	else -- int.from_bytes and int.to_bytes both refuse it
+	(Objects/longobject.c int_to_bytes_impl, int_from_bytes_impl).  They
+	compared with 'big' only, so ``(1).to_bytes(1, 'middle')'' quietly wrote
+	little-endian bytes.
+
+	Python equality, by code point, as CPython's _PyUnicode_Equal: the kernel's
+	= collates under the stone's Unicode comparison mode, where a NUL is
+	ignorable, so 'big\x00' was 'big' (test_long test_from_bytes)."
+
+	(aByteorder __eq__: 'big') == true ifTrue: [^ true].
+	(aByteorder __eq__: 'little') == true ifTrue: [^ false].
+	^ ValueError ___signal___: 'byteorder must be either ''little'' or ''big'''
 
 ]
 
@@ -624,7 +663,7 @@ Integer class >> from_bytes: bytes _: byteorder _: signed [
 	(array.fromfile, test_system_transitions)."
 	bytesArray := self ___byteValuesOf: bytes.
 
-	isBigEndian := (byteorder @env0:= 'big').
+	isBigEndian := self ___isBigEndian___: byteorder.
 	isSigned := (signed == true) or: [signed == true].
 
 	result := 0.
@@ -1897,7 +1936,7 @@ Integer >> to_bytes: length _: byteorder _: signed [
 
 	| numBytes isBigEndian isSigned val bytes |
 	numBytes := length.
-	isBigEndian := (byteorder @env0:= 'big').
+	isBigEndian := int ___isBigEndian___: byteorder.
 	isSigned := (signed == true) or: [signed == true].
 	val := self.
 

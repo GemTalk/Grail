@@ -247,7 +247,11 @@ IntEnum class >> from_bytes: bytesArg _: byteorder [
 	from_bytes'' was an AttributeError.  Delegate the byte decoding to
 	Integer, then -- as CPython int.from_bytes does for a subclass (calls
 	cls(result)) -- resolve the int through this enum, yielding the MEMBER
-	(or ValueError for an unknown value)."
+	(or ValueError for an unknown value).
+
+	AbstractPyInt class now has the general forwarders, for every int
+	subclass and every arity, and answers the same member; this pair stays
+	because a reinstall cannot delete an env-1 method on 4.0.0.a5 (#1727)."
 
 	^ self from_bytes: bytesArg _: byteorder _: false
 
