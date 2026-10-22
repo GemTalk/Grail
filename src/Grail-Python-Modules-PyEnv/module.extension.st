@@ -1626,6 +1626,18 @@ module >> __repr__ [
 
 ]
 
+{ #category : 'Grail-Protocol Refusal' }
+module >> __reversed__ [
+	<grailProtocolRefusal>
+	"``reversed(mod)'' raises CPython's catchable TypeError.  KeyValueDictionary's
+	answered a list iterator over the kernel dictionary's slots.  See
+	__getitem__:."
+
+	^ TypeError ___signal___: ('''' @env0:, (self @env0:___pyDnuTypeName___)
+		@env0:, ''' object is not reversible')
+
+]
+
 { #category : 'Grail-Attribute Access' }
 module >> __setattr__: aName _: aValue [
 	"``m.x = v'' as codegen emits it -- and the path that actually matters for

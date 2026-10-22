@@ -1279,8 +1279,13 @@ module >> doesNotUnderstand: aSelector args: anArray envId: envId [
 				on: AbstractException do: [:ex | ex return: nil].
 			attr notNil ifTrue: [
 				^ attr @env1:___pyCallValue___: anArray asArray kw: nil]]].
-	(anArray isNil or: [anArray isEmpty])
-		ifTrue: [^ nil].
+	"...but not a protocol DUNDER the module lacks.  ``-mod'' sends __neg__ and
+	``abs(mod)'' __abs__, both unary, so this tail answered a raw Smalltalk nil
+	that reached Python as ``<UndefinedObject object>'' where CPython raises
+	TypeError.  Object's handler raises the operation's own TypeError."
+	((anArray isNil or: [anArray isEmpty])
+		and: [(object @env1:___grailIsProtocolDunderName___: aSelector) not])
+			ifTrue: [^ nil].
 	^ super doesNotUnderstand: aSelector args: anArray envId: envId
 
 ]
