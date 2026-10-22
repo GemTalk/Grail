@@ -521,10 +521,7 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 			or: [aBuilder inNestedFunction and: [self ___irFreeReadNeedsGuard___]])
 				ifFalse: [^ read].
 		^ aBuilder ifNilValue: read then: [
-			aBuilder add: (aBuilder
-				send: #'___signalUnbound___:'
-				to: (aBuilder globalNamed: #UnboundLocalError)
-				with: { aBuilder obj: id asSymbol } env: 1)]].
+			aBuilder add: (self ___irUnboundReadSignalWith___: aBuilder)]].
 	kind := self ___irNonLocalLoadKind___: Set new.
 	kind == #module ifTrue: [
 		^ aBuilder
@@ -776,7 +773,8 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 			aStream
 				nextPut: $(;
 				nextPutAll: (NameAst ___transportIdentifierFor___: id);
-				nextPutAll: ' ifNil: [UnboundLocalError ___signalUnbound___: #';
+				nextPutAll: ' ifNil: [';
+				nextPutAll: self ___unboundReadSignalSource___;
 				nextPutAll: id;
 				nextPutAll: '])'.
 			^ self].
@@ -1516,7 +1514,8 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 		aStream
 			nextPut: $(;
 			nextPutAll: id;
-			nextPutAll: ' ifNil: [UnboundLocalError ___signalUnbound___: #';
+			nextPutAll: ' ifNil: [';
+			nextPutAll: self ___unboundReadSignalSource___;
 			nextPutAll: id;
 			nextPutAll: '])'.
 		^ self
@@ -2177,6 +2176,23 @@ NameAst >> ___irTypeLoadKind___ [
 
 ]
 
+{ #category : 'Grail-IR' }
+NameAst >> ___irUnboundReadSignalWith___: aBuilder [
+	"The IR of an unbound read's failure arm: the text's
+	___unboundReadSignalSource___, as a send."
+
+	^ self ___readsFreeVariable___
+		ifTrue: [aBuilder
+			send: #'___signalUnboundFree___:'
+			to: (aBuilder globalNamed: #NameError)
+			with: { aBuilder obj: id asSymbol } env: 0]
+		ifFalse: [aBuilder
+			send: #'___signalUnbound___:'
+			to: (aBuilder globalNamed: #UnboundLocalError)
+			with: { aBuilder obj: id asSymbol } env: 1]
+
+]
+
 { #category : 'other' }
 NameAst >> ___isDeclaredForThisScope___: aSymbol [
 	"isVariableIsDeclared:, with the class body's own names invisible when this
@@ -2469,6 +2485,36 @@ NameAst >> ___readsDoitLiveMapping___ [
 ]
 
 { #category : 'other' }
+NameAst >> ___readsFreeVariable___ [
+	"Is this load a read of a FREE variable -- one the innermost scope around it
+	does not bind, so it reaches an enclosing function's binding?  When that
+	binding is empty CPython raises NameError, ``cannot access free variable'',
+	where an empty LOCAL raises UnboundLocalError (#1712).
+
+	The innermost scope is the nearest def, lambda or class whose BODY holds
+	the read, or a generator expression.  A def's defaults and decorators, a
+	class's bases and keywords, and a generator's first iterable are evaluated
+	in the scope around them, so the walk goes past those.  A list, set or dict
+	comprehension is no scope at all: PEP 709 inlines it into its function."
+
+	| child node |
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
+	child := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		(((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst)
+			or: [node isKindOf: ClassDefAst]]) and: [child == node body])
+				ifTrue: [^ (self ___functionBindsPythonLocal___: node named: id asSymbol) not].
+		((node isKindOf: GeneratorExpAst)
+			and: [(self ___isWithin___: node generators first iter) not])
+				ifTrue: [^ true].
+		child := node.
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'other' }
 NameAst >> ___readsThroughClassCell___ [
 	"Does THIS read of ``id'' resolve through the class's closure cell rather
 	than through a Smalltalk temp?
@@ -2532,6 +2578,18 @@ NameAst >> ___targetPattern___: targetNode bindsName: aSymbol [
 		inner ifNotNil: [^ self ___targetPattern___: inner bindsName: aSymbol].
 		^ false].
 	^ false
+
+]
+
+{ #category : 'other' }
+NameAst >> ___unboundReadSignalSource___ [
+	"The source of an unbound read's failure arm, up to the name's symbol:
+	NameError for a free variable (___readsFreeVariable___), UnboundLocalError
+	for a local."
+
+	^ self ___readsFreeVariable___
+		ifTrue: ['NameError @env0:___signalUnboundFree___: #']
+		ifFalse: ['UnboundLocalError ___signalUnbound___: #']
 
 ]
 

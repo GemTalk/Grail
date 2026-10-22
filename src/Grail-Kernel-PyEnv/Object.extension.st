@@ -7535,9 +7535,8 @@ Object >> ___classCell___: aSym [
 	affordable only on the miss."
 	v == nil ifTrue: [v := self ___grailClassCellFromFrames___: aSym].
 	v == nil ifTrue: [
-		NameError ___signal___: ('free variable '''
-			@env0:, (aSym @env0:asString @env0:copyFrom: 9 to: aSym @env0:asString @env0:size - 3)
-			@env0:, ''' referenced before assignment in enclosing scope')].
+		NameError @env0:___signalUnboundFree___:
+			(aSym @env0:asString @env0:copyFrom: 9 to: aSym @env0:asString @env0:size - 3)].
 	^ v
 
 ]
