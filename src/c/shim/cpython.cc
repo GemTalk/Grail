@@ -152,12 +152,17 @@ static inline int is_grail_wrapper_magic(uint64_t m) {
    Grail str from its data.  An exact bytes too ([ob_size@16][ob_shash@24]
    [data@32]): Cython keeps its signature strings in a bytes constant and
    reads them with the inline PyBytes_AS_STRING -- past the end of a 32-byte
-   wrapper -- and its capsules' names point into that buffer. */
+   wrapper -- and its capsules' names point into that buffer.  An exact slice
+   ([start@16][stop@24][step@32]): cffi reads a cdata slice's bounds inline.
+   A bytearray ([ob_size@16][ob_alloc@24][ob_bytes@32][ob_start@40]
+   [ob_exports@48]), its bytes the shim's copy (CPythonShim>>PyBytes_Buffer:):
+   cffi reads them with the inline PyByteArray_GET_SIZE / AS_STRING. */
 #define GRAIL_PREFIX_MAGIC 0x475241494C505831ULL   /* "GRAILPX1" */
 extern "C" PyTypeObject PyComplex_Type;   /* shim_numpy.cc */
 static inline int has_grail_prefix(PyObject *obj) {
     PyTypeObject *t = obj->ob_type;
-    if (t != &PyLong_Type && t != &PyUnicode_Type && t != &PyBytes_Type && t != &PyComplex_Type)
+    if (t != &PyLong_Type && t != &PyUnicode_Type && t != &PyBytes_Type && t != &PyComplex_Type
+            && t != &PySlice_Type && t != &PyByteArray_Type)
         return 0;
     return *(uint64_t *)((char *)obj - 16) == GRAIL_PREFIX_MAGIC;
 }
@@ -278,14 +283,14 @@ PyTypeObject PyTuple_Type;
 PyTypeObject PyBaseObject_Type;
 PyTypeObject _PyNone_Type;
 
-/* Types a prebuilt wheel references by ADDRESS but whose instances the shim
-   never hands out: PyO3 links PyByteArray_Type / PyFunction_Type /
-   PyModule_Type for its PyByteArray_Check / PyFunction_Check /
-   PyModule_Check, and a missing data symbol fails dlopen outright
-   (docs/Support_Pydantic.md, Phase 1).  NOT registered with
-   register_shim_type: no Grail wrapper carries one as its ob_type
-   (typeAddrFor: never answers them), so registering would only make a
-   wheel's own object of that type look like a wrapper. */
+/* Types a prebuilt wheel references by ADDRESS: PyO3 links PyByteArray_Type /
+   PyFunction_Type / PyModule_Type for its PyByteArray_Check /
+   PyFunction_Check / PyModule_Check, and a missing data symbol fails dlopen
+   outright (docs/Support_Pydantic.md, Phase 1).  The shim hands out no
+   function or module of these types, so those two are NOT registered with
+   register_shim_type -- registering would only make a wheel's own object of
+   that type look like a wrapper.  A Grail bytearray does cross as a
+   bytearray, in its own layout (has_grail_prefix), so that one is. */
 PyTypeObject PyByteArray_Type;
 PyTypeObject PyFunction_Type;
 PyTypeObject PyModule_Type;
@@ -614,6 +619,7 @@ static void init_types(void) {
     register_shim_type(&PySet_Type);
     register_shim_type(&PyFrozenSet_Type);
     register_shim_type(&PySlice_Type);
+    register_shim_type(&PyByteArray_Type);
 
     init_exception_types();
     install_value_type_slots();
@@ -2282,11 +2288,21 @@ extern "C" PyObject *PyBytes_FromStringAndSize(const char *data, Py_ssize_t len)
     return addr_to_pyobj(GciPerform(server, "PyBytes_FromStringAndSize:", &oop, 1));
 }
 
+/* A Grail bytes or bytearray: the byte objects whose bytes are the shim's
+   copy, kept with the wrapper (CPythonShim>>PyBytes_Buffer:).  A bytearray
+   is typed bytearray, not bytes -- typed bytes, a wheel's inline
+   PyBytes_GET_SIZE read its OOP as the length -- so it has to be named
+   wherever the shim takes bytes-like. */
+static inline int grail_bytes_like(PyObject *obj) {
+    return PyBytes_Check(obj)
+        || (obj != NULL && obj->ob_type == &PyByteArray_Type && has_grail_prefix(obj));
+}
+
 /* The bytes of any byte-indexable Grail object (bytes, bytearray, a buffer),
    with no type check: what the shim's own bytes-like paths need --
    PyByteArray_AsString and the PyArg "y#"/"s#" parsers.
 
-   One that crosses as bytes (a bytes or a bytearray) answers a block that
+   A bytes or a bytearray (grail_bytes_like) answers a block that
    lives as long as its WRAPPER (CPythonShim>>PyBytes_Buffer:), as CPython's
    data lives as long as the object: numpy's frombuffer keeps the pointer in
    the array it returns, and from the per-call cache below, freed when the
@@ -2295,7 +2311,7 @@ static char *grail_buffer_of(PyObject *obj) {
     if (obj == NULL) return NULL;
     if (is_foreign_bytes(obj)) return (char *)obj + GRAIL_BYTES_SVAL_OFFSET;
     OopType oop = pyobj_oop(obj);
-    if (PyBytes_Check(obj))
+    if (grail_bytes_like(obj))
         return grail_wrapper_buffer("PyBytes_Buffer:", oop, NULL, NULL);
     char *cached = buffer_cache_get(oop);
     if (cached) return cached;
@@ -2495,7 +2511,7 @@ static int is_foreign(PyObject *obj) {
        caller gets a reportable error rather than a proxy for garbage. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
     if (is_real_layout(obj)) return 0;
-    if (has_grail_prefix(obj)) return 0;   /* a Grail int, str, bytes or complex */
+    if (has_grail_prefix(obj)) return 0;   /* a Grail int, str, bytes, complex, slice or bytearray */
     /* A subtype body IS a C object -- the base's slots, through its subtype
        mirror -- though pyobj_oop answers its Grail half for it. */
     if (is_type_mirror(obj)) return 0;     /* a Grail class's type mirror */
@@ -5177,20 +5193,47 @@ extern "C" int PyIndex_Check(PyObject *obj) {
     return PyLong_Check(obj);
 }
 
+/* int(o), float(o) and operator.index(o).  A Grail object goes to the
+   Python function itself (number_op, below), so __int__ / __float__ /
+   __index__, str parsing and arbitrary-precision ints are Python's.  These
+   are also the nb_int / nb_float / nb_index of a type mirror of a class
+   defining them (CPythonShim>>___installNumberSlotsIn:for:layout:), so they
+   never consult a Grail object's own slots.  PyNumber_Index raised for every
+   Grail object, and PyNumber_Long went through a Py_ssize_t -- truncating a
+   big int, and building -1 with an error pending. */
+static PyObject *number_op(const char *op, int n, PyObject *a, PyObject *b, PyObject *c);
 extern "C" PyObject *PyNumber_Index(PyObject *obj) {
+    if (obj == NULL) return NULL;
     if (PyLong_Check(obj)) {
         Py_INCREF(obj);
         return obj;
     }
+    if (!is_foreign(obj)) return number_op("index", 1, obj, NULL, NULL);
     /* A foreign object (numpy scalar) supplies an exact int via its own
        nb_index slot. */
-    if (is_foreign(obj) && Py_TYPE(obj) && Py_TYPE(obj)->tp_as_number &&
+    if (Py_TYPE(obj) && Py_TYPE(obj)->tp_as_number &&
         Py_TYPE(obj)->tp_as_number->nb_index) {
         return Py_TYPE(obj)->tp_as_number->nb_index(obj);
     }
     PyErr_Format(PyExc_TypeError, "'%.200s' object cannot be interpreted as an integer",
-                 obj ? Py_TYPE(obj)->tp_name : "NULL");
+                 Py_TYPE(obj)->tp_name);
     return NULL;
+}
+extern "C" PyObject *PyNumber_Long(PyObject *o) {
+    if (o == NULL) return NULL;
+    if (PyLong_Check(o)) { Py_INCREF(o); return o; }
+    if (!is_foreign(o)) return number_op("int", 1, o, NULL, NULL);
+    Py_ssize_t v = PyLong_AsSsize_t(o);
+    if (v == -1 && PyErr_Occurred()) return NULL;
+    return PyLong_FromSsize_t(v);
+}
+extern "C" PyObject *PyNumber_Float(PyObject *o) {
+    if (o == NULL) return NULL;
+    if (PyFloat_Check(o)) { Py_INCREF(o); return o; }
+    if (!is_foreign(o)) return number_op("float", 1, o, NULL, NULL);
+    double v = PyFloat_AsDouble(o);
+    if (v == -1.0 && PyErr_Occurred()) return NULL;
+    return PyFloat_FromDouble(v);
 }
 
 extern "C" PyObject *PyLong_FromSize_t(size_t v) {
@@ -5697,8 +5740,6 @@ extern "C" PyObject *PyNumber_Invert(PyObject *a)   { return number_op("invert",
    does not handle inline, and raised "unsupported operand type(s) for &:
    'int' and 'int'" from SeedSequence when they were NULL.  Each is the
    shim's PyNumber_* function, which asks the server and never a slot. */
-extern "C" PyObject *PyNumber_Float(PyObject *);   /* shim_numpy.cc */
-extern "C" PyObject *PyNumber_Long(PyObject *);    /* shim_numpy.cc */
 static PyNumberMethods grail_value_number_methods;
 static void install_value_type_slots(void) {
     PyNumberMethods *m = &grail_value_number_methods;
@@ -5845,7 +5886,7 @@ extern "C" Py_ssize_t PySlice_AdjustIndices(Py_ssize_t length, Py_ssize_t *start
 /* A str has no buffer in CPython ("a bytes-like object is required, not
    'str'"); the shim used to answer its UTF-8 bytes. */
 extern "C" int PyObject_CheckBuffer(PyObject *obj) {
-    if (PyBytes_Check(obj)) return 1;
+    if (grail_bytes_like(obj)) return 1;
     return obj != NULL && Py_TYPE(obj) != NULL &&
            Py_TYPE(obj)->tp_as_buffer != NULL &&
            Py_TYPE(obj)->tp_as_buffer->bf_getbuffer != NULL;
@@ -5901,7 +5942,7 @@ extern "C" int PyObject_GetBuffer(PyObject *obj, Py_buffer *view, int flags) {
     if (is_foreign_bytes(obj))
         return PyBuffer_FillInfo(view, obj, (char *)obj + GRAIL_BYTES_SVAL_OFFSET,
                                  Py_SIZE(obj), 1, flags);
-    if (PyBytes_Check(obj)) {
+    if (grail_bytes_like(obj)) {
         Py_ssize_t len = 0;
         int writable = 0;
         char *buf = grail_wrapper_buffer("PyBytes_Buffer:", pyobj_oop(obj),
@@ -6104,9 +6145,11 @@ static int parse_one_unit(PyObject *item, const char **pf, va_list *va,
             break;
         }
         case 'y': {
-            if (!PyBytes_Check(item)) {
+            /* 'y*' takes any buffer, a bytearray included; 'y' and 'y#' bytes. */
+            if (f[1] == '*' ? !PyObject_CheckBuffer(item) : !PyBytes_Check(item)) {
                 PyErr_Format(PyExc_TypeError,
-                    "%s argument %zd must be bytes, not %s", fname, argnum,
+                    "%s argument %zd must be %s, not %s", fname, argnum,
+                    f[1] == '*' ? "a bytes-like object" : "bytes",
                     Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
                 return 0;
             }
@@ -6417,11 +6460,13 @@ extern "C" int PyArg_ParseTuple(PyObject *args, const char *format, ...) {
                 break;
             }
             case 'y': {
-                if (!PyBytes_Check(item)) {
+                /* 'y*' takes any buffer, a bytearray included; 'y' and 'y#' bytes. */
+                if (f[1] == '*' ? !PyObject_CheckBuffer(item) : !PyBytes_Check(item)) {
                     va_end(vargs);
                     PyErr_Format(PyExc_TypeError,
-                        "%s argument %zd must be bytes, not %s",
+                        "%s argument %zd must be %s, not %s",
                         fname, i + 1,
+                        f[1] == '*' ? "a bytes-like object" : "bytes",
                         Py_TYPE(item) ? Py_TYPE(item)->tp_name : "?");
                     return 0;
                 }
@@ -7212,6 +7257,7 @@ static OopType shimTypeAddr(OopType nameOop)
     else if (strcmp(name, "NoneType") == 0) type = &_PyNone_Type;
     else if (strcmp(name, "set")    == 0) type = &PySet_Type;
     else if (strcmp(name, "slice")  == 0) type = &PySlice_Type;
+    else if (strcmp(name, "bytearray") == 0) type = &PyByteArray_Type;
     else if (strcmp(name, "frozenset") == 0) type = &PyFrozenSet_Type;
     /* Not types: the three singletons, so Grail can hand C THESE pointers
        for None / True / False (CPythonShim>>initTypeAddresses). */
@@ -8707,6 +8753,19 @@ static OopType shimTypeMirrorLayout(OopType ignored)
            mirror of a class with __get__ carries as that slot. */
         (int64)offsetof(PyTypeObject, tp_descr_get),
         (int64)(intptr_t)grail_mirror_descr_get,
+        /* 29-36: tp_as_number, sizeof(PyNumberMethods), its nb_int / nb_float
+           / nb_index, and PyNumber_Long / Float / Index, which a type mirror
+           of a class with __int__ / __float__ / __index__ carries as those
+           slots.  cffi converts a non-int by calling
+           ``ob->ob_type->tp_as_number->nb_int'' inline. */
+        (int64)offsetof(PyTypeObject, tp_as_number),
+        (int64)sizeof(PyNumberMethods),
+        (int64)offsetof(PyNumberMethods, nb_int),
+        (int64)offsetof(PyNumberMethods, nb_float),
+        (int64)offsetof(PyNumberMethods, nb_index),
+        (int64)(intptr_t)PyNumber_Long,
+        (int64)(intptr_t)PyNumber_Float,
+        (int64)(intptr_t)PyNumber_Index,
     };
     int n = (int)(sizeof(vals) / sizeof(vals[0]));
     OopType sizeOop = GciI64ToOop(n);

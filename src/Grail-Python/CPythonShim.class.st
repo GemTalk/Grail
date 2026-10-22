@@ -587,6 +587,11 @@ CPythonShim >> ___buildTypeMirrorFor: aClass [
 	up on the type through it (``with lock:'' in numpy.random)."
 	(self ___classDefinesReal: #'__get__:_:' in: aClass) ifTrue: [
 		m int64At: (lay at: 27) put: (lay at: 28)].
+	"tp_as_number with nb_int / nb_float / nb_index for a class that converts,
+	each only if the class defines it: cffi converts a non-int through an
+	inline ``tp_as_number->nb_int'', and a NULL slot is its ''an integer is
+	required''."
+	self ___installNumberSlotsIn: m for: aClass layout: lay.
 	"tp_new: the shim's trampoline into cls.__new__(cls) (PyType_GenericNew:)."
 	m int64At: (lay at: 9) put: (lay at: 10).
 	m int64At: (lay at: 6) put: 16r524F5252494D4C47.
@@ -680,6 +685,22 @@ CPythonShim >> ___ellipsis [
 ]
 
 { #category : 'Grail-Wrapping' }
+CPythonShim >> ___fillByteArrayBody: aBody from: anEntry [
+	"Point a bytearray's PyByteArrayObject body at its bytes, anEntry being
+	PyBytes_Buffer:''s { block. size. old blocks }: ob_size, ob_alloc (with
+	the NUL), ob_bytes and ob_start.  Rewritten whenever the bytes are,
+	since a resize moves them to a new block."
+
+	| addr |
+	addr := (anEntry at: 1) memoryAddress.
+	aBody int64At: 16 put: (anEntry at: 2).
+	aBody int64At: 24 put: (anEntry at: 2) + 1.
+	aBody int64At: 32 put: addr.
+	aBody int64At: 40 put: addr
+
+]
+
+{ #category : 'Grail-Wrapping' }
 CPythonShim >> ___functionObjectFor: aBoundMethod [
 	"C's builtin_function_or_method for aBoundMethod, as a CByteArray, when it
 	is a function of a dynamically loaded C module; nil for any other
@@ -745,6 +766,29 @@ CPythonShim >> ___guardCallback: aBlock [
 		(typeAddresses at: #'___cbErrorFlag___' otherwise: nil)
 			ifNotNil: [:flag | flag int32At: 0 put: 1].
 		ex return: nil]
+
+]
+
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___installNumberSlotsIn: aMirror for: aClass layout: lay [
+	"Give aMirror a PyNumberMethods whose nb_int / nb_float / nb_index are the
+	shim's PyNumber_Long / Float / Index -- each only where aClass defines
+	__int__ / __float__ / __index__, so a wheel testing the slot for NULL
+	sees what CPython's type would show it.  None defined: no table at all.
+	The table lives as long as the mirror."
+
+	| slots table |
+	slots := { #'__int__' -> 31. #'__float__' -> 32. #'__index__' -> 33 }
+		select: [:assoc | self ___classDefinesReal: assoc key in: aClass].
+	slots isEmpty ifTrue: [^ self].
+	table := CByteArray gcMalloc: (lay at: 30).
+	0 to: (lay at: 30) - 8 by: 8 do: [:off | table int64At: off put: 0].
+	slots do: [:assoc |
+		table int64At: (lay at: assoc value) put: (lay at: assoc value + 3)].
+	aMirror int64At: (lay at: 29) put: table memoryAddress.
+	(SessionTemps current
+		at: #'GrailTypeMirrorNumberTables'
+		ifAbsentPut: [ IdentityKeyValueDictionary new ]) at: aClass put: table
 
 ]
 
@@ -984,7 +1028,7 @@ CPythonShim >> ___prefixBlock: bodySize for: aValue [
 
 { #category : 'Grail-Wrapping' }
 CPythonShim >> ___prefixedWrapperFor: aValue [
-	"An exact int, str, bytes or complex in CPython 3.14''s OWN layout, or nil for
+	"An exact int, str, bytes, complex or slice, or a bytearray, in CPython 3.14''s OWN layout, or nil for
 	anything else.  A Cython module reads both INLINE -- an int''s lv_tag and digits, a
 	str''s length, hash, state and data -- and a 32-byte wrapper keeps the OOP
 	at offset 16, which Cython read as an int''s sign (every SmallInteger came
@@ -1073,6 +1117,42 @@ CPythonShim >> ___prefixedWrapperFor: aValue [
 		body int64At: 8 put: (typeAddresses at: #complex).
 		body doubleAt: 16 put: (aValue dynamicInstVarAt: #real) asFloat.
 		body doubleAt: 24 put: (aValue dynamicInstVarAt: #imag) asFloat.
+		^ body].
+	"An exact slice: [start@16][stop@24][step@32], each a PyObject*
+	(PySliceObject).  cffi reads a cdata slice's bounds inline
+	(_cdata_getslicearg), and read this OOP and the wrapper magic as them.
+	The slice takes a reference to each, as CPython's does, so none is swept
+	while the slice is live.  A sweep of the slice does not give them back
+	(the sweep knows only the map), so its bounds' wrappers stay for the
+	session."
+	(aValue class == (Python at: #slice otherwise: nil)
+			and: [typeAddresses notNil
+			and: [(typeAddresses at: #slice otherwise: 0) ~= 0]]) ifTrue: [
+		| fields |
+		fields := { aValue @env1:start. aValue @env1:stop. aValue @env1:step }
+			collect: [:each | | w |
+				w := self wrap: each.
+				w int64At: 0 put: (w int64At: 0) + 1.
+				w memoryAddress].
+		block := self ___prefixBlock: 40 for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #slice).
+		fields doWithIndex: [:addr :i | body int64At: 8 + (8 * i) put: addr].
+		^ body].
+	"A bytearray: [ob_size@16][ob_alloc@24][ob_bytes@32][ob_start@40]
+	[ob_exports@48] (PyByteArrayObject), its bytes the copy PyBytes_Buffer:
+	keeps -- refreshed whenever it crosses again (wrap:) or C asks for them,
+	so a change made on either side after that is not seen by the other, as
+	before.  cffi reads both fields inline, and when a bytearray crossed typed
+	bytes, its PyBytes_GET_SIZE read the OOP as the length."
+	(((Python at: #bytearray otherwise: nil) ifNil: [false] ifNotNil: [:ba | aValue isKindOf: ba])
+			and: [typeAddresses notNil
+			and: [(typeAddresses at: #bytearray otherwise: 0) ~= 0]]) ifTrue: [
+		block := self ___prefixBlock: 56 for: aValue.
+		body := block at: 2.
+		body int64At: 8 put: (typeAddresses at: #bytearray).
+		self PyBytes_Buffer: aValue.
+		self ___fillByteArrayBody: body from: (self ___wrapperBuffers at: aValue).
 		^ body].
 	^ nil
 
@@ -2321,7 +2401,7 @@ CPythonShim >> initTypeAddresses [
 	| addr |
 	typeAddresses := Dictionary new.
 	#('float' 'int' 'bool' 'str' 'bytes' 'list' 'dict' 'tuple' 'object' 'type' 'NoneType'
-		'set' 'frozenset' 'slice' 'complex')
+		'set' 'frozenset' 'slice' 'complex' 'bytearray')
 		do: [:name |
 			typeAddresses at: name asSymbol put: (System userAction: #shimTypeAddr with: name).
 		].
@@ -2333,7 +2413,7 @@ CPythonShim >> initTypeAddresses [
 	"set and frozenset, and their subclasses, to the shim's static types of
 	those names: a wheel's PySet_Check is an inline compare against them (see
 	the shim's init_types)."
-	#(#set #frozenset #slice) do: [:n | | cls |
+	#(#set #frozenset #slice #bytearray) do: [:n | | cls |
 		cls := Python at: n otherwise: nil.
 		(cls notNil and: [(typeAddresses at: n otherwise: 0) ~= 0]) ifTrue: [
 			addr := typeAddresses at: n.
@@ -2511,19 +2591,24 @@ CPythonShim >> PyBytes_Buffer: aByteObject [
 	mutable := (Python @env0:at: #bytearray otherwise: nil)
 		ifNil: [false]
 		ifNotNil: [:ba | aByteObject isKindOf: ba].
-	entry isNil ifTrue: [
-		entry := { self ___cBufferHolding: aByteObject. size. nil }.
-		map at: aByteObject put: entry.
-		^ { (entry at: 1) memoryAddress. size. mutable }].
+	entry isNil
+		ifTrue: [
+			entry := { self ___cBufferHolding: aByteObject. size. nil }.
+			map at: aByteObject put: entry]
+		ifFalse: [
+			mutable ifTrue: [
+				size = (entry at: 2)
+					ifTrue: [
+						self ___copyBytesOf: aByteObject into: (entry at: 1)]
+					ifFalse: [
+						(entry at: 3) ifNil: [entry at: 3 put: OrderedCollection new].
+						(entry at: 3) add: (entry at: 1).
+						entry at: 1 put: (self ___cBufferHolding: aByteObject).
+						entry at: 2 put: size]]].
+	"A bytearray's body points at these bytes (___fillByteArrayBody:from:)."
 	mutable ifTrue: [
-		size = (entry at: 2)
-			ifTrue: [
-				self ___copyBytesOf: aByteObject into: (entry at: 1)]
-			ifFalse: [
-				(entry at: 3) ifNil: [entry at: 3 put: OrderedCollection new].
-				(entry at: 3) add: (entry at: 1).
-				entry at: 1 put: (self ___cBufferHolding: aByteObject).
-				entry at: 2 put: size]].
+		(self valueToPyObject at: aByteObject otherwise: nil) ifNotNil: [:body |
+			self ___fillByteArrayBody: body from: entry]].
 	^ { (entry at: 1) memoryAddress. entry at: 2. mutable }
 
 ]
@@ -3042,9 +3127,10 @@ CPythonShim >> PyLong_U64Parts: anInt mask: aBoolean [
 CPythonShim >> PyNumber_Op: opName a: a b: b c: c n: n [
 	"One number-protocol operation for the shim's PyNumber_* (see number_op
 	in cpython.cc): the ``operator'' module's function named opName on the
-	first n operands -- ``divmod'' and ``pow'' are builtins, three-argument
-	pow included -- so the answer has Python's semantics, reflected operands
-	and arbitrary-precision ints with them.  ``___check'' is PyNumber_Check.
+	first n operands -- ``divmod'', ``pow'', ``int'' and ``float'' are
+	builtins, three-argument pow included -- so the answer has Python's
+	semantics, reflected operands and arbitrary-precision ints with them.
+	``___check'' is PyNumber_Check.
 	Guarded: the operator is Python code."
 
 	^ self ___guardCallback: [ | args fn r |
@@ -3055,7 +3141,7 @@ CPythonShim >> PyNumber_Op: opName a: a b: b c: c n: n [
 					((builtins @env1:instance) @env1:hasattr: a _: sel asString) @env1:___isTruthy___].
 				r]
 			ifFalse: [
-				fn := (opName = 'divmod' or: [opName = 'pow'])
+				fn := (#('divmod' 'pow' 'int' 'float') includes: opName asString)
 					ifTrue: [(builtins @env1:instance) @env1:___pyAttrLoad___: opName asSymbol]
 					ifFalse: [((importlib @env0:___instance___) @env1:import_module: 'operator')
 						@env1:___pyAttrLoad___: opName asSymbol].
@@ -3748,6 +3834,10 @@ CPythonShim >> wrap: aValue [
 		sweep-bait while in flight; reset to 1 so it survives until the
 		C side is done with it again."
 		(pyObj int64At: 0) <= 0 ifTrue: [pyObj int64At: 0 put: 1].
+		"A bytearray's body carries its bytes, which may have changed."
+		(typeAddresses notNil
+				and: [(pyObj int64At: 8) = (typeAddresses at: #bytearray otherwise: -1)])
+			ifTrue: [self PyBytes_Buffer: aValue].
 		^ pyObj].
 	"An exact int or str crosses in CPython's own layout, its OOP in a hidden
 	prefix (___prefixedWrapperFor:)."

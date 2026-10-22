@@ -514,20 +514,7 @@ extern "C" void PyMutex_Lock(PyMutex *m) {
 extern "C" void PyMutex_Unlock(PyMutex *m) {
     (void)0;
 }
-/* float(o): pass through floats; otherwise coerce via the server's
-   double conversion (applies __float__/__index__ on the Grail side). */
-extern "C" PyObject * PyNumber_Float(PyObject *o) {
-    if (o == NULL) return NULL;
-    if (PyFloat_Check(o)) { Py_INCREF(o); return o; }
-    return PyFloat_FromDouble(PyFloat_AsDouble(o));
-}
-/* int(o): already-int passes through; otherwise coerce via the server's
-   Py_ssize_t conversion (which applies __index__/__int__ on the Grail side). */
-extern "C" PyObject * PyNumber_Long(PyObject *o) {
-    if (o == NULL) return NULL;
-    if (PyLong_Check(o)) { Py_INCREF(o); return o; }
-    return PyLong_FromSsize_t(PyLong_AsSsize_t(o));
-}
+/* PyNumber_Float / PyNumber_Long are in cpython.cc, beside PyNumber_Index. */
 extern "C" int PyOS_snprintf(char *str, size_t size, const char *format, ...) {
     va_list ap; va_start(ap,format); int r=vsnprintf(str,size,format,ap); va_end(ap); return r;
 }

@@ -183,3 +183,16 @@ keywords travel as a tuple of names.
 
 Tested by `CPythonShimTestCase`'s `Grail-Tests - Cython` category, against
 `_grail_demo.cython()`, which does each inline read Cython compiles to.
+
+### Two more: slice and bytearray (2026-10-22)
+
+cffi's `_cffi_backend` reads a slice's `start`/`stop`/`step` and a
+bytearray's `ob_size`/`ob_start` inline, so both now cross in their CPython
+layout with the same prefix (docs/Support_FastAPI.md, "cffi").  A slice is
+immutable and owns a reference to each bound.  A bytearray is mutable, which
+§2 warns against; it is safe here only because the shim already gave C a
+COPY of a bytearray's bytes (`CPythonShim>>PyBytes_Buffer:`), and the body
+points at that copy, rewritten at each crossing -- the semantics C saw
+before, now at the offsets a wheel reads.  A bytearray also stopped crossing
+typed `bytes`, which had let a wheel's `PyBytes_Check` pass and its
+`PyBytes_GET_SIZE` read the OOP.

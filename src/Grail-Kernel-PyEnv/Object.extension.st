@@ -15428,8 +15428,8 @@ Object >> ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew [
 
 { #category : 'Grail-Callable' }
 Object >> ___pyCallValue___: positional kw: kwargs [
-	"Default: receiver is not a Python callable.  Raise TypeError
-	matching CPython's ``'<typename>' object is not callable''.
+	"Default: call the receiver through value:value:, which for a
+	non-callable raises CPython's ``'<typename>' object is not callable''.
 
 	Overridden on BoundMethod (and other callable wrappers) to
 	forward the call.  Used by CallAst's probe-then-branch dispatch
@@ -15460,11 +15460,14 @@ Object >> ___pyCallValue___: positional kw: kwargs [
 	and the classes that opted in with a class-side ___pyCallValue___:kw: of
 	their own (functools_cached_property, functools_partial) now merely
 	shortcut what this answers anyway."
-	(self isKindOf: Behavior) ifTrue: [
-		^ self @env1:value: positional value: kwargs].
-	TypeError ___signal___:
-		'''' @env0:, self ___pyTypeNameForError___
-			@env0:, ''' object is not callable'
+
+	"Anything else goes to value:value: too.  A callable that implements only
+	that (WeakReference, SuperBoundMethod, functools_singledispatch) is then
+	callable this way as well -- the way C calls it, through the shim's
+	PyObject_Call: cffi's type cache calls its weakrefs, and ``'WeakReference'
+	object is not callable'' stopped every cffi call.  A non-callable reaches
+	Object >> value:value:, which raises the same TypeError this used to."
+	^ self @env1:value: positional value: kwargs
 
 ]
 

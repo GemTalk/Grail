@@ -1516,3 +1516,73 @@ improvement** (test_uuid; main's refreshed board already carries the other
 three) -- test_math, test_pickle and test___all__ timed out beside the SUnit
 suite and are OK alone; `check_python_fixtures.sh` 675 fixtures agree with
 CPython.
+
+### cffi -- argon2's 70 security tests *(2026-10-22)*
+
+On `jmason/cffi`, from main at `49b37dfd`.  The argon2 cluster Phase 6 part 3
+left (pwdlib's default hasher, behind the OAuth2/JWT tutorials) runs on cffi:
+`_cffi_backend.cpython-314-darwin.so` (cffi 2.1.1, a full-API build) and
+argon2-cffi-bindings' `_ffi.abi3.so` (limited API; it imports twelve `Py*`
+symbols and reaches everything else through `_cffi_backend`'s export table).
+
+**Real CPython layout was not the obstacle.** Every inline struct read in
+cffi's C source was already satisfied, or became so by extending a scheme
+the shim already had: tuples and lists are real-layout, int/str/bytes carry
+the hidden prefix ([Shim_Object_Model.md](Shim_Object_Model.md) §5), and a
+float crosses as its value.  The walls were a Grail call path, three shim
+functions, and two more immutable-or-copied types that needed the prefix:
+
+| wall | symptom | fix |
+|---|---|---|
+| a `WeakReference` called from C | every cffi call: `'WeakReference' object is not callable` (cffi's ctype cache is a dict of weakrefs it calls) | `Object >> ___pyCallValue___:kw:` -- the shim's `PyObject_Call` -- forwards to `value:value:` instead of raising; a non-callable still raises there.  `SuperBoundMethod` and `functools.singledispatch` were uncallable from C the same way |
+| a slice read inline | `p[0:2] = ...`: `__index__ raised` -- `_cdata_getslicearg` reads `slice->start/stop/step` | a slice crosses as `PySliceObject` with the prefix; it owns a reference to each bound |
+| a Python class's `nb_int` | `ffi.cast('int', obj)` with `__int__`: `an integer is required` | a type mirror carries `tp_as_number` with `nb_int` / `nb_float` / `nb_index` for exactly the conversions the class defines |
+| `PyNumber_Index` / `Long` / `Float` of a Grail object | Index raised for every Grail object; Long truncated through `Py_ssize_t` and built `-1` with an error pending | `operator.index()`, `int()`, `float()` (`number_op`) |
+| `bytes(ffi.buffer(buf, n))` | argon2's `hash_secret_raw`: `'_cffi_backend.buffer' object cannot be interpreted as an integer` | a C object with a buffer gives `bytes()` / `bytearray()` / `join` its bytes, after `__index__` as in CPython; `ShimForeignObject >> ___hasIndexDunder___` asks C whether `nb_index` exists |
+| a bytearray crossed typed `bytes` | `p[0:3] = bytearray(...)`: `need a string of length 3, got 240897025` -- cffi tests `PyBytes_Check` first, then reads `ob_size` inline | a bytearray crosses typed `bytearray`, as `PyByteArrayObject` with the prefix, `ob_bytes` pointing at the copy `PyBytes_Buffer:` already kept (refreshed at each crossing, so the copy semantics are unchanged); `y*` takes any buffer, `y`/`y#` only bytes, as in CPython |
+
+And one regression on main that stopped pydantic from importing at all,
+found on the way: #1658 (2026-10-16) checked a class statement's `__slots__`
+against the body's bindings BEFORE the metaclass ran, so `BaseModel` -- whose
+`ModelMetaclass` drops the `__pydantic_fields_set__ = NoInitField(...)`
+defaults before `type.__new__` -- raised `'__pydantic_fields_set__' in
+__slots__ conflicts with class variable`.  CPython checks in `type.__new__`,
+against the namespace the metaclass passes; Grail now does too, for a
+metaclass that constructs (`type >> __new__:_:_:_:`), and keeps the
+statement-time check for every other class.
+
+A 20-step probe (import, `typeof` identity, `new`, slices, casts, buffers,
+`from_buffer`, `cdef` structs, ABI-mode `dlopen(None)`, argon2's raw hash,
+`PasswordHasher`, pwdlib) matches CPython line for line.
+**`test_security/test_tutorial004` and `005`: 70 of 70 pass** (were 70
+errors).  Pinned by `CPythonShimTestCase`'s `Grail-Tests - cffi` category,
+which reads each value through `_grail_demo`'s real-`Python.h` build as cffi
+would, and by `tests/python/class_statement_slots.py`.
+
+**The tutorial slice after it: 1,273 of 1,288 with CPython's outcome** (was
+1,202; `p9/tut6.grail`).  The 70 argon2 tests and the three `response_model`
+`self_instance` RuntimeErrors are gone.  Of the 15 left: the 8 sql_databases
+tests, still excluded; the same five singles as before (conditional_openapi,
+graphql, query_params_str_validations tutorial015, settings
+`test_settings_validation_error`, websockets tutorial003 -- now a
+CancelledError rather than a crash); and **two new ones, `test_wsgi`**,
+whose import now fails in `_ast_unparse.py` -- `Unexpected node inside
+JoinedStr, Call(...)`: werkzeug's URL builder puts a bare `Call` among a
+`JoinedStr`'s values (`rules.py` `_join`), which CPython's `compile()`
+accepts.  Nothing on this branch touches that path; it passed on
+2026-10-15 and is not yet bisected on main.
+
+**Gates** (Darwin arm64): `run_tests.sh` **8276 run, 8276 passed**, 8 of 8
+shards; `check_python_fixtures.sh` 705 fixtures agree with CPython.  The
+CPython conformance gate read 3 regressions: test_math and test_pickle
+TIMEOUT beside the SUnit suite, OK alone; and test_generators 11 -> 12
+fail+err, which is the `pep` doctest catching output that belongs to the
+`coroutine` doctest before it.  Its `del g; gc_collect()` should print
+`finally` on the spot; Grail finalizes that generator late (which is why
+`coroutine` already fails), and the late print lands in whichever doctest is
+running -- `refleaks` on main (already failing), `pep` here.  Bisected to the
+`___pyCallValue___:kw:` change, which moves the timing; `pep` passes when
+the module runs under a plain unittest loader.
+
+Not covered, because argon2 needs neither: `ffi.callback` / `@ffi.def_extern`
+(libffi closures calling back into Python) and API-mode `ffi.verify`.
