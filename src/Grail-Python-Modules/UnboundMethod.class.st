@@ -178,6 +178,29 @@ UnboundMethod class >> ___refuseReceiver___: aReceiver positional: positional kw
 
 ]
 
+{ #category : 'Grail-Private' }
+UnboundMethod >> _boxedNumberRootFor: obj [
+	"The boxed base -- AbstractPyInt or AbstractPyFloat -- that obj is an instance
+	of, when this handle names the sealed kernel class the base stands in for;
+	nil otherwise.  See _resolutionRootFor:."
+
+	| boxed |
+	((definingClass == Integer)
+		or: [definingClass == SmallInteger or: [definingClass == LargeInteger]])
+		ifTrue: [
+			boxed := System @env0:myUserProfile @env0:symbolList
+				@env0:objectNamed: #'AbstractPyInt'.
+			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	((definingClass == Float)
+		or: [definingClass == SmallDouble or: [definingClass == BinaryFloat]])
+		ifTrue: [
+			boxed := System @env0:myUserProfile @env0:symbolList
+				@env0:objectNamed: #'AbstractPyFloat'.
+			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	^ nil
+
+]
+
 { #category : 'Grail-Dispatch' }
 UnboundMethod >> _isFixedArityForwarder: aSelector on: aClass [
 	"True when aClass's aSelector is one of the fixed-arity trampolines
@@ -218,20 +241,8 @@ UnboundMethod >> _resolutionRootFor: obj [
 	byte-format Unicode7 subclass (boxing it broke framework str types), so
 	its content already IS the string and the kernel method applies as-is."
 
-	| boxed |
 	(obj @env0:isKindOf: definingClass) ifTrue: [^ definingClass].
-	((definingClass == Integer)
-		or: [definingClass == SmallInteger or: [definingClass == LargeInteger]])
-		ifTrue: [
-			boxed := System @env0:myUserProfile @env0:symbolList
-				@env0:objectNamed: #'AbstractPyInt'.
-			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
-	((definingClass == Float)
-		or: [definingClass == SmallDouble or: [definingClass == BinaryFloat]])
-		ifTrue: [
-			boxed := System @env0:myUserProfile @env0:symbolList
-				@env0:objectNamed: #'AbstractPyFloat'.
-			(boxed @env0:notNil and: [obj @env0:isKindOf: boxed]) ifTrue: [^ boxed]].
+	(self _boxedNumberRootFor: obj) @env0:ifNotNil: [:boxed | ^ boxed].
 	"A C TYPE reaches Grail as a ShimForeignObject, not a Behavior, and
 	answers the class reflection methods itself (ShimForeignObject>>
 	__subclasses__): ``type.__subclasses__(T)'' ran Behavior's on the proxy,

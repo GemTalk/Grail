@@ -1006,6 +1006,32 @@ PyDateTime >> ___isoDatePart___ [
 
 ]
 
+{ #category : 'Grail-Conversion' }
+PyDateTime >> ___isoformat___: positional kw: kwargs [
+	"isoformat(sep='T', timespec='auto') — the varargs/keyword form.
+	Grail routes ``dt.isoformat(...)'' with ANY argument through the
+	``_<name>:kw:'' selector (Object.gs), so without this the fixed-arity
+	``isoformat:'' alone made every call that passed sep or timespec fail
+	with ``takes a different number of arguments'' (test_isoformat,
+	test_fromisoformat_timespecs, test_fromisoformat_separators)."
+
+	| sep timespec sepCh |
+	sep := $T.
+	timespec := 'auto'.
+	positional @env0:isNil ifFalse: [
+		positional @env0:size @env0:>= 1 ifTrue: [sep := positional @env0:at: 1].
+		positional @env0:size @env0:>= 2 ifTrue: [timespec := positional @env0:at: 2]].
+	kwargs @env0:isNil ifFalse: [
+		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
+		timespec := kwargs @env0:at: 'timespec' ifAbsent: [timespec]].
+	sepCh := sep @env0:isString ifTrue: [sep @env0:first] ifFalse: [sep].
+	^ self ___isoDatePart___
+		@env0:, (Unicode7 @env0:with: sepCh)
+		@env0:, (self ___isoTimePart___: timespec)
+		@env0:, self ___isoTzSuffix___
+
+]
+
 { #category : 'Grail-Private' }
 PyDateTime >> ___isoTimePart___: timespec [
 	"The time half of isoformat(), honouring CPython's timespec values.
@@ -1579,7 +1605,11 @@ PyDateTime >> __setattr__: name _: value [
 
 { #category : 'Grail-Conversion' }
 PyDateTime >> __str__ [
-	^ self isoformat: ' '
+	"``self.isoformat(' ')'', a VIRTUAL call as CPython makes it: a subclass that
+	overrides isoformat gets it, sep included.  Sent as the varargs form, which is
+	what a Python ``def isoformat'' compiles."
+
+	^ self _isoformat: { ' ' } kw: nil
 
 ]
 
@@ -1646,28 +1676,12 @@ PyDateTime >> _astimezone: positional kw: kwargs [
 
 { #category : 'Grail-Conversion' }
 PyDateTime >> _isoformat: positional kw: kwargs [
-	"isoformat(sep='T', timespec='auto') — the varargs/keyword form.
-	Grail routes ``dt.isoformat(...)'' with ANY argument through the
-	``_<name>:kw:'' selector (Object.gs), so without this the fixed-arity
-	``isoformat:'' alone made every call that passed sep or timespec fail
-	with ``takes a different number of arguments'' (test_isoformat,
-	test_fromisoformat_timespecs, test_fromisoformat_separators)."
+	"The varargs form ``isoformat(...)'' compiles to; the work is ___isoformat___:kw:.
+	Kept apart from it because a Python subclass's own ``def isoformat'' compiles a
+	``_isoformat:kw:'' too, and a fixed form re-sending THIS selector landed on that
+	override: ``time.isoformat(sub)'' answered the subclass's result (#1613)."
 
-	| sep timespec sepCh |
-	sep := $T.
-	timespec := 'auto'.
-	positional @env0:isNil ifFalse: [
-		positional @env0:size @env0:>= 1 ifTrue: [sep := positional @env0:at: 1].
-		positional @env0:size @env0:>= 2 ifTrue: [timespec := positional @env0:at: 2]].
-	kwargs @env0:isNil ifFalse: [
-		sep := kwargs @env0:at: 'sep' ifAbsent: [sep].
-		timespec := kwargs @env0:at: 'timespec' ifAbsent: [timespec]].
-	sepCh := sep @env0:isString ifTrue: [sep @env0:first] ifFalse: [sep].
-	^ self ___isoDatePart___
-		@env0:, (Unicode7 @env0:with: sepCh)
-		@env0:, (self ___isoTimePart___: timespec)
-		@env0:, self ___isoTzSuffix___
-
+	^ self ___isoformat___: positional kw: kwargs
 ]
 
 { #category : 'Grail-Public' }
@@ -1877,7 +1891,7 @@ PyDateTime >> isocalendar [
 
 { #category : 'Grail-Conversion' }
 PyDateTime >> isoformat [
-	^ self _isoformat: nil kw: nil
+	^ self ___isoformat___: nil kw: nil
 
 ]
 
@@ -1885,7 +1899,7 @@ PyDateTime >> isoformat [
 PyDateTime >> isoformat: sep [
 	"ISO 8601 representation; sep is `T` by default but can be space."
 
-	^ self _isoformat: { sep } kw: nil
+	^ self ___isoformat___: { sep } kw: nil
 
 ]
 

@@ -407,6 +407,27 @@ UnboundMethod >> ___callReceiverless___: positional kw: kwargs orSignal: obj [
 
 ]
 
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___callUnresolved___: obj rest: rest kw: kwargs [
+	"value:value: found no method to take this call.
+
+	A BOXED NUMBER first.  ``int.bit_length(MyInt(5))'' resolves from
+	AbstractPyInt, the base a Python int subclass is rooted at
+	(_resolutionRootFor:), and a boxed base publishes only the part of the
+	kernel class's protocol it implements against its ``value'' slot -- so
+	bit_length, __add__ and float's is_integer raised AttributeError (#1613).
+	Run the call on the number it boxes instead, which is what CPython's int
+	and float methods operate on: ``int.__add__(MyInt(3), 1)'' is a plain 4.
+	The retry cannot loop: the unboxed number is a kind of the kernel class.
+
+	Otherwise bind keywords to parameters (___callKeywordsBound___:rest:kw:)."
+
+	(self @env0:_boxedNumberRootFor: obj) @env0:ifNotNil: [:boxed |
+		^ self value: ({ obj @env0:value } @env0:, rest) value: kwargs].
+	^ self ___callKeywordsBound___: obj rest: rest kw: kwargs
+
+]
+
 { #category : 'Grail-Instance Creation' }
 UnboundMethod >> ___canonicalBuiltinFor___: aClass [
 	"The class the builtins module binds for aClass's Python type, when that
@@ -1961,7 +1982,7 @@ UnboundMethod >> value: positional value: kwargs [
 		@env0:_resolveMethodNargs: nargs
 		kwOk: kwOk
 		from: (self @env0:_resolutionRootFor: obj).
-	method ifNil: [^ self ___callKeywordsBound___: obj rest: rest kw: kwargs].
+	method ifNil: [^ self ___callUnresolved___: obj rest: rest kw: kwargs].
 	"A CAPTURE KEEPS MEANING THE FUNCTION IT CAPTURED, exactly as a BoundMethod
 	does since PR #835.  Reassigns ``method'' rather than taking a temp: this
 	method's frame WIDTH is load-bearing (see the comment further down, and
