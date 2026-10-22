@@ -494,10 +494,16 @@ builtins >> ___asIterator___: anIterator [
 	diverted to __iter__ and died on the default with ``'type' object is not
 	iterable'', naming the wrong protocol for a class that has the right
 	one."
+	"Not an iterator: an object with a REAL __iter__ is iterated (Grail's eager
+	generator expressions are iterables); anything else is CPython's TypeError,
+	which names the iterator protocol.  Object's __iter__ refusal used to answer
+	instead, so ``next(object())'' said ``not iterable''."
 	((anIterator ___respondsTo___: #'__next__') not
-		and: [(anIterator ___grailMetaclassMethodFor___: #'__next__') @env0:isNil
-		and: [anIterator ___respondsTo___: #'__iter__']])
-		ifTrue: [^ anIterator __iter__].
+		and: [(anIterator ___grailMetaclassMethodFor___: #'__next__') @env0:isNil])
+		ifTrue: [
+			(anIterator ___hasProtocolForCall___: '__iter__') ifTrue: [^ anIterator __iter__].
+			^ TypeError ___signal___: ('''' @env0:, anIterator ___pyTypeNameForError___
+				@env0:, ''' object is not an iterator')].
 	^ anIterator
 
 ]
@@ -7211,7 +7217,7 @@ builtins >> len: anObject [
 
 	| className errorMsg result |
 	result := [anObject __len__] @env0:on: MessageNotUnderstood do: [:ex |
-		className := (anObject @env0:class) @env0:name.
+		className := anObject ___pyTypeNameForError___.
 		errorMsg := 'object of type ''' @env0:, className.
 		errorMsg := errorMsg @env0:, ''' has no len()'.
 		TypeError ___signal___: errorMsg
@@ -7436,6 +7442,12 @@ builtins >> ord: aString [
 	"Python builtin ord(c) — fixed-arity fast path."
 
 	| size char errorMsg sizeStr |
+	"Not a str or bytes-like object at all: CPython names its type.  The size test
+	below answered ``string of length 0'' for an object() instead."
+	((aString isKindOf: CharacterCollection)
+		or: [(aString isKindOf: ByteArray) or: [aString isKindOf: AbstractPyStr]]) ifFalse: [
+		^ TypeError ___signal___: ('ord() expected string of length 1, but '
+			@env0:, aString ___pyTypeNameForError___ @env0:, ' found')].
 	size := aString @env0:size.
 	(size == 1) ifFalse: [
 		sizeStr := size @env0:asString.

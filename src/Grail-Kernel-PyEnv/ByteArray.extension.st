@@ -467,6 +467,13 @@ ByteArray class >> __new__: source [
 	way as the list/tuple/Array branch above (test_float.py:
 	bytes(reversed(b'...')) -- previously fell through to 'empty bytes'
 	below, silently losing the whole byte string)."
+	"...but only an iterable.  Anything else is CPython's TypeError, which names
+	the conversion -- ``cannot convert 'object' object to bytes'' -- where list()
+	said ``not iterable''."
+	((source ___hasProtocolForCall___: '__iter__')
+		or: [source ___hasProtocolForCall___: '__getitem__']) ifFalse: [
+		^ TypeError ___signal___: ('cannot convert ''' @env0:, source ___pyTypeNameForError___
+			@env0:, ''' object to ' @env0:, (self @env1:__name__) @env0:asString)].
 	materialized := list __new__: source.
 	size := materialized @env0:size.
 	ba := self ___new___: size.
