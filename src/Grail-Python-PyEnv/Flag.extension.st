@@ -103,8 +103,10 @@ Flag >> ___flagOperandOrNil___: other [
 	___grailMemberTypeFor: is what tells the two apart without asking about
 	storage -- it answers Integer for the MI flag and object for the plain one.
 
-	NIL rather than a raise so each caller can phrase CPython's message for its
-	own operator; ___flagOperand___: keeps the generic one for anything else."
+	NIL rather than a raise, so each operator can answer CPython's
+	NotImplemented (Lib/enum.py Flag.__or__) and let the binary fallback try
+	the other operand's reflected dunder before raising; ___flagOperand___:
+	keeps a generic message for anything else."
 
 	| mt |
 	"Case 1: an instance of the receiver's own class."
@@ -120,6 +122,9 @@ Flag >> ___flagOperandOrNil___: other [
 		v := other @env0:dynamicInstVarAt: #value.
 		v @env0:isNil ifFalse: [^ v]].
 	(other isKindOf: Integer) ifTrue: [^ other].
+	"A bool is an int too, as isinstance(True, int) says: ``H.A | True'' is
+	<H.A: 1> in CPython."
+	(other isKindOf: Boolean) ifTrue: [^ other __int__].
 	^ nil
 
 ]
@@ -127,7 +132,11 @@ Flag >> ___flagOperandOrNil___: other [
 { #category : 'Grail-Flag Member' }
 Flag >> ___flagOperandTypeError___: other op: opString [
 	"CPython's message for a rejected flag operand, naming both types in
-	evaluation order: unsupported operand type(s) for |: 'PlainA' and 'PlainB'."
+	evaluation order: unsupported operand type(s) for |: 'PlainA' and 'PlainB'.
+
+	The operators no longer send it: they answer NotImplemented, as CPython's
+	do, and the binary fallback raises this same message.  It stays because a
+	reinstall cannot delete an env-1 method on 4.0.0.a5 (#1727)."
 
 	^ TypeError ___signal___: ('unsupported operand type(s) for ' @env0:, opString
 		@env0:, ': ''' @env0:, (Enum ___grailOperandTypeName: self)
@@ -167,7 +176,7 @@ Flag >> __and__: other [
 	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
 		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with &'].
 	ov := self ___flagOperandOrNil___: other.
-	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '&'].
+	ov @env0:isNil ifTrue: [^ NotImplemented].
 	^ Enum ___grailLookupValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) ___pyBitAnd___: ov)
 
@@ -183,18 +192,16 @@ Flag >> __bool__ [
 Flag >> __contains__: other [
 	"``B in (A|B)``: membership by bit coverage.
 
-	Refuses an operand this class does not accept, by the same rule the
-	operators use -- CPython's message names the types in the order ``in''
-	evaluates them, the contained object first: unsupported operand type(s)
-	for 'in': 'PB' and 'PA'."
+	Only a member of the receiver's own class is contained -- CPython's
+	Flag.__contains__ asks ``isinstance(other, self.__class__)'', NOT the
+	operators' member-type rule, so ``2 in H.B'' is a TypeError even for
+	``class H(int, Flag)'' (Lib/enum.py).  Grail used the operators' rule and
+	answered True."
 
 	| ov v |
-	ov := self ___flagOperandOrNil___: other.
-	ov @env0:isNil ifTrue: [
-		^ TypeError ___signal___: ('unsupported operand type(s) for ''in'': '''
-			@env0:, (Enum ___grailOperandTypeName: other)
-			@env0:, ''' and ''' @env0:, (Enum ___grailOperandTypeName: self)
-			@env0:, '''')].
+	(other @env0:isKindOf: self @env0:class) ifFalse: [
+		^ Enum ___grailSignalUnsupportedIn: other flag: self].
+	ov := other @env0:dynamicInstVarAt: #value.
 	v := self @env0:dynamicInstVarAt: #value.
 	^ (v @env0:bitAnd: ov) @env0:= ov
 
@@ -253,7 +260,7 @@ Flag >> __or__: other [
 	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
 		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with |'].
 	ov := self ___flagOperandOrNil___: other.
-	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '|'].
+	ov @env0:isNil ifTrue: [^ NotImplemented].
 	^ Enum ___grailLookupValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) @env0:bitOr: ov)
 
@@ -298,7 +305,7 @@ Flag >> __xor__: other [
 	(none := self ___grailNoneCombineStr: other) @env0:isNil ifFalse: [
 		^ TypeError ___signal___: '''' @env0:, none @env0:, ''' cannot be combined with other flags with ^'].
 	ov := self ___flagOperandOrNil___: other.
-	ov @env0:isNil ifTrue: [^ self ___flagOperandTypeError___: other op: '^'].
+	ov @env0:isNil ifTrue: [^ NotImplemented].
 	^ Enum ___grailLookupValue: self @env0:class
 		value: ((self @env0:dynamicInstVarAt: #value) ___pyBitXor___: ov)
 

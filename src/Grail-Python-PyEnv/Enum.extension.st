@@ -4139,6 +4139,20 @@ Enum class >> ___grailShouldForceOutput: cls selector: sel [
 ]
 
 { #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailSignalUnsupportedIn: other flag: aFlag [
+	"CPython's TypeError for ``other in aFlag'' when other is not a member of
+	the flag's class, naming the contained object first as ``in'' evaluates
+	it: unsupported operand type(s) for 'in': 'int' and 'Perm'.  Shared by
+	Flag and IntFlag, which have no common superclass to hold it."
+
+	^ TypeError ___signal___: ('unsupported operand type(s) for ''in'': '''
+		@env0:, (self ___grailOperandTypeName: other)
+		@env0:, ''' and ''' @env0:, (self ___grailOperandTypeName: aFlag)
+		@env0:, '''')
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
 Enum class >> ___grailSimpleEnum: cls type: etype kw: kwargs [
 	"CPython enum._simple_enum(etype, *, boundary=None, use_args=None): the
 	decorator that turns a PLAIN class into an enum of type etype -- ssl.py's
