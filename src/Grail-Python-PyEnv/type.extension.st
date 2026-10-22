@@ -311,6 +311,14 @@ type class >> __new__: mcls _: aName _: bases _: ns [
 			rebuilt @env1:___grailSetMetaclass___: mcls.
 			^ rebuilt].
 	pending @env0:notNil ifTrue: [
+		"__slots__ AGAINST THIS NAMESPACE, as CPython checks it here.  The
+		class statement leaves the class-variable check to this call when its
+		metaclass constructs (object class >> ___grailValidateStatementSlots___:),
+		because the metaclass may take names out first: pydantic's
+		ModelMetaclass removes the defaults BaseModel declares beside slots of
+		the same names."
+		(Python @env0:at: #builtins) @env0:___instance___
+			___validateSlots___: ns bases: bases.
 		"APPLY THE NAMESPACE.  type.__new__ is defined as ``build a class with
 		this namespace'', so what the metaclass did to the mapping before
 		calling it has to land on the class -- and a metaclass that ADDS to the

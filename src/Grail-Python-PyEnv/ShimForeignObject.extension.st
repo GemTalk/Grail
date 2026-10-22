@@ -91,6 +91,18 @@ ShimForeignObject >> ___grailForeignTypeCheck___: aCandidate subclass: aBoolean 
 ]
 
 { #category : 'Grail-Python Protocol' }
+ShimForeignObject >> ___hasIndexDunder___ [
+	"Whether the C type has nb_index.  A proxy understands every operator
+	selector, so Object's selector test answered true for every C object, and
+	bytes(ffi.buffer(p, n)) took cffi's buffer for a count."
+
+	^ [(CPythonShim @env0:current) @env0:foreignGetAttr: cPtr name: '__index__'.
+		true]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 ShimForeignObject >> ___pyAttrLoad___: aSym [
 	"Python ``proxy.attr`` load.  Asked of C FIRST (CPythonShim>>
 	foreignGetAttr:name:), which knows the object: its type's dict, its own

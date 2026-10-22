@@ -91,6 +91,19 @@ t('type_no_slots_over_empty_base',
 t('slots_over_empty_base_stay_strict',
   EMPTY + 'class K(Empty):\n    __slots__ = ("a",)\no = K()\ntry:\n    o.zz = 1\n    out = "stored"\nexcept AttributeError:\n    out = "refused"')
 
+# under a metaclass that constructs, the check is type.__new__'s, against the
+# namespace the metaclass passes -- which it may have taken a name out of
+# (pydantic's ModelMetaclass drops BaseModel's defaults beside its slots)
+t('metaclass_pops_conflict',
+  'class M(type):\n    def __new__(m, n, b, ns):\n        ns.pop("x", None)\n'
+  '        return super().__new__(m, n, b, ns)\n'
+  'class K(metaclass=M):\n    x = 1\n    __slots__ = ("x",)\nout = K.__slots__')
+t('metaclass_keeps_conflict',
+  'class M(type):\n    def __new__(m, n, b, ns):\n        return super().__new__(m, n, b, ns)\n'
+  'class K(metaclass=M):\n    x = 1\n    __slots__ = ("x",)')
+t('abc_conflict',
+  'import abc\nclass K(abc.ABC):\n    x = 1\n    __slots__ = ("x",)')
+
 # a refused class statement leaves its name unbound
 try:
     class Refused:
@@ -109,6 +122,7 @@ t('dir_type_over_python_base',
 
 
 EXPECTED = {
+    'abc_conflict': "ValueError: 'x' in __slots__ conflicts with class variable",
     'annotated_value_conflicts': "ValueError: 'f' in __slots__ conflicts with class variable",
     'annotation_beside_slot': "(3, {'f': <class 'int'>})",
     'conflicts_with_method': "ValueError: 'm' in __slots__ conflicts with class variable",
@@ -127,6 +141,8 @@ EXPECTED = {
     'empty_slots_over_int': '4',
     'item_not_a_string': "TypeError: __slots__ items must be strings, not 'int'",
     'item_not_an_identifier': 'TypeError: __slots__ must be identifiers',
+    'metaclass_keeps_conflict': "ValueError: 'x' in __slots__ conflicts with class variable",
+    'metaclass_pops_conflict': "('x',)",
     'module_name_unbound': 'False',
     'not_iterable': "TypeError: 'int' object is not iterable",
     'plain_slots': '(1, 1)',

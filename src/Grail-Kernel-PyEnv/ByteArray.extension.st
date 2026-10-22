@@ -15,6 +15,7 @@ ByteArray class >> ___bufferOperand___: value [
 	nothing, and had simply never been handed anything else."
 
 	(value isKindOf: bytes) ifTrue: [^ value].
+	(self ___foreignBufferBytes___: value) @env0:ifNotNil: [:b | ^ b].
 	(value ___respondsTo___: #'__buffer__:') ifTrue: [
 		^ [self ___exportBuffer___: value]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
@@ -111,6 +112,24 @@ ByteArray class >> ___exportBuffer___: value [
 	(exported isKindOf: memoryview) ifTrue: [exported := exported @env1:tobytes].
 	(exported isKindOf: bytes) ifTrue: [^ exported].
 	^ TypeError ___signal___: '__buffer__ returned non-memoryview object'
+
+]
+
+{ #category : 'Grail-Constructors' }
+ByteArray class >> ___foreignBufferBytes___: value [
+	"The bytes of a C extension's object that exports a buffer -- cffi's
+	``ffi.buffer(p, n)'', a numpy array -- as a ByteArray; nil for anything
+	else, a C object with no buffer included.  CPython takes these through
+	PyObject_GetBuffer; here C copies them out (CPythonShim>>
+	foreignBuffer:mode:index:value:).  argon2's hash_secret_raw answers
+	``bytes(ffi.buffer(buf, hash_len))'', which went to the __index__ branch
+	of bytes(): '_cffi_backend.buffer' object cannot be interpreted as an
+	integer."
+
+	(value ___respondsTo___: #'___grailForeignTypeCheck___:subclass:') ifFalse: [^ nil].
+	^ [(CPythonShim @env0:current) @env0:foreignBuffer: value @env0:cPtr
+			mode: 1 index: 0 value: 0]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]
 
 ]
 
@@ -460,6 +479,11 @@ ByteArray class >> __new__: source [
 		and: [source ___hasIndexDunder___]) ifTrue: [
 		^ self __new__: (source __index__)
 	].
+
+	"A C extension's object that exports a buffer, after __index__ as in
+	CPython (bytes_new_impl, then PyBytes_FromObject)."
+	(self ___foreignBufferBytes___: source) @env0:ifNotNil: [:b |
+		^ self ___copyBytesOf___: b].
 
 	"Any other iterable (generators, reversed_iterator, __iter__/__next__
 	or __getitem__-protocol objects, ...) -- materialize via list()'s

@@ -1012,6 +1012,41 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     }
     if (IS("ulong")) return Py_BuildValue("(NN)", PyLong_FromUnsignedLong((unsigned long)-1),
                                           PyLong_FromUnsignedLong(1UL << 63));
+    /* A slice's bounds read off the struct, as cffi's cdata slicing reads
+       them (_cdata_getslicearg). */
+    if (IS("slice_inline")) {
+        if (!PySlice_Check(a)) Py_RETURN_NONE;
+        PySliceObject *sl = (PySliceObject *)a;
+        return PyTuple_Pack(3, sl->start, sl->stop, sl->step);
+    }
+    /* A bytearray read with the inline PyByteArray_GET_SIZE / AS_STRING, as
+       cffi reads one -- and whether it passes for bytes, which cffi tests
+       first. */
+    if (IS("bytearray_inline")) {
+        if (!PyByteArray_Check(a)) Py_RETURN_NONE;
+        return Py_BuildValue("(iN)", PyBytes_Check(a),
+                             PyBytes_FromStringAndSize(PyByteArray_AS_STRING(a),
+                                                       PyByteArray_GET_SIZE(a)));
+    }
+    /* The type's nb_int / nb_float / nb_index, called as cffi calls nb_int:
+       ``ob->ob_type->tp_as_number->nb_int(ob)''; None for a NULL slot. */
+    if (IS("nb_slots")) {
+        PyNumberMethods *nb = Py_TYPE(a)->tp_as_number;
+        unaryfunc fs[3] = { nb ? nb->nb_int : NULL, nb ? nb->nb_float : NULL,
+                            nb ? nb->nb_index : NULL };
+        PyObject *out = PyTuple_New(3);
+        for (int i = 0; i < 3; i++) {
+            PyObject *r = fs[i] ? fs[i](a) : Py_NewRef(Py_None);
+            if (r == NULL) { Py_DECREF(out); return NULL; }
+            PyTuple_SET_ITEM(out, i, r);
+        }
+        return out;
+    }
+    if (IS("number_index")) return PyNumber_Index(a);
+    if (IS("number_long")) return PyNumber_Long(a);
+    if (IS("number_float")) return PyNumber_Float(a);
+    /* PyObject_CallNoArgs: how cffi calls the weakrefs in its type cache. */
+    if (IS("call_no_args")) return PyObject_CallNoArgs(a);
 #undef IS
     PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
     return NULL;

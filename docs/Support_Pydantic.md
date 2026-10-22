@@ -448,6 +448,17 @@ are right: `float` (`ob_fval` at offset 16), `bytes` (`ob_sval` at 32), `str`
   questions), and the per-crossing cost — (a) moves work from every shim call
   into object creation.
 
+**Where (a) stands (2026-10-22).** Most of it has since been built for
+other wheels: a float crosses as its value (`GRAILFV1`, for numpy), an exact
+int, str, bytes and complex in CPython's layout behind a hidden prefix (for
+Cython, Shim_Object_Model.md §5), a slice and a bytearray likewise (for
+cffi), and W1's type mirrors are Phase 5.  What a STOCK wheel would still
+meet is `datetime`: the capsule's type slots are `&PyType_Type`
+placeholders (`cpython.cc`, `shim_datetime_capi`) and no `PyDateTime_*` data
+bytes exist; W6's `TzInfo extends PyTzInfo` needs a real native
+`datetime.tzinfo`; and the non-abi3 symbol floor is unmeasured.  The
+stock-wheel probe table above has not been re-run since.
+
 ### Phase 5 — Grail classes as types (W1)
 Type-object mirrors for Grail classes; real `PyObject_GenericSetAttr` /
 `GenericGetDict` / `IsInstance` / `IsSubclass` on Grail objects. Exit:

@@ -1525,6 +1525,155 @@ repr((t(d.capi, ''delattr'', o, ''a''), hasattr(o, ''a''), t(d.capi, ''delattr''
 
 ]
 
+{ #category : 'Grail-Tests - cffi' }
+CPythonShimTestCase >> testCffiByteArrayCrossesInItsOwnLayout [
+	"A bytearray crosses as CPython's PyByteArrayObject, typed bytearray, its
+	bytes the shim's copy refreshed at each crossing.  It crossed typed
+	BYTES, and cffi -- which tests PyBytes_Check first and then reads
+	PyBytes_GET_SIZE inline -- took its OOP for the length: ``p[0:3] =
+	bytearray(b'pqr')'' answered ''need a string of length 3, got
+	240897025''.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.capi
+def t(*a):
+    try:
+        return C(*a)
+    except Exception as e:
+        return (type(e).__name__, str(e))
+ba = bytearray(b''pqr'')
+first = C(''bytearray_inline'', ba)
+ba.extend(b''stu'')
+repr((first, C(''bytearray_inline'', ba), C(''bytearray_inline'', bytearray()), C(''bytearray_inline'', b''x'')))') equals: '((0, b''pqr''), (0, b''pqrstu''), (0, b''''), None)'
+
+]
+
+{ #category : 'Grail-Tests - cffi' }
+CPythonShimTestCase >> testCffiBytesOfAForeignBuffer [
+	"bytes(), bytearray() and join of a C object that exports a buffer take
+	its bytes, after __index__ as CPython does.  A proxy answers every
+	operator selector, so bytes() took the buffer for a count: argon2's
+	``bytes(ffi.buffer(buf, n))'' raised ''_cffi_backend.buffer'' object
+	cannot be interpreted as an integer.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.capi
+def t(*a):
+    try:
+        return C(*a)
+    except Exception as e:
+        return (type(e).__name__, str(e))
+b = d.Buf()
+repr((bytes(b), bytearray(b), b''''.join([b]), b''-''.join([b''x'', b])))') equals: '(b''\n\x00\x00\x00\x14\x00\x00\x00\x1e\x00\x00\x00'', bytearray(b''\n\x00\x00\x00\x14\x00\x00\x00\x1e\x00\x00\x00''), b''\n\x00\x00\x00\x14\x00\x00\x00\x1e\x00\x00\x00'', b''x-\n\x00\x00\x00\x14\x00\x00\x00\x1e\x00\x00\x00'')'
+
+]
+
+{ #category : 'Grail-Tests - cffi' }
+CPythonShimTestCase >> testCffiNumberConversionsAskPython [
+	"PyNumber_Index / Long / Float of a Grail object are operator.index(),
+	int() and float().  PyNumber_Index raised for every Grail object --
+	``__index__'' never asked -- and PyNumber_Long went through a
+	Py_ssize_t, truncating a big int.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.capi
+def t(*a):
+    try:
+        return C(*a)
+    except Exception as e:
+        return (type(e).__name__, str(e))
+class Idx:
+    def __index__(self): return 6
+class I:
+    def __int__(self): return 7
+repr([t(''number_index'', Idx()), t(''number_index'', 2**70), t(''number_index'', 3.5), t(''number_long'', ''12''), t(''number_long'', 2**70), t(''number_long'', 3.7), t(''number_long'', I()), t(''number_float'', ''1.5''), t(''number_float'', Idx())])') equals: '[6, 1180591620717411303424, (''TypeError'', "''float'' object cannot be interpreted as an integer"), 12, 1180591620717411303424, 3, 7, 1.5, 6.0]'
+
+]
+
+{ #category : 'Grail-Tests - cffi' }
+CPythonShimTestCase >> testCffiNumberSlotsOfAPythonClass [
+	"A Python class's type mirror carries nb_int / nb_float / nb_index for
+	the conversions it defines, and only those.  cffi converts a non-int
+	through an inline ``tp_as_number->nb_int'', and with no slot it
+	refused ffi.cast('int', obj) as ''an integer is required''.  Values
+	are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.capi
+def t(*a):
+    try:
+        return C(*a)
+    except Exception as e:
+        return (type(e).__name__, str(e))
+class Both:
+    def __int__(self): return 3
+    def __index__(self): return 4
+class F:
+    def __float__(self): return 1.5
+class P: pass
+repr([C(''nb_slots'', x) for x in (Both(), F(), P())])') equals: '[(3, None, 4), (None, 1.5, None), (None, None, None)]'
+
+]
+
+{ #category : 'Grail-Tests - cffi' }
+CPythonShimTestCase >> testCffiSliceCrossesInItsOwnLayout [
+	"A slice crosses as CPython's PySliceObject, its start, stop and step
+	readable off the struct as cffi's cdata slicing reads them.  They read
+	the wrapper's OOP and magic: ``p[0:2] = ...'' answered ''__index__
+	raised''.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.capi
+def t(*a):
+    try:
+        return C(*a)
+    except Exception as e:
+        return (type(e).__name__, str(e))
+repr([C(''slice_inline'', s) for s in (slice(1, 5), slice(None, 3, 2), slice(''a'', [1]), slice(2**70))])') equals: '[(1, 5, None), (None, 3, 2), (''a'', [1], None), (None, 1180591620717411303424, None)]'
+
+]
+
+{ #category : 'Grail-Tests - cffi' }
+CPythonShimTestCase >> testCffiWeakrefCalledFromC [
+	"A weakref called from C answers its referent.  The shim's
+	PyObject_Call goes through ___pyCallValue___:kw:, which WeakReference
+	did not implement, so cffi's type cache -- a dict of weakrefs it calls
+	-- failed every cffi call with ''WeakReference'' object is not
+	callable.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+C = d.capi
+def t(*a):
+    try:
+        return C(*a)
+    except Exception as e:
+        return (type(e).__name__, str(e))
+import weakref
+class A: pass
+a = A()
+r = weakref.ref(a)
+repr((C(''call_no_args'', r) is a, t(''call_no_args'', 5)))') equals: '(True, (''TypeError'', "''int'' object is not callable"))'
+
+]
+
 { #category : 'Grail-Tests - NumPy Stage 1' }
 CPythonShimTestCase >> testComplexFromDoublesRoundTrips [
 	"The complex API was log-once stubs answering 0 with no error set."

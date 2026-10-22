@@ -4647,13 +4647,24 @@ Object class >> ___grailValidateStatementSlots___: boundNames [
 	bound to its name, so a refusal leaves the name unbound, as CPython's
 	does.  boundNames is the body's own bindings -- its assignments, defs,
 	nested classes and imports, but not a bare annotation -- which is what
-	``conflicts with class variable'' is about."
+	``conflicts with class variable'' is about.
 
-	| slots ns |
+	Except under a metaclass that constructs: CPython makes that check in
+	type.__new__, against the namespace the metaclass hands it, and a
+	metaclass may take names out first.  pydantic's ModelMetaclass removes
+	BaseModel's ``__pydantic_fields_set__ = NoInitField(...)'' defaults before
+	type.__new__ sees the slots of the same names, so checking the body's
+	bindings here refused ``import pydantic'' altogether.  type >>
+	__new__:_:_:_: checks them there instead."
+
+	| slots ns meta |
 	slots := self ___classBodyValueAt___: #'__slots__'.
 	slots == nil ifTrue: [^ self].
 	ns := dict @env0:new.
-	boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None].
+	meta := self ___grailMetaclass___.
+	((meta notNil and: [meta isKindOf: Behavior])
+			and: [self ___grailMetaclassConstructs___: meta]) ifFalse: [
+		boundNames @env0:do: [:n | ns @env1:__setitem__: n @env0:asString _: None]].
 	ns @env1:__setitem__: '__slots__' _: slots.
 	((Python @env0:at: #builtins) @env0:___instance___)
 		___validateSlots___: ns bases: (self ___pyAttrLoad___: #'__bases__').
@@ -15416,8 +15427,8 @@ Object >> ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew [
 
 { #category : 'Grail-Callable' }
 Object >> ___pyCallValue___: positional kw: kwargs [
-	"Default: receiver is not a Python callable.  Raise TypeError
-	matching CPython's ``'<typename>' object is not callable''.
+	"Default: call the receiver through value:value:, which for a
+	non-callable raises CPython's ``'<typename>' object is not callable''.
 
 	Overridden on BoundMethod (and other callable wrappers) to
 	forward the call.  Used by CallAst's probe-then-branch dispatch
@@ -15448,11 +15459,14 @@ Object >> ___pyCallValue___: positional kw: kwargs [
 	and the classes that opted in with a class-side ___pyCallValue___:kw: of
 	their own (functools_cached_property, functools_partial) now merely
 	shortcut what this answers anyway."
-	(self isKindOf: Behavior) ifTrue: [
-		^ self @env1:value: positional value: kwargs].
-	TypeError ___signal___:
-		'''' @env0:, self ___pyTypeNameForError___
-			@env0:, ''' object is not callable'
+
+	"Anything else goes to value:value: too.  A callable that implements only
+	that (WeakReference, SuperBoundMethod, functools_singledispatch) is then
+	callable this way as well -- the way C calls it, through the shim's
+	PyObject_Call: cffi's type cache calls its weakrefs, and ``'WeakReference'
+	object is not callable'' stopped every cffi call.  A non-callable reaches
+	Object >> value:value:, which raises the same TypeError this used to."
+	^ self @env1:value: positional value: kwargs
 
 ]
 
