@@ -78,14 +78,19 @@ r = {
     "call_not_in_class_dict": "__call__" in vars(Plain),
     "call_not_in_dir": "__call__" in dir(Plain),
     "int_instancecheck": _outcome(lambda: int.__instancecheck__(3)),
+    "int_instancecheck_bool": _outcome(lambda: int.__instancecheck__(True)),
+    "float_instancecheck": _outcome(lambda: float.__instancecheck__(1.5)),
 }
 
 EXPECTED = {
     'call_not_in_class_dict': False,
     'call_not_in_dir': False,
     'callable_by_hasattr': ['Plain', 'len'],
+    'float_instancecheck': 'ok -> True',
     'int_call_converts': 'ok -> 5',
     'int_has': ('__call__', '__instancecheck__', '__subclasscheck__'),
+    'int_instancecheck': 'ok -> True',
+    'int_instancecheck_bool': 'ok -> True',
     'metaclass_call_wins': 'ok -> "the metaclass\'s __call__"',
     'object_has': ('__call__', '__instancecheck__', '__subclasscheck__'),
     'object_has_no_refusal': (),
@@ -100,13 +105,11 @@ EXPECTED = {
     'with_meta_has': ('__call__', '__instancecheck__', '__subclasscheck__'),
 }
 
-# A Grail limitation this fixture documents: what GRAIL answers, which CPython
-# does not (``ok -> True'').  int keeps a class-side __instancecheck__: of its
-# own, a hook isinstance consults only after its isKindOf: Integer test has
-# failed, so it recognizes int WRAPPERS and answers False for an int.
-GRAIL_ONLY = {
-    'int_instancecheck': 'ok -> False',
-}
+# No Grail limitation is left to document.  The last one was int's own
+# class-side __instancecheck__:, a hook isinstance consults only after its
+# isKindOf: Integer test has failed: called directly it recognized int WRAPPERS
+# alone, and ``int.__instancecheck__(3)'' was False (float's had the same shape).
+GRAIL_ONLY = {}
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, "<missing>") != EXPECTED[k])
 SUMMARY = "%d checks, %d disagreeing %r, keys match: %s" % (

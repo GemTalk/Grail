@@ -305,13 +305,16 @@ Integer class >> __getitem__: index [
 
 { #category : 'Grail-Class Methods' }
 Integer class >> __instancecheck__: anObject [
-	"isinstance(x, int) — Grail's isinstance tries ``isKindOf: Integer``
-	first (real ints short-circuit) and consults this hook only on
-	failure.  Recognize AbstractPyInt-based wrappers (NamedIntConstant,
-	HTTPStatus, ...) so they report as ints, matching CPython where
-	those types subclass int."
+	"``int.__instancecheck__(x)'' -- what isinstance(x, int) answers: an Integer,
+	a bool (an int subclass), or an AbstractPyInt-based wrapper (NamedIntConstant,
+	HTTPStatus, ...), which CPython makes an int subclass.
 
-	^ anObject isKindOf: AbstractPyInt
+	Grail's isinstance tests ``isKindOf: Integer'' itself and asks this hook only
+	when that fails, so the hook used to answer the wrappers alone -- and a direct
+	``int.__instancecheck__(3)'' was False."
+
+	^ (anObject isKindOf: Integer)
+		or: [(anObject isKindOf: Boolean) or: [anObject isKindOf: AbstractPyInt]]
 
 ]
 
