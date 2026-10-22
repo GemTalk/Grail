@@ -596,6 +596,38 @@ Float >> ___checkedOperand___: other [
 
 ]
 
+{ #category : 'Grail-Conversion' }
+Float >> ___checkIntConvertible___ [
+	"Raise CPython's error when this float has no int value: ValueError for a
+	NaN, OverflowError for an infinity -- what PyLong_FromDouble raises for
+	int(), math.trunc(), math.floor(), math.ceil() and round() alike
+	(Objects/longobject.c:435).  int(float('inf')) reached the kernel's
+	truncated, which answers the infinity itself, and the result check then
+	said ``__int__ returned non-int (type Float)''."
+
+	| kind |
+	kind := self @env0:_getKind.
+	(kind @env0:> 4) ifTrue: [ValueError ___signal___: 'cannot convert float NaN to integer'].
+	(kind @env0:== 3) ifTrue: [OverflowError ___signal___: 'cannot convert float infinity to integer']
+
+]
+
+{ #category : 'Grail-Comparison' }
+Float >> ___comparandFor___: aNumber [
+	"The value aNumber is compared with this float as.  CPython's
+	float_richcompare compares an int with an INFINITY as if the int were 0,
+	since the infinity's magnitude exceeds any int (Objects/floatobject.c:
+	396-405).  The kernel converts the int to a float first, and from 2**1024
+	up that is an infinity too, so ``float('inf') == 2**2000'' was True and
+	``-float('inf') < -2**2000'' False.  A NaN already compares False either
+	way, and every finite comparison is exact."
+
+	((aNumber @env0:isKindOf: Integer) and: [(self @env0:_getKind) @env0:== 3])
+		ifTrue: [^ 0].
+	^ aNumber
+
+]
+
 { #category : 'Grail-Arithmetic' }
 Float >> ___pyDivModPair___: other [
 	"CPython's float_divmod (Objects/floatobject.c), answering the Array
@@ -757,10 +789,7 @@ Float >> __ceil__ [
 	than let a NaN/inf SmallDouble>>ceiling do something ill-defined
 	(test_float.py's test_float_ceil)."
 
-	| kind |
-	kind := self @env0:_getKind.
-	(kind @env0:> 4) ifTrue: [ValueError ___signal___: 'cannot convert float NaN to integer'].
-	(kind @env0:== 3) ifTrue: [OverflowError ___signal___: 'cannot convert float infinity to integer'].
+	self ___checkIntConvertible___.
 	^ self @env0:ceiling
 
 ]
@@ -842,7 +871,7 @@ Float >> __eq__: other [
 		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
 		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
 			^ other @env0:perform: #'__eq__:' env: 1 withArguments: { self }]].
-	^ self @env0:= other
+	^ self @env0:= (self ___comparandFor___: other)
 
 ]
 
@@ -859,10 +888,7 @@ Float >> __floor__ [
 	"Return floor (largest integer <= self).  NaN/Infinity have no
 	integer floor -- see __ceil__'s twin guard."
 
-	| kind |
-	kind := self @env0:_getKind.
-	(kind @env0:> 4) ifTrue: [ValueError ___signal___: 'cannot convert float NaN to integer'].
-	(kind @env0:== 3) ifTrue: [OverflowError ___signal___: 'cannot convert float infinity to integer'].
+	self ___checkIntConvertible___.
 	^ self @env0:floor
 
 ]
@@ -915,9 +941,9 @@ Float >> __format__: formatSpec [
 Float >> __ge__: other [
 	"Greater than or equal comparison."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:>= other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:>= (self ___comparandFor___: other)].
 	(self ___isPyIntOperand___: other) ifTrue: [
-		^ self @env0:>= (other __index__)
+		^ self @env0:>= (self ___comparandFor___: other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>=' reflected: #'__le__:'
 
@@ -927,9 +953,9 @@ Float >> __ge__: other [
 Float >> __gt__: other [
 	"Greater than comparison."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:> other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:> (self ___comparandFor___: other)].
 	(self ___isPyIntOperand___: other) ifTrue: [
-		^ self @env0:> (other __index__)
+		^ self @env0:> (self ___comparandFor___: other __index__)
 	].
 	^ self ___cmpFallback___: other op: '>' reflected: #'__lt__:'
 
@@ -970,6 +996,7 @@ Float >> __hash__ [
 Float >> __int__ [
 	"Convert float to int by truncating."
 
+	self ___checkIntConvertible___.
 	^ self @env0:truncated
 
 ]
@@ -978,9 +1005,9 @@ Float >> __int__ [
 Float >> __le__: other [
 	"Less than or equal comparison."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:<= other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:<= (self ___comparandFor___: other)].
 	(self ___isPyIntOperand___: other) ifTrue: [
-		^ self @env0:<= (other __index__)
+		^ self @env0:<= (self ___comparandFor___: other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<=' reflected: #'__ge__:'
 
@@ -990,9 +1017,9 @@ Float >> __le__: other [
 Float >> __lt__: other [
 	"Less than comparison."
 
-	(other isKindOf: Number) ifTrue: [^ self @env0:< other].
+	(other isKindOf: Number) ifTrue: [^ self @env0:< (self ___comparandFor___: other)].
 	(self ___isPyIntOperand___: other) ifTrue: [
-		^ self @env0:< (other __index__)
+		^ self @env0:< (self ___comparandFor___: other __index__)
 	].
 	^ self ___cmpFallback___: other op: '<' reflected: #'__gt__:'
 
@@ -1108,6 +1135,12 @@ Float >> __pow__: other [
 		((self @env0:= 0.0) and: [(other @env0:< 0)
 			and: [(((other @env0:_getKind) @env0:== 3) or: [(other @env0:_getKind) @env0:> 4]) @env0:not]])
 			ifTrue: [ZeroDivisionError ___signal___: 'zero to a negative power'].
+		"CPython converts the exponent to a double before anything else
+		(float_pow's CONVERT_TO_DOUBLE, Objects/floatobject.c), so an int
+		exponent too large for a float is OverflowError: ``1.0 ** 2**30000''
+		answered 1.0.  The exact Integer stays the exponent below, so the
+		raisedTo: result is unchanged for every exponent that fits."
+		(other @env0:isKindOf: Integer) ifTrue: [float ___intToFloatChecked___: other].
 		((self @env0:< 0) and: [((self @env0:_getKind) @env0:<= 2)
 			and: [(other @env0:isKindOf: Integer) @env0:not
 			and: [(((other @env0:_getKind) @env0:== 3) or: [(other @env0:_getKind) @env0:> 4]) @env0:not
@@ -1215,10 +1248,7 @@ Float >> __round__ [
 	CPython raises ValueError/OverflowError rather than a bogus result
 	from an inf/nan SmallDouble>>rounded (test_float.py's test_inf_nan)."
 
-	| kind |
-	kind := self @env0:_getKind.
-	(kind @env0:> 4) ifTrue: [ValueError ___signal___: 'cannot convert float NaN to integer'].
-	(kind @env0:== 3) ifTrue: [OverflowError ___signal___: 'cannot convert float infinity to integer'].
+	self ___checkIntConvertible___.
 	"TIES TO EVEN, which ``rounded'' does not do -- see
 	object>>___roundHalfToEven___.  The sibling __round__: below has always
 	been right, by its own exact-rational route, so ``round(2.5)'' answered 3
@@ -1401,6 +1431,7 @@ Float >> __truediv__: other [
 Float >> __trunc__ [
 	"Truncate to integer."
 
+	self ___checkIntConvertible___.
 	^ self @env0:truncated
 
 ]

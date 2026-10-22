@@ -704,6 +704,26 @@ Integer >> ___checkIntStrDigitLimit___ [
 ]
 
 { #category : 'Grail-Private' }
+Integer >> ___fitsInBytes___: aCount signed: aBoolean [
+	"Does the receiver fit aCount bytes?  Signed, that is the two's-complement
+	range [-2**(8n-1), 2**(8n-1)); unsigned, [0, 2**(8n)) -- the range
+	CPython's _PyLong_AsByteArray checks.  The signed case was checked only
+	after the two's-complement step and against the UNSIGNED limit, so
+	``(128).to_bytes(1, 'big', signed=True)'' answered b'\x80' and
+	``(-129).to_bytes(1, 'little', signed=True)'' b'\x7f', where CPython
+	raises ``int too big to convert''."
+
+	| bits |
+	bits := aCount @env0:* 8.
+	aBoolean ifFalse: [
+		^ self @env0:>= 0 and: [self @env0:< (1 @env0:bitShift: bits)]].
+	bits @env0:= 0 ifTrue: [^ self @env0:= 0].
+	^ (self @env0:>= (1 @env0:bitShift: bits @env0:- 1) @env0:negated)
+		and: [self @env0:< (1 @env0:bitShift: bits @env0:- 1)]
+
+]
+
+{ #category : 'Grail-Private' }
 Integer >> ___floorQuotientOf___: aDividend by: aDivisor [
 	"Floor division that survives the SmallInteger boundary.
 
@@ -1371,6 +1391,11 @@ Integer >> __pow__: other [
 		not Grail's capacity OverflowError or an IEEE infinity."
 		((self @env0:= 0) and: [other @env0:< 0]) ifTrue: [
 			^ ZeroDivisionError ___signal___: 'zero to a negative power'].
+		"int ** float is float ** float in CPython: long_pow declines a float
+		exponent and float_pow converts the int with PyLong_AsDouble, so an int
+		too large for a float is OverflowError (Objects/floatobject.c,
+		CONVERT_TO_DOUBLE).  ``(2**30000) ** 1.0'' answered inf."
+		(other @env0:isKindOf: Float) ifTrue: [float ___intToFloatChecked___: self].
 		"A NEGATIVE BASE TO A NON-INTEGER POWER IS COMPLEX, and float>>__pow__:
 		beside this already knows that -- the angle of a negative real is pi,
 		so the result is |self|**other * (cos + i*sin)(other*pi).  int did not,
@@ -1876,22 +1901,13 @@ Integer >> to_bytes: length _: byteorder _: signed [
 	isSigned := (signed == true) or: [signed == true].
 	val := self.
 
-	"Handle negative numbers"
+	((val @env0:< 0) and: [isSigned @env0:not]) ifTrue: [
+		OverflowError ___signal___: 'can''t convert negative int to unsigned'].
+	(self ___fitsInBytes___: numBytes signed: isSigned) ifFalse: [
+		OverflowError ___signal___: 'int too big to convert'].
+	"Two's complement"
 	(val @env0:< 0) ifTrue: [
-		isSigned ifFalse: [
-			OverflowError ___signal___: 'can''t convert negative int to unsigned'
-		].
-		"Two's complement"
-		val := ((1 @env0:bitShift: (numBytes @env0:* 8))
-			@env0:+ val).
-	].
-
-	"Check if value fits in the given number of bytes"
-	((val @env0:< 0) or: [
-		val @env0:>= (1 @env0:bitShift: (numBytes @env0:* 8))
-	]) ifTrue: [
-		OverflowError ___signal___: 'int too big to convert'
-	].
+		val := (1 @env0:bitShift: (numBytes @env0:* 8)) @env0:+ val].
 
 	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
 	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython
