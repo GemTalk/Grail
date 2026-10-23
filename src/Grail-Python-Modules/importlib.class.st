@@ -4222,14 +4222,21 @@ importlib class >> ___hasBuiltinStorage___: b [
 	    Number, so its chain is five long and beat the mixin's three.
 
 	    test_enum test_strenum / test_custom_strenum reach this through
-	    ``class DumbStrEnum(DumbMixin, StrEnum)''."
+	    ``class DumbStrEnum(DumbMixin, StrEnum)''.
+
+	  * PyMersenneTwister -- ``_random.Random'', whose generator state (mt,
+	    mti) is CPython's solid base for random.Random and every subclass.
+	    Its chain ties a mixin's for the same reason, so ``class S(Mixin,
+	    random.Random)'' was rooted at the mixin and random.Random's own
+	    methods then sent ___genrandUint32 to an object without it
+	    (test_random test_subclasses_overriding_methods)."
 
 	(b isKindOf: Behavior) ifFalse: [^ false].
 	(b inheritsFrom: Collection) ifTrue: [^ true].
 	(b inheritsFrom: Number) ifTrue: [^ true].
-	^ [ | root |
-	root := Python at: #'AbstractPyStr' otherwise: nil.
-	root ~~ nil and: [(b == root) or: [b inheritsFrom: root]] ] value
+	^ #(#'AbstractPyStr' #'PyMersenneTwister') anySatisfy: [:rootName | | root |
+		root := Python at: rootName otherwise: nil.
+		root ~~ nil and: [(b == root) or: [b inheritsFrom: root]]]
 
 ]
 

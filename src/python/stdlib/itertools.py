@@ -27,6 +27,7 @@
 # that Grail handles fine and is used directly (product, zip_longest).
 
 from collections import deque
+from operator import index as _index
 
 
 def _iter(x):
@@ -157,12 +158,23 @@ class cycle:
         return value
 
 
+_REPEAT_FOREVER = object()
+
+
 class repeat:
-    def __init__(self, object, times=None):
+    def __init__(self, object, times=_REPEAT_FOREVER):
+        # GRAIL: ``times`` is CPython's Py_ssize_t argument ("O|n" in
+        # Modules/itertoolsmodule.c repeat_new): converted through __index__,
+        # so random.choices(data, k=MyIndex(5)) works and k=2.5 is CPython's
+        # TypeError, and a count past 2**63 is OverflowError.  None is not
+        # a count either; a private sentinel marks "no times given".
         self._object = object
-        if times is not None:
-            if not isinstance(times, int):
-                raise TypeError('an integer is required')
+        if times is _REPEAT_FOREVER:
+            times = None
+        else:
+            times = _index(times)
+            if not -(1 << 63) <= times < (1 << 63):
+                raise OverflowError('Python int too large to convert to C ssize_t')
             if times < 0:
                 times = 0
         self._times = times
