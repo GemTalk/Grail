@@ -106,8 +106,17 @@ freeMB := SystemRepository freeSpace / 1048576.
 headroomMB := capMB <= 0
 	ifTrue: [freeMB]
 	ifFalse: [(capMB - usedMB) + freeMB].
-"1 GB is what MFC needs to work in; the failed install had 16 MB."
-headroomMB < 1024 ifTrue: [
+"1 GB is what MFC needs to work in; the failed install had 16 MB.
+
+ A QUARTER OF A CAPPED REPOSITORY, NOT 1 GB.  A fixed 1 GB starts collecting
+ only at 7 GB of a Community key''s 8 GB cap, and on 2026-10-23 that was too
+ late: a session idle in a long transaction stalled the vote, nothing could be
+ reclaimed while test runs went on committing, and the extent hit the cap --
+ after which the stone terminated, and could not even recover on restart (its
+ reclaim gem died for want of a free page).  A quarter leaves room for a stalled
+ vote to be noticed and for the collection to finish.  An uncapped repository
+ keeps the 1 GB floor."
+headroomMB < (capMB > 0 ifTrue: [(capMB // 4) max: 1024] ifFalse: [1024]) ifTrue: [
 	"SKIP, DON''T CONTEND, when another GC is under way.  Several worktrees
 	 share one stone, so another session''s MFC, reclaim or epoch -- or a vote
 	 its test shards have not finished -- is routine.  markForCollection then
@@ -125,7 +134,12 @@ headroomMB < 1024 ifTrue: [
 				, System sessionsHoldingGcLock printString
 				, '', vote state '' , System voteStateString]
 		ifFalse: [
-			[SystemRepository markForCollection; reclaimAll]
+			"reclaimAllWait:, not reclaimAll.  reclaimAll waits forever for the vote
+			 on the dead objects (its own comment says so), so one idle session in a
+			 long transaction hung the install -- ``session 4 taking too long to vote''''
+			 for ten minutes and counting.  Two minutes, then the timeout''s error is
+			 the handler''s: the reclaim gem finishes the job once the vote completes."
+			[SystemRepository markForCollection; reclaimAllWait: 120]
 				on: Error
 				do: [:e |
 					GsFile gciLogServer: ''install: MFC skipped -- ''
