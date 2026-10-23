@@ -193,6 +193,41 @@ check('a_built_node_gets_cpythons_defaults',
       ([], [], 'Load', None, True))
 
 
+# -- a tree no source can spell ------------------------------------------------
+# werkzeug's URL builder (routing/rules.py _compile_builder) names its function
+# ``<builder:'/x/<a>'>'' and its parameters ``.self'' / ``.kwargs'', puts each
+# converter's call straight into a JoinedStr, and takes the function back out
+# of exec()'s locals by that name.  Every Flask url_for() compiles one.
+
+def odd_names_tree():
+    def s(e):
+        return ast.Call(ast.Name('str'), [e], [])
+    fn = ast.parse('def _(): pass').body[0]
+    fn.name = "<builder:'/x'>"
+    fn.args.args.append(ast.arg('.a'))
+    fn.args.vararg = ast.arg('.rest')
+    fn.args.kwarg = ast.arg('.kw')
+    fn.body = [ast.Return(ast.JoinedStr([
+        ast.Constant('a='), s(ast.Name('.a')),
+        ast.Constant(' n='), s(ast.Call(ast.Name('len'), [ast.Name('.rest')], [])),
+        ast.Constant(' kw='), s(ast.Call(ast.Name('sorted'), [ast.Name('.kw')], []))]))]
+    return ast.fix_missing_locations(ast.Module([fn], []))
+
+
+_g, _l = {}, {}
+exec(compile(odd_names_tree(), '<odd>', 'exec'), _g, _l)
+_built = _l.get("<builder:'/x'>")
+check('odd_names_bind_under_their_own_name',
+      (_built.__name__, _built.__qualname__, _built(1, 2, 3, z=1, y=2)) if _built else sorted(_l),
+      ("<builder:'/x'>", "<builder:'/x'>", "a=1 n=2 kw=['y', 'z']"))
+
+_call = ast.fix_missing_locations(ast.Expression(
+    ast.Call(ast.Name('f'), [ast.Constant(7)], [ast.keyword('.kw', ast.Constant(1))])))
+check('odd_keyword_reaches_the_callee_as_spelled',
+      eval(compile(_call, '<kw>', 'eval'), {'f': lambda *a, **k: (a, k)}),
+      ((7,), {'.kw': 1}))
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

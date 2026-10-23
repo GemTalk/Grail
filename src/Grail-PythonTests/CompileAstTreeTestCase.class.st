@@ -41,7 +41,9 @@ CompileAstTreeTestCase >> testABuiltOrChangedTreeCompiles [
 		'a_renumbered_tree_reports_its_own_lines'
 		'an_untouched_parse_compiles'
 		'the_root_must_match_the_mode'
-		'names_no_source_can_spell_still_bind')
+		'names_no_source_can_spell_still_bind'
+		'odd_names_bind_under_their_own_name'
+		'odd_keyword_reaches_the_callee_as_spelled')
 
 ]
 
@@ -65,9 +67,9 @@ CompileAstTreeTestCase >> testDumpUnparseAndTheParseTheyRead [
 
 { #category : 'Grail-Tests - compile' }
 CompileAstTreeTestCase >> testEveryFixtureCheckIsAssertedByATestHere [
-	"The lists above name 12 checks.  A check added to the fixture without
+	"The lists above name 14 checks.  A check added to the fixture without
 	being listed would pass unasserted here, so the count is pinned."
 
-	self assert: (self results @env1:__len__) equals: 12
+	self assert: (self results @env1:__len__) equals: 14
 
 ]
