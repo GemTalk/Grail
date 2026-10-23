@@ -10706,7 +10706,15 @@ Object >> ___grailOwnMetaclass___ [
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailOwnsCommittedAttr___: aClass name: aSym [
 	"Does aClass ITSELF hold aSym in its committed namespace -- its own
-	___dynInstVars___ holder, or its own class-attribute accessor pair?"
+	___dynInstVars___ holder, or its own class-attribute accessor pair?
+
+	Both probes RE-PASS a stack overflow, as every probe in this file does.
+	Every attribute load on a class runs through here, so a recursion through
+	one -- ``A.__call__ = A()'' and ``A()()'', test_descr test_recursive_call
+	-- can trip the guard page inside these blocks.  Answering nil for it
+	consumed the VM's only warning without reducing depth, the recursion went
+	on into the Red Zone, and the session died there: on Linux, where native
+	code puts the trip in this frame, not on Darwin, where it lands elsewhere."
 
 	| holder |
 	((aClass @env0:class @env0:includesSelector: aSym environmentId: 1)
@@ -10716,10 +10724,14 @@ Object >> ___grailOwnsCommittedAttr___: aClass name: aSym [
 	(aClass @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1)
 		ifFalse: [^ false].
 	holder := [aClass @env0:perform: #'___dynInstVars___' env: 1]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
 	holder == nil ifTrue: [^ false].
 	^ ([holder @env0:dynamicInstVarAt: aSym]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil]) @env0:notNil
 
 ]
 
