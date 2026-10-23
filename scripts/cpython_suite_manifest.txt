@@ -598,3 +598,15 @@ test.test_filecmp
 test.test_dbm_dumb
 test.test_robotparser
 test.test_rlcompleter
+
+# --- Stdlib batch 2 (added 2026-10-23): timeit ---
+#
+# timeit is vendored verbatim from CPython 3.14.4.  Its test found three Grail
+# defects, all fixed at the cause: ``globals'' did not exist as a VALUE
+# (timeit's ``_globals = globals''), a def inside a conditional class-body
+# block read the class namespace for its free names (Grail puts a def named
+# ``repeat'' under such a block), and a form feed in the indentation was an
+# IndentationError.  Measured on Darwin arm64:
+#
+#   OK    timeit 41t
+test.test_timeit
