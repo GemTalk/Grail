@@ -808,6 +808,19 @@ os >> ___refuseShellExpandedPath___: aPath for: anOperation [
 
 ]
 
+{ #category : 'Grail-Private' }
+os >> ___reprOfTypeOf___: anObject [
+
+	"``<class 'str'>'': the repr of anObject's Python type, as CPython's
+	messages spell it with %s of type(x)."
+
+	| pythonBuiltins |
+
+	pythonBuiltins := builtins @env0:___instance___.
+	^ pythonBuiltins repr: (pythonBuiltins type: anObject)
+
+]
+
 { #category : 'Grail-File and Directory Operations' }
 os >> ___requiredArgument: aName at: anIndex in: positional kw: kwargs for: aFunctionName [
 	"A required argument, by position or else by keyword, as CPython binds it."
@@ -869,10 +882,28 @@ os >> ___shellPathArg___: aPath [
 	naming the same file.  Everything else is quoted unchanged."
 
 	| s |
-	s := (self ___fsPath___: aPath) @env0:asString.
+	s := self ___shellPathString___: aPath.
 	(s @env0:isEmpty @env0:not @env0:and: [(s @env0:at: 1) @env0:= $-])
 		ifTrue: [s := './' @env0:, s].
 	^ self ___shellQuote___: s
+
+]
+
+{ #category : 'Grail-Private' }
+os >> ___shellPathString___: aPath [
+
+	"aPath as the text a shell command names it by.  A BYTES path is decoded,
+	as CPython's os.fsdecode decodes one: Smalltalk's asString does not, so a
+	bytes path reached chmod(1) as something other than the file's name, the
+	read-back found the mode unchanged, and os.chmod raised PermissionError
+	for a file the caller owned (dbm.dumb names its files in bytes, so every
+	shelve.open failed -- test_shelve)."
+
+	| path |
+
+	path := self ___fsPath___: aPath.
+	(path @env0:isKindOf: ByteArray) ifTrue: [path := self fsdecode: path].
+	^ path @env0:asString
 
 ]
 
@@ -887,7 +918,7 @@ os >> ___shellQuote___: aString [
 	arbitrary command execution rather than a wrong answer."
 
 	| s out |
-	s := (self ___fsPath___: aString) @env0:asString.
+	s := self ___shellPathString___: aString.
 	out := WriteStream @env0:on: String @env0:new.
 	out @env0:nextPut: $'.
 	1 @env0:to: s @env0:size do: [:i |
@@ -1311,6 +1342,24 @@ os >> _chmod: positional kw: kwargs [
 					NotImplementedError ___signal___:
 						'chmod: follow_symlinks unavailable on this platform']]]].
 	^ self ___applyChmod___: path mode: mode
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> _fdopen: positional kw: kwargs [
+
+	"os.fdopen(fd, mode='r', buffering=-1, encoding=None, *args, **kwargs) --
+	CPython's Lib/os.py: a non-int descriptor is a TypeError, and everything
+	else is open()'s, which takes a descriptor as its file argument."
+
+	| descriptor |
+
+	descriptor := self ___requiredArgument: 'fd' at: 1 in: positional kw: kwargs for: 'fdopen'.
+	(descriptor @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___:
+			'invalid fd type (' @env0:, (self ___reprOfTypeOf___: descriptor)
+				@env0:, ', expected integer)'].
+	^ (builtins @env0:___instance___) _open: positional kw: kwargs
 
 ]
 

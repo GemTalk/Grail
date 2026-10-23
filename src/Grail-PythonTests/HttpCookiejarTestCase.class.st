@@ -120,6 +120,11 @@ HttpCookiejarTestCase >> testOmissionsAreDeliberate [
 	   os.fdopen is the one name left, so it alone stays on the list, and
 	   the mode is checked rather than assumed.
 
+	   AND IT FIRED A THIRD TIME, when os.fdopen arrived (stdlib batch 1,
+	   for fileinput).  That retired the helper: both save sites are
+	   CPython's own os.fdopen(os.open(..., 0o600)) again, so the check
+	   below is now that a SAVED cookie file is mode 0600.
+
 	2. HTTPCookieProcessor.  THIS TRIPWIRE FIRED TOO, and is now a positive
 	   check.  It lives in urllib.request, not here, and needed the
 	   opener/handler chain the hand-written urlopen() lacked, so it was
@@ -130,19 +135,16 @@ HttpCookiejarTestCase >> testOmissionsAreDeliberate [
 	self assert: (self eval:
 'import os
 repr([n for n in (''open'', ''fdopen'', ''close'') if hasattr(os, n)])
-') equals: '[''open'', ''close'']'.
-	"os.open and os.chmod DO exist now, and the helper uses them -- so the
-	 file's mode is READ BACK rather than the absence of a name being taken as
-	 evidence."
+') equals: '[''open'', ''fdopen'', ''close'']'.
+	"The saved file's mode is READ BACK rather than the presence of a name
+	 being taken as evidence."
 	self assert: (self eval:
 'import http.cookiejar as m
 import os, stat
 p = "$TMP/cookiejar_mode_probe.txt"
 if os.path.exists(p):
     os.remove(p)
-f = m._open_cookie_file_for_write(p)
-f.write("x")
-f.close()
+m.MozillaCookieJar(p).save()
 mode = stat.S_IMODE(os.stat(p).st_mode)
 os.remove(p)
 oct(mode)
@@ -213,9 +215,11 @@ HttpCookiejarTestCase >> testVendoredFileIsTheModuleThatLoads [
 	"A pre-seeded sys.modules entry, or a Smalltalk module of the same name,
 	would make src/python/stdlib/http/cookiejar.py unreachable SILENTLY --
 	the import succeeds, it is just a different module.  So do not settle
-	for ``the import worked'': check __file__, and check for a name that
-	exists ONLY in the vendored file (_open_cookie_file_for_write is Grail's
-	one adaptation and appears in no CPython release).
+	for ``the import worked'': check __file__, and check for something only
+	the vendored file has.  That was _open_cookie_file_for_write, Grail's one
+	adaptation, until os.fdopen retired it; it is now 3.14.8's
+	case-insensitive Netscape magic pattern, which a 3.14.4 copy or a
+	hand-written module would not carry.
 
 	The module class name is also asserted (Smalltalk-side): Grail flattens
 	dots, so http.cookiejar becomes the class http_cookiejar, and a fixture or
@@ -227,7 +231,8 @@ m.__file__.endswith(''/src/python/stdlib/http/cookiejar.py'')
 ') equals: true.
 	self assert: (self eval:
 'import http.cookiejar as m
-hasattr(m, ''_open_cookie_file_for_write'')
+import re
+bool(m.NETSCAPE_MAGIC_RGX.flags & re.IGNORECASE)
 ') equals: true.
 	"The CLASS is checked on the Smalltalk side: Python's type(m) is
 	``module'', as in CPython, and no longer shows it."
