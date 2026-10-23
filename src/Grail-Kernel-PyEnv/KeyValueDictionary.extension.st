@@ -647,9 +647,12 @@ KeyValueDictionary >> __init__: source [
 		(source keys) @env0:do: [:k |
 			self @env0:at: k put: (source __getitem__: k)].
 		^ None].
-	"Iterable of (k, v) pairs — fall back to plain do."
-	source @env0:do: [:pair |
-		self @env0:at: (pair @env0:at: 1) put: (pair @env0:at: 2)].
+	"Iterable of (k, v) pairs: update:'s, through the __iter__ protocol.  This
+	was a Smalltalk do:, which only a list or tuple understands, so a dict
+	subclass whose __init__ chained ``super().__init__(zip(...))'' -- or a
+	generator, or any iterator -- died on an uncatchable MessageNotUnderstood
+	(test_pprint test_default_dict, through collections.defaultdict)."
+	self update: source.
 	^ None
 
 ]

@@ -308,8 +308,21 @@ UnboundMethod >> _resolveMethodNargs: nargs kwOk: kwOk from: rootClass [
 	vaSel := ('_' , selector asString , ':kw:') asSymbol.
 	walker := rootClass.
 	[walker notNil] whileTrue: [
-		| md |
-		md := walker methodDictForEnv: 1.
+		| fixedArityMethod varargsMethod |
+		"EACH CLASS IS ASKED FOR THE TWO SELECTORS, not for its merged
+		``methodDictForEnv: 1''.  That copy is rebuilt from the persistent and
+		session dictionaries on every call, for every class in the chain, and
+		growing it runs a primitive (``_selectedPrimeGreaterThan:limit:'').  A
+		deep Python recursion through an unbound call -- ``C.__repr__ =
+		C.__str__'' whose __str__ calls repr(self) -- reached the stack limit
+		inside that primitive, and GemStone cannot unwind an
+		AlmostOutOfStackError across a C frame: the session died with
+		UncontinuableError 2758 where CPython raises RecursionError
+		(test_descr test_repr_as_str).  compiledMethodAt:environmentId:otherwise:
+		looks in the session dictionary and then the persistent one, which is
+		the membership the merged copy answered."
+		fixedArityMethod := walker compiledMethodAt: fixedSel environmentId: 1 otherwise: nil.
+		varargsMethod := walker compiledMethodAt: vaSel environmentId: 1 otherwise: nil.
 		"A FIXED-ARITY FORWARDER IS NOT THE METHOD, it is a trampoline INTO
 		the method: its whole body is a virtual re-send of the varargs form.
 		Running one from here would undo the point of an unbound call --
@@ -318,20 +331,12 @@ UnboundMethod >> _resolveMethodNargs: nargs kwOk: kwOk from: rootClass [
 		test_with's MockNested does exactly that and recursed until the stack
 		ran out.  The forwarder's own class always publishes the varargs form
 		it forwards to, so skipping it costs no lookup."
-		kwOk
-			ifTrue: [
-				(fixedSel notNil
-					and: [(md includesKey: fixedSel)
-					and: [(self _isFixedArityForwarder: fixedSel on: walker) not]])
-						ifTrue: [^ md at: fixedSel].
-				(md includesKey: vaSel) ifTrue: [^ md at: vaSel].
-				(fixedSel notNil and: [md includesKey: fixedSel])
-					ifTrue: [^ md at: fixedSel].
-			]
-			ifFalse: [
-				(md includesKey: vaSel) ifTrue: [^ md at: vaSel].
-				(fixedSel notNil and: [md includesKey: fixedSel]) ifTrue: [^ md at: fixedSel].
-			].
+		(kwOk
+			and: [fixedArityMethod notNil
+			and: [(self _isFixedArityForwarder: fixedSel on: walker) not]])
+				ifTrue: [^ fixedArityMethod].
+		varargsMethod ifNotNil: [^ varargsMethod].
+		fixedArityMethod ifNotNil: [^ fixedArityMethod].
 		walker := walker superClass].
 	^ nil
 

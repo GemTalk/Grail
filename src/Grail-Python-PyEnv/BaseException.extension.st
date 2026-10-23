@@ -867,19 +867,12 @@ BaseException >> ___applyImplicitContext___ [
 	__context__ as the KeyError, not None -- while doing nothing at all would let
 	format() walk the loop forever."
 
-	| current probe next |
+	| current |
 	(self ___rawContext___) isNil ifFalse: [^ self].
 	current := BaseException @env0:___handledException___.
 	current isNil ifTrue: [^ self].
 	current == self ifTrue: [^ self].
-	probe := current.
-	[probe isNil] whileFalse: [
-		next := probe ___rawContext___.
-		next == self
-			ifTrue: [
-				probe @env0:dynamicInstVarAt: #'___context___' put: nil.
-				probe := nil]
-			ifFalse: [probe := next]].
+	self ___unlinkFromContextChainOf___: current.
 	self @env0:dynamicInstVarAt: #'___context___' put: current.
 	"``current'' is being HANDLED -- we are raising from inside its handler -- so
 	its traceback is already built and it is no longer propagating.  Release its
@@ -1463,6 +1456,37 @@ BaseException >> ___signal___: message [
 		self ___applyImplicitContext___].
 	self ___captureFrameLocalsIfSuggestible___.
 	^ self @env0:signal: message
+
+]
+
+{ #category : 'Grail-Chaining' }
+BaseException >> ___unlinkFromContextChainOf___: anException [
+
+	"CPython's _PyErr_SetObject (Python/errors.c:203), before it chains the
+	receiver to anException: walk anException's context chain and, if the
+	receiver is on it, clear the link that points at the receiver, so the new
+	link makes no cycle.
+
+	A cycle ALREADY in the chain ends the walk, found as CPython finds it, with
+	Floyd's tortoise and hare: by the time the hare meets the tortoise every
+	exception on the loop has been checked.  Without it the walk never ended --
+	``ex.__context__ = ex'' and then any raise inside ex's handler hung the
+	session (test_exceptions test_no_hang_on_context_chain_cycle1)."
+
+	| hare tortoise tortoiseMoves next |
+
+	hare := anException.
+	tortoise := anException.
+	tortoiseMoves := false.
+	[(next := hare ___rawContext___) isNil] whileFalse: [
+		next == self ifTrue: [
+			hare @env0:dynamicInstVarAt: #'___context___' put: nil.
+			^ self].
+		hare := next.
+		hare == tortoise ifTrue: [^ self].
+		tortoiseMoves ifTrue: [tortoise := tortoise ___rawContext___].
+		tortoiseMoves := tortoiseMoves not].
+	^ self
 
 ]
 

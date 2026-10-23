@@ -398,6 +398,27 @@ DictTestCase >> testDictSetdefault [
 
 ]
 
+{ #category : 'Grail-Tests - Methods' }
+DictTestCase >> testDictSubclassChainingItsInitWithAnIteratorIsPopulatedFromIt [
+
+	"``super().__init__(iterable)'' from a dict subclass reached dict's one-argument
+	__init__:, whose fallback for an iterable of pairs was a Smalltalk do: -- which
+	a zip, a generator or any other iterator does not understand, so it died on an
+	uncatchable MessageNotUnderstood (test_pprint test_default_dict, through
+	collections.defaultdict)."
+
+	| populated |
+
+	populated := self eval: 'class Chained(dict):
+    def __init__(self, source):
+        super().__init__(source)
+[list(Chained(zip("ab", [1, 2])).items()), list(Chained((k, 0) for k in "xy").items())]'.
+	self
+		assert: (populated @env1:__eq__: (self eval: '[[("a", 1), ("b", 2)], [("x", 0), ("y", 0)]]'))
+		equals: true
+
+]
+
 { #category : 'Grail-Tests - Type' }
 DictTestCase >> testDictType [
 	"Test that dict instances report their type correctly"
