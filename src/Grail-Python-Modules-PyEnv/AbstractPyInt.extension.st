@@ -1,5 +1,18 @@
 Extension { #name : 'AbstractPyInt' }
 
+{ #category : 'Grail-Class Methods' }
+AbstractPyInt class >> ___fromIntValue___: anInteger [
+	"An instance of THIS class for the int a class method computed: CPython's
+	int.from_bytes calls ``type(long_obj)'' for a subclass, so
+	``MyInt.from_bytes(...)'' is a MyInt and an IntFlag's is its member
+	(Objects/longobject.c int_from_bytes_impl).  An int subclass is rooted at
+	AbstractPyInt, not Integer, so it never saw int's class side: the
+	attribute was missing altogether (test_long test_from_bytes)."
+
+	^ self value: (Array @env0:with: anInteger) value: nil
+
+]
+
 { #category : 'Grail-Instantiation' }
 AbstractPyInt class >> ___hasUserInit___ [
 	"True if this class defines its OWN Python __init__ (any arity),
@@ -20,6 +33,30 @@ AbstractPyInt class >> ___hasUserInit___ [
 		owner := self @env0:whichClassIncludesSelector: sel environmentId: 1.
 		(owner @env0:notNil and: [(builtins @env0:includes: owner) @env0:not]) ifTrue: [^ true]].
 	^ false
+
+]
+
+{ #category : 'Grail-Class Methods' }
+AbstractPyInt class >> _from_bytes: positional kw: kwargs [
+	^ self ___fromIntValue___: (int _from_bytes: positional kw: kwargs)
+
+]
+
+{ #category : 'Grail-Class Methods' }
+AbstractPyInt class >> from_bytes: theBytes [
+	^ self ___fromIntValue___: (int from_bytes: theBytes)
+
+]
+
+{ #category : 'Grail-Class Methods' }
+AbstractPyInt class >> from_bytes: theBytes _: byteorder [
+	^ self ___fromIntValue___: (int from_bytes: theBytes _: byteorder)
+
+]
+
+{ #category : 'Grail-Class Methods' }
+AbstractPyInt class >> from_bytes: theBytes _: byteorder _: signed [
+	^ self ___fromIntValue___: (int from_bytes: theBytes _: byteorder _: signed)
 
 ]
 
