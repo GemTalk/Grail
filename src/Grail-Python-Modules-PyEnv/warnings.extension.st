@@ -58,7 +58,7 @@ warnings >> ___actionFor___: message _: category _: explicitModule _: lineno [
 		catMatch := (fCat @env0:isNil or: [fCat @env0:== None])
 			@env0:or: [category @env0:== fCat
 				@env0:or: [(category @env0:isKindOf: Behavior)
-					@env0:and: [category @env0:inheritsFrom: fCat]]].
+					@env0:and: [self ___category___: category isSubclassOf: fCat]]].
 		msgMatch := (fMsg @env0:isNil or: [fMsg @env0:== None])
 			@env0:or: [self ___patternMatches___: fMsg _: msgStr].
 		"An origin of nil means no module could be established, so a
@@ -224,6 +224,19 @@ warnings >> ___callerRegistryFor___: loc [
 		[hit @env0:dynamicInstVarAt: #'__warningregistry__' put: reg]
 			@env0:on: Error do: [:ex | ex @env0:return: nil]].
 	^ reg
+
+]
+
+{ #category : 'Grail-Private' }
+warnings >> ___category___: aCategory isSubclassOf: aFilterCategory [
+
+	"Whether a filter's category covers aCategory: CPython's get_filter asks
+	PyObject_IsSubclass (Python/_warnings.c), so a filter's category may be a
+	TUPLE of classes, as simplefilter installs one for codeop."
+
+	(aFilterCategory @env0:isKindOf: Behavior) ifTrue: [
+		^ aCategory @env0:inheritsFrom: aFilterCategory].
+	^ ((builtins @env0:___instance___) issubclass: aCategory _: aFilterCategory) ___isTruthy___
 
 ]
 
@@ -1064,14 +1077,11 @@ warnings >> ___validateFilter___: action _: message _: category _: module _: lin
 	(message @env0:isNil or: [message @env0:== None
 		or: [message @env0:isKindOf: CharacterCollection]]) ifFalse: [
 			^ TypeError ___signal___: 'message must be a string'].
-	(category @env0:isNil or: [category @env0:== None]) ifFalse: [
-		"``a type, and a Warning subclass'' -- int is the first half only,
-		and 0 is neither."
-		((category @env0:isKindOf: Behavior)
-			and: [category @env0:== Warning
-				or: [category @env0:inheritsFrom: Warning]]) ifFalse: [
-					^ TypeError ___signal___:
-						'category must be a Warning subclass']].
+	"The CATEGORY is not checked here: only filterwarnings checks it
+	(___validateFilterCategory___:), as in CPython's _py_warnings, whose
+	simplefilter takes any category _add_filter is given -- codeop passes
+	the tuple (SyntaxWarning, DeprecationWarning), which matching then
+	reads as issubclass does."
 	(module @env0:isNil or: [module @env0:== None
 		or: [module @env0:isKindOf: CharacterCollection]]) ifFalse: [
 			^ TypeError ___signal___: 'module must be a string'].
@@ -1079,6 +1089,22 @@ warnings >> ___validateFilter___: action _: message _: category _: module _: lin
 		^ TypeError ___signal___: 'lineno must be an int'].
 	lineno @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: 'lineno must be an int >= 0'].
+	^ nil
+
+]
+
+{ #category : 'Grail-Private' }
+warnings >> ___validateFilterCategory___: category [
+
+	"filterwarnings' category check, CPython's _py_warnings.filterwarnings:
+	``a type, and a Warning subclass'' -- int is the first half only, and 0
+	is neither.  simplefilter does not make it."
+
+	(category @env0:isNil or: [category @env0:== None]) ifTrue: [^ nil].
+	((category @env0:isKindOf: Behavior)
+		and: [category @env0:== Warning
+			or: [category @env0:inheritsFrom: Warning]]) ifFalse: [
+				^ TypeError ___signal___: 'category must be a Warning subclass'].
 	^ nil
 
 ]
@@ -1724,6 +1750,7 @@ warnings >> _filterwarnings: positional kw: kwargs [
 	the checks as the string '0' and was accepted -- the type error the
 	argument has to raise had already been erased.  Empty-means-no-constraint
 	is handled where the pattern is compiled."
+	self ___validateFilterCategory___: category.
 	^ self
 		___addFilter___: action
 		message: message
@@ -2220,6 +2247,7 @@ warnings >> filterwarnings: action _: messageSubstring _: category [
 	behaved differently depending on how it had been installed -- and the
 	string form matched nothing at all once matching became a real #match."
 
+	self ___validateFilterCategory___: category.
 	^ self
 		___addFilter___: action
 		message: messageSubstring
