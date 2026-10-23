@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 59 | 5 | 26 | 90 |
+| P1 | 59 | 6 | 25 | 90 |
 | P2 | 21 | 3 | 10 | 34 |
-| P3 | 16 | 4 | 36 | 56 |
-| P4 | 15 | 9 | 51 | 75 |
-| **In-scope** | **111** | **21** | **123** | **255** |
+| P3 | 16 | 7 | 33 | 56 |
+| P4 | 15 | 10 | 50 | 75 |
+| **In-scope** | **111** | **26** | **118** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **132 are wired into the harness** (P1 64 · P2 24 · P3 20 · P4 24) and **111 of those score OK**.
+Of the 255 in-scope modules, **137 are wired into the harness** (P1 65 · P2 24 · P3 23 · P4 25) and **111 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -199,7 +199,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_coroutines` | Coroutines / async-await (language). |
 | ✅ | `test_decorators` | Decorators (language). |
 |  | `test_descr` | Descriptors / new-style class machinery (language). |
-|  | `test_descrtut` | Descriptor tutorial doctests (language). |
+| ❗ | `test_descrtut` | Descriptor tutorial doctests (language). |
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
 | ✅ | `test_dictviews` | dict keys/values/items views (language). |
@@ -343,7 +343,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ✅ | `test_difflib` | difflib — pure Python. |
 |  | `test_doctest` | doctest — pure-Python test framework. |
 | ❗ | `test_fnmatch` | fnmatch — pure glob-pattern matching on strings. |
-|  | `test_genericpath` | genericpath — pure string path operations. |
+| ❗ | `test_genericpath` | genericpath — pure string path operations. |
 |  | `test_getopt` | getopt — pure CLI parsing. |
 | ✅ | `test_gettext` | gettext — pure-Python .mo/.po i18n. |
 |  | `test_inspect` | inspect — needs frame/code/signature introspection depth. *(edge — see below)* |
@@ -352,12 +352,12 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ✅ | `test_linecache` | linecache — caches source lines (reads files, but a caching layer). *(edge — see below)* |
 |  | `test_logging` | logging (vendored) — core stdlib; socket/file handlers are optional. |
 |  | `test_memoryio` | In-memory StringIO/BytesIO — pure. |
-|  | `test_ntpath` | ntpath — pure Windows path-string operations. |
+| ❗ | `test_ntpath` | ntpath — pure Windows path-string operations. |
 |  | `test_optparse` | optparse — pure (legacy CLI). |
 |  | `test_pathlib` | pathlib — pure path algebra is in-scope; stat/IO methods are OS. *(edge — see below)* |
 | ✅ | `test_pickle` | pickle (partial support today) — pure-Python protocol. |
 | ❗ | `test_pickletools` | pickletools — pure. |
-|  | `test_posixpath` | posixpath — pure POSIX path-string operations. |
+| ❗ | `test_posixpath` | posixpath — pure POSIX path-string operations. |
 | ❗ | `test_pprint` | pprint — pure Python. |
 |  | `test_queue` | queue — pure structures (thread-safety atop them). |
 | ✅ | `test_reprlib` | reprlib — pure Python. |
@@ -442,7 +442,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 | ❗ | `test_stringprep` | stringprep (RFC 3454) — pure (net/security). |
 |  | `test_tabnanny` | tabnanny — indentation checker (tokenize-based tool). *(edge — see below)* |
 |  | `test_timeout` | Socket timeout behavior (net). *(edge — see below)* |
-|  | `test_urllib` | urllib (vendored) — web stack. |
+| ❗ | `test_urllib` | urllib (vendored) — web stack. |
 |  | `test_urllib2` | urllib.request — web stack. |
 | ✅ | `test_urllib2_localnet` | urllib against a local server (needs a running server). *(edge — see below)* |
 |  | `test_urllib2net` | urllib against the live internet (needs real network). *(edge — see below)* |
@@ -782,7 +782,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_long` ERROR, 47 tests: 4 failed, 5 errors, 7 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 8 errors, 5 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_abstract_numbers`, `test_buffer`, `test_c_locale_coercion`, `test_colorsys`, `test_errno`, `test_fnmatch`, `test_html`, `test_http_cookiejar`, `test_largefile`, `test_longexp`, `test_multibytecodec`, `test_numeric_tower`, `test_opcodes`, `test_picklebuffer`, `test_pickletools`, `test_pprint`, `test_quopri`, `test_range`, `test_secrets`, `test_str`, `test_stringprep`, `test_sundry`, `test_unicode_file_functions`, `test_urllib_response`, `test_xml_dom_minicompat`, `test_xml_etree_c`.
+Wired, but not on the board until the next nightly measures them: `test_abstract_numbers`, `test_buffer`, `test_c_locale_coercion`, `test_colorsys`, `test_descrtut`, `test_errno`, `test_fileio`, `test_fnmatch`, `test_genericpath`, `test_html`, `test_http_cookiejar`, `test_largefile`, `test_longexp`, `test_multibytecodec`, `test_ntpath`, `test_numeric_tower`, `test_opcodes`, `test_picklebuffer`, `test_pickletools`, `test_posixpath`, `test_pprint`, `test_quopri`, `test_range`, `test_secrets`, `test_signal`, `test_str`, `test_stringprep`, `test_sundry`, `test_sys`, `test_unicode_file_functions`, `test_urllib`, `test_urllib_response`, `test_utf8_mode`, `test_xml_dom_minicompat`, `test_xml_etree_c`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

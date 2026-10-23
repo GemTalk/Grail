@@ -1468,6 +1468,17 @@ sys >> is_finalizing [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+sys >> is_remote_debug_enabled [
+	"is_remote_debug_enabled() -> False.  New in 3.14 (PEP 768): whether a
+	debugger may attach to this process through sys.remote_exec.  Grail has no
+	remote_exec, so it never is.  test.support's support_remote_exec_only
+	asks it while decorating, so test_sys could not even be imported."
+
+	^ false
+
+]
+
 { #category : 'Grail-Accessors' }
 sys >> modules [
 	"The Python-level ``sys.modules'' read.  Delegates to the class-side

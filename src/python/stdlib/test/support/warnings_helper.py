@@ -4,6 +4,7 @@
 # @contextmanager -- it is a no-op in Grail).  The ignore_* decorators
 # are passthroughs (Grail drops method decorators anyway).
 
+import importlib
 import re
 import sys
 import warnings
@@ -169,3 +170,13 @@ class save_restore_warnings_filters:
     def __exit__(self, *exc):
         warnings.filters[:] = self._old_filters
         return False
+
+
+# GRAIL: verbatim from CPython 3.14.4 Lib/test/support/warnings_helper.py, the names
+# CPython test modules import that this trimmed copy lacked.
+
+def import_deprecated(name):
+    """Import *name* while suppressing DeprecationWarning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category=DeprecationWarning)
+        return importlib.import_module(name)

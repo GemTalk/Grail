@@ -19,6 +19,8 @@ assert_python_failure = _skip
 spawn_python = _skip
 kill_python = _skip
 run_python_until_end = _skip
+# run_test_script runs the script in a child interpreter (assert_python_ok).
+run_test_script = _skip
 
 
 def make_script(script_dir, script_basename, source, omit_suffix=False):
@@ -61,3 +63,36 @@ def make_script(script_dir, script_basename, source, omit_suffix=False):
 
 def interpreter_requires_environment():
     return False
+
+
+# GRAIL: make_zip_script only WRITES a zip, so it is CPython 3.14.4's, verbatim;
+# the two names its __pycache__ branch reaches are imported as CPython's module does.
+try:
+    from importlib.util import source_from_cache
+except ImportError:
+    pass
+try:
+    from test.support.import_helper import make_legacy_pyc
+except ImportError:
+    pass
+
+
+def make_zip_script(zip_dir, zip_basename, script_name, name_in_zip=None):
+    import zipfile
+    zip_filename = zip_basename+os.extsep+'zip'
+    zip_name = os.path.join(zip_dir, zip_filename)
+    with zipfile.ZipFile(zip_name, 'w') as zip_file:
+        if name_in_zip is None:
+            parts = script_name.split(os.sep)
+            if len(parts) >= 2 and parts[-2] == '__pycache__':
+                legacy_pyc = make_legacy_pyc(source_from_cache(script_name))
+                name_in_zip = os.path.basename(legacy_pyc)
+                script_name = legacy_pyc
+            else:
+                name_in_zip = os.path.basename(script_name)
+        zip_file.write(script_name, name_in_zip)
+    #if test.support.verbose:
+    #    with zipfile.ZipFile(zip_name, 'r') as zip_file:
+    #        print 'Contents of %r:' % zip_name
+    #        zip_file.printdir()
+    return zip_name, os.path.join(zip_name, name_in_zip)
