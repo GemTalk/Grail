@@ -450,6 +450,17 @@ Boolean >> __floordiv__: other [
 
 ]
 
+{ #category : 'Grail-String Representation' }
+Boolean >> __format__: formatSpec [
+	"bool inherits int.__format__: ``format(True, 'd')'' is '1' and
+	``f'{True:>6}''' is '     1'.  bool had no __format__ of its own, so
+	object's answered every non-empty spec with ``unsupported format string
+	passed to bool.__format__''."
+
+	^ (builtins instance) ___formatValue___: self spec: formatSpec
+
+]
+
 { #category : 'Grail-Comparison' }
 Boolean >> __ge__: other [
 	"Greater than or equal comparison."

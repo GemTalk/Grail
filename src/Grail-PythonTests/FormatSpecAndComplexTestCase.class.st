@@ -239,9 +239,9 @@ FormatSpecAndComplexTestCase >> testZOnlyValidInItsOwnPositionAndForFloatTypes [
 	self assertResult: 'z_wrong_position_suffix'
 		equals: 'ValueError: Invalid format specifier ''fz'' for object of type ''int'''.
 	self assertResult: 'z_on_int_type'
-		equals: 'ValueError: Negative zero coercion (z) not allowed'.
+		equals: 'ValueError: Negative zero coercion (z) not allowed in integer format specifier'.
 	self assertResult: 'z_on_str_type'
-		equals: 'ValueError: Negative zero coercion (z) not allowed'
+		equals: 'ValueError: Negative zero coercion (z) not allowed in string format specifier'
 
 ]
 
