@@ -1580,9 +1580,11 @@ fail+err, which is the `pep` doctest catching output that belongs to the
 `coroutine` doctest before it.  Its `del g; gc_collect()` should print
 `finally` on the spot; Grail finalizes that generator late (which is why
 `coroutine` already fails), and the late print lands in whichever doctest is
-running -- `refleaks` on main (already failing), `pep` here.  Bisected to the
-`___pyCallValue___:kw:` change, which moves the timing; `pep` passes when
-the module runs under a plain unittest loader.
+running -- `refleaks` in the board's run (already failing), `pep` here.
+Which one it lands in follows the code's layout, not any one change: it is
+`pep` on main plus only the unrelated #1756 as well (measured on a fresh
+stone, twice), and `pep` passes when the module runs under a plain unittest
+loader.
 
 Not covered, because argon2 needs neither: `ffi.callback` / `@ffi.def_extern`
 (libffi closures calling back into Python) and API-mode `ffi.verify`.
