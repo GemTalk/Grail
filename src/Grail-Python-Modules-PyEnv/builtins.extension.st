@@ -6969,6 +6969,30 @@ builtins >> getattr: anObject _: aName [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+builtins >> globals [
+
+	"globals() reached as a VALUE: ``_globals = globals'' and a call through it
+	later, which is how timeit reads the namespace of whoever constructs a
+	Timer.  A direct ``globals()'' never comes here -- CallAst compiles it to
+	the module's own namespace -- so there was nothing to call, and the
+	assignment was a NameError.
+
+	CPython's globals() answers the CALLING frame's globals, so this answers
+	the innermost Python frame's f_globals, skipping its own."
+
+	| frame |
+
+	frame := BaseException @env0:___liveFrameChain___.
+	[(frame @env0:~~ nil) and: [(frame @env0:~~ None) and: [
+		((sys @env0:___instance___) @env1:___frameName___: frame) @env0:= 'globals']]]
+		whileTrue: [frame := frame @env0:dynamicInstVarAt: #'f_back'].
+	((frame @env0:== nil) or: [frame @env0:== None]) ifTrue: [
+		^ RuntimeError ___signal___: 'globals(): no current frame'].
+	^ frame f_globals
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 builtins >> hasattr: anObject _: aName [
 	"Python builtin hasattr(obj, name) — return True if obj has an
 	attribute named `name`, False if accessing the attribute raises

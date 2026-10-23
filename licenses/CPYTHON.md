@@ -50,7 +50,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/fork_wait.py`, `lock_tests.py` | `Lib/test/` | Verbatim from 3.14.4 (sibling helpers of test modules) |
 | `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
-| `src/python/stdlib/cmd.py`, `sched.py`, `fileinput.py`, `filecmp.py`, `rlcompleter.py`, `shelve.py`, `urllib/robotparser.py`, `unittest/util.py` | `Lib/` | Verbatim from 3.14.4 |
+| `src/python/stdlib/cmd.py`, `sched.py`, `fileinput.py`, `filecmp.py`, `rlcompleter.py`, `shelve.py`, `timeit.py`, `urllib/robotparser.py`, `unittest/util.py` | `Lib/` | Verbatim from 3.14.4 |
 | `src/python/stdlib/_pydecimal.py` | `Lib/_pydecimal.py` | Verbatim, byte-for-byte (CPython's pure-Python `decimal`; `stdlib/decimal.py` is a Grail-authored re-export shim over it and is NOT derived from CPython's six-line `Lib/decimal.py` dispatcher) |
 
 Per PSF License clause 3, these are modified copies: the `support`

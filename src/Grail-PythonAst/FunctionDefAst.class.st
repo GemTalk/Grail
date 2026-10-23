@@ -103,6 +103,19 @@ FunctionDefAst >> ___bindsOwnParameterNamed___: aSymbol [
 
 ]
 
+{ #category : 'Grail-scoping' }
+FunctionDefAst >> ___bodyHolds___: aNode [
+
+	"Whether aNode is one of this def's own body statements: the node a parent
+	walk comes up from when it leaves the function's scope, rather than from
+	its decorators, defaults or annotation, which the enclosing scope
+	evaluates."
+
+	^ body == aNode
+		or: [(body isKindOf: SequenceableCollection) and: [body identityIncludes: aNode]]
+
+]
+
 { #category : 'Grail-Class Body' }
 FunctionDefAst >> ___boundTargetNames___ [
 	"A ``def'' binds its own name.  It contributes no

@@ -23,6 +23,7 @@ Class {
 		'openBrackets'
 	],
 	#classVars : [
+		'FormFeed',
 		'Lf',
 		'Tab',
 		'KeywordDict',
@@ -987,12 +988,20 @@ PythonTokenizer >> peekAt: offset [
 PythonTokenizer >> readIndentation [
 	"Read whitespace at the beginning of a line and return the indent level."
 
+	"A FORM FEED resets the column, as CPython's lexer does
+	(Parser/lexer/lexer.c:529, ``For Emacs users''), so a line of spaces,
+	tabs and form feeds is blank.  It was not whitespace here at all, and
+	``timeit.Timer(stmt=' \n\t\f')'' was an IndentationError."
+
 	| indent ch |
 	indent := 0.
-	[ ch := self peek . ch == $ or: [ ch == Tab ] ] whileTrue: [
+	[ ch := self peek . ch == $  or: [ ch == Tab or: [ ch == FormFeed ] ] ] whileTrue: [
 		ch == Tab
 			ifTrue: [indent := (indent // 8 + 1) * 8]
-			ifFalse: [indent := indent + 1].
+			ifFalse: [
+				ch == FormFeed
+					ifTrue: [indent := 0]
+					ifFalse: [indent := indent + 1]].
 		self advance.
 	].
 	^indent
@@ -1321,8 +1330,9 @@ PythonTokenizer >> tokenizeOne [
 	"Tokenize a single token from the current position."
 
 	| char |
-	"Skip whitespace (not newlines)"
-	[self atEnd not and: [(self peek == Character space) or: [self peek == Tab]]] whileTrue: [
+	"Skip whitespace (not newlines).  A form feed is whitespace between tokens
+	too (Parser/lexer/lexer.c:645)."
+	[self atEnd not and: [(self peek == Character space) or: [self peek == Tab or: [self peek == FormFeed]]]] whileTrue: [
 		self advance.
 	].
 	self atEnd ifTrue: [^self].
