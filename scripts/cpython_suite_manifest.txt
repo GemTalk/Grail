@@ -544,3 +544,34 @@ test.test_genericpath
 test.test_sys
 test.test_descrtut
 test.test_fileio
+
+# --- Stdlib batch 1 (added 2026-10-23): pure-Python modules Grail lacked ---
+#
+# cmd, sched, fileinput, filecmp, rlcompleter, shelve and urllib.robotparser
+# are vendored verbatim from CPython 3.14.4 (licenses/CPYTHON.md), with their
+# test modules and test_dbm / test_dbm_dumb, which shelve's tests import.
+# What their tests found is fixed in Grail rather than in the vendored code:
+# os.fdopen, os.chmod on a bytes path, ast.literal_eval of a bare tuple,
+# simplefilter taking a tuple category, and unittest's assertCountEqual and
+# assertMultiLineEqual (now CPython's, over a vendored unittest/util.py).
+# Measured on Darwin arm64:
+#
+#   OK    cmd 7t   sched 11t   fileinput 57t   shelve 182t   dbm 18t
+#   filecmp 16t 1E        a lone surrogate in a file name
+#   dbm_dumb 26t 1E       a non-ASCII bytes path reaching a GsFile primitive
+#   robotparser 50t 5E    3 lone-surrogate URLs, 2 network classes
+#   rlcompleter 8t 2F     inspect.signature of a builtin answers no parameters
+#
+# Left out for now: test_timeit (``_globals = globals'' -- Grail compiles
+# globals() and locals() specially, so neither exists as a value), test_codeop
+# (compile() refuses PyCF_ALLOW_INCOMPLETE_INPUT), test_threading_local
+# (_thread._local) and test_pyclbr (test.test_importlib).
+test.test_cmd
+test.test_sched
+test.test_fileinput
+test.test_shelve
+test.test_dbm
+test.test_filecmp
+test.test_dbm_dumb
+test.test_robotparser
+test.test_rlcompleter

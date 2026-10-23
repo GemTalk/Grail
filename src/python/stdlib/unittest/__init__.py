@@ -798,12 +798,72 @@ class TestCase:
             self._failWith(msg, repr(first) + " != " + repr(second)
                            + " within " + str(places) + " places")
 
+    # CPython's TestCase.assertCountEqual (Lib/unittest/case.py), with its
+    # helpers from unittest.util.  This used to SORT both sides, so elements
+    # that cannot be ordered -- ``(('a', 'b'), {})`` beside ``((1, 2), {})``
+    # -- raised TypeError instead of comparing (test_sched
+    # test_args_kwargs).  CPython counts with a Counter, and pairs by
+    # equality alone when an element is unhashable.
     def assertCountEqual(self, first, second, msg=None):
-        a = sorted(first)
-        b = sorted(second)
-        if not (a == b):
-            self._failWith(msg, "element counts differ: "
-                           + repr(first) + " vs " + repr(second))
+        import collections
+        from unittest.util import _count_diff_all_purpose, _count_diff_hashable
+        first_seq, second_seq = list(first), list(second)
+        try:
+            first = collections.Counter(first_seq)
+            second = collections.Counter(second_seq)
+        except TypeError:
+            # Handle case with unhashable elements
+            differences = _count_diff_all_purpose(first_seq, second_seq)
+        else:
+            if first == second:
+                return
+            differences = _count_diff_hashable(first_seq, second_seq)
+
+        if differences:
+            standardMsg = 'Element counts were not equal:\n'
+            lines = ['First has %d, Second has %d:  %r' % diff for diff in differences]
+            diffMsg = '\n'.join(lines)
+            standardMsg = self._truncateMessage(standardMsg, diffMsg)
+            self._failWith(msg, standardMsg)
+
+    # CPython's TestCase.assertMultiLineEqual (Lib/unittest/case.py): both
+    # must be str, and a mismatch reports an ndiff of the lines.
+    def assertMultiLineEqual(self, first, second, msg=None):
+        """Assert that two multi-line strings are equal."""
+        self.assertIsInstance(first, str, "First argument is not a string")
+        self.assertIsInstance(second, str, "Second argument is not a string")
+
+        if first != second:
+            # Don't use difflib if the strings are too long
+            if (len(first) > self._diffThreshold or
+                len(second) > self._diffThreshold):
+                self.assertEqual(first, second, msg)
+
+            # Append \n to both strings if either is missing the \n.
+            # This allows the final ndiff to show the \n difference. The
+            # exception here is if the string is empty, in which case no
+            # \n should be added
+            first_presplit = first
+            second_presplit = second
+            if first and second:
+                if first[-1] != '\n' or second[-1] != '\n':
+                    first_presplit += '\n'
+                    second_presplit += '\n'
+            elif second and second[-1] != '\n':
+                second_presplit += '\n'
+            elif first and first[-1] != '\n':
+                first_presplit += '\n'
+
+            import difflib
+            from unittest.util import _common_shorten_repr
+            firstlines = first_presplit.splitlines(keepends=True)
+            secondlines = second_presplit.splitlines(keepends=True)
+
+            # Generate the message and diff, then raise the exception
+            standardMsg = '%s != %s' % _common_shorten_repr(first, second)
+            diff = '\n' + ''.join(difflib.ndiff(firstlines, secondlines))
+            standardMsg = self._truncateMessage(standardMsg, diff)
+            self._failWith(msg, standardMsg)
 
     def assertRaises(self, expected_exception, *call_args, **call_kw):
         if len(call_args) == 0:
