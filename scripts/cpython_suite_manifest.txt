@@ -482,3 +482,45 @@ test.test_shlex
 #   62 of the 69 skips are the *WithExtModule classes, which need the C
 #   _uuid accelerator Grail does not have; CPython itself skips 16.
 test.test_uuid
+
+# --- Census batch 1 (added 2026-10-23): modules that already pass or nearly pass ---
+#
+# A census ran the 266 single-file CPython test modules that were not in this
+# manifest; these 26 import and pass (17) or pass 80% or more of their tests
+# (9).  Vendored verbatim from CPython 3.14.4.  Left out: test_script_helper,
+# which tests the subprocess helpers Grail rewrites to skip
+# (licenses/CPYTHON.md), so its failures measure that choice; and test_bigmem,
+# whose 3.14.4 file skips the whole module here.  Measured on Darwin arm64:
+#
+#   17 OK    abstract_numbers c_locale_coercion colorsys errno fnmatch html
+#            http_cookiejar longexp opcodes picklebuffer quopri stringprep sundry
+#            unicode_file_functions urllib_response xml_dom_minicompat xml_etree_c
+#   pickletools 190t 1F/1E   secrets 11t 1E    range 29t 3F     buffer 95t 6F/4E
+#   numeric_tower 9t 1E      largefile 16t 2E  pprint 45t 6F    str 138t 20F/8E
+#   multibytecodec 36t 5F/1E
+test.test_abstract_numbers
+test.test_c_locale_coercion
+test.test_colorsys
+test.test_errno
+test.test_fnmatch
+test.test_html
+test.test_http_cookiejar
+test.test_longexp
+test.test_opcodes
+test.test_picklebuffer
+test.test_quopri
+test.test_stringprep
+test.test_sundry
+test.test_unicode_file_functions
+test.test_urllib_response
+test.test_xml_dom_minicompat
+test.test_xml_etree_c
+test.test_pickletools
+test.test_secrets
+test.test_range
+test.test_buffer
+test.test_numeric_tower
+test.test_largefile
+test.test_pprint
+test.test_multibytecodec
+test.test_str
