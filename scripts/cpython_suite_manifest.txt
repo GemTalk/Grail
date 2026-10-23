@@ -524,3 +524,23 @@ test.test_largefile
 test.test_pprint
 test.test_multibytecodec
 test.test_str
+
+# --- Census batch 2 (added 2026-10-23): unlocked by test.support helpers ---
+#
+# 58 census modules failed to import on a test.support name the trimmed copy
+# lacked.  With those helpers added verbatim from CPython 3.14.4, 21 of them run;
+# these 9 pass 70% or more.  Vendored verbatim from 3.14.4.  Measured on Darwin
+# arm64:
+#
+#   utf8_mode 12t OK      urllib 101t 14F+E   ntpath 105t 16F+E   signal 57t 10F+E
+#   posixpath 94t 22F+E   genericpath 25t 6F+E   sys 97t 24F+E   descrtut 8t 2F
+#   fileio 99t 30F+E
+test.test_utf8_mode
+test.test_urllib
+test.test_ntpath
+test.test_signal
+test.test_posixpath
+test.test_genericpath
+test.test_sys
+test.test_descrtut
+test.test_fileio

@@ -1472,3 +1472,546 @@ def nomemtest(f):
     all that is left of it here.
     """
     return cpython_only(f)
+
+
+# GRAIL: verbatim from CPython 3.14.4 Lib/test/support/__init__.py, the names
+# CPython test modules import that this trimmed copy lacked.
+
+import os
+import sysconfig
+import time
+try:
+    import _opcode
+except ImportError:
+    # GRAIL: no _opcode module, and no specializing interpreter for
+    # requires_specialization{,_ft} to wait for.
+    class _opcode:
+        ENABLE_SPECIALIZATION = False
+        ENABLE_SPECIALIZATION_FT = False
+
+
+def flush_std_streams():
+    if sys.stdout is not None:
+        sys.stdout.flush()
+    if sys.stderr is not None:
+        sys.stderr.flush()
+
+
+def print_warning(msg):
+    # bpo-45410: Explicitly flush stdout to keep logs in order
+    flush_std_streams()
+    stream = print_warning.orig_stderr
+    for line in msg.splitlines():
+        print(f"Warning -- {line}", file=stream)
+    stream.flush()
+
+
+print_warning.orig_stderr = sys.stderr
+
+
+# Use is_wasm32 as a generic check for WebAssembly platforms.
+is_wasm32 = is_emscripten or is_wasi
+
+is_s390x = hasattr(os, 'uname') and os.uname().machine == 's390x'
+skip_on_s390x = unittest.skipIf(is_s390x, 'skipped on s390x')
+
+
+class SuppressCrashReport:
+    """Try to prevent a crash report from popping up.
+
+    On Windows, don't display the Windows Error Reporting dialog.  On UNIX,
+    disable the creation of coredump file.
+    """
+    old_value = None
+    old_modes = None
+
+    def __enter__(self):
+        """On Windows, disable Windows Error Reporting dialogs using
+        SetErrorMode() and CrtSetReportMode().
+
+        On UNIX, try to save the previous core file size limit, then set
+        soft limit to 0.
+        """
+        if sys.platform.startswith('win'):
+            # see http://msdn.microsoft.com/en-us/library/windows/desktop/ms680621.aspx
+            try:
+                import msvcrt
+            except ImportError:
+                return
+
+            self.old_value = msvcrt.GetErrorMode()
+
+            msvcrt.SetErrorMode(self.old_value | msvcrt.SEM_NOGPFAULTERRORBOX)
+
+            # bpo-23314: Suppress assert dialogs in debug builds.
+            # CrtSetReportMode() is only available in debug build.
+            if hasattr(msvcrt, 'CrtSetReportMode'):
+                self.old_modes = {}
+                for report_type in [msvcrt.CRT_WARN,
+                                    msvcrt.CRT_ERROR,
+                                    msvcrt.CRT_ASSERT]:
+                    old_mode = msvcrt.CrtSetReportMode(report_type,
+                            msvcrt.CRTDBG_MODE_FILE)
+                    old_file = msvcrt.CrtSetReportFile(report_type,
+                            msvcrt.CRTDBG_FILE_STDERR)
+                    self.old_modes[report_type] = old_mode, old_file
+
+        else:
+            try:
+                import resource
+                self.resource = resource
+            except ImportError:
+                self.resource = None
+            if self.resource is not None:
+                try:
+                    self.old_value = self.resource.getrlimit(self.resource.RLIMIT_CORE)
+                    self.resource.setrlimit(self.resource.RLIMIT_CORE,
+                                            (0, self.old_value[1]))
+                except (ValueError, OSError):
+                    pass
+
+            if sys.platform == 'darwin':
+                import subprocess
+                # Check if the 'Crash Reporter' on OSX was configured
+                # in 'Developer' mode and warn that it will get triggered
+                # when it is.
+                #
+                # This assumes that this context manager is used in tests
+                # that might trigger the next manager.
+                cmd = ['/usr/bin/defaults', 'read',
+                       'com.apple.CrashReporter', 'DialogType']
+                proc = subprocess.Popen(cmd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+                with proc:
+                    stdout = proc.communicate()[0]
+                if stdout.strip() == b'developer':
+                    print("this test triggers the Crash Reporter, "
+                          "that is intentional", end='', flush=True)
+
+        return self
+
+    def __exit__(self, *ignore_exc):
+        """Restore Windows ErrorMode or core file behavior to initial value."""
+        if self.old_value is None:
+            return
+
+        if sys.platform.startswith('win'):
+            import msvcrt
+            msvcrt.SetErrorMode(self.old_value)
+
+            if self.old_modes:
+                for report_type, (old_mode, old_file) in self.old_modes.items():
+                    msvcrt.CrtSetReportMode(report_type, old_mode)
+                    msvcrt.CrtSetReportFile(report_type, old_file)
+        else:
+            if self.resource is not None:
+                try:
+                    self.resource.setrlimit(self.resource.RLIMIT_CORE, self.old_value)
+                except (ValueError, OSError):
+                    pass
+
+
+def requires_gil_enabled(msg="needs the GIL enabled"):
+    """Decorator for skipping tests on the free-threaded build."""
+    return unittest.skipIf(Py_GIL_DISABLED, msg)
+
+
+# Use is_wasm32 as a generic check for WebAssembly platforms.
+is_wasm32 = is_emscripten or is_wasi
+
+
+def sortdict(dict):
+    "Like repr(dict), but in sorted order."
+    items = sorted(dict.items())
+    reprpairs = ["%r: %r" % pair for pair in items]
+    withcommas = ", ".join(reprpairs)
+    return "{%s}" % withcommas
+
+
+MS_WINDOWS = (sys.platform == 'win32')
+
+
+def system_must_validate_cert(f):
+    """Skip the test on TLS certificate validation failures."""
+    @functools.wraps(f)
+    def dec(*args, **kwargs):
+        try:
+            f(*args, **kwargs)
+        except OSError as e:
+            if "CERTIFICATE_VERIFY_FAILED" in str(e):
+                raise unittest.SkipTest("system does not contain "
+                                        "necessary certificates")
+            raise
+    return dec
+
+
+def requires_specialization_ft(test):
+    return unittest.skipUnless(
+        _opcode.ENABLE_SPECIALIZATION_FT, "requires specialization")(test)
+
+
+def requires_specialization(test):
+    return unittest.skipUnless(
+        _opcode.ENABLE_SPECIALIZATION, "requires specialization")(test)
+
+
+def control_characters_c0() -> list[str]:
+    """Returns a list of C0 control characters as strings.
+    C0 control characters defined as the byte range 0x00-0x1F, and 0x7F.
+    """
+    return [chr(c) for c in range(0x00, 0x20)] + ["\x7F"]
+
+
+@contextlib.contextmanager
+def patch_list(orig):
+    """Like unittest.mock.patch.dict, but for lists."""
+    try:
+        saved = orig[:]
+        yield
+    finally:
+        orig[:] = saved
+
+
+class SaveSignals:
+    """
+    Save and restore signal handlers.
+
+    This class is only able to save/restore signal handlers registered
+    by the Python signal module: see bpo-13285 for "external" signal
+    handlers.
+    """
+
+    def __init__(self):
+        import signal
+        self.signal = signal
+        self.signals = signal.valid_signals()
+        # SIGKILL and SIGSTOP signals cannot be ignored nor caught
+        for signame in ('SIGKILL', 'SIGSTOP'):
+            try:
+                signum = getattr(signal, signame)
+            except AttributeError:
+                continue
+            self.signals.remove(signum)
+        self.handlers = {}
+
+    def save(self):
+        for signum in self.signals:
+            handler = self.signal.getsignal(signum)
+            if handler is None:
+                # getsignal() returns None if a signal handler was not
+                # registered by the Python signal module,
+                # and the handler is not SIG_DFL nor SIG_IGN.
+                #
+                # Ignore the signal: we cannot restore the handler.
+                continue
+            self.handlers[signum] = handler
+
+    def restore(self):
+        for signum, handler in self.handlers.items():
+            self.signal.signal(signum, handler)
+
+
+def get_pagesize():
+    """Get size of a page in bytes."""
+    try:
+        page_size = os.sysconf('SC_PAGESIZE')
+    except (ValueError, AttributeError):
+        try:
+            page_size = os.sysconf('SC_PAGE_SIZE')
+        except (ValueError, AttributeError):
+            page_size = 4096
+    return page_size
+
+
+def in_systemd_nspawn_sync_suppressed() -> bool:
+    """
+    Test whether the test suite is runing in systemd-nspawn
+    with ``--suppress-sync=true``.
+
+    This can be used to skip tests that rely on ``fsync()`` calls
+    and similar not being intercepted.
+    """
+
+    if not hasattr(os, "O_SYNC"):
+        return False
+
+    try:
+        with open("/run/systemd/container", "rb") as fp:
+            if fp.read().rstrip() != b"systemd-nspawn":
+                return False
+    except FileNotFoundError:
+        return False
+
+    # If systemd-nspawn is used, O_SYNC flag will immediately
+    # trigger EINVAL.  Otherwise, ENOENT will be given instead.
+    import errno
+    try:
+        fd = os.open(__file__, os.O_RDONLY | os.O_SYNC)
+    except OSError as err:
+        if err.errno == errno.EINVAL:
+            return True
+    else:
+        os.close(fd)
+
+    return False
+
+
+def skip_android_selinux(name):
+    return unittest.skipIf(
+        sys.platform == "android", f"Android blocks {name} with SELinux"
+    )
+
+
+def reap_children():
+    """Use this function at the end of test_main() whenever sub-processes
+    are started.  This will help ensure that no extra children (zombies)
+    stick around to hog resources and create problems when looking
+    for refleaks.
+    """
+    global environment_altered
+
+    # Need os.waitpid(-1, os.WNOHANG): Windows is not supported
+    if not (hasattr(os, 'waitpid') and hasattr(os, 'WNOHANG')):
+        return
+    elif not has_subprocess_support:
+        return
+
+    # Reap all our dead child processes so we don't leave zombies around.
+    # These hog resources and might be causing some of the buildbots to die.
+    while True:
+        try:
+            # Read the exit status of any child process which already completed
+            pid, status = os.waitpid(-1, os.WNOHANG)
+        except OSError:
+            break
+
+        if pid == 0:
+            break
+
+        print_warning(f"reap_children() reaped child process {pid}")
+        environment_altered = True
+
+
+def get_attribute(obj, name):
+    """Get an attribute, raising SkipTest if AttributeError is raised."""
+    try:
+        attribute = getattr(obj, name)
+    except AttributeError:
+        raise unittest.SkipTest("object %r has no attribute %r" % (obj, name))
+    else:
+        return attribute
+
+
+def skip_if_buggy_ucrt_strfptime(test):
+    """
+    Skip decorator for tests that use buggy strptime/strftime
+
+    If the UCRT bugs are present time.localtime().tm_zone will be
+    an empty string, otherwise we assume the UCRT bugs are fixed
+
+    See bpo-37552 [Windows] strptime/strftime return invalid
+    results with UCRT version 17763.615
+    """
+    import locale
+    global _buggy_ucrt
+    if _buggy_ucrt is None:
+        if(sys.platform == 'win32' and
+                locale.getencoding() == 'cp65001' and
+                time.localtime().tm_zone == ''):
+            _buggy_ucrt = True
+        else:
+            _buggy_ucrt = False
+    return unittest.skip("buggy MSVC UCRT strptime/strftime")(test) if _buggy_ucrt else test
+
+
+class PythonSymlink:
+    """Creates a symlink for the current Python executable"""
+    def __init__(self, link=None):
+        from .os_helper import TESTFN
+
+        self.link = link or os.path.abspath(TESTFN)
+        self._linked = []
+        self.real = os.path.realpath(sys.executable)
+        self._also_link = []
+
+        self._env = None
+
+        self._platform_specific()
+
+    if sys.platform == "win32":
+        def _platform_specific(self):
+            import glob
+            import _winapi
+
+            if os.path.lexists(self.real) and not os.path.exists(self.real):
+                # App symlink appears to not exist, but we want the
+                # real executable here anyway
+                self.real = _winapi.GetModuleFileName(0)
+
+            dll = _winapi.GetModuleFileName(sys.dllhandle)
+            src_dir = os.path.dirname(dll)
+            dest_dir = os.path.dirname(self.link)
+            self._also_link.append((
+                dll,
+                os.path.join(dest_dir, os.path.basename(dll))
+            ))
+            for runtime in glob.glob(os.path.join(glob.escape(src_dir), "vcruntime*.dll")):
+                self._also_link.append((
+                    runtime,
+                    os.path.join(dest_dir, os.path.basename(runtime))
+                ))
+
+            self._env = {k.upper(): os.getenv(k) for k in os.environ}
+            self._env["PYTHONHOME"] = os.path.dirname(self.real)
+            if sysconfig.is_python_build():
+                self._env["PYTHONPATH"] = STDLIB_DIR
+    else:
+        def _platform_specific(self):
+            pass
+
+    def __enter__(self):
+        os.symlink(self.real, self.link)
+        self._linked.append(self.link)
+        for real, link in self._also_link:
+            os.symlink(real, link)
+            self._linked.append(link)
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        for link in self._linked:
+            try:
+                os.remove(link)
+            except IOError as ex:
+                if verbose:
+                    print("failed to clean up {}: {}".format(link, ex))
+
+    def _call(self, python, args, env, returncode):
+        import subprocess
+        cmd = [python, *args]
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, env=env)
+        r = p.communicate()
+        if p.returncode != returncode:
+            if verbose:
+                print(repr(r[0]))
+                print(repr(r[1]), file=sys.stderr)
+            raise RuntimeError(
+                'unexpected return code: {0} (0x{0:08X})'.format(p.returncode))
+        return r
+
+    def call_real(self, *args, returncode=0):
+        return self._call(self.real, args, None, returncode)
+
+    def call_link(self, *args, returncode=0):
+        return self._call(self.link, args, self._env, returncode)
+
+
+def no_rerun(reason):
+    """Skip rerunning for a particular test.
+
+    WARNING: Use this decorator with care; skipping rerunning makes it
+    impossible to find reference leaks. Provide a clear reason for skipping the
+    test using the 'reason' parameter.
+    """
+    def deco(func):
+        assert not isinstance(func, type), func
+        _has_run = False
+        def wrapper(self):
+            nonlocal _has_run
+            if _has_run:
+                self.skipTest(reason)
+            func(self)
+            _has_run = True
+        return wrapper
+    return deco
+
+
+# Windows doesn't have os.uname() but it doesn't support s390x.
+is_s390x = hasattr(os, 'uname') and os.uname().machine == 's390x'
+
+
+def _id(obj):
+    return obj
+
+
+def _supports_remote_attaching():
+    PROCESS_VM_READV_SUPPORTED = False
+
+    try:
+        from _remote_debugging import PROCESS_VM_READV_SUPPORTED
+    except ImportError:
+        pass
+
+    return PROCESS_VM_READV_SUPPORTED
+
+
+def _support_remote_exec_only_impl():
+    if not sys.is_remote_debug_enabled():
+        return unittest.skip("Remote debugging is not enabled")
+    if sys.platform not in ("darwin", "linux", "win32"):
+        return unittest.skip("Test only runs on Linux, Windows and macOS")
+    if sys.platform == "linux" and not _supports_remote_attaching():
+        return unittest.skip("Test only runs on Linux with process_vm_readv support")
+    return _id
+
+
+Py_TRACE_REFS = hasattr(sys, 'getobjects')
+
+
+def force_colorized_test_class(cls):
+    """Force the terminal to be colorized for the entire test class."""
+    original_setUpClass = cls.setUpClass
+
+    @classmethod
+    @functools.wraps(cls.setUpClass)
+    def new_setUpClass(cls):
+        cls.enterClassContext(force_color(True))
+        original_setUpClass()
+
+    cls.setUpClass = new_setUpClass
+    return cls
+
+
+def force_colorized(func):
+    """Force the terminal to be colorized."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        with force_color(True):
+            return func(*args, **kwargs)
+    return wrapper
+
+
+def support_remote_exec_only(test):
+    return _support_remote_exec_only_impl()(test)
+
+
+# GRAIL: CPython reads sys._jit.is_enabled(); Grail has no sys._jit, and no JIT.
+try:
+    _JIT_ENABLED = sys._jit.is_enabled()
+except AttributeError:
+    _JIT_ENABLED = False
+requires_jit_enabled = unittest.skipUnless(_JIT_ENABLED, "requires JIT enabled")
+requires_jit_disabled = unittest.skipIf(_JIT_ENABLED, "requires JIT disabled")
+
+
+# Set by libregrtest/main.py so we can skip tests that are not
+# useful for PGO
+PGO = False
+
+
+@contextlib.contextmanager
+def gc_threshold(*args):
+    import gc
+    old_threshold = gc.get_threshold()
+    gc.set_threshold(*args)
+    try:
+        yield
+    finally:
+        gc.set_threshold(*old_threshold)
+
+
+def reset_code(f: types.FunctionType) -> types.FunctionType:
+    """Clear all specializations, local instrumentation, and JIT code for the given function."""
+    f.__code__ = f.__code__.replace()
+    return f
