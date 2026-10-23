@@ -1877,8 +1877,20 @@ NameAst >> ___inNestedScopeWithinClassBody___ [
 	inClauseIter := false.
 	[node notNil] whileTrue: [
 		(node isKindOf: LambdaAst) ifTrue: [^ true].
-		((node isKindOf: ClassDefAst) or: [node isKindOf: FunctionDefAst])
-			ifTrue: [^ false].
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		"A DEF's BODY is a function scope, so the class is not on its chain.
+		This used to answer false at any def, on the reasoning that a def's
+		body is never emitted during class-body value emit -- but a def in a
+		CONDITIONAL class-body block is, inline, as a block value (ClassDefAst
+		>> emitClassBodyIfDef:on:, FunctionDefAst >>
+		printSmalltalkClassBodyRuntimeDefOn:).  Every free name in it then read
+		the class namespace: a sibling method, a class attribute.  Grail wraps a
+		def whose name GemStone reserves -- ``repeat'' -- in exactly such an
+		``if True:'', so test_timeit's ``def repeat(self, ...)'' read the test
+		class's own ``timeit'' method instead of the timeit module.  Arriving
+		through the def's decorators, defaults or annotation is still the class
+		body's own evaluation, and answers false as before."
+		(node isKindOf: FunctionDefAst) ifTrue: [^ node ___bodyHolds___: child].
 		"``iter'' hangs off the ComprehensionAst CLAUSE, one level below the
 		comprehension node itself, so the ``did we come up through the
 		iterable?'' test has to be made here and carried one step."
@@ -2393,9 +2405,12 @@ NameAst >> ___pythonBindingShadows___: aSymbol [
 		ifTrue: [^ true].
 	(CallAst moduleFunctionNames notNil
 		and: [CallAst moduleFunctionNames includes: aSymbol asSymbol]) ifTrue: [^ true].
+	"Not from inside a nested scope, where the class namespace is not visible
+	-- see ___inNestedScopeWithinClassBody___."
 	(CallAst inClassBodyValueEmit
 		and: [CallAst classAttrNames notNil
-		and: [CallAst classAttrNames includes: aSymbol asSymbol]]) ifTrue: [^ true].
+		and: [(CallAst classAttrNames includes: aSymbol asSymbol)
+		and: [self ___inNestedScopeWithinClassBody___ not]]]) ifTrue: [^ true].
 	"A DOIT (exec/eval) compiles against CALLER-PROVIDED globals, and a name
 	seeded from that dict shadows the builtin exactly as a module global
 	would: eval('lambda: len([])', {'len': fake}) must read fake
