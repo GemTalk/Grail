@@ -544,3 +544,22 @@ test.test_genericpath
 test.test_sys
 test.test_descrtut
 test.test_fileio
+
+# --- Census batch 3 (added 2026-10-23): the census's crashers, fixed ---
+#
+# Three census modules took their whole scoring session down.  Each is fixed at
+# the cause, and vendored verbatim from CPython 3.14.4.  Measured on Darwin arm64:
+#
+#   test_defaultdict 13t OK      the factory's repr gets CPython's reentrancy
+#                                guard; init, __missing__ and | follow
+#                                defdict_init / defdict_missing / defdict_or
+#   test_descr  162t 50F/32E/12S an unbound-method lookup no longer builds a
+#                                merged method dictionary per class per call:
+#                                the stack ran out inside that primitive
+#                                (UncontinuableError 2758)
+#   test_exceptions 107t 14F/14E/30S  a pre-existing __context__ cycle no
+#                                longer hangs the next raise; testInfiniteRecursion
+#                                is skip-listed (scripts/cpython_suite_skips.txt)
+test.test_defaultdict
+test.test_descr
+test.test_exceptions

@@ -23,20 +23,40 @@ class defaultdict(dict):
     # __slots__ is strict, as there (#1693).
     __slots__ = ('default_factory',)
 
-    def __init__(self, default_factory=None, *args, **kwargs):
-        super().__init__()
+    # As CPython's defdict_init (Modules/_collectionsmodule.c:2460): the
+    # factory must be callable or None, and every other argument is dict's.
+    def __init__(self, default_factory=None, /, *args, **kwargs):
+        if default_factory is not None and not callable(default_factory):
+            raise TypeError("first argument must be callable or None")
         self.default_factory = default_factory
-        if args:
-            self.update(args[0])
-        if kwargs:
-            self.update(kwargs)
+        super().__init__(*args, **kwargs)
 
+    # As CPython's defdict_missing (Modules/_collectionsmodule.c:2230): the
+    # value is stored with setdefault semantics, so a factory that itself
+    # filled the key leaves that value in place and is what [] answers
+    # (test_factory_conflict_with_set_value).
     def __missing__(self, key):
         if self.default_factory is None:
             raise KeyError(key)
         value = self.default_factory()
-        self[key] = value
-        return value
+        return dict.setdefault(self, key, value)
+
+    # As CPython's defdict_or (Modules/_collectionsmodule.c:2409): the result
+    # is the defaultdict operand's class, with its factory, built the way
+    # copy() builds one.  ``|='' is dict's.
+    def __or__(self, other):
+        if not isinstance(other, dict):
+            return NotImplemented
+        new = type(self)(self.default_factory, self)
+        new.update(other)
+        return new
+
+    def __ror__(self, other):
+        if not isinstance(other, dict):
+            return NotImplemented
+        new = type(self)(self.default_factory, other)
+        new.update(self)
+        return new
 
     # dict.copy() answers a plain dict for a subclass, as CPython's does;
     # defaultdict, as in CPython, overrides it to keep its type and factory.
@@ -58,9 +78,30 @@ class defaultdict(dict):
     # A defaultdict that contains itself needs no guard here: dict.__repr__
     # catches the cycle, so the inner one prints as ``defaultdict(f, {...})'',
     # which is CPython's output too.
+    # The FACTORY does need one: CPython's defdict_repr wraps the factory's
+    # repr in Py_ReprEnter (Modules/_collectionsmodule.c:2383), so a factory
+    # whose __repr__ reprs the defaultdict prints as ``...'' the second time
+    # round instead of recursing (gh-145492, test_repr_recursive_factory).
+    # Same order as CPython too: the dict part first, then the factory.
     def __repr__(self):
-        return '%s(%r, %s)' % (type(self).__name__, self.default_factory,
-                               dict.__repr__(self))
+        base = dict.__repr__(self)
+        factory = self.default_factory
+        if factory is None:
+            factory_repr = 'None'
+        elif id(factory) in _defaultdict_factory_repr_running:
+            factory_repr = '...'
+        else:
+            _defaultdict_factory_repr_running.add(id(factory))
+            try:
+                factory_repr = repr(factory)
+            finally:
+                _defaultdict_factory_repr_running.discard(id(factory))
+        return '%s(%s, %s)' % (type(self).__name__, factory_repr, base)
+
+
+# The default factories whose repr a defaultdict.__repr__ is building -- the
+# set Py_ReprEnter keeps for CPython's defdict_repr.
+_defaultdict_factory_repr_running = set()
 
 
 # The OrderedDicts whose repr is being built: one that contains itself prints
