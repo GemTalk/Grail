@@ -212,7 +212,12 @@ Each has a tracked root cause elsewhere in this file or in
   / `_URL_ENCODE_AST_NAMES` set to ``None`` because Python `ast.parse`
   isn't implemented in Grail.  Routes match correctly but
   ``url_for()`` / ``Rule.build()`` raise on first use.  Blocks Flask
-  reverse-routing.
+  reverse-routing.  *(2026-10-23: the stock werkzeug's AST builder now
+  compiles -- `ast.py`'s tree unparser spells the names and f-string
+  fields it builds -- so a venv's werkzeug 3.1.9 builds URLs as CPython
+  does, FastAPI's test_wsgi tutorial included.  The bundled copy still
+  carries its interpreted builder; whether it can go back to stock is
+  unmeasured.)*
 
 ## Flask Source-Drop — Remaining Blockers
 

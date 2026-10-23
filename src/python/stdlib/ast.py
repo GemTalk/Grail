@@ -1109,6 +1109,67 @@ def _grail_unparse_with_lines(tree):
             if node.asname:
                 self.write(" as " + _grail_identifier(node.asname))
 
+        # ``*args'' and ``**kwargs'' are written without visit_arg.
+        def visit_arguments(self, node):
+            stars = [a for a in (node.vararg, node.kwarg) if a is not None]
+            names = [a.arg for a in stars]
+            for a in stars:
+                a.arg = _grail_identifier(a.arg)
+            try:
+                super().visit_arguments(node)
+            finally:
+                for a, n in zip(stars, names):
+                    a.arg = n
+
+        # A keyword argument no source can spell reaches the callee under
+        # that very name, as CPython passes it: ``**{name: value}''.
+        def visit_keyword(self, node):
+            if node.arg is None or node.arg.isidentifier():
+                return super().visit_keyword(node)
+            self.write(f"**{{{node.arg!r}: ")
+            self.traverse(node.value)
+            self.write("}")
+
+        # A def or class may be named what no source can spell, too:
+        # werkzeug's URL builder is ``<builder:'/static/<path:filename>'>``,
+        # and it takes the function back out of exec()'s namespace under
+        # that name.  So it is written as a valid identifier, then bound
+        # under its own name as well, and given that name.
+        def visit_FunctionDef(self, node):
+            self._grail_def(node, super().visit_FunctionDef)
+
+        def visit_AsyncFunctionDef(self, node):
+            self._grail_def(node, super().visit_AsyncFunctionDef)
+
+        def visit_ClassDef(self, node):
+            self._grail_def(node, super().visit_ClassDef)
+
+        def _grail_def(self, node, write):
+            name = node.name
+            spelled = _grail_identifier(name)
+            if spelled == name:
+                return write(node)
+            node.name = spelled
+            try:
+                write(node)
+            finally:
+                node.name = name
+            self.fill(f"locals()[{name!r}] = {spelled}")
+            self.fill(f"{spelled}.__name__ = {name!r}")
+            self.fill(f"{spelled}.__qualname__ = "
+                      f"{spelled}.__qualname__[:-{len(spelled)}] + {name!r}")
+
+        # A bare expression among an f-string's values -- the same builder
+        # puts each converter's ``to_url()'' call straight into a JoinedStr --
+        # is written as a field.  CPython's compiler joins it as it is, so it
+        # has to be a str there (another type is a TypeError); a str comes
+        # out of the field unchanged.
+        def _write_ftstring_inner(self, node, is_format_spec=False):
+            if isinstance(node, expr) and not isinstance(
+                    node, (JoinedStr, Constant, FormattedValue, Interpolation)):
+                node = FormattedValue(value=node, conversion=-1, format_spec=None)
+            super()._write_ftstring_inner(node, is_format_spec=is_format_spec)
+
         def __init__(self):
             super().__init__()
             self._grail_line = 1
