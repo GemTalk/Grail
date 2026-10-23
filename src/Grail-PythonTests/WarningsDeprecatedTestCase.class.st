@@ -72,6 +72,17 @@ WarningsDeprecatedTestCase >> testCustomMessageIsFormatted [
 ]
 
 { #category : 'Grail-Tests' }
+WarningsDeprecatedTestCase >> testDefaultMessageIsAModuleAttribute [
+
+	"nturl2path builds its message on warnings._DEPRECATED_MSG, which was
+	missing, so importing it was an AttributeError."
+
+	self assertAll: #('the_default_message_is_a_module_attribute'
+		'a_message_built_on_it_is_formatted')
+
+]
+
+{ #category : 'Grail-Tests' }
 WarningsDeprecatedTestCase >> testDefaultMessageIsFormatted [
 	"The name is quoted, the version tuple is rendered M.m, and neither the
 	raw tuple nor an unfilled brace survives into the text."
