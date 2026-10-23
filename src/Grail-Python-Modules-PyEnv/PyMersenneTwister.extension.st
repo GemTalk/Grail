@@ -222,14 +222,25 @@ PyMersenneTwister >> _randbelow: n [
 
 { #category : 'Grail-Python Methods' }
 PyMersenneTwister >> getrandbits: k [
-	"getrandbits(k) -> an int with k random bits -- see ___getrandbits:."
+	"getrandbits(k) -> an int with k random bits -- see ___getrandbits:.
 
-	(k @env0:isKindOf: Integer) ifFalse: [
-		^ TypeError ___signal___: ('''' @env0:, k ___pyTypeNameForError___
-			@env0:, ''' object cannot be interpreted as an integer')].
-	(k @env0:< 0) ifTrue: [
-		^ ValueError ___signal___: 'number of bits must be non-negative'].
-	^ self @env0:___getrandbits: k
+	k is converted as CPython's _PyLong_UInt64_Converter converts it
+	(Modules/_randommodule.c, getrandbits): through __index__, a negative
+	one a ValueError and one past 2**64 an OverflowError, each in its words.
+	random.py's randbytes(n) is getrandbits(n * 8), so it inherits all three.
+	A k past what a GemStone integer holds (~130144 bits) is the
+	OverflowError Grail raises for that elsewhere; it was an uncatchable
+	NumericError that ended the process (test_random test_randbytes)."
+
+	| bits |
+	bits := k ___asIndex___.
+	(bits @env0:< 0) ifTrue: [
+		^ ValueError ___signal___: 'Cannot convert negative int'].
+	(bits @env0:>= (1 @env0:bitShift: 64)) ifTrue: [
+		^ OverflowError ___signal___: 'Python int too large for C uint64_t'].
+	(bits @env0:> 130144) ifTrue: [
+		^ OverflowError ___signal___: 'result exceeds Grail integer capacity'].
+	^ self @env0:___getrandbits: bits
 
 ]
 

@@ -2517,6 +2517,12 @@ os >> urandom: size [
 	"___asIndex___ is CPython's Py_ssize_t conversion: an int, or __index__,
 	 else TypeError naming the PYTHON type (not 'SmallDouble')."
 	n := size ___asIndex___.
+	"A Py_ssize_t, so a size past 2**63 either way is CPython's OverflowError
+	 (Modules/posixmodule.c os_urandom_impl's Py_ssize_t argument).  It reached
+	 HostRandom as an UNCATCHABLE OutOfRange that ended the process
+	 (test_random SystemRandom test_randbytes)."
+	(n @env0:between: (1 @env0:bitShift: 63) @env0:negated and: (1 @env0:bitShift: 63) @env0:- 1) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C ssize_t'].
 	n @env0:< 0 ifTrue: [^ ValueError ___signal___: 'negative argument not allowed'].
 	^ (secrets instance) token_bytes: n
 
