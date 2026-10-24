@@ -578,3 +578,10 @@ test.test_annotationlib|TestStringFormat.test_unsupported_operations|pins the st
 # f()'' half of the test passes.  Removing this skip is the regression test for
 # an except clause whose miss does not grow the stack.
 test.test_exceptions|ExceptionTests.testInfiniteRecursion|recursion through a non-matching except clause: each level's lazy except selector re-passes the overflow on top of the exhausted stack (kernel on:do: form 3, four frames per level), so the search overruns the Red Zone and AlmostOutOfStack 2502 kills the session -- see the comment above
+# test_signal's handler-race stress test: a thread busy-loops raise_signal()
+# while the main thread waits for at least one signal to arrive.  Grail's
+# threads are cooperative green threads, so the busy thread never yields and
+# the wait never ends; in CI's Linux container the module hit the 1800s
+# watchdog here and scored TIMEOUT (refresh run 40106128072).  The same shape
+# as test_itertools' test_tee_concurrent above.
+test.test_signal|StressTest.test_stress_modifying_handlers|real-thread contention: a busy raise_signal() loop in a thread never yields under Grail's cooperative green threads, so the waiting main thread hangs the session (Linux TIMEOUT at 1800s, refresh run 40106128072)
