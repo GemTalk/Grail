@@ -52,6 +52,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
 | `src/python/stdlib/cmd.py`, `sched.py`, `fileinput.py`, `filecmp.py`, `rlcompleter.py`, `shelve.py`, `timeit.py`, `nturl2path.py`, `plistlib.py`, `urllib/robotparser.py`, `unittest/util.py` | `Lib/` | Verbatim from 3.14.4 |
 | `src/python/stdlib/gzip.py`, `compression/` (`__init__.py`, `_common/`, `gzip.py`, `zlib.py`) | `Lib/gzip.py`, `Lib/compression/` | Verbatim from 3.14.4. Replaces Grail's earlier gzip stand-in. `_grail_zlib.py` beside them is ORIGINAL Grail code (zlib's `_ZlibDecompressor`, written in Python after `Modules/zlibmodule.c`'s behaviour), not derived source |
+| `src/python/stdlib/email/` (all 29 modules), `src/python/stdlib/test/test_email/` (with its `data/`) | `Lib/email/`, `Lib/test/test_email/` | Verbatim from 3.14.4. Replaces Grail's earlier partly hand-written email package |
 | `src/python/stdlib/_pydecimal.py` | `Lib/_pydecimal.py` | Verbatim, byte-for-byte (CPython's pure-Python `decimal`; `stdlib/decimal.py` is a Grail-authored re-export shim over it and is NOT derived from CPython's six-line `Lib/decimal.py` dispatcher) |
 
 Per PSF License clause 3, these are modified copies: the `support`
