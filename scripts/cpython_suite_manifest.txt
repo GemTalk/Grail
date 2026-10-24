@@ -612,3 +612,22 @@ test.test_rlcompleter
 #
 #   OK    timeit 41t
 test.test_timeit
+
+# --- Stdlib batch 3 (added 2026-10-23): nturl2path, plistlib ---
+#
+# Vendored verbatim from CPython 3.14.4.  What their tests found is fixed in
+# Grail: warnings._DEPRECATED_MSG was missing (nturl2path builds its message
+# on it), a NaN or infinite timedelta component reached the date primitive as
+# a Float day count (an uncatchable ArgumentTypeError, where CPython raises
+# ValueError / OverflowError), and the io classes had no __module__, so
+# check__all__ counted plistlib's imported BytesIO as its own.  Measured on
+# Darwin arm64:
+#
+#   OK    nturl2path 3t
+#   plistlib 70t 1E       a lone surrogate (GemStone Characters cannot hold one)
+#
+# Left out: test_webbrowser and test__osx_support, whose failures depend on the
+# host's browsers and compilers and so would differ between a Mac and CI's
+# Linux; test_tabnanny, which needs CPython's tokenize.generate_tokens.
+test.test_nturl2path
+test.test_plistlib

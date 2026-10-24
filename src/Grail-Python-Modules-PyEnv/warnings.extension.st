@@ -1407,7 +1407,7 @@ warnings >> __deprecated: positional kw: keywords [
 		ifFalse: [
 			(keywords ~~ nil and: [keywords @env0:includesKey: 'message'])
 				ifTrue: [keywords @env0:at: 'message']
-				ifFalse: ['{name!r} is deprecated and slated for removal in Python {remove}']].
+				ifFalse: [self _DEPRECATED_MSG]].
 	remove := (keywords ~~ nil and: [keywords @env0:includesKey: 'remove'])
 		ifTrue: [keywords @env0:at: 'remove']
 		ifFalse: [
@@ -1623,6 +1623,18 @@ warnings >> _actionFor: message _: category [
 	"The action for a warning whose origin has to be inferred."
 
 	^ self ___actionFor___: message _: category _: nil _: 0
+
+]
+
+{ #category : 'Grail-Public' }
+warnings >> _DEPRECATED_MSG [
+
+	"CPython's _py_warnings._DEPRECATED_MSG: the message _deprecated uses by
+	default.  Stdlib modules build their own on it -- nturl2path appends
+	``; use 'urllib.request' instead'' to it -- so its absence was an
+	AttributeError on import."
+
+	^ '{name!r} is deprecated and slated for removal in Python {remove}'
 
 ]
 

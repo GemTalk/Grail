@@ -77,3 +77,23 @@ RESULTS['mul_int'] = (timedelta(seconds=1) * 3 == timedelta(seconds=3))
 RESULTS['div_timedelta'] = (timedelta(seconds=1) / timedelta(seconds=2) == 0.5)
 RESULTS['mul_negative_float'] = (timedelta(seconds=2) * -1.5 == timedelta(seconds=-3))
 RESULTS['div_negative_float'] = (timedelta(seconds=2) / -4.0 == timedelta(microseconds=-500000))
+
+
+# A NaN or infinite COMPONENT is CPython's ValueError or OverflowError, from
+# rounding it to whole microseconds.  Grail carried it on as a Float day count
+# into the date primitive, an uncatchable ArgumentTypeError (a binary plist
+# whose date is inf seconds -- test_plistlib test_invalid_binary).
+def _construction_error(**components):
+    try:
+        timedelta(**components)
+    except (ValueError, OverflowError) as exc:
+        return (type(exc).__name__, str(exc))
+    return 'no error'
+
+
+RESULTS['nan_component_is_a_value_error'] = (
+    _construction_error(seconds=float('nan'))
+    == ('ValueError', 'cannot convert float NaN to integer'))
+RESULTS['infinite_component_is_an_overflow_error'] = (
+    _construction_error(days=float('-inf'))
+    == ('OverflowError', 'cannot convert float infinity to integer'))
