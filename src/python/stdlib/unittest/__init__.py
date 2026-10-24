@@ -455,6 +455,12 @@ class TestCase:
     def __init__(self, methodName="runTest"):
         self._testMethodName = methodName
         self._cleanups = []
+        # addTypeEqualityFunc's registry, as CPython's TestCase keeps it.
+        # CPython also pre-registers comparators for dict, list, tuple, set,
+        # frozenset and str; those are NOT here, so assertEqual on built-in
+        # types keeps Grail's message.  Only a type a test registers itself
+        # -- test_email registers email.message.Message -- is dispatched.
+        self._type_equality_funcs = {}
 
     @classmethod
     def setUpClass(cls):
@@ -616,7 +622,29 @@ class TestCase:
 
     # -- assertions --
 
+    # CPython's TestCase.addTypeEqualityFunc (Lib/unittest/case.py): the
+    # function assertEqual uses when both operands are exactly typeobj.
+    def addTypeEqualityFunc(self, typeobj, function):
+        funcs = getattr(self, '_type_equality_funcs', None)
+        if funcs is None:
+            funcs = self._type_equality_funcs = {}
+        funcs[typeobj] = function
+
+    def _getAssertEqualityFunc(self, first, second):
+        if type(first) == type(second):
+            funcs = getattr(self, '_type_equality_funcs', None) or {}
+            asserter = funcs.get(type(first))
+            if asserter is not None:
+                if isinstance(asserter, str):
+                    asserter = getattr(self, asserter)
+                return asserter
+        return None
+
     def assertEqual(self, first, second, msg=None):
+        asserter = self._getAssertEqualityFunc(first, second)
+        if asserter is not None:
+            asserter(first, second, msg=msg)
+            return
         if not (first == second):
             self._failWith(msg, repr(first) + " != " + repr(second))
 

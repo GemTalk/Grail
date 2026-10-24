@@ -16,10 +16,7 @@ __all__ = [
     ]
 
 # validation regex from RFC 5322, equivalent to pattern re.compile("[!-9;-~]+$")
-# GRAIL: spelled with literal characters instead of octal string
-# escapes (\041 et al.), which Grail's tokenizer doesn't decode; this
-# is the equivalent pattern the upstream comment documents.
-valid_header_name_re = re.compile("[!-9;-~]+$")
+valid_header_name_re = re.compile("[\041-\071\073-\176]+$")
 
 def validate_header_name(name):
     # Validate header name according to RFC 5322
@@ -109,10 +106,15 @@ def _append_doc(doc, added_doc):
     return doc + '\n' + added_doc
 
 def _extend_docstrings(cls):
-    # GRAIL: upstream splices parent-class docstrings into '+'-prefixed
-    # ones by walking cls.__dict__ and each base's MRO — pure
-    # documentation surgery with no behavioural effect.  Grail classes
-    # don't expose that introspection surface, so skip it.
+    if cls.__doc__ and cls.__doc__.startswith('+'):
+        cls.__doc__ = _append_doc(cls.__bases__[0].__doc__, cls.__doc__)
+    for name, attr in cls.__dict__.items():
+        if attr.__doc__ and attr.__doc__.startswith('+'):
+            for c in (c for base in cls.__bases__ for c in base.mro()):
+                doc = getattr(getattr(c, name), '__doc__')
+                if doc:
+                    attr.__doc__ = _append_doc(doc, attr.__doc__)
+                    break
     return cls
 
 
@@ -363,7 +365,7 @@ class Compat32(Policy):
                                       charset=_charset.UNKNOWN8BIT,
                                       header_name=name)
                 else:
-                    # If we have raw 8bit data in a string, we have no idea
+                    # If we have raw 8bit data in a byte string, we have no idea
                     # what the encoding is.  There is no safe way to split this
                     # string.  If it's ascii-subset, then we could do a normal
                     # ascii split, but if it's multibyte then we could break the
