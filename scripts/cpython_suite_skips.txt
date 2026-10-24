@@ -565,3 +565,16 @@ test.test_annotationlib|TestForwardRefClass.test_forward_equality_and_hash_with_
 test.test_annotationlib|TestForwardRefFormat.test_multiple_closure|asserts __extra_names__ holds a closure variable's VALUE, which the fake-globals pass reads from the function's cell; Grail's stringifier runs on source text and cannot see an enclosing function's locals
 test.test_annotationlib|TestStringFormat.test_shenanigans|pins the stringifier's rendering of an expression it cannot reconstruct ("x | <class 'int'>" for x | (1).__class__); Grail's STRING is the exact source, "x | 1 .__class__"
 test.test_annotationlib|TestStringFormat.test_unsupported_operations|pins the stringifier's refusal of an f-string (its __format__ raises TypeError); Grail's STRING is source text and has no such limitation
+# test_exceptions' infinite recursion through a NON-MATCHING except clause.
+# ``def g(): try: return g() except ValueError: return -1'' -- each level's
+# ``except ValueError'' is a PyLazyExceptSelector, which the kernel's on:do:
+# handles as its form 3 (a non-class selector): catch AbstractException, ask
+# #handles:, and ``ex pass'' on a miss.  Each miss runs on TOP of the
+# overflowing stack and adds four frames, so the stack-overflow error is passed
+# through every level's handler before reaching assertRaises, and at Grail's
+# ~2600-level physical recursion limit that is thousands of frames past the
+# Red Zone: AlmostOutOfStack 2502 kills the session (CPython stops at a
+# counted limit of 1000 and unwinds as it goes).  The plain ``def f(): return
+# f()'' half of the test passes.  Removing this skip is the regression test for
+# an except clause whose miss does not grow the stack.
+test.test_exceptions|ExceptionTests.testInfiniteRecursion|recursion through a non-matching except clause: each level's lazy except selector re-passes the overflow on top of the exhausted stack (kernel on:do: form 3, four frames per level), so the search overruns the Red Zone and AlmostOutOfStack 2502 kills the session -- see the comment above
