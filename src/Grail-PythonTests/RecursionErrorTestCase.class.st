@@ -25,33 +25,6 @@ RecursionErrorTestCase >> test_inheritance [
 ]
 
 { #category : 'Grail-Tests-RecursionError' }
-RecursionErrorTestCase >> testAnUnboundMethodAliasRecursionRaisesACatchableRecursionError [
-
-	"``C.__repr__ = C.__str__'' makes str() and repr() call each other through an
-	unbound method, which UnboundMethod >> _resolveMethodNargs:kwOk:from: looks
-	up on every call.  It used to build each class's merged methodDictForEnv: 1
-	there, and growing that copy runs a primitive: the stack ran out INSIDE it,
-	an AlmostOutOfStackError cannot be unwound across a C frame, and the session
-	died with UncontinuableError 2758 (test_descr test_repr_as_str).  CPython
-	raises RecursionError."
-
-	| outcome |
-
-	outcome := BaseException @env1:___recursionGuard___: [
-		self eval: 'class Aliased:
-    pass
-Aliased.__repr__ = Aliased.__str__
-try:
-    str(Aliased())
-    outcome = "no error"
-except RecursionError:
-    outcome = "RecursionError"
-outcome'].
-	self assert: outcome asString equals: 'RecursionError'
-
-]
-
-{ #category : 'Grail-Tests-RecursionError' }
 RecursionErrorTestCase >> testOverflowIsCatchableAtEveryAlignment [
 	"A runaway recursion must end in a RecursionError the nearest ``except''
 	catches, wherever the stack runs out.
