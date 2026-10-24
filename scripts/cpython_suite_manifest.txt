@@ -670,19 +670,21 @@ test.test_zlib
 #                           it passes run alone, by unittest and by the
 #                           harness's own Python helpers)
 #
-# Not yet wired: test_generator and test_message.  Their @parameterize adds
-# test methods to a mixin base AFTER the class exists, and a class-attribute
-# read through a multiple-inheritance subclass walks the Smalltalk superclass
-# chain rather than the MRO (Object >> ___dynamicClassAttr___:), so the
-# generated tests cannot be found.
+# test_generator and test_message joined once a class attribute set on a
+# secondary base became visible through the subclass (their @parameterize adds
+# test methods to a mixin base after the class exists):
+#
+#   message 310t 1F/29E    generator 73t 24F/18E
 test.test_email.test__encoded_words
 test.test_email.test__header_value_parser
 test.test_email.test_asian_codecs
 test.test_email.test_contentmanager
 test.test_email.test_defect_handling
 test.test_email.test_email
+test.test_email.test_generator
 test.test_email.test_headerregistry
 test.test_email.test_inversion
+test.test_email.test_message
 test.test_email.test_parser
 test.test_email.test_pickleable
 test.test_email.test_policy

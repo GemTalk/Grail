@@ -7695,22 +7695,38 @@ Object >> ___classChainAttrLookup___: aSym [
 					ancestor's stored attribute."
 					(self ___methodDefinedFrom___: start upTo: walker name: aSym)
 						ifTrue: [^ nil].
-					((self isKindOf: Behavior)
-						and: [self ___isValueDescriptor___: v])
-						ifTrue: [^ self ___classDescriptorGet___: v].
-					((self isKindOf: Behavior) not
-						and: [self ___isValueDescriptor___: v])
-						ifTrue: [^ self ___descriptorGet___: v].
-					((self isKindOf: Behavior) not
-						and: [self ___isDescriptorCallable___: v])
-						ifTrue: [^ MethodBinding instance: self callable: v].
-					^ v
+					^ self ___classChainValue___: v
 				]
 			]
 		].
 		walker := walker @env0:superClass
 	].
-	^ nil
+	"A secondary base's store, which the chain does not reach (multiple
+	inheritance) -- see ___secondaryBaseAttr___:name:."
+	v := self ___secondaryBaseAttr___: start name: aSym.
+	v == nil ifTrue: [^ nil].
+	^ self ___classChainValue___: v
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___classChainValue___: aValue [
+
+	"A class-attribute store's value as an attribute read sees it: off the
+	CLASS, a value descriptor's class-side get and otherwise the raw value;
+	through an INSTANCE, a value descriptor's get, a callable bound to the
+	instance, or the raw value.  ___classChainAttrLookup___: explains each."
+
+	((self isKindOf: Behavior)
+		and: [self ___isValueDescriptor___: aValue])
+		ifTrue: [^ self ___classDescriptorGet___: aValue].
+	((self isKindOf: Behavior) not
+		and: [self ___isValueDescriptor___: aValue])
+		ifTrue: [^ self ___descriptorGet___: aValue].
+	((self isKindOf: Behavior) not
+		and: [self ___isDescriptorCallable___: aValue])
+		ifTrue: [^ MethodBinding instance: self callable: aValue].
+	^ aValue
 
 ]
 
@@ -16516,6 +16532,64 @@ Object >> ___roundHalfToEven___ [
 	twice @env0:> 1 ifTrue: [^ fl @env0:+ 1].
 	twice @env0:< 1 ifTrue: [^ fl].
 	^ fl @env0:even ifTrue: [fl] ifFalse: [fl @env0:+ 1]
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___secondaryBaseAttr___: aClass name: aSym [
+
+	"aSym from a SECONDARY base of aClass -- a base on its C3 MRO but not on
+	its Smalltalk superclass chain -- or nil.
+
+	A multiple-inheritance class inherits only its primary base through
+	Smalltalk; the other bases' compiled methods and declared class attributes
+	are COPIED onto it when it is made (importlib ___mergeSecondaryBases___).
+	An attribute set on such a base with setattr was not copied, and not seen
+	either, before or after the subclass existed: test_email's @parameterize
+	adds test methods to a mixin base that way, and ``class
+	TestBytesGenerator(TestGeneratorBase, TestEmailBase)'' found none of them.
+	CPython reads every class on the MRO.
+
+	Walked in MRO ORDER, stopping at the first class that has aSym.  A METHOD
+	there answers nil, and so does a value aClass or its primary chain holds
+	itself, in its committed store or its session overlay: the caller's own
+	readers serve those, in their order.  A value a secondary base holds -- in
+	its overlay first, a runtime store on a canonical class landing there, then
+	in its committed store -- is the answer.
+
+	Not for a DUNDER: a class's store carries its own bookkeeping under those
+	names (__doc__, __init__ overrides, ABC state), which CPython keeps per class
+	and a subclass does not inherit through this route; letting them through
+	regressed sixteen CPython modules.  Asked only after the primary chain's
+	stores miss, and only of a registered multiple-inheritance class, so the
+	ordinary miss costs one identity probe."
+
+	| entry overlay |
+	(aSym @env0:size @env0:> 1 and: [(aSym @env0:at: 1) @env0:= $_
+		and: [(aSym @env0:at: 2) @env0:= $_]]) ifTrue: [^ nil].
+	entry := (importlib @env0:___miRegistry___) @env0:at: aClass otherwise: nil.
+	entry == nil ifTrue: [^ nil].
+	overlay := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	(entry @env0:at: 2) @env0:do: [:each |
+		(each @env0:isKindOf: Behavior) ifTrue: [
+			| overlaid holder held |
+			"Every arity form of a def counts: ``def m(self, x=None)'' compiles
+			to keyword selectors, never to the unary #m."
+			(self ___definesPythonMethod___: each name: aSym) ifTrue: [^ nil].
+			overlaid := overlay == nil
+				ifTrue: [nil]
+				ifFalse: [(overlay @env0:at: each otherwise: nil)
+					@env0:ifNotNil: [:values | values @env0:at: aSym otherwise: nil]].
+			held := ((each ___respondsTo___: #___dynInstVars___)
+				and: [(holder := each @env0:perform: #___dynInstVars___ env: 1) ~~ nil])
+					ifTrue: [holder @env0:dynamicInstVarAt: aSym]
+					ifFalse: [nil].
+			(each == aClass or: [aClass @env0:inheritsFrom: each])
+				ifTrue: [(overlaid ~~ nil or: [held ~~ nil]) ifTrue: [^ nil]]
+				ifFalse: [
+					overlaid ~~ nil ifTrue: [^ overlaid].
+					held ~~ nil ifTrue: [^ held]]]].
+	^ nil
 
 ]
 
