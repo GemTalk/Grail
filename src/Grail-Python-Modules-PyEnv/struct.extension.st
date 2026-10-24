@@ -614,14 +614,24 @@ struct >> _maxStructSize [
 	from ``sys.maxsize + 1'', which is how test_struct writes the
 	overflow case, computed a total the cap never noticed.  Reading the
 	same number the caller reads is what makes the test mean what it
-	says."
+	says.
+
+	The probe RE-PASSES a stack overflow, as every probe that answers a
+	default must.  Every struct.unpack reaches it, so a deep recursion through
+	one -- plistlib's binary parser, test_plistlib test_deep_nesting -- can
+	trip the guard page inside this block; answering the default consumed the
+	VM's only warning without reducing depth, and on Linux, where native code
+	puts the trip here, the recursion ran on into the Red Zone and the session
+	died."
 
 	| sysMod |
 	sysMod := Python @env0:at: #'sys' otherwise: nil.
 	sysMod @env0:isNil ifTrue: [^ 16r7FFFFFFFFFFFFFFF].
 	^ [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'maxsize']
 		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: 16r7FFFFFFFFFFFFFFF]
+		do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: 16r7FFFFFFFFFFFFFFF]
 
 ]
 
