@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 59 | 8 | 23 | 90 |
-| P2 | 21 | 4 | 9 | 34 |
-| P3 | 16 | 9 | 31 | 56 |
-| P4 | 15 | 13 | 47 | 75 |
-| **In-scope** | **111** | **34** | **110** | **255** |
+| P1 | 60 | 7 | 23 | 90 |
+| P2 | 23 | 2 | 9 | 34 |
+| P3 | 20 | 5 | 31 | 56 |
+| P4 | 22 | 6 | 47 | 75 |
+| **In-scope** | **125** | **20** | **110** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **145 are wired into the harness** (P1 67 · P2 25 · P3 25 · P4 28) and **111 of those score OK**.
+Of the 255 in-scope modules, **145 are wired into the harness** (P1 67 · P2 25 · P3 25 · P4 28) and **125 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,13 +136,14 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 61 | 3169 | 375 | 2774 | 12% |
-| P2 | 22 | 4146 | 554 | 3584 | 13% |
-| P3 | 16 | 2600 | 401 | 2199 | 15% |
-| P4 | 20 | 1618 | 128 | 1490 | 8% |
-| **all** | **119** | **11533** | **1458** | **10047** | **13%** |
+| P1 | 67 | 3614 | 430 | 3029 | 12% |
+| P2 | 25 | 4175 | 554 | 3619 | 13% |
+| P3 | 25 | 3142 | 478 | 2612 | 15% |
+| P4 | 32 | 1925 | 134 | 1768 | 7% |
+| other | 22 | 996 | 214 | 712 | 21% |
+| **all** | **171** | **13852** | **1810** | **11740** | **13%** |
 
-OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120.
+OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_c_locale_coercion` 6 of 8 · `test_utf8_mode` 13 of 12.
 <!-- /test-tally -->
 
 Most of the heavy skips are CPython's own, not Grail's. A module that tests a C
@@ -235,7 +236,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_list` | list — core type (in harness). |
 | ✅ | `test_listcomps` | List comprehensions (language). |
 | ❗ | `test_long` | Arbitrary-precision int (language). |
-| ❗ | `test_longexp` | Very long expressions (parser stress). |
+| ✅ | `test_longexp` | Very long expressions (parser stress). |
 |  | `test_metaclass` | Metaclasses (language). |
 |  | `test_module` | Module objects & namespace (language). |
 | ✅ | `test_named_expressions` | Walrus := operator (language). |
@@ -282,14 +283,14 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | Status | Module | Rationale |
 |:------:|--------|-----------|
 | ✅ | `test_abc` | abc / ABCMeta — pure-Python, foundational to the type system. |
-| ❗ | `test_abstract_numbers` | numbers ABC tower — pure Python. |
+| ✅ | `test_abstract_numbers` | numbers ABC tower — pure Python. |
 | ✅ | `test_bisect` | bisect — pure-Python algorithm. |
 |  | `test_cmath` | cmath — complex math. |
 | ✅ | `test_collections` | collections — core containers. |
 | ✅ | `test_copy` | copy — shallow/deep copy protocol. |
 | ✅ | `test_datetime` | datetime — core data type (in harness). |
 | ✅ | `test_decimal` | decimal — arbitrary-precision arithmetic. Scored for the first time here: the module reads `Context.flags` at IMPORT time, which the old hand-written decimal lacked, so the row could not be measured at all. 368 tests · 3 fail · 14 error · 200 skip. |
-| ❗ | `test_defaultdict` | collections.defaultdict. |
+| ✅ | `test_defaultdict` | collections.defaultdict. |
 | ✅ | `test_deque` | collections.deque. |
 |  | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
 | ✅ | `test_enum` | enum — core (in harness). |
@@ -332,7 +333,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_charmapcodec` | charmap codec — pure text codec. |
 |  | `test_codeccallbacks` | Codec error-handler callbacks — pure. |
 | ✅ | `test_codecs` | codecs core — encode/decode registry (pure). |
-| ❗ | `test_colorsys` | colorsys — pure color-space math. |
+| ✅ | `test_colorsys` | colorsys — pure color-space math. |
 |  | `test_configparser` | configparser (INI) — pure Python. |
 |  | `test_context` | contextvars — pure-Python context state. |
 | ✅ | `test_contextlib` | contextlib — pure Python. |
@@ -342,7 +343,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_dataclasses` | dataclasses — pure-Python codegen over classes. |
 | ✅ | `test_difflib` | difflib — pure Python. |
 |  | `test_doctest` | doctest — pure-Python test framework. |
-| ❗ | `test_fnmatch` | fnmatch — pure glob-pattern matching on strings. |
+| ✅ | `test_fnmatch` | fnmatch — pure glob-pattern matching on strings. |
 | ❗ | `test_genericpath` | genericpath — pure string path operations. |
 |  | `test_getopt` | getopt — pure CLI parsing. |
 | ✅ | `test_gettext` | gettext — pure-Python .mo/.po i18n. |
@@ -361,13 +362,13 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ❗ | `test_pprint` | pprint — pure Python. |
 |  | `test_queue` | queue — pure structures (thread-safety atop them). |
 | ✅ | `test_reprlib` | reprlib — pure Python. |
-| ❗ | `test_sched` | sched — pure event scheduler. |
+| ✅ | `test_sched` | sched — pure event scheduler. |
 | ✅ | `test_shlex` | shlex — pure lexer. |
 |  | `test_strftime` | time.strftime formatting — pure. |
 |  | `test_strptime` | _strptime parsing — pure. |
 | ✅ | `test_struct` | struct — binary packing; C-accelerated but pure semantics. *(edge — see below)* |
 |  | `test_time` | time — clock/sleep; pure formatting parts in-scope, OS clock parts not. *(edge — see below)* |
-| ❗ | `test_timeit` | timeit — pure timing harness. |
+| ✅ | `test_timeit` | timeit — pure timing harness. |
 |  | `test_tokenize` | tokenize — pure Python tokenizer. |
 |  | `test_tomllib` | tomllib — pure-Python TOML parser. |
 | ✅ | `test_traceback` | traceback — needs frame/tb introspection. *(edge — see below)* |
@@ -404,9 +405,9 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_ftplib` | ftplib — FTP client (net stack). |
 |  | `test_hashlib` | hashlib — crypto digests; C/OpenSSL-accelerated but pure fallbacks exist. *(edge — see below)* |
 |  | `test_hmac` | hmac — pure-Python over a hash. |
-| ❗ | `test_html` | html escaping/entities — pure (web stack). |
+| ✅ | `test_html` | html escaping/entities — pure (web stack). |
 | ✅ | `test_htmlparser` | html.parser — pure (web stack). |
-| ❗ | `test_http_cookiejar` | http.cookiejar — pure (web stack). |
+| ✅ | `test_http_cookiejar` | http.cookiejar — pure (web stack). |
 |  | `test_http_cookies` | http.cookies — pure (web stack). |
 |  | `test_httplib` | http.client — web stack (needs socket bridge). |
 |  | `test_httpservers` | http.server — web stack (needs socket bridge). |
@@ -420,7 +421,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_modulefinder` | modulefinder — static import graph analysis (tooling). *(edge — see below)* |
 | ❗ | `test_multibytecodec` | Multibyte codec engine — C-backed CJK; low priority. *(edge — see below)* |
 | ✅ | `test_netrc` | netrc — pure parser (net-config). |
-| ❗ | `test_nturl2path` | nturl2path — url<->path conversion (pure). |
+| ✅ | `test_nturl2path` | nturl2path — url<->path conversion (pure). |
 |  | `test_pkg` | Package import semantics — import system. *(edge — see below)* |
 |  | `test_pkgutil` | pkgutil — package discovery utilities. |
 | ❗ | `test_plistlib` | plistlib — pure XML/binary plist parsing (Apple format). *(edge — see below)* |
@@ -429,7 +430,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_pyclbr` | pyclbr — Python class browser (source parsing tool). *(edge — see below)* |
 |  | `test_pydoc` | pydoc — introspection + doc HTTP server. *(edge — see below)* |
 |  | `test_pyexpat` | pyexpat — C expat XML parser (needed under xml.etree). *(edge — see below)* |
-| ❗ | `test_quopri` | quopri — quoted-printable (email encoding). |
+| ✅ | `test_quopri` | quopri — quoted-printable (email encoding). |
 | ❗ | `test_robotparser` | robotparser — robots.txt (pure, web stack). |
 |  | `test_runpy` | runpy — -m module execution (import/exec machinery). *(edge — see below)* |
 | ✅ | `test_sax` | xml.sax (vendored xml). |
@@ -439,20 +440,20 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_socket` | socket — net transport; requires a GemStone GsSocket bridge. *(edge — see below)* |
 |  | `test_socketserver` | socketserver — atop sockets. *(edge — see below)* |
 | ✅ | `test_ssl` | ssl — C/OpenSSL TLS; needed by the secure net stack. *(edge — see below)* |
-| ❗ | `test_stringprep` | stringprep (RFC 3454) — pure (net/security). |
+| ✅ | `test_stringprep` | stringprep (RFC 3454) — pure (net/security). |
 |  | `test_tabnanny` | tabnanny — indentation checker (tokenize-based tool). *(edge — see below)* |
 |  | `test_timeout` | Socket timeout behavior (net). *(edge — see below)* |
 | ❗ | `test_urllib` | urllib (vendored) — web stack. |
 |  | `test_urllib2` | urllib.request — web stack. |
 | ✅ | `test_urllib2_localnet` | urllib against a local server (needs a running server). *(edge — see below)* |
 |  | `test_urllib2net` | urllib against the live internet (needs real network). *(edge — see below)* |
-| ❗ | `test_urllib_response` | urllib response objects — web stack. |
+| ✅ | `test_urllib_response` | urllib response objects — web stack. |
 |  | `test_urllibnet` | urllib against the live internet (needs real network). *(edge — see below)* |
 | ✅ | `test_urlparse` | urllib.parse — pure URL parsing (web stack). |
 | ✅ | `test_uuid` | uuid — pure (some OS node-id lookups optional). |
 | ✅ | `test_wave` | wave — pure WAV container parsing (audio format). *(edge — see below)* |
 |  | `test_wsgiref` | wsgiref (vendored) — WSGI reference (web stack). |
-| ❗ | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
+| ✅ | `test_xml_dom_minicompat` | xml.dom minicompat (vendored xml). |
 |  | `test_xml_dom_xmlbuilder` | xml.dom xmlbuilder (vendored xml). |
 | ✅ | `test_xml_etree` | xml.etree.ElementTree (vendored xml). |
 |  | `test_xmlrpc` | xmlrpc — web stack. |
@@ -775,14 +776,39 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**4 of the 119 rows on the committed board are not OK.**
+**31 of the 171 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
-- `test.test_generators` ERROR, 59 tests: 10 failed, 1 errors, 1 skipped
-- `test.test_long` ERROR, 47 tests: 4 failed, 5 errors, 7 skipped
-- `test.test_random` ERROR, 116 tests: 0 failed, 8 errors, 5 skipped
-
-Wired, but not on the board until the next nightly measures them: `test_abstract_numbers`, `test_buffer`, `test_c_locale_coercion`, `test_cmd`, `test_colorsys`, `test_dbm`, `test_dbm_dumb`, `test_defaultdict`, `test_descr`, `test_descrtut`, `test_errno`, `test_exceptions`, `test_filecmp`, `test_fileinput`, `test_fileio`, `test_fnmatch`, `test_genericpath`, `test_gzip`, `test_html`, `test_http_cookiejar`, `test_largefile`, `test_longexp`, `test_multibytecodec`, `test_ntpath`, `test_nturl2path`, `test_numeric_tower`, `test_opcodes`, `test_picklebuffer`, `test_pickletools`, `test_plistlib`, `test_posixpath`, `test_pprint`, `test_quopri`, `test_range`, `test_rlcompleter`, `test_robotparser`, `test_sched`, `test_secrets`, `test_shelve`, `test_signal`, `test_str`, `test_stringprep`, `test_sundry`, `test_sys`, `test_timeit`, `test_unicode_file_functions`, `test_urllib`, `test_urllib_response`, `test_utf8_mode`, `test_xml_dom_minicompat`, `test_xml_etree_c`, `test_zlib`.
+- `test.test_generators` ERROR, 59 tests: 8 failed, 1 errors, 3 skipped
+- `test.test_long` ERROR, 47 tests: 0 failed, 3 errors, 7 skipped
+- `test.test_random` ERROR, 116 tests: 0 failed, 1 errors, 5 skipped
+- `test.test_unicode_file_functions` FAIL, 30 tests: 10 failed, 0 errors, 0 skipped
+- `test.test_pickletools` ERROR, 190 tests: 1 failed, 1 errors, 16 skipped
+- `test.test_secrets` ERROR, 11 tests: 0 failed, 1 errors, 0 skipped
+- `test.test_range` FAIL, 29 tests: 3 failed, 0 errors, 0 skipped
+- `test.test_buffer` ERROR, 95 tests: 6 failed, 4 errors, 80 skipped
+- `test.test_numeric_tower` ERROR, 9 tests: 0 failed, 1 errors, 0 skipped
+- `test.test_largefile` ERROR, 16 tests: 0 failed, 2 errors, 6 skipped
+- `test.test_pprint` FAIL, 45 tests: 6 failed, 0 errors, 1 skipped
+- `test.test_multibytecodec` ERROR, 36 tests: 5 failed, 1 errors, 2 skipped
+- `test.test_str` ERROR, 138 tests: 20 failed, 8 errors, 11 skipped
+- `test.test_urllib` ERROR, 101 tests: 5 failed, 6 errors, 2 skipped
+- `test.test_ntpath` ERROR, 105 tests: 0 failed, 16 errors, 28 skipped
+- `test.test_signal` TIMEOUT, 0 tests: 0 failed, 0 errors, 0 skipped
+- `test.test_posixpath` ERROR, 94 tests: 11 failed, 11 errors, 29 skipped
+- `test.test_genericpath` ERROR, 25 tests: 0 failed, 6 errors, 3 skipped
+- `test.test_sys` ERROR, 97 tests: 5 failed, 19 errors, 56 skipped
+- `test.test_descrtut` FAIL, 8 tests: 2 failed, 0 errors, 0 skipped
+- `test.test_fileio` SKIP, 0 tests: 0 failed, 0 errors, 0 skipped
+- `test.test_exceptions` ERROR, 107 tests: 14 failed, 14 errors, 30 skipped
+- `test.test_descr` ERROR, 162 tests: 50 failed, 32 errors, 12 skipped
+- `test.test_filecmp` ERROR, 16 tests: 0 failed, 1 errors, 0 skipped
+- `test.test_dbm_dumb` ERROR, 26 tests: 0 failed, 1 errors, 1 skipped
+- `test.test_robotparser` ERROR, 50 tests: 0 failed, 5 errors, 0 skipped
+- `test.test_rlcompleter` FAIL, 8 tests: 2 failed, 0 errors, 0 skipped
+- `test.test_plistlib` CRASH, 0 tests: 0 failed, 0 errors, 0 skipped
+- `test.test_gzip` ERROR, 75 tests: 4 failed, 3 errors, 9 skipped
+- `test.test_zlib` ERROR, 76 tests: 5 failed, 8 errors, 8 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
