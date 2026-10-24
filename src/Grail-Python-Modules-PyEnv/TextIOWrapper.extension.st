@@ -79,6 +79,18 @@ TextIOWrapper class >> __instancecheck__: anObject [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+TextIOWrapper class >> __module__ [
+
+	"CPython's io classes come from the C accelerator, _io.  Grail's had no
+	__module__ at all, so test.support.check__all__ -- which asks it of every
+	name a module holds -- counted plistlib's imported BytesIO as plistlib's
+	own public API (test_plistlib test__all__)."
+
+	^ '_io'
+
+]
+
 { #category : 'Grail-Opening' }
 TextIOWrapper class >> __new__ [
 	^ TypeError ___signal___:
