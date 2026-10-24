@@ -629,3 +629,21 @@ test.test_timeit
 # Linux; test_tabnanny, which needs CPython's tokenize.generate_tokens.
 test.test_nturl2path
 test.test_plistlib
+
+# --- Stdlib batch 4 (added 2026-10-24): gzip, the compression package, zlib ---
+#
+# gzip is CPython 3.14.4's own now, with the new ``compression'' package it is
+# built on (compression/_common/_streams.py is 3.14's _compression).  Grail's
+# gzip was a 92-line stand-in over GsFile, whose GzipFile was a factory
+# FUNCTION -- so ``class GzipDecodedResponse(gzip.GzipFile)'' (xmlrpc.client)
+# could not even be defined.  What CPython's gzip needed from Grail's zlib is
+# fixed there: compress(data, level, wbits) honours a gzip or raw window,
+# _ZlibDecompressor exists (src/python/stdlib/_grail_zlib.py), and
+# ZLIB_RUNTIME_VERSION / ZLIB_VERSION.  test_zlib's uncatchable errors are
+# fixed too: argument conversion and CPython's TypeError / ValueError at every
+# entry point, and an empty buffer's checksum.  Measured on Darwin arm64:
+#
+#   gzip 75t 4F/3E/9S    (the stand-in scored 20F/40E in the census)
+#   zlib 76t 5F/8E/8S    zdict, multi-GB buffers, _ZlibDecompressor pickling
+test.test_gzip
+test.test_zlib
