@@ -649,3 +649,41 @@ test.test_plistlib
 #   zlib 76t 5F/8E/8S    zdict, multi-GB buffers, _ZlibDecompressor pickling
 test.test_gzip
 test.test_zlib
+
+# --- Stdlib batch 5 (added 2026-10-24): CPython's email package ---
+#
+# email is CPython 3.14.4's own now, all 29 modules.  Grail's had been a mix:
+# the mime classes, encoders, errors and base64mime verbatim, but message,
+# generator, policy, headerregistry and utils were hand-written stand-ins at a
+# fraction of their size (BytesGenerator "not supported in Grail").  The test
+# package is vendored with it.  What its tests found is fixed in Grail:
+# unittest's addTypeEqualityFunc (test_email's TestEmailBase registers a
+# Message comparator), and a function of a stdlib PACKAGE's module now binds
+# in a class body -- Message's ``from email.iterators import walk'' answered
+# ``walk() missing self''.  Measured on Darwin arm64:
+#
+#   OK    asian_codecs 3t   inversion 5t
+#   email 536t 4F/38E      _header_value_parser 380t 3F/8E
+#   headerregistry 192t 2E contentmanager 113t 1F/3E   defect_handling 60t 8E
+#   _encoded_words 39t 7E  policy 33t 3E   utils 22t 1F/10E   parser 8t 5E
+#   pickleable 12t 1E      (test_deepcopy_created, under this harness only:
+#                           it passes run alone, by unittest and by the
+#                           harness's own Python helpers)
+#
+# Not yet wired: test_generator and test_message.  Their @parameterize adds
+# test methods to a mixin base AFTER the class exists, and a class-attribute
+# read through a multiple-inheritance subclass walks the Smalltalk superclass
+# chain rather than the MRO (Object >> ___dynamicClassAttr___:), so the
+# generated tests cannot be found.
+test.test_email.test__encoded_words
+test.test_email.test__header_value_parser
+test.test_email.test_asian_codecs
+test.test_email.test_contentmanager
+test.test_email.test_defect_handling
+test.test_email.test_email
+test.test_email.test_headerregistry
+test.test_email.test_inversion
+test.test_email.test_parser
+test.test_email.test_pickleable
+test.test_email.test_policy
+test.test_email.test_utils

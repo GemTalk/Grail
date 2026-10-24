@@ -1,114 +1,127 @@
-# GRAIL email.parser - RFC 5322-shaped parsing: folded headers, blank
-# line, body; multipart bodies split on the Content-Type boundary and
-# parsed recursively.  Deviations from CPython, kept deliberately
-# small for V1: no policies, no header-defect tracking, no streaming
-# feedparser (the whole text is parsed at once), \r\n normalized
-# to \n.
+# Copyright (C) 2001 Python Software Foundation
+# Author: Barry Warsaw, Thomas Wouters, Anthony Baxter
+# Contact: email-sig@python.org
 
-from email.message import Message
+"""A parser of RFC 5322 and MIME email messages."""
 
-__all__ = ["Parser", "BytesParser"]
+__all__ = ['Parser', 'HeaderParser', 'BytesParser', 'BytesHeaderParser',
+           'FeedParser', 'BytesFeedParser']
+
+from io import StringIO, TextIOWrapper
+
+from email.feedparser import FeedParser, BytesFeedParser
+from email._policybase import compat32
 
 
 class Parser:
-    def parsestr(self, text, headersonly=False):
-        return _parse_message(text.replace("\r\n", "\n"), headersonly)
+    def __init__(self, _class=None, *, policy=compat32):
+        """Parser of RFC 5322 and MIME email messages.
+
+        Creates an in-memory object tree representing the email message, which
+        can then be manipulated and turned over to a Generator to return the
+        textual representation of the message.
+
+        The string must be formatted as a block of RFC 5322 headers and header
+        continuation lines, optionally preceded by a 'Unix-from' header.  The
+        header block is terminated either by the end of the string or by a
+        blank line.
+
+        _class is the class to instantiate for new message objects when they
+        must be created.  This class must have a constructor that can take
+        zero arguments.  Default is Message.Message.
+
+        The policy keyword specifies a policy object that controls a number of
+        aspects of the parser's operation.  The default policy maintains
+        backward compatibility.
+
+        """
+        self._class = _class
+        self.policy = policy
 
     def parse(self, fp, headersonly=False):
-        return self.parsestr(fp.read(), headersonly)
+        """Create a message structure from the data in a file.
+
+        Reads all the data from the file and returns the root of the message
+        structure.  Optional headersonly is a flag specifying whether to stop
+        parsing after reading the headers or not.  The default is False,
+        meaning it parses the entire contents of the file.
+        """
+        feedparser = FeedParser(self._class, policy=self.policy)
+        if headersonly:
+            feedparser._set_headersonly()
+        while data := fp.read(8192):
+            feedparser.feed(data)
+        return feedparser.close()
+
+    def parsestr(self, text, headersonly=False):
+        """Create a message structure from a string.
+
+        Returns the root of the message structure.  Optional headersonly is a
+        flag specifying whether to stop parsing after reading the headers or
+        not.  The default is False, meaning it parses the entire contents of
+        the file.
+        """
+        return self.parse(StringIO(text), headersonly=headersonly)
+
+
+class HeaderParser(Parser):
+    def parse(self, fp, headersonly=True):
+        return Parser.parse(self, fp, True)
+
+    def parsestr(self, text, headersonly=True):
+        return Parser.parsestr(self, text, True)
 
 
 class BytesParser:
-    def parsebytes(self, data, headersonly=False):
-        return Parser().parsestr(data.decode("utf-8"), headersonly)
+
+    def __init__(self, *args, **kw):
+        """Parser of binary RFC 5322 and MIME email messages.
+
+        Creates an in-memory object tree representing the email message, which
+        can then be manipulated and turned over to a Generator to return the
+        textual representation of the message.
+
+        The input must be formatted as a block of RFC 5322 headers and header
+        continuation lines, optionally preceded by a 'Unix-from' header.  The
+        header block is terminated either by the end of the input or by a
+        blank line.
+
+        _class is the class to instantiate for new message objects when they
+        must be created.  This class must have a constructor that can take
+        zero arguments.  Default is Message.Message.
+        """
+        self.parser = Parser(*args, **kw)
 
     def parse(self, fp, headersonly=False):
-        return self.parsebytes(fp.read(), headersonly)
+        """Create a message structure from the data in a binary file.
+
+        Reads all the data from the file and returns the root of the message
+        structure.  Optional headersonly is a flag specifying whether to stop
+        parsing after reading the headers or not.  The default is False,
+        meaning it parses the entire contents of the file.
+        """
+        fp = TextIOWrapper(fp, encoding='ascii', errors='surrogateescape')
+        try:
+            return self.parser.parse(fp, headersonly)
+        finally:
+            fp.detach()
 
 
-def _parse_message(text, headersonly=False):
-    msg = Message()
-    lines = text.split("\n")
-    n = len(lines)
-    i = 0
-    current_name = None
-    current_value = None
-    while i < n:
-        line = lines[i]
-        if line == "":
-            i = i + 1
-            break
-        first = line[0]
-        if (first == " " or first == "\t") and current_name is not None:
-            # Folded continuation of the previous header.
-            current_value = current_value + " " + line.strip()
-        else:
-            if current_name is not None:
-                msg[current_name] = current_value
-            colon = line.find(":")
-            if colon < 0:
-                # Not a header - treat this line as the start of the
-                # body (tolerant parse, like CPython's defect handling).
-                if current_name is not None:
-                    msg[current_name] = current_value
-                    current_name = None
-                break
-            current_name = line[:colon]
-            current_value = line[colon + 1:].strip()
-        i = i + 1
-    if current_name is not None:
-        msg[current_name] = current_value
-    if headersonly:
-        msg.set_payload("\n".join(lines[i:]))
-        return msg
-    body = "\n".join(lines[i:])
-    boundary = None
-    if msg.get_content_maintype() == "multipart":
-        boundary = msg.get_boundary()
-    if boundary is None:
-        msg.set_payload(body)
-        return msg
-    _parse_multipart(msg, body, boundary)
-    return msg
+    def parsebytes(self, text, headersonly=False):
+        """Create a message structure from a byte string.
+
+        Returns the root of the message structure.  Optional headersonly is a
+        flag specifying whether to stop parsing after reading the headers or
+        not.  The default is False, meaning it parses the entire contents of
+        the file.
+        """
+        text = text.decode('ASCII', errors='surrogateescape')
+        return self.parser.parsestr(text, headersonly)
 
 
-def _parse_multipart(msg, body, boundary):
-    marker = "--" + boundary
-    closer = marker + "--"
-    lines = body.split("\n")
-    sections = []
-    current = []
-    state = "preamble"
-    preamble_lines = []
-    epilogue_lines = []
-    for line in lines:
-        stripped = line.rstrip()
-        if stripped == closer and state == "parts":
-            sections.append(current)
-            current = []
-            state = "epilogue"
-        elif stripped == marker:
-            if state == "preamble":
-                state = "parts"
-            elif state == "parts":
-                sections.append(current)
-                current = []
-        else:
-            if state == "preamble":
-                preamble_lines.append(line)
-            elif state == "parts":
-                current.append(line)
-            else:
-                epilogue_lines.append(line)
-    if state == "parts" and current:
-        # Unterminated multipart - tolerate it.
-        sections.append(current)
-    if preamble_lines and "\n".join(preamble_lines).strip() != "":
-        msg.preamble = "\n".join(preamble_lines)
-    if epilogue_lines and "\n".join(epilogue_lines).strip() != "":
-        msg.epilogue = "\n".join(epilogue_lines)
-    parts = []
-    for section in sections:
-        parts.append(_parse_message("\n".join(section)))
-    msg.set_payload(parts)
-    return None
+class BytesHeaderParser(BytesParser):
+    def parse(self, fp, headersonly=True):
+        return BytesParser.parse(self, fp, headersonly=True)
+
+    def parsebytes(self, text, headersonly=True):
+        return BytesParser.parsebytes(self, text, headersonly=True)

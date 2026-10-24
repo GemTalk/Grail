@@ -9992,28 +9992,37 @@ Object >> ___grailLayoutBase___ [
 
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___grailMayStandInForABuiltin___: aValue [
-	"Whether aValue is a top-level function of a module in Grail's ported stdlib
-	-- one that may be Grail's Python implementation of what CPython provides as
-	a C builtin, which is no descriptor.  operator.add is a function here and a
-	builtin_function_or_method there; so are threading.Lock and many more.
+	"Whether aValue is a top-level function of a TOP-LEVEL module in Grail's
+	ported stdlib -- one that may be Grail's Python implementation of what
+	CPython provides as a C builtin, which is no descriptor.  operator.add is a
+	function here and a builtin_function_or_method there; so are
+	threading.Lock and many more.
 
 	Grail cannot tell which of its stdlib functions are builtins in CPython, so
-	all of them answer true; the cost is that a stdlib function CPython writes
-	in Python (textwrap.dedent) does not bind when assigned in a class body,
-	which nothing does on purpose.  CPython's own TEST modules are excepted:
-	they are pure Python there too.  Matched on the path segment, so it holds
+	every top-level stdlib module's functions answer true; the cost is that a
+	stdlib function CPython writes in Python (textwrap.dedent) does not bind when
+	assigned in a class body.
+
+	A module INSIDE A PACKAGE does not stand in for one.  CPython's C functions
+	are reached through top-level modules (operator, threading, _thread, heapq,
+	...), and its packages are its own Python -- which does bind a function in
+	a class body on purpose: email.message's Message is ``from
+	email.iterators import walk'', and ``m.walk()'' answered ``missing 1
+	required positional argument: 'self''' here.  CPython's own TEST modules,
+	always excepted, are such a package.  Matched on the path, so it holds
 	wherever the checkout lives."
 
-	| rcvr file |
+	| rcvr file at rest |
 	(aValue isKindOf: BoundMethod) ifFalse: [^ false].
 	rcvr := aValue @env0:receiver.
 	(rcvr isKindOf: module) ifFalse: [^ false].
 	file := rcvr @env0:dynamicInstVarAt: #'__file__'.
 	(file isKindOf: CharacterCollection) ifFalse: [^ false].
 	file := file @env0:asString.
-	((file @env0:indexOfSubCollection: '/src/python/stdlib/') @env0:= 0)
-		ifTrue: [^ false].
-	^ (file @env0:indexOfSubCollection: '/src/python/stdlib/test/') @env0:= 0
+	at := file @env0:indexOfSubCollection: '/src/python/stdlib/'.
+	at @env0:= 0 ifTrue: [^ false].
+	rest := file @env0:copyFrom: at @env0:+ '/src/python/stdlib/' @env0:size to: file @env0:size.
+	^ (rest @env0:includes: $/) not
 
 ]
 

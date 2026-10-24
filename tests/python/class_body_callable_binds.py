@@ -60,6 +60,10 @@ class C:
     static = staticmethod(_outer)
     builtin = len
     stdlib_builtin = operator.add
+    # A function of a stdlib PACKAGE's module is CPython's own Python, and
+    # email.message binds one exactly this way: ``from email.iterators
+    # import walk'' in Message's body.
+    from email.iterators import walk as package_def
     bound = _Other().method
     data = 5
 
@@ -81,6 +85,7 @@ check('builtin_does_not_bind', attempt(lambda: c.builtin([1, 2])), ('ok', 2))
 # glob's ``concat_path = operator.add'': a C builtin in CPython, a Python
 # function in Grail's stdlib -- either way it must not bind.
 check('stdlib_builtin_does_not_bind', attempt(lambda: c.stdlib_builtin('a', 'b')), ('ok', 'ab'))
+check('stdlib_package_def_binds', attempt(lambda: type(next(c.package_def())).__name__), ('ok', 'C'))
 check('bound_method_does_not_rebind', attempt(lambda: c.bound()), ('ok', ('method', '_Other')))
 check('data_is_data', c.data, 5)
 

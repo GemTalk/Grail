@@ -24,6 +24,39 @@ UnittestTestCase >> loadFixture: fixtureName [
 
 ]
 
+{ #category : 'Grail-Tests' }
+UnittestTestCase >> testAddTypeEqualityFuncDispatchesOnTheExactType [
+
+	"CPython's TestCase.addTypeEqualityFunc: assertEqual hands two operands of
+	exactly the registered type to the registered function.  test_email's
+	TestEmailBase registers a Message comparator in its __init__, and every
+	test_email module stopped there with an AttributeError."
+
+	self assert: (self eval: 'import unittest
+calls = []
+class Box:
+    def __init__(self, v): self.v = v
+class T(unittest.TestCase):
+    def __init__(self, name):
+        super().__init__(name)
+        self.addTypeEqualityFunc(Box, self.compare_boxes)
+    def compare_boxes(self, a, b, msg=None):
+        calls.append((a.v, b.v))
+        if a.v != b.v:
+            self.fail("boxes differ")
+    def runTest(self): pass
+t = T("runTest")
+t.assertEqual(Box(1), Box(1))
+t.assertEqual(3, 3)
+try:
+    t.assertEqual(Box(1), Box(2))
+    raised = False
+except AssertionError:
+    raised = True
+calls == [(1, 1), (1, 2)] and raised')
+
+]
+
 { #category : 'Grail-Tests - unittest' }
 UnittestTestCase >> testAssertionMessages [
 	"Individual assertions raise AssertionError; an assertRaises block
