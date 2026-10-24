@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 59 | 7 | 24 | 90 |
+| P1 | 59 | 8 | 23 | 90 |
 | P2 | 21 | 4 | 9 | 34 |
 | P3 | 16 | 9 | 31 | 56 |
 | P4 | 15 | 13 | 47 | 75 |
-| **In-scope** | **111** | **33** | **111** | **255** |
+| **In-scope** | **111** | **34** | **110** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **144 are wired into the harness** (P1 66 · P2 25 · P3 25 · P4 28) and **111 of those score OK**.
+Of the 255 in-scope modules, **145 are wired into the harness** (P1 67 · P2 25 · P3 25 · P4 28) and **111 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -198,7 +198,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_contains` | Membership (`in`) protocol (language). |
 | ✅ | `test_coroutines` | Coroutines / async-await (language). |
 | ✅ | `test_decorators` | Decorators (language). |
-|  | `test_descr` | Descriptors / new-style class machinery (language). |
+| ❗ | `test_descr` | Descriptors / new-style class machinery (language). |
 | ❗ | `test_descrtut` | Descriptor tutorial doctests (language). |
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
@@ -782,7 +782,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_long` ERROR, 47 tests: 4 failed, 5 errors, 7 skipped
 - `test.test_random` ERROR, 116 tests: 0 failed, 8 errors, 5 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_abstract_numbers`, `test_buffer`, `test_c_locale_coercion`, `test_cmd`, `test_colorsys`, `test_dbm`, `test_dbm_dumb`, `test_defaultdict`, `test_descrtut`, `test_errno`, `test_exceptions`, `test_filecmp`, `test_fileinput`, `test_fileio`, `test_fnmatch`, `test_genericpath`, `test_html`, `test_http_cookiejar`, `test_largefile`, `test_longexp`, `test_multibytecodec`, `test_ntpath`, `test_nturl2path`, `test_numeric_tower`, `test_opcodes`, `test_picklebuffer`, `test_pickletools`, `test_plistlib`, `test_posixpath`, `test_pprint`, `test_quopri`, `test_range`, `test_rlcompleter`, `test_robotparser`, `test_sched`, `test_secrets`, `test_shelve`, `test_signal`, `test_str`, `test_stringprep`, `test_sundry`, `test_sys`, `test_timeit`, `test_unicode_file_functions`, `test_urllib`, `test_urllib_response`, `test_utf8_mode`, `test_xml_dom_minicompat`, `test_xml_etree_c`.
+Wired, but not on the board until the next nightly measures them: `test_abstract_numbers`, `test_buffer`, `test_c_locale_coercion`, `test_cmd`, `test_colorsys`, `test_dbm`, `test_dbm_dumb`, `test_defaultdict`, `test_descr`, `test_descrtut`, `test_errno`, `test_exceptions`, `test_filecmp`, `test_fileinput`, `test_fileio`, `test_fnmatch`, `test_genericpath`, `test_html`, `test_http_cookiejar`, `test_largefile`, `test_longexp`, `test_multibytecodec`, `test_ntpath`, `test_nturl2path`, `test_numeric_tower`, `test_opcodes`, `test_picklebuffer`, `test_pickletools`, `test_plistlib`, `test_posixpath`, `test_pprint`, `test_quopri`, `test_range`, `test_rlcompleter`, `test_robotparser`, `test_sched`, `test_secrets`, `test_shelve`, `test_signal`, `test_str`, `test_stringprep`, `test_sundry`, `test_sys`, `test_timeit`, `test_unicode_file_functions`, `test_urllib`, `test_urllib_response`, `test_utf8_mode`, `test_xml_dom_minicompat`, `test_xml_etree_c`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

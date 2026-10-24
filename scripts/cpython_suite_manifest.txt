@@ -558,15 +558,17 @@ test.test_fileio
 #                                longer hangs the next raise; testInfiniteRecursion
 #                                is skip-listed (scripts/cpython_suite_skips.txt)
 #
-# NOT YET WIRED: test_descr.  Its crash on Darwin is fixed (an unbound-method
-# lookup no longer builds a merged method dictionary per call, and the stack
-# ran out inside that primitive: UncontinuableError 2758), and it runs there --
-# 162t 50F/32E/12S.  On Linux it still dies in the Red Zone, in
-# ClassPropertiesAndMethods.test_recursive_call (``A.__call__ = A()'') and
-# test_repr_as_str: native code puts the stack trip somewhere a probe can
-# still swallow it, so a new CRASH row would reach the nightly.
+#   test_descr  162t 50F/32E/12S an unbound-method lookup no longer builds a
+#                                merged method dictionary per class per call
+#                                (the stack ran out inside that primitive:
+#                                UncontinuableError 2758), and the committed-
+#                                attribute probe re-passes a stack overflow --
+#                                on Linux, native code put the trip inside it,
+#                                and answering nil sent test_recursive_call and
+#                                test_repr_as_str on into the Red Zone
 test.test_defaultdict
 test.test_exceptions
+test.test_descr
 
 # --- Stdlib batch 1 (added 2026-10-23): pure-Python modules Grail lacked ---
 #
