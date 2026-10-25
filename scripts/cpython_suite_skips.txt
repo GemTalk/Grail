@@ -331,6 +331,14 @@ test.test_format|FormatTest.test_common_format|CPython builds a 123456-fraction-
 # test, up through LONG4's 8*257-bit boundary, passes.  Both runners.
 test.test_pickle|InMemoryPickleTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
 test.test_pickle|PyPicklerTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
+# test_long has two more, each a correctness loop whose LAST case crosses the same
+# ceiling.  test_bit_count ends at ``2**1234567''; test_karatsuba's largest operand
+# is KARATSUBA_CUTOFF*100 digits of 30 bits, 210,000 bits, and its products twice
+# that.  Measured 2026-10-25 by running each loop without its over-ceiling case:
+# every smaller case passes, 120 Karatsuba products included, as under CPython.
+# The VM's own probe: 130143 bits builds, 130144 raises error 2503.
+test.test_long|LongTest.test_bit_count|its last case is 2**1234567; GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; every smaller case passes
+test.test_long|LongTest.test_karatsuba|its largest operands are 210,000 bits; GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; every smaller case passes
 # --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
 # Both are single-line hangs inside an otherwise-scorable module, so they are
 # skip-listed (never counted as passes) to let the rest of the module score;
