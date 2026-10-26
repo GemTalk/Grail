@@ -155,6 +155,35 @@ def _forward_alias():
 
 check('an_alias_value_sees_its_params_and_itself', _forward_alias(), True)
 
+
+# A parameterised alias in a CLASS BODY was refused: its scope function is a
+# def the class body calls, whose lazy value reads the class's own parameters
+# (test_type_aliases' test_alias_value_02).
+class _GenericOwner[A]:
+    type Mapping[B] = dict[A, B]
+    type Plain = list[A]
+
+
+def _class_body_alias():
+    a, = _GenericOwner.__type_params__
+    b, = _GenericOwner.Mapping.__type_params__
+    return (type(_GenericOwner.Mapping).__name__,
+            _GenericOwner.Mapping.__value__ == dict[a, b],
+            _GenericOwner.Plain.__value__ == list[a],
+            sorted(k for k in vars(_GenericOwner) if not k.startswith('_')))
+
+
+check('a_parameterised_alias_in_a_class_body', _class_body_alias(),
+      ('TypeAliasType', True, True, ['Mapping', 'Plain']))
+
+
+class _PlainOwner:
+    type Pair[T] = tuple[T, T]
+
+
+check('a_class_body_alias_is_subscriptable', repr(_PlainOwner.Pair[int]),
+      'Pair[int]')
+
 # ----------------------------------------------------------- TypeVar
 
 T = TypeVar('T')

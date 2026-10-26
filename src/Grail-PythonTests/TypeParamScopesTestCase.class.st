@@ -92,6 +92,17 @@ TypeParamScopesTestCase >> testParameterisedAliases [
 ]
 
 { #category : 'Grail-Tests' }
+TypeParamScopesTestCase >> testParameterisedAliasesInAClassBody [
+	"``class P[A]: type M[B] = dict[A, B]'' -- the alias's scope function is
+	a def the class body calls, and its lazy value reads the class's own
+	parameter.  It was refused with a SyntaxError."
+
+	self assertAll: #('a_parameterised_alias_in_a_class_body'
+		'a_class_body_alias_is_subscriptable')
+
+]
+
+{ #category : 'Grail-Tests' }
 TypeParamScopesTestCase >> testTypeVarModules [
 
 	self assertAll: #('a_typevar_belongs_to_its_module'
