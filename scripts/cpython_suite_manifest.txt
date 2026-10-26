@@ -779,3 +779,16 @@ test.test_type_params
 #   types 129t 26F/21E/3S   ClassCreation corner cases, mappingproxy of a
 #                           non-dict mapping, types._GeneratorWrapper
 test.test_types
+
+# --- Core language (added 2026-10-26): break in a loop's else clause ---
+#
+# test_graphlib is CPython 3.14.4's, vendored verbatim.  It timed out on its
+# first test: TopologicalSorter.prepare() never returned.  _find_cycle ends its
+# ``while True'' with a ``break'' in an inner while's ELSE clause, and Grail ran
+# a loop's else clause inside that loop's own PythonBreak handler -- so the
+# break was caught by the loop that had already ended and the outer loop went
+# on forever.  Both arms now run the else clause after the handler, when no
+# break ended the loop.  Measured on Darwin arm64:
+#
+#   graphlib 17t OK/1S
+test.test_graphlib

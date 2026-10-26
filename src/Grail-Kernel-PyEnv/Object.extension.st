@@ -8265,6 +8265,21 @@ Object >> ___cmpBlockedError___ [
 ]
 
 { #category : 'Grail-Comparison' }
+Object >> ___cmpByOperandMetaclass___: other op: baseSym [
+	"The reflected __eq__ / __ne__ of a CLASS operand, which its METACLASS runs:
+	``x == C'' with ``class C(metaclass=M)'' is M.__eq__(C, x) once x has
+	declined.  dirty_equals compares with bare classes -- ``{'url': IsAnyStr}''
+	-- whose metaclass's __eq__ does the matching, and ``'x' == IsAnyStr''
+	answered False.  nil when other is no class, its metaclass does not define
+	the operator, or it declines."
+
+	(other @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	(other ___grailMetaclassDefines___: baseSym) ifFalse: [^ nil].
+	^ other ___grailMetaclassCmp___: baseSym with: self
+
+]
+
+{ #category : 'Grail-Comparison' }
 Object >> ___cmpDunderBlocked___: baseSym [
 	"True when this object's class BLOCKS baseSym by binding it to None.
 
@@ -8322,6 +8337,14 @@ Object >> ___cmpEq___: other [
 		ifTrue: [
 			r := other ___grailMetaclassCmp___: #'__eq__' with: self.
 			r ~~ nil ifTrue: [^ r]].
+	"A CLASS on the right only: x's own __eq__ goes first, and unless it is
+	written in Python it is a builtin's -- object's included -- which declines
+	a class.  So the metaclass decides now, or, after a Python __eq__ that
+	declines, below."
+	((self @env0:isKindOf: Behavior) not and: [(other @env0:isKindOf: Behavior)
+			and: [(self ___cmpOwnsPythonDunder___: #'__eq__') not]]) ifTrue: [
+		r := self ___cmpByOperandMetaclass___: other op: #'__eq__'.
+		r ~~ nil ifTrue: [^ r]].
 	pri := self ___reflectedFirst___: other
 		selector: #'__eq__:' kwSelector: #'___eq__:kw:'.
 	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
@@ -8331,6 +8354,9 @@ Object >> ___cmpEq___: other [
 	(r @env0:== NotImplemented) ifTrue: [
 		"pri notNil: the reflected __eq__ already ran and declined, so identity
 		decides -- calling it again through ___eqValue___ would double it."
+		(self @env0:isKindOf: Behavior) ifFalse: [
+			r := self ___cmpByOperandMetaclass___: other op: #'__eq__'.
+			r ~~ nil ifTrue: [^ r]].
 		pri @env0:== nil ifTrue: [^ self ___eqValue___: other].
 		^ self @env0:== other].
 	^ r
@@ -8492,6 +8518,11 @@ Object >> ___cmpLt___: other [
 { #category : 'Grail-Comparison' }
 Object >> ___cmpNe___: other [
 	| pri r |
+	"A CLASS on the right whose metaclass defines __ne__: see ___cmpEq___:."
+	((self @env0:isKindOf: Behavior) not and: [(other @env0:isKindOf: Behavior)
+			and: [(self ___cmpOwnsPythonDunder___: #'__ne__') not]]) ifTrue: [
+		r := self ___cmpByOperandMetaclass___: other op: #'__ne__'.
+		r ~~ nil ifTrue: [^ r]].
 	pri := self ___reflectedFirst___: other
 		selector: #'__ne__:' kwSelector: #'___ne__:kw:'.
 	(pri @env0:~~ nil and: [pri @env0:~~ NotImplemented]) ifTrue: [^ pri].
@@ -8501,9 +8532,28 @@ Object >> ___cmpNe___: other [
 	(r @env0:== NotImplemented) ifTrue: [
 		"See ___cmpEq___: a reflected __ne__ that already declined is not
 		retried -- CPython goes straight to identity."
+		(self @env0:isKindOf: Behavior) ifFalse: [
+			r := self ___cmpByOperandMetaclass___: other op: #'__ne__'.
+			r ~~ nil ifTrue: [^ r]].
 		pri @env0:== nil ifTrue: [^ self ___neValue___: other].
 		^ (self @env0:== other) @env0:not].
 	^ r
+
+]
+
+{ #category : 'Grail-Comparison' }
+Object >> ___cmpOwnsPythonDunder___: baseSym [
+	"Does the receiver's class have this __eq__ / __ne__ in Python -- a def,
+	a varargs def, or an assigned function -- which runs before a reflected
+	one?  Every other receiver's is a builtin's, which declines a class."
+
+	| varargs |
+	(self ___dynamicInstanceDunder___: baseSym) == nil ifFalse: [^ true].
+	varargs := ('_' @env0:, baseSym @env0:asString @env0:, ':kw:') @env0:asSymbol.
+	{ (baseSym @env0:asString @env0:, ':') @env0:asSymbol. varargs } @env0:do: [:sel | | owner |
+		owner := self @env0:class @env0:whichClassIncludesSelector: sel environmentId: 1.
+		(owner @env0:notNil and: [owner ___grailIsPythonClass___]) ifTrue: [^ true]].
+	^ false
 
 ]
 
@@ -18364,6 +18414,11 @@ Object >> __ne__: other [
 	class beyond object defines __eq__ at all."
 
 	| fn eqOwner eqr |
+	"A CLASS compares through its metaclass, as __eq__: does
+	(___grailObjectEq___:): ``A != B'' is ``type(A).__ne__(A, B)''."
+	((self @env0:isKindOf: Behavior) and: [self ___grailMetaclassDefines___: #'__ne__']) ifTrue: [
+		eqr := self ___grailMetaclassCmp___: #'__ne__' with: other.
+		eqr == nil ifFalse: [^ eqr]].
 	fn := self ___dynamicInstanceDunder___: #'__ne__'.
 	fn == nil ifFalse: [^ self ___callTypeAttr___: fn with: { other }].
 	"``def __ne__(*args)'' compiles to ___ne__:kw: with no __ne__: alias."

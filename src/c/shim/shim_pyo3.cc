@@ -763,6 +763,7 @@ typedef struct {
     char          pad[3];
     uint32_t      magic;             /* GRAIL_RAISED_MAGIC, at offset 68 */
     int           from_grail;        /* raised by a Grail callback */
+    PyObject     *grail_exc;         /* that callback's exception, as Grail's wrapper */
     char          msg[1024];
 } GrailRaisedException;
 
@@ -803,6 +804,20 @@ int _grail_raised_token_read(PyObject *o, PyObject **type, const char **msg, int
     *msg = r->msg;
     *from_grail = r->from_grail;
     return 1;
+}
+
+/* The Grail exception a token stands for, when a Grail callback raised it
+   (NULL otherwise, and for anything that is not a token).  pydantic_core keeps
+   a validator's exception in its error's ctx, and the token crossing back
+   became a NEW exception -- not the one raised, without __traceback__ or a
+   __dict__ (FastAPI's jsonable_encoder answers vars() of it). */
+PyObject *_grail_raised_token_exc(PyObject *o) {
+    GrailRaisedException *r = as_raised(o);
+    return r ? r->grail_exc : NULL;
+}
+void _grail_raised_token_set_exc(PyObject *o, PyObject *exc) {
+    GrailRaisedException *r = as_raised(o);
+    if (r) r->grail_exc = exc;
 }
 
 void _grail_raised_token_recycle(PyObject *o) {

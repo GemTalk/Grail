@@ -223,15 +223,11 @@ ForAst >> ___emitIRStatementOn___: aBuilder [
 			with: { aBuilder globalNamed: #PythonLoopDrained.
 				aBuilder handlerBlockNamed: #'___ex___' }
 			env: 0).
-		"The else clause (cut 68): after a natural drain, inside the PythonBreak
-		handler's block so a break skips it -- the text's placement."
-		(self ___irElseStatements___) do: [:s | s ___emitIRStatementOn___: aBuilder]].
-	aBuilder add: (aBuilder
-		send: #on:do:
-		to: outerBlk
-		with: { aBuilder globalNamed: #PythonBreak.
-			aBuilder handlerBlockNamed: #'___ex___' }
-		env: 0).
+		"The else clause (cut 68): the block answers false after a natural
+		drain, and the else clause runs after the handler -- the text's
+		placement; see ___emitIRBreakHandlerFor___:else:on:."
+		self ___irElseStatements___ isEmpty ifFalse: [aBuilder add: aBuilder falseLit]].
+	self ___emitIRBreakHandlerFor___: outerBlk else: self ___irElseStatements___ on: aBuilder.
 	"Release the iterator once the loop is over, drained or broken out of.
 	 CPython pops it off the value stack at loop exit; a METHOD temp would
 	 otherwise keep it -- and the generator behind it -- alive until the
@@ -405,7 +401,7 @@ ForAst >> ___irEligibleStatementLocals___: localNames [
 
 	(self class == ForAst or: [self class == AsyncForAst]) ifFalse: [^ false].
 	"An else clause (cut 68) is emittable when its statements are: the text
-	runs it inside the PythonBreak-protected block, after the drain handler."
+	runs it after the PythonBreak handler, when no break ended the loop."
 	((self ___irElseStatements___) allSatisfy: [:s | s ___irEligibleStatementLocals___: localNames])
 		ifFalse: [^ false].
 	(self ___irForTargetEligible___: localNames) ifFalse: [^ false].
@@ -848,15 +844,18 @@ ForAst >> printSmalltalkOn: aStream [
 	          @env0:on: PythonContinue do: [...].
 	    ].
 	   ] @env0:on: StopIteration do: [:___ex___ | nil].
+	   false
+	  ] @env0:on: PythonBreak do: [:___ex___ | true]) ifFalse: [
 	   else_body.   ""only runs when the loop drained naturally""
-	  ] @env0:on: PythonBreak do: [:___ex___ | nil].
+	  ].
 
 	Python ``for-else`` requires the else clause to execute ONLY
 	when the loop drains naturally — ``break`` must skip it.  Catch
 	StopIteration (natural end) on the INNER handler, let
-	PythonBreak propagate through it to an OUTER handler that wraps
-	BOTH the loop and the else clause; the outer handler catches
-	the break and the else clause never runs.
+	PythonBreak propagate through it to an OUTER handler, which answers
+	whether a break ended the loop; the else clause runs outside it, so a
+	``break'' in the else clause leaves the ENCLOSING loop, as in CPython.
+	With no else clause the outer handler answers nil and nothing follows.
 
 	For tuple unpacking (for a, b in items), uses a temp ___item___
 	and unpacks with __getitem__:."
@@ -878,8 +877,9 @@ ForAst >> printSmalltalkOn: aStream [
 	iterTemp := '___iter' , depth printString , '___'.
 	itemTemp := '___item' , depth printString , '___'.
 
-	"Outer PythonBreak handler — wraps the iteration AND the else
-	clause so a ``break`` from the body skips both."
+	"Outer PythonBreak handler — wraps the iteration, and answers whether a
+	``break`` ended it; see the else clause below."
+	hasElse ifTrue: [aStream nextPut: $(].
 	aStream nextPutAll: '['; lf; increaseIndent.
 
 	"Inner StopIteration handler block"
@@ -967,14 +967,22 @@ ForAst >> printSmalltalkOn: aStream [
 	aStream decreaseIndent;
 		nextPutAll: '] @env0:on: PythonLoopDrained do: [:___ex___ | nil].'; lf.
 
-	"Else clause — runs only after a natural loop drain."
-	hasElse ifTrue: [
-		orelse printSmalltalkOn: aStream.
-		aStream lf.
-	].
-
 	"Close outer block with PythonBreak handler."
-	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+	hasElse ifFalse: [
+		aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+		^ self].
+	"Else clause -- runs only after a natural loop drain, and OUTSIDE this
+	loop's PythonBreak handler: the block answers false when the loop
+	drained, the handler true when a break ended it.  Inside the handler, a
+	``break'' IN the else clause was caught by this loop -- which had already
+	ended -- instead of leaving the enclosing one, so graphlib's _find_cycle
+	looped forever (test_graphlib timed out)."
+	aStream nextPutAll: 'false'; lf.
+	aStream decreaseIndent;
+		nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | true]) ifFalse: ['; lf;
+		increaseIndent.
+	orelse printSmalltalkOn: aStream.
+	aStream lf; decreaseIndent; nextPutAll: '].'
 
 ]
 
