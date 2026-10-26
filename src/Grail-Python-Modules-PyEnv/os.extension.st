@@ -17,6 +17,10 @@ os class >> ___directoryNotChangedMessage: path [
 
 { #category : 'Grail-Error Messages' }
 os class >> ___directoryNotCreatedMessage: path [
+	"NOT CALLED any more: a failed mkdir now always has an errno, from
+	mkdir(2) if nothing else (see ___signalDirectoryNotCreated:).  Kept
+	because an incremental install cannot remove an env-1 method (Rowan
+	deletes it through an env-0 lookup and fails with LookupError 2021)."
 
 	^ 'Cannot create directory: ' @env0:, path @env0:printString
 
@@ -92,6 +96,18 @@ os class >> ___fdCallouts [
 				result: #'int32' args: #(#'ptr')).
 			d @env0:at: #access put: (CCallout @env0:library: lib name: 'access'
 				result: #'int32' args: #(#'ptr' #'int32')).
+			d @env0:at: #chmod put: (CCallout @env0:library: lib name: 'chmod'
+				result: #'int32' args: #(#'ptr' #'uint32')).
+			d @env0:at: #utimes put: (CCallout @env0:library: lib name: 'utimes'
+				result: #'int32' args: #(#'ptr' #'ptr')).
+			d @env0:at: #lutimes put: (CCallout @env0:library: lib name: 'lutimes'
+				result: #'int32' args: #(#'ptr' #'ptr')).
+			d @env0:at: #readlink put: (CCallout @env0:library: lib name: 'readlink'
+				result: #'int64' args: #(#'ptr' #'ptr' #'uint64')).
+			d @env0:at: #symlink put: (CCallout @env0:library: lib name: 'symlink'
+				result: #'int32' args: #(#'ptr' #'ptr')).
+			d @env0:at: #mkdir put: (CCallout @env0:library: lib name: 'mkdir'
+				result: #'int32' args: #(#'ptr' #'uint32')).
 			d]
 
 ]
@@ -253,39 +269,24 @@ os >> ___applyChmod___: aPath mode: aMode [
 	actually changes a mode; os.chmod funnels here once its arguments are
 	settled.
 
-	Runs chmod(1), because GemStone exposes no chmod(2): GsFile can READ a mode
-	(GsFileStat>>mode) but not write one.  The path goes through
-	___shellPathArg___:, NOT the bare ___shellQuote___: the other shelled-out
-	os calls use -- see that method for why ``--'' is not a portable guard for
-	this particular utility.
+	chmod(2), through libc, with the path as the exact bytes it names
+	(___cPathFor:).  This ran chmod(1) through the shell, because GsFile can
+	read a mode but not write one -- and a shell command is a String, which
+	cannot carry a filename that is not valid UTF-8, so a file os.listdir
+	answered as a surrogate-escaped str could not be chmod'ed at all.  The
+	system call also reports its own errno, where the shell reported nothing
+	and success had to be measured by stat'ing the file again.
 
 	ONLY THE LOW 12 BITS are sent.  CPython hands the mode straight to chmod(2),
 	which ignores the file-type bits; measured, ``os.chmod(f, 0o100644)'' leaves
-	a file at 0o644 under CPython 3.14.6, so masking here reproduces that rather
-	than letting chmod(1) parse a six-digit octal number as something else.
+	a file at 0o644 under CPython 3.14.6, and the mask keeps the argument
+	inside mode_t on every platform."
 
-	System>>performOnServer: reports no exit status, so SUCCESS IS MEASURED,
-	not assumed -- the file is re-stat'd and the permission bits read back must
-	be the ones asked for.  This matters more for chmod than for anything else
-	that shells out: a chmod that silently did nothing would leave a file MORE
-	permissive than the caller believes it made it, which is a security answer,
-	not merely a wrong one.
-
-	The command is SKIPPED when the mode is already correct.  That is an
-	optimisation (copystat on a tree spawns a process per file otherwise) and
-	not a weakening: the read-back below is what decides, and the stat it reads
-	is the one taken after any command that ran."
-
-	| path st want |
-	want := aMode @env0:bitAnd: 8r7777.
+	| path |
 	path := self ___fsPathChecked___: aPath for: 'chmod' arg: 'path'.
-	st := self ___statOrSignal___: path isLstat: false.
-	(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want ifTrue: [^ None].
-	self ___runShell___: 'chmod ' @env0:, (self ___octalString___: want)
-		@env0:, ' ' @env0:, (self ___shellPathArg___: path).
-	st := self ___statOrNil___: path lstat: false.
-	(st @env0:notNil @env0:and: [(st @env0:mode @env0:bitAnd: 8r7777) @env0:= want])
-		ifFalse: [^ self ___signalErrno: 1 filename: path].
+	self ___libc: #chmod
+		with: { self ___cPathFor: path. aMode @env0:bitAnd: 8r7777 }
+		ifFail: [:errno | ^ self ___signalErrno: errno filename: path].
 	^ None
 
 ]
@@ -296,50 +297,36 @@ os >> ___applyUtime___: aPath atime: at mtime: mt follow: followSymlinks [
 	at / mt, and answer None.  The one place that actually touches the clock;
 	every os.utime spelling above funnels here once its arguments are settled.
 
-	Runs touch(1) -- see ___isoUtcFromEpochSeconds___ for why -d and not -t.
-	``-a'' and ``-m'' set the two times independently, which is what CPython's
-	(atime, mtime) pair means; when they are equal one bare touch sets both,
-	which halves the process spawns on kaggle's per-chunk restamping loop.
-	``-h'' is the follow_symlinks=False case: both BSD and GNU touch spell
-	``act on the link itself'' that way.
+	utimes(2) -- lutimes(2) for follow_symlinks=False, which acts on the link
+	itself -- through libc, with the path as the exact bytes it names
+	(___cPathFor:).  This ran touch(1) through the shell, which could not name
+	a file whose name is not valid UTF-8 (a shell command is a String), cost a
+	process or two per call, and reported no status, so success had to be
+	measured by stat'ing the file again.  The system call reports its errno.
 
-	The path is single-quoted by ___shellQuote___: and passed after ``--'', so
-	a downloaded filename holding a space, a quote or a ``;'' is a filename and
-	not shell syntax.  The formatted timestamp is quoted too -- it is generated
-	here and cannot be hostile, but an unquoted argument next to a quoted one
-	invites the next edit to get it wrong.
+	Each time is a struct timeval, {seconds, microseconds}: 16 bytes on both
+	64-bit platforms, so the pair is 32.  Microseconds are 0 -- whole seconds,
+	as os.stat reports them here.  An int64 written at offset 8 also covers
+	Darwin's 32-bit tv_usec, since the four bytes after it are padding.
 
-	System>>performOnServer: reports no exit status, so SUCCESS IS MEASURED,
-	not assumed: the file is re-stat'd afterwards and the times read back must
-	be the ones asked for.  That is the whole point of the method.  A no-op
-	implementation -- which is what os.utime nearly shipped as -- passes every
-	``did not raise'' test and fails this one.  The re-stat matches the way
-	touch acted: lstat when -h was used, stat when it was not."
+	The range check comes FIRST, so an out-of-range timestamp is an
+	OverflowError rather than a FileNotFoundError: argument conversion, then
+	the system call, the order CPython reports them in.  Its bound is time_t's,
+	as CPython's is."
 
-	| path st q base atIso mtIso |
+	| path times |
 	path := self ___fsPathChecked___: aPath for: 'utime' arg: 'path'.
-	"Format BEFORE the existence check so an out-of-range timestamp is an
-	OverflowError rather than a FileNotFoundError, which is the order CPython
-	reports them in: argument conversion, then the syscall."
-	atIso := self ___isoUtcFromEpochSeconds___: at.
-	mtIso := self ___isoUtcFromEpochSeconds___: mt.
-	self ___statOrSignal___: path isLstat: followSymlinks @env0:not.
-	q := self ___shellQuote___: path.
-	base := followSymlinks ifTrue: ['touch '] ifFalse: ['touch -h '].
-	at @env0:= mt
-		ifTrue: [
-			self ___runShell___: base @env0:, '-d ' @env0:,
-				(self ___shellQuote___: mtIso) @env0:, ' -- ' @env0:, q]
-		ifFalse: [
-			self ___runShell___: base @env0:, '-a -d ' @env0:,
-				(self ___shellQuote___: atIso) @env0:, ' -- ' @env0:, q.
-			self ___runShell___: base @env0:, '-m -d ' @env0:,
-				(self ___shellQuote___: mtIso) @env0:, ' -- ' @env0:, q].
-	st := self ___statOrNil___: path lstat: followSymlinks @env0:not.
-	(st @env0:notNil @env0:and: [
-		(st @env0:mtimeUtcSeconds @env0:= mt) @env0:and: [
-			st @env0:atimeUtcSeconds @env0:= at]])
-		ifFalse: [^ self ___signalErrno: 1 filename: path].
+	{ at. mt } @env0:do: [:t |
+		(t @env0:between: -9223372036854775808 and: 9223372036854775807) ifFalse: [
+			^ OverflowError ___signal___: 'timestamp out of range for platform time_t']].
+	times := CByteArray @env0:gcMalloc: 32.
+	times @env0:int64At: 0 put: at.
+	times @env0:int64At: 8 put: 0.
+	times @env0:int64At: 16 put: mt.
+	times @env0:int64At: 24 put: 0.
+	self ___libc: (followSymlinks ifTrue: [#utimes] ifFalse: [#lutimes])
+		with: { self ___cPathFor: path. times }
+		ifFail: [:errno | ^ self ___signalErrno: errno filename: path].
 	^ None
 
 ]
@@ -361,23 +348,36 @@ os >> ___asCInt: anObject [
 
 { #category : 'Grail-File Descriptors' }
 os >> ___cPathFor: aPath [
-	"aPath as the NUL-terminated bytes libc takes: a str as UTF-8, bytes as
-	they are.  An embedded NUL would silently cut the path short in C, so it
+	"aPath as the NUL-terminated bytes libc takes (___pathBytes___:).  An embedded NUL would silently cut the path short in C, so it
 	is CPython's ValueError instead."
 
 	| path encoded |
 	path := self ___fsPath___: aPath.
-	(path @env0:isKindOf: ByteArray)
-		ifTrue: [encoded := path]
-		ifFalse: [
-			(path @env0:isKindOf: CharacterCollection) ifFalse: [
-				^ TypeError ___signal___:
-					('open: path should be string, bytes or os.PathLike, not '
-						@env0:, (bytes ___pyTypeNameOf___: aPath))].
-			encoded := path @env0:encodeAsUTF8 @env0:asByteArray].
+	((path @env0:isKindOf: ByteArray) or: [(path @env0:isKindOf: CharacterCollection)
+			or: [path isKindOf: PyStrSurrogate]]) ifFalse: [
+		^ TypeError ___signal___:
+			('open: path should be string, bytes or os.PathLike, not '
+				@env0:, (bytes ___pyTypeNameOf___: aPath))].
+	encoded := self ___pathBytes___: path.
 	(encoded @env0:includes: 0) ifTrue: [
 		^ ValueError ___signal___: 'open: embedded null character in path'].
 	^ CByteArray @env0:withAll: encoded nullTerminate: true
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+os >> ___cwdBytes___ [
+	"The current directory's exact bytes, for getcwd and getcwdb.  The
+	primitive answers them as a String holding one BYTE per Character, as the
+	listing primitive answers names (see _listdir:kw:) -- so answering that
+	String as the str was mojibake for any non-ASCII directory: '/tmp/u\xfc'
+	came back as '/tmp/u\xc3\xbc'."
+
+	| result |
+	result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
+	(result @env0:isKindOf: Utf16) ifTrue: [
+		^ bytes @env0:withAll: result @env0:decodeToUnicode @env0:encodeAsUTF8 @env0:asByteArray].
+	^ bytes @env0:withAll: result @env0:asByteArray
 
 ]
 
@@ -397,6 +397,29 @@ os >> ___errnoOfLibc: aName onPath: path [
 ]
 
 { #category : 'Grail-File and Directory Operations' }
+os >> ___errnoOfOpening: path mode: gsMode [
+	"Why the GsFile open of path in gsMode ('r', 'w+', 'ab', ...) failed, asked
+	of open(2) with the same intent: its errno, or 0 if this open succeeds
+	(its descriptor is closed again).  The primitive answers only nil, and a
+	stat cannot say why a file that does not exist yet could not be CREATED --
+	macOS refusing a name that is not UTF-8 (EILSEQ) read as ENOENT."
+
+	| flags fd |
+	flags := (gsMode @env0:includes: $+)
+		ifTrue: [2]
+		ifFalse: [(gsMode @env0:includes: $r) ifTrue: [0] ifFalse: [1]].
+	(gsMode @env0:includes: $r) ifFalse: [
+		flags := flags @env0:bitOr: (self @env0:class ___openFlags @env0:at: #O_CREAT).
+		flags := flags @env0:bitOr: (self @env0:class ___openFlags
+			@env0:at: ((gsMode @env0:includes: $a) ifTrue: [#O_APPEND] ifFalse: [#O_TRUNC]))].
+	fd := self ___libc: #open with: { self ___cPathFor: path. flags. #'int32'. 8r666 }
+		ifFail: [:errno | ^ errno].
+	self ___libc: #close with: { fd } ifFail: [:errno | ^ 0].
+	^ 0
+
+]
+
+{ #category : 'Grail-File and Directory Operations' }
 os >> ___errnoPreventingCreationOf: path [
 	"Why an entry cannot be created at path: the path is already there, or its
 	parent cannot be stat'd (that stat's own errno), or the parent is not a
@@ -405,8 +428,8 @@ os >> ___errnoPreventingCreationOf: path [
 
 	| parentStat |
 
-	((GsFile @env0:stat: path isLstat: true) @env0:isKindOf: GsFileStat) ifTrue: [^ 17].
-	parentStat := GsFile @env0:stat: (self ___parentDirectoryOf: path) isLstat: false.
+	((GsFile @env0:stat: (self ___primPath___: path) isLstat: true) @env0:isKindOf: GsFileStat) ifTrue: [^ 17].
+	parentStat := GsFile @env0:stat: (self ___primPath___: (self ___parentDirectoryOf: path)) isLstat: false.
 	(parentStat @env0:isKindOf: SmallInteger) ifTrue: [^ parentStat].
 	((parentStat @env0:isKindOf: GsFileStat) and: [parentStat @env0:isDirectory @env0:not])
 		ifTrue: [^ 20].
@@ -422,7 +445,7 @@ os >> ___errnoPreventingRemovalOfDirectory: path [
 
 	| entryStat |
 
-	entryStat := GsFile @env0:stat: path isLstat: true.
+	entryStat := GsFile @env0:stat: (self ___primPath___: path) isLstat: true.
 	(entryStat @env0:isKindOf: SmallInteger) ifTrue: [^ entryStat].
 	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory @env0:not])
 		ifTrue: [^ 20].
@@ -439,7 +462,7 @@ os >> ___errnoPreventingUnlinkOf: path [
 
 	| entryStat |
 
-	entryStat := GsFile @env0:stat: path isLstat: true.
+	entryStat := GsFile @env0:stat: (self ___primPath___: path) isLstat: true.
 	(entryStat @env0:isKindOf: SmallInteger) ifTrue: [^ entryStat].
 	((entryStat @env0:isKindOf: GsFileStat) and: [entryStat @env0:isDirectory])
 		ifTrue: [^ self @env0:class ___errnoOfUnlinkingADirectory].
@@ -500,22 +523,13 @@ os >> ___fsPath___: path [
 
 	(self ___isPathLike___: path) ifTrue: [^ path __fspath__].
 	"A str holding a LONE SURROGATE -- which is how os.fsdecode spells an
-	undecodable byte (PEP 383) -- cannot reach the GsFile primitives as it
-	is: they send it encodeAsUTF8, get the surrogatepass bytes back, and
-	refuse the ByteArray with an ArgumentTypeError no Python code can catch
-	(test_warnings' non-ASCII-filename tests died there, inside a
-	catch_warnings block that then never restored the warnings module).
-
-	CPython encodes such a path with surrogateescape.  Here the escaped bytes
-	are handed on as the CHARACTERS of an ordinary string, since the
-	primitives take a String and a raw-byte Utf8 cannot be built: a lone
-	U+DC80..U+DCFF becomes its byte, and any other surrogate raises
-	CPython's catchable UnicodeEncodeError.  The byte is then UTF-8-encoded
-	by the primitive, so a file whose on-disk name is itself undecodable is
-	still out of reach -- but a missing one is FileNotFoundError, as in
-	CPython, rather than a dead session."
-	(path isKindOf: PyStrSurrogate) ifTrue: [
-		^ (path encode: 'utf-8' _: 'surrogateescape') decode: 'latin-1'].
+	undecodable byte (PEP 383) -- passes through as it is, like any other str.
+	It used to be turned into the escaped bytes as Latin-1 CHARACTERS here, so
+	that the GsFile primitives would accept it; but that is a different str,
+	and every caller saw it: os.fspath and os.path.join answered '\xff' for
+	'\udcff', and the primitive then UTF-8-encoded that, so the file reached
+	was never the one named.  ___primPath___: now hands the primitives the
+	exact bytes, at the primitive."
 	^ path
 
 ]
@@ -563,6 +577,8 @@ os >> ___hasNul___: aPath [
 	(aPath @env0:isKindOf: ByteArray) ifTrue: [^ aPath @env0:includes: 0].
 	(aPath @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ aPath @env0:includes: (Character @env0:withValue: 0)].
+	(aPath isKindOf: PyStrSurrogate) ifTrue: [
+		^ (self ___pathBytes___: aPath) @env0:includes: 0].
 	^ false
 
 ]
@@ -585,7 +601,7 @@ os >> ___isEmptyDirectory: path [
 	| contents |
 
 	contents := GsFile
-		@env0:_contentsOfServerDirectory: path
+		@env0:_contentsOfServerDirectory: (self ___primPath___: path)
 		expandPath: false
 		utf8Results: false.
 	(contents @env0:isKindOf: Array) ifFalse: [^ true].
@@ -620,7 +636,12 @@ os >> ___isLink___: aPath [
 
 { #category : 'Grail-File and Directory Operations' }
 os >> ___isoUtcFromEpochSeconds___: secs [
-	"``YYYY-MM-DDThh:mm:ssZ'' for whole Unix-epoch seconds -- the one spelling
+	"NOT CALLED any more: os.utime uses utimes(2) through libc.  Kept because an
+	incremental install cannot remove an env-1 method (Rowan deletes it through
+	an env-0 lookup and fails with LookupError 2021), so deleting it would break
+	every existing developer install; remove it together with that fix.
+
+	``YYYY-MM-DDThh:mm:ssZ'' for whole Unix-epoch seconds -- the one spelling
 	of an absolute time that BOTH touch(1) implementations read as UTC.
 
 	os.utime has to run touch(1), because GemStone exposes no utimes(2), and
@@ -733,6 +754,31 @@ os >> ___libc: aName with: anArray ifFail: aBlock [
 ]
 
 { #category : 'Grail-File and Directory Operations' }
+os >> ___makedirsOf___: path [
+	"makedirs for a bytes path or a surrogate-escaped str, which the
+	component scan in makedirs: cannot take apart: it splits with Smalltalk
+	String protocol, which a ByteArray answers with an uncatchable
+	ArgumentTypeError and a PyStrSurrogate does not have.  This is CPython's
+	own recursion over os.path.split instead, and keeps makedirs:'s rule of
+	creating only what is missing."
+
+	| osPath parts head tail |
+	osPath := os_path instance.
+	parts := osPath split: path.
+	head := parts @env0:at: 1.
+	tail := parts @env0:at: 2.
+	tail ___isTruthy___ ifFalse: [
+		parts := osPath split: head.
+		head := parts @env0:at: 1.
+		tail := parts @env0:at: 2].
+	(head ___isTruthy___ and: [tail ___isTruthy___ and: [(osPath exists: head) not]])
+		ifTrue: [self ___makedirsOf___: head].
+	(osPath isdir: path) ifFalse: [self mkdir: path].
+	^ None
+
+]
+
+{ #category : 'Grail-File and Directory Operations' }
 os >> ___octalString___: anInteger [
 	"anInteger as four-or-more plain octal digits, for chmod(1).
 
@@ -755,6 +801,38 @@ os >> ___parentDirectoryOf: path [
 
 	parent := (os_path instance) dirname: ((os_path instance) normpath: path).
 	^ parent @env0:isEmpty ifTrue: ['.'] ifFalse: [parent]
+
+]
+
+{ #category : 'Grail-Filesystem' }
+os >> ___pathBytes___: aPath [
+	"The exact bytes the path names on disk, as CPython's path converter
+	produces them: a str as UTF-8, a str holding surrogate escapes (PEP 383,
+	which is how os.fsdecode and os.listdir spell a byte that is not UTF-8)
+	with surrogateescape, and bytes as they are."
+
+	(aPath @env0:isKindOf: ByteArray) ifTrue: [^ aPath].
+	(aPath isKindOf: PyStrSurrogate) ifTrue: [^ aPath encode: 'utf-8' _: 'surrogateescape'].
+	^ aPath @env0:encodeAsUTF8 @env0:asByteArray
+
+]
+
+{ #category : 'Grail-Filesystem' }
+os >> ___primPath___: aPath [
+	"The path as a GsFile primitive must be handed it to reach the file it
+	names.  Every one of them sends its argument encodeAsUTF8, so a str goes
+	as it is.  Bytes and a surrogate-escaped str cannot: a ByteArray does not
+	understand encodeAsUTF8 -- an uncatchable MessageNotUnderstood, which is
+	what os.path.exists(b'/tmp/\xc3\xbc') was -- and a PyStrSurrogate is no
+	String at all.  Both go as a Utf8 holding their exact bytes instead:
+	Utf8 >> encodeAsUTF8 answers itself, so the primitive passes those bytes
+	to the filesystem untouched, whether or not they are valid UTF-8.  That is
+	what lets a file whose on-disk name is not UTF-8 be opened, stat'd,
+	renamed and removed by the name os.listdir answered for it."
+
+	((aPath @env0:isKindOf: ByteArray) or: [aPath isKindOf: PyStrSurrogate])
+		ifFalse: [^ aPath].
+	^ Utf8 @env0:withBytes: (self ___pathBytes___: aPath)
 
 ]
 
@@ -791,15 +869,24 @@ os >> ___refuseShellExpandedPath___: aPath for: anOperation [
 	for another file is a wrong ANSWER; os.remove('a$b') deleting another file
 	is a wrong ACTION, and only the second can destroy data.  Narrowing the
 	guard to the three destructive operations also keeps it off every stat-like
-	call, which the predicate fixtures already document as expanding."
+	call, which the predicate fixtures already document as expanding.
+
+	A bytes path and a surrogate-escaped str reach the same primitives (as a
+	Utf8, see ___primPath___:), so they are tested on their bytes: a ``$''
+	in them is expanded just the same."
 
 	| expanded |
-	(aPath @env0:isKindOf: CharacterCollection) ifFalse: [^ self].
-	(aPath @env0:includesValue: $$) ifFalse: [^ self].
-	expanded := [GsFile @env0:_expandFilename: aPath @env0:asString isClient: false]
-		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	(aPath @env0:isKindOf: CharacterCollection)
+		ifTrue: [
+			(aPath @env0:includesValue: $$) ifFalse: [^ self].
+			expanded := [GsFile @env0:_expandFilename: aPath @env0:asString isClient: false]
+				@env0:on: Error do: [:ex | ex @env0:return: nil]]
+		ifFalse: [
+			((aPath @env0:isKindOf: ByteArray) or: [aPath isKindOf: PyStrSurrogate])
+				ifFalse: [^ self].
+			((self ___pathBytes___: aPath) @env0:includes: 36) ifFalse: [^ self]].
 	OSError ___signal___: (((((anOperation @env0:, ' cannot address ')
-		@env0:, (aPath @env0:printString))
+		@env0:, ((builtins @env0:___instance___) repr: aPath) @env0:asString)
 		@env0:, ': the server file primitives expand ''$'', so this would act on ')
 		@env0:, (expanded @env0:isNil
 			ifTrue: ['a different path']
@@ -860,7 +947,12 @@ os >> ___scandirFollowArg___: positional kw: kwargs for: aName [
 
 { #category : 'Grail-File and Directory Operations' }
 os >> ___shellPathArg___: aPath [
-	"A path as ONE shell word that no utility can mistake for an OPTION.
+	"NOT CALLED any more: os.chmod uses chmod(2) through libc.  Kept because an
+	incremental install cannot remove an env-1 method (Rowan deletes it through
+	an env-0 lookup and fails with LookupError 2021), so deleting it would break
+	every existing developer install; remove it together with that fix.
+
+	A path as ONE shell word that no utility can mistake for an OPTION.
 
 	___shellQuote___: alone is not enough, and the gap is a real one measured
 	here rather than reasoned about.  Quoting is a SHELL concern: after the
@@ -950,7 +1042,12 @@ os >> ___signalDirectoryNotCreated: path [
 	| errno |
 
 	errno := self ___errnoPreventingCreationOf: path.
-	errno == 0 ifTrue: [^ OSError ___signal___: (self @env0:class ___directoryNotCreatedMessage: path)].
+	"Nothing the filesystem shows says why -- macOS refusing a name that is
+	not UTF-8 (EILSEQ) is one such case -- so ask mkdir(2) itself.  If the
+	repeat succeeds, what was asked for is done."
+	errno == 0 ifTrue: [
+		self ___libc: #mkdir with: { self ___cPathFor: path. 8r777 } ifFail: [:e | errno := e].
+		errno == 0 ifTrue: [^ None]].
 	^ self ___signalErrno: errno filename: path
 
 ]
@@ -1038,7 +1135,7 @@ os >> ___statOrNil___: aPath lstat: isLstat [
 
 	| result |
 	(self ___hasNul___: aPath) ifTrue: [^ nil].
-	result := GsFile @env0:stat: aPath isLstat: isLstat.
+	result := GsFile @env0:stat: (self ___primPath___: aPath) isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
 	^ nil
 
@@ -1061,7 +1158,7 @@ os >> ___statOrSignal___: path isLstat: isLstat [
 	that is where their ``e.filename'' comes from too."
 
 	| result |
-	result := GsFile @env0:stat: path isLstat: isLstat.
+	result := GsFile @env0:stat: (self ___primPath___: path) isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
 	(result @env0:isKindOf: SmallInteger) ifTrue: [^ self ___signalErrno: result filename: path].
 	^ OSError ___signal___: (self @env0:class ___statFailedMessage: path)
@@ -1424,7 +1521,7 @@ os >> _listdir: positional kw: kwargs [
 	empty listing rather than PermissionError, because the pattern expansion
 	does not distinguish it.  That is unchanged behaviour, not new."
 	dirContents := GsFile
-		@env0:_contentsOfServerDirectory: actualPath
+		@env0:_contentsOfServerDirectory: (self ___primPath___: actualPath)
 		expandPath: false
 		utf8Results: false.
 	"The primitive answers an Array of BARE NAMES on success and the real
@@ -1741,7 +1838,7 @@ os >> chdir: aPath [
 	"The primitive answers 0 on success and the ERRNO on failure, never nil --
 	the one answer this tested for, so a chdir to a missing directory changed
 	nothing and said nothing, exactly as os.rename did (see Issues.md)."
-	result := GsFile @env0:_directoryPrim: 0 with: path with: nil.
+	result := GsFile @env0:_directoryPrim: 0 with: (self ___primPath___: path) with: nil.
 	result == 0 ifTrue: [^ None].
 	(result @env0:isKindOf: SmallInteger) ifFalse: [
 		^ OSError ___signal___: (self @env0:class ___directoryNotChangedMessage: path)].
@@ -1936,14 +2033,23 @@ os >> ftruncate: fd _: length [
 
 { #category : 'Grail-Built-in Functions' }
 os >> getcwd [
-	"os.getcwd() — return the current working directory."
+	"os.getcwd() — return the current working directory, decoded as CPython
+	decodes it: UTF-8 with surrogateescape (see ___cwdBytes___)."
 
-	| result |
-	result := GsFile @env0:_directoryPrim: 2 with: nil with: nil.
-	(result isKindOf: String) ifTrue: [^ result].
-	(result isKindOf: Utf8) ifTrue: [^ result @env0:decodeToUnicode].
-	(result isKindOf: Utf16) ifTrue: [^ result @env0:decodeToUnicode].
-	^ result @env0:asUnicodeString
+	| raw |
+	raw := self ___cwdBytes___.
+	"The common case, an ASCII directory, needs no codec."
+	(raw @env0:allSatisfy: [:b | b @env0:< 128]) ifTrue: [^ String @env0:withBytes: raw].
+	^ raw decode: 'utf-8' _: 'surrogateescape'
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+os >> getcwdb [
+	"os.getcwdb() — the current working directory as bytes.  posixpath's
+	abspath asks for it whenever its argument is bytes."
+
+	^ self ___cwdBytes___
 
 ]
 
@@ -2212,6 +2318,8 @@ os >> makedirs: aPath [
 
 	| parts currentPath sep path |
 	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
+	((path @env0:isKindOf: ByteArray) or: [path isKindOf: PyStrSurrogate])
+		ifTrue: [^ self ___makedirsOf___: path].
 	sep := '/'.
 	parts := $/ @env0:split: path.
 	currentPath := ''.
@@ -2230,8 +2338,8 @@ os >> makedirs: aPath [
 			file (ENOTDIR).  A bare ifFalse: on that nil is ImproperOperation
 			(error 2085), an uncatchable Smalltalk error; ___statOrSignal___:
 			raises the NotADirectoryError CPython raises here."
-			(GsFile @env0:existsOnServer: currentPath) == true ifFalse: [
-				(GsFile @env0:existsOnServer: currentPath) == nil ifTrue: [
+			(GsFile @env0:existsOnServer: (self ___primPath___: currentPath)) == true ifFalse: [
+				(GsFile @env0:existsOnServer: (self ___primPath___: currentPath)) == nil ifTrue: [
 					self ___statOrSignal___: currentPath isLstat: false].
 				self mkdir: currentPath
 			]
@@ -2247,7 +2355,7 @@ os >> mkdir: aPath [
 
 	| result path |
 	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
-	result := GsFile @env0:createServerDirectory: path.
+	result := GsFile @env0:createServerDirectory: (self ___primPath___: path).
 	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
 
@@ -2259,7 +2367,7 @@ os >> mkdir: aPath _: mode [
 
 	| result path |
 	path := self ___fsPathChecked___: aPath for: 'mkdir' arg: 'path'.
-	result := GsFile @env0:createServerDirectory: path mode: mode.
+	result := GsFile @env0:createServerDirectory: (self ___primPath___: path) mode: mode.
 	result == nil ifTrue: [self ___signalDirectoryNotCreated: path].
 	^ None
 
@@ -2357,22 +2465,31 @@ os >> readlink: aPath [
 	"os.readlink(path) -- the path a symbolic link points at, VERBATIM: a
 	relative target is answered relative, not resolved against the link's
 	directory.  That is CPython's contract, and os.path.realpath is what
-	resolves.
+	resolves.  Bytes for a bytes path, as CPython answers; a str is decoded
+	as os.fsdecode decodes, so a target that is not UTF-8 comes back
+	surrogate-escaped and still names it.
 
-	Not a link is EINVAL, not ENOENT -- CPython distinguishes ``there is
-	nothing there'' from ``there is something there but it is not a link'',
-	and code branches on it."
+	readlink(2) through libc, with the path's exact bytes (___cPathFor:).  This
+	ran readlink(1) through the shell, which could neither name a link whose
+	name is not UTF-8 nor return a target that is not, and answered str for a
+	bytes path -- so posixpath.realpath(b'...') mixed the two and raised
+	TypeError wherever a component was a link (/tmp is one on macOS).  The
+	system call's own errno is CPython's: ENOENT for nothing there, EINVAL for
+	something that is not a link.  It does not NUL-terminate and answers the
+	length; a full buffer may mean the target was cut short, so it is asked
+	again with a bigger one, as CPython does."
 
-	| path out |
+	| path cPath size buf n raw |
 	path := self ___fsPathChecked___: aPath for: 'readlink' arg: 'path'.
-	self ___statOrSignal___: path isLstat: true.
-	(self ___isLink___: path) ifFalse: [^ self ___signalErrno: 22 filename: path].
-	out := self ___runShell___: 'readlink -- ' @env0:, (self ___shellQuote___: path).
-	"readlink(1) terminates its answer with a newline; the syscall does not."
-	[out @env0:size @env0:> 0
-		and: [(out @env0:at: out @env0:size) @env0:= (Character @env0:lf)]]
-		@env0:whileTrue: [out := out @env0:copyFrom: 1 to: out @env0:size @env0:- 1].
-	^ out @env0:asUnicodeString
+	cPath := self ___cPathFor: path.
+	size := 1024.
+	[buf := CByteArray @env0:gcMalloc: size.
+	 n := self ___libc: #readlink with: { cPath. buf. size }
+		ifFail: [:errno | ^ self ___signalErrno: errno filename: path].
+	 n @env0:< size] @env0:whileFalse: [size := size @env0:* 2].
+	raw := bytes @env0:withAll: (buf @env0:byteArrayFrom: 0 numBytes: n).
+	(path @env0:isKindOf: ByteArray) ifTrue: [^ raw].
+	^ self fsdecode: raw
 
 ]
 
@@ -2396,7 +2513,7 @@ os >> remove: aPath [
 	deliberately -- looked absent and raised FileNotFoundError instead of being
 	unlinked.  CPython removes the LINK, and never consults the target at all."
 	self ___statOrSignal___: path isLstat: true.
-	result := GsFile @env0:removeServerFile: path.
+	result := GsFile @env0:removeServerFile: (self ___primPath___: path).
 	result == nil ifTrue: [^ self ___signalFileNotRemoved: path].
 	^ None
 
@@ -2418,7 +2535,7 @@ os >> rename: anOldPath _: aNewPath [
 	and an expanded SOURCE renames a file the caller never named."
 	self ___refuseShellExpandedPath___: oldPath for: 'rename'.
 	self ___refuseShellExpandedPath___: newPath for: 'rename'.
-	result := GsFile @env0:renameFileOnServer: oldPath to: newPath.
+	result := GsFile @env0:renameFileOnServer: (self ___primPath___: oldPath) to: (self ___primPath___: newPath).
 	result == 0 ifTrue: [^ None].
 	(result @env0:isKindOf: SmallInteger) ifFalse: [
 		^ OSError ___signal___: (self @env0:class ___renameFailedMessage: oldPath to: newPath)].
@@ -2443,7 +2560,7 @@ os >> rmdir: aPath [
 	| result path |
 	path := self ___fsPathChecked___: aPath for: 'rmdir' arg: 'path'.
 	self ___refuseShellExpandedPath___: path for: 'rmdir'.
-	result := GsFile @env0:removeServerDirectory: path.
+	result := GsFile @env0:removeServerDirectory: (self ___primPath___: path).
 	result == nil ifTrue: [^ self ___signalDirectoryNotRemoved: path].
 	^ None
 
@@ -2503,28 +2620,19 @@ os >> symlink: src _: dst [
 	src is NOT required to exist: a dangling symlink is legal in POSIX and in
 	CPython, and shutil/test code creates them deliberately.
 
-	Implemented by running ``ln -s'', because GemStone exposes no symlink
-	primitive -- GsFile can TEST for a symbolic link but not make one.  The
-	paths are shell-quoted (___shellQuote___:) and passed after ``--'', so a
-	path containing a space or a ``;'' cannot be re-parsed as shell syntax.
+	symlink(2) through libc, with both paths' exact bytes (___cPathFor:), so a
+	name that is not UTF-8 is reachable.  This ran ``ln -s'' through the
+	shell, which could not carry such a name and reported no status, so the
+	errors CPython raises had to be predicted beforehand; the system call
+	reports its own errno, which is raised as CPython raises it, naming both
+	paths."
 
-	The errors CPython raises are predicted BEFORE the command, since the
-	command reports no status: an occupied dst is FileExistsError -- a
-	DANGLING symlink included, which is why the probe is an lstat -- a missing
-	parent FileNotFoundError, and a parent that is a file NotADirectoryError.
-	CPython names both paths in them.  Anything else that goes wrong is caught
-	after the fact by asking whether the link now exists."
-
-	| srcPath dstPath errno |
+	| srcPath dstPath |
 	srcPath := self ___fsPathChecked___: src for: 'symlink' arg: 'src'.
 	dstPath := self ___fsPathChecked___: dst for: 'symlink' arg: 'dst'.
-	errno := self ___errnoPreventingCreationOf: dstPath.
-	errno == 0 ifFalse: [^ self ___signalErrno: errno filename: srcPath filename2: dstPath].
-	self ___runShell___: 'ln -s -- ' @env0:,
-		(self ___shellQuote___: srcPath) @env0:, ' ' @env0:,
-		(self ___shellQuote___: dstPath).
-	(self ___isLink___: dstPath) ifFalse: [
-		OSError ___signal___: (self @env0:class ___symlinkNotCreatedMessage: dstPath)].
+	self ___libc: #symlink
+		with: { self ___cPathFor: srcPath. self ___cPathFor: dstPath }
+		ifFail: [:errno | ^ self ___signalErrno: errno filename: srcPath filename2: dstPath].
 	^ None
 
 ]
