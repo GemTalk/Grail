@@ -12,10 +12,28 @@
 #   ./scripts/run_cpython_suite.sh                # run the whole manifest
 #   ./scripts/run_cpython_suite.sh test.test_math # run just these modules
 #   GRAIL_TEST_TIMEOUT=120 ./scripts/run_cpython_suite.sh
+#   ./scripts/run_cpython_suite.sh --plan-shards 4  # print 4 balanced module lists
+#   ./scripts/run_cpython_suite.sh --report-only    # score the existing outputs
 #
 # Assumes a stone is already running per .topazini (like run_tests.sh).
+#
+# The last two run nothing and need no stone; they are how the nightly runs the
+# suite as several CI jobs (.github/workflows/cpython-conformance.yml).
+# --plan-shards N splits the module list into N lines with roughly equal
+# wall-clock, from the same weights the launch order uses (see launch_order).
+# Each shard job runs its line as an ordinary partial run.  --report-only then
+# skips the launch and builds the scoreboard from the out/cpython/*.out and .rc
+# files the shards left behind, exactly as a single run would have.  A module
+# with no output there scores CRASH, so a lost shard fails the gate instead of
+# shrinking the board.
 
 PROJECT_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+
+MODE=run
+case "$1" in
+    --plan-shards) MODE=plan; N_SHARDS="$2"; shift 2 ;;
+    --report-only) MODE=report; shift ;;
+esac
 
 # Always source .setenv when it exists (same as run_tests.sh): it is this
 # checkout's source of truth for which product + stone to use, so it must win
@@ -28,7 +46,7 @@ if [ -f "$PROJECT_ROOT/.setenv" ]; then
     # shellcheck disable=SC1091
     source "$PROJECT_ROOT/.setenv"
 fi
-if [ -z "$GEMSTONE" ]; then
+if [ -z "$GEMSTONE" ] && [ "$MODE" = run ]; then
     echo "Error: \$GEMSTONE is not set. 'source .setenv' first." >&2
     exit 1
 fi
@@ -110,7 +128,9 @@ run_capped() { # $1=limit, then the command
     return $?
 }
 
-OUTDIR="$PROJECT_ROOT/out/cpython"
+# Both overridable for tests/scripts/test_cpython_suite_shards.sh, which scores
+# made-up outputs and must not rewrite the real board.
+OUTDIR="${GRAIL_CPYTHON_OUTDIR:-$PROJECT_ROOT/out/cpython}"
 mkdir -p "$OUTDIR"
 MANIFEST="$PROJECT_ROOT/scripts/cpython_suite_manifest.txt"
 
@@ -138,7 +158,7 @@ if [ -f "$MANIFEST" ]; then
     done
 fi
 DRIVER="$PROJECT_ROOT/scripts/run_one_cpython_module.gs"
-SCOREBOARD_MD="$PROJECT_ROOT/docs/CPython_Suite_Scoreboard.md"
+SCOREBOARD_MD="${GRAIL_CPYTHON_SCOREBOARD:-$PROJECT_ROOT/docs/CPython_Suite_Scoreboard.md}"
 SCOREBOARD_JSON="$OUTDIR/scoreboard.json"
 
 # Concurrency: run N modules at once, each in its own isolated topaz + watchdog
@@ -235,9 +255,6 @@ json_escape() { # minimal: backslash and double-quote
     printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
 
-echo "Running CPython suite against Grail (timeout=${PER_MODULE_TIMEOUT}s per module)"
-echo
-
 # Launch heaviest-first (longest-processing-time scheduling): start the big
 # modules early so they run while the many light modules fill the other slots,
 # instead of bunching at the end and starving each other.  PARSE order (phase 2)
@@ -267,7 +284,7 @@ echo
 # sort keeps some resolution among the sub-second modules.  Ties keep manifest
 # order (field 2 = seq).
 TESTS_PER_SEC=6
-launch_order() {
+launch_weights() { # weight<TAB>module, heaviest first
     local mods durs sb
     mods="$(mktemp)"; durs="$(mktemp)"; sb="$(mktemp)"
     printf '%s\n' $MODULES > "$mods"
@@ -295,51 +312,96 @@ launch_order() {
                 printf "%d\t%d\t%s\n", w, i, m
             }
         }
-    ' "$durs" "$sb" "$mods" 2>/dev/null | sort -k1,1rn -k2,2n | cut -f3
+    ' "$durs" "$sb" "$mods" 2>/dev/null | sort -k1,1rn -k2,2n | cut -f1,3
     rm -f "$mods" "$durs" "$sb"
 }
-LAUNCH_MODULES=$(launch_order)
-[ -z "$LAUNCH_MODULES" ] && LAUNCH_MODULES="$MODULES"   # fallback: manifest order
+launch_order() {
+    launch_weights | cut -f2
+}
 
-# Phase 1 -- launch modules with bounded concurrency.  Track PIDs and count the
-# live ones with `kill -0` (portable to bash 3.2, which lacks `wait -n`; and
-# unlike `jobs` in a $(...) subshell it sees the real job set).
-#
-# Each launch also passes the machine-wide load gate (scripts/launch_gate.sh):
-# a free slot here says only that THIS run is under its own concurrency, not
-# that the machine has room, and other worktrees' suites share the CPU.  The
-# gate is checked before a module starts, so a hold never counts against its
-# PER_MODULE_TIMEOUT.
-. "$PROJECT_ROOT/scripts/launch_gate.sh"
-launch_gate_init "$CONCURRENCY"
-echo "Launching (${CONCURRENCY} concurrent, heaviest-first)..."
-launch_pids=()
-for mod in $LAUNCH_MODULES; do
-    while :; do
-        live=0
-        for p in "${launch_pids[@]}"; do kill -0 "$p" 2>/dev/null && live=$((live + 1)); done
-        [ "$live" -lt "$CONCURRENCY" ] && break
-        sleep 1
+# Shards for the nightly: deal the modules, heaviest first, each to the shard
+# with the least weight so far (ties to the one with fewer modules, then the
+# lower number).  That is the same greedy rule the launch order applies to
+# concurrent slots, one level up.  Deterministic for a given set of weights,
+# which is why the workflow plans ONCE and hands each shard its line, rather
+# than letting each shard compute its own from a duration cache that another
+# shard might have refreshed in the meantime.
+plan_shards() { # $1=N -- print N lines, one shard's modules each
+    launch_weights | awk -F'\t' -v n="$1" '
+        {
+            best = 1
+            for (i = 2; i <= n; i++)
+                if (load[i] < load[best] || (load[i] == load[best] && cnt[i] < cnt[best]))
+                    best = i
+            load[best] += $1; cnt[best]++
+            mods[best] = mods[best] (cnt[best] > 1 ? " " : "") $2
+        }
+        END { for (i = 1; i <= n; i++) print mods[i] }'
+}
+
+if [ "$MODE" = plan ]; then
+    case "$N_SHARDS" in
+        ''|*[!0-9]*|0) echo "Error: --plan-shards needs a positive shard count." >&2; exit 1 ;;
+    esac
+    plan_shards "$N_SHARDS"
+    exit 0
+fi
+
+if [ "$MODE" = report ]; then
+    echo "Scoring the existing outputs in $OUTDIR (nothing is run)"
+    echo
+else
+    echo "Running CPython suite against Grail (timeout=${PER_MODULE_TIMEOUT}s per module)"
+    echo
+
+    LAUNCH_MODULES=$(launch_order)
+    [ -z "$LAUNCH_MODULES" ] && LAUNCH_MODULES="$MODULES"   # fallback: manifest order
+
+    # Phase 1 -- launch modules with bounded concurrency.  Track PIDs and count the
+    # live ones with `kill -0` (portable to bash 3.2, which lacks `wait -n`; and
+    # unlike `jobs` in a $(...) subshell it sees the real job set).
+    #
+    # Each launch also passes the machine-wide load gate (scripts/launch_gate.sh):
+    # a free slot here says only that THIS run is under its own concurrency, not
+    # that the machine has room, and other worktrees' suites share the CPU.  The
+    # gate is checked before a module starts, so a hold never counts against its
+    # PER_MODULE_TIMEOUT.
+    . "$PROJECT_ROOT/scripts/launch_gate.sh"
+    launch_gate_init "$CONCURRENCY"
+    echo "Launching (${CONCURRENCY} concurrent, heaviest-first)..."
+    launch_pids=()
+    for mod in $LAUNCH_MODULES; do
+        while :; do
+            live=0
+            for p in "${launch_pids[@]}"; do kill -0 "$p" 2>/dev/null && live=$((live + 1)); done
+            [ "$live" -lt "$CONCURRENCY" ] && break
+            sleep 1
+        done
+        launch_gate "$mod" "$live"
+        run_module "$mod" &
+        launch_pids+=("$!")
     done
-    launch_gate "$mod" "$live"
-    run_module "$mod" &
-    launch_pids+=("$!")
-done
-wait
-launch_gate_summary
+    wait
+    launch_gate_summary
+fi
 
 # Phase 2 -- parse results serially, in manifest order (deterministic scoreboard).
 for mod in $MODULES; do
     n_modules=$((n_modules + 1))
     log="$OUTDIR/${mod}.out"
+    # The .rc is kept: --report-only reads it after a shard's own run has
+    # parsed it, and it tells a TIMEOUT from a CRASH.  run_module removes it
+    # with the .out before each run, so the two are always from the same run.
     rc=$(cat "$OUTDIR/${mod}.rc" 2>/dev/null || echo 1)
-    rm -f "$OUTDIR/${mod}.rc"
     # Kept (not removed) -- next run's launch_order reads it.
     secs=$(cat "$OUTDIR/${mod}.sec" 2>/dev/null || echo 0)
 
-    line=$(grep -m1 '^GRAIL_RESULT|' "$log")
+    line=$(grep -m1 '^GRAIL_RESULT|' "$log" 2>/dev/null)
 
-    if [ "$rc" -eq 124 ] && [ -z "$line" ]; then
+    if [ ! -f "$log" ]; then
+        status="CRASH"; tests=0; failures=0; errors=0; skipped=0
+        detail="no output: the module did not run"
+    elif [ "$rc" -eq 124 ] && [ -z "$line" ]; then
         status="TIMEOUT"; tests=0; failures=0; errors=0; skipped=0
         detail="killed after $(module_timeout "$mod")s"
     elif [ -z "$line" ]; then
