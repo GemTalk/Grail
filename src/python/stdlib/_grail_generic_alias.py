@@ -234,6 +234,45 @@ def union_repr(union):
     return ' | '.join(parts)
 
 
+class generic_alias_iterator:
+    """ga_iterator (Objects/genericaliasobject.c): iterating an alias yields it
+    once, unpacked -- PEP 646's ``*tuple[int, ...]''.
+
+    It pickles as ``iter(alias)'' (ga_iter_reduce), with the alias it was made
+    from.  That is what ends the chain a starred alias starts: ga_reduce pickles
+    one as ``next(iter(<the alias, not starred>))''.  Grail iterated through a
+    tuple_iterator over the starred copy instead, which pickled the starred copy
+    again, without end -- test_genericalias' test_pickle ran the gem out of
+    memory."""
+
+    __slots__ = ('_alias', '_starred')
+
+    def __init__(self, alias, starred):
+        self._alias = alias
+        self._starred = starred
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        starred = self._starred
+        if starred is None:
+            raise StopIteration
+        self._alias = self._starred = None
+        return starred
+
+    def __reduce__(self):
+        if self._alias is None:
+            return (iter, ((),))
+        return (iter, (self._alias,))
+
+
+def ga_iter(alias, starred):
+    """ga_iter: the iterator over alias, yielding starred -- its unpacked copy,
+    which PyGenericAlias >> __iter__ makes."""
+    return generic_alias_iterator(alias, starred)
+
+
 def ga_reduce(alias):
     """ga_reduce: rebuild through the type; a starred alias through next()."""
     import types
@@ -258,3 +297,7 @@ def union_reduce(union):
     union: the type subscripted with its members."""
     import operator, typing
     return (operator.getitem, (typing.Union, union.__args__))
+
+
+# CPython's is a builtin type: ``type(iter(list[int])).__module__ == 'builtins'``.
+generic_alias_iterator.__module__ = 'builtins'

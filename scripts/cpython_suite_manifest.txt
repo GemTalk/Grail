@@ -792,3 +792,18 @@ test.test_types
 #
 #   graphlib 17t OK/1S
 test.test_graphlib
+
+# --- Core language (added 2026-10-26): types.GenericAlias ---
+#
+# test_genericalias is CPython 3.14.4's, vendored verbatim, with mailbox (which
+# it lists among the generic classes) vendored verbatim too, and
+# unittest.case forwarding _AssertRaisesContext, which it imports.  Its
+# test_pickle then crashed the gem: a starred alias, ``*tuple[int]'', pickles
+# as next(iter(tuple[int])), and Grail iterated an alias through a
+# tuple_iterator over the starred copy, which pickled the starred copy again,
+# without end.  Iteration is now CPython's generic_alias_iterator, which
+# pickles as iter(alias).  Measured on Darwin arm64:
+#
+#   genericalias 36t 3F/4E   __class_getitem__ on _AssertRaisesContext,
+#                            subscription edge cases
+test.test_genericalias

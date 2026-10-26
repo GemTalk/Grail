@@ -327,12 +327,18 @@ PyGenericAlias >> __iter__ [
 	in a subscript or a star-annotation is ``(*tuple[int, ...],)[0]'', an alias
 	that differs only in ``__unpacked__'' and prints with a leading star."
 
-	| copy |
+	| copy iterator |
 	copy := PyGenericAlias
 		origin: (self @env0:dynamicInstVarAt: #'__origin__')
 		args: (self @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
 	copy @env0:dynamicInstVarAt: #'__unpacked__' put: true.
-	^ (tuple @env0:withAll: { copy }) @env1:__iter__
+	"CPython's generic_alias_iterator, which pickles as iter(self): a starred
+	alias pickles as next(iter(...)), and the tuple_iterator this used to
+	answer pickled the starred copy again, without end."
+	iterator := PyGenericAlias ___helperCall___: #ga_iter with: { self. copy }.
+	iterator == #'___noHelper___' ifTrue: [
+		^ (tuple @env0:withAll: { copy }) @env1:__iter__].
+	^ iterator
 
 ]
 
