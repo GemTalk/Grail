@@ -239,6 +239,101 @@ def match_fn(x):
 r['ident_call'] = match_fn(3)
 
 
+# --- the subject: a walrus, a starred element, an ellipsis -------------------
+
+def walrus_subject():
+    match w := 1, 2:
+        case (1, 2):
+            return ('tuple', w)
+    return 'unreachable'
+
+
+def bare_walrus_subject():
+    match (w := 5):
+        case 5:
+            return w
+    return 'unreachable'
+
+
+def starred_subject(rest):
+    match *rest, 3:
+        case [a, b, 3]:
+            return [a, b]
+    return 'other'
+
+
+def ellipsis_subject():
+    match ...:
+        case _:
+            return 'ellipsis'
+
+
+r['walrus_subject'] = walrus_subject()
+r['bare_walrus_subject'] = bare_walrus_subject()
+r['starred_subject'] = starred_subject([1, 2])
+r['ellipsis_subject'] = ellipsis_subject()
+
+# A lone starred subject is not a tuple display, so CPython rejects it at
+# compile time rather than matching a one-element tuple.
+try:
+    compile('match *x:\n    case _: pass\n', '<s>', 'exec')
+    r['lone_starred_subject'] = 'compiled'
+except SyntaxError:
+    r['lone_starred_subject'] = 'SyntaxError'
+
+
+# --- builtins that match themselves ------------------------------------------
+
+class MyInt(int):
+    pass
+
+
+def self_matching(v):
+    match v:
+        case bool(b):
+            return ('bool', b)
+        case int(i):
+            return ('int', i)
+        case str(s):
+            return ('str', s)
+        case _:
+            return 'other'
+
+
+# bool, int, str, ... take ONE positional sub-pattern that binds the subject
+# itself, and a subclass inherits that.
+r['self_matching'] = [self_matching(v) for v in (True, 7, MyInt(3), 'x', 2.5)]
+
+
+def two_self_args(v):
+    match v:
+        case int(a, b):
+            return 'matched'
+    return 'other'
+
+
+try:
+    two_self_args(1)
+    r['self_matching_takes_one'] = 'no error'
+except TypeError:
+    r['self_matching_takes_one'] = 'TypeError'
+
+
+# --- **rest copies through the mapping protocol ------------------------------
+
+import collections
+
+
+def rest_of(v):
+    match v:
+        case {2: 3, **z}:
+            return sorted(z.items())
+    return 'other'
+
+
+r['rest_from_userdict'] = rest_of(collections.UserDict({1: 2, 2: 3, 4: 5}))
+
+
 EXPECTED = {
     'kinds': "['literal-zero', 'or', 'guarded-str:abcd', 'wildcard', "
              "'pair:7,8', 'star:1,[2, 3]', \"map:9,{'z': 1}\", "
@@ -262,6 +357,15 @@ EXPECTED = {
     'ident_tuple_target': '7',
     'ident_case': '11',
     'ident_call': '6',
+    'walrus_subject': "('tuple', 1)",
+    'bare_walrus_subject': '5',
+    'starred_subject': '[1, 2]',
+    'ellipsis_subject': "'ellipsis'",
+    'lone_starred_subject': "'SyntaxError'",
+    'self_matching': "[('bool', True), ('int', 7), ('int', 3), "
+                     "('str', 'x'), 'other']",
+    'self_matching_takes_one': "'TypeError'",
+    'rest_from_userdict': '[(1, 2), (4, 5)]',
 }
 
 

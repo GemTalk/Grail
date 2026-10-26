@@ -75,6 +75,16 @@ MatchStatementTestCase >> testAListOrTupleIsASequencePattern [
 
 ]
 
+{ #category : 'Grail-Tests - The subject' }
+MatchStatementTestCase >> testALoneStarredSubjectIsASyntaxError [
+	"``match *x:'' has no comma, so it is not a tuple display: CPython's
+	subject_expr rejects it at compile time rather than matching a
+	one-element tuple."
+
+	self assertMatchesCPythonAt: 'lone_starred_subject'.
+
+]
+
 { #category : 'Grail-Tests - Sequence gate' }
 MatchStatementTestCase >> testAMappingOrSetIsNotASequencePattern [
 	"dict answers both __len__ and __getitem__, so a duck-typed gate let
@@ -83,6 +93,15 @@ MatchStatementTestCase >> testAMappingOrSetIsNotASequencePattern [
 
 	self assertMatchesCPythonAt: 'dict_is_not_a_sequence'.
 	self assertMatchesCPythonAt: 'set_is_not_a_sequence'.
+
+]
+
+{ #category : 'Grail-Tests - The subject' }
+MatchStatementTestCase >> testAnEllipsisSubjectOpensAMatchStatement [
+	"``match ...:'' is a statement, so the soft-keyword lookahead has to read
+	an ellipsis after ``match'' as the start of a subject."
+
+	self assertMatchesCPythonAt: 'ellipsis_subject'.
 
 ]
 
@@ -97,6 +116,33 @@ MatchStatementTestCase >> testAPositionalPatternWithoutMatchArgsIsATypeError [
 
 ]
 
+{ #category : 'Grail-Tests - Pattern kinds' }
+MatchStatementTestCase >> testASelfMatchingBuiltinBindsTheSubjectItself [
+	"``case int(i):'' binds the subject, not an attribute.  bool, int, str and
+	the other builtins CPython flags _Py_TPFLAGS_MATCH_SELF take one
+	positional sub-pattern without any __match_args__, and a subclass
+	inherits that."
+
+	self assertMatchesCPythonAt: 'self_matching'.
+
+]
+
+{ #category : 'Grail-Tests - Pattern kinds' }
+MatchStatementTestCase >> testASelfMatchingBuiltinTakesOnlyOnePositionalSubPattern [
+	"``case int(a, b):'' is a TypeError at match time, not a quiet non-match."
+
+	self assertMatchesCPythonAt: 'self_matching_takes_one'.
+
+]
+
+{ #category : 'Grail-Tests - The subject' }
+MatchStatementTestCase >> testAStarredElementMakesTheSubjectATuple [
+	"``match *rest, 3:'' unpacks rest into the subject tuple."
+
+	self assertMatchesCPythonAt: 'starred_subject'.
+
+]
+
 { #category : 'Grail-Tests - Sequence gate' }
 MatchStatementTestCase >> testAStringIsNotASequencePattern [
 	"The exclusion PEP 634 makes explicit.  Without it ``case [a, b]:''
@@ -108,12 +154,33 @@ MatchStatementTestCase >> testAStringIsNotASequencePattern [
 
 ]
 
+{ #category : 'Grail-Tests - The subject' }
+MatchStatementTestCase >> testAWalrusSubjectBindsItsName [
+	"The subject's elements are named expressions, so ``match w := 1, 2:''
+	binds w to the first element and ``match (w := 5):'' to the whole
+	subject."
+
+	self assertMatchesCPythonAt: 'walrus_subject'.
+	self assertMatchesCPythonAt: 'bare_walrus_subject'.
+
+]
+
 { #category : 'Grail-Tests - Pattern kinds' }
 MatchStatementTestCase >> testClassPatternsResolvePositionalsThroughMatchArgs [
 	"``Point(0, 0)'' reads __match_args__ to turn positions into attribute
 	names; ``Point(x=0, y=yy)'' names them directly."
 
 	self assertMatchesCPythonAt: 'class_patterns'.
+
+]
+
+{ #category : 'Grail-Tests - Pattern kinds' }
+MatchStatementTestCase >> testDoubleStarRestCopiesTheSubjectThroughTheMappingProtocol [
+	"``**z'' copies the subject with update and then deletes the matched keys,
+	as CPython's COPY_DICT_WITHOUT_KEYS does -- so a UserDict, a Mapping that
+	is not a dict, still yields its remaining items."
+
+	self assertMatchesCPythonAt: 'rest_from_userdict'.
 
 ]
 
