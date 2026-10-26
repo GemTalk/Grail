@@ -153,13 +153,18 @@ module class >> ___forgetSessionGlobalsOf___: aName [
 	the new definitions are not hidden behind the old session's changes."
 
 	| reg doomed |
-	reg := SessionTemps current at: #'GrailSessionModuleGlobals' otherwise: nil.
-	reg == nil ifTrue: [^ self].
-	doomed := OrderedCollection new.
-	reg keysDo: [:m |
-		((m at: #'__name__' otherwise: nil) ifNotNil: [:n | n asString = aName asString])
-			== true ifTrue: [doomed add: m]].
-	doomed do: [:m | reg removeKey: m ifAbsent: []]
+	"...and its DELETIONS (module >> ___markGlobalDeleted___:).  A body that runs
+	again re-creates what it defines, as CPython's reload re-executes the body
+	over the namespace; a tombstone left from before would keep hiding a def
+	the new body no longer deletes."
+	#(#'GrailSessionModuleGlobals' #'GrailDeletedGlobals') do: [:key |
+		reg := SessionTemps current at: key otherwise: nil.
+		reg == nil ifFalse: [
+			doomed := OrderedCollection new.
+			reg keysDo: [:m |
+				((m at: #'__name__' otherwise: nil) ifNotNil: [:n | n asString = aName asString])
+					== true ifTrue: [doomed add: m]].
+			doomed do: [:m | reg removeKey: m ifAbsent: []]]]
 
 ]
 

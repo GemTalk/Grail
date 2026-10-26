@@ -28,6 +28,66 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Code Generation' }
+DeleteAst >> ___collectModuleScopeDefsNamed___: aSymbol in: aValue into: aCollection [
+	"Every def of aSymbol at MODULE scope beneath aValue -- top level, or inside
+	an if / try / with / loop -- into aCollection.  A def's own body, a class
+	body and a lambda are other scopes and are not entered.  Walks instVars,
+	skipping the parent back-pointer, as ___nameNodesIn___:anySatisfy: does."
+
+	(aValue isKindOf: FunctionDefAst) ifTrue: [
+		aValue name asSymbol == aSymbol ifTrue: [aCollection add: aValue].
+		^ self].
+	((aValue isKindOf: ClassDefAst) or: [aValue isKindOf: LambdaAst]) ifTrue: [^ self].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		2 to: aValue class instSize do: [:i |
+			self ___collectModuleScopeDefsNamed___: aSymbol in: (aValue instVarAt: i)
+				into: aCollection].
+		^ self].
+	((aValue isKindOf: SequenceableCollection)
+		and: [(aValue isKindOf: CharacterCollection) not]) ifTrue: [
+			aValue do: [:each |
+				self ___collectModuleScopeDefsNamed___: aSymbol in: each into: aCollection]]
+
+]
+
+{ #category : 'Grail-Code Generation' }
+DeleteAst >> ___deletesOwnTopLevelDef___: aNameAst [
+	"Does this module-scope ``del name'' delete the module's OWN top-level def,
+	so the emit should unfile it (module >> ___deleteOwnDef___:) rather than only
+	remove a slot?
+
+	A top-level def is a METHOD on the module's generated class and emits
+	nothing when its statement runs, so the slot removal every other delete
+	does found nothing to remove: ``def f(): ...; f(); del f'' left f in
+	globals(), dir() and vars(), and still callable -- pickletools'
+	``del assure_pickle_consistency'' is the one test__all__ caught.
+
+	Only where unfiling is exactly CPython's result:
+	  * the statement is in the module BODY, not in a function or class.  A
+	    ``global f; del f'' in a function runs whenever it is called, and for a
+	    deployed module that would change a class every session shares; it
+	    keeps the slot removal.
+	  * the body defines the name with exactly ONE def, on an earlier line.
+	    The class holds one method per name whatever the body says, so with
+	    two defs, or a def after the del, the method is also a LATER binding,
+	    and unfiling it would delete that too."
+
+	| node module sym defs |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst)
+			or: [node isKindOf: ClassDefAst]]) ifTrue: [^ false].
+		(node isKindOf: ModuleAst) ifTrue: [module := node].
+		node := node parent].
+	module isNil ifTrue: [^ false].
+	sym := aNameAst id asSymbol.
+	defs := OrderedCollection new.
+	self ___collectModuleScopeDefsNamed___: sym in: module body into: defs.
+	^ defs size = 1 and: [(defs first line ifNil: [0]) < (self line ifNil: [0])]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 DeleteAst >> ___emitIRStatementOn___: aBuilder [
 	"printSmalltalkOn:'s shapes, one statement per target:
@@ -79,10 +139,18 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 				only nils a temp -- a later read then raises NameError rather
 				than UnboundLocalError, and every other function sees it gone."
 				(self isModuleScopeTarget: t)
-					ifTrue: [aBuilder add: (aBuilder
-						send: #'removeDynamicInstVar:'
-						to: (self ___emitIRModuleReceiverOn___: aBuilder)
-						with: { aBuilder obj: t id asSymbol } env: 0)]
+					ifTrue: [
+						"The module's own top-level def is unfiled, not merely
+						unslotted -- see ___deletesOwnTopLevelDef___:."
+						(self ___deletesOwnTopLevelDef___: t)
+							ifTrue: [aBuilder add: (aBuilder
+								send: #'___deleteOwnDef___:'
+								to: (self ___emitIRModuleReceiverOn___: aBuilder)
+								with: { aBuilder obj: t id asSymbol } env: 1)]
+							ifFalse: [aBuilder add: (aBuilder
+								send: #'removeDynamicInstVar:'
+								to: (self ___emitIRModuleReceiverOn___: aBuilder)
+								with: { aBuilder obj: t id asSymbol } env: 0)]]
 					ifFalse: [
 						| leaf |
 						leaf := aBuilder leafFor: t id asSymbol.
@@ -396,7 +464,9 @@ DeleteAst >> printSmalltalkOn: aStream [
 						and raises Python's NameError on miss — matching
 						CPython's module-scope semantics for ``del x''."
 						aStream nextPutAll: self ___moduleStoreReceiverExpr___;
-							nextPutAll: ' @env0:removeDynamicInstVar: #''';
+							nextPutAll: ((self ___deletesOwnTopLevelDef___: target)
+								ifTrue: [' @env1:___deleteOwnDef___: #''']
+								ifFalse: [' @env0:removeDynamicInstVar: #''']);
 							nextPutAll: target id;
 							nextPutAll: '''.'.
 					] ifFalse: [

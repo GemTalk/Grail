@@ -236,6 +236,33 @@ module >> ___deletedGlobals___ [
 ]
 
 { #category : 'Grail-Attribute Access' }
+module >> ___deleteOwnDef___: aSym [
+	"``del name'' in this module's own body, for the one top-level def the body
+	gives that name (DeleteAst >> ___deletesOwnTopLevelDef___:).  The def is a
+	METHOD of the module's generated class and the def statement stored
+	nothing, so the slot removal every other delete does found nothing to
+	remove: the name stayed in globals(), dir() and vars().
+
+	TOMBSTONED, like ``del m.x'' (___markGlobalDeleted___:), so every read
+	through ___globalAt___:otherwise: and every enumeration treats the name as
+	gone.  NOT unfiled: a function handle is a BoundMethod holding the module
+	and the SELECTOR, so a handle the body took before the del -- typing's
+	``copyreg.pickle(ParamSpecArgs, _pickle_psargs)'' -- would stop working,
+	where CPython's function object outlives its name.  The same limit leaves
+	one divergence: a compiled bare CALL of the deleted name still reaches the
+	method, because it is the same send a handle makes.
+
+	The tombstone is session-local, and a DEPLOYED module runs its body once,
+	at deploy; so the deletion is also recorded, committed, for every session
+	that binds the module (importlib >> ___recordBodyDeletedDef___:of:)."
+
+	self @env0:removeDynamicInstVar: aSym.
+	self ___markGlobalDeleted___: aSym.
+	importlib @env0:___recordBodyDeletedDef___: aSym of: self
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 module >> ___functionHandleFor___: aSym [
 	"The BoundMethod an attribute read of the module function aSym answers --
 	the ONE place both resolution chains (object >> ___pyAttrLoad___: for
@@ -425,7 +452,7 @@ module >> ___globalNames___ [
 	put ``update'', ``__repr__'' and the rest into runpy's run_path globals."
 	self ___grailHasNoOwnDefs___ ifTrue: [^ names].
 	(self @env0:class @env0:selectorsForEnvironment: 1) @env0:do: [:sel |
-		| s index skip |
+		| s skip |
 		s := sel @env0:asString.
 		"THE SAME CATEGORY RULE AS __dir__, which EXCLUDES the two artifact
 		categories rather than REQUIRING 'Grail-Methods'.
@@ -445,8 +472,10 @@ module >> ___globalNames___ [
 
 		Nothing changes for a module written in PYTHON: its top-level defs all
 		compile into 'Grail-Methods', which neither rule excludes."
+		"The tombstone holds the PYTHON name, so the test uses it: a one-argument
+		def is ``f:'' and its forwarder ``_f:kw:'', and neither IS #f."
 		skip := (self ___isGrailInternalSelector___: s)
-			@env0:or: [(self ___isDeletedGlobal___: sel)
+			@env0:or: [(self ___isDeletedGlobal___: (self ___pythonNameOfSelector___: sel) @env0:asSymbol)
 			@env0:or: [self ___isAbsentAccessor___: sel]].
 		skip ifFalse: [
 			| cat |
@@ -461,19 +490,10 @@ module >> ___globalNames___ [
 			(sel == #'__dir__' and: [cat @env0:~= #'Grail-Methods'])
 				ifTrue: [skip := true]].
 		skip ifFalse: [
-			index := s @env0:indexOf: $:.
-			(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
-			"A varargs def / forwarder compiles to ``_<name>:kw:''; its base
-			carries a leading underscore that is NOT part of the Python name
-			(``abs'' -> forwarder ``_abs:kw:'').  Strip one leading underscore
-			for :kw: selectors so globals()/__dict__ reads the real name and not
-			a stray ``_abs'' (test_operator's test___all__).  A genuine ``_foo''
-			def forwards as ``__foo:kw:'' -> base ``__foo'' -> ``_foo'', so the
-			real name is preserved."
-			((sel @env0:asString @env0:endsWith: ':kw:')
-				and: [(s @env0:size @env0:> 1) and: [(s @env0:at: 1) @env0:== $_]])
-				ifTrue: [s := s @env0:copyFrom: 2 to: s @env0:size].
-			add @env0:value: s]].
+			"A varargs def / forwarder compiles to ``_<name>:kw:'', whose leading
+			underscore is not part of the Python name (test_operator's
+			test___all__) -- ___pythonNameOfSelector___: has the rule."
+			add @env0:value: (self ___pythonNameOfSelector___: sel)]].
 	^ names
 
 ]
@@ -1079,6 +1099,25 @@ module >> ___pyMetaclass___ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+module >> ___pythonNameOfSelector___: aSelector [
+	"The Python name a module-class selector stands for: up to its first colon,
+	and without the leading underscore a varargs def's ``_<name>:kw:''
+	forwarder adds (``_abs:kw:'' is abs; a genuine ``_foo'' forwards as
+	``__foo:kw:'' and stays _foo).  The one rule ___globalNames___ and
+	__dir__ both read, to list a def and to test its tombstone."
+
+	| s index |
+	s := aSelector @env0:asString.
+	index := s @env0:indexOf: $:.
+	(index == 0) ifFalse: [s := s @env0:copyFrom: 1 to: (index @env0:- 1)].
+	((aSelector @env0:asString @env0:endsWith: ':kw:')
+		and: [(s @env0:size @env0:> 1) and: [(s @env0:at: 1) @env0:== $_]])
+		ifTrue: [s := s @env0:copyFrom: 2 to: s @env0:size].
+	^ s
+
+]
+
 { #category : 'Grail-Error Messages' }
 module >> ___pyTypeNameForError___ [
 	"``type(m).__name__'' -- ``module'', or the ModuleType subclass it was given.
@@ -1278,7 +1317,7 @@ module >> __dir__ [
 		| s index skip |
 		s := sel @env0:asString.
 		skip := (self ___isGrailInternalSelector___: s)
-			@env0:or: [(self ___isDeletedGlobal___: sel)
+			@env0:or: [(self ___isDeletedGlobal___: (self ___pythonNameOfSelector___: sel) @env0:asSymbol)
 			@env0:or: [self ___isAbsentAccessor___: sel]].
 		"The module BODY is compiled as an env-1 ``initialize'' method in
 		category 'Grail-Module Body' (importlib class >>
