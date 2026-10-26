@@ -3256,21 +3256,36 @@ Enum class >> ___grailKeepPreviousMember: aMember named: nameStr in: previousByN
 	Color.GREEN'') and hashed by it, so a new object for an old member strands
 	every stored one.  When the previous build had a member of this name and
 	class, it takes the state this build gave aMember and is answered in its
-	place.  A byte-format member (a StrEnum's) cannot take another's state this
-	way and stays the new one, as does any member the transfer fails for."
+	place: its named, indexed and dynamic instance variables.
 
-	| old names |
+	A byte-format member's indexed part is its bytes, not object references: a
+	``str'' mixin's (``class Mode(str, Enum)'', a Unicode32 subclass) or a
+	``bytes'' or ``bytearray'' mixin's (a ByteArray subclass).  It takes the new
+	member's size and contents through #size: and
+	#replaceFrom:to:with:startingAt:, which work in the class's own units
+	(characters, bytes) where #_basicSize counts bytes.  Both are the same class,
+	so they have the same storage.  StrEnum's own members are AbstractPyStr,
+	pointer-format.  Any other format, or a member the transfer fails for, stays
+	the new one."
+
+	| old names cls |
 	previousByName @env0:isNil ifTrue: [^ aMember].
 	old := previousByName @env0:at: nameStr ifAbsent: [nil].
 	(old @env0:isNil or: [old @env0:== aMember]) ifTrue: [^ aMember].
-	((old @env0:class @env0:== aMember @env0:class) and: [aMember @env0:class @env0:isPointers])
+	cls := aMember @env0:class.
+	((old @env0:class @env0:== cls) and: [cls @env0:isPointers or: [cls @env0:isBytes]])
 		ifFalse: [^ aMember].
-	^ [1 @env0:to: aMember @env0:class @env0:instSize do: [:i |
+	^ [1 @env0:to: cls @env0:instSize do: [:i |
 			old @env0:instVarAt: i put: (aMember @env0:instVarAt: i)].
-		aMember @env0:class @env0:isIndexable ifTrue: [
-			old @env0:_basicSize: aMember @env0:_basicSize.
-			1 @env0:to: aMember @env0:_basicSize do: [:i |
-				old @env0:_basicAt: i put: (aMember @env0:_basicAt: i)]].
+		cls @env0:isPointers
+			ifTrue: [
+				cls @env0:isIndexable ifTrue: [
+					old @env0:_basicSize: aMember @env0:_basicSize.
+					1 @env0:to: aMember @env0:_basicSize do: [:i |
+						old @env0:_basicAt: i put: (aMember @env0:_basicAt: i)]]]
+			ifFalse: [
+				old @env0:size: aMember @env0:size.
+				old @env0:replaceFrom: 1 to: aMember @env0:size with: aMember startingAt: 1].
 		names := aMember @env0:dynamicInstanceVariables.
 		old @env0:dynamicInstanceVariables @env0:do: [:n |
 			(names @env0:includes: n) ifFalse: [old @env0:removeDynamicInstVar: n]].
