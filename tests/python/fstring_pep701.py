@@ -30,6 +30,7 @@ D = {'k': 'v', '}': 'brace'}
 W = 6
 A = 10
 B = 'hi'
+Y = 20
 
 
 def check(name, fn, expected):
@@ -64,6 +65,45 @@ check('escape_both_sides', lambda: f'\t{'\n'.join(CMD)}\t', '\ta\nb\t')
 check('nested_once', lambda: f'{f'{1 + 1}'}', '2')
 check('nested_twice', lambda: f'{f'{f'{1 + 1}'}'}', '2')
 check('nested_with_text', lambda: f'a{f'b{1 + 1}c'}d', 'ab2cd')
+
+
+# ------------------------------- PEP 701: triple-quoted literals in the field
+
+# A nested literal opened with three quotes closes only on three, so its body
+# may hold the quote character alone.  Pairing quotes one at a time left a
+# string open here that swallowed the rest of the source -- test_fstring's
+# test_expressions_with_triple_quoted_strings could not even be imported.
+check('triple_quoted_in_field', lambda: f"{'''x'''}", 'x')
+check('triple_quoted_holding_its_quote', lambda: f"{'''eric's'''}", "eric's")
+check('concat_around_triple_quoted', lambda: f'{"x" """eric"s""" "y"}',
+      'xeric"sy')
+check('triple_quoted_then_plain', lambda: f'{"""eric"s""" "y"}', 'eric"sy')
+check('raw_triple_quoted_in_field',
+      lambda: f'{r"""x""" """eric"s""" """y"""}', 'xeric"sy')
+check('outer_quote_tripled_in_field', lambda: f'{'''eric's'''}', "eric's")
+
+
+# ------------------------------------ fields nested inside a format spec
+
+# A field inside a spec is a field like any other.  Grail split the spec with a
+# scan of its own that matched braces blindly and parsed the text bare, so a
+# leading space was an INDENT, a quoted brace ended the field, and a nested
+# field's own conversion or spec was read as part of its expression.
+check('spec_field_leading_space', lambda: f'{42:{ 5}}', '   42')
+check('spec_field_quoted_close_brace', lambda: f'{3:{"}"}>10}', '}}}}}}}}}3')
+check('spec_field_quoted_open_brace', lambda: f'{2:{"{"}>10}', '{{{{{{{{{2')
+check('spec_field_with_its_own_spec', lambda: f'{A:{W:1d}}', '    10')
+check('spec_field_with_conversion', lambda: f'{A:{W!r}}', '    10')
+# The nested field's debug form makes the spec 'Y=20': fill Y, align =, width 20.
+check('spec_field_debug_form', lambda: f'{2:{Y=}}', 'Y' * 19 + '2')
+check('debug_form_spec_with_nested_spec', lambda: f"{1 + 1 =  :{1 + 1:1d}f}",
+      '1 + 1 =  2.000000')
+
+# Whitespace after a conversion character is legal; the expression stops at
+# the ``!''.
+check('space_after_conversion', lambda: f"{3!s  }", '3')
+check('space_after_conversion_before_spec', lambda: f'{1.25!s  :10.10}',
+      '1.25      ')
 
 
 # ------------------------------------------------- must not have changed
