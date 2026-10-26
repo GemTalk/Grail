@@ -364,10 +364,47 @@ static PyObject *buf_values(PyObject *self, PyObject *noargs) {
     BufObject *b = (BufObject *)self;
     return Py_BuildValue("(iii)", b->data[0], b->data[1], b->data[2]);
 }
+/* buf.inline(seq=...): a keyword argument read with the inline list and
+   tuple macros, as numpy's ndarray.view(dtype=[...]) reads its dtype list. */
+static PyObject *buf_inline(PyObject *self, PyObject *const *args, Py_ssize_t nargs,
+                            PyObject *kwnames) {
+    (void)self;
+    PyObject *seq = NULL;
+    Py_ssize_t nkw = kwnames ? PyTuple_GET_SIZE(kwnames) : 0;
+    for (Py_ssize_t i = 0; i < nkw; i++)
+        if (PyUnicode_CompareWithASCIIString(PyTuple_GET_ITEM(kwnames, i), "seq") == 0)
+            seq = args[nargs + i];
+    if (seq == NULL) Py_RETURN_NONE;
+    PyObject *items = PyList_New(0);
+    if (PyList_Check(seq)) {
+        for (Py_ssize_t i = 0; i < PyList_GET_SIZE(seq); i++) {
+            PyObject *it = PyList_GET_ITEM(seq, i);
+            PyList_Append(items, PyTuple_Check(it) ? PyLong_FromSsize_t(PyTuple_GET_SIZE(it)) : it);
+        }
+    } else if (PyTuple_Check(seq)) {
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(seq); i++)
+            PyList_Append(items, PyTuple_GET_ITEM(seq, i));
+    }
+    return items;
+}
 static PyMethodDef buf_methods[] = {
     {"values", buf_values, METH_NOARGS, "the three ints, read in C"},
+    {"inline", (PyCFunction)(void (*)(void))buf_inline, METH_FASTCALL | METH_KEYWORDS,
+     "a keyword argument read inline"},
     {NULL, NULL, 0, NULL}
 };
+/* sq_concat beside an nb_add that takes anything, as numpy's ndarray has
+   both: operator.concat answers sq_concat, and refuses a list + Buf that
+   + would let Buf's nb_add answer. */
+static PyObject *buf_concat(PyObject *self, PyObject *other) {
+    (void)self;
+    return Py_BuildValue("(sO)", "buf_concat", other);
+}
+static PyObject *buf_add(PyObject *a, PyObject *b) {
+    return Py_BuildValue("(sOO)", "buf_add", a, b);
+}
+static PySequenceMethods buf_as_sequence = { .sq_concat = buf_concat };
+static PyNumberMethods buf_as_number = { .nb_add = buf_add };
 static PyTypeObject Buf_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name = "_grail_demo.Buf",
@@ -375,6 +412,8 @@ static PyTypeObject Buf_Type = {
     .tp_flags = Py_TPFLAGS_DEFAULT,
     .tp_new = buf_new,
     .tp_as_buffer = &buf_as_buffer,
+    .tp_as_sequence = &buf_as_sequence,
+    .tp_as_number = &buf_as_number,
     .tp_methods = buf_methods,
 };
 
@@ -886,6 +925,41 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         Py_DECREF(o);
         return r;
     }
+    /* A tuple value read out of a dict with the inline macros, as numpy reads
+       an __array_interface__'s "shape"; and whether two lookups answer the
+       same object, as they do in CPython. */
+    if (IS("dict_tuple_inline")) {
+        PyObject *v = PyDict_GetItemString(a, "k");
+        PyObject *w = NULL;
+        if (v == NULL || !PyTuple_Check(v)) Py_RETURN_NONE;
+        if (PyDict_GetItemStringRef(a, "k", &w) < 0) return NULL;
+        PyObject *items = PyList_New(0);
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(v); i++)
+            PyList_Append(items, PyTuple_GET_ITEM(v, i));
+        PyObject *r = Py_BuildValue("(nNO)", PyTuple_GET_SIZE(v), items, v == w ? Py_True : Py_False);
+        Py_XDECREF(w);
+        return r;
+    }
+    /* PyTuple_GetSlice read with the inline macros, as numpy's dtype parser
+       reads a field tuple sliced past its name. */
+    if (IS("tuple_slice_inline")) {
+        static const Py_ssize_t bounds[][2] = { {1, 3}, {0, 10}, {-5, 2}, {2, 1} };
+        PyObject *out = PyList_New(0);
+        for (size_t k = 0; k < sizeof(bounds) / sizeof(bounds[0]); k++) {
+            PyObject *s = PyTuple_GetSlice(a, bounds[k][0], bounds[k][1]);
+            if (s == NULL) { Py_DECREF(out); return NULL; }
+            PyObject *items = PyList_New(0);
+            for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(s); i++)
+                PyList_Append(items, PyTuple_GET_ITEM(s, i));
+            PyObject *pair = Py_BuildValue("(nN)", PyTuple_GET_SIZE(s), items);
+            PyList_Append(out, pair);
+            Py_DECREF(pair);
+            Py_DECREF(s);
+        }
+        return out;
+    }
+    /* The ByteSub itself, for Python's own len() and bool(). */
+    if (IS("bytesub_obj")) return PyObject_CallOneArg((PyObject *)&ByteSub_Type, a);
     if (IS("unique_temporary")) return PyLong_FromLong(PyUnstable_Object_IsUniqueReferencedTemporary(a));
     /* Py_BuildValue's small-integer and character units: B and H were
        unsupported, and c built a str where CPython builds a bytes. */
@@ -1032,6 +1106,37 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         }
         Py_DECREF(r);
         return out;
+    }
+    /* Build N one-item tuples and answer the last, as numpy builds a few
+       dozen on every ufunc call.  The shim used to stop recording new tuples
+       once it had made 131072, and the next one could not be filled. */
+    if (IS("many_tuples")) {
+        Py_ssize_t n = PyLong_AsSsize_t(a);
+        if (n == -1 && PyErr_Occurred()) return NULL;
+        PyObject *t = NULL;
+        for (Py_ssize_t i = 0; i < n; i++) {
+            Py_XDECREF(t);
+            t = PyTuple_New(1);
+            if (t == NULL) return NULL;
+            if (PyTuple_SetItem(t, 0, Py_NewRef(Py_None)) < 0) {
+                Py_DECREF(t);
+                return NULL;
+            }
+        }
+        if (t == NULL) Py_RETURN_NONE;
+        return t;
+    }
+    /* PyLong_AsLong and PyLong_AsSsize_t, which raise OverflowError for an
+       int that does not fit, as numpy's copyto relies on. */
+    if (IS("as_long")) {
+        long v = PyLong_AsLong(a);
+        if (v == -1 && PyErr_Occurred()) return NULL;
+        return PyLong_FromLong(v);
+    }
+    if (IS("as_ssize_t")) {
+        Py_ssize_t v = PyLong_AsSsize_t(a);
+        if (v == -1 && PyErr_Occurred()) return NULL;
+        return PyLong_FromSsize_t(v);
     }
     /* The exception types numpy raises from C under np.errstate. */
     if (IS("raise_fpe")) {

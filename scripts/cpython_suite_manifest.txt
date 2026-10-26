@@ -690,6 +690,23 @@ test.test_email.test_pickleable
 test.test_email.test_policy
 test.test_email.test_utils
 
+# --- Core language (added 2026-10-26): structural pattern matching ---
+#
+# test_patma is CPython 3.14.4's, vendored verbatim.  It could not be imported:
+# Grail parsed a match subject as a plain expression, so ``match w := 1,:''
+# was a SyntaxError and the whole module with it.  The subject is now
+# CPython's subject_expr (Grammar/python.gram): star_named_expressions with a
+# walrus allowed, a lone starred element rejected, and ``match ...:'' read as
+# a statement.  What its tests then found at match time is fixed too: bool,
+# int, str and the other _Py_TPFLAGS_MATCH_SELF builtins bind the subject for
+# one positional sub-pattern (match_class_attr, Python/ceval.c), and ``**rest''
+# copies the subject through the mapping protocol, so a UserDict works
+# (COPY_DICT_WITHOUT_KEYS).  Measured on Darwin arm64:
+#
+#   patma 328t 56F/10E   compile-time pattern checks (``SyntaxError not
+#                        raised''), capture bindings after a failed match
+test.test_patma
+
 # --- Core language (added 2026-10-26): f-strings ---
 #
 # test_fstring is CPython 3.14.4's, vendored verbatim.  It could not be

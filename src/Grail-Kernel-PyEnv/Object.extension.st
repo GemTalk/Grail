@@ -12421,6 +12421,26 @@ Object >> ___isRepeatCount___ [
 
 ]
 
+{ #category : 'Grail-Pattern Matching' }
+Object >> ___isSelfMatching___: aClass [
+
+	"Whether a class pattern on aClass matches its ONE positional
+	sub-pattern against the subject itself: ``case int(x):'' binds x to the
+	int.  CPython flags bool, bytearray, bytes, dict, float, frozenset, int,
+	list, set, str and tuple with _Py_TPFLAGS_MATCH_SELF, which subclasses
+	inherit; it applies only to a class without __match_args__
+	(match_class_attr, Python/ceval.c)."
+
+	| pythonBuiltins |
+
+	pythonBuiltins := builtins @env0:___instance___.
+	^ (#(#bool #bytearray #bytes #dict #float #frozenset #int #list #set #str #tuple)
+		@env0:detect: [:name |
+			(pythonBuiltins issubclass: aClass _: (pythonBuiltins ___pyAttrLoad___: name)) ___isTruthy___]
+		ifNone: [nil]) ~~ nil
+
+]
+
 { #category : 'Grail-Convenience Methods - Unary' }
 Object >> ___isTruthy___ [
 	"Convert any Python object to a Smalltalk Boolean for use in if/while conditions.
@@ -12529,6 +12549,12 @@ Object >> ___matchArgAt___: anIndex of: aClass [
 	args := [aClass ___pyAttrLoad___: #'__match_args__']
 		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
 	args == nil ifTrue: [
+		"A self-matching builtin takes ONE positional sub-pattern, which
+		matches the subject itself -- see ___isSelfMatching___:."
+		(self ___isSelfMatching___: aClass) ifTrue: [
+			anIndex @env0:= 0 ifTrue: [^ self].
+			TypeError ___signal___: (aClass @env1:__name__) @env0:asString
+				@env0:, '() accepts 1 positional sub-pattern'].
 		TypeError ___signal___: (aClass @env1:__name__) @env0:asString
 			@env0:, '() accepts 0 positional sub-patterns'].
 	n := args __len__.
@@ -12684,18 +12710,20 @@ Object >> ___matchLen___ [
 Object >> ___matchRestExcluding___: anArrayOfKeys [
 	"The ``**rest'' of a mapping pattern: a NEW dict holding every key the
 	pattern did not name.  A fresh dict, not a view -- CPython copies, so
-	mutating rest must not touch the subject."
+	mutating rest must not touch the subject.
+
+	CPython's COPY_DICT_WITHOUT_KEYS: copy the WHOLE subject into a new dict
+	through the mapping protocol, then delete the pattern's keys.  This walked
+	the subject's Smalltalk storage (keysDo:), which only a real dict has, so
+	``case {2: 3, **z}'' on a collections.UserDict -- any Mapping that is not a
+	dict -- died on an uncatchable MessageNotUnderstood (test_patma_240).
+	dict's update: reads a mapping through keys() and __getitem__."
 
 	| out |
 	out := dict ___new___.
-	"keysDo: is the raw walk over the stored keys -- the same one dict's
-	own __contains__ uses -- rather than iterating the dict_keys VIEW,
-	which is a Python-level object and does not answer the Smalltalk
-	iteration protocol."
-	self @env0:keysDo: [:k |
-		(anArrayOfKeys @env0:detect: [:each | (k ___cmpEq___: each) ___isTruthy___]
-			ifNone: [nil]) @env0:isNil
-				ifTrue: [out __setitem__: k _: (self __getitem__: k)]].
+	out update: self.
+	anArrayOfKeys @env0:do: [:each |
+		(out __contains__: each) ___isTruthy___ ifTrue: [out __delitem__: each]].
 	^ out
 
 ]
