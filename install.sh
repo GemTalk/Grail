@@ -359,5 +359,33 @@ if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ]; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Rebuild every other deployed module the install made stale, and commit it.
+# ---------------------------------------------------------------------------
+# An install makes every module deployed under the previous one stale
+# (docs/Persistent_Modules_and_Classes.md D7), and its next import rebuilds it
+# in place.  Left to the application, that rebuild dirties the first session to
+# import it -- gemdb.transaction() then refuses to begin -- and repeats in every
+# session that does not commit.  So it happens here, once, in every namespace.
+# On a fresh stone there is nothing deployed and this does nothing.
+#
+# A WARNING on failure, like unicodedata's: the modules it could not rebuild
+# stay stale and rebuild on their next import, as they would have anyway.
+# GRAIL_NO_REDEPLOY=1 skips just this step (the upgrade test's control).
+if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ] && [ "${GRAIL_NO_REDEPLOY:-0}" != "1" ]; then
+    DEPLOY_T0=$SECONDS
+    if LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+         -S "$GRAIL_DIR/scripts/redeployModules.gs" < /dev/null \
+         | grep -E 'redeployModules: [0-9]+ rebuilt, [0-9]+ skipped, 0 failed'; then
+        printf 'TIMING | %-26s | %4ds\n' "redeploy-modules" "$((SECONDS - DEPLOY_T0))"
+    else
+        echo ""
+        echo "Warning: rebuilding the deployed modules failed for some of them."
+        echo "  Grail is installed; each of those rebuilds on its next import, and"
+        echo "  leaves that session with something to commit."
+        echo "  Re-run ./scripts/redeployModules.gs to see which, and why."
+    fi
+fi
+
 echo ""
 echo "Successful install of Grail!"
