@@ -991,61 +991,23 @@ PythonParser >> ___fstringPartToAst: assoc from: startTok [
 { #category : 'Grail-parsing - atoms' }
 PythonParser >> ___fstringSpecExprFor: spec at: locTok [
 	"Build an AST expression for a format spec containing {expr}
-	placeholders: literal runs stay constants, each placeholder becomes
-	str(expr) (parsed by a child parser, its declared names propagated),
-	all folded with +."
+	placeholders (``f'{x:{width}.{precision}}''').  The spec is read as an
+	f-string of its own, by a child parser over one synthetic FSTRING token,
+	so a nested field gets everything a field outside a spec gets: its
+	expression parsed as if parenthesized (``{ 1}''), quotes that may hold a
+	brace (``{3:{'}'}>10}''), its own conversion and spec (``{1 + 1:1d}''),
+	and the debug form (``{y=}'').  The scan this replaced matched braces
+	blindly and parsed the text bare, so test_fstring could not compile.
+	The child's declared names are propagated, as for any field."
 
-	| parts pos len ch runStart exprStart depth innerParser exprAst result piece |
-	parts := OrderedCollection new.
-	pos := 1.
-	len := spec size.
-	[pos <= len] whileTrue: [
-		ch := spec at: pos.
-		ch == ${
-			ifTrue: [
-				exprStart := pos + 1.
-				depth := 1.
-				pos := pos + 1.
-				[pos <= len and: [depth > 0]] whileTrue: [
-					ch := spec at: pos.
-					ch == ${ ifTrue: [depth := depth + 1].
-					ch == $} ifTrue: [depth := depth - 1].
-					depth > 0 ifTrue: [pos := pos + 1]].
-				innerParser := PythonParser basicNew
-					source: (spec copyFrom: exprStart to: pos - 1) asString.
-				innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
-				exprAst := innerParser parseExpression.
-				"Its positions are relative to the FIELD, not the module: the
-				child parse sees ``(expr)'' as a whole source, so every node in
-				it says line 1.  Real enough for codegen, which only reads the
-				tree -- but a position map records spans, and a line-1 span
-				nested inside a real one WINS the innermost-node contest and
-				blames line 1 of the file.  Mark the subtree so the map skips
-				it; the enclosing f-string node still carries a true span."
-				exprAst ifNotNil: [:e | e ___markFragmentPositions___].
-				innerParser ___variableStack___ do: [:innerScope |
-					innerScope do: [:varName | self declareVariable: varName]].
-				parts add: #expr ->
-					(self ___wrapFStringExpr: exprAst conversion: nil formatSpec: nil at: locTok).
-				pos := pos + 1]
-			ifFalse: [
-				runStart := pos.
-				[pos <= len and: [(spec at: pos) ~= ${]] whileTrue: [pos := pos + 1].
-				parts add: #literal -> (spec copyFrom: runStart to: pos - 1)]].
-	parts isEmpty ifTrue: [
-		^ ConstantAst new
-			value: '';
-			kind: nil;
-			from: locTok to: locTok ; yourself].
-	result := self ___fstringPartToAst: parts first from: locTok.
-	2 to: parts size do: [:i |
-		piece := self ___fstringPartToAst: (parts at: i) from: locTok.
-		result := BinOpAst new
-			left: result;
-			op: (AddAst new from: locTok to: locTok ; yourself);
-			right: piece;
-			from: locTok to: locTok ; yourself].
-	^ result
+	| innerParser specAst |
+	innerParser := PythonParser basicNew source: ''.
+	innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
+	specAst := innerParser ___parseFStringLiteralToken___:
+		(PythonToken type: #FSTRING value: spec line: locTok line position: locTok position).
+	innerParser ___variableStack___ do: [:innerScope |
+		innerScope do: [:varName | self declareVariable: varName]].
+	^ specAst
 
 ]
 
@@ -1314,6 +1276,17 @@ PythonParser >> ___isParenthesizedTuple___: aNode [
 	(i = 0 or: [((tokens at: i) isOp: '(') not]) ifTrue: [^ false].
 	close := self ___indexOfClose___: i.
 	^ close notNil and: [(tokens at: close) endPosition = aNode endPosition]
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___isTripleQuoteIn: aString at: anIndex [
+	"Is the quote at anIndex of aString the first of three identical ones?"
+
+	| quote |
+	quote := aString at: anIndex.
+	^ anIndex + 2 <= aString size
+		and: [(aString at: anIndex + 1) == quote and: [(aString at: anIndex + 2) == quote]]
 
 ]
 
@@ -1599,6 +1572,16 @@ PythonParser >> ___parseDictValue___ [
 		^ self ___syntaxError___: 'cannot use a starred expression in a dictionary value'
 			from: tok to: self ___endOfNextExpression___].
 	^ self parseExpression
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___parseFStringLiteralToken___: aToken [
+	"Parse aToken, and nothing else, as an f-string literal."
+
+	tokens := Array with: aToken.
+	position := 1.
+	^ self parseFStringLiteral
 
 ]
 
@@ -4184,7 +4167,7 @@ PythonParser >> parseFStringLiteral [
 				and tracking string-literal quotes so a right-brace
 				inside an embedded string literal doesn't end the
 				placeholder early."
-				| bracketDepth strQuote exprEnd |
+				| bracketDepth strQuote strTriple exprEnd exprStop |
 				pos := pos + 1.
 				exprStart := pos.
 				"CPython's invalid_fstring_replacement_field: a field whose
@@ -4200,6 +4183,7 @@ PythonParser >> parseFStringLiteral [
 							token: tok fieldAt: exprStart index: k]]] value.
 				bracketDepth := 0.
 				strQuote := nil.
+				exprStop := nil.
 				conversion := nil.
 				formatSpec := nil.
 				inSpec := false.
@@ -4218,7 +4202,15 @@ PythonParser >> parseFStringLiteral [
 								pos := pos + 1.
 							].
 						] ifFalse: [
-							ch == strQuote ifTrue: [strQuote := nil].
+							"A literal opened with three quotes closes only on three, so
+							its body may hold the quote alone: '''eric's''' (test_fstring)."
+							(ch == strQuote
+								and: [strTriple not or: [self ___isTripleQuoteIn: value at: pos]])
+									ifTrue: [
+										strTriple ifTrue: [
+											inSpec ifTrue: [specBuf nextPut: ch; nextPut: ch].
+											pos := pos + 2].
+										strQuote := nil].
 							inSpec ifTrue: [specBuf nextPut: ch].
 							pos := pos + 1.
 						].
@@ -4236,6 +4228,10 @@ PythonParser >> parseFStringLiteral [
 						it is expression text again."
 						((ch == $' or: [ch == $"]) and: [inSpec not or: [bracketDepth > 0]]) ifTrue: [
 							strQuote := ch.
+							strTriple := self ___isTripleQuoteIn: value at: pos.
+							strTriple ifTrue: [
+								inSpec ifTrue: [specBuf nextPut: ch; nextPut: ch].
+								pos := pos + 2].
 							inSpec ifTrue: [specBuf nextPut: ch].
 							pos := pos + 1.
 						] ifFalse: [
@@ -4281,11 +4277,13 @@ PythonParser >> parseFStringLiteral [
 											c2 := value at: pos + 1.
 											c2 == $r or: [c2 == $s or: [c2 == $a]]]]])
 										ifTrue: [
+											exprStop := pos - 1.
 											conversion := value at: pos + 1.
 											pos := pos + 2.
 									] ifFalse: [
 										"Format spec opener: ``:`` at depth 0."
 										(ch == $: and: [bracketDepth == 0]) ifTrue: [
+											exprStop ifNil: [exprStop := pos - 1].
 											inSpec := true.
 											pos := pos + 1.
 										] ifFalse: [
@@ -4300,16 +4298,12 @@ PythonParser >> parseFStringLiteral [
 				].
 				"After loop, pos is at the position past ``}``."
 				pos := exprEnd ifNil: [pos] ifNotNil: [exprEnd + 1].
+				"The expression stops where its conversion or spec starts, as
+				recorded when the scan met the ``!'' or ``:''.  Counting back from
+				the brace instead missed whitespace after a conversion, which is
+				legal: f'{3!s  }' read ``3!s'' as the expression (test_fstring)."
 				exprText := value copyFrom: exprStart to: (exprEnd ifNil: [pos - 1] ifNotNil: [
-					"Trim trailing conversion+spec text from the expression
-					if either was present.  Walk back through specBuf and the
-					conversion bytes from exprEnd."
-					| backCount |
-					backCount := specBuf contents size.
-					inSpec ifTrue: [backCount := backCount + 1].
-					conversion ifNotNil: [backCount := backCount + 2].
-					exprEnd - 1 - backCount
-				]).
+					exprStop ifNil: [exprEnd - 1]]).
 				formatSpec := inSpec ifTrue: [specBuf contents] ifFalse: [nil].
 				"Comments come out of the field's text before anything reads it:
 				the debug text and a t-string's expression are CPython's
