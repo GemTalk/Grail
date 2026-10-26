@@ -1444,18 +1444,25 @@ os >> _listdir: positional kw: kwargs [
 		^ OSError ___signal___: (self @env0:class ___listingFailedMessage: actualPath)].
 	result := list ___new___.
 	"The names arrive BARE from the primitive -- the public wrapper answered
-	full paths, and the basename stripping that undid them is gone with it."
+	full paths, and the basename stripping that undid them is gone with it.
+
+	They arrive as the RAW BYTES of the on-disk name, one byte per Character
+	(utf8Results: false), so they are decoded here as CPython decodes them:
+	a bytes path lists bytes, a str path lists str decoded from UTF-8 with
+	surrogateescape.  Answering the raw String as a str listed every
+	non-ASCII name as mojibake -- 'Gr\xfc' came back as 'Gr\xc3\xbc' -- which
+	no other os function could find (test_unicode_file_functions'
+	test_listdir)."
 	dirContents @env0:do: [:each |
-		| decoded |
-		decoded := each.
-		(each isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
-		(each isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].
-		(each isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
 		"CPython never reports the '.' / '..' entries; GsFile does.
 		Leaving them in sends naive recursive walkers (shutil.rmtree,
 		copytree) into 'dir/././…' infinite recursion."
-		((decoded @env0:= '.') @env0:or: [decoded @env0:= '..']) ifFalse: [
-			result append: decoded
+		((each @env0:= '.') @env0:or: [each @env0:= '..']) ifFalse: [
+			| raw |
+			raw := bytes @env0:withAll: each @env0:asByteArray.
+			result append: ((actualPath isKindOf: ByteArray)
+				ifTrue: [raw]
+				ifFalse: [raw decode: 'utf-8' _: 'surrogateescape'])
 		]
 	].
 	^ result
@@ -1842,12 +1849,15 @@ os >> fsdecode: filename [
 	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
 	input decodes; str input passes through.  CPython runs the argument
 	through fspath() first, so a PathLike is honoured and anything else --
-	None, an int -- is its TypeError rather than an echo."
+	None, an int -- is its TypeError rather than an echo.  The error handler
+	is surrogateescape, as CPython's: an undecodable byte becomes a lone
+	surrogate (PEP 383) rather than a UnicodeDecodeError, so a name listdir
+	answers always decodes."
 
 	| path |
 	path := self fspath: filename.
 	(path isKindOf: ByteArray)
-		ifTrue: [^ path decode: 'utf-8'].
+		ifTrue: [^ path decode: 'utf-8' _: 'surrogateescape'].
 	^ path
 
 ]
@@ -1857,13 +1867,15 @@ os >> fsencode: filename [
 	"``os.fsencode(filename)'' — inverse of fsdecode, and like it goes
 	through fspath() first.  The echo it used to give a non-path let
 	``ssl.SSLContext.set_ecdh_curve(None)'' hand OpenSSL a NULL name,
-	which is a SIGSEGV rather than CPython's TypeError."
+	which is a SIGSEGV rather than CPython's TypeError.  surrogateescape, as
+	fsdecode, so the two round-trip an undecodable name."
 
 	| path |
 	path := self fspath: filename.
-	(path isKindOf: CharacterCollection)
-		ifTrue: [^ path encode: 'utf-8'].
-	^ path
+	"fspath: answered str or bytes, and a str holding a lone surrogate is a
+	PyStrSurrogate, not a CharacterCollection -- so test for the bytes."
+	(path isKindOf: ByteArray) ifTrue: [^ path].
+	^ path encode: 'utf-8' _: 'surrogateescape'
 
 ]
 
