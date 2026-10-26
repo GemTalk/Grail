@@ -779,3 +779,17 @@ test.test_type_params
 #   types 129t 26F/21E/3S   ClassCreation corner cases, mappingproxy of a
 #                           non-dict mapping, types._GeneratorWrapper
 test.test_types
+
+# --- Core language (added 2026-10-26): cmath's inverse functions ---
+#
+# test_cmath is CPython 3.14.4's, vendored verbatim.  It could not be
+# imported: Grail's native cmath had no acos, acosh, asin, asinh, atan, atanh
+# or isclose, which the module lists at import.  They are now CPython's
+# Modules/cmathmodule.c, special-value tables included, ported to Python in
+# src/python/stdlib/_grail_cmath.py and answered by cmath >> __getattr__:.
+# Measured on Darwin arm64:
+#
+#   cmath 33t 3F/3E/1S   the functions that were ALREADY native and are not
+#                        ported yet: tanh's zero signs, log's base argument,
+#                        polar's infinities, specific values
+test.test_cmath
