@@ -36,7 +36,11 @@
 # lives outside it, so neither its path nor Grail's changes between the installs.
 #
 # Needs: $GEMSTONE (4.0.0.a5 or later) and $GEMSTONE_GLOBAL_DIR, from ./.setenv or
-# the environment. GRAIL_UPGRADE_EXTENT names another extent to start from (default
+# the environment. GRAIL_UPGRADE_RELOAD_ROWAN names an externals directory (a Rowan
+# masterV4 checkout as RowanV3, beside RowanClientServicesV3 and the rest) to reload
+# Rowan from into the live database, data and all, between installing n and m:
+# whether an existing database can get a newer Rowan without being recreated.
+# GRAIL_UPGRADE_EXTENT names another extent to start from (default
 # $GEMSTONE/bin/extent0.rowan3.dbf) -- one with a newer Rowan loaded, say. Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
 # grail_upgrade); touches no other stone. Work goes in GRAIL_UPGRADE_DIR (default
 # out/upgrade), removed at the end unless --keep or a case failed.
@@ -164,6 +168,16 @@ run_case() {            # run_case <case> -- 0 if every check passed
     # After the write: the app's import deployed its modules, and an upgrade must keep those too.
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
         | grep '^SNAPSHOT' > "$d/snapshot-n.txt"
+    if [ -n "${GRAIL_UPGRADE_RELOAD_ROWAN:-}" ]; then
+        # A newer Rowan into the live database, data and all, before Grail m.
+        log "reload Rowan from $GRAIL_UPGRADE_RELOAD_ROWAN"
+        (cd "$WORK/grail" && EXTERNALS_ST_BASE=$GRAIL_UPGRADE_RELOAD_ROWAN \
+            ROWAN_PROJECTS_HOME=${ROWAN_PROJECTS_HOME:-$GRAIL_UPGRADE_RELOAD_ROWAN} \
+            topaz -lq -S "$PROJECT_ROOT/tests/upgrade/reload_rowan.gs") < /dev/null > "$d/reload-rowan.log" 2>&1 \
+            && grep -q 'reload_rowan: reloaded' "$d/reload-rowan.log" || {
+            echo "upgrade: the Rowan reload failed; the end of $d/reload-rowan.log:"
+            tail -30 "$d/reload-rowan.log"; return 1; }
+    fi
     log "install m (the upgrade)"
     install_tree "$d/m" "$d/install-m.log" || return 1
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
