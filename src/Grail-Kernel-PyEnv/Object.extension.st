@@ -9242,7 +9242,14 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	``def mk(): return lambda: A'' in a class body, the lambda called after mk
 	returned, which is what a parameterised type alias in a class body does
 	with its lazily evaluated value.  Measured on 4.0.0.a5: the slot is the
-	ExecBlock, and its selfValue is the receiver."
+	ExecBlock, and its selfValue is the receiver.
+
+	...when the block records one.  A block NESTED in another -- the text arm
+	wraps a def body in a block for per-activation cells -- reaches self
+	through its outer context, and ExecBlock >> selfValue answers nil for it
+	(selfOffsetInVC is not past the named slots).  Such a frame is matched by
+	its class alone.  It cannot claim a stranger's cell: walking outward, the
+	first frame that is not one of Object's own is the block doing the read."
 
 	| probe st i cls blk slot |
 	BaseException @env0:___ensureStackCapture___.
@@ -9255,7 +9262,9 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	[i @env0:+ 2 @env0:<= st @env0:size] @env0:whileTrue: [
 		slot := st @env0:at: i @env0:+ 2.
 		(slot == self or: [(slot @env0:isKindOf: ExecBlock)
-			and: [slot @env0:selfValue == self]]) ifTrue: [
+			and: [| captured |
+				captured := slot @env0:selfValue.
+				captured == self or: [captured == nil]]]) ifTrue: [
 			cls := [(st @env0:at: i) @env0:inClass]
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 			cls == nil ifFalse: [
