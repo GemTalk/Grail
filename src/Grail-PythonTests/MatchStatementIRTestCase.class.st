@@ -111,7 +111,7 @@ MatchStatementIRTestCase >> testAMatchStatementIsNowEligible [
 
 { #category : 'Grail-Tests - match under IR' }
 MatchStatementIRTestCase >> testEveryMatchShapeAgreesWithCPythonUnderIR [
-	"All twenty of the fixture's checks with the seam forced on.
+	"Every one of the fixture's checks with the seam forced on.
 
 	Two of them are the silently-wrong hazards the fixture exists for: a BARE
 	name captures where a DOTTED name compares, and a sequence pattern must not

@@ -1,15 +1,20 @@
 name: CPython conformance
 
 # The CPython regression-suite scoreboard (scripts/run_cpython_suite.sh) is a
-# heavy job -- ~50-60 min on a CI runner as of 2026-09-27, dominated by the biggest modules
-# (test_enum, test_set) contending on the single shared stone -- so it is too
-# slow for the every-push critical path (that is the SUnit gate in ci.yml).
-# It runs here on a NIGHTLY schedule + on-demand instead.
+# heavy job -- ~106 min of module wall clock on one CI runner as of 2026-10-26,
+# dominated by the biggest modules (test___all__, test_math, test_bytes,
+# test_pickle) -- so it is too slow for the every-push critical path (that is
+# the SUnit gate in ci.yml).  It runs here on a NIGHTLY schedule + on-demand
+# instead, split into SHARDS: a plan job divides the manifest by measured
+# duration, one container job per shard installs Grail and runs its share, and
+# a gate job builds the board from all of their outputs and gates it.  As one
+# job it outgrew its 90-minute limit, and three nightlies in a row were killed
+# mid-suite with nothing measured.
 #
 # The run regenerates docs/CPython_Suite_Scoreboard.md and gates on a NEGATIVE
 # delta vs the committed baseline (scripts/check_cpython_regressions.sh): a
 # module with more fail+err, an OK module that stopped passing, or a new
-# CRASH/TIMEOUT/IMPORTERROR fails the job.  A red scheduled run is a
+# CRASH/TIMEOUT/IMPORTERROR fails the gate job.  A red scheduled run is a
 # NOTIFICATION, not a merge blocker.
 #
 # BASELINE MAINTENANCE IS AUTOMATED HERE, and it has to be, because the baseline
@@ -37,7 +42,7 @@ name: CPython conformance
 # pipeline (that is ci.yml, which runs the SUnit shards and the fixtures and
 # never touches this scoreboard).  A scoreboard regression is therefore first
 # seen HERE, a day of merges wide.  That is a deliberate trade -- the suite is
-# ~33 min -- and the tiering rule in CLAUDE.md is what covers it: run the full
+# ~35 min even sharded -- and the tiering rule in CLAUDE.md is what covers it: run the full
 # suite locally before a PR that touches shared machinery.
 
 on:
@@ -62,25 +67,68 @@ permissions:
   contents: read
 
 jobs:
-  conformance:
+  # Split the manifest into SHARDS lists of modules with roughly equal wall
+  # clock, weighted by the previous runs' per-module durations
+  # (run_cpython_suite.sh --plan-shards).  Planned ONCE, here, and handed to
+  # each shard as its matrix entry: if every shard planned for itself from the
+  # duration cache, a shard starting after another had saved a newer cache
+  # could compute a different split, and a module would run twice or not at
+  # all.  No stone needed, so no container.
+  plan:
     runs-on: ubuntu-22.04
-    # 90, not 60.  The suite outgrew 60 on 2026-09-27: #1200 and #1202 turned
-    # test_typing (701 tests) and test_pickle (468, the slowest module in the
-    # corpus) from IMPORTERRORs that cost nothing into full runs, on top of a
-    # suite already measured at 52 minutes.  That day's nightly and the manual
-    # run after it were both killed at 60:00 mid-suite, so the gate saw no
-    # summary and failed closed -- a red nightly that measured nothing.
-    timeout-minutes: 90
+    timeout-minutes: 5
     outputs:
-      regressions: ${{ steps.gate.outputs.regressions }}
-      improvements: ${{ steps.gate.outputs.improvements }}
-    # Same image as ci.yml's test-main: GemTalk's GemStone 4.0 container.  It
-    # MOVED here when 3.7.x support was dropped -- this workflow used to run in
-    # the public ci-base image, which baked a 3.7.5 product, so every number in
-    # docs/CPython_Suite_Scoreboard.md is a 3.7.5 measurement.  The committed
-    # baseline therefore has to be re-measured on 4.0 ONCE (a manual run with
-    # refresh_baseline=true); until that lands the gate is comparing two
-    # different kernels and its verdict means nothing.
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore module durations
+        uses: actions/cache/restore@v4
+        with:
+          path: out/cpython/*.sec
+          key: cpython-durations-${{ github.run_id }}
+          restore-keys: cpython-durations-
+
+      - name: Plan the shards
+        id: plan
+        # FOUR SHARDS.  As of 2026-10-26 the modules add up to ~12,700s of wall
+        # clock on a CI runner, which at two concurrent modules is ~106 minutes:
+        # past the 90-minute job limit, so the nightlies of 10-24, 10-25 and
+        # 10-26 were all killed mid-suite and measured nothing.  Four shards
+        # plan at ~26 minutes each, plus ~6 for the container and the install.
+        # The floor is the single longest module (test___all__, ~13 minutes),
+        # so more shards buy less and less.
+        env:
+          SHARDS: 4
+          GRAIL_MODULES: ${{ inputs.modules }}
+        run: |
+          # Unquoted on purpose: the input is a space-separated LIST.  A
+          # targeted run is planned the same way, over just those modules.
+          ./scripts/run_cpython_suite.sh --plan-shards "$SHARDS" $GRAIL_MODULES > plan.txt
+          # An empty line is a shard with nothing to run (fewer modules than
+          # shards); it gets no job.
+          matrix=$(jq -R -s -c 'split("\n") | map(select(length > 0))
+            | to_entries | map({shard: (.key + 1), modules: .value}) | {include: .}' plan.txt)
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          { echo "### CPython conformance shards"
+            echo
+            jq -r '.include[] | "* shard \(.shard): \(.modules | split(" ") | length) modules"' <<< "$matrix"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  conformance:
+    name: conformance (shard ${{ matrix.shard }})
+    needs: plan
+    runs-on: ubuntu-22.04
+    # 90 is the old whole-suite limit, kept as a ceiling: a shard plans at
+    # about a third of it.  The headroom is for one hung module, which the
+    # per-module cap (GRAIL_TEST_TIMEOUT=1800) ends after 30 minutes.
+    timeout-minutes: 90
+    strategy:
+      # Every shard's rows are needed for the board; one red shard must not
+      # cancel the others.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # Same image as ci.yml's test-main: GemTalk's GemStone 4.0 container.
     container:
       image: container.gemtalksystems.com/gemstone/gemstone/main:grail
       options: --shm-size=1g
@@ -91,22 +139,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Carry the per-module wall-clock sidecars (out/cpython/*.sec) between
-      # nightly runs.  run_cpython_suite.sh launches heaviest-first weighted by
-      # them; with no cache every run starts from the test-count ESTIMATE, which
-      # is the ordering the duration weights exist to replace.  Measured
-      # back-to-back locally: 254s by test count, 206s once the durations
-      # settle.  restore-keys lets a run inherit the previous day's timings, and
-      # the always-unique key makes every run save a fresh copy.  A cache miss
-      # is harmless -- the estimate is the documented fallback.
-      #
-      # RESTORE AND SAVE ARE SEPARATE STEPS so the save can run on a failed or
-      # timed-out job.  The combined actions/cache saves in its post step, which
-      # is skipped unless the job succeeds -- so a run killed by the timeout
-      # never recorded what it had measured, the next run inherited the same
-      # stale schedule, and it was killed the same way.  That is how a module
-      # newly unblocked (test_pickle, costed at ~0s while it was an IMPORTERROR)
-      # kept being launched LAST and stretched the tail of every run.
+      # Within a shard, run_cpython_suite.sh still launches heaviest-first by
+      # these durations.  Only the ORDER depends on them here -- which modules
+      # this shard runs was fixed by the plan job -- so a cache that differs
+      # from the one the plan read is harmless.
       - name: Restore module durations
         uses: actions/cache/restore@v4
         with:
@@ -116,10 +152,11 @@ jobs:
 
       # Same non-root 'ci' pattern as ci.yml (NetLDI guest mode needs it).
       - name: install + cpython conformance (as non-root 'ci')
-        # Via env: rather than interpolated into the script, so the input cannot
-        # be spliced into the shell command line.
+        # Via env: rather than interpolated into the script, so neither the
+        # input nor the planned list can be spliced into the shell command line.
         env:
           GRAIL_MODULES: ${{ inputs.modules }}
+          SHARD_MODULES: ${{ matrix.modules }}
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
@@ -128,6 +165,7 @@ jobs:
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
             GRAIL_MODULES="$GRAIL_MODULES" \
+            SHARD_MODULES="$SHARD_MODULES" \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
@@ -140,10 +178,6 @@ jobs:
               cd "$GITHUB_WORKSPACE"
               ./install_base.sh
               ./install.sh
-              # Lower concurrency (2, not the default 4) + a generous per-module
-              # cap so the heavy modules COMPLETE on slower CI cores instead of
-              # false-TIMEOUTing under 4-way stone contention.  Deterministic
-              # per-module numbers are what make the regression gate trustworthy.
               # A TARGETED run exists for one reason: several rows fail here and
               # nowhere else -- the test_traceback rows test_extract_stack and
               # test_format_stack are Linux-only, and as of 2026-08-28 so is
@@ -152,36 +186,130 @@ jobs:
               # Chasing one of those used to cost a 33-minute blind nightly per
               # attempt; naming the module costs a couple of minutes, and the
               # per-module .out (uploaded below) carries the GRAIL_DETAIL line.
-              #
-              # Unquoted on purpose: the input is a space-separated LIST.
               if [ -n "$GRAIL_MODULES" ]; then
                 # Dump the GENERATED Smalltalk for the named modules.  For a
                 # platform-only row this is the whole point: the Darwin box can
                 # generate the same module and DIFF the two, which is the one
                 # question a pass/fail line cannot answer.  Full-manifest runs
-                # leave it unset -- 102 modules of codegen is not an artifact.
+                # leave it unset -- 185 modules of codegen is not an artifact.
                 export GRAIL_CODEGEN_TRACE_DIR="$GITHUB_WORKSPACE/out/codegen"
                 mkdir -p "$GRAIL_CODEGEN_TRACE_DIR"
-                GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh $GRAIL_MODULES
-                # No gate line, deliberately.  check_cpython_regressions.sh
-                # compares against the FULL-manifest baseline, so every module
-                # not named would read as vanished.  The verdict parser fails
-                # closed on an unparseable summary, which is what keeps a
-                # targeted run from opening a baseline-refresh PR.
-                echo "targeted run of: $GRAIL_MODULES -- regression gate SKIPPED (a partial run cannot be compared with the full-manifest baseline)" | tee gate-output.txt
-                echo 0 > gate-rc.txt
-              else
-                GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh
-                # The gate verdict is CAPTURED rather than allowed to abort here,
-                # so the refresh job downstream can see whether the delta was
-                # improvements-only.  The job still fails on a regression -- the
-                # "Enforce the gate" step below does it, reading this file.
-                set +o errexit
-                ./scripts/check_cpython_regressions.sh 2>&1 | tee gate-output.txt
-                echo "${PIPESTATUS[0]}" > gate-rc.txt
-                set -o errexit
               fi
+              # Lower concurrency (2, not the default 4) + a generous per-module
+              # cap so the heavy modules COMPLETE on slower CI cores instead of
+              # false-TIMEOUTing under 4-way stone contention.  Deterministic
+              # per-module numbers are what make the regression gate trustworthy.
+              #
+              # A partial run by construction: it writes the outputs of this
+              # shard and leaves the board alone.  The gate job builds the
+              # board from the outputs of every shard.  Unquoted: a LIST.
+              GRAIL_CPYTHON_WORKERS=2 GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh $SHARD_MODULES
             '
+
+      # ONLY this shard's modules' files, in a directory of their own.  The
+      # gate merges every shard's artifact into one out/cpython, and
+      # out/cpython here also holds the restored .sec of every other module --
+      # uploaded too, a stale one could overwrite the fresh timing another
+      # shard measured.  Always, so a shard the timeout killed still delivers
+      # what it finished; what it did not finish scores CRASH at the gate.
+      - name: Collect this shard's results
+        if: always()
+        env:
+          SHARD_MODULES: ${{ matrix.modules }}
+        run: |
+          mkdir -p shard-out
+          for m in $SHARD_MODULES; do
+            for ext in out rc sec; do
+              [ -f "out/cpython/$m.$ext" ] && cp "out/cpython/$m.$ext" shard-out/
+            done
+          done
+          echo "$(find shard-out -type f | wc -l) result files from this shard"
+
+      - name: Upload this shard's results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpython-results-${{ matrix.shard }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: shard-out/
+
+      # Kept apart from the results: the gate merges every cpython-results-*
+      # into one directory, and each shard's stone logs have the same names.
+      - name: Upload this shard's stone logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cpython-logs-${{ matrix.shard }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            out/codegen/**
+            testing/*.log
+            testing/log/**
+
+  # Build the board from every shard's outputs and gate it -- what the single
+  # job used to do at the end of its run.  run_cpython_suite.sh --report-only
+  # scores the merged out/cpython in manifest order, exactly as a one-job run
+  # would have, and a module whose output never arrived (a shard that failed
+  # to install, or was killed before it got there) scores CRASH: the gate then
+  # fails on it rather than gating a board with rows missing.  No stone, so no
+  # container.
+  #
+  # Runs after a red shard too (the board is how one reads what went wrong),
+  # but not when the run itself was cancelled.
+  gate:
+    needs: [plan, conformance]
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      regressions: ${{ steps.gate.outputs.regressions }}
+      improvements: ${{ steps.gate.outputs.improvements }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The previous timings first, then this run's on top: a module whose
+      # shard was lost keeps its old weight for the next plan instead of
+      # falling back to the test-count estimate.
+      - name: Restore module durations
+        uses: actions/cache/restore@v4
+        with:
+          path: out/cpython/*.sec
+          key: cpython-durations-${{ github.run_id }}
+          restore-keys: cpython-durations-
+
+      - name: Download every shard's results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cpython-results-*
+          path: out/cpython
+          merge-multiple: true
+
+      - name: Score the shards and gate the board
+        env:
+          GRAIL_MODULES: ${{ inputs.modules }}
+        run: |
+          set +e
+          # 1800 is the shards' per-module cap; a TIMEOUT row's detail names it.
+          if [ -n "$GRAIL_MODULES" ]; then
+            GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh --report-only $GRAIL_MODULES
+            # No gate line, deliberately.  check_cpython_regressions.sh
+            # compares against the FULL-manifest baseline, so every module
+            # not named would read as vanished.  The verdict parser fails
+            # closed on an unparseable summary, which is what keeps a
+            # targeted run from opening a baseline-refresh PR.
+            echo "targeted run of: $GRAIL_MODULES -- regression gate SKIPPED (a partial run cannot be compared with the full-manifest baseline)" | tee gate-output.txt
+            echo 0 > gate-rc.txt
+          else
+            GRAIL_TEST_TIMEOUT=1800 ./scripts/run_cpython_suite.sh --report-only
+            # The gate verdict is CAPTURED rather than allowed to abort here,
+            # so the refresh job downstream can see whether the delta was
+            # improvements-only.  The job still fails on a regression -- the
+            # "Enforce the gate" step below does it, reading this file.
+            ./scripts/check_cpython_regressions.sh 2>&1 | tee gate-output.txt
+            echo "${PIPESTATUS[0]}" > gate-rc.txt
+          fi
 
       # Parsed from the gate's own summary line:
       #   cpython regression gate: N regression(s), M improvement(s)
@@ -208,8 +336,12 @@ jobs:
             echo "\`${line:-(no summary line -- see the log)}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      # Every module that FINISHED wrote its .sec, including on a run the
-      # timeout killed; saving them is what lets the next run schedule by them.
+      # Saved here, once, from the merged timings, so the next plan reads one
+      # cache that holds every shard's measurements.  Restore and save are
+      # separate steps so the save runs on a red gate too: a module newly
+      # unblocked (test_pickle, costed at ~0s while it was an IMPORTERROR) has
+      # to be weighted by its real duration in the next plan, or it lands in
+      # whichever shard is lightest and stretches it.
       - name: Save module durations
         if: always()
         uses: actions/cache/save@v4
@@ -225,18 +357,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
           # The regenerated scoreboard (commit it to move the baseline forward)
-          # + per-module logs + JSON + stone/gem logs + per-module wall clock
-          # (.sec), so a slow run can be read module by module.
+          # + per-module logs + JSON + per-module wall clock (.sec), so a slow
+          # run can be read module by module.  The stone logs are in each
+          # shard's cpython-logs-N.
           path: |
             docs/CPython_Suite_Scoreboard.md
             out/cpython/*.out
             out/cpython/*.sec
-            out/codegen/**
             out/cpython/scoreboard.json
             gate-output.txt
             gate-rc.txt
-            testing/*.log
-            testing/log/**
 
       # Deliberately LAST in this job: the artifact is uploaded and the summary
       # written before the job is allowed to go red, so a regression still leaves
@@ -260,16 +390,21 @@ jobs:
   # 403 -- the branch is still there to open by hand, so nothing is lost, but
   # the job goes red for a reason that is not about conformance.
   refresh-baseline:
-    needs: conformance
+    needs: [conformance, gate]
+    # Never from a run with a red or lost shard, even when asked: its missing
+    # modules are CRASH rows on the board, and refresh_baseline=true would
+    # commit them as the baseline.
     if: >-
       always()
-      && needs.conformance.result != 'cancelled'
+      && needs.conformance.result == 'success'
+      && needs.gate.result != 'cancelled'
+      && needs.gate.result != 'skipped'
       && (
            (github.event_name == 'workflow_dispatch' && inputs.refresh_baseline && !inputs.modules)
            || (
                 github.event_name == 'schedule'
-                && needs.conformance.outputs.regressions == '0'
-                && needs.conformance.outputs.improvements != '0'
+                && needs.gate.outputs.regressions == '0'
+                && needs.gate.outputs.improvements != '0'
               )
          )
     runs-on: ubuntu-22.04
@@ -288,8 +423,8 @@ jobs:
       - name: Open a baseline-refresh PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REGRESSIONS: ${{ needs.conformance.outputs.regressions }}
-          IMPROVEMENTS: ${{ needs.conformance.outputs.improvements }}
+          REGRESSIONS: ${{ needs.gate.outputs.regressions }}
+          IMPROVEMENTS: ${{ needs.gate.outputs.improvements }}
         run: |
           set -euo pipefail
           board=docs/CPython_Suite_Scoreboard.md
