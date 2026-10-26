@@ -772,6 +772,25 @@ importlib class >> ___loadNamespacePackageIfAny___: moduleName [
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___loadParentExtensionIfAny___: moduleName [
+	"Load moduleName from a compiled extension, when one is on the path, as
+	the PARENT of a dotted name being imported; nil when there is none.
+
+	CPython's finder tries extension modules for every component of a dotted
+	name, not only the last.  Grail's parent walk tried source and then a
+	namespace directory, so ``from hypothesis._native.internal.floats import
+	...'' never loaded _native.cpython-314-darwin.so -- whose init is what
+	registers hypothesis._native.internal.floats in sys.modules -- and raised
+	ModuleNotFoundError."
+
+	| path |
+	path := self ___moduleNameToSoPath___: moduleName.
+	path @env0:isNil ifTrue: [^ nil].
+	^ self @env0:loadDynamicModuleNamed: moduleName fromPath: path
+
+]
+
 { #category : 'Grail-Meta Path' }
 importlib class >> ___loadViaLoader___: aLoader name: aName [
 	"PEP 302's ``loader.load_module(fullname)'': the loader builds AND registers
@@ -1441,8 +1460,10 @@ importlib >> ___import__: positional kw: kwargs [
 				parentFilePath notNil ifTrue: [
 					self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
 				] ifFalse: [
-					"PEP 420: a parent with no __init__.py is still a package."
-					self @env0:class ___loadNamespacePackageIfAny___: prefix.
+					"A C extension, then PEP 420: a parent with no __init__.py is
+					still a package.  See ___loadParentExtensionIfAny___:."
+					(self @env0:class ___loadParentExtensionIfAny___: prefix) ifNil: [
+						self @env0:class ___loadNamespacePackageIfAny___: prefix]
 				].
 			].
 		].
@@ -1454,7 +1475,8 @@ importlib >> ___import__: positional kw: kwargs [
 					parentFilePath notNil ifTrue: [
 						self @env0:class @env0:loadModuleFromPath: parentFilePath name: prefix.
 					] ifFalse: [
-						self @env0:class ___loadNamespacePackageIfAny___: prefix.
+						(self @env0:class ___loadParentExtensionIfAny___: prefix) ifNil: [
+							self @env0:class ___loadNamespacePackageIfAny___: prefix]
 					].
 				].
 			].

@@ -1010,6 +1010,37 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         if (t < 0) return NULL;
         return PyLong_FromLong(t);
     }
+    /* How many arguments arrived, past the name: a call with more than five
+       used to lose the rest on the way, and its count wrapped at eight. */
+    if (IS("count")) return PyLong_FromSsize_t(nargs - 1);
+    /* Call a Python callable and read the list or tuple it answers INLINE,
+       as numpy reads _commastring's list with PyList_GET_ITEM. */
+    if (IS("call_inline")) {
+        PyObject *r = PyObject_CallNoArgs(a);
+        if (r == NULL) return NULL;
+        PyObject *out;
+        if (PyList_CheckExact(r)) {
+            out = PyList_New(0);
+            for (Py_ssize_t i = 0; i < PyList_GET_SIZE(r); i++)
+                PyList_Append(out, PyList_GET_ITEM(r, i));
+        } else if (PyTuple_CheckExact(r)) {
+            out = PyList_New(0);
+            for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(r); i++)
+                PyList_Append(out, PyTuple_GET_ITEM(r, i));
+        } else {
+            out = Py_NewRef(r);
+        }
+        Py_DECREF(r);
+        return out;
+    }
+    /* The exception types numpy raises from C under np.errstate. */
+    if (IS("raise_fpe")) {
+        PyErr_SetString(PyExc_FloatingPointError, "invalid value encountered");
+        return NULL;
+    }
+    if (IS("import_warning")) {
+        return Py_BuildValue("(OO)", PyExc_ImportWarning, PyExc_FloatingPointError);
+    }
     if (IS("ulong")) return Py_BuildValue("(NN)", PyLong_FromUnsignedLong((unsigned long)-1),
                                           PyLong_FromUnsignedLong(1UL << 63));
     /* A slice's bounds read off the struct, as cffi's cdata slicing reads

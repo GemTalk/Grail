@@ -216,6 +216,31 @@ def _partial_deepcopy():
 check('partial_deep_copy_copies', _partial_deepcopy, (True, True, True))
 
 
+# ------------------------------- the memo keeps what it remembers alive
+
+# deepcopy remembers objects by id(), so each one it memoizes must outlive
+# the copy, or a later object can take its id and be answered with another
+# object's copy.  Grail copies an instance's state from a __dict__ view made
+# for that call, which nothing else holds; email's generator copy then read
+# a header's state dict back for a str.
+
+class _Plain:
+    pass
+
+
+def _memo_keeps_alive():
+    p = _Plain()
+    p.a = [1]
+    p.b = 'x'
+    memo = {}
+    copy.deepcopy(p, memo)
+    kept = {id(o) for o in memo.get(id(memo), [])}
+    return [k for k in memo if k != id(memo) and k not in kept]
+
+
+check('deepcopy_memo_keeps_memoized_objects_alive', _memo_keeps_alive, [])
+
+
 # --------------------------------------------------- copy.replace()
 
 Point = namedtuple('Point', 'x y')

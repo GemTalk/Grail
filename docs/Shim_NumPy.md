@@ -1243,6 +1243,55 @@ Still open:
   answers the lock, not `True`, and `delattr`'s AttributeError text is the
   bare name.
 
+## Stage 11 (2026-10-25): numpy's own test suite starts to run
+
+On current main, the census still agrees in every case. All but three of the
+cases parked behind the user-action limit now agree as well:
+`__array_function__` and `__array_ufunc__` overrides, `matrix.I`, array
+printing, `set_printoptions`, `numpy.random` and `np.strings`.
+
+The next measure is numpy's own suite, run by pytest. Reaching it found
+these gaps, none of them in numpy:
+
+| gap | effect |
+|---|---|
+| `inspect.getattr_static` read nothing on a module. `module`'s `__dict__` accessor, and the implementation classes above it, read as bindings that hide the namespace. | pluggy 1.7 finds hookspecs with it, so pytest could not start. |
+| A private `def __helper` inside a class-body `if` or `try` was emitted under its written name but assigned under its mangled one. | CompileError 1001 in sortedcontainers, which hypothesis imports. |
+| The shim had no `PyModule_FromDefAndSpec2` or `PyModule_ExecDef`. A module an extension makes itself was not readable from Grail, and its `__name__` was its def's. | hypothesis's PyO3 `_native` would not dlopen. |
+| A dotted import never tried a C extension for a PARENT. | `hypothesis._native.internal.floats` could not be imported. |
+| `array.array` had no `+`, `*`, `+=`, `*=` or array slices. | hypothesis builds a table with `array("H", [0]) * n`. |
+| `unittest.case` lacked `SkipTest` and `TestCase`. | `numpy.testing`, and so every numpy test module, failed to import. |
+| `sys.getrefcount` and `sys.call_tracing` read a module-dict key nobody had put. | `getattr(sys, 'getrefcount', None)` raised an uncatchable LookupError at `numpy.testing` import. |
+| A list a Grail callable returns to C crossed as a wrapper, which numpy reads inline. | `np.dtype("S10,S9")` segfaulted. |
+| A call to a C function passed at most five arguments, with a three-bit count. | `np.result_type` with eight dtypes saw none; with seven it segfaulted. |
+| `FloatingPointError` and `ImportWarning` were placeholder objects. | `errstate(invalid='raise')` raised an unknown error that ended the pytest session. |
+| `issubclass` of a C type skipped the ABC's own hook. | `issubclass(np.number, numbers.Number)` was False, and every `test_abc` test failed. |
+
+Six core test modules, run with `--noconftest -p no:hypothesispytest` (the
+conftest imports hypothesis, which still needs a real `tokenize`), compared
+with CPython:
+
+| module | CPython | Grail |
+|---|---|---|
+| `test_errstate` | 8 passed | 8 passed |
+| `test_indexerrors` | 8 passed | 8 passed |
+| `test_abc` | 5 passed | 5 passed |
+| `test_shape_base` | 213 passed | 212 passed, 1 failed (`operator.concat` of arrays should raise; numpy's `sq_concat` is not consulted) |
+| `test_api` | 59 passed | 21 passed, 3 failed, then the session ends (below) |
+| `test_numerictypes` | 138 passed | no result |
+
+Still open:
+* Calling `numpy.testing.assert_array_equal` about 2000 times exhausts the
+  Smalltalk stack ("object does not have varying instVars", then a wall of
+  error 6011). The Python frame depth and the exception-context chain stay
+  flat, so whatever accumulates is not a Python frame. `test_api`'s
+  `test_copyto_permute` loop reaches it.
+* hypothesis needs `tokenize.generate_tokens`, `untokenize` and `COMMENT`.
+  Grail's `tokenize` is a stub and there is no `token` module.
+* Rowan cannot delete an env-1 method on an incremental reload, because it
+  looks the method up in env 0. So these fixes rewrite or seed rather than
+  delete. CI's fresh installs are unaffected.
+
 ## Repro
 
 ```

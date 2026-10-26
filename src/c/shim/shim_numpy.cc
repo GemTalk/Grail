@@ -896,8 +896,6 @@ extern "C" {
      Py_Ellipsis'' never matched.  Typed and mapped to Grail's Ellipsis in
      cpython.cc (pyobj_oop, shimTypeAddr ``Ellipsis''). */
   PyObject _Py_EllipsisObject={1,0};
-  static struct _object _exc_FPE={1,0}; PyObject *PyExc_FloatingPointError=&_exc_FPE;
-  static struct _object _exc_IW={1,0}; PyObject *PyExc_ImportWarning=&_exc_IW;
 }
 
 /* ====================================================================
