@@ -445,7 +445,10 @@ followed a source edit:
   second class, as in CPython), only while the superclass and instVars still
   fit, and never a class something else is rebuilding. A built class does not
   join the canonical class set, so D3 does not apply to it, as before; a key
-  the body stopped claiming is forgotten, not refused. Still new on every
+  the body stopped claiming is forgotten, not refused. A module deployed by a
+  Grail that recorded no such key is matched through its committed instance's
+  old globals instead (`___previousBuiltClass___:module:parent:`), so the first
+  upgrade keeps the class as well. Still new on every
   rebuild: a class statement inside a function other than namedtuple's, and
   any class built during `importlib.reload`, which does not mark a module body
   as running.
