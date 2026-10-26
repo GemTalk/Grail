@@ -36,6 +36,18 @@ grail >> _begin_fresh_import: aName [
 
 ]
 
+{ #category : 'Grail-Built Classes' }
+grail >> _claim_built_class: aName [
+	"grail._claim_built_class(name) -- the next class created is built by a call
+	under ``name'', and keeps its identity across rebuilds of the module whose
+	body is running (importlib class >> ___claimBuiltClass___:).
+	collections.namedtuple calls it just before its class statement."
+
+	importlib @env0:___claimBuiltClass___: aName.
+	^ None
+
+]
+
 { #category : 'Grail-Fresh Import' }
 grail >> _end_fresh_import_kept: aName [
 	"grail._end_fresh_import_kept(name) -- _end_fresh_import, but the fresh

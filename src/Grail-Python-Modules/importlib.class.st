@@ -918,6 +918,105 @@ importlib class >> ___builtinsModuleOrNil___ [
 
 ]
 
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames [
+	"MINT (or identity-reuse) a class built by CALLING something while a module's
+	body runs: collections.namedtuple, whose class statement runs inside the
+	function, and a direct type(name, bases, ns) -- which is also what a metaclass
+	call and a metaclass that rewrites a class statement's bases come down to.
+	Reached only through a claim (___claimBuiltClass___:), taken by the very next
+	class creation (Class >> ___subclass___:...).
+
+	The module-level class statement's rule, applied to them (#1802).  A class
+	statement keeps its class across a rebuild of its module through
+	___canonicalSubclassOf:..., keyed ``module.Class''; a built class had no key,
+	so every rebuild -- and since D7 every install is one -- minted a new class and
+	left every stored instance on the old one, named by nothing:
+	``isinstance(stored, Pair)'' false, and pickle unable to find the class.
+
+	THE KEY is ``module.Name()'': the module whose body is running, the name the
+	caller asked for, and a suffix of its own, because ``class Point(namedtuple(
+	'Point', 'x y'))'' builds both a ``Point'' class statement and a ``Point''
+	namedtuple in one module, and they must not share an entry.  Kept in the class
+	registry beside the statement keys, so everything that sweeps a module's
+	entries by its prefix (an abort, a dropped module, an app namespace) sweeps
+	these too; ___grailRefuseVanishedClasses___: skips them.
+
+	REUSE, exactly as a class statement's: the same identity, a fresh namespace
+	(___grailResetClassNamespace___), and the build re-run onto it, marked
+	rebuilding until the module body ends (___finishBuiltClasses___:).  Only when
+	the shape still fits -- the same superclass, and every instVar the build asks
+	for already there -- and only for the FIRST claim of a key in one body run: a
+	second ``namedtuple('P', ...)'' in the same body is a second class, as in
+	CPython, and is neither reused nor recorded.  A class something else is
+	already rebuilding in this session is never handed out twice.
+
+	Unlike a class statement's, a built class does NOT join the canonical class
+	set: a store on it after the build commits with it, as it always has (D3
+	makes runtime stores session-local only for a class statement's class)."
+
+	| key reg existing claimed rebuilding reuse built |
+	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aModuleName do: [self ___builtSubclassOf: aParent name: aSymbol pyName: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames]].
+	"A session-local module (``__main__'') records nothing: see
+	___canonicalSubclassOf:..."
+	(self ___isSessionLocalModule___: aModuleName) ifTrue: [
+		^ aParent @env1:___subclass___: aSymbol instVarNames: ivNames classInstVarNames: civNames].
+	key := aModuleName asString , '.' , aName asString , '()'.
+	reg := self ___canonicalClassRegistry___.
+	existing := reg at: key otherwise: nil.
+	built := self ___builtThisLoad___: aModuleName.
+	claimed := (built at: 1) includes: key.
+	rebuilding := SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil.
+	reuse := (existing isKindOf: Behavior)
+		and: [claimed not
+		and: [existing superclass == aParent
+		and: [(rebuilding notNil and: [rebuilding includes: existing]) not
+		and: [(ivNames allSatisfy: [:n |
+				(existing allInstVarNames detect: [:m | m asString = n asString] ifNone: [nil]) notNil])
+		and: [civNames allSatisfy: [:n |
+				(existing class allInstVarNames detect: [:m | m asString = n asString] ifNone: [nil]) notNil]]]]]].
+	reuse ifTrue: [
+		(built at: 1) add: key.
+		(built at: 2) add: existing.
+		"Out of the canonical set, if a class statement put it there --
+		``class Emp(typing.NamedTuple)'' registers the namedtuple its metaclass
+		returns.  That statement's ___canonicalClassRegister___ puts it back; until
+		then the metaclass's stores on it are definitional, as on a first build."
+		(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+			[bag includes: existing] whileTrue: [bag remove: existing]].
+		existing @env1:___grailResetClassNamespace___.
+		(SessionTemps current at: #'GrailRebuildingClasses' ifAbsentPut: [IdentitySet new])
+			add: existing.
+		"The subclass link, which ___subclass___ records for a new class and the
+		body re-run has just dropped (see ___canonicalSubclassOf:...)."
+		self ___registerSubclass___: existing of: aParent.
+		^ existing].
+	existing := aParent @env1:___subclass___: aSymbol instVarNames: ivNames classInstVarNames: civNames.
+	claimed ifFalse: [
+		(built at: 1) add: key.
+		reg at: key put: existing].
+	^ existing
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___builtThisLoad___: aModuleName [
+	"What the current body run of aModuleName has built by a claim: { the keys
+	claimed. the classes reused }.  Session-local, reset with ___mintedThisLoad___:
+	right before the body runs; separate from it, because a key in that set is a
+	class STATEMENT the body bound, which ___grailRefuseVanishedClasses___: reads."
+
+	| map entry |
+	map := SessionTemps current at: #'GrailBuiltThisLoad' ifAbsentPut: [SymbolKeyValueDictionary new].
+	entry := map at: aModuleName asString asSymbol otherwise: nil.
+	entry isNil ifTrue: [
+		entry := { Set new. IdentitySet new }.
+		map at: aModuleName asString asSymbol put: entry].
+	^ entry
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___bundledRuntimeSource___: aPathOrNil [
 	"True when aPathOrNil is one of Grail's bundled Python sources whose
@@ -1523,9 +1622,16 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	CPython does (each statement is a fresh type).  ___mintedThisLoad___:
 	is reset by loadModuleFromPath:/reload: right before the body runs."
 	minted := self ___mintedThisLoad___: aModuleName.
+	"...and never a class something else in this session is rebuilding right
+	now: a class built by a call reused this run (___builtSubclassOf:...) can
+	also be what a class statement registered -- the class a metaclass or a
+	decorator built through type() -- and handing it out twice would reset its
+	namespace in the middle of the other build."
 	((existing isKindOf: Behavior)
 		and: [(minted includes: key) not
-		and: [existing superclass == aParent]])
+		and: [existing superclass == aParent
+		and: [((SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil)
+			ifNil: [false] ifNotNil: [:r | r includes: existing]) not]]])
 			ifTrue: [
 				minted add: key.
 				"Reused structure, fresh namespace -- see the comment above."
@@ -1666,6 +1772,27 @@ importlib class >> ___checkTextModelResult___: aResult for: aSelector named: aNa
 		@env0:, (bytes @env1:___pyTypeNameOf___: aResult) @env0:asString
 		@env0:, ''' instead of ''' @env0:, wanted @env0:, '''; use codecs.'
 		@env0:, verb @env0:, '() to ' @env0:, verb @env0:, ' to arbitrary types')
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___claimBuiltClass___: aName [
+	"The NEXT class created in this session is built by a call -- namedtuple or
+	type() -- under the name aName: key it by the module whose body is running, so
+	a rebuild of that module reuses it (___builtSubclassOf:...).  Taken, whatever
+	it turns out to be, by that next creation (Class >> ___subclass___:...): so a
+	claim never outlives the call that made it.
+
+	No module body running -- a call at run time, after every import -- claims
+	nothing, and clears a claim left over, so the class is minted fresh, as
+	CPython's always is."
+
+	| mod |
+	mod := self ___initializingModuleName___.
+	(mod isNil or: [(aName isKindOf: CharacterCollection) not]) ifTrue: [
+		SessionTemps current removeKey: #'GrailBuiltClassClaim' ifAbsent: [].
+		^ self].
+	SessionTemps current at: #'GrailBuiltClassClaim' put: { mod asString. aName asString }
 
 ]
 
@@ -2332,6 +2459,31 @@ importlib class >> ___directCallsInvalidate___ [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___dropUnbuiltClasses___: aModuleName [
+	"After a body run that completed: forget the built-class keys
+	(``module.Name()'', ___builtSubclassOf:...) of aModuleName that this run did
+	not claim.  A class the body no longer builds is not refused as a vanished
+	class statement is (___grailRefuseVanishedClasses___:) -- a call's result
+	can legitimately depend on more than the source -- but neither is a later
+	build of the same name handed a class from long ago."
+
+	| claimed prefix reg |
+	claimed := (self ___builtThisLoad___: aModuleName) at: 1.
+	prefix := aModuleName asString , '.'.
+	reg := self ___canonicalClassRegistry___.
+	reg keys asArray do: [:k | | ks tail |
+		ks := k asString.
+		((ks size > (prefix size + 2)) and: [(ks copyFrom: 1 to: prefix size) = prefix]) ifTrue: [
+			tail := ks copyFrom: prefix size + 1 to: ks size.
+			(((tail endsWith: '()') and: [(tail includes: $.) not])
+				and: [(claimed includes: ks) not])
+					ifTrue: [reg removeKey: k ifAbsent: []]]].
+	(SessionTemps current at: #'GrailBuiltThisLoad' otherwise: nil)
+		ifNotNil: [:map | map removeKey: aModuleName asString asSymbol ifAbsent: []]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___endDepCollection___: aName [
 	"Pop aName's collector and answer the names its body imported (nil when
 	the top is not aName's, which only an unbalanced begin/end would cause)."
@@ -2542,6 +2694,26 @@ importlib class >> ___exposedBuiltinFor___: aClass [
 				((b isKindOf: Behavior) and: [b ~~ aClass]) ifFalse: [b := nil]]].
 	cache at: aClass put: b.
 	^ b
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___finishBuiltClasses___: aModuleName [
+	"The end of a body run, whether it completed or raised: the classes it rebuilt
+	by a claim are built, so they stop being marked rebuilding (which let the build
+	compile onto a committed class, object >> ___grailClassIsRebuilding___) and
+	under construction (the mark a nested class statement opens and nothing at
+	function scope closes, object >> ___grailBeginClassBuild___)."
+
+	| entry rebuilding |
+	entry := (SessionTemps current at: #'GrailBuiltThisLoad' otherwise: nil)
+		ifNotNil: [:map | map at: aModuleName asString asSymbol otherwise: nil].
+	entry isNil ifTrue: [^ self].
+	rebuilding := SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil.
+	(entry at: 2) do: [:cls |
+		rebuilding isNil ifFalse: [rebuilding remove: cls ifAbsent: []].
+		cls @env1:___grailEndClassBuild___].
+	(entry at: 2) removeAll: (entry at: 2) copy
 
 ]
 
@@ -3778,8 +3950,11 @@ importlib class >> ___grailRefuseVanishedClasses___: aModuleName [
 			Measured the hard way: 103 corpus regressions and 113 suite
 			errors, all of them this one line."
 			tail := ks copyFrom: prefix size + 1 to: ks size.
+			"A class built by a CALL (``module.Name()'', ___builtSubclassOf:...)
+			is not a class statement, and is not refused: ___dropUnbuiltClasses___:
+			forgets one the body stopped building."
 			(((tail includes: $.) not and: [(minted includes: ks) not])
-				and: [v isKindOf: Behavior]) ifTrue: [vanished add: ks]]].
+				and: [(v isKindOf: Behavior) and: [(tail endsWith: '()') not]]) ifTrue: [vanished add: ks]]].
 	vanished isEmpty ifTrue: [^ self].
 	names := ''.
 	vanished asSortedCollection do: [:n |
@@ -5881,6 +6056,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 			ex outer]]
 		ensure: [
 			imported := self ___endDepCollection___: moduleName.
+			self ___finishBuiltClasses___: moduleName.
 			self ___popInitializingModule___.
 			self ___releaseModuleInit___: moduleName.
 			"Registrations for this module's class methods that no class-build
@@ -5894,6 +6070,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	"A class the PREVIOUS deployment defined and this body does not is refused --
 	after the body, because only a completed run knows what it defined."
 	self ___grailRefuseVanishedClasses___: moduleName.
+	self ___dropUnbuiltClasses___: moduleName.
 	self ___syncPersistentState___: moduleInstance.
 	"Session tier (par.10.4): runs on the cold path too, so a module author
 	gets ONE uniform per-session hook regardless of how the session
@@ -7923,6 +8100,10 @@ importlib class >> ___resetMintedThisLoad___: aModuleName [
 
 	| map |
 	map := SessionTemps current at: #'GrailMintedThisLoad' otherwise: nil.
+	map isNil ifFalse: [
+		map removeKey: aModuleName asString asSymbol ifAbsent: []].
+	"...and what it built by a claim (___builtSubclassOf:...)."
+	map := SessionTemps current at: #'GrailBuiltThisLoad' otherwise: nil.
 	map isNil ifFalse: [
 		map removeKey: aModuleName asString asSymbol ifAbsent: []].
 
