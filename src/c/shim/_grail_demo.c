@@ -1183,6 +1183,14 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     if (IS("number_float")) return PyNumber_Float(a);
     /* PyObject_CallNoArgs: how cffi calls the weakrefs in its type cache. */
     if (IS("call_no_args")) return PyObject_CallNoArgs(a);
+    /* The exception a callable raised, taken as one object the way PyO3
+       takes every error (PyErr_GetRaisedException) and handed back, as
+       pydantic_core hands a validator's exception back in its error's ctx. */
+    if (IS("raised_by")) {
+        PyObject *r = PyObject_CallNoArgs(a);
+        if (r != NULL) return r;
+        return PyErr_GetRaisedException();
+    }
 #undef IS
     PyErr_Format(PyExc_ValueError, "capi: unknown name %s", n);
     return NULL;
