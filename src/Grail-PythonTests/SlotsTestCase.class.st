@@ -173,6 +173,27 @@ SlotsTestCase >> testNonSlotAssignRaises [
 
 ]
 
+{ #category : 'Grail-Tests - Errors' }
+SlotsTestCase >> testRefusedStoreAndDeleteMessagesAreCPythons [
+	"A strictly slotted object refuses an undeclared name, for a store and a
+	delete alike, with CPython's ``... and no __dict__ for setting new
+	attributes'' and name and obj stamped; a class with its own __setattr__
+	gets the plain form, an unset slot the bare name, and a missed delete on
+	an ordinary instance the load's message.
+	tests/python/attribute_refusal_messages.py holds the checks and agrees
+	with CPython 3.14 (test_descrtut's slotted dict subclass)."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'attribute_refusal_messages' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/attribute_refusal_messages.py')
+		name: 'attribute_refusal_messages'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '13 checks, 0 disagreeing [], keys match: True'
+
+]
+
 { #category : 'Grail-Tests - Forms' }
 SlotsTestCase >> testSingleStringSlot [
 	"__slots__ = 'only' (a bare string) declares a single slot."
