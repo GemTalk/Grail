@@ -567,7 +567,16 @@ def _reconstruct(x, memo, func, args,
             # Materialising it first (_plain_state) took the snapshot before
             # any value was copied, and the mutation went unseen.
             # _deepcopy_dict builds a real dict, so nothing writes through.
-            state = _deepcopy_dict(state, memo)
+            #
+            # And keep the view ALIVE, as deepcopy() would have: _deepcopy_dict
+            # memoizes it by id(), and the view is made fresh for this call, so
+            # once it died a later object could be given its id and the memo
+            # answered that object with this dict's copy -- a header's bases
+            # tuple came back as {'defects': []} (test_email's
+            # test_contentmanager, once allocation happened to reuse the id).
+            copied = _deepcopy_dict(state, memo)
+            _keep_alive(state, memo)
+            state = copied
         else:
             state = _plain_state(state)
             if deep:

@@ -482,6 +482,26 @@ PyFrame class >> ___liveFrameContentsByLevel___: maxLevels [
 
 ]
 
+{ #category : 'Grail-Live Frames' }
+PyFrame class >> ___liveFrameContentsByLevelOf___: aProcess [
+	"___liveFrameContentsByLevel___ for a process that is NOT the one running: a
+	generator's body, suspended at a yield while its consumer reads one of its
+	frames.  Innermost first with index == level, as there, and to the base of
+	the process -- the outer end the re-read's distance is measured from.
+
+	The instance-side _frameContentsAt: reads a suspended process's stack as it
+	was left; the running process's stack is the class-side form's business,
+	and the caller decides which it has."
+
+	| depth levels |
+	depth := aProcess @env0:stackDepth.
+	levels := Array @env0:new: depth.
+	1 @env0:to: depth do: [:i |
+		levels @env0:at: i put: (aProcess @env0:_frameContentsAt: i)].
+	^ levels
+
+]
+
 { #category : 'Grail-Tracebacks' }
 PyFrame class >> ___liveTempsReport___: aMaxLevel [
 	"Diagnostic dump of the live stack: one line per readable level, giving the
