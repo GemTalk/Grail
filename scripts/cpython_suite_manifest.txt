@@ -745,3 +745,50 @@ test.test_grammar
 #   fstring 90t 37F/4E/4S   ast.parse answers Grail's lowering (BinOp / Call)
 #                           where CPython has JoinedStr; SyntaxError messages
 test.test_fstring
+
+# --- Core language (added 2026-10-26): PEP 695 type aliases and parameters ---
+#
+# test_type_aliases and test_type_params are CPython 3.14.4's, vendored
+# verbatim.  Neither could be imported: a parameterised alias in a CLASS BODY,
+# ``class Parent[A]: type TA1[B] = dict[A, B]'', was refused with a
+# SyntaxError, because its scope function is a def the class body calls and
+# whose lazily evaluated value reads the class's own parameter -- which a
+# class-body def could not see.  It can now (a class-body def called by the
+# body, and the lambda it returns, read the enclosing locals), and the rewrite
+# accepts an alias in a class body; a parameterised CLASS nested in a class
+# body is still refused.  Measured on Darwin arm64:
+#
+#   type_aliases  30t 4F/7E    TypeAliasType pickling and __module__, an alias
+#                              in a generic method of a generic class
+#   type_params  108t 16F/42E  SyntaxError checks, private-name mangling of
+#                              type params, codegen gaps in nested scopes
+test.test_type_aliases
+test.test_type_params
+
+# --- Core language (added 2026-10-26): the types module ---
+#
+# test_types is CPython 3.14.4's, vendored verbatim.  It could not be
+# imported: it does ``import _datetime'' at module level, and Grail, whose
+# datetime is native, had no module of that name.  src/python/stdlib/
+# _datetime.py now answers datetime's own classes under the accelerator's
+# name, as CPython's datetime.py re-exports them; the C API capsule
+# datetime_CAPI is left out, so code probing for it still sees it missing
+# (test_sys's sizeof check, test_datetime's C variant).  Measured on Darwin
+# arm64:
+#
+#   types 129t 26F/21E/3S   ClassCreation corner cases, mappingproxy of a
+#                           non-dict mapping, types._GeneratorWrapper
+test.test_types
+
+# --- Core language (added 2026-10-26): break in a loop's else clause ---
+#
+# test_graphlib is CPython 3.14.4's, vendored verbatim.  It timed out on its
+# first test: TopologicalSorter.prepare() never returned.  _find_cycle ends its
+# ``while True'' with a ``break'' in an inner while's ELSE clause, and Grail ran
+# a loop's else clause inside that loop's own PythonBreak handler -- so the
+# break was caught by the loop that had already ended and the outer loop went
+# on forever.  Both arms now run the else clause after the handler, when no
+# break ended the loop.  Measured on Darwin arm64:
+#
+#   graphlib 17t OK/1S
+test.test_graphlib
