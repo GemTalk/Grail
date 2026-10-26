@@ -37,15 +37,9 @@ import sys  # noqa: E402
 
 FAILED = []
 
-# A class built by CALLING a function -- collections.namedtuple's class statement
-# runs inside namedtuple() -- is not registered under its module and name the way
-# a module-level class statement is, so every build of its module makes a new
-# one, and a stored instance is left an instance of the class before.
-NAMEDTUPLE_GAP = 'known gap: a namedtuple class is new after every rebuild of its module'
-KNOWN = {
-    'type.pair': NAMEDTUPLE_GAP,
-    'runs.pickle_namedtuple': NAMEDTUPLE_GAP,
-}
+# No check is a known gap today. A gap goes here, with its reason, when one is
+# found and not yet fixed.
+KNOWN = {}
 
 
 def check(name, fn):
@@ -129,7 +123,7 @@ def raise_and_catch():
 
 def pickle_round_trip():
     bad = [n for n in ('tuple', 'dict', 'set', 'date', 'datetime', 'decimal', 'fraction',
-                       'point', 'color')
+                       'point', 'color', 'span', 'typed_pair_obj')
            if pickle.loads(pickle.dumps(stored[n])) != stored[n]]
     return not bad, 'not equal after a round trip: %s' % bad
 
