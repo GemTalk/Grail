@@ -2476,7 +2476,14 @@ FunctionDefAst >> ___innermostDeclarativeWrapper___ [
 		(self isClassDeclarativeDecorator: (decorator_list at: i)) ifTrue: [^ nil]].
 	last asSymbol == #'classmethod' ifTrue: [^ #'PyClassMethod'].
 	last asSymbol == #'staticmethod' ifTrue: [^ #'PyStaticMethod'].
-	^ #'PropertyDescriptor'
+	"The parser reads @enum.property and @DynamicClassAttribute as #property
+	too, but the object is not the builtin: CPython's DynamicClassAttribute is
+	a plain class with a __dict__, so ``@abstractmethod @DynamicClassAttribute''
+	marks it, where over the builtin the store is refused
+	(test_dynamicclassattribute, at import)."
+	^ self ___isBuiltinPropertyDef___
+		ifTrue: [#'PropertyDescriptor']
+		ifFalse: [#'DynamicClassAttribute']
 
 ]
 

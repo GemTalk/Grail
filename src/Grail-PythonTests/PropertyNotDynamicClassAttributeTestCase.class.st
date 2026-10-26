@@ -33,6 +33,21 @@ PropertyNotDynamicClassAttributeTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests - Classification' }
+PropertyNotDynamicClassAttributeTestCase >> testAnOuterDecoratorReceivesTheDynamicClassAttributeItself [
+	"``@abstractmethod @DynamicClassAttribute'' marks the DynamicClassAttribute,
+	which has a __dict__ as CPython's does; over the builtin property the same
+	store is refused.  The class __dict__ entry is no property either way."
+
+	self
+		assert: (self resultAt: 'outer_decorator_marks_a_dynamic_class_attribute') asString
+		equals: '(False, True, [''color''])'.
+	self
+		assert: (self resultAt: 'outer_decorator_over_builtin_property_is_refused') asString
+		equals: '''AttributeError'''
+
+]
+
+{ #category : 'Grail-Tests - Classification' }
 PropertyNotDynamicClassAttributeTestCase >> testARealPropertyStillClassifiesAsOne [
 	"The other half of the change: making the enum descriptor stop reading as a
 	property must not stop a property from reading as one."
