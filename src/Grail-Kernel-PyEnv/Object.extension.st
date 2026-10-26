@@ -14094,6 +14094,13 @@ Object >> ___pyAttrLoad___: aSym [
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__' or: [s @env0:= '__type_params__']]]]]])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Type slots CPython exposes as member descriptors, so ``int.__itemsize__''
+		is a number (Integer class >> __basicsize__).  Compared by identity,
+		apart from the string list above: every class-attribute read passes this
+		line, and only a class that defines one of them answers it."
+		((aSym == #'__basicsize__' or: [aSym == #'__itemsize__'])
+			and: [self ___respondsTo___: aSym])
+				ifTrue: [^ self @env0:perform: aSym env: 1].
 		"A METACLASS reaches neither accessor: __name__ and __qualname__ are
 		written on ``object class'', and a metaclass's own class chain runs to
 		Metaclass3 rather than through it -- the same asymmetry the __module__

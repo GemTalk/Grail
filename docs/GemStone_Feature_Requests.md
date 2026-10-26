@@ -829,7 +829,7 @@ class, a module namespace); (c) accept dynamic instVars on `ExecBlock` and
 * Raised from 15 sites — `VM: src/lrgint.c:456`, `:474`, `:518`, `:528`, `:550`, `:600`, `:645`, `:1061`, `:1862`, `:2075`, `:2965`, `:3602`, `:3745`, `:3903`, `:4250`
 * It **is** trappable Smalltalk (mapped to `NumericError`) — the error-class map in `KERNEL: Filein1B/Upgrade1B.class.st` (2503 → `NumericError`). Contrast `RT_ERR_STACK_LIMIT_RED 2502` at `VM: src/gcierr.ht:2095`, explicitly *"Not Trappable"*
 * Grail resignals it as catchable `OverflowError` — `src/smalltalk/Python/Int.gs:918-941`, `math.gs:405-427`
-* Reached by real Python — `scripts/cpython_suite_skips.txt:255-269` (CPython genuinely builds a 123,456-digit fraction string); six skip sites in `src/python/stdlib/test/test_int.py:612`, `:621`, `:667`, `:673`, `:717`, `:904`
+* Reached by real Python — `scripts/cpython_suite_skips.txt:255-269` (CPython genuinely builds a 123,456-digit fraction string); six skip sites in `src/python/stdlib/test/test_int.py:612`, `:621`, `:667`, `:673`, `:717`, `:904`; and `test_long`'s `test_bit_count` (`2**1234567`) and `test_karatsuba` (210,000-bit operands), skip-listed with every below-ceiling case measured passing
 
 **Ask.** Raise or make the ceiling configurable; failing that, confirm 2503 is
 trappable from all 15 raise sites, since Grail's guards depend on it. (The one

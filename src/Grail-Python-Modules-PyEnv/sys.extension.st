@@ -723,16 +723,34 @@ sys >> _getframe: depth [
 
 { #category : 'Grail-Built-in Functions' }
 sys >> _getsizeof: positional kw: kwargs [
-	"getsizeof(object[, default]) - Return size of object in bytes."
-	| obj default |
+	"getsizeof(object[, default]) -- what the object's __sizeof__() answers, as
+	CPython's sys.getsizeof asks it.  So a class that defines __sizeof__ is
+	reported through it, and an int reports CPython's int model
+	(Integer >> __sizeof__) rather than GemStone's physical size, which was
+	read directly here and answered 0 for every small int.  Objects with no
+	__sizeof__ of their own still report their physical size
+	(Object >> __sizeof__).
+
+	CPython adds the garbage collector's header for a GC-tracked object; a
+	GemStone object has none, so nothing is added.  A TypeError from
+	__sizeof__ answers ``default'' when one is given, and the answer must be a
+	non-negative int -- CPython's checks and messages."
+
+	| obj default size |
 	obj := positional @env0:at: 1.
 	default := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
-	^ [obj @env0:physicalSize] @env0:on: Error do: [:ex |
-		default ifNil: [TypeError ___signal___: 'object does not provide size'].
-		default
-	]
+	size := [obj @env1:__sizeof__]
+		@env0:on: TypeError
+		do: [:ex |
+			default @env0:isNil ifTrue: [ex @env0:pass].
+			^ default].
+	(size @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: 'an integer is required'].
+	size @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: '__sizeof__() should return >= 0'].
+	^ size
 
 ]
 

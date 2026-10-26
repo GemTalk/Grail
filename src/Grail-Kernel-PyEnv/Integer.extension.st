@@ -332,6 +332,22 @@ Integer class >> ___parseIntFromBytes___: byteObj original: original [
 
 ]
 
+{ #category : 'Grail-Python-Size' }
+Integer class >> __basicsize__ [
+	"``int.__basicsize__'' -- CPython's fixed part of an int, in bytes: refcount,
+	type and the size/sign tag on a 64-bit build.
+
+	Grail reports CPython's int MODEL here, not GemStone's memory: sys.int_info
+	already describes CPython's 30-bit digits stored 4 bytes apiece, and
+	``__sizeof__ == __basicsize__ + __itemsize__ * ndigits'' is the identity
+	test_long's test___sizeof__ checks, against those same sys.int_info
+	numbers.  A SmallInteger is an immediate with no memory of its own, so the
+	physical size (Object >> __sizeof__) answered 0 for every small int."
+
+	^ 24
+
+]
+
 { #category : 'Grail-Protocol Refusal' }
 Integer class >> __getitem__: index [
 	<grailProtocolRefusal>
@@ -354,6 +370,15 @@ Integer class >> __instancecheck__: anObject [
 
 	^ (anObject isKindOf: Integer)
 		or: [(anObject isKindOf: Boolean) or: [anObject isKindOf: AbstractPyInt]]
+
+]
+
+{ #category : 'Grail-Python-Size' }
+Integer class >> __itemsize__ [
+	"``int.__itemsize__'' -- the bytes per digit, sys.int_info.sizeof_digit.  See
+	__basicsize__."
+
+	^ 4
 
 ]
 
@@ -1724,6 +1749,19 @@ Integer >> __rxor__: other [
 	(other isKindOf: Integer) ifTrue: [^ other ___pyBitXor___: self].
 	(self ___isPyIntOperand___: other) ifTrue: [^ (other __index__) ___pyBitXor___: self].
 	^ self ___rbinOpFallback___: other op: '^'
+
+]
+
+{ #category : 'Grail-Python-Size' }
+Integer >> __sizeof__ [
+	"``n.__sizeof__()'' in CPython's int model: the fixed part plus one 4-byte
+	digit per 30 bits of the magnitude, and at least one digit, so 0 is one
+	digit as in CPython.  See Integer class >> __basicsize__ for why this is
+	the model rather than GemStone's physical size."
+
+	| digits |
+	digits := ((self @env0:abs @env0:highBit) @env0:+ 29) @env0:// 30.
+	^ Integer __basicsize__ @env0:+ (Integer __itemsize__ @env0:* (digits @env0:max: 1))
 
 ]
 
