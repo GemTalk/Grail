@@ -2571,6 +2571,18 @@ importlib class >> ___forgetBodyClassAttrsOf___: aModuleName [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___forgetBodyDeletedDefsOf___: aModuleName [
+	"Drop aModuleName's recorded deletions before its body runs again -- see
+	___recordBodyDeletedDef___:of:.  PEEKS the registry."
+
+	| reg |
+	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyDeletedDefs' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	(reg includesKey: aModuleName asString) ifTrue: [reg removeKey: aModuleName asString]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___forgetCanonicalModule___: aModuleName [
 	"Purge EVERY canonical-registry trace of aModuleName, so the next import of
 	it is a genuine COLD import that re-executes the module body.  The shared
@@ -2604,6 +2616,7 @@ importlib class >> ___forgetCanonicalModule___: aModuleName [
 	self ___canonicalModuleHashes___ removeKey: modName ifAbsent: [].
 	"Per-module records, keyed by the module name."
 	self ___canonicalModuleDeps___ ifNotNil: [:deps | deps removeKey: modName ifAbsent: []].
+	self ___forgetBodyDeletedDefsOf___: modName.
 	self ___canonicalMetaclasses___ removeKey: modName ifAbsent: [].
 	self ___canonicalClassStructure___ removeKey: modName ifAbsent: [].
 	"Class registry is keyed ``<module>.<class>''.  Collect the classes as we go:
@@ -7021,6 +7034,7 @@ importlib class >> ___pushInitializingModule___: aName [
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
 	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
 	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
+	self @env0:___forgetBodyDeletedDefsOf___: aName @env0:asString.
 	self @env0:___forgetFunctionMetaOf___: aName @env0:asString.
 	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
 	module @env0:___forgetSessionGlobalsOf___: aName @env0:asString.
@@ -7208,6 +7222,38 @@ importlib class >> ___recordBodyClassAttr___: aClass name: aSym value: aValue [
 		attrs := KeyValueDictionary new.
 		inner at: aClass put: attrs].
 	attrs at: aSym asSymbol put: aValue
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___recordBodyDeletedDef___: aSym of: aModule [
+	"Remember, COMMITTED, that aModule's body deleted its own top-level def aSym
+	(module >> ___deleteOwnDef___:), so a session that BINDS the deployed module
+	-- and so never runs the body -- hides the name too
+	(___restoreAllBodyDeletedDefsIn___:).  pickletools defines, calls and
+	deletes assure_pickle_consistency at deploy; without the record every later
+	session's pickletools still had it (test_pickletools test__all__).
+
+	The same shape as ___recordBodyClassAttr___:name:value:: an RcKeyValueDictionary
+	in the module's namespace, keyed by the module's name, dropped when that body
+	runs again (___forgetBodyDeletedDefsOf___:), and never for a session-local
+	module (``__main__''), which nothing binds.  The value is the module and the
+	names it deleted: the module is the committed instance a bind adopts, and the
+	session tombstone is keyed by that identity."
+
+	| origin reg rec |
+	origin := self ___initializingModuleName___.
+	origin isNil ifTrue: [^ self].
+	(self ___isSessionLocalModule___: origin) ifTrue: [^ self].
+	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyDeletedDefs' otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		self ___grailNamespace___ at: #'GrailCanonicalBodyDeletedDefs' put: reg].
+	rec := reg at: origin asString otherwise: nil.
+	(rec isNil or: [(rec at: 1) ~~ aModule]) ifTrue: [
+		rec := Array with: aModule with: IdentitySet new.
+		reg at: origin asString put: rec].
+	(rec at: 2) add: aSym asSymbol
 
 ]
 
@@ -7892,6 +7938,7 @@ importlib class >> ___restoreAllBodyClassAttrs___ [
 
 	self ___grailSessionNamespacesDo___: [:ns |
 		self ___restoreAllBodyClassAttrsIn___: ns.
+		self ___restoreAllBodyDeletedDefsIn___: ns.
 		self ___seedTransientClassAttrsIn___: ns].
 	^ self
 
@@ -7925,6 +7972,30 @@ importlib class >> ___restoreAllBodyClassAttrsIn___: ns [
 							ov at: cls put: slot].
 						(slot includesKey: sym) ifFalse: [slot at: sym put: val].
 						cls @env1:___noteClassDunderStore___: sym]]]]].
+	^ self
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___restoreAllBodyDeletedDefsIn___: ns [
+	"Replay every deployed module body's recorded deletions as this session's
+	tombstones -- see ___recordBodyDeletedDef___:of:.  Once per session per
+	module (GrailBodyDeletedDefsReplayed), for ___restoreAllBodyClassAttrsIn___:'s
+	reason; a module whose body ran in this session tombstoned its names first
+	hand, and marking them again changes nothing.  PEEKS the registry."
+
+	| reg st done |
+	reg := ns at: #'GrailCanonicalBodyDeletedDefs' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	st := SessionTemps current.
+	done := st at: #'GrailBodyDeletedDefsReplayed' otherwise: nil.
+	done isNil ifTrue: [
+		done := Set new.
+		st at: #'GrailBodyDeletedDefsReplayed' put: done].
+	reg keysAndValuesDo: [:modName :rec |
+		(done includes: modName asString) ifFalse: [
+			done add: modName asString.
+			(rec at: 2) do: [:sym | (rec at: 1) @env1:___markGlobalDeleted___: sym]]].
 	^ self
 
 ]

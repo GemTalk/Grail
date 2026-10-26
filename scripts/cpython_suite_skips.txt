@@ -333,6 +333,11 @@ test.test_format|FormatTest.test_common_format|CPython builds a 123456-fraction-
 # test, up through LONG4's 8*257-bit boundary, passes.  Both runners.
 test.test_pickle|InMemoryPickleTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
 test.test_pickle|PyPicklerTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
+# test_pickletools runs the same test_long (pickletester's AbstractPickleTests)
+# with every pickle passed through pickletools.optimize.  Measured 2026-10-26:
+# all 216 below-ceiling round trips pass, as under CPython; only the monster
+# cannot be built.
+test.test_pickletools|OptimizedPickleTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; all 216 smaller round trips pass
 # test_long has two more, each a correctness loop whose LAST case crosses the same
 # ceiling.  test_bit_count ends at ``2**1234567''; test_karatsuba's largest operand
 # is KARATSUBA_CUTOFF*100 digits of 30 bits, 210,000 bits, and its products twice
