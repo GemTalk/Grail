@@ -38,6 +38,21 @@ def unlink(filename):
         pass
 
 
+def _rmdir(dirname):
+    os.rmdir(dirname)
+
+
+def rmdir(dirname):
+    """Remove the directory ``dirname``, ignoring a missing one (matches
+    CPython).  genericpath's test_isdir cleans up with it; without it the test
+    raised AttributeError after creating its directory and left it behind, so
+    every later test that writes TESTFN failed with IsADirectoryError."""
+    try:
+        _rmdir(dirname)
+    except FileNotFoundError:
+        pass
+
+
 def create_empty_file(filename):
     """Create (or truncate) an empty file -- CPython os_helper.create_empty_file.
 

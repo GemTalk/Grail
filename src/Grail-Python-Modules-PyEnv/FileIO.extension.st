@@ -113,7 +113,7 @@ FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg errors: 
 	``file'' may also be a descriptor, as in CPython -- see
 	___openDescriptor___:."
 
-	| file mode hasR hasW hasA hasX hasPlus hasB hasT count gsMode gsfile inst fd native |
+	| file mode hasR hasW hasA hasX hasPlus hasB hasT count gsMode gsfile inst fd native errName errno |
 	file := fileArg.
 	fd := nil.
 	(file isKindOf: CharacterCollection) ifFalse: [
@@ -134,7 +134,11 @@ FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg errors: 
 				define a display __str__ alongside a real __fspath__ would
 				otherwise be opened under whatever its repr-ish text happened to be."
 				file := (os instance) ___fsPath___: file.
-				(file isKindOf: CharacterCollection) ifFalse: [file := file __str__]]].
+				"A surrogate-escaped str -- an undecodable bytes name, decoded
+				above -- is a str already, and stays one: the primitives below
+				get its exact bytes through ___primPath___:."
+				((file isKindOf: CharacterCollection) or: [file isKindOf: PyStrSurrogate])
+					ifFalse: [file := file __str__]]].
 	"AN EMBEDDED NUL IS A BAD ARGUMENT, not a missing file.  A path cannot
 	hold one -- the OS call takes a NUL-terminated string, so everything after
 	it is silently dropped -- and CPython refuses up front with ``ValueError:
@@ -191,15 +195,18 @@ FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg errors: 
 			writable: ((hasR @env0:not) @env0:or: [hasPlus])
 			native: native encoding: encodingArg errors: errorsArg
 			newline: newlineArg closefd: closefdArg].
-	((GsFile @env0:isServerDirectory: file) == true) ifTrue: [
-		(os instance) ___signalErrno: 21 filename: file].
+	"An error names the argument as given -- bytes stay bytes -- as CPython's
+	open() does."
+	errName := (fileArg isKindOf: ByteArray) ifTrue: [fileArg] ifFalse: [file].
+	((GsFile @env0:isServerDirectory: ((os instance) ___primPath___: file)) == true) ifTrue: [
+		(os instance) ___signalErrno: 21 filename: errName].
 	hasX ifTrue: [
-		((GsFile @env0:existsOnServer: file) == true) ifTrue: [
-			(os instance) ___signalErrno: 17 filename: file]].
+		((GsFile @env0:existsOnServer: ((os instance) ___primPath___: file)) == true) ifTrue: [
+			(os instance) ___signalErrno: 17 filename: errName]].
 	gsMode := hasR ifTrue: ['r'] ifFalse: [hasA ifTrue: ['a'] ifFalse: ['w']].
 	hasPlus ifTrue: [gsMode := gsMode @env0:, '+'].
 	gsMode := gsMode @env0:, 'b'.
-	gsfile := GsFile @env0:openOnServer: file mode: gsMode.
+	gsfile := GsFile @env0:openOnServer: ((os instance) ___primPath___: file) mode: gsMode.
 	gsfile == nil ifTrue: [
 		"Ask STAT why, rather than re-testing existence: os >>
 		___statOrSignal___: already raises the errno as CPython does (ENOENT
@@ -209,8 +216,16 @@ FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg errors: 
 		file''.  It raises whenever the stat fails;
 		reaching past it means the file IS there and the open failed for
 		another reason."
-		(os instance) ___statOrSignal___: file isLstat: false.
-		OSError ___signal___: ('could not open file: ''' @env0:, file @env0:, '''')].
+		errno := GsFile @env0:stat: ((os instance) ___primPath___: file) isLstat: false.
+		(errno @env0:isKindOf: SmallInteger) ifTrue: [
+			"A file that is not there may be one being CREATED, and why that
+			failed is open(2)'s to say: macOS refuses a name that is not UTF-8
+			with EILSEQ, which the stat reports as ENOENT."
+			(hasR @env0:not and: [errno @env0:= 2]) ifTrue: [
+				errno := (os instance) ___errnoOfOpening: file mode: gsMode.
+				errno @env0:= 0 ifTrue: [errno := 2]].
+			^ (os instance) ___signalErrno: errno filename: errName].
+		OSError ___signal___: ('could not open file: ' @env0:, ((builtins @env0:___instance___) repr: errName) @env0:asString)].
 	inst := ((hasB @env0:or: [native == nil]) ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
 	inst ___initGsFile___: gsfile
 		name: ((fileArg isKindOf: ByteArray) ifTrue: [fileArg] ifFalse: [file])
@@ -331,6 +346,8 @@ FileIO class >> ___pathHasNul___: aPath [
 		^ aPath @env0:anySatisfy: [:c | c @env0:codePoint @env0:= 0]].
 	(aPath @env0:isKindOf: ByteArray) ifTrue: [
 		^ aPath @env0:includes: 0].
+	(aPath isKindOf: PyStrSurrogate) ifTrue: [
+		^ (os instance) ___hasNul___: aPath].
 	^ false
 
 ]
