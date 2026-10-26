@@ -1181,6 +1181,14 @@ sys >> initialize [
 	probe misses and lands on the varargs _audit:kw: below, which then gives
 	CPython's complaint.  It also makes ``hook = sys.audit'' a callable value."
 	self @env0:at: #audit put: (BoundMethod receiver: self selector: #audit).
+	"getrefcount and call_tracing had the excepthook defect exactly: an
+	accessor reading a key nobody had put, so even ``getattr(sys,
+	'getrefcount', None)'' raised the uncatchable LookupError -- and
+	numpy.testing makes that read at import, so no numpy test module loaded.
+	Seeded rather than the accessors removed: Rowan's reload cannot delete an
+	env-1 method (it looks the method up in env 0)."
+	self @env0:at: #getrefcount put: (BoundMethod receiver: self selector: #getrefcount).
+	self @env0:at: #call_tracing put: (BoundMethod receiver: self selector: #call_tracing).
 
 ]
 

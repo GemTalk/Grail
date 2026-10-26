@@ -108,7 +108,7 @@ PYTHON_INCLUDES := $(shell \
 NEST_MODS = $(GRAIL_LIB_DIR)/_grail_nest1.so $(GRAIL_LIB_DIR)/_grail_nest2.so \
 	$(GRAIL_LIB_DIR)/_grail_nest3.so $(GRAIL_LIB_DIR)/_grail_nestbad.so
 
-dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so $(NEST_MODS)
+dynmods: $(GRAIL_LIB_DIR)/_grail_demo.so $(NEST_MODS) $(GRAIL_LIB_DIR)/grail_extpkg/_host.so
 
 $(GRAIL_LIB_DIR)/_grail_demo.so: _grail_demo.c
 	@if [ -z "$(PYTHON_INCLUDES)" ]; then \
@@ -129,6 +129,14 @@ $(GRAIL_LIB_DIR)/_grail_nest%.so: _grail_nest.c $(GRAIL_LIB_DIR)/_grail_demo.so
 
 $(GRAIL_LIB_DIR)/_grail_nestbad.so: _grail_nest.c $(GRAIL_LIB_DIR)/_grail_demo.so
 	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -DNEST_FAIL -o $@ _grail_nest.c $(UNDEF_ARGS)
+
+# _grail_subhost.c inside a package (see the file's header): importing
+# grail_extpkg._host.inner loads the extension as a PARENT.  Same headers as
+# _grail_demo.so.
+$(GRAIL_LIB_DIR)/grail_extpkg/_host.so: _grail_subhost.c $(GRAIL_LIB_DIR)/_grail_demo.so
+	@mkdir -p $(GRAIL_LIB_DIR)/grail_extpkg
+	@touch $(GRAIL_LIB_DIR)/grail_extpkg/__init__.py
+	$(CC) $(CFLAGS) $(PYTHON_INCLUDES) $(SHARED_FLAGS) -o $@ _grail_subhost.c $(UNDEF_ARGS)
 
 clean:
 	rm -f $(OBJECTS) $(LIB)

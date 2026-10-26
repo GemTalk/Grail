@@ -474,8 +474,11 @@ ClassDefAst >> ___classBodyConditionalNames___ [
 					"``except E as e'' binds e for the handler's extent."
 					h name ifNotNil: [:n | names add: n asSymbol].
 					collect value: h body]]].
+		"Under the name the def BINDS, as a nested class's is, since a read
+		looks the set up by its mangled name: a private ``def __helper'' in a
+		class-body ``if'' binds _K__helper (sortedcontainers' SortedDict)."
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
-			names add: stmt name asSymbol].
+			names add: stmt ___mangledName___ asSymbol].
 		(stmt isKindOf: ClassDefAst) ifTrue: [
 			names add: (stmt ___manglePrivate___: stmt name) asSymbol].
 		"Per TARGET rather than only when every target is a plain name: Python
@@ -3789,7 +3792,11 @@ ClassDefAst >> emitClassBodyIfDef: aDef on: aStream [
 	from the same place: FunctionDefAst >> ___classBodyValueWrapper___."
 
 	| fname wrapper savedValueDefNode |
-	fname := aDef name asString.
+	"The name the def BINDS: a private ``def __helper'' binds _K__helper, and
+	its own emit assigns that -- so a temp and a store under the written name
+	left _K__helper undeclared (CompileError 1001, sortedcontainers'
+	SortedDict).  printSmalltalkClassBodyRuntimeDefOn: already did this."
+	fname := aDef ___mangledName___ asString.
 	wrapper := aDef ___classBodyValueWrapper___.
 	aStream nextPutAll: '[ | '; nextPutAll: fname; nextPutAll: ' |'; lf.
 	savedValueDefNode := CallAst classBodyValueDefNode.

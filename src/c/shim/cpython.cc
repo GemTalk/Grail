@@ -677,6 +677,8 @@ static PyTypeObject _exc_UnicodeError;
 static PyTypeObject _exc_UnicodeDecodeError;
 static PyTypeObject _exc_UnicodeEncodeError;
 static PyTypeObject _exc_RuntimeWarning;
+static PyTypeObject _exc_FloatingPointError;
+static PyTypeObject _exc_ImportWarning;
 static PyTypeObject _exc_UserWarning;
 static PyTypeObject _exc_AssertionError;
 static PyTypeObject _exc_BaseExceptionGroup;
@@ -715,6 +717,12 @@ PyObject *PyExc_UnicodeError      = (PyObject *)&_exc_UnicodeError;
 PyObject *PyExc_UnicodeDecodeError = (PyObject *)&_exc_UnicodeDecodeError;
 PyObject *PyExc_UnicodeEncodeError = (PyObject *)&_exc_UnicodeEncodeError;
 PyObject *PyExc_RuntimeWarning    = (PyObject *)&_exc_RuntimeWarning;
+/* Real types, as every other: they were placeholder objects in
+   shim_numpy.cc, so numpy's errstate(invalid='raise') raised a type the
+   name table did not know -- "UnknownError", which no except clause caught
+   and which ended a pytest session. */
+PyObject *PyExc_FloatingPointError = (PyObject *)&_exc_FloatingPointError;
+PyObject *PyExc_ImportWarning     = (PyObject *)&_exc_ImportWarning;
 PyObject *PyExc_UserWarning       = (PyObject *)&_exc_UserWarning;
 PyObject *PyExc_AssertionError    = (PyObject *)&_exc_AssertionError;
 PyObject *PyExc_BaseExceptionGroup = (PyObject *)&_exc_BaseExceptionGroup;
@@ -729,6 +737,7 @@ static PyTypeObject *const exc_parent_table[][2] = {
     { &_exc_IndexError,         &_exc_LookupError },
     { &_exc_OverflowError,      &_exc_ArithmeticError },
     { &_exc_ZeroDivisionError,  &_exc_ArithmeticError },
+    { &_exc_FloatingPointError, &_exc_ArithmeticError },
     { &_exc_RecursionError,     &_exc_RuntimeError },
     { &_exc_NotImplementedError, &_exc_RuntimeError },
     { &_exc_UnicodeDecodeError, &_exc_UnicodeError },
@@ -846,6 +855,8 @@ static void init_exception_types(void) {
     init_exc_type(&_exc_UnicodeDecodeError, "UnicodeDecodeError");
     init_exc_type(&_exc_UnicodeEncodeError, "UnicodeEncodeError");
     init_exc_type(&_exc_RuntimeWarning, "RuntimeWarning");
+    init_exc_type(&_exc_FloatingPointError, "FloatingPointError");
+    init_exc_type(&_exc_ImportWarning, "ImportWarning");
     init_exc_type(&_exc_UserWarning, "UserWarning");
     init_exc_type(&_exc_AssertionError, "AssertionError");
     init_exc_type(&_exc_GeneratorExit, "GeneratorExit");
@@ -886,6 +897,7 @@ static void init_exception_types(void) {
         &_exc_UnicodeEncodeError,
         &_exc_RuntimeWarning,
         &_exc_UserWarning,
+        &_exc_ImportWarning,
         &_exc_AssertionError,
         &_exc_BaseExceptionGroup,
     };
@@ -1281,6 +1293,8 @@ static const char *name_for_exc_type(PyObject *current_error_type) {
     if (current_error_type == PyExc_UnboundLocalError) return "UnboundLocalError";
     if (current_error_type == PyExc_BaseExceptionGroup) return "BaseExceptionGroup";
     if (current_error_type == PyExc_RuntimeWarning)    return "RuntimeWarning";
+    if (current_error_type == PyExc_FloatingPointError) return "FloatingPointError";
+    if (current_error_type == PyExc_ImportWarning)     return "ImportWarning";
     if (current_error_type == PyExc_UserWarning)       return "UserWarning";
     if (current_error_type == PyExc_DeprecationWarning) return "DeprecationWarning";
     if (current_error_type == PyExc_FutureWarning)     return "FutureWarning";
@@ -5023,8 +5037,6 @@ static int is_shim_module(PyObject *obj) {
 
 static PyObject *shim_module_getattr(PyObject *module, const char *name) {
     PyModuleDef *def = (PyModuleDef *)module;
-    if (strcmp(name, "__name__") == 0)
-        return PyUnicode_FromString(def->m_name ? def->m_name : "?");
     if (strcmp(name, "__dict__") == 0)
         return PyModule_GetDict(module);
     int idx = find_or_create_module_attrs(module);
@@ -5049,6 +5061,13 @@ static PyObject *shim_module_getattr(PyObject *module, const char *name) {
             if (v != NULL) { Py_INCREF(v); return v; }
             if (PyErr_Occurred()) return NULL;
         }
+    }
+    /* A __name__ nobody set: the dotted name the module was made under, as
+       CPython's spec gives it, else its def's.  After the table, because
+       PyO3 sets a submodule's full name there itself. */
+    if (strcmp(name, "__name__") == 0) {
+        const char *full = module_name_for(module);
+        return PyUnicode_FromString(full ? full : def->m_name ? def->m_name : "?");
     }
     PyErr_Format(PyExc_AttributeError, "module '%s' has no attribute '%s'",
                  def->m_name ? def->m_name : "?", name);
@@ -5584,7 +5603,12 @@ extern "C" PyObject *PyObject_Call(PyObject *callable, PyObject *args,
         result = GciPerform(server, "PyObject_Call:args:", cargs, 2);
     }
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    /* A list or tuple answered to C in CPython's layout: the caller may read
+       it inline, as numpy reads _commastring's list with PyList_GET_ITEM --
+       from a Grail wrapper that read the wrapper's magic as an item pointer,
+       and np.dtype("S10,S9") segfaulted.  A copy, as for mp_subscript's
+       answer: C mutating it does not reach the Grail list. */
+    return real_layout_arg(addr_to_pyobj(result), 0);
 }
 
 /* callable(*args) in Grail, whatever it is in C: the server half of
@@ -6747,6 +6771,46 @@ static int run_module_exec_slots(PyObject *mod) {
     return 0;
 }
 
+/* Multi-phase init driven by the extension itself, as PyO3 builds a
+   submodule (hypothesis._native.internal.floats): it creates a module from a
+   def and a spec, then runs the def's exec slots on it.  The shim's def IS
+   the module (PyModuleDef_Init), so creating one stamps the def and records
+   the dotted name the spec carries, which the module's __name__ and dict
+   read (module_name_for).  Py_mod_create is not run, as for every shim
+   module.  These two were missing, so the library failed to dlopen at all. */
+extern "C" PyObject *PyModule_FromDefAndSpec2(PyModuleDef *def, PyObject *spec, int apiver) {
+    (void)apiver;
+    if (def == NULL) {
+        PyErr_SetString(PyExc_SystemError, "PyModule_FromDefAndSpec2: NULL def");
+        return NULL;
+    }
+    PyObject *mod = PyModuleDef_Init(def);
+    if (mod == NULL) return NULL;
+    PyObject *nameObj = spec ? PyObject_GetAttrString(spec, "name") : NULL;
+    const char *name = nameObj ? PyUnicode_AsUTF8(nameObj) : NULL;
+    if (name == NULL) { PyErr_Clear(); name = def->m_name; }
+    if (name != NULL && module_name_for(mod) == NULL && num_modules < MAX_MODULES) {
+        snprintf(module_names[num_modules], sizeof(module_names[num_modules]), "%s", name);
+        module_cache[num_modules] = mod;
+        num_modules++;
+    }
+    return mod;
+}
+
+extern "C" int PyModule_ExecDef(PyObject *module, PyModuleDef *def) {
+    if (module != (PyObject *)def) {
+        PyErr_SetString(PyExc_SystemError,
+                        "PyModule_ExecDef: the Grail shim's module is its def");
+        return -1;
+    }
+    if (run_module_exec_slots(module) != 0) {
+        if (!PyErr_Occurred())
+            PyErr_SetString(PyExc_SystemError, "PyModule_ExecDef: an exec slot failed");
+        return -1;
+    }
+    return 0;
+}
+
 static PyObject *get_or_load_module(const char *name) {
     /* Check cache */
     for (int i = 0; i < num_modules; i++) {
@@ -7229,7 +7293,8 @@ static PyObject *static_exc_named(const char *name) {
         PyExc_UnicodeError, PyExc_UnicodeDecodeError, PyExc_UnicodeEncodeError,
         PyExc_AssertionError, PyExc_BaseExceptionGroup, PyExc_DeprecationWarning,
         PyExc_FutureWarning, PyExc_RuntimeWarning, PyExc_UserWarning,
-        PyExc_GeneratorExit, PyExc_UnboundLocalError };
+        PyExc_GeneratorExit, PyExc_UnboundLocalError, PyExc_FloatingPointError,
+        PyExc_ImportWarning };
     for (size_t i = 0; i < sizeof(excs) / sizeof(excs[0]); i++) {
         const char *n = name_for_exc_type(excs[i]);
         if (n && strcmp(n, name) == 0) return excs[i];
@@ -8271,6 +8336,11 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
            __getattribute__ ran round that loop until the user actions ran
            out). */
         v = foreign_generic_getattr(obj, name);
+    } else if (is_shim_module(obj)) {
+        /* A module an extension made itself -- PyO3's submodules,
+           hypothesis._native.internal -- reaches Grail as a foreign object;
+           its names are in the shim's module table, where C reads them. */
+        v = shim_module_getattr(obj, name);
     } else {
         v = foreign_getattr_c(obj, name);
     }

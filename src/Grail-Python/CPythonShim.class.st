@@ -1329,7 +1329,8 @@ CPythonShim >> ___staticExceptionNames [
 		'ImportError' 'NameError' 'BufferError' 'EOFError' 'KeyboardInterrupt'
 		'UnicodeError' 'UnicodeDecodeError' 'UnicodeEncodeError' 'AssertionError'
 		'BaseExceptionGroup' 'DeprecationWarning' 'FutureWarning' 'RuntimeWarning'
-		'UserWarning' 'GeneratorExit' 'UnboundLocalError')
+		'UserWarning' 'GeneratorExit' 'UnboundLocalError' 'FloatingPointError'
+		'ImportWarning')
 
 ]
 
@@ -1954,10 +1955,18 @@ CPythonShim >> callModule6ReturnCPtr: modDotMethod with: a1 with: a2 with: a3 wi
 { #category : 'Grail-Dynamic Loading' }
 CPythonShim >> callModuleDynamic: moduleName method: methodName args: anArray [
 	"Call a dynamically loaded module method with a variable number of arguments.
-	anArray is an Array of Smalltalk values (0 to 5 elements)."
+	anArray is an Array of Smalltalk values.
+
+	shimCall has five argument slots and a three-bit count, so more than five
+	go through shimCallKw, which takes arrays.  They used to go here: a sixth
+	and later argument were dropped, and the count wrapped -- np.result_type
+	with eight arguments saw none (``at least one array or dtype is
+	required''), and with seven read past the slots and segfaulted."
 
 	| nargs a1 a2 a3 a4 a5 |
 	nargs := anArray size.
+	nargs > 5 ifTrue: [
+		^ self callModule: moduleName method: methodName args: anArray kwargs: nil].
 	a1 := nargs >= 1 ifTrue: [(self wrap: (anArray at: 1)) memoryAddress] ifFalse: [0].
 	a2 := nargs >= 2 ifTrue: [(self wrap: (anArray at: 2)) memoryAddress] ifFalse: [0].
 	a3 := nargs >= 3 ifTrue: [(self wrap: (anArray at: 3)) memoryAddress] ifFalse: [0].

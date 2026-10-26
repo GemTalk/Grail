@@ -2088,6 +2088,16 @@ def _shadowed_dict(klass, cache):
         # class's __dict__ at all.
         if entry is type or entry is object:
             continue
+        # module's own ``__dict__`` is the namespace it stores, as CPython's
+        # md_dict member is, and above module CPython has only object.
+        # Grail's lists an accessor function there, and its MRO goes on into
+        # the implementation's SymbolDictionary and IdentityDictionary, whose
+        # ``__dict__`` entries both read as shadowing bindings -- so
+        # getattr_static found nothing on any module, and pluggy 1.7, which
+        # finds hookspecs with it, refused pytest's own (``did not find any
+        # 'pytest' hooks``).
+        if entry is _types.ModuleType:
+            return _sentinel
         d = _getattr_static_class_dict(entry, cache)
         if '__dict__' in d:
             class_dict = d['__dict__']

@@ -2963,6 +2963,13 @@ builtins >> ___isSubclassSingle___: sub of: target [
 			argMessage: 'issubclass() arg 1 must be a class'.
 		self ___abstractClassCheck___: target
 			argMessage: 'issubclass() arg 2 must be a class, a tuple of classes, or a union'.
+		"An ABC's own hook first, as for a class below: a C extension's type
+		is no Behavior, and numpy registers np.number with numbers.Number --
+		``issubclass(np.number, numbers.Number)'' answered False while
+		numbers.Number.__subclasscheck__(np.number) answered True."
+		((target isKindOf: Behavior)
+			and: [target ___respondsTo___: #'__subclasscheck__:']) ifTrue: [
+				(target __subclasscheck__: sub) == true ifTrue: [^ true]].
 		^ self ___abstractIsSubclass___: sub of: target depth: 0].
 	(sub == target) ifTrue: [^ true].
 	"CPython: bytearray is NOT a subclass of bytes (distinct types), though
