@@ -1519,11 +1519,12 @@ sys >> set_coroutine_origin_tracking_depth: depth [
 sys >> set_int_max_str_digits: maxdigits [
 	"set_int_max_str_digits(maxdigits): set the per-session limit on the
 	number of digits int(str) will convert.  0 disables the limit; CPython
-	rejects a positive value below 640 (the minimum threshold)."
+	rejects a positive value below 640 (the minimum threshold), in its own
+	words: ``maxdigits must be >= 640 or 0 for unlimited''."
 	(maxdigits @env0:isKindOf: Integer) ifFalse: [
 		TypeError ___signal___: 'an integer is required'].
 	((maxdigits @env0:~= 0) and: [maxdigits @env0:< 640]) ifTrue: [
-		ValueError ___signal___: 'maxdigits must be 0 or larger than 640'].
+		ValueError ___signal___: 'maxdigits must be >= 640 or 0 for unlimited'].
 	(SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits put: maxdigits.
 	^ None
 
