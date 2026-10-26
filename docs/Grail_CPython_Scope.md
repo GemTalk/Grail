@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 60 | 8 | 22 | 90 |
+| P1 | 60 | 9 | 21 | 90 |
 | P2 | 23 | 2 | 9 | 34 |
 | P3 | 20 | 5 | 31 | 56 |
 | P4 | 22 | 7 | 46 | 75 |
-| **In-scope** | **125** | **22** | **108** | **255** |
+| **In-scope** | **125** | **23** | **107** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **147 are wired into the harness** (P1 68 · P2 25 · P3 25 · P4 29) and **125 of those score OK**.
+Of the 255 in-scope modules, **148 are wired into the harness** (P1 69 · P2 25 · P3 25 · P4 29) and **125 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -224,7 +224,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
 | ✅ | `test_global` | global statement (language). |
-|  | `test_grammar` | Grammar (language). |
+| ❗ | `test_grammar` | Grammar (language). |
 | ✅ | `test_hash` | hash() protocol (language). |
 | ✅ | `test_index` | __index__ protocol (language). |
 | ✅ | `test_int` | int — core type (in harness). |
@@ -820,7 +820,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_policy` ERROR, 33 tests: 0 failed, 3 errors, 0 skipped
 - `test.test_email.test_utils` ERROR, 22 tests: 1 failed, 10 errors, 1 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_patma`.
+Wired, but not on the board until the next nightly measures them: `test_grammar`, `test_patma`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

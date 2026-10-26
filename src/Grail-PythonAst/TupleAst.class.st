@@ -31,6 +31,15 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Code Generation' }
+TupleAst >> ___addDeletedTargetsTo___: aCollection [
+	"``del (a, [b, c])'' deletes each element in turn, as CPython's
+	codegen visits a Del-context Tuple (codegen_tuple, Python/codegen.c:3449)."
+
+	elts do: [:each | each ___addDeletedTargetsTo___: aCollection]
+
+]
+
 { #category : 'Grail-annotations' }
 TupleAst >> ___defaultSourceString___ [
 	"PARENTHESISED, unlike the annotation form.

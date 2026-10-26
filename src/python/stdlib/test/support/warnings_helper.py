@@ -175,6 +175,35 @@ class save_restore_warnings_filters:
 # GRAIL: verbatim from CPython 3.14.4 Lib/test/support/warnings_helper.py, the names
 # CPython test modules import that this trimmed copy lacked.
 
+def check_syntax_warning(testcase, statement, errtext='',
+                         *, lineno=1, offset=None):
+    # Test also that a warning is emitted only once.
+    from test.support import check_syntax_error
+    with warnings.catch_warnings(record=True) as warns:
+        warnings.simplefilter('always', SyntaxWarning)
+        compile(statement, '<testcase>', 'exec')
+    testcase.assertEqual(len(warns), 1, warns)
+
+    warn, = warns
+    testcase.assertIsSubclass(warn.category, SyntaxWarning)
+    if errtext:
+        testcase.assertRegex(str(warn.message), errtext)
+    testcase.assertEqual(warn.filename, '<testcase>')
+    testcase.assertIsNotNone(warn.lineno)
+    if lineno is not None:
+        testcase.assertEqual(warn.lineno, lineno)
+
+    # SyntaxWarning should be converted to SyntaxError when raised,
+    # since the latter contains more information and provides better
+    # error report.
+    with warnings.catch_warnings(record=True) as warns:
+        warnings.simplefilter('error', SyntaxWarning)
+        check_syntax_error(testcase, statement, errtext,
+                           lineno=lineno, offset=offset)
+    # No warnings are leaked when a SyntaxError is raised.
+    testcase.assertEqual(warns, [])
+
+
 def import_deprecated(name):
     """Import *name* while suppressing DeprecationWarning."""
     with warnings.catch_warnings():

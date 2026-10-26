@@ -5501,7 +5501,7 @@ FunctionDefAst >> collectDeletedNamesFrom: node into: aSet [
 		^ self].
 	(node isKindOf: AbstractNode) ifFalse: [^ self].
 	(node isKindOf: DeleteAst) ifTrue: [
-		targets := node targets.
+		targets := node deletedTargets.
 		targets ifNotNil: [
 			targets do: [:t |
 				(t isKindOf: NameAst) ifTrue: [aSet add: t id asSymbol]]]].

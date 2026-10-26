@@ -24,3 +24,12 @@ ExpressionAst class >> isAbstract [
 	^self == ExpressionAst
 
 ]
+
+{ #category : 'Grail-Code Generation' }
+ExpressionAst >> ___addDeletedTargetsTo___: aCollection [
+	"A name, attribute or subscript ``del'' target deletes itself; a tuple
+	or list deletes its elements instead."
+
+	aCollection add: self
+
+]

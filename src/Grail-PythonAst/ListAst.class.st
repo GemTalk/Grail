@@ -31,6 +31,15 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Code Generation' }
+ListAst >> ___addDeletedTargetsTo___: aCollection [
+	"``del (a, [b, c])'' deletes each element in turn, as CPython's
+	codegen visits a Del-context List (codegen_list, Python/codegen.c:3431)."
+
+	elts do: [:each | each ___addDeletedTargetsTo___: aCollection]
+
+]
+
 { #category : 'Grail-annotations' }
 ListAst >> ___defaultSourceString___ [
 	"``h=[1]'' fell to the ``<annotation>'' placeholder."
