@@ -37,6 +37,8 @@ test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect 
 test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
 test.test_generators|__test__.coroutine|`del g` inside support.catch_unraisable_exception() expects the generator to be finalized on the spot, so cm.unraisable is set before the next line -- refcount finalization. Grail finalizes it at a later GC, which also prints its "Exception ignored while closing generator" during whichever doctest is running then: in __test__.refleaks it was absorbed, in __test__.pep or __test__.email it failed a passing test (nightly 39918472792)
 test.test_generators|__test__.refleaks|the Leaker example's `del leaker` expects __del__ to have run before the next line, inside support.catch_unraisable_exception() -- refcount finalization; Grail's GC is not refcounted
+test.test_generators|FinalizationTest.test_refcycle|asserts sys.getrefcount(g) >= 2 before anything else -- a refcount, which Grail's GC does not keep.  The finalization it goes on to check does happen: a generator caught in a cycle is finalized by support.gc_collect()
+test.test_generators|GeneratorTest.test_close_clears_frame|expects the argument's __del__ to run the moment close() drops the generator's frame, before the next line -- refcount finalization; Grail's GC is not refcounted
 test.test_scope|ScopeTests.testLeaks|counts 100 closure-captured objects back to zero via __del__ after the last reference drops — refcount finalization, and gc_collect() cannot stand in for it on a non-refcounted VM
 # test_dynamic's two CPython-internals tests.  The module as a whole is about
 # rebinding globals/builtins, which Grail does implement; these two are not.
@@ -331,6 +333,27 @@ test.test_format|FormatTest.test_common_format|CPython builds a 123456-fraction-
 # test, up through LONG4's 8*257-bit boundary, passes.  Both runners.
 test.test_pickle|InMemoryPickleTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
 test.test_pickle|PyPicklerTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
+# test_pickletools runs the same test_long (pickletester's AbstractPickleTests)
+# with every pickle passed through pickletools.optimize.  Measured 2026-10-26:
+# all 216 below-ceiling round trips pass, as under CPython; only the monster
+# cannot be built.
+test.test_pickletools|OptimizedPickleTests.test_long|a 1,000,064-bit integer (``nbase << 1000000''); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; all 216 smaller round trips pass
+# test_long has two more, each a correctness loop whose LAST case crosses the same
+# ceiling.  test_bit_count ends at ``2**1234567''; test_karatsuba's largest operand
+# is KARATSUBA_CUTOFF*100 digits of 30 bits, 210,000 bits, and its products twice
+# that.  Measured 2026-10-25 by running each loop without its over-ceiling case:
+# every smaller case passes, 120 Karatsuba products included, as under CPython.
+# The VM's own probe: 130143 bits builds, 130144 raises error 2503.
+test.test_long|LongTest.test_bit_count|its last case is 2**1234567; GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; every smaller case passes
+test.test_long|LongTest.test_karatsuba|its largest operands are 210,000 bits; GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; every smaller case passes
+# test_random's test_getrandbits_2G_bits asks for ONE 2**31-bit integer, 16500
+# times the same ceiling; it is not a bigmemtest, so CPython simply runs it.
+# getrandbits raises the catchable OverflowError past 130144 bits, and matches
+# CPython bit for bit up to and including it (seeded draws compared at 1 ..
+# 130144 bits).  randbytes(16268), the widest getrandbits it can make, used to
+# END THE PROCESS in to_bytes, which built 2**(8n) one bit past the value;
+# that is fixed (tests/python/int_bytes_at_ceiling.py).
+test.test_random|MersenneTwister_TestBasicOps.test_getrandbits_2G_bits|a 2**31-bit integer from getrandbits(2**31); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
 # --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
 # Both are single-line hangs inside an otherwise-scorable module, so they are
 # skip-listed (never counted as passes) to let the rest of the module score;
@@ -565,3 +588,23 @@ test.test_annotationlib|TestForwardRefClass.test_forward_equality_and_hash_with_
 test.test_annotationlib|TestForwardRefFormat.test_multiple_closure|asserts __extra_names__ holds a closure variable's VALUE, which the fake-globals pass reads from the function's cell; Grail's stringifier runs on source text and cannot see an enclosing function's locals
 test.test_annotationlib|TestStringFormat.test_shenanigans|pins the stringifier's rendering of an expression it cannot reconstruct ("x | <class 'int'>" for x | (1).__class__); Grail's STRING is the exact source, "x | 1 .__class__"
 test.test_annotationlib|TestStringFormat.test_unsupported_operations|pins the stringifier's refusal of an f-string (its __format__ raises TypeError); Grail's STRING is source text and has no such limitation
+# test_exceptions' infinite recursion through a NON-MATCHING except clause.
+# ``def g(): try: return g() except ValueError: return -1'' -- each level's
+# ``except ValueError'' is a PyLazyExceptSelector, which the kernel's on:do:
+# handles as its form 3 (a non-class selector): catch AbstractException, ask
+# #handles:, and ``ex pass'' on a miss.  Each miss runs on TOP of the
+# overflowing stack and adds four frames, so the stack-overflow error is passed
+# through every level's handler before reaching assertRaises, and at Grail's
+# ~2600-level physical recursion limit that is thousands of frames past the
+# Red Zone: AlmostOutOfStack 2502 kills the session (CPython stops at a
+# counted limit of 1000 and unwinds as it goes).  The plain ``def f(): return
+# f()'' half of the test passes.  Removing this skip is the regression test for
+# an except clause whose miss does not grow the stack.
+test.test_exceptions|ExceptionTests.testInfiniteRecursion|recursion through a non-matching except clause: each level's lazy except selector re-passes the overflow on top of the exhausted stack (kernel on:do: form 3, four frames per level), so the search overruns the Red Zone and AlmostOutOfStack 2502 kills the session -- see the comment above
+# test_signal's handler-race stress test: a thread busy-loops raise_signal()
+# while the main thread waits for at least one signal to arrive.  Grail's
+# threads are cooperative green threads, so the busy thread never yields and
+# the wait never ends; in CI's Linux container the module hit the 1800s
+# watchdog here and scored TIMEOUT (refresh run 40106128072).  The same shape
+# as test_itertools' test_tee_concurrent above.
+test.test_signal|StressTest.test_stress_modifying_handlers|real-thread contention: a busy raise_signal() loop in a thread never yields under Grail's cooperative green threads, so the waiting main thread hangs the session (Linux TIMEOUT at 1800s, refresh run 40106128072)

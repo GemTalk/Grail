@@ -4,6 +4,25 @@ Class {
 	#category : 'Grail-SUnit'
 }
 
+{ #category : 'Grail-Tests' }
+TimedeltaFloatOperandTestCase >> testANonFiniteComponentIsCPythonsError [
+
+	"timedelta(seconds=nan) is a ValueError and an infinite component an
+	OverflowError, as in CPython.  Grail carried either on as a Float day
+	count into the date primitive, which refused it with an uncatchable
+	ArgumentTypeError (test_plistlib test_invalid_binary)."
+
+	| results |
+
+	importlib @env1:modules removeKey: #'timedelta_float_operand' ifAbsent: [].
+	results := (importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/timedelta_float_operand.py')
+		name: 'timedelta_float_operand') @env1:___pyAttrLoad___: #RESULTS.
+	#('nan_component_is_a_value_error' 'infinite_component_is_an_overflow_error') do: [:key |
+		self assert: (results @env1:__getitem__: key) == true description: key]
+
+]
+
 { #category : 'Grail-Tests - timedelta' }
 TimedeltaFloatOperandTestCase >> testTimedeltaFloatOperand [
 	"timedelta * / a float SUBCLASS must go through the float path, and a

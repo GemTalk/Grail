@@ -33,7 +33,12 @@ CopyProtocolTestCase >> testCopyProtocol [
 	doesNotUnderstand: #\\''.  Classes are ordinary keys: copy keys its
 	atomic tables as sets of classes.  And partial.__setstate__ rebuilt its
 	args and keywords unconditionally, where CPython keeps an EXACT tuple or
-	dict as is, so a shallow copy stopped sharing them."
+	dict as is, so a shallow copy stopped sharing them.
+
+	The memo remembers objects by id, so it must keep each one alive.  An
+	instance's state is a __dict__ view made for the call; memoized but not
+	kept, it could be collected mid-copy and its id taken by a later object,
+	which then came back as the view's copy (test_email's contentmanager)."
 
 	| mod results |
 	importlib @env1:modules removeKey: #'copy_protocol' ifAbsent: [].
@@ -53,7 +58,8 @@ CopyProtocolTestCase >> testCopyProtocol [
 	  'list_subclass_keeps_items_and_attrs' 'custom_reduce_roundtrip'
 	  'getnewargs_used' 'regex_pattern_and_match_are_atomic'
 	  'userdict_copy' 'partial_shallow_copy_shares'
-	  'partial_deep_copy_copies' 'replace_namedtuple'
+	  'partial_deep_copy_copies' 'deepcopy_memo_keeps_memoized_objects_alive'
+	  'replace_namedtuple'
 	  'replace_dataclass' 'replace_rejects_plain_object'
 	  'hash_of_unhashable_instance_type' 'unhashable_type_as_dict_key'
 	  'unhashable_type_as_set_member'

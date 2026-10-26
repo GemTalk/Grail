@@ -53,14 +53,20 @@ m = email.message_from_string(src)
 
 { #category : 'Grail-Tests - building' }
 EmailMessageTestCase >> testEmailMessageSetContent [
+
+	"CPython's raw-data manager ends text content with a newline, so
+	get_content() answers 'hello\n' -- the hand-written email package this was
+	written against answered 'hello'; the package is CPython 3.14's now."
+
 	| result |
+
 	result := self eval: 'import email
 from email.message import EmailMessage
 m = EmailMessage()
 m["Subject"] = "modern"
 m.set_content("hello", "html")
 (m.get_content_type() == "text/html"
- and m.get_content() == "hello"
+ and m.get_content() == "hello\n"
  and m.get_content_charset() == "utf-8")'.
 	self assert: result
 
@@ -146,14 +152,17 @@ parts = m.get_payload()
 
 { #category : 'Grail-Tests - parsing' }
 EmailMessageTestCase >> testParseSimpleMessage [
-	"Headers (case-insensitive, first-wins), folded continuation, body."
+	"Headers (case-insensitive, first-wins), folded continuation, body.  Under
+	CPython's default compat32 policy a folded header keeps its fold, so the
+	Subject reads 'a folded\n subject line'; the hand-written package this was
+	written against unfolded it."
 
 	| result |
 	result := self eval: 'import email
 src = "From: a@example.com\nTo: b@example.com\nSubject: a folded\n subject line\nX-Dup: one\nX-Dup: two\n\nbody line 1\nbody line 2"
 m = email.message_from_string(src)
 (m["from"] == "a@example.com"
- and m["SUBJECT"] == "a folded subject line"
+ and m["SUBJECT"] == "a folded\n subject line"
  and m["x-dup"] == "one"
  and m.get_all("X-Dup") == ["one", "two"]
  and m.get_payload() == "body line 1\nbody line 2"

@@ -149,6 +149,20 @@ check('wave_style_call_names_the_method',
       lambda: 'Wave_read.getmarkers' in _wave_style_call()[1], True)
 
 
+
+# ------------------------------------------------- the default message, as a name
+
+# _DEPRECATED_MSG is the message _deprecated uses by default, and stdlib
+# modules build their own on it: nturl2path appends "; use 'urllib.request'
+# instead".  It was missing, so importing nturl2path was an AttributeError.
+check('the_default_message_is_a_module_attribute',
+      lambda: warnings._DEPRECATED_MSG,
+      '{name!r} is deprecated and slated for removal in Python {remove}')
+check('a_message_built_on_it_is_formatted',
+      lambda: warn_text('spam', message=warnings._DEPRECATED_MSG + '; use eggs',
+                        remove=FUTURE)[1].endswith('; use eggs'),
+      True)
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

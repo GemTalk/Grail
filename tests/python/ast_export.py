@@ -114,6 +114,10 @@ r['syntax_error_still_raised'] = kind(lambda: ast.parse("x ="))
 r['parse_of_a_tree'] = outcome(
     lambda: names(ast.parse(ast.parse("x = 1"))))
 r['literal_eval_unaffected'] = outcome(lambda: ast.literal_eval("[1, 2]"))
+# A BARE TUPLE is an expression literal_eval reads: each line of a dbm.dumb
+# index is one, so shelve could not reopen a database it had written.
+r['literal_eval_bare_tuple'] = outcome(lambda: ast.literal_eval("'a', (0, 5)"))
+r['literal_eval_one_element_tuple'] = outcome(lambda: ast.literal_eval("1,"))
 r['compile_without_the_flag'] = outcome(
     lambda: (lambda d: (exec(compile("q = 4", "<t>", "exec"), d), d['q'])[1])({}))
 
@@ -125,6 +129,8 @@ EXPECTED = {
     'left': "ok -> ('Name', 'a')",
     'left_unchanged_by_folding': "ok -> 'a'",
     'lineno': 'ok -> 2',
+    'literal_eval_bare_tuple': "ok -> ('a', (0, 5))",
+    'literal_eval_one_element_tuple': 'ok -> (1,)',
     'literal_eval_unaffected': 'ok -> [1, 2]',
     'module': "ok -> 'Module'",
     'operator': "ok -> 'Mult'",

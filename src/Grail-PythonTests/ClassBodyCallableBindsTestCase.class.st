@@ -29,6 +29,17 @@ ClassBodyCallableBindsTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests' }
+ClassBodyCallableBindsTestCase >> testAFunctionFromAStdlibPackageBinds [
+
+	"A stdlib PACKAGE module's function is CPython's own Python and binds in a
+	class body, as email.message's ``from email.iterators import walk'' needs;
+	only a top-level stdlib module may stand in for a C builtin."
+
+	self assertAll: #('stdlib_package_def_binds')
+
+]
+
+{ #category : 'Grail-Tests' }
 ClassBodyCallableBindsTestCase >> testAssignedFunctionsBindSelf [
 	"object >> ___instanceClassAttrGet___: asks ___isDescriptorCallable___:, as
 	the holder path does, instead of binding an UnboundMethod alone."

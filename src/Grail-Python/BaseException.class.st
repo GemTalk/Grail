@@ -2127,6 +2127,11 @@ BaseException class >> ___liveFrameChainFromPairs___: pairs [
 		route, for a frame whose levels could not be aligned."
 		(pair @env0:atOrNil: 6) ifNotNil: [:ol |
 			frame @env0:dynamicInstVarAt: #'___liveOuterLevel___' put: ol.
+			"AND WHOSE STACK IT IS.  A generator's body runs on a process of its
+			own, so a frame built inside it is re-read after the body has yielded,
+			from the consumer's process -- whose stack it is not on.  The levels to
+			re-read are the owner's (PyFrame >> ___liveLocalsFromLevels___)."
+			frame @env0:dynamicInstVarAt: #'___liveProcess___' put: GsProcess @env0:_current.
 			"THE LEVEL'S OWN METHOD, which is not always ``meth'' above: a nested def
 			is a two-argument BLOCK and the pair identifies it by its HOME, so the
 			method to confirm a level against and the method to identify a frame by
@@ -2445,7 +2450,7 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 	no locals.  See ___liveFrameLevelOffset___:levels: for how a triple index turns
 	into a level, and PyFrame class>>___pyLocalsFromFrameContentsList___: for why a
 	single Python frame hands over a LIST of Smalltalk frames rather than one."
-	| pairs done pendingHome pendingLine pendingContents |
+	| pairs done pendingHome pendingLine pendingContents pendingOuterLvl pendingLevelMeth |
 	"{ method. ip. name. lineOrNil } for every frame that is a Python FUNCTION,
 	innermost first.  A block frame carries a nil selector and normally belongs to
 	its home method, so it is skipped -- CPython has no frame for a comprehension
@@ -2596,7 +2601,9 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 										executing -- but the locals want them ALL: a method's
 										arguments and its body block's variables are different
 										halves of one Python frame."
-										pendingContents := OrderedCollection @env0:new].
+										pendingContents := OrderedCollection @env0:new.
+										pendingOuterLvl := nil.
+										pendingLevelMeth := nil].
 									"Guarded on BOTH, not just on contents.  Every path that clears
 									pendingContents also clears pendingHome, and home is never nil,
 									so the reset above always fires first and this cannot see a nil
@@ -2604,7 +2611,13 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 									sys._getframe, and so in every warning and every import, which
 									is a wide enough blast radius to spend two words defending."
 									(contents notNil and: [pendingContents @env0:notNil]) ifTrue: [
-										pendingContents @env0:add: contents]]]].
+										pendingContents @env0:add: contents].
+									"The OUTERMOST block of the home so far -- the walk is
+									innermost first, so the last one seen is the generator
+									body's own block, the level a live re-read starts from
+									(the flush below)."
+									pendingOuterLvl := outerLvl.
+									pendingLevelMeth := meth]]].
 					((meth @env0:environmentId @env0:= 1) and: [meth @env0:selector notNil])
 						ifTrue: [
 							| frameLine |
@@ -2707,8 +2720,13 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 		fnName isNil ifTrue: [
 			fnName := self ___pythonFrameNameFor___: pendingHome @env0:selector].
 		((fnName notNil) and: [self ___isGeneratedPythonMethod___: pendingHome]) ifTrue: [
+			"WITH THE BODY BLOCK'S LEVEL, so this frame is a live one like every
+			other: without it the frame sys._getframe answers inside a generator
+			body could only show the snapshot taken when it was built, and a
+			``f_locals'' read before ``a = 42'' never saw a (test_generators'
+			test_frame_locals_outlive_generator)."
 			pairs @env0:add: { pendingHome. 0. fnName. (pendingLine ifNil: [0]).
-				pendingContents }]].
+				pendingContents. pendingOuterLvl. pendingLevelMeth }]].
 	^ pairs
 
 ]

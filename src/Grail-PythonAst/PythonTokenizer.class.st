@@ -23,6 +23,7 @@ Class {
 		'openBrackets'
 	],
 	#classVars : [
+		'FormFeed',
 		'Lf',
 		'Tab',
 		'KeywordDict',
@@ -540,6 +541,16 @@ PythonTokenizer >> ___addCodePoint___: aCodePoint to: aBuilder [
 
 ]
 
+{ #category : 'Grail-private' }
+PythonTokenizer >> ___atTripleQuote___ [
+	"Is the character at the cursor the first of three identical quotes?"
+
+	| quote |
+	quote := self peek.
+	^ (self peekAt: 1) == quote and: [(self peekAt: 2) == quote]
+
+]
+
 { #category : 'Grail-tokenizing' }
 PythonTokenizer >> ___bodyOffsetOf: anIndex literal: lit [
 	"Where CPython says the source character at anIndex sits in the literal's
@@ -987,12 +998,20 @@ PythonTokenizer >> peekAt: offset [
 PythonTokenizer >> readIndentation [
 	"Read whitespace at the beginning of a line and return the indent level."
 
+	"A FORM FEED resets the column, as CPython's lexer does
+	(Parser/lexer/lexer.c:529, ``For Emacs users''), so a line of spaces,
+	tabs and form feeds is blank.  It was not whitespace here at all, and
+	``timeit.Timer(stmt=' \n\t\f')'' was an IndentationError."
+
 	| indent ch |
 	indent := 0.
-	[ ch := self peek . ch == $ or: [ ch == Tab ] ] whileTrue: [
+	[ ch := self peek . ch == $  or: [ ch == Tab or: [ ch == FormFeed ] ] ] whileTrue: [
 		ch == Tab
 			ifTrue: [indent := (indent // 8 + 1) * 8]
-			ifFalse: [indent := indent + 1].
+			ifFalse: [
+				ch == FormFeed
+					ifTrue: [indent := 0]
+					ifFalse: [indent := indent + 1]].
 		self advance.
 	].
 	^indent
@@ -1321,8 +1340,9 @@ PythonTokenizer >> tokenizeOne [
 	"Tokenize a single token from the current position."
 
 	| char |
-	"Skip whitespace (not newlines)"
-	[self atEnd not and: [(self peek == Character space) or: [self peek == Tab]]] whileTrue: [
+	"Skip whitespace (not newlines).  A form feed is whitespace between tokens
+	too (Parser/lexer/lexer.c:645)."
+	[self atEnd not and: [(self peek == Character space) or: [self peek == Tab or: [self peek == FormFeed]]]] whileTrue: [
 		self advance.
 	].
 	self atEnd ifTrue: [^self].
@@ -1463,7 +1483,7 @@ PythonTokenizer >> tokenizeString [
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  fields nestQuote fieldStarts isTString frame bodyStart lit |
+	  fields nestQuote nestTriple fieldStarts isTString frame bodyStart lit |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -1511,6 +1531,7 @@ PythonTokenizer >> tokenizeString [
 	fields := OrderedCollection new.
 	fieldStarts := nil.
 	nestQuote := nil.
+	nestTriple := false.
 	[
 		char := self peek.
 		char ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
@@ -1543,7 +1564,11 @@ PythonTokenizer >> tokenizeString [
 		Nested quotes are tracked so a brace inside an embedded literal cannot
 		shift the depth.  That tracking is also what makes arbitrary nesting
 		work: each nested f-string's quotes pair off in turn, so the scan
-		finds the right closing quote without recursing."
+		finds the right closing quote without recursing.  A nested literal
+		that opens with three quotes closes only on three: its body may hold
+		the quote character alone, as in f'{'x' '''eric's'''}' -- test_fstring
+		spells it with double quotes -- and pairing those one at a time left a
+		string open that swallowed the rest of the source."
 		(isFString and: [fields notEmpty or: [nestQuote notNil]]) ifTrue: [
 			nestQuote
 				ifNil: [
@@ -1562,7 +1587,11 @@ PythonTokenizer >> tokenizeString [
 						ifFalse: [
 							"Expression."
 							(char == $' or: [char == $"])
-								ifTrue: [nestQuote := char. str add: self advance]
+								ifTrue: [
+									nestQuote := char.
+									nestTriple := self ___atTripleQuote___.
+									nestTriple ifTrue: [str add: self advance. str add: self advance].
+									str add: self advance]
 								ifFalse: [
 							char == $#
 								ifTrue: [
@@ -1587,7 +1616,10 @@ PythonTokenizer >> tokenizeString [
 							str add: self advance.
 							self atEnd ifFalse: [str add: self advance]]
 						ifFalse: [
-							char == nestQuote ifTrue: [nestQuote := nil].
+							(char == nestQuote and: [nestTriple not or: [self ___atTripleQuote___]])
+								ifTrue: [
+									nestTriple ifTrue: [str add: self advance. str add: self advance].
+									nestQuote := nil].
 							str add: self advance]]
 		] ifFalse: [
 			triple ifTrue: [

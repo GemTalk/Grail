@@ -62,7 +62,12 @@ ZlibDecompress >> _finish [
 
 { #category : 'Grail-Decompression' }
 ZlibDecompress >> _flush: positional kw: kwargs [
-	^ self flush: 0
+
+	"flush(length=DEF_BUF_SIZE), by position or keyword.  It ignored its
+	arguments, so ``flush(0)'' -- CPython's ValueError -- was accepted."
+
+	^ self flush: (zlib @env0:___instance___
+		_argumentAt: 1 named: 'length' from: positional kw: kwargs ifAbsent: 16384)
 
 ]
 
@@ -72,21 +77,25 @@ ZlibDecompress >> _initWbits: wbits [
 	windowBits: 8..15 zlib, -8..-15 raw deflate, 24..31 gzip,
 	40..47 auto-detect zlib-or-gzip."
 
-	| strm rc callouts ok |
-	ok := (wbits @env0:>= 8) @env0:and: [wbits @env0:<= 15].
-	ok ifFalse: [ok := (wbits @env0:>= -15) @env0:and: [wbits @env0:<= -8]].
-	ok ifFalse: [ok := (wbits @env0:>= 24) @env0:and: [wbits @env0:<= 31]].
-	ok ifFalse: [ok := (wbits @env0:>= 40) @env0:and: [wbits @env0:<= 47]].
-	ok ifFalse: [
-		ZlibError ___signal___: ('Invalid initialization option: ' @env0:, wbits @env0:printString)].
+	"LIBZ JUDGES THE WINDOW, as in CPython (zlib_decompressobj_impl): its
+	Z_STREAM_ERROR is the ValueError ``Invalid initialization option''.  A
+	range check here had refused 0 -- take the window from the zlib header,
+	which libz and CPython accept -- and raised zlib.error where CPython raises
+	ValueError (test_zlib test_wbits, test_baddecompressobj).  A non-integer is
+	CPython's TypeError, not a Float or a String reaching the callout."
+
+	| strm rc callouts window |
+	window := wbits ___asIndex___.
 	callouts := zlib _libzCallouts.
 	strm := zlib _zeroedStream.
 	rc := (callouts @env0:at: #inflateInit2_) @env0:callWith:
-		{ strm. wbits. callouts @env0:at: #zlibVersion. zlib _streamSize }.
+		{ strm. window. callouts @env0:at: #zlibVersion. zlib _streamSize }.
+	rc @env0:= -2 ifTrue: [^ ValueError ___signal___: ZlibCompress _invalidInitializationOptionMessage].
+	rc @env0:= -4 ifTrue: [^ MemoryError ___signal___: ZlibCompress _cannotAllocateMessage].
 	rc @env0:= 0 ifFalse: [
 		ZlibError ___signal___: ('inflateInit2_ failed with ' @env0:, rc @env0:printString)].
 	self @env0:dynamicInstVarAt: #strm put: strm.
-	self @env0:dynamicInstVarAt: #wbits put: wbits.
+	self @env0:dynamicInstVarAt: #wbits put: window.
 	self @env0:dynamicInstVarAt: #eof put: false.
 	self @env0:dynamicInstVarAt: #closed put: false.
 	self @env0:dynamicInstVarAt: #unused put: ByteArray @env0:new.
@@ -207,7 +216,13 @@ ZlibDecompress >> decompress: data _: maxLength [
 	recovers 101 bytes, because the input was never handed back.  flush()
 	still processes the stored tail, which is what CPython's flush does."
 
-	| bytes |
+	"max_length is an index (an __index__ object is converted, not compared as
+	itself) and a negative one is CPython's ValueError
+	(zlib_Decompress_decompress_impl)."
+
+	| bytes length |
+	length := maxLength ___asIndex___.
+	length @env0:< 0 ifTrue: [^ ValueError ___signal___: 'max_length must be non-negative'].
 	bytes := zlib _asBytesArg: data.
 	(self @env0:dynamicInstVarAt: #eof) == true ifTrue: [
 		"Past the end of the stream CPython accumulates into unused_data."
@@ -216,7 +231,7 @@ ZlibDecompress >> decompress: data _: maxLength [
 				((self @env0:dynamicInstVarAt: #unused) @env0:, bytes)].
 		^ ByteArray @env0:new].
 	self @env0:dynamicInstVarAt: #tail put: ByteArray @env0:new.
-	^ self _run: bytes flushMode: 0 maxLength: maxLength
+	^ self _run: bytes flushMode: 0 maxLength: length
 
 ]
 
@@ -230,7 +245,10 @@ ZlibDecompress >> eof [
 
 { #category : 'Grail-Decompression' }
 ZlibDecompress >> flush [
-	^ self flush: 0
+
+	"flush() -- CPython's default length is DEF_BUF_SIZE."
+
+	^ self flush: 16384
 
 ]
 
@@ -239,7 +257,11 @@ ZlibDecompress >> flush: length [
 	"flush([length]) - run the remaining input to completion.  libz's
 	window is released afterwards, so the object is spent."
 
+	"A length below one is CPython's ValueError (zlib_Decompress_flush_impl),
+	checked before anything else."
+
 	| out tail |
+	length ___asIndex___ @env0:<= 0 ifTrue: [^ ValueError ___signal___: 'length must be greater than zero'].
 	(self @env0:dynamicInstVarAt: #closed) == true ifTrue: [^ ByteArray @env0:new].
 	(self @env0:dynamicInstVarAt: #eof) == true ifTrue: [
 		self _finish.

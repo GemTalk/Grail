@@ -474,8 +474,11 @@ ClassDefAst >> ___classBodyConditionalNames___ [
 					"``except E as e'' binds e for the handler's extent."
 					h name ifNotNil: [:n | names add: n asSymbol].
 					collect value: h body]]].
+		"Under the name the def BINDS, as a nested class's is, since a read
+		looks the set up by its mangled name: a private ``def __helper'' in a
+		class-body ``if'' binds _K__helper (sortedcontainers' SortedDict)."
 		(stmt isKindOf: FunctionDefAst) ifTrue: [
-			names add: stmt name asSymbol].
+			names add: stmt ___mangledName___ asSymbol].
 		(stmt isKindOf: ClassDefAst) ifTrue: [
 			names add: (stmt ___manglePrivate___: stmt name) asSymbol].
 		"Per TARGET rather than only when every target is a plain name: Python
@@ -1399,10 +1402,11 @@ ClassDefAst >> ___emitClassAttrStoreOpen___: aName on: aStream [
 { #category : 'Grail-code generation' }
 ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames savedWrite: savedCapturedWriteNames [
 	"Emit the per-class closure-cell stores.  Factored out because it runs
-	TWICE per classdef: once before the metaclass hook, so a method that runs
-	DURING class construction can read its cells, and once after the decorator
-	loop, so the self-name cell holds the final decorated class.  Both call
-	sites are in printSmalltalkRuntimeOn:."
+	THREE times per classdef: before the body, so a body-level call of a
+	class-body def can read its cells; before the metaclass hook, so a method
+	that runs DURING class construction can; and after the decorator loop, so
+	the self-name cell holds the final decorated class.  All three call sites
+	are in printSmalltalkRuntimeOn:."
 
 	"READER CELLS: store every enclosing-function local the class's
 	method bodies referenced (NameAst emitted ___classCell___ reads for
@@ -2766,8 +2770,8 @@ ClassDefAst >> ___isClassBodyDeleteStatement___: stmt [
 	exclusion and simply emit as they would anywhere else."
 
 	(stmt isKindOf: DeleteAst) ifFalse: [^ false].
-	stmt targets isEmpty ifTrue: [^ false].
-	^ stmt targets allSatisfy: [:t |
+	stmt deletedTargets isEmpty ifTrue: [^ false].
+	^ stmt deletedTargets allSatisfy: [:t |
 		(t isKindOf: NameAst)
 			ifTrue: [(self ___classBodyDeclaresElsewhere___: t id asSymbol) not
 				and: [(self ___classBodyBindsAsDefinition___: t id asSymbol) not]]
@@ -3789,7 +3793,11 @@ ClassDefAst >> emitClassBodyIfDef: aDef on: aStream [
 	from the same place: FunctionDefAst >> ___classBodyValueWrapper___."
 
 	| fname wrapper savedValueDefNode |
-	fname := aDef name asString.
+	"The name the def BINDS: a private ``def __helper'' binds _K__helper, and
+	its own emit assigns that -- so a temp and a store under the written name
+	left _K__helper undeclared (CompileError 1001, sortedcontainers'
+	SortedDict).  printSmalltalkClassBodyRuntimeDefOn: already did this."
+	fname := aDef ___mangledName___ asString.
 	wrapper := aDef ___classBodyValueWrapper___.
 	aStream nextPutAll: '[ | '; nextPutAll: fname; nextPutAll: ' |'; lf.
 	savedValueDefNode := CallAst classBodyValueDefNode.
@@ -6562,6 +6570,19 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"CLOSURE CELLS, EARLIEST EMIT -- before the body runs.  A def in the class
+	body that the body itself CALLS (``def mk(): return A'' then ``f = mk()'')
+	reads the enclosing function's locals through these cells, as any method
+	does, and the stores used to come only after the body: CPython answers the
+	local, Grail raised ``cannot access free variable''.  The methods are
+	compiled above, so the captured set is complete here.  PEP 695 needs it: a
+	parameterised type alias in a class body is a scope function the body
+	calls, reading the class's own type parameters."
+	self
+		___emitClosureCellStoresOn: aStream
+		className: self ___stVarName___
+		saved: savedCapturedNames
+		savedWrite: savedCapturedWriteNames.
 	"The names this class declares as @property, as a
 	class-side method so the record is committed with the class -- a session
 	stamp would not survive deployment.  A property compiles to an accessor

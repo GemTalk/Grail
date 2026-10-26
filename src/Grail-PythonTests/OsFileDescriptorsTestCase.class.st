@@ -42,6 +42,17 @@ OsFileDescriptorsTestCase >> testAbstractCheckIsCachedWithoutChangingItsAnswer [
 ]
 
 { #category : 'Grail-Tests - os' }
+OsFileDescriptorsTestCase >> testChmodTakesABytesPath [
+
+	"dbm.dumb names its files in bytes, and os.chmod on one raised
+	PermissionError for a file the caller owned: the shell command named it by
+	Smalltalk's asString of the bytes rather than by os.fsdecode."
+
+	self assertAll: #('chmod_takes_a_bytes_path')
+
+]
+
+{ #category : 'Grail-Tests - os' }
 OsFileDescriptorsTestCase >> testEveryPlatformRowOfTheOpenFlags [
 	"Every row, from whichever machine runs this -- so the Linux rows are
 	executed on a Mac and the Darwin row on Linux.  The first version could
@@ -72,6 +83,17 @@ repr([os.O_APPEND, os.O_CREAT, os.O_TRUNC, os.O_EXCL, os.O_NOFOLLOW, os.O_CLOEXE
 		equals: '[' , ((#(#O_APPEND #O_CREAT #O_TRUNC #O_EXCL #O_NOFOLLOW #O_CLOEXEC)
 			collect: [:k | (installed at: k) printString])
 				inject: '' into: [:acc :each | acc isEmpty ifTrue: [each] ifFalse: [acc , ', ' , each]]) , ']'
+
+]
+
+{ #category : 'Grail-Tests - os' }
+OsFileDescriptorsTestCase >> testFdopenWrapsADescriptorAsCPythonDoes [
+
+	"os.fdopen was missing.  CPython's wraps the descriptor in open() and
+	refuses one that is not an int."
+
+	self assertAll: #('fdopen_wraps_a_descriptor_in_a_file'
+		'fdopen_refuses_a_descriptor_that_is_not_an_int')
 
 ]
 

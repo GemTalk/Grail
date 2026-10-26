@@ -32,6 +32,26 @@ CPythonShimTestCase >> testA128BitIntRoundTripsTheAbi3Way [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testACallAnswersCAListItCanReadInline [
+	"A list or tuple a Grail callable answers to C is in CPython's layout, so C
+	reads it inline.  numpy reads _commastring's list with PyList_GET_ITEM, and
+	from a Grail wrapper that took the wrapper's magic for an item pointer:
+	np.dtype(''S10,S9'') segfaulted.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr((d.capi(''call_inline'', lambda: [1, ''a'', (2, 3)]), d.capi(''call_inline'', lambda: (4, [5])), d.capi(''call_inline'', lambda: [])))') equals: '([1, ''a'', (2, 3)], [4, [5]], [])'
+
+]
+
 { #category : 'Grail-Tests - NumPy Census Gaps' }
 CPythonShimTestCase >> testACFunctionObjectReprsPicklesAndRoundTrips [
 	"A function object C made answers repr, __reduce__ and a __module__ store as
@@ -180,6 +200,29 @@ def store():
     d.Cell.__dict__[''x''] = 1
 D = d.Cell.__dict__
 repr((type(D).__name__, sorted(k for k in D if not k.startswith(''__'')), type(D[''get'']).__name__, D[''get''](d.Cell(4)), t(store)[:2], d.Cell.get.__doc__, d.Cell.__doc__, sorted(k for k in vars(d.Cell) if not k.startswith(''__'')), t(vars, d.Cell(1)), vars(d.make_box(1))))') equals: '(''mappingproxy'', [''describe'', ''get'', ''value''], ''method_descriptor'', 4, (''raised'', ''TypeError''), ''the value'', None, [''describe'', ''get'', ''value''], (''raised'', ''TypeError'', ''vars() argument must have __dict__ attribute''), {})'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testACTypeRegisteredWithAnABCIsItsSubclass [
+	"issubclass() of a C extension's type asks the ABC's own hook, as for a class:
+	numpy registers np.number with numbers.Number, and ``issubclass(np.number,
+	numbers.Number)'' answered False while numbers.Number.__subclasscheck__
+	answered True -- numpy's test_abc failed in every test.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+import numbers
+numbers.Integral.register(d.Marker)
+repr((issubclass(d.Marker, numbers.Integral), issubclass(d.Dual, numbers.Integral), issubclass(d.Dual, numbers.Real), issubclass(d.Cell, numbers.Integral), isinstance(d.Dual(1.5), numbers.Integral)))') equals: '(True, True, True, False, True)'
 
 ]
 
@@ -355,6 +398,23 @@ f'.
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAKeywordListReachesACMethodInCPythonsLayout [
+	"A keyword argument to a C method of a wheel's object reaches C in CPython's
+layout when it is a list or tuple.  The shim's builtin-method call took the
+keyword values out of a Grail dict as Grail objects, and C read the list's
+wrapper as items: numpy's ndarray.view(dtype=[...]) segfaulted.  Values are
+CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.Buf()
+repr([b.inline(seq=s) for s in ([(''a'', ''i4''), (''b'', ''f4'', (2,))], [1, 2, 3], (4, 5), [])] + [b.inline()])') equals: '[[2, 3], [1, 2, 3], [4, 5], [], None]'
+
+]
+
 { #category : 'Grail-Tests - NumPy Dispatch' }
 CPythonShimTestCase >> testALikeDispatcherAndADispatcherErrorGoThroughC [
 	"A like= dispatcher (no relevant_arg_func) is left to C, and so is a call its dispatcher
@@ -470,6 +530,29 @@ repr((nest(4, D(_disp, _impl))(d.NdLike()), nest(4, D(_disp, _impl))(d.make_box(
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAnArrayConcatenatesAndRepeats [
+	"array.array's + and += with another array of its typecode, * and *= by an
+	integer from either side, and a slice that is an array.  Grail's list-backed
+	array had none of them, and hypothesis builds a table with
+	``array(''H'', [0]) * n'' at module scope.  Values are CPython's."
+
+	self assert: (self eval: 'def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+from array import array
+def ints(a):
+    return (type(a).__name__, a.typecode, a.tolist())
+a = array(''i'', [1])
+b = a
+a += array(''i'', [2])
+a *= 2
+repr((ints(array(''H'', [0]) * 3), ints(2 * array(''H'', [1, 2])), ints(array(''i'', [1]) + array(''i'', [2, 3])), a is b, a.tolist(), ints(array(''i'', [1, 2, 3])[1:]), t(lambda: array(''i'', [1]) + [2]), t(lambda: array(''i'', [1]) + array(''h'', [2]))))') equals: '((''array'', ''H'', [0, 0, 0]), (''array'', ''H'', [1, 2, 1, 2]), (''array'', ''i'', [1, 2, 3]), True, [1, 2, 1, 2], (''array'', ''i'', [2, 3]), (''raised'', ''TypeError'', ''can only append array (not "list") to array''), (''raised'', ''TypeError'', ''bad argument type for built-in operation''))'
+
+]
+
 { #category : 'Grail-Tests - NumPy Dispatch' }
 CPythonShimTestCase >> testAnArrayFunctionOverrideStillReceivesTheCall [
 	"An argument with an __array_function__ of its own -- a Grail class's, or a wheel type's
@@ -505,6 +588,34 @@ CPythonShimTestCase >> testANativeTypeInstanceIsItsTypesSubtype [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAnExtensionCanBeTheParentOfADottedImport [
+	"An extension module can be the PARENT of a dotted import, and a submodule it
+	makes the way PyO3 does -- PyModule_FromDefAndSpec, PyModule_ExecDef, bound on
+	its parent and put in sys.modules -- reads like any module.  hypothesis 6.170
+	imports ``hypothesis._native.internal.floats'' so: the library would not
+	dlopen (both functions were missing), the parent walk tried source and
+	namespace packages but never an extension, and the submodule's names and
+	dotted __name__ were not readable from Grail.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/grail_extpkg/_host.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/grail_extpkg/_host.so not built'].
+	self assert: (self eval: ('GRAILLIB = ''' , importlib grailDir , '/lib''
+' , 'import sys
+sys.path.insert(0, GRAILLIB)
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+from grail_extpkg._host.inner import VALUE
+import grail_extpkg._host.inner as inner
+import grail_extpkg._host as host
+repr((VALUE, inner.__name__, inner.VALUE, host.inner is inner, t(getattr, inner, ''missing'')[:2], sorted(k for k in sys.modules if k.startswith(''grail_extpkg''))))')) equals: '(42, ''grail_extpkg._host.inner'', 42, True, (''raised'', ''AttributeError''), [''grail_extpkg'', ''grail_extpkg._host'', ''grail_extpkg._host.inner''])'
+
+]
+
 { #category : 'Grail-Tests - FastAPI Phase 5' }
 CPythonShimTestCase >> testAnImportedModuleKeepsAReferenceInTheImportCache [
 	"PyImport_ImportModule answers a NEW reference, which PyO3 drops when it is
@@ -522,6 +633,27 @@ CPythonShimTestCase >> testAnImportedModuleKeepsAReferenceInTheImportCache [
 		with: 'json' with: 5) >= 1.
 	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
 		with: 'json' with: 5) >= 1
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAnIntTooBigForCIsAnOverflowError [
+	"PyLong_AsLong and PyLong_AsSsize_t raise OverflowError for an int that
+	does not fit in 64 bits, as CPython's do.  The failed conversion was left
+	as a GCI error that no except clause could catch, so numpy's
+	np.copyto(np.arange(3), 2**80) ended the pytest session.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a):
+    try:
+        return f(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([t(d.capi, k, v) for k in (''as_long'', ''as_ssize_t'') for v in (5, -(2**62), 2**63 - 1, 2**63, -(2**80), 2**80)])') equals: '[5, -4611686018427387904, 9223372036854775807, (''raised'', ''OverflowError'', ''Python int too large to convert to C long''), (''raised'', ''OverflowError'', ''Python int too large to convert to C long''), (''raised'', ''OverflowError'', ''Python int too large to convert to C long''), 5, -4611686018427387904, 9223372036854775807, (''raised'', ''OverflowError'', ''Python int too large to convert to C ssize_t''), (''raised'', ''OverflowError'', ''Python int too large to convert to C ssize_t''), (''raised'', ''OverflowError'', ''Python int too large to convert to C ssize_t'')]'
 
 ]
 
@@ -566,6 +698,31 @@ def t(f, *a, **k):
     except Exception as e:
         return (''raised'', type(e).__name__, str(e))
 repr(d.capi(''ulong''))') equals: '(18446744073709551615, 9223372036854775808)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAPrivateDefInAClassBodyBlockIsMangled [
+	"A private ``def __helper'' inside a class-body ``if'' or ``try'' binds and is
+	called under its mangled name, _K__helper, as a nested class or an
+	assignment already was.  Its emit declared the temp and stored the attribute
+	under the written name while the def assigned the mangled one, so the
+	module failed to compile -- sortedcontainers' SortedDict, which hypothesis
+	imports.  Values are CPython's."
+
+	self assert: (self eval: 'class K:
+    if True:
+        def __helper(x):
+            return ''h'' + x
+        a = __helper(''a'')
+    b = __helper(''b'')
+    try:
+        def __other(x):
+            return x * 2
+    except Exception:
+        pass
+    c = __other(3)
+repr((K.a, K.b, K.c, sorted(k for k in vars(K) if k.startswith(''_K''))))') equals: '(''ha'', ''hb'', 6, [''_K__helper'', ''_K__other''])'
 
 ]
 
@@ -740,6 +897,41 @@ def t(f, *a, **k):
         return (''raised'', type(e).__name__, str(e))
 x = d.Text(''h\u00e9llo'')
 ascii((str(x), repr(x), x.upper(), str.upper(x), t(str.split, d.Text(''a b'')), isinstance(x, str), type(x).__name__, t(d.capi, ''str_read'', x), t(d.capi, ''str_slots'', d.Text(''ab'')), t(d.capi, ''str_slots'', ''ab''), len(x), x + ''!'', ''>'' + x, x * 2, x == ''h\u00e9llo'', hash(x) == hash(''h\u00e9llo''), ''ll'' in x, x[1], list(d.Text(''ab'')), bool(d.Text('''')), bool(x)))') equals: '(''h\xe9llo'', "Text(''h\xe9llo'')", ''H\xc9LLO'', ''H\xc9LLO'', [''a'', ''b''], True, ''Text'', (5, ''h\xe9llo''), (''ab'', "''ab''"), (''ab'', "''ab''"), 5, ''h\xe9llo!'', ''>h\xe9llo'', ''h\xe9lloh\xe9llo'', True, True, True, ''\xe9'', [''a'', ''b''], False, True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testATupleReadFromADictHasCPythonsLayout [
+	"A tuple Python stored in a dict reaches C in CPython's layout, so C can read
+it with PyTuple_GET_SIZE and PyTuple_GET_ITEM, and two lookups answer the
+same object.  The size field of the Grail wrapper is its OOP: numpy's
+as_strided, which rebuilds an array from an __array_interface__ dict with
+new ""shape"" and ""strides"" tuples, failed with ""number of dimensions must be
+within [0, 64], got 1385564417"".  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+s = (2, 3)
+repr([d.capi(''dict_tuple_inline'', {''k'': v}) for v in (s, tuple([4]), (), (''a'', (1, 2)), [1, 2])])') equals: '[(2, [2, 3], True), (1, [4], True), (0, [], True), (2, [''a'', (1, 2)], True), None]'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testATupleSliceHasCPythonsLayout [
+	"PyTuple_GetSlice answers a tuple in CPython's layout, with CPython's bounds
+clamping, so C can read it with PyTuple_GET_SIZE and PyTuple_GET_ITEM.  It
+answered a Grail tuple, whose size field is its OOP: numpy's dtype parser
+slices ('x', 'i4', (2,)) to ('i4', (2,)), so every structured dtype with a
+subarray field raised ""Tuple must have size 2, but has size 756128001"".
+Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr([d.capi(''tuple_slice_inline'', t) for t in ((''x'', ''i4'', (2,)), (), (1,), tuple(range(6)))])') equals: '[[(2, [''i4'', (2,)]), (3, [''x'', ''i4'', (2,)]), (2, [''x'', ''i4'']), (0, [])], [(0, []), (0, []), (0, []), (0, [])], [(0, []), (1, [1]), (1, [1]), (0, [])], [(2, [1, 2]), (6, [0, 1, 2, 3, 4, 5]), (2, [0, 1]), (0, [])]]'
 
 ]
 
@@ -1694,6 +1886,23 @@ class A: pass
 a = A()
 r = weakref.ref(a)
 repr((C(''call_no_args'', r) is a, t(''call_no_args'', 5)))') equals: '(True, (''TypeError'', "''int'' object is not callable"))'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testCMakesMoreTuplesThanTheRegistryOnceHeld [
+	"C can build any number of tuples and fill each one.  The shim records
+	the tuples C makes in CPython's layout, and its record was a fixed set
+	that stopped taking entries at 131072.  numpy makes dozens per ufunc
+	call, so about 2000 calls of assert_array_equal in, a new tuple went
+	unrecorded, PyTuple_SetItem took it for a Grail object, and the error
+	that followed failed inside its own handlers until the stack ran out."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.capi(''many_tuples'', 300000))') equals: '(None,)'
 
 ]
 
@@ -2725,6 +2934,32 @@ CPythonShimTestCase >> testFloatAsDoubleFollowsCPython [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testFloatingPointErrorFromCIsAnArithmeticError [
+	"FloatingPointError and ImportWarning from C are the real classes, so
+	``except FloatingPointError'' catches numpy's errstate(invalid='raise').  They
+	were placeholder objects the shim's name table did not know: the error
+	reached Grail as an ``UnknownError'' no except clause caught, and it ended a
+	pytest session.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+def catch():
+    try:
+        d.capi(''raise_fpe'')
+    except FloatingPointError as e:
+        return (''FloatingPointError'', str(e), isinstance(e, ArithmeticError))
+repr((catch(), [k.__name__ for k in d.capi(''import_warning'')], d.capi(''import_warning'')[0] is ImportWarning))') equals: '((''FloatingPointError'', ''invalid value encountered'', True), [''ImportWarning'', ''FloatingPointError''], True)'
+
+]
+
 { #category : 'Grail-Tests - NumPy Stage 2' }
 CPythonShimTestCase >> testForeignAttributeStoreLandsInTheInstanceDict [
 	"``obj.attr = value'' on a wheel's own object stores in its instance dict
@@ -3283,6 +3518,26 @@ CPythonShimTestCase >> testKwargsVarargsDict [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testLenAndBoolOfACBytesSubclassReadItsLength [
+	"len() and bool() of a C subclass of bytes read its length, as numpy.bytes_
+needs.  The type has no length slot of its own and the search stopped at
+the shim's bytes, so len() raised TypeError and an empty one was true:
+np.array([b''], 'S3').astype(bool) answered True.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a):
+    try:
+        return f(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([(t(len, o), t(bool, o)) for o in (d.capi(''bytesub_obj'', b''''), d.capi(''bytesub_obj'', b''\x00''), d.capi(''bytesub_obj'', b''ab''))])') equals: '[(0, False), (1, True), (2, True)]'
+
+]
+
 { #category : 'Grail-Tests - Object Protocol' }
 CPythonShimTestCase >> testLengthList [
 	"test_length on a list returns its size."
@@ -3589,6 +3844,27 @@ CPythonShimTestCase >> testModuleAttrsExport [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testMoreThanFiveArgumentsReachACFunction [
+	"A C function called with more than five positional arguments gets them
+	all.  The call path had five slots and a three-bit count: a sixth argument
+	on was dropped, eight arrived as none (np.result_type with eight dtypes:
+	``at least one array or dtype is required''), and seven read past the slots
+	and segfaulted.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a, **k):
+    try:
+        return f(*a, **k)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([d.capi(''count'', *range(n)) for n in (0, 4, 5, 6, 7, 8, 9, 12)])') equals: '[0, 4, 5, 6, 7, 8, 9, 12]'
+
+]
+
 { #category : 'Grail-Tests - Error Handling' }
 CPythonShimTestCase >> testNewExceptionRaisesByName [
 	"PyErr_NewException creates a type whose raises carry its short name."
@@ -3786,6 +4062,32 @@ CPythonShimTestCase >> testObTypeTuple [
 		callModule: '_shimtest' method: 'test_ob_type'
 		with: #(1 2 3).
 	self assert: result equals: 'tuple'.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testOperatorConcatUsesTheSequenceConcatSlot [
+	"operator.concat tries the first operand's own sq_concat before +, as
+CPython's PySequence_Concat does, and a list or tuple takes only its own
+type.  It was a + b, so numpy's operator.concat(array, array) added the
+arrays elementwise where numpy's sq_concat raises TypeError, and
+operator.concat(list, array) let the array's __radd__ answer.  Values are
+CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d, operator
+def t(f, *a):
+    try:
+        return f(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+def tt(f, *a):
+    r = t(f, *a)
+    return r[:2] if isinstance(r, tuple) and r[:1] == (''raised'',) else r
+b = d.Buf()
+repr([t(operator.concat, *p) for p in ((b, 5), (b, [1]), (d.Text(''ab''), ''c''), ([1], [2]), ([1], (2,)), ((1,), [2]), ((1,), (2,)), (''a'', ''b''), (5, b))] + [tt(operator.concat, [1], b), tt(operator.concat, (1,), b), t(lambda: ([1] + b)[:2])])') equals: '[(''buf_concat'', 5), (''buf_concat'', [1]), ''abc'', [1, 2], (''raised'', ''TypeError'', ''can only concatenate list (not "tuple") to list''), (''raised'', ''TypeError'', ''can only concatenate tuple (not "list") to tuple''), (1, 2), ''ab'', (''raised'', ''TypeError'', "''int'' object can''t be concatenated"), (''raised'', ''TypeError''), (''raised'', ''TypeError''), (''buf_add'', [1])]'
 
 ]
 
@@ -4612,6 +4914,19 @@ CPythonShimTestCase >> testSweepReapsIdleZeroRefcountWrappers [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testSysFunctionsReadAsFunctions [
+	"sys.getrefcount and sys.call_tracing read as the functions they are.  Their
+	accessors read a module-dict key nobody had put, so even ``getattr(sys,
+	'getrefcount', None)'' raised an uncatchable LookupError -- numpy.testing
+	makes that read at import.  getrefcount's value is a refcount in CPython and
+	is not compared."
+
+	self assert: (self eval: 'import sys
+repr((callable(getattr(sys, ''getrefcount'', None)), isinstance(sys.getrefcount(object()), int), sys.call_tracing(lambda a, b: a + b, (1, 2)), callable(sys.call_tracing)))') equals: '(True, True, 3, True)'
+
+]
+
 { #category : 'Grail-Tests - NumPy Stage 3' }
 CPythonShimTestCase >> testThreadStateNamesTheMainInterpreter [
 	"PyThreadState_Get and PyInterpreterState_Main were stubs answering NULL; numpy's
@@ -4994,6 +5309,19 @@ CPythonShimTestCase >> testUnicodeFromObjectAcceptsOnlyAStr [
 		with: 'abc') equals: 'abc'.
 	self assert: (shim callModule: '_shimtest' method: 'test_unicode_from_object'
 		with: 5) equals: 'TypeError'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testUnittestCaseHasTheNamesCPythonDefinesThere [
+	"unittest.case answers SkipTest, TestCase and the skip decorators, which
+	CPython defines there and code imports from there: numpy.testing does
+	``from unittest.case import SkipTest'' at module scope, so no numpy test
+	module imported.  Values are CPython's."
+
+	self assert: (self eval: 'import unittest, unittest.case
+from unittest.case import SkipTest, TestCase, skip, skipIf, skipUnless, expectedFailure
+repr((SkipTest is unittest.SkipTest, TestCase is unittest.TestCase, skip is unittest.skip, skipIf is unittest.skipIf, skipUnless is unittest.skipUnless, expectedFailure is unittest.expectedFailure, hasattr(unittest.case, ''no_such_name'')))') equals: '(True, True, True, True, True, True, False)'
 
 ]
 

@@ -123,6 +123,10 @@ ShimForeignObject >> ___pyAttrLoad___: aSym [
 	(aSym == #'__name__' or: [aSym == #'__qualname__'])
 		ifTrue: [^ self @env0:unqualifiedName].
 	aSym == #'__module__' ifTrue: [^ self @env0:moduleName].
+	"The C sq_concat, which has no dunder for C to answer: operator.concat
+	reads it by this name (___sq_concat___:)."
+	aSym == #'___sq_concat___'
+		ifTrue: [^ BoundMethod receiver: self selector: #'___sq_concat___'].
 	"type's methods of a C TYPE, which C leaves to the proxy rather than
 	answer object's bound to object."
 	((aSym == #mro or: [aSym == #'__subclasses__'])
@@ -183,6 +187,19 @@ ShimForeignObject >> ___pyMetaclass___ [
 
 	^ [self ___pyAttrLoad___: #'__class__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: super ___pyMetaclass___]
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> ___sq_concat___: other [
+	"The object's own C sq_concat applied to other, or None when its type has
+	none.  operator.concat asks for it first, as CPython's PySequence_Concat
+	does: numpy's raises TypeError (an array's + is elementwise, not
+	concatenation), and other types fall back to +."
+
+	| r |
+	r := self ___foreignOp: '___sq_concat___' with: other with: nil.
+	^ r == nil ifTrue: [None] ifFalse: [r]
 
 ]
 

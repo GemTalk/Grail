@@ -196,6 +196,21 @@ def literal_eval(s):
         raise TypeError('literal_eval requires a string')
     i, value = _parse_value(s, 0)
     i = _skip_ws(s, i)
+    # A BARE TUPLE: CPython's literal_eval parses an expression, so
+    # ``'a', (0, 5)'' -- each line of a dbm.dumb index -- is the tuple
+    # ('a', (0, 5)), and ``1,'' is (1,).  This parser stopped after the first
+    # literal and called the rest trailing characters, so every dbm.dumb
+    # database (and every shelve on one) failed to reopen.
+    if i < len(s) and s[i] == ',':
+        items = [value]
+        while i < len(s) and s[i] == ',':
+            i = _skip_ws(s, i + 1)
+            if i >= len(s):
+                break
+            i, item = _parse_value(s, i)
+            items.append(item)
+            i = _skip_ws(s, i)
+        value = tuple(items)
     if i != len(s):
         raise _UnsupportedLiteral('trailing characters after literal')
     return value

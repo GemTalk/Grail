@@ -172,7 +172,8 @@ true
 '.
 	"src/smalltalk/PythonAst/PythonTokenizer.gs:37"
 	'PythonTokenizer _addInvariantClassVar: #Lf value: Character lf ;
-                _addInvariantClassVar: #Tab value: Character tab .
+                _addInvariantClassVar: #Tab value: Character tab ;
+                _addInvariantClassVar: #FormFeed value: (Character codePoint: 12) .
 true
 '.
 	"src/smalltalk/PythonAst/PythonTokenizer.gs:65"

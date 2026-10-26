@@ -28,6 +28,66 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Code Generation' }
+DeleteAst >> ___collectModuleScopeDefsNamed___: aSymbol in: aValue into: aCollection [
+	"Every def of aSymbol at MODULE scope beneath aValue -- top level, or inside
+	an if / try / with / loop -- into aCollection.  A def's own body, a class
+	body and a lambda are other scopes and are not entered.  Walks instVars,
+	skipping the parent back-pointer, as ___nameNodesIn___:anySatisfy: does."
+
+	(aValue isKindOf: FunctionDefAst) ifTrue: [
+		aValue name asSymbol == aSymbol ifTrue: [aCollection add: aValue].
+		^ self].
+	((aValue isKindOf: ClassDefAst) or: [aValue isKindOf: LambdaAst]) ifTrue: [^ self].
+	(aValue isKindOf: AbstractNode) ifTrue: [
+		2 to: aValue class instSize do: [:i |
+			self ___collectModuleScopeDefsNamed___: aSymbol in: (aValue instVarAt: i)
+				into: aCollection].
+		^ self].
+	((aValue isKindOf: SequenceableCollection)
+		and: [(aValue isKindOf: CharacterCollection) not]) ifTrue: [
+			aValue do: [:each |
+				self ___collectModuleScopeDefsNamed___: aSymbol in: each into: aCollection]]
+
+]
+
+{ #category : 'Grail-Code Generation' }
+DeleteAst >> ___deletesOwnTopLevelDef___: aNameAst [
+	"Does this module-scope ``del name'' delete the module's OWN top-level def,
+	so the emit should unfile it (module >> ___deleteOwnDef___:) rather than only
+	remove a slot?
+
+	A top-level def is a METHOD on the module's generated class and emits
+	nothing when its statement runs, so the slot removal every other delete
+	does found nothing to remove: ``def f(): ...; f(); del f'' left f in
+	globals(), dir() and vars(), and still callable -- pickletools'
+	``del assure_pickle_consistency'' is the one test__all__ caught.
+
+	Only where unfiling is exactly CPython's result:
+	  * the statement is in the module BODY, not in a function or class.  A
+	    ``global f; del f'' in a function runs whenever it is called, and for a
+	    deployed module that would change a class every session shares; it
+	    keeps the slot removal.
+	  * the body defines the name with exactly ONE def, on an earlier line.
+	    The class holds one method per name whatever the body says, so with
+	    two defs, or a def after the del, the method is also a LATER binding,
+	    and unfiling it would delete that too."
+
+	| node module sym defs |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst)
+			or: [node isKindOf: ClassDefAst]]) ifTrue: [^ false].
+		(node isKindOf: ModuleAst) ifTrue: [module := node].
+		node := node parent].
+	module isNil ifTrue: [^ false].
+	sym := aNameAst id asSymbol.
+	defs := OrderedCollection new.
+	self ___collectModuleScopeDefsNamed___: sym in: module body into: defs.
+	^ defs size = 1 and: [(defs first line ifNil: [0]) < (self line ifNil: [0])]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 DeleteAst >> ___emitIRStatementOn___: aBuilder [
 	"printSmalltalkOn:'s shapes, one statement per target:
@@ -37,7 +97,7 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 	  del name  -> name := nil.                 [the local's temp; a deleted
 	               parameter lives in a temp too, like a reassigned one]"
 
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst)
 			ifTrue: [
 				aBuilder atNode: self.
@@ -79,10 +139,18 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 				only nils a temp -- a later read then raises NameError rather
 				than UnboundLocalError, and every other function sees it gone."
 				(self isModuleScopeTarget: t)
-					ifTrue: [aBuilder add: (aBuilder
-						send: #'removeDynamicInstVar:'
-						to: (self ___emitIRModuleReceiverOn___: aBuilder)
-						with: { aBuilder obj: t id asSymbol } env: 0)]
+					ifTrue: [
+						"The module's own top-level def is unfiled, not merely
+						unslotted -- see ___deletesOwnTopLevelDef___:."
+						(self ___deletesOwnTopLevelDef___: t)
+							ifTrue: [aBuilder add: (aBuilder
+								send: #'___deleteOwnDef___:'
+								to: (self ___emitIRModuleReceiverOn___: aBuilder)
+								with: { aBuilder obj: t id asSymbol } env: 1)]
+							ifFalse: [aBuilder add: (aBuilder
+								send: #'removeDynamicInstVar:'
+								to: (self ___emitIRModuleReceiverOn___: aBuilder)
+								with: { aBuilder obj: t id asSymbol } env: 0)]]
 					ifFalse: [
 						| leaf |
 						leaf := aBuilder leafFor: t id asSymbol.
@@ -120,8 +188,8 @@ DeleteAst >> ___irEligibleStatementLocals___: localNames [
 	stays on text and its guard.  In a module def none of the text's other
 	name branches (module-scope, class-body, the ``__class__'' cell) apply."
 
-	targets isEmpty ifTrue: [^ false].
-	^ targets allSatisfy: [:t |
+	self deletedTargets isEmpty ifTrue: [^ false].
+	^ self deletedTargets allSatisfy: [:t |
 		((t isKindOf: SubscriptAst)
 			and: [(t value ___irEligibleValueLocals___: localNames)
 			and: [t slice ___irEligibleValueLocals___: localNames]])
@@ -143,7 +211,7 @@ DeleteAst >> ___irFlowBound___: boundIn locals: localSet [
 	self ___irReadLocalNamesInto___: reads locals: localSet.
 	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
 	out := boundIn copy.
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [out remove: t id asString ifAbsent: []]].
 	^ out
 
@@ -225,7 +293,7 @@ DeleteAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	"A bare-name target is neither read nor written here -- it is UNBOUND, which
 	___irFlowBound___:locals: accounts for."
 
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifFalse: [
 			t value ___irReadLocalNamesInto___: aSet locals: localSet.
 			(t isKindOf: SubscriptAst) ifTrue: [
@@ -241,12 +309,26 @@ DeleteAst >> ___irRefusalDetail___: localSet [
 	are different cuts -- one wants the class-body definitional store, the other
 	the class cell -- and a single row cannot say which the next cut is about."
 
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
 			CallAst classBodyRuntimeClass notNil ifTrue: [^ #'DeleteAst:classBody'].
 			(self ___irNameTargetEligible___: t locals: localSet)
 				ifFalse: [^ #'DeleteAst:name']]].
 	^ #'DeleteAst:target'
+
+]
+
+{ #category : 'Grail-Accessing' }
+DeleteAst >> deletedTargets [
+	"Each name, attribute and subscript the statement deletes, left to right.
+	``del (a, [b, c])'' is ``del a, b, c'': a tuple or list target deletes its
+	elements.  targets keeps the parsed shape, which is what ast.parse reports
+	-- CPython's tree holds the Tuple too -- so every emit reads this instead."
+
+	| leaves |
+	leaves := OrderedCollection new.
+	targets do: [:each | each ___addDeletedTargetsTo___: leaves].
+	^ leaves
 
 ]
 
@@ -286,7 +368,7 @@ DeleteAst >> printSmalltalkOn: aStream [
 
 	See https://docs.python.org/3/reference/simple_stmts.html#the-del-statement"
 
-	targets do: [:target |
+	self deletedTargets do: [:target |
 		(target isKindOf: SubscriptAst) ifTrue: [
 			"del x[key] → (x) __delitem__: (key)"
 			aStream nextPut: $(.
@@ -396,7 +478,9 @@ DeleteAst >> printSmalltalkOn: aStream [
 						and raises Python's NameError on miss — matching
 						CPython's module-scope semantics for ``del x''."
 						aStream nextPutAll: self ___moduleStoreReceiverExpr___;
-							nextPutAll: ' @env0:removeDynamicInstVar: #''';
+							nextPutAll: ((self ___deletesOwnTopLevelDef___: target)
+								ifTrue: [' @env1:___deleteOwnDef___: #''']
+								ifFalse: [' @env0:removeDynamicInstVar: #''']);
 							nextPutAll: target id;
 							nextPutAll: '''.'.
 					] ifFalse: [

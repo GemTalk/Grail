@@ -103,6 +103,19 @@ FunctionDefAst >> ___bindsOwnParameterNamed___: aSymbol [
 
 ]
 
+{ #category : 'Grail-scoping' }
+FunctionDefAst >> ___bodyHolds___: aNode [
+
+	"Whether aNode is one of this def's own body statements: the node a parent
+	walk comes up from when it leaves the function's scope, rather than from
+	its decorators, defaults or annotation, which the enclosing scope
+	evaluates."
+
+	^ body == aNode
+		or: [(body isKindOf: SequenceableCollection) and: [body identityIncludes: aNode]]
+
+]
+
 { #category : 'Grail-Class Body' }
 FunctionDefAst >> ___boundTargetNames___ [
 	"A ``def'' binds its own name.  It contributes no
@@ -1334,7 +1347,7 @@ FunctionDefAst >> ___emitIRNestedBodyOn___: aBuilder [
 			aBuilder add: (self ___emitIRPyCodeExprOn___: aBuilder qualname: qual nested: true)].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
-			send: #withBlock:name:qualname:code:
+			send: #withBlock:name:qualname:nestedCode:
 			to: (aBuilder globalNamed: self ___lazyWrapperClass___ asSymbol)
 			with: { genBlk. aBuilder obj: name asString. aBuilder obj: qual asString. codeThunk }
 			env: 1)
@@ -2147,14 +2160,18 @@ FunctionDefAst >> ___emitLazyWrapperTailOn___: aStream nested: isNested [
 	own __code__ (the closure form stamps nested: true, the method form
 	nested: false): CPython's cr_code IS f.__code__, so the closest Grail can
 	come is two code objects that agree field for field, and test_func_1 masks
-	cr_code.co_flags directly."
+	cr_code.co_flags directly.
+
+	The closure form sends nestedCode: instead, which takes the names and code
+	from the function block itself at call time -- see PyGeneratorBase class >>
+	withBlock:name:qualname:nestedCode:."
 
 	| qual |
 	qual := self ___qualifiedNameFor___: name.
 	aStream
 		nextPutAll: '] name: '''; nextPutAll: name;
 		nextPutAll: ''' qualname: '''; nextPutAll: qual;
-		nextPutAll: ''' code: ['.
+		nextPutAll: (isNested ifTrue: [''' nestedCode: ['] ifFalse: [''' code: [']).
 	self emitPyCodeExprOn: aStream qualname: qual nested: isNested.
 	aStream nextPutAll: ']'
 
@@ -5484,7 +5501,7 @@ FunctionDefAst >> collectDeletedNamesFrom: node into: aSet [
 		^ self].
 	(node isKindOf: AbstractNode) ifFalse: [^ self].
 	(node isKindOf: DeleteAst) ifTrue: [
-		targets := node targets.
+		targets := node deletedTargets.
 		targets ifNotNil: [
 			targets do: [:t |
 				(t isKindOf: NameAst) ifTrue: [aSet add: t id asSymbol]]]].

@@ -66,7 +66,7 @@ AstExportTestCase >> testEveryCheckIsPresentAndAgreesWithCPython [
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '28 checks, 0 disagreeing [], keys match: True'
+		equals: '30 checks, 0 disagreeing [], keys match: True'
 
 ]
 
@@ -102,6 +102,8 @@ AstExportTestCase >> testTheOldCallersAreUndisturbed [
 	self assertMatchesCPythonAt: 'syntax_error_still_raised'.
 	self assertMatchesCPythonAt: 'parse_of_a_tree'.
 	self assertMatchesCPythonAt: 'literal_eval_unaffected'.
+	self assertMatchesCPythonAt: 'literal_eval_bare_tuple'.
+	self assertMatchesCPythonAt: 'literal_eval_one_element_tuple'.
 	self assertMatchesCPythonAt: 'compile_without_the_flag'.
 
 ]

@@ -224,6 +224,34 @@ check('a_concrete_subclass_constructs_every_time',
       [Square().area() for _ in range(3)], [4, 4, 4])
 
 
+# os.fdopen: CPython's Lib/os.py wraps a descriptor in open(), and refuses a
+# descriptor that is not an int.  It was missing, so fileinput's inplace mode
+# (which reopens its output with fdopen) raised AttributeError.
+_fd_path = _path('fdopen.txt')
+with os.fdopen(os.open(_fd_path, os.O_WRONLY | os.O_CREAT, 0o644), 'w') as _f:
+    _f.write('through a descriptor')
+with os.fdopen(os.open(_fd_path, os.O_RDONLY)) as _f:
+    _fdopen_text = _f.read()
+with os.fdopen(os.open(_fd_path, os.O_RDONLY), 'rb', buffering=0) as _f:
+    _fdopen_bytes = _f.read()
+check('fdopen_wraps_a_descriptor_in_a_file',
+      (_fdopen_text, _fdopen_bytes),
+      ('through a descriptor', b'through a descriptor'))
+check('fdopen_refuses_a_descriptor_that_is_not_an_int',
+      _error(lambda: os.fdopen('3')),
+      ('TypeError', "invalid fd type (<class 'str'>, expected integer)"))
+
+# os.chmod on a BYTES path: the shell command it runs named the file by
+# Smalltalk's asString of the bytes, the mode it read back was unchanged, and
+# it raised PermissionError for a file the caller owned -- dbm.dumb names its
+# files in bytes, so every shelve.open failed.
+_bytes_path = os.fsencode(_path('chmod-bytes.txt'))
+with open(_bytes_path, 'w') as _f:
+    os.chmod(_bytes_path, 0o640)
+check('chmod_takes_a_bytes_path',
+      stat.S_IMODE(os.stat(_bytes_path).st_mode), 0o640)
+
+
 shutil.rmtree(ROOT)
 
 

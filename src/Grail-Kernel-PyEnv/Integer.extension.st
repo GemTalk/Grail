@@ -115,11 +115,70 @@ Integer class >> ___checkStrDigitLimit___: aString [
 	sign, whitespace, underscores and a radix point do not, matching how
 	CPython measures the value's length."
 
-	| limit count |
+	^ self ___checkStrDigitLimit___: aString base: 10
+
+]
+
+{ #category : 'Grail-Initialization' }
+Integer class >> ___checkStrDigitLimit___: aString base: aBase [
+	"The str -> int side of sys.set_int_max_str_digits, for int(aString,
+	aBase), counted as CPython's long_from_string_base counts: after optional
+	whitespace, a sign and a radix prefix, the LEADING RUN of characters that
+	are digits in the base, underscores skipped and not counted.  A
+	power-of-two base (2, 4, 8, 16, 32) is exempt -- its conversion is linear
+	-- and base 0 takes its base from the prefix first, so
+	``int('0x' + '1' * 5000, 0)'' is hex and exempt.
+
+	This used to count every DECIMAL digit anywhere in the string, which
+	missed a letter digit entirely: ``int('z' * 5000, 36)'' counted 0 and
+	built a 7782-digit integer CPython refuses.  It also took base 0 for
+	decimal, refusing the hex string above."
+
+	| limit s n i base count c v done |
 	limit := (SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits ifAbsent: [4300].
 	(limit @env0:= 0) ifTrue: [^ self].
+	s := aString.
+	n := s @env0:size.
+	i := 1.
+	[i @env0:<= n and: [(s @env0:at: i) @env0:unicodeIsWhitespace]]
+		whileTrue: [i := i @env0:+ 1].
+	(i @env0:<= n and: [((s @env0:at: i) @env0:= $+) or: [(s @env0:at: i) @env0:= $-]])
+		ifTrue: [i := i @env0:+ 1].
+	base := aBase.
+	(i @env0:< n and: [(s @env0:at: i) @env0:= $0]) ifTrue: [
+		| p prefixBase |
+		p := (s @env0:at: i @env0:+ 1) @env0:asLowercase.
+		prefixBase := p @env0:= $x
+			ifTrue: [16]
+			ifFalse: [p @env0:= $o
+				ifTrue: [8]
+				ifFalse: [p @env0:= $b ifTrue: [2] ifFalse: [nil]]].
+		(prefixBase notNil and: [base @env0:= 0 or: [base @env0:= prefixBase]])
+			ifTrue: [base := prefixBase. i := i @env0:+ 2]].
+	base @env0:= 0 ifTrue: [base := 10].
+	(#(2 4 8 16 32) @env0:includes: base) ifTrue: [^ self].
 	count := 0.
-	aString @env0:do: [:c | (c @env0:isDigit) ifTrue: [count := count @env0:+ 1]].
+	done := false.
+	[done not and: [i @env0:<= n]] whileTrue: [
+		c := s @env0:at: i.
+		c @env0:= $_
+			ifFalse: [
+				v := c @env0:isDigit
+					ifTrue: [c @env0:digitValue]
+					ifFalse: [((c @env0:codePoint @env0:< 128) and: [c @env0:isLetter])
+						ifTrue: [c @env0:asLowercase @env0:codePoint @env0:- 87]
+						ifFalse: [nil]].
+				(v notNil and: [v @env0:< base])
+					ifTrue: [count := count @env0:+ 1]
+					ifFalse: [done := true]].
+		done ifFalse: [i := i @env0:+ 1]].
+	"Anything after the digits but trailing whitespace makes the string an
+	invalid literal, and CPython reports THAT, not the limit:
+	``int('1' * 4301 + 'x')'' is ``invalid literal for int() with base 10''.
+	Leave it to the parser, which raises it."
+	[i @env0:<= n and: [(s @env0:at: i) @env0:unicodeIsWhitespace]]
+		whileTrue: [i := i @env0:+ 1].
+	i @env0:<= n ifTrue: [^ self].
 	(count @env0:> limit) ifTrue: [
 		ValueError ___signal___: ('Exceeds the limit (' @env0:,
 			limit @env0:printString @env0:,
@@ -160,12 +219,19 @@ Integer class >> ___invalidLiteral___: obj base: baseInt [
 	int(obj[, base]) literal: 'invalid literal for int() with base N:
 	REPR(obj)' -- REPR is the ORIGINAL (untrimmed) obj's Python repr,
 	matching test_int.py's test_error_message which asserts on
-	exception.args[0] verbatim."
+	exception.args[0] verbatim.
 
+	CUT AT 200 CHARACTERS, as CPython's ``%.200R'' cuts it -- mid-repr, so a
+	long one loses its closing quote.  Uncut, int() of a 4301-digit string
+	with one bad character put all 4302 characters in the message."
+
+	| text |
+	text := obj __repr__.
+	text @env0:size @env0:> 200 ifTrue: [text := text @env0:copyFrom: 1 to: 200].
 	ValueError ___signal___: ('invalid literal for int() with base ' @env0:,
 		baseInt @env0:printString @env0:,
 		': ' @env0:,
-		(obj __repr__))
+		text)
 
 ]
 
@@ -332,6 +398,22 @@ Integer class >> ___parseIntFromBytes___: byteObj original: original [
 
 ]
 
+{ #category : 'Grail-Python-Size' }
+Integer class >> __basicsize__ [
+	"``int.__basicsize__'' -- CPython's fixed part of an int, in bytes: refcount,
+	type and the size/sign tag on a 64-bit build.
+
+	Grail reports CPython's int MODEL here, not GemStone's memory: sys.int_info
+	already describes CPython's 30-bit digits stored 4 bytes apiece, and
+	``__sizeof__ == __basicsize__ + __itemsize__ * ndigits'' is the identity
+	test_long's test___sizeof__ checks, against those same sys.int_info
+	numbers.  A SmallInteger is an immediate with no memory of its own, so the
+	physical size (Object >> __sizeof__) answered 0 for every small int."
+
+	^ 24
+
+]
+
 { #category : 'Grail-Protocol Refusal' }
 Integer class >> __getitem__: index [
 	<grailProtocolRefusal>
@@ -354,6 +436,15 @@ Integer class >> __instancecheck__: anObject [
 
 	^ (anObject isKindOf: Integer)
 		or: [(anObject isKindOf: Boolean) or: [anObject isKindOf: AbstractPyInt]]
+
+]
+
+{ #category : 'Grail-Python-Size' }
+Integer class >> __itemsize__ [
+	"``int.__itemsize__'' -- the bytes per digit, sys.int_info.sizeof_digit.  See
+	__basicsize__."
+
+	^ 4
 
 ]
 
@@ -530,10 +621,9 @@ Integer class >> __new__: obj _: base [
 	"sys.set_int_max_str_digits digit-limit check -- CPython exempts
 	power-of-2 bases (2, 4, 8, 16, 32) since conversion for those is
 	linear, never quadratic (test_int.py test_power_of_two_bases_unlimited).
-	Every other base, including plain decimal 10, is checked."
-	((baseInt @env0:= 2) or: [(baseInt @env0:= 4) or: [(baseInt @env0:= 8)
-		or: [(baseInt @env0:= 16) or: [baseInt @env0:= 32]]]]) ifFalse: [
-		self ___checkStrDigitLimit___: str].
+	Every other base, including plain decimal 10, is checked; base 0 is
+	resolved from the prefix first.  See ___checkStrDigitLimit___:base:."
+	self ___checkStrDigitLimit___: str base: baseInt.
 
 	"Parse the string with the given base.  GemStone has no public
 	radix-aware Integer parser (only ``fromString:`` for base 10 and
@@ -652,7 +742,7 @@ Integer class >> from_bytes: bytes _: byteorder _: signed [
 	"int.from_bytes(bytes, byteorder='big', *, signed=False)
 	Return the integer represented by the given array of bytes."
 
-	| bytesArray result isBigEndian isSigned |
+	| bytesArray result isBigEndian isSigned negative |
 	"Extract bytes - assuming bytes is a Python bytes object or similar.
 	Python's bytes IS Smalltalk's ByteArray with the Python protocol
 	layered on (see Bytes.gs); bytearray subclasses it (Bytearray.gs).
@@ -666,35 +756,40 @@ Integer class >> from_bytes: bytes _: byteorder _: signed [
 	isBigEndian := self ___isBigEndian___: byteorder.
 	isSigned := (signed == true) or: [signed == true].
 
-	result := 0.
-	isBigEndian
-		ifTrue: [
-			bytesArray @env0:do: [:each |
-				result := ((result @env0:bitShift: 8) @env0:bitOr: each).
-			].
-		]
-		ifFalse: [
-			| shift |
-			shift := 0.
-			bytesArray @env0:do: [:each |
-				result := (result @env0:bitOr: (each @env0:bitShift: shift)).
-				shift := (shift @env0:+ 8).
-			].
-		].
+	"A signed value whose top bit is set is NEGATIVE.  It used to be assembled
+	unsigned and then have 2**(8n) subtracted, and 2**(8n) is one bit wider
+	than the widest n-byte value: at GemStone's LargeInteger ceiling (~130144
+	bits) it could not be built, and the kernel's NumericError (error 2503)
+	ended the process.  So a negative one is decoded as -(inverted + 1),
+	assembling the INVERTED bytes, which never exceeds the value's own width."
+	negative := isSigned and: [(bytesArray @env0:size) @env0:> 0
+		and: [((isBigEndian
+				ifTrue: [bytesArray @env0:first]
+				ifFalse: [bytesArray @env0:last]) @env0:bitAnd: 16r80) @env0:~= 0]].
 
-	"Handle signed conversion"
-	(isSigned and: [(bytesArray @env0:size) @env0:> 0]) ifTrue: [
-		| highByte |
-		highByte := isBigEndian
-			ifTrue: [bytesArray @env0:first]
-			ifFalse: [bytesArray @env0:last].
-		((highByte @env0:bitAnd: 16r80) @env0:~= 0) ifTrue: [
-			"Negative number - subtract 2^(numBits)"
-			result := (result @env0:- 
-				(1 @env0:bitShift: ((bytesArray @env0:size) @env0:* 8))
-			).
-		].
-	].
+	"More bytes than GemStone's LargeInteger holds: the catchable OverflowError
+	Grail raises for that ceiling elsewhere (see ___pyShiftLeft___:), not the
+	kernel's uncatchable NumericError.  CPython has no ceiling and answers."
+	result := [ | acc |
+		acc := 0.
+		isBigEndian
+			ifTrue: [
+				bytesArray @env0:do: [:each |
+					acc := (acc @env0:bitShift: 8) @env0:bitOr:
+						(negative ifTrue: [255 @env0:- each] ifFalse: [each])]]
+			ifFalse: [
+				| shift |
+				shift := 0.
+				bytesArray @env0:do: [:each |
+					acc := acc @env0:bitOr:
+						((negative ifTrue: [255 @env0:- each] ifFalse: [each])
+							@env0:bitShift: shift).
+					shift := shift @env0:+ 8]].
+		negative
+			ifTrue: [(acc @env0:+ 1) @env0:negated]
+			ifFalse: [acc]]
+				@env0:on: NumericError
+				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity'].
 
 	^ result
 
@@ -727,7 +822,12 @@ Integer >> ___checkIntStrDigitLimit___ [
 	pre-checks via bit-length to dodge its OWN quadratic conversion;
 	GemStone's Integer>>printString is not quadratic and LargeInteger is
 	capped at ~130144 bits regardless, so a plain post-hoc digit count
-	is both correct and cheap here."
+	is both correct and cheap here.
+
+	CPython words this direction WITHOUT the digit count the str -> int
+	direction reports (``...for integer string conversion; use ...'', not
+	``...: value has N digits; use ...'').  It only knows the size from the
+	bit length, never the exact digit count, so it does not claim one."
 
 	| limit count |
 	limit := (SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits ifAbsent: [4300].
@@ -736,9 +836,7 @@ Integer >> ___checkIntStrDigitLimit___ [
 	(count @env0:> limit) ifTrue: [
 		ValueError ___signal___: ('Exceeds the limit (' @env0:,
 			limit @env0:printString @env0:,
-			' digits) for integer string conversion: value has ' @env0:,
-			count @env0:printString @env0:,
-			' digits; use sys.set_int_max_str_digits() to increase the limit')]
+			' digits) for integer string conversion; use sys.set_int_max_str_digits() to increase the limit')]
 
 ]
 
@@ -750,15 +848,24 @@ Integer >> ___fitsInBytes___: aCount signed: aBoolean [
 	after the two's-complement step and against the UNSIGNED limit, so
 	``(128).to_bytes(1, 'big', signed=True)'' answered b'\x80' and
 	``(-129).to_bytes(1, 'little', signed=True)'' b'\x7f', where CPython
-	raises ``int too big to convert''."
+	raises ``int too big to convert''.
+
+	Read from the receiver's BIT LENGTH, never by building 2**(8n): that bound
+	is one bit wider than the widest value that fits, so for a receiver at
+	GemStone's LargeInteger ceiling (~130144 bits) it could not exist, and the
+	kernel's NumericError (error 2503) ended the process.
+	``random.randbytes(16268)'' is ``getrandbits(130144).to_bytes(16268)'' and
+	died exactly so (test_random).  A negative n's magnitude is measured as
+	-n - 1, which is no wider than n, so nothing here grows past the receiver."
 
 	| bits |
 	bits := aCount @env0:* 8.
 	aBoolean ifFalse: [
-		^ self @env0:>= 0 and: [self @env0:< (1 @env0:bitShift: bits)]].
+		^ self @env0:>= 0 and: [self @env0:highBit @env0:<= bits]].
 	bits @env0:= 0 ifTrue: [^ self @env0:= 0].
-	^ (self @env0:>= (1 @env0:bitShift: bits @env0:- 1) @env0:negated)
-		and: [self @env0:< (1 @env0:bitShift: bits @env0:- 1)]
+	^ (self @env0:>= 0
+		ifTrue: [self]
+		ifFalse: [self @env0:negated @env0:- 1]) @env0:highBit @env0:< bits
 
 ]
 
@@ -1713,6 +1820,19 @@ Integer >> __rxor__: other [
 
 ]
 
+{ #category : 'Grail-Python-Size' }
+Integer >> __sizeof__ [
+	"``n.__sizeof__()'' in CPython's int model: the fixed part plus one 4-byte
+	digit per 30 bits of the magnitude, and at least one digit, so 0 is one
+	digit as in CPython.  See Integer class >> __basicsize__ for why this is
+	the model rather than GemStone's physical size."
+
+	| digits |
+	digits := ((self @env0:abs @env0:highBit) @env0:+ 29) @env0:// 30.
+	^ Integer __basicsize__ @env0:+ (Integer __itemsize__ @env0:* (digits @env0:max: 1))
+
+]
+
 { #category : 'Grail-String Representation' }
 Integer >> __str__ [
 	"Return string representation of integer."
@@ -1944,9 +2064,12 @@ Integer >> to_bytes: length _: byteorder _: signed [
 		OverflowError ___signal___: 'can''t convert negative int to unsigned'].
 	(self ___fitsInBytes___: numBytes signed: isSigned) ifFalse: [
 		OverflowError ___signal___: 'int too big to convert'].
-	"Two's complement"
-	(val @env0:< 0) ifTrue: [
-		val := (1 @env0:bitShift: (numBytes @env0:* 8)) @env0:+ val].
+	"No explicit two's complement for a negative value: GemStone's bitAnd: and
+	bitShift: already treat a negative integer as infinite two's complement
+	(-1 bitAnd: 255 is 255, -1 bitShift: -8 is -1), so the loop below writes
+	its bytes directly.  The old step added 2**(8n), which for a length at
+	GemStone's LargeInteger ceiling could not be built (error 2503, see
+	___fitsInBytes___:signed:)."
 
 	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
 	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython

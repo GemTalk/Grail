@@ -1710,6 +1710,11 @@ builtins >> ___formatIntValue___: value parsed: p [
 		^ self ___formatPadBody___: body fill: fill align: align width: width signLength: 0].
 	prefix := ''.
 	(type == nil or: [type @env0:= $d or: [type @env0:= $n]]) ifTrue: [
+		"A decimal rendering is an int -> str conversion and obeys
+		sys.set_int_max_str_digits, as str() does: format(10 ** 4300, 'd')
+		and format(10 ** 4300, ',') raise in CPython.  The other bases are
+		power-of-two and exempt."
+		value ___checkIntStrDigitLimit___.
 		digits := value @env0:abs @env0:printString]
 	ifFalse: [
 		type @env0:= $b ifTrue: [
@@ -2963,6 +2968,13 @@ builtins >> ___isSubclassSingle___: sub of: target [
 			argMessage: 'issubclass() arg 1 must be a class'.
 		self ___abstractClassCheck___: target
 			argMessage: 'issubclass() arg 2 must be a class, a tuple of classes, or a union'.
+		"An ABC's own hook first, as for a class below: a C extension's type
+		is no Behavior, and numpy registers np.number with numbers.Number --
+		``issubclass(np.number, numbers.Number)'' answered False while
+		numbers.Number.__subclasscheck__(np.number) answered True."
+		((target isKindOf: Behavior)
+			and: [target ___respondsTo___: #'__subclasscheck__:']) ifTrue: [
+				(target __subclasscheck__: sub) == true ifTrue: [^ true]].
 		^ self ___abstractIsSubclass___: sub of: target depth: 0].
 	(sub == target) ifTrue: [^ true].
 	"CPython: bytearray is NOT a subclass of bytes (distinct types), though
@@ -3575,6 +3587,9 @@ builtins >> ___printfConvert___: value conv: conv flags: flags width: width prec
 	absval := iv @env0:abs.
 	prefix := ''.
 	(conv @env0:= $d @env0:or: [conv @env0:= $i @env0:or: [conv @env0:= $u]]) ifTrue: [
+		"Decimal, so sys.set_int_max_str_digits applies: '%d' % (10 ** 4300)
+		raises in CPython, as str() does.  o/x/X are power-of-two, exempt."
+		absval ___checkIntStrDigitLimit___.
 		digits := absval @env0:printString].
 	conv @env0:= $o ifTrue: [
 		digits := absval @env0:printStringRadix: 8.
@@ -6965,6 +6980,30 @@ builtins >> getattr: anObject _: aName [
 	self ___requireAttrName___: aName.
 
 	^ (self ___attrLoad___: anObject named: aName)
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+builtins >> globals [
+
+	"globals() reached as a VALUE: ``_globals = globals'' and a call through it
+	later, which is how timeit reads the namespace of whoever constructs a
+	Timer.  A direct ``globals()'' never comes here -- CallAst compiles it to
+	the module's own namespace -- so there was nothing to call, and the
+	assignment was a NameError.
+
+	CPython's globals() answers the CALLING frame's globals, so this answers
+	the innermost Python frame's f_globals, skipping its own."
+
+	| frame |
+
+	frame := BaseException @env0:___liveFrameChain___.
+	[(frame @env0:~~ nil) and: [(frame @env0:~~ None) and: [
+		((sys @env0:___instance___) @env1:___frameName___: frame) @env0:= 'globals']]]
+		whileTrue: [frame := frame @env0:dynamicInstVarAt: #'f_back'].
+	((frame @env0:== nil) or: [frame @env0:== None]) ifTrue: [
+		^ RuntimeError ___signal___: 'globals(): no current frame'].
+	^ frame f_globals
 
 ]
 

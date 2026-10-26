@@ -7695,22 +7695,38 @@ Object >> ___classChainAttrLookup___: aSym [
 					ancestor's stored attribute."
 					(self ___methodDefinedFrom___: start upTo: walker name: aSym)
 						ifTrue: [^ nil].
-					((self isKindOf: Behavior)
-						and: [self ___isValueDescriptor___: v])
-						ifTrue: [^ self ___classDescriptorGet___: v].
-					((self isKindOf: Behavior) not
-						and: [self ___isValueDescriptor___: v])
-						ifTrue: [^ self ___descriptorGet___: v].
-					((self isKindOf: Behavior) not
-						and: [self ___isDescriptorCallable___: v])
-						ifTrue: [^ MethodBinding instance: self callable: v].
-					^ v
+					^ self ___classChainValue___: v
 				]
 			]
 		].
 		walker := walker @env0:superClass
 	].
-	^ nil
+	"A secondary base's store, which the chain does not reach (multiple
+	inheritance) -- see ___secondaryBaseAttr___:name:."
+	v := self ___secondaryBaseAttr___: start name: aSym.
+	v == nil ifTrue: [^ nil].
+	^ self ___classChainValue___: v
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___classChainValue___: aValue [
+
+	"A class-attribute store's value as an attribute read sees it: off the
+	CLASS, a value descriptor's class-side get and otherwise the raw value;
+	through an INSTANCE, a value descriptor's get, a callable bound to the
+	instance, or the raw value.  ___classChainAttrLookup___: explains each."
+
+	((self isKindOf: Behavior)
+		and: [self ___isValueDescriptor___: aValue])
+		ifTrue: [^ self ___classDescriptorGet___: aValue].
+	((self isKindOf: Behavior) not
+		and: [self ___isValueDescriptor___: aValue])
+		ifTrue: [^ self ___descriptorGet___: aValue].
+	((self isKindOf: Behavior) not
+		and: [self ___isDescriptorCallable___: aValue])
+		ifTrue: [^ MethodBinding instance: self callable: aValue].
+	^ aValue
 
 ]
 
@@ -9268,9 +9284,17 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	The innermost frame whose receiver is this very object and whose class
 	carries the cell decides, so object's own methods on the way down (this
 	one, ___classCell___:) are passed over, and no class can answer that does
-	not hold the cell itself."
+	not hold the cell itself.
 
-	| probe st i cls blk |
+	A BLOCK's frame carries the block in its receiver slot, not the block's
+	self, so a frame running a block that captured this receiver counts too.
+	That is the only frame a lambda has when it ESCAPES a receiverless def --
+	``def mk(): return lambda: A'' in a class body, the lambda called after mk
+	returned, which is what a parameterised type alias in a class body does
+	with its lazily evaluated value.  Measured on 4.0.0.a5: the slot is the
+	ExecBlock, and its selfValue is the receiver."
+
+	| probe st i cls blk slot |
 	BaseException @env0:___ensureStackCapture___.
 	probe := [Error @env0:new @env0:signal: 'grail closure-cell probe']
 		@env0:on: Error do: [:ex | ex @env0:return: ex].
@@ -9279,7 +9303,9 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	"A SmallInteger, then (method, ip, receiver) triples, innermost first."
 	i := 2.
 	[i @env0:+ 2 @env0:<= st @env0:size] @env0:whileTrue: [
-		(st @env0:at: i @env0:+ 2) == self ifTrue: [
+		slot := st @env0:at: i @env0:+ 2.
+		(slot == self or: [(slot @env0:isKindOf: ExecBlock)
+			and: [slot @env0:selfValue == self]]) ifTrue: [
 			cls := [(st @env0:at: i) @env0:inClass]
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 			cls == nil ifFalse: [
@@ -10042,28 +10068,37 @@ Object >> ___grailLayoutBase___ [
 
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___grailMayStandInForABuiltin___: aValue [
-	"Whether aValue is a top-level function of a module in Grail's ported stdlib
-	-- one that may be Grail's Python implementation of what CPython provides as
-	a C builtin, which is no descriptor.  operator.add is a function here and a
-	builtin_function_or_method there; so are threading.Lock and many more.
+	"Whether aValue is a top-level function of a TOP-LEVEL module in Grail's
+	ported stdlib -- one that may be Grail's Python implementation of what
+	CPython provides as a C builtin, which is no descriptor.  operator.add is a
+	function here and a builtin_function_or_method there; so are
+	threading.Lock and many more.
 
 	Grail cannot tell which of its stdlib functions are builtins in CPython, so
-	all of them answer true; the cost is that a stdlib function CPython writes
-	in Python (textwrap.dedent) does not bind when assigned in a class body,
-	which nothing does on purpose.  CPython's own TEST modules are excepted:
-	they are pure Python there too.  Matched on the path segment, so it holds
+	every top-level stdlib module's functions answer true; the cost is that a
+	stdlib function CPython writes in Python (textwrap.dedent) does not bind when
+	assigned in a class body.
+
+	A module INSIDE A PACKAGE does not stand in for one.  CPython's C functions
+	are reached through top-level modules (operator, threading, _thread, heapq,
+	...), and its packages are its own Python -- which does bind a function in
+	a class body on purpose: email.message's Message is ``from
+	email.iterators import walk'', and ``m.walk()'' answered ``missing 1
+	required positional argument: 'self''' here.  CPython's own TEST modules,
+	always excepted, are such a package.  Matched on the path, so it holds
 	wherever the checkout lives."
 
-	| rcvr file |
+	| rcvr file at rest |
 	(aValue isKindOf: BoundMethod) ifFalse: [^ false].
 	rcvr := aValue @env0:receiver.
 	(rcvr isKindOf: module) ifFalse: [^ false].
 	file := rcvr @env0:dynamicInstVarAt: #'__file__'.
 	(file isKindOf: CharacterCollection) ifFalse: [^ false].
 	file := file @env0:asString.
-	((file @env0:indexOfSubCollection: '/src/python/stdlib/') @env0:= 0)
-		ifTrue: [^ false].
-	^ (file @env0:indexOfSubCollection: '/src/python/stdlib/test/') @env0:= 0
+	at := file @env0:indexOfSubCollection: '/src/python/stdlib/'.
+	at @env0:= 0 ifTrue: [^ false].
+	rest := file @env0:copyFrom: at @env0:+ '/src/python/stdlib/' @env0:size to: file @env0:size.
+	^ (rest @env0:includes: $/) not
 
 ]
 
@@ -10756,7 +10791,15 @@ Object >> ___grailOwnMetaclass___ [
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailOwnsCommittedAttr___: aClass name: aSym [
 	"Does aClass ITSELF hold aSym in its committed namespace -- its own
-	___dynInstVars___ holder, or its own class-attribute accessor pair?"
+	___dynInstVars___ holder, or its own class-attribute accessor pair?
+
+	Both probes RE-PASS a stack overflow, as every probe in this file does.
+	Every attribute load on a class runs through here, so a recursion through
+	one -- ``A.__call__ = A()'' and ``A()()'', test_descr test_recursive_call
+	-- can trip the guard page inside these blocks.  Answering nil for it
+	consumed the VM's only warning without reducing depth, the recursion went
+	on into the Red Zone, and the session died there: on Linux, where native
+	code puts the trip in this frame, not on Darwin, where it lands elsewhere."
 
 	| holder |
 	((aClass @env0:class @env0:includesSelector: aSym environmentId: 1)
@@ -10766,10 +10809,14 @@ Object >> ___grailOwnsCommittedAttr___: aClass name: aSym [
 	(aClass @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1)
 		ifFalse: [^ false].
 	holder := [aClass @env0:perform: #'___dynInstVars___' env: 1]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
 	holder == nil ifTrue: [^ false].
 	^ ([holder @env0:dynamicInstVarAt: aSym]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil]) @env0:notNil
 
 ]
 
@@ -12434,6 +12481,26 @@ Object >> ___isRepeatCount___ [
 
 ]
 
+{ #category : 'Grail-Pattern Matching' }
+Object >> ___isSelfMatching___: aClass [
+
+	"Whether a class pattern on aClass matches its ONE positional
+	sub-pattern against the subject itself: ``case int(x):'' binds x to the
+	int.  CPython flags bool, bytearray, bytes, dict, float, frozenset, int,
+	list, set, str and tuple with _Py_TPFLAGS_MATCH_SELF, which subclasses
+	inherit; it applies only to a class without __match_args__
+	(match_class_attr, Python/ceval.c)."
+
+	| pythonBuiltins |
+
+	pythonBuiltins := builtins @env0:___instance___.
+	^ (#(#bool #bytearray #bytes #dict #float #frozenset #int #list #set #str #tuple)
+		@env0:detect: [:name |
+			(pythonBuiltins issubclass: aClass _: (pythonBuiltins ___pyAttrLoad___: name)) ___isTruthy___]
+		ifNone: [nil]) ~~ nil
+
+]
+
 { #category : 'Grail-Convenience Methods - Unary' }
 Object >> ___isTruthy___ [
 	"Convert any Python object to a Smalltalk Boolean for use in if/while conditions.
@@ -12542,6 +12609,12 @@ Object >> ___matchArgAt___: anIndex of: aClass [
 	args := [aClass ___pyAttrLoad___: #'__match_args__']
 		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
 	args == nil ifTrue: [
+		"A self-matching builtin takes ONE positional sub-pattern, which
+		matches the subject itself -- see ___isSelfMatching___:."
+		(self ___isSelfMatching___: aClass) ifTrue: [
+			anIndex @env0:= 0 ifTrue: [^ self].
+			TypeError ___signal___: (aClass @env1:__name__) @env0:asString
+				@env0:, '() accepts 1 positional sub-pattern'].
 		TypeError ___signal___: (aClass @env1:__name__) @env0:asString
 			@env0:, '() accepts 0 positional sub-patterns'].
 	n := args __len__.
@@ -12697,18 +12770,20 @@ Object >> ___matchLen___ [
 Object >> ___matchRestExcluding___: anArrayOfKeys [
 	"The ``**rest'' of a mapping pattern: a NEW dict holding every key the
 	pattern did not name.  A fresh dict, not a view -- CPython copies, so
-	mutating rest must not touch the subject."
+	mutating rest must not touch the subject.
+
+	CPython's COPY_DICT_WITHOUT_KEYS: copy the WHOLE subject into a new dict
+	through the mapping protocol, then delete the pattern's keys.  This walked
+	the subject's Smalltalk storage (keysDo:), which only a real dict has, so
+	``case {2: 3, **z}'' on a collections.UserDict -- any Mapping that is not a
+	dict -- died on an uncatchable MessageNotUnderstood (test_patma_240).
+	dict's update: reads a mapping through keys() and __getitem__."
 
 	| out |
 	out := dict ___new___.
-	"keysDo: is the raw walk over the stored keys -- the same one dict's
-	own __contains__ uses -- rather than iterating the dict_keys VIEW,
-	which is a Python-level object and does not answer the Smalltalk
-	iteration protocol."
-	self @env0:keysDo: [:k |
-		(anArrayOfKeys @env0:detect: [:each | (k ___cmpEq___: each) ___isTruthy___]
-			ifNone: [nil]) @env0:isNil
-				ifTrue: [out __setitem__: k _: (self __getitem__: k)]].
+	out update: self.
+	anArrayOfKeys @env0:do: [:each |
+		(out __contains__: each) ___isTruthy___ ifTrue: [out __delitem__: each]].
 	^ out
 
 ]
@@ -14105,6 +14180,13 @@ Object >> ___pyAttrLoad___: aSym [
 		and break visitor dispatch
 		(``getattr(self, 'visit_' + type(node).__name__)``)."
 		((s @env0:= '__name__' or: [s @env0:= '__module__' or: [s @env0:= '__qualname__' or: [s @env0:= '__mro__' or: [s @env0:= '__base__' or: [s @env0:= '__bases__' or: [s @env0:= '__type_params__']]]]]])
+			and: [self ___respondsTo___: aSym])
+				ifTrue: [^ self @env0:perform: aSym env: 1].
+		"Type slots CPython exposes as member descriptors, so ``int.__itemsize__''
+		is a number (Integer class >> __basicsize__).  Compared by identity,
+		apart from the string list above: every class-attribute read passes this
+		line, and only a class that defines one of them answers it."
+		((aSym == #'__basicsize__' or: [aSym == #'__itemsize__'])
 			and: [self ___respondsTo___: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1].
 		"A METACLASS reaches neither accessor: __name__ and __qualname__ are
@@ -16545,6 +16627,64 @@ Object >> ___roundHalfToEven___ [
 	twice @env0:> 1 ifTrue: [^ fl @env0:+ 1].
 	twice @env0:< 1 ifTrue: [^ fl].
 	^ fl @env0:even ifTrue: [fl] ifFalse: [fl @env0:+ 1]
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___secondaryBaseAttr___: aClass name: aSym [
+
+	"aSym from a SECONDARY base of aClass -- a base on its C3 MRO but not on
+	its Smalltalk superclass chain -- or nil.
+
+	A multiple-inheritance class inherits only its primary base through
+	Smalltalk; the other bases' compiled methods and declared class attributes
+	are COPIED onto it when it is made (importlib ___mergeSecondaryBases___).
+	An attribute set on such a base with setattr was not copied, and not seen
+	either, before or after the subclass existed: test_email's @parameterize
+	adds test methods to a mixin base that way, and ``class
+	TestBytesGenerator(TestGeneratorBase, TestEmailBase)'' found none of them.
+	CPython reads every class on the MRO.
+
+	Walked in MRO ORDER, stopping at the first class that has aSym.  A METHOD
+	there answers nil, and so does a value aClass or its primary chain holds
+	itself, in its committed store or its session overlay: the caller's own
+	readers serve those, in their order.  A value a secondary base holds -- in
+	its overlay first, a runtime store on a canonical class landing there, then
+	in its committed store -- is the answer.
+
+	Not for a DUNDER: a class's store carries its own bookkeeping under those
+	names (__doc__, __init__ overrides, ABC state), which CPython keeps per class
+	and a subclass does not inherit through this route; letting them through
+	regressed sixteen CPython modules.  Asked only after the primary chain's
+	stores miss, and only of a registered multiple-inheritance class, so the
+	ordinary miss costs one identity probe."
+
+	| entry overlay |
+	(aSym @env0:size @env0:> 1 and: [(aSym @env0:at: 1) @env0:= $_
+		and: [(aSym @env0:at: 2) @env0:= $_]]) ifTrue: [^ nil].
+	entry := (importlib @env0:___miRegistry___) @env0:at: aClass otherwise: nil.
+	entry == nil ifTrue: [^ nil].
+	overlay := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	(entry @env0:at: 2) @env0:do: [:each |
+		(each @env0:isKindOf: Behavior) ifTrue: [
+			| overlaid holder held |
+			"Every arity form of a def counts: ``def m(self, x=None)'' compiles
+			to keyword selectors, never to the unary #m."
+			(self ___definesPythonMethod___: each name: aSym) ifTrue: [^ nil].
+			overlaid := overlay == nil
+				ifTrue: [nil]
+				ifFalse: [(overlay @env0:at: each otherwise: nil)
+					@env0:ifNotNil: [:values | values @env0:at: aSym otherwise: nil]].
+			held := ((each ___respondsTo___: #___dynInstVars___)
+				and: [(holder := each @env0:perform: #___dynInstVars___ env: 1) ~~ nil])
+					ifTrue: [holder @env0:dynamicInstVarAt: aSym]
+					ifFalse: [nil].
+			(each == aClass or: [aClass @env0:inheritsFrom: each])
+				ifTrue: [(overlaid ~~ nil or: [held ~~ nil]) ifTrue: [^ nil]]
+				ifFalse: [
+					overlaid ~~ nil ifTrue: [^ overlaid].
+					held ~~ nil ifTrue: [^ held]]]].
+	^ nil
 
 ]
 

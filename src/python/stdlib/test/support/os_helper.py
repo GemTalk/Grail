@@ -9,9 +9,12 @@
 
 import os
 import stat
+import sys
 import unittest
 
 from collections.abc import MutableMapping
+
+from test import support
 
 # A scratch filename in the current directory.  os.getpid() keeps concurrent
 # sessions from colliding; fall back to a fixed suffix if it is unavailable.
@@ -291,3 +294,123 @@ class FakePath:
 # plain one.  test_sax reads TESTFN_UNICODE at import to decide whether the
 # filesystem encoding can carry it.
 TESTFN_UNICODE = TESTFN + "-\u00e0\u00f2\u0258\u0141\u011f"
+
+
+# GRAIL: verbatim from CPython 3.14.4 Lib/test/support/os_helper.py, after the
+# FS_NONASCII this file already defines; TESTFN itself stays Grail's fixed name.
+
+# TESTFN_UNENCODABLE is a filename (str type) that should *not* be able to be
+# encoded by the filesystem encoding (in strict mode). It can be None if we
+# cannot generate such filename.
+TESTFN_UNENCODABLE = None
+if os.name == 'nt':
+    # skip win32s (0) or Windows 9x/ME (1)
+    if sys.getwindowsversion().platform >= 2:
+        # Different kinds of characters from various languages to minimize the
+        # probability that the whole name is encodable to MBCS (issue #9819)
+        TESTFN_UNENCODABLE = TESTFN_ASCII + "-\u5171\u0141\u2661\u0363\uDC80"
+        try:
+            TESTFN_UNENCODABLE.encode(sys.getfilesystemencoding())
+        except UnicodeEncodeError:
+            pass
+        else:
+            print('WARNING: The filename %r CAN be encoded by the filesystem '
+                  'encoding (%s). Unicode filename tests may not be effective'
+                  % (TESTFN_UNENCODABLE, sys.getfilesystemencoding()))
+            TESTFN_UNENCODABLE = None
+# Apple and Emscripten deny unencodable filenames (invalid utf-8)
+elif not support.is_apple and sys.platform not in {"emscripten", "wasi"}:
+    try:
+        # ascii and utf-8 cannot encode the byte 0xff
+        b'\xff'.decode(sys.getfilesystemencoding())
+    except UnicodeDecodeError:
+        # 0xff will be encoded using the surrogate character u+DCFF
+        TESTFN_UNENCODABLE = TESTFN_ASCII \
+            + b'-\xff'.decode(sys.getfilesystemencoding(), 'surrogateescape')
+    else:
+        # File system encoding (eg. ISO-8859-* encodings) can encode
+        # the byte 0xff. Skip some unicode filename tests.
+        pass
+
+# TESTFN_UNDECODABLE is a filename (bytes type) that should *not* be able to be
+# decoded from the filesystem encoding (in strict mode). It can be None if we
+# cannot generate such filename (ex: the latin1 encoding can decode any byte
+# sequence). On UNIX, TESTFN_UNDECODABLE can be decoded by os.fsdecode() thanks
+# to the surrogateescape error handler (PEP 383), but not from the filesystem
+# encoding in strict mode.
+TESTFN_UNDECODABLE = None
+for name in (
+    # b'\xff' is not decodable by os.fsdecode() with code page 932. Windows
+    # accepts it to create a file or a directory, or don't accept to enter to
+    # such directory (when the bytes name is used). So test b'\xe7' first:
+    # it is not decodable from cp932.
+    b'\xe7w\xf0',
+    # undecodable from ASCII, UTF-8
+    b'\xff',
+    # undecodable from iso8859-3, iso8859-6, iso8859-7, cp424, iso8859-8, cp856
+    # and cp857
+    b'\xae\xd5'
+    # undecodable from UTF-8 (UNIX and Mac OS X)
+    b'\xed\xb2\x80', b'\xed\xb4\x80',
+    # undecodable from shift_jis, cp869, cp874, cp932, cp1250, cp1251, cp1252,
+    # cp1253, cp1254, cp1255, cp1257, cp1258
+    b'\x81\x98',
+):
+    try:
+        name.decode(sys.getfilesystemencoding())
+    except UnicodeDecodeError:
+        try:
+            name.decode(sys.getfilesystemencoding(),
+                        sys.getfilesystemencodeerrors())
+        except UnicodeDecodeError:
+            continue
+        TESTFN_UNDECODABLE = os.fsencode(TESTFN_ASCII) + name
+        break
+
+if FS_NONASCII:
+    TESTFN_NONASCII = TESTFN_ASCII + FS_NONASCII
+else:
+    TESTFN_NONASCII = None
+
+
+_can_symlink = None
+
+
+def can_symlink():
+    global _can_symlink
+    if _can_symlink is not None:
+        return _can_symlink
+    # WASI / wasmtime prevents symlinks with absolute paths, see man
+    # openat2(2) RESOLVE_BENEATH. Almost all symlink tests use absolute
+    # paths. Skip symlink tests on WASI for now.
+    src = os.path.abspath(TESTFN)
+    symlink_path = src + "can_symlink"
+    try:
+        os.symlink(src, symlink_path)
+        can = True
+    except (OSError, NotImplementedError, AttributeError):
+        can = False
+    else:
+        os.remove(symlink_path)
+    _can_symlink = can
+    return can
+
+
+def skip_unless_symlink(test):
+    """Skip decorator for tests that require functional symlink"""
+    ok = can_symlink()
+    msg = "Requires functional symlink implementation"
+    return test if ok else unittest.skip(msg)(test)
+
+
+def make_bad_fd():
+    """
+    Create an invalid file descriptor by opening and closing a file and return
+    its fd.
+    """
+    file = open(TESTFN, "wb")
+    try:
+        return file.fileno()
+    finally:
+        file.close()
+        unlink(TESTFN)

@@ -659,6 +659,8 @@ extern PyObject *PyExc_UnicodeError;
 extern PyObject *PyExc_UnicodeDecodeError;
 extern PyObject *PyExc_UnicodeEncodeError;
 extern PyObject *PyExc_RuntimeWarning;
+extern PyObject *PyExc_FloatingPointError;
+extern PyObject *PyExc_ImportWarning;
 extern PyObject *PyExc_UserWarning;
 extern PyObject *PyExc_AssertionError;
 extern PyObject *PyExc_GeneratorExit;

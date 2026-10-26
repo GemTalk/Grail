@@ -107,6 +107,13 @@ PyTimedelta class >> _timedelta: positional kw: kwargs [
 					@env0:, sym @env0:asString
 					@env0:, ' component: ' @env0:, v @env0:class __name__].
 			vals @env0:at: idx put: v]].
+	"A NaN or infinite component is CPython's ValueError or OverflowError, from
+	rounding it to a whole number of microseconds.  Here it went on to
+	___fromDaysSecondsMicros___ as a Float day count, and the date primitive
+	refused it with an uncatchable ArgumentTypeError (a binary plist's date of
+	inf seconds -- test_plistlib test_invalid_binary)."
+	vals @env0:do: [:each |
+		(each @env0:isKindOf: Float) ifTrue: [each ___checkIntConvertible___]].
 
 	days := (vals @env0:at: 1) @env0:+ ((vals @env0:at: 7) @env0:* 7).
 	seconds := (vals @env0:at: 2)

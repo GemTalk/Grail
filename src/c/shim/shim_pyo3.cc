@@ -294,7 +294,12 @@ static PyObject *gcm_vectorcall(PyObject *callable, PyObject *const *args,
     return gcm_invoke((GrailCMethodObject *)callable, args, nargs, kwnames);
 }
 
-/* tp_call: a tuple and a dict, flattened into the vector convention. */
+extern "C" PyObject *_grail_real_layout(PyObject *o);   /* cpython.cc */
+
+/* tp_call: a tuple and a dict, flattened into the vector convention.  The
+   keyword values come out of a Grail dict as Grail objects, so a list or
+   tuple goes back to CPython's layout: numpy's ndarray.view(dtype=[...])
+   read the list's items inline and segfaulted. */
 static PyObject *gcm_call(PyObject *callable, PyObject *args, PyObject *kwargs) {
     Py_ssize_t nargs = args ? PyTuple_Size(args) : 0;
     Py_ssize_t nkw = kwargs ? PyDict_Size(kwargs) : 0;
@@ -312,7 +317,7 @@ static PyObject *gcm_call(PyObject *callable, PyObject *args, PyObject *kwargs) 
         while (i < nkw && PyDict_Next(kwargs, &pos, &k, &v)) {
             Py_INCREF(k);
             PyTuple_SetItem(kwnames, i, k);
-            vec[nargs + i] = v;
+            vec[nargs + i] = _grail_real_layout(v);
             i++;
         }
     }

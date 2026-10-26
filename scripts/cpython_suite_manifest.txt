@@ -524,3 +524,224 @@ test.test_largefile
 test.test_pprint
 test.test_multibytecodec
 test.test_str
+
+# --- Census batch 2 (added 2026-10-23): unlocked by test.support helpers ---
+#
+# 58 census modules failed to import on a test.support name the trimmed copy
+# lacked.  With those helpers added verbatim from CPython 3.14.4, 21 of them run;
+# these 9 pass 70% or more.  Vendored verbatim from 3.14.4.  Measured on Darwin
+# arm64:
+#
+#   utf8_mode 12t OK      urllib 101t 14F+E   ntpath 105t 16F+E   signal 57t 10F+E
+#   posixpath 94t 22F+E   genericpath 25t 6F+E   sys 97t 24F+E   descrtut 8t 2F
+#   fileio 99t 30F+E
+test.test_utf8_mode
+test.test_urllib
+test.test_ntpath
+test.test_signal
+test.test_posixpath
+test.test_genericpath
+test.test_sys
+test.test_descrtut
+test.test_fileio
+
+# --- Census batch 3 (added 2026-10-23): the census's crashers, fixed ---
+#
+# Census modules that took their whole scoring session down, fixed at the
+# cause, and vendored verbatim from CPython 3.14.4.  Measured on Darwin arm64
+# and in CI's Linux container alike:
+#
+#   test_defaultdict 13t OK      the factory's repr gets CPython's reentrancy
+#                                guard; init, __missing__ and | follow
+#                                defdict_init / defdict_missing / defdict_or
+#   test_exceptions 107t 14F/14E/30S  a pre-existing __context__ cycle no
+#                                longer hangs the next raise; testInfiniteRecursion
+#                                is skip-listed (scripts/cpython_suite_skips.txt)
+#
+#   test_descr  162t 50F/32E/12S an unbound-method lookup no longer builds a
+#                                merged method dictionary per class per call
+#                                (the stack ran out inside that primitive:
+#                                UncontinuableError 2758), and the committed-
+#                                attribute probe re-passes a stack overflow --
+#                                on Linux, native code put the trip inside it,
+#                                and answering nil sent test_recursive_call and
+#                                test_repr_as_str on into the Red Zone
+test.test_defaultdict
+test.test_exceptions
+test.test_descr
+
+# --- Stdlib batch 1 (added 2026-10-23): pure-Python modules Grail lacked ---
+#
+# cmd, sched, fileinput, filecmp, rlcompleter, shelve and urllib.robotparser
+# are vendored verbatim from CPython 3.14.4 (licenses/CPYTHON.md), with their
+# test modules and test_dbm / test_dbm_dumb, which shelve's tests import.
+# What their tests found is fixed in Grail rather than in the vendored code:
+# os.fdopen, os.chmod on a bytes path, ast.literal_eval of a bare tuple,
+# simplefilter taking a tuple category, and unittest's assertCountEqual and
+# assertMultiLineEqual (now CPython's, over a vendored unittest/util.py).
+# Measured on Darwin arm64:
+#
+#   OK    cmd 7t   sched 11t   fileinput 57t   shelve 182t   dbm 18t
+#   filecmp 16t 1E        a lone surrogate in a file name
+#   dbm_dumb 26t 1E       a non-ASCII bytes path reaching a GsFile primitive
+#   robotparser 50t 5E    3 lone-surrogate URLs, 2 network classes
+#   rlcompleter 8t 2F     inspect.signature of a builtin answers no parameters
+#
+# Left out for now: test_timeit (``_globals = globals'' -- Grail compiles
+# globals() and locals() specially, so neither exists as a value), test_codeop
+# (compile() refuses PyCF_ALLOW_INCOMPLETE_INPUT), test_threading_local
+# (_thread._local) and test_pyclbr (test.test_importlib).
+test.test_cmd
+test.test_sched
+test.test_fileinput
+test.test_shelve
+test.test_dbm
+test.test_filecmp
+test.test_dbm_dumb
+test.test_robotparser
+test.test_rlcompleter
+
+# --- Stdlib batch 2 (added 2026-10-23): timeit ---
+#
+# timeit is vendored verbatim from CPython 3.14.4.  Its test found three Grail
+# defects, all fixed at the cause: ``globals'' did not exist as a VALUE
+# (timeit's ``_globals = globals''), a def inside a conditional class-body
+# block read the class namespace for its free names (Grail puts a def named
+# ``repeat'' under such a block), and a form feed in the indentation was an
+# IndentationError.  Measured on Darwin arm64:
+#
+#   OK    timeit 41t
+test.test_timeit
+
+# --- Stdlib batch 3 (added 2026-10-23): nturl2path, plistlib ---
+#
+# Vendored verbatim from CPython 3.14.4.  What their tests found is fixed in
+# Grail: warnings._DEPRECATED_MSG was missing (nturl2path builds its message
+# on it), a NaN or infinite timedelta component reached the date primitive as
+# a Float day count (an uncatchable ArgumentTypeError, where CPython raises
+# ValueError / OverflowError), and the io classes had no __module__, so
+# check__all__ counted plistlib's imported BytesIO as its own.  Measured on
+# Darwin arm64:
+#
+#   OK    nturl2path 3t
+#   plistlib 70t 1E       a lone surrogate (GemStone Characters cannot hold one)
+#
+# Left out: test_webbrowser and test__osx_support, whose failures depend on the
+# host's browsers and compilers and so would differ between a Mac and CI's
+# Linux; test_tabnanny, which needs CPython's tokenize.generate_tokens.
+test.test_nturl2path
+test.test_plistlib
+
+# --- Stdlib batch 4 (added 2026-10-24): gzip, the compression package, zlib ---
+#
+# gzip is CPython 3.14.4's own now, with the new ``compression'' package it is
+# built on (compression/_common/_streams.py is 3.14's _compression).  Grail's
+# gzip was a 92-line stand-in over GsFile, whose GzipFile was a factory
+# FUNCTION -- so ``class GzipDecodedResponse(gzip.GzipFile)'' (xmlrpc.client)
+# could not even be defined.  What CPython's gzip needed from Grail's zlib is
+# fixed there: compress(data, level, wbits) honours a gzip or raw window,
+# _ZlibDecompressor exists (src/python/stdlib/_grail_zlib.py), and
+# ZLIB_RUNTIME_VERSION / ZLIB_VERSION.  test_zlib's uncatchable errors are
+# fixed too: argument conversion and CPython's TypeError / ValueError at every
+# entry point, and an empty buffer's checksum.  Measured on Darwin arm64:
+#
+#   gzip 75t 4F/3E/9S    (the stand-in scored 20F/40E in the census)
+#   zlib 76t 5F/8E/8S    zdict, multi-GB buffers, _ZlibDecompressor pickling
+test.test_gzip
+test.test_zlib
+
+# --- Stdlib batch 5 (added 2026-10-24): CPython's email package ---
+#
+# email is CPython 3.14.4's own now, all 29 modules.  Grail's had been a mix:
+# the mime classes, encoders, errors and base64mime verbatim, but message,
+# generator, policy, headerregistry and utils were hand-written stand-ins at a
+# fraction of their size (BytesGenerator "not supported in Grail").  The test
+# package is vendored with it.  What its tests found is fixed in Grail:
+# unittest's addTypeEqualityFunc (test_email's TestEmailBase registers a
+# Message comparator), and a function of a stdlib PACKAGE's module now binds
+# in a class body -- Message's ``from email.iterators import walk'' answered
+# ``walk() missing self''.  Measured on Darwin arm64:
+#
+#   OK    asian_codecs 3t   inversion 5t
+#   email 536t 4F/38E      _header_value_parser 380t 3F/8E
+#   headerregistry 192t 2E contentmanager 113t 1F/3E   defect_handling 60t 8E
+#   _encoded_words 39t 7E  policy 33t 3E   utils 22t 1F/10E   parser 8t 5E
+#   pickleable 12t 1E      (test_deepcopy_created, under this harness only:
+#                           it passes run alone, by unittest and by the
+#                           harness's own Python helpers)
+#
+# test_generator and test_message joined once a class attribute set on a
+# secondary base became visible through the subclass (their @parameterize adds
+# test methods to a mixin base after the class exists):
+#
+#   message 310t 1F/29E    generator 73t 24F/18E
+test.test_email.test__encoded_words
+test.test_email.test__header_value_parser
+test.test_email.test_asian_codecs
+test.test_email.test_contentmanager
+test.test_email.test_defect_handling
+test.test_email.test_email
+test.test_email.test_generator
+test.test_email.test_headerregistry
+test.test_email.test_inversion
+test.test_email.test_message
+test.test_email.test_parser
+test.test_email.test_pickleable
+test.test_email.test_policy
+test.test_email.test_utils
+
+# --- Core language (added 2026-10-26): structural pattern matching ---
+#
+# test_patma is CPython 3.14.4's, vendored verbatim.  It could not be imported:
+# Grail parsed a match subject as a plain expression, so ``match w := 1,:''
+# was a SyntaxError and the whole module with it.  The subject is now
+# CPython's subject_expr (Grammar/python.gram): star_named_expressions with a
+# walrus allowed, a lone starred element rejected, and ``match ...:'' read as
+# a statement.  What its tests then found at match time is fixed too: bool,
+# int, str and the other _Py_TPFLAGS_MATCH_SELF builtins bind the subject for
+# one positional sub-pattern (match_class_attr, Python/ceval.c), and ``**rest''
+# copies the subject through the mapping protocol, so a UserDict works
+# (COPY_DICT_WITHOUT_KEYS).  Measured on Darwin arm64:
+#
+#   patma 328t 56F/10E   compile-time pattern checks (``SyntaxError not
+#                        raised''), capture bindings after a failed match
+test.test_patma
+
+# --- Core language (added 2026-10-26): the grammar ---
+#
+# test_grammar is CPython 3.14.4's, vendored verbatim.  It could not be
+# compiled: ``del x, y, (z, xyz)'' (test_del_stmt) reached the emit with a
+# parenthesized tuple as one target -- ``del for TupleAst is not yet
+# supported''.  A tuple or list del target now deletes its elements left to
+# right, as codegen_tuple / codegen_list do (Python/codegen.c); the parsed
+# tree keeps the Tuple, as CPython's does.  test.support.warnings_helper gains
+# CPython's check_syntax_warning, which the module imports.  Measured on
+# Darwin arm64:
+#
+#   grammar 75t 12F/4E   SyntaxError checks Grail does not make, a decorator
+#                        spelled [f][0].__call__.__call__, assert warnings
+#
+# Linux CI measures 12F/5E.  The extra error is test_selectors' first line,
+# ``c = sys.path[0]'': Grail's sys.path holds only $PYTHONPATH, a venv and an
+# EXISTING ~/.grail/site-packages, which a CI container has none of, so it is
+# empty there.  CPython's always lists its stdlib directories.
+test.test_grammar
+
+# --- Core language (added 2026-10-26): f-strings ---
+#
+# test_fstring is CPython 3.14.4's, vendored verbatim.  It could not be
+# compiled, for three reasons in the scans that split an f-string into fields:
+#   * a triple-quoted literal inside a field, f'{"x" """eric"s""" "y"}', closed
+#     on its first quote -- both the tokenizer and the parser paired nested
+#     quotes one character at a time;
+#   * a field nested in a format spec was split by a scan of its own that
+#     matched braces blindly and parsed the text bare, so {value:{ 1}} was an
+#     INDENT, {3:{"}"}>10} ended at the quoted brace, and {1 + 1:1d} read
+#     ``1 + 1:1d'' as the expression; the spec is now parsed as an f-string;
+#   * f"{3!s  }" -- whitespace after a conversion -- kept ``!s'' in the
+#     expression.
+# Measured on Darwin arm64:
+#
+#   fstring 90t 37F/4E/4S   ast.parse answers Grail's lowering (BinOp / Call)
+#                           where CPython has JoinedStr; SyntaxError messages
+test.test_fstring

@@ -29,8 +29,11 @@ SUnit*.log
 # Scratch files the CPython test suite writes into the working directory.
 # test/support/os_helper.py builds its name as "@test_<pid>_tmp", so the pid
 # changes every run and a leaked one is a new path each time; test/support
-# also uses the fixed "@grail_test_tmp".
+# also uses the fixed "@grail_test_tmp".  TESTFN_NONASCII appends a non-ASCII
+# letter to that name, and a test that fails before its cleanup leaves the
+# suffixed file behind (test_dbm_dumb test_nonascii_filename: "@test_<pid>_tmpæ.dat").
 @test_*_tmp
+@test_*_tmp?*
 @grail_test_tmp
 # CPython's XML test data includes an EXPECTED-OUTPUT file whose extension
 # collides with the ``*.out'' build-output rule above.  It is vendored test

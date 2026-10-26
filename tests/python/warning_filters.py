@@ -273,6 +273,43 @@ check_raises('simplefilter_validates_the_lineno_sign',
              lambda: warnings.simplefilter('ignore', lineno=-1), ValueError)
 
 
+# ------------------------------------------------- a tuple category
+# simplefilter does not check its category -- CPython's _py_warnings checks
+# it in filterwarnings only -- and a filter's category is matched as
+# issubclass matches it, so a TUPLE claims each of its members and their
+# subclasses.  codeop installs exactly that:
+# simplefilter('ignore', (SyntaxWarning, DeprecationWarning)).
+
+class _TupleMemberSubclass(DeprecationWarning):
+    pass
+
+
+def _claimed_by_a_tuple_filter(category):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        warnings.simplefilter('error', (SyntaxWarning, DeprecationWarning))
+        try:
+            warnings.warn('x', category)
+        except Warning:
+            return True
+        return False
+
+
+def _simplefilter_takes(category):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', category)
+        return warnings.filters[0][2] == category
+
+
+check('a_tuple_category_claims_its_members',
+      lambda: _claimed_by_a_tuple_filter(DeprecationWarning), True)
+check('a_tuple_category_claims_a_members_subclass',
+      lambda: _claimed_by_a_tuple_filter(_TupleMemberSubclass), True)
+check('a_tuple_category_leaves_other_categories_alone',
+      lambda: _claimed_by_a_tuple_filter(UserWarning), False)
+check('simplefilter_takes_a_tuple_category',
+      lambda: _simplefilter_takes((SyntaxWarning, DeprecationWarning)), True)
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

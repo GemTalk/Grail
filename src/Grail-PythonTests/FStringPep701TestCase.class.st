@@ -152,6 +152,19 @@ FStringPep701TestCase >> testDoubledBracesAreLiteral [
 
 ]
 
+{ #category : 'Grail-Tests - PEP 701' }
+FStringPep701TestCase >> testFieldsNestedInAFormatSpecAreFullFields [
+	"A field inside a format spec gets everything any field does: parentheses
+	around its expression, quotes that may hold a brace, its own conversion
+	and spec, and the debug form."
+
+	self assertAll: #('spec_field_leading_space' 'spec_field_quoted_close_brace'
+		'spec_field_quoted_open_brace' 'spec_field_with_its_own_spec'
+		'spec_field_with_conversion' 'spec_field_debug_form'
+		'debug_form_spec_with_nested_spec')
+
+]
+
 { #category : 'Grail-Tests - regressions' }
 FStringPep701TestCase >> testOperatorEqualsIsNotTheDebugForm [
 	"An ``='' belonging to == / != / >= / := is an operator."
@@ -184,6 +197,27 @@ FStringPep701TestCase >> testSelfDocumentingEqualsForm [
 		'debug_eq_with_spec_formats' 'debug_eq_with_spec_pads'
 		'debug_eq_conversion_r' 'debug_eq_conversion_s'
 		'debug_eq_keeps_spacing' 'debug_eq_expression_source')
+
+]
+
+{ #category : 'Grail-Tests - PEP 701' }
+FStringPep701TestCase >> testTripleQuotedLiteralsInsideTheField [
+	"A literal opened with three quotes inside a field closes only on three,
+	so its body may hold the quote character alone -- including when the
+	quote is the f-string's own."
+
+	self assertAll: #('triple_quoted_in_field' 'triple_quoted_holding_its_quote'
+		'concat_around_triple_quoted' 'triple_quoted_then_plain'
+		'raw_triple_quoted_in_field' 'outer_quote_tripled_in_field')
+
+]
+
+{ #category : 'Grail-Tests - regressions' }
+FStringPep701TestCase >> testWhitespaceAfterAConversionIsLegal [
+	"The expression stops at the ``!'', whatever follows the conversion
+	character before the brace or the spec."
+
+	self assertAll: #('space_after_conversion' 'space_after_conversion_before_spec')
 
 ]
 

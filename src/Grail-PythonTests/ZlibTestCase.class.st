@@ -35,6 +35,17 @@ outcome') equals: 'Error -2 while compressing data: inconsistent stream state'
 
 ]
 
+{ #category : 'Grail-Tests' }
+ZlibTestCase >> testAnEmptyBufferChecksumKeepsTheStartingValue [
+
+	"libz answers its initial value, ignoring the one passed, for a NULL
+	buffer; an empty one was passed as NULL, so adler32(b'', 0) was 1."
+
+	self assert: (self eval: 'import zlib
+(zlib.adler32(b"", 0), zlib.adler32(b"", 432), zlib.crc32(b"", 1), zlib.crc32(b"", 432)) == (0, 432, 1, 432)')
+
+]
+
 { #category : 'Grail-Tests - zlib streaming' }
 ZlibTestCase >> testAnEmptyFollowUpCallDoesNotResumeFromTheTail [
 	"The half that would catch the bug coming back: decompress(b'') does NOT
@@ -52,15 +63,23 @@ len(d.decompress(b"", 4096)) < 4096') equals: true
 
 { #category : 'Grail-Tests - zlib streaming' }
 ZlibTestCase >> testBadWbitsRaises [
+
+	"A window libz refuses is CPython's ValueError, and 0 -- take the window
+	from the zlib header -- is accepted.  This test used to expect zlib.error
+	for all five, 0 included; CPython 3.14 says otherwise, and libz now judges
+	the window as it does there."
+
 	| result |
+
 	result := self eval: 'import zlib
 bad = 0
-for wb in (3, 7, 0, 100, -20):
+for wb in (3, 7, 100, -20):
     try:
         zlib.decompressobj(wb)
-    except zlib.error:
+    except ValueError:
         bad += 1
-bad == 5'.
+zlib.decompressobj(0)
+bad == 4'.
 	self assert: result
 
 ]
@@ -78,6 +97,21 @@ ZlibTestCase >> testChecksums [
  and zlib.adler32(b"llo", zlib.adler32(b"he")) == zlib.adler32(b"hello")
  and zlib.crc32(b"") == 0 and zlib.adler32(b"") == 1)'.
 	self assert: result
+
+]
+
+{ #category : 'Grail-Tests' }
+ZlibTestCase >> testCompressHonoursAGzipOrRawWindow [
+
+	"compress(data, level, wbits) wrote the zlib format whatever wbits said,
+	so gzip.compress -- which asks for wbits=31 -- answered data its own
+	decompress refused as not gzipped."
+
+	self assert: (self eval: 'import zlib, gzip
+data = b"Grail " * 50
+(zlib.compress(data, wbits=31)[:2] == b"\x1f\x8b"
+ and zlib.decompress(zlib.compress(data, 9, -15), -15) == data
+ and gzip.decompress(gzip.compress(data)) == data)')
 
 ]
 
@@ -250,6 +284,24 @@ out += d.flush()
 
 ]
 
+{ #category : 'Grail-Tests' }
+ZlibTestCase >> testNonBytesArgumentsAreTypeErrors [
+
+	"CPython's TypeError, naming the type.  An int died on an uncatchable
+	MessageNotUnderstood, and a call with no data read past the arguments."
+
+	self assert: (self eval: 'import zlib
+caught = 0
+for call in (lambda: zlib.crc32(42), lambda: zlib.adler32(None), lambda: zlib.compress([1, 2]),
+             lambda: zlib.compress(), lambda: zlib.decompress(), lambda: zlib.crc32()):
+    try:
+        call()
+    except TypeError:
+        caught += 1
+caught == 6')
+
+]
+
 { #category : 'Grail-Tests - zlib streaming' }
 ZlibTestCase >> testRawDeflateFromCPython [
 	"RAW DEFLATE (wbits -15) is what every zip entry holds, and libz''s
@@ -295,6 +347,22 @@ zlib.compress("not bytes")']
 
 ]
 
+{ #category : 'Grail-Tests' }
+ZlibTestCase >> testTheZlibDecompressorIsTheClassAndCallsMakeInstances [
+
+	"zlib._ZlibDecompressor is the class gzip's reader is built on: reading it
+	answers the class, calling it an incremental decompressor."
+
+	self assert: (self eval: 'import zlib
+d = zlib._ZlibDecompressor()
+data = zlib.compress(b"abc" * 100)
+first = d.decompress(data[:10])
+rest = d.decompress(data[10:] + b"extra")
+(isinstance(zlib._ZlibDecompressor, type) and first + rest == b"abc" * 100
+ and d.eof and d.unused_data == b"extra" and not d.needs_input)')
+
+]
+
 { #category : 'Grail-Tests - zlib streaming' }
 ZlibTestCase >> testTrailingBytesBecomeUnusedData [
 	"Bytes past the stream''s end marker are not an error -- they are
@@ -308,5 +376,17 @@ d = zlib.decompressobj()
 out = d.decompress(packed + b"TRAILER")
 (out == payload and d.eof and d.unused_data == b"TRAILER")'.
 	self assert: result
+
+]
+
+{ #category : 'Grail-Tests' }
+ZlibTestCase >> testVersionConstants [
+
+	"ZLIB_RUNTIME_VERSION is the loaded library's zlibVersion(); test_zlib
+	reads it at import time."
+
+	self assert: (self eval: 'import zlib
+v = zlib.ZLIB_RUNTIME_VERSION
+isinstance(v, str) and v[0].isdigit() and zlib.ZLIB_VERSION == v')
 
 ]

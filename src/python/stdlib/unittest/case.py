@@ -31,4 +31,26 @@ honouring the swap would change which error they report, not whether they pass.
 
 import warnings
 
-__all__ = ['warnings']
+# CPython DEFINES these here, and code imports them from here by name --
+# numpy.testing does ``from unittest.case import SkipTest'' at module scope,
+# so without them numpy.testing, and every numpy test module, failed to
+# import.  Grail defines them in unittest/__init__.py, which imports this
+# module after SkipTest exists but before TestCase does: SkipTest is bound
+# now, the rest on first read (PEP 562).
+from unittest import SkipTest
+
+_FORWARDED = frozenset({
+    'TestCase', 'skip', 'skipIf', 'skipUnless', 'expectedFailure',
+    'doModuleCleanups', 'addModuleCleanup', 'enterModuleContext',
+})
+
+
+def __getattr__(name):
+    if name in _FORWARDED:
+        import unittest
+        return getattr(unittest, name)
+    raise AttributeError(f"module 'unittest.case' has no attribute '{name}'")
+
+
+__all__ = ['warnings', 'SkipTest', 'TestCase', 'skip', 'skipIf', 'skipUnless',
+           'expectedFailure']

@@ -134,6 +134,82 @@ def assigned_cause_exception():
     return e
 
 
+# A cycle ALREADY in the context chain must not hang the next raise.  Chaining
+# walks the handled exception's chain to break any cycle through the NEW one;
+# a loop that does not pass through it never ended that walk in Grail, where
+# CPython ends it with Floyd's tortoise and hare (Python/errors.c:203).  The
+# shapes are test_exceptions' test_no_hang_on_context_chain_cycle1..3.
+def a_self_context_cycle_does_not_hang_the_next_raise():
+    def cycle():
+        try:
+            raise ValueError(1)
+        except ValueError as ex:
+            ex.__context__ = ex
+            raise TypeError(2)
+    try:
+        cycle()
+    except Exception as e:
+        exc = e
+    return (type(exc).__name__, type(exc.__context__).__name__,
+            exc.__context__.__context__ is exc.__context__)
+
+
+def a_cycle_through_the_raised_exception_is_broken_there():
+    class A(Exception): pass
+    class B(Exception): pass
+    class C(Exception): pass
+    try:
+        try:
+            raise A()
+        except A as a_:
+            a = a_
+            try:
+                raise B()
+            except B as b_:
+                b = b_
+                try:
+                    raise C()
+                except C as c_:
+                    c = c_
+                    a.__context__ = c
+                    raise c
+    except C as caught:
+        got = caught
+    return (got is c, c.__context__ is b, b.__context__ is a, a.__context__ is c)
+
+
+def a_longer_pre_existing_cycle_does_not_hang():
+    class A(Exception): pass
+    class B(Exception): pass
+    class C(Exception): pass
+    class D(Exception): pass
+    class E(Exception): pass
+    try:
+        try:
+            raise A()
+        except A as a_:
+            a = a_
+            try:
+                raise B()
+            except B as b_:
+                b = b_
+                try:
+                    raise C()
+                except C as c_:
+                    c = c_
+                    a.__context__ = c
+                    try:
+                        raise D()
+                    except D as d_:
+                        e = E()
+                        raise e
+    except E as caught:
+        got = caught
+    return (got is e, type(e.__context__).__name__,
+            type(e.__context__.__context__).__name__,
+            c.__context__ is b, b.__context__ is a, a.__context__ is c)
+
+
 CHECKS = [
     assigning_the_cause_suppresses_the_context,
     every_store_route_sets_the_flag,
@@ -143,6 +219,9 @@ CHECKS = [
     chaining_attributes_cannot_be_deleted,
     assigned_links_are_not_instance_attributes,
     raise_from_still_chains,
+    a_self_context_cycle_does_not_hang_the_next_raise,
+    a_cycle_through_the_raised_exception_is_broken_there,
+    a_longer_pre_existing_cycle_does_not_hang,
 ]
 
 EXPECTED = {
@@ -154,6 +233,9 @@ EXPECTED = {
     'chaining_attributes_cannot_be_deleted': ((('TypeError', '__cause__ may not be deleted'), ('TypeError', '__context__ may not be deleted'), ('TypeError', "can't delete numeric/char attribute")), 'KeyError'),
     'assigned_links_are_not_instance_attributes': (True, ['extra']),
     'raise_from_still_chains': ('TypeError', 'KeyError', True),
+    'a_self_context_cycle_does_not_hang_the_next_raise': ('TypeError', 'ValueError', True),
+    'a_cycle_through_the_raised_exception_is_broken_there': (True, True, True, True),
+    'a_longer_pre_existing_cycle_does_not_hang': (True, 'D', 'C', True, True, True),
 }
 
 RESULTS = {}

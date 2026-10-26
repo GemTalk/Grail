@@ -116,6 +116,21 @@ WarningFiltersTestCase >> testSimplefilterInsertsRatherThanClearing [
 
 ]
 
+{ #category : 'Grail-Tests - category matching' }
+WarningFiltersTestCase >> testSimplefilterTakesATupleCategoryThatMatchesLikeIssubclass [
+
+	"codeop's ``simplefilter('ignore', (SyntaxWarning, DeprecationWarning))''
+	raised TypeError: the category check filterwarnings makes ran for
+	simplefilter too, which CPython's does not make, and matching asked
+	inheritsFrom: of the tuple."
+
+	self assertAll: #('a_tuple_category_claims_its_members'
+		'a_tuple_category_claims_a_members_subclass'
+		'a_tuple_category_leaves_other_categories_alone'
+		'simplefilter_takes_a_tuple_category')
+
+]
+
 { #category : 'Grail-Tests - message matching' }
 WarningFiltersTestCase >> testTheMessagePatternIsAnchored [
 	"#match, not #search: a prefix counts and a suffix does not.  The

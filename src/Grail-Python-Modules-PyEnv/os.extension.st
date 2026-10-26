@@ -808,6 +808,19 @@ os >> ___refuseShellExpandedPath___: aPath for: anOperation [
 
 ]
 
+{ #category : 'Grail-Private' }
+os >> ___reprOfTypeOf___: anObject [
+
+	"``<class 'str'>'': the repr of anObject's Python type, as CPython's
+	messages spell it with %s of type(x)."
+
+	| pythonBuiltins |
+
+	pythonBuiltins := builtins @env0:___instance___.
+	^ pythonBuiltins repr: (pythonBuiltins type: anObject)
+
+]
+
 { #category : 'Grail-File and Directory Operations' }
 os >> ___requiredArgument: aName at: anIndex in: positional kw: kwargs for: aFunctionName [
 	"A required argument, by position or else by keyword, as CPython binds it."
@@ -869,10 +882,28 @@ os >> ___shellPathArg___: aPath [
 	naming the same file.  Everything else is quoted unchanged."
 
 	| s |
-	s := (self ___fsPath___: aPath) @env0:asString.
+	s := self ___shellPathString___: aPath.
 	(s @env0:isEmpty @env0:not @env0:and: [(s @env0:at: 1) @env0:= $-])
 		ifTrue: [s := './' @env0:, s].
 	^ self ___shellQuote___: s
+
+]
+
+{ #category : 'Grail-Private' }
+os >> ___shellPathString___: aPath [
+
+	"aPath as the text a shell command names it by.  A BYTES path is decoded,
+	as CPython's os.fsdecode decodes one: Smalltalk's asString does not, so a
+	bytes path reached chmod(1) as something other than the file's name, the
+	read-back found the mode unchanged, and os.chmod raised PermissionError
+	for a file the caller owned (dbm.dumb names its files in bytes, so every
+	shelve.open failed -- test_shelve)."
+
+	| path |
+
+	path := self ___fsPath___: aPath.
+	(path @env0:isKindOf: ByteArray) ifTrue: [path := self fsdecode: path].
+	^ path @env0:asString
 
 ]
 
@@ -887,7 +918,7 @@ os >> ___shellQuote___: aString [
 	arbitrary command execution rather than a wrong answer."
 
 	| s out |
-	s := (self ___fsPath___: aString) @env0:asString.
+	s := self ___shellPathString___: aString.
 	out := WriteStream @env0:on: String @env0:new.
 	out @env0:nextPut: $'.
 	1 @env0:to: s @env0:size do: [:i |
@@ -1314,6 +1345,24 @@ os >> _chmod: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-File Descriptors' }
+os >> _fdopen: positional kw: kwargs [
+
+	"os.fdopen(fd, mode='r', buffering=-1, encoding=None, *args, **kwargs) --
+	CPython's Lib/os.py: a non-int descriptor is a TypeError, and everything
+	else is open()'s, which takes a descriptor as its file argument."
+
+	| descriptor |
+
+	descriptor := self ___requiredArgument: 'fd' at: 1 in: positional kw: kwargs for: 'fdopen'.
+	(descriptor @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___:
+			'invalid fd type (' @env0:, (self ___reprOfTypeOf___: descriptor)
+				@env0:, ', expected integer)'].
+	^ (builtins @env0:___instance___) _open: positional kw: kwargs
+
+]
+
 { #category : 'Grail-Queries' }
 os >> _get_exports_list: aModule [
 	"CPython's os._get_exports_list(module): the module's ``__all__'' when it
@@ -1395,18 +1444,25 @@ os >> _listdir: positional kw: kwargs [
 		^ OSError ___signal___: (self @env0:class ___listingFailedMessage: actualPath)].
 	result := list ___new___.
 	"The names arrive BARE from the primitive -- the public wrapper answered
-	full paths, and the basename stripping that undid them is gone with it."
+	full paths, and the basename stripping that undid them is gone with it.
+
+	They arrive as the RAW BYTES of the on-disk name, one byte per Character
+	(utf8Results: false), so they are decoded here as CPython decodes them:
+	a bytes path lists bytes, a str path lists str decoded from UTF-8 with
+	surrogateescape.  Answering the raw String as a str listed every
+	non-ASCII name as mojibake -- 'Gr\xfc' came back as 'Gr\xc3\xbc' -- which
+	no other os function could find (test_unicode_file_functions'
+	test_listdir)."
 	dirContents @env0:do: [:each |
-		| decoded |
-		decoded := each.
-		(each isKindOf: Utf8) ifTrue: [decoded := each @env0:decodeToUnicode].
-		(each isKindOf: Utf16) ifTrue: [decoded := each @env0:decodeToUnicode].
-		(each isKindOf: String) ifFalse: [decoded := each @env0:asUnicodeString].
 		"CPython never reports the '.' / '..' entries; GsFile does.
 		Leaving them in sends naive recursive walkers (shutil.rmtree,
 		copytree) into 'dir/././…' infinite recursion."
-		((decoded @env0:= '.') @env0:or: [decoded @env0:= '..']) ifFalse: [
-			result append: decoded
+		((each @env0:= '.') @env0:or: [each @env0:= '..']) ifFalse: [
+			| raw |
+			raw := bytes @env0:withAll: each @env0:asByteArray.
+			result append: ((actualPath isKindOf: ByteArray)
+				ifTrue: [raw]
+				ifFalse: [raw decode: 'utf-8' _: 'surrogateescape'])
 		]
 	].
 	^ result
@@ -1793,12 +1849,15 @@ os >> fsdecode: filename [
 	the filesystem encoding.  Grail uses UTF-8 throughout.  Bytes
 	input decodes; str input passes through.  CPython runs the argument
 	through fspath() first, so a PathLike is honoured and anything else --
-	None, an int -- is its TypeError rather than an echo."
+	None, an int -- is its TypeError rather than an echo.  The error handler
+	is surrogateescape, as CPython's: an undecodable byte becomes a lone
+	surrogate (PEP 383) rather than a UnicodeDecodeError, so a name listdir
+	answers always decodes."
 
 	| path |
 	path := self fspath: filename.
 	(path isKindOf: ByteArray)
-		ifTrue: [^ path decode: 'utf-8'].
+		ifTrue: [^ path decode: 'utf-8' _: 'surrogateescape'].
 	^ path
 
 ]
@@ -1808,13 +1867,15 @@ os >> fsencode: filename [
 	"``os.fsencode(filename)'' — inverse of fsdecode, and like it goes
 	through fspath() first.  The echo it used to give a non-path let
 	``ssl.SSLContext.set_ecdh_curve(None)'' hand OpenSSL a NULL name,
-	which is a SIGSEGV rather than CPython's TypeError."
+	which is a SIGSEGV rather than CPython's TypeError.  surrogateescape, as
+	fsdecode, so the two round-trip an undecodable name."
 
 	| path |
 	path := self fspath: filename.
-	(path isKindOf: CharacterCollection)
-		ifTrue: [^ path encode: 'utf-8'].
-	^ path
+	"fspath: answered str or bytes, and a str holding a lone surrogate is a
+	PyStrSurrogate, not a CharacterCollection -- so test for the bytes."
+	(path isKindOf: ByteArray) ifTrue: [^ path].
+	^ path encode: 'utf-8' _: 'surrogateescape'
 
 ]
 

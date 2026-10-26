@@ -36,6 +36,23 @@ AbstractPyInt class >> ___hasUserInit___ [
 
 ]
 
+{ #category : 'Grail-Python-Size' }
+AbstractPyInt class >> __basicsize__ [
+	"An int subclass reports int's layout, as CPython's does when the subclass
+	adds no slots of its own.  See Integer class >> __basicsize__."
+
+	^ Integer __basicsize__
+
+]
+
+{ #category : 'Grail-Python-Size' }
+AbstractPyInt class >> __itemsize__ [
+	"See Integer class >> __itemsize__."
+
+	^ Integer __itemsize__
+
+]
+
 { #category : 'Grail-Class Methods' }
 AbstractPyInt class >> _from_bytes: positional kw: kwargs [
 	^ self ___fromIntValue___: (int _from_bytes: positional kw: kwargs)
@@ -282,6 +299,15 @@ AbstractPyInt >> __repr__ [
 	HTTPStatus) override to show the symbolic name."
 
 	^ self @env0:value __repr__
+
+]
+
+{ #category : 'Grail-Python-Size' }
+AbstractPyInt >> __sizeof__ [
+	"The size of the int this object IS, in CPython's model -- ``MyInt(5)'' is
+	28 bytes like ``5''.  It used to be this wrapper's physical size."
+
+	^ (self @env0:dynamicInstVarAt: #value) __sizeof__
 
 ]
 

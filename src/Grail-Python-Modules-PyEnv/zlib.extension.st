@@ -2,12 +2,30 @@ Extension { #name : 'zlib' }
 
 { #category : 'Grail-Private' }
 zlib class >> _asBytesArg: data [
-	"Coerce a bytes-like argument to ByteArray; reject str like CPython.
-	Class side so ZlibDecompress shares the one coercion."
+	"Coerce a bytes-like argument to ByteArray, as CPython's buffer converter
+	does.  Class side so ZlibDecompress and the module share the one coercion.
+
+	What is NOT bytes-like is CPython's TypeError, naming the type, as
+	os.write words it.  Only str was refused before: an int reached
+	asByteArray and died on an uncatchable MessageNotUnderstood, and a tuple
+	or list of small ints was quietly compressed as if it were bytes
+	(test_zlib test_badargs).  Anything else that answers asByteArray keeps
+	that path, so a buffer type this does not name still works."
 
 	(data isKindOf: ByteArray) ifTrue: [^ data].
-	(data isKindOf: CharacterCollection) ifTrue: [
-		TypeError ___signal___: 'a bytes-like object is required, not ''str'''].
+	(data isKindOf: memoryview) ifTrue: [^ data tobytes].
+	"array.array -- a buffer in CPython, and a Collection here -- is read the
+	way memoryview is, through its own tobytes()."
+	((data isKindOf: CharacterCollection) not
+		and: [data ___respondsTo___: #'tobytes']) ifTrue: [^ data tobytes].
+	((data isKindOf: CharacterCollection)
+		or: [(data isKindOf: Number)
+		or: [(data == nil) or: [(data == None)
+		or: [(data isKindOf: Collection)
+		or: [(data @env0:respondsTo: #asByteArray) not]]]]]) ifTrue: [
+			^ TypeError ___signal___:
+				('a bytes-like object is required, not '''
+					@env0:, (bytes ___pyTypeNameOf___: data) @env0:, '''')].
 	^ data @env0:asByteArray
 
 ]
@@ -83,12 +101,39 @@ zlib class >> _zeroedStream [
 
 ]
 
+{ #category : 'Grail-Streaming' }
+zlib >> __getattr__: aName [
+
+	"PEP 562, for one name: ``_ZlibDecompressor'', CPython 3.12's incremental
+	decompressor with the bz2/lzma interface, which gzip's reader is built on.
+	It is written in Python over decompressobj (src/python/stdlib/_grail_zlib.py)
+	and imported on first use.
+
+	WHY A __getattr__ AND NOT A UNARY METHOD -- warnings >> __getattr__: says it
+	for catch_warnings: an attribute read performs a unary module method, and so
+	does a zero-argument call, which codegen compiles to a bare send.
+	``zlib._ZlibDecompressor'' must be the class and ``zlib._ZlibDecompressor()''
+	an instance of it."
+
+	aName @env0:asString @env0:= '_ZlibDecompressor' ifFalse: [
+		^ AttributeError ___signal___:
+			'module ''zlib'' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+	^ (importlib ___runtimeModule___: '_grail_zlib') ___pyAttrLoad___: #'_ZlibDecompressor'
+
+]
+
 { #category : 'Grail-Checksums' }
 zlib >> _adler32: positional kw: kwargs [
-	| data value |
-	data := positional @env0:at: 1.
+
+	"adler32(data, value=1, /): a call without data is CPython's TypeError; it
+	read past the end of the arguments, an uncatchable OffsetError
+	(test_zlib test_badargs)."
+
+	| value |
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'adler32() takes at least 1 positional argument (0 given)'].
 	value := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [1].
-	^ self adler32: data _: value
+	^ self adler32: (positional @env0:at: 1) _: value ___asIndex___
 
 ]
 
@@ -103,12 +148,20 @@ zlib >> _argumentAt: anIndex named: aName from: positional kw: kwargs ifAbsent: 
 
 { #category : 'Grail-Private' }
 zlib >> _asBytes: data [
-	"Coerce a bytes-like argument to ByteArray; reject str like CPython."
+	"Coerce a bytes-like argument to ByteArray -- the class side's coercion."
 
-	(data isKindOf: ByteArray) ifTrue: [^ data].
-	(data isKindOf: CharacterCollection) ifTrue: [
-		TypeError ___signal___: 'a bytes-like object is required, not ''str'''].
-	^ data @env0:asByteArray
+	^ self @env0:class _asBytesArg: data
+
+]
+
+{ #category : 'Grail-Private' }
+zlib >> _assertCompressionLevel: aLevel [
+
+	"CPython's zlib.compress refuses a level outside -1..9 with this message,
+	before anything is compressed."
+
+	((aLevel @env0:>= -1) @env0:and: [aLevel @env0:<= 9]) ifFalse: [
+		ZlibError ___signal___: ('Bad compression level: ' @env0:, aLevel @env0:printString)]
 
 ]
 
@@ -120,15 +173,18 @@ zlib >> _callouts [
 
 { #category : 'Grail-Compression' }
 zlib >> _compress: positional kw: kwargs [
-	| data level |
-	data := positional @env0:at: 1.
-	level := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [
-			(kwargs == nil)
-				ifTrue: [-1]
-				ifFalse: [kwargs @env0:at: 'level' ifAbsent: [-1]]].
-	^ self compress: data _: level
+
+	"compress(data, /, level=-1, wbits=MAX_WBITS).  ``data'' is positional-only,
+	so a call without it -- ``compress()'', ``compress(data=b)'' -- is
+	CPython's TypeError; it read past the end of the arguments instead, an
+	uncatchable OffsetError (test_zlib test_keywords, test_badargs)."
+
+	| level wbits |
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'compress() missing required argument ''data'' (pos 1)'].
+	level := self _argumentAt: 2 named: 'level' from: positional kw: kwargs ifAbsent: -1.
+	wbits := self _argumentAt: 3 named: 'wbits' from: positional kw: kwargs ifAbsent: 15.
+	^ self compress: (positional @env0:at: 1) _: level ___asIndex___ _: wbits ___asIndex___
 
 ]
 
@@ -143,11 +199,11 @@ zlib >> _compressobj: positional kw: kwargs [
 	(arguments @env0:at: 6) == None ifFalse: [
 		NotImplementedError ___signal___: ZlibCompress _zdictNotImplementedMessage].
 	^ ZlibCompress
-		level: (arguments @env0:at: 1)
-		method: (arguments @env0:at: 2)
-		wbits: (arguments @env0:at: 3)
-		memLevel: (arguments @env0:at: 4)
-		strategy: (arguments @env0:at: 5)
+		level: (arguments @env0:at: 1) ___asIndex___
+		method: (arguments @env0:at: 2) ___asIndex___
+		wbits: (arguments @env0:at: 3) ___asIndex___
+		memLevel: (arguments @env0:at: 4) ___asIndex___
+		strategy: (arguments @env0:at: 5) ___asIndex___
 
 ]
 
@@ -172,30 +228,34 @@ zlib >> _compressobjArguments: positional kw: kwargs [
 
 { #category : 'Grail-Checksums' }
 zlib >> _crc32: positional kw: kwargs [
-	| data value |
-	data := positional @env0:at: 1.
+
+	"crc32(data, value=0, /): a call without data is CPython's TypeError; it
+	read past the end of the arguments, an uncatchable OffsetError
+	(test_zlib test_badargs)."
+
+	| value |
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'crc32() takes at least 1 positional argument (0 given)'].
 	value := (positional @env0:size @env0:>= 2) ifTrue: [positional @env0:at: 2] ifFalse: [0].
-	^ self crc32: data _: value
+	^ self crc32: (positional @env0:at: 1) _: value ___asIndex___
 
 ]
 
 { #category : 'Grail-Compression' }
 zlib >> _decompress: positional kw: kwargs [
-	| data wbits bufsize |
-	data := positional @env0:at: 1.
-	wbits := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [
-			(kwargs == nil)
-				ifTrue: [15]
-				ifFalse: [kwargs @env0:at: 'wbits' ifAbsent: [15]]].
-	bufsize := (positional @env0:size @env0:>= 3)
-		ifTrue: [positional @env0:at: 3]
-		ifFalse: [
-			(kwargs == nil)
-				ifTrue: [16384]
-				ifFalse: [kwargs @env0:at: 'bufsize' ifAbsent: [16384]]].
-	^ self decompress: data _: wbits _: bufsize
+
+	"decompress(data, /, wbits=MAX_WBITS, bufsize=DEF_BUF_SIZE).  As
+	_compress:kw:, a missing ``data'' is CPython's TypeError; a negative
+	bufsize is its ValueError (zlib_decompress_impl)."
+
+	| wbits bufsize |
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'decompress() missing required argument ''data'' (pos 1)'].
+	wbits := self _argumentAt: 2 named: 'wbits' from: positional kw: kwargs ifAbsent: 15.
+	bufsize := (self _argumentAt: 3 named: 'bufsize' from: positional kw: kwargs ifAbsent: 16384)
+		___asIndex___.
+	bufsize @env0:< 0 ifTrue: [^ ValueError ___signal___: 'bufsize must be non-negative'].
+	^ self decompress: (positional @env0:at: 1) _: wbits ___asIndex___ _: bufsize
 
 ]
 
@@ -222,8 +282,12 @@ zlib >> adler32: data [
 zlib >> adler32: data _: value [
 	| bytes src result |
 	bytes := self _asBytes: data.
+	"An EMPTY buffer is still a real pointer: libz answers its initial value,
+	ignoring the one passed, when the buffer is NULL -- so adler32(b'', 0)
+	was 1 and crc32(b'', 1) was 0 (test_zlib test_adler32empty /
+	test_crc32empty).  CPython always passes a buffer."
 	src := bytes @env0:isEmpty
-		ifTrue: [nil]
+		ifTrue: [CByteArray @env0:gcMalloc: 1]
 		ifFalse: [CByteArray @env0:withAll: bytes].
 	result := ((self _callouts) @env0:at: #adler32)
 		@env0:callWith: { value @env0:bitAnd: 16rFFFFFFFF. src. bytes @env0:size }.
@@ -243,8 +307,7 @@ zlib >> compress: data _: level [
 
 	| bytes callouts bound src dest destLen rc n |
 	bytes := self _asBytes: data.
-	((level @env0:>= -1) @env0:and: [level @env0:<= 9]) ifFalse: [
-		ZlibError ___signal___: ('Bad compression level: ' @env0:, level @env0:printString)].
+	self _assertCompressionLevel: level.
 	callouts := self _callouts.
 	bound := (callouts @env0:at: #compressBound) @env0:callWith: { bytes @env0:size }.
 	src := bytes @env0:isEmpty
@@ -258,6 +321,25 @@ zlib >> compress: data _: level [
 		ZlibError ___signal___: ('Error ' @env0:, rc @env0:printString @env0:, ' while compressing data')].
 	n := destLen @env0:int64At: 0.
 	^ dest @env0:byteArrayFrom: 0 numBytes: n
+
+]
+
+{ #category : 'Grail-Compression' }
+zlib >> compress: data _: level _: wbits [
+
+	"zlib.compress(data, level=-1, wbits=MAX_WBITS).  The one-shot compress2
+	only writes the zlib format, so any other window -- a raw deflate stream
+	(-9..-15) or a gzip one (25..31) -- goes through a compressor object, as
+	CPython's own compress does.  wbits was ignored, and gzip.compress, which
+	asks for wbits=31 to get its header from zlib, answered zlib-format data
+	that its own decompress then refused as ``Not a gzipped file''."
+
+	| compressor |
+
+	wbits @env0:= 15 ifTrue: [^ self compress: data _: level].
+	self _assertCompressionLevel: level.
+	compressor := ZlibCompress level: level method: 8 wbits: wbits memLevel: 8 strategy: 0.
+	^ (compressor compress: data) @env0:, compressor flush
 
 ]
 
@@ -277,8 +359,12 @@ zlib >> crc32: data [
 zlib >> crc32: data _: value [
 	| bytes src result |
 	bytes := self _asBytes: data.
+	"An EMPTY buffer is still a real pointer: libz answers its initial value,
+	ignoring the one passed, when the buffer is NULL -- so adler32(b'', 0)
+	was 1 and crc32(b'', 1) was 0 (test_zlib test_adler32empty /
+	test_crc32empty).  CPython always passes a buffer."
 	src := bytes @env0:isEmpty
-		ifTrue: [nil]
+		ifTrue: [CByteArray @env0:gcMalloc: 1]
 		ifFalse: [CByteArray @env0:withAll: bytes].
 	result := ((self _callouts) @env0:at: #crc32)
 		@env0:callWith: { value @env0:bitAnd: 16rFFFFFFFF. src. bytes @env0:size }.
@@ -360,5 +446,26 @@ zlib >> initialize [
 	self @env0:at: #Z_FULL_FLUSH put: 3.
 	self @env0:at: #Z_FINISH put: 4.
 	self @env0:at: #Z_BLOCK put: 5
+
+]
+
+{ #category : 'Grail-Constants' }
+zlib >> ZLIB_RUNTIME_VERSION [
+
+	"The version string of the zlib library actually loaded, zlibVersion(),
+	as CPython reports it.  test_zlib reads it at import time."
+
+	^ (self _callouts @env0:at: #zlibVersion) @env0:stringFromCharStar
+
+]
+
+{ #category : 'Grail-Constants' }
+zlib >> ZLIB_VERSION [
+
+	"The zlib version the module was BUILT against, in CPython.  Grail is
+	built against no zlib header -- it calls the library it finds at run time
+	-- so the two are the same string here."
+
+	^ self ZLIB_RUNTIME_VERSION
 
 ]

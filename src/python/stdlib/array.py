@@ -146,7 +146,47 @@ class _array:
         return len(self._data)
 
     def __getitem__(self, i):
+        # A slice of an array is an array of the same typecode, as CPython's.
+        if isinstance(i, slice):
+            return self._with(self._data[i])
         return self._data[i]
+
+    def _with(self, items):
+        r = _array(self.typecode)
+        r._data = items
+        return r
+
+    # Concatenation and repetition, as CPython's sq_concat / sq_repeat.  The
+    # stub had neither, so hypothesis -- ``array("H", [0]) * n'' at module
+    # scope -- could not be imported, and with it numpy's conftest.
+    def _concat_check(self, other):
+        if not isinstance(other, _array):
+            raise TypeError('can only append array (not "%s") to array'
+                            % type(other).__name__)
+        if other.typecode != self.typecode:
+            raise TypeError('bad argument type for built-in operation')
+
+    def __add__(self, other):
+        self._concat_check(other)
+        return self._with(self._data + other._data)
+
+    def __iadd__(self, other):
+        self._concat_check(other)
+        self._data.extend(other._data)
+        return self
+
+    def __mul__(self, n):
+        if not hasattr(type(n), '__index__'):
+            return NotImplemented
+        return self._with(self._data * n.__index__())
+
+    __rmul__ = __mul__
+
+    def __imul__(self, n):
+        if not hasattr(type(n), '__index__'):
+            return NotImplemented
+        self._data *= n.__index__()
+        return self
 
     def __setitem__(self, i, v):
         self._data[i] = v

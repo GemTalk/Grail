@@ -45,6 +45,21 @@ ExceptionChainingAttributesTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests' }
+ExceptionChainingAttributesTestCase >> testAPreExistingContextCycleDoesNotHangTheNextRaise [
+
+	"A raise inside the handler of an exception whose context chain already
+	loops -- ``ex.__context__ = ex'' -- hung the session: the walk that breaks a
+	cycle through the NEW exception never ended on one that does not pass
+	through it.  The three shapes are test_exceptions'
+	test_no_hang_on_context_chain_cycle1..3."
+
+	self assertAll: #('a_self_context_cycle_does_not_hang_the_next_raise'
+		'a_cycle_through_the_raised_exception_is_broken_there'
+		'a_longer_pre_existing_cycle_does_not_hang')
+
+]
+
+{ #category : 'Grail-Tests' }
 ExceptionChainingAttributesTestCase >> testAssignedLinksAreNotInstanceAttributes [
 	"The control (``raise X from Y'') and the storage: nothing lands in
 	__dict__."

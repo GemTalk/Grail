@@ -153,11 +153,24 @@ PyDict >> ___removeKeyFromOrder___: aKey [
 	so the scan is paid only where the cheap answer was WRONG.  That fallback
 	also settles the String-probe/Symbol-stored mismatch, which ``='' misses
 	for the same reason and which dict>>___removeStoredKey___ has its own
-	resolution ladder for."
+	resolution ladder for.
+
+	A ``='' hit that is not the probe itself is CONFIRMED by the table's
+	comparison before it is taken, because ``='' can also be wrong the other
+	way: in Unicode comparison mode two strings compare by ICU collation, so
+	``'\xa8́' = '΅''' (canonically equivalent, unequal in Python).
+	With both stored, deleting the second nilled the FIRST one's entry, and
+	the dict went on listing the deleted key and lost the live one -- a pop()
+	then died on an uncatchable LookupError.  That is what made
+	test_unicode_file_functions' ``others -= files'' keep a name it had just
+	removed."
 
 	| index |
 
 	index := self ___order___ indexOf: aKey.
+	(index = 0 or: [(self ___order___ at: index) == aKey
+			or: [self compareKey: aKey with: (self ___order___ at: index)]])
+		ifFalse: [index := 0].
 	index = 0 ifTrue: [
 		index := self ___order___ findFirst: [:each |
 			each ~~ nil and: [self compareKey: aKey with: each]]].

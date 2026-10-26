@@ -310,6 +310,24 @@ PythonTokenizerTestCase >> test_float_with_exponent [
 
 ]
 
+{ #category : 'Grail-tests - structure' }
+PythonTokenizerTestCase >> test_form_feed_resets_the_indentation_and_separates_tokens [
+
+	"A form feed resets the column, as CPython's lexer does, so a line of a tab
+	and a form feed is blank -- it was an IndentationError (test_timeit
+	test_timer_empty_stmt) -- and it is whitespace between tokens."
+
+	| formFeed tokens |
+
+	formFeed := String with: (Character codePoint: 12).
+	tokens := self tokenize: 'if x:' , (String with: Character lf) , '    y'
+		, (String with: Character lf) , (String with: Character tab) , formFeed
+		, (String with: Character lf) , '    z' , formFeed , ' = 1'.
+	self assert: (self tokensOfType: #NAME from: tokens) size equals: 3.
+	self assert: (self tokensOfType: #INDENT from: tokens) size equals: 1
+
+]
+
 { #category : 'Grail-tests - numbers' }
 PythonTokenizerTestCase >> test_hex_number [
 	"Tokenize hexadecimal numbers."

@@ -1,6 +1,39 @@
 Extension { #name : 'PyFrame' }
 
 { #category : 'Grail-Tracebacks' }
+PyFrame >> ___adoptSuspendedGenerator___ [
+	"Make this a LIVE frame of its generator's suspended body, if it has one;
+	answer whether it now is.
+
+	gi_frame is a carrier built from what the generator knows -- its code and
+	first line -- with no identity on any stack, so its f_locals answered {} for
+	a generator parked inside its body (test_generators' test_frame_outlives_-
+	generator).  The body is on the generator's own process, and the identity a
+	live frame records -- process, level from the outer end, method -- can be
+	read off it there; f_locals then re-reads that stack like any other live
+	frame.  Recorded only while suspended: before the first next there is no
+	body frame, and once it finishes there is nothing to read."
+
+	| ref gen where locals |
+	ref := [self @env0:dynamicInstVarAt: #'___generator___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	ref isNil ifTrue: [^ false].
+	gen := ref @env0:value.
+	gen isNil ifTrue: [^ false].
+	where := gen ___suspendedBodyLevel___.
+	where isNil ifTrue: [^ false].
+	self @env0:dynamicInstVarAt: #'___liveProcess___' put: (where @env0:at: 1).
+	self @env0:dynamicInstVarAt: #'___liveOuterLevel___' put: (where @env0:at: 2).
+	self @env0:dynamicInstVarAt: #'___liveLevelMethod___' put: (where @env0:at: 3).
+	self @env0:dynamicInstVarAt: #'___liveMethod___' put: (where @env0:at: 3).
+	locals := self ___liveLocalsFromLevels___.
+	self @env0:dynamicInstVarAt: #'___liveLocals___'
+		put: (locals ifNil: [PyFrame @env0:___pyDictFrom___: Dictionary @env0:new]).
+	^ true
+
+]
+
+{ #category : 'Grail-Tracebacks' }
 PyFrame >> ___liveLocalsAtOuterIndex___: anIndex [
 	"This frame's locals off a FRESH walk of the stack, or nil when the frame
 	cannot be found there.
@@ -90,10 +123,12 @@ PyFrame >> ___liveLocalsFromLevels___ [
 	The list is handed over INNERMOST FIRST, which is the order
 	___pyLocalsFromFrameContentsList___ resolves collisions in."
 
-	| lvl levels mine home fc list i scanning |
+	| lvl levels mine home fc list i scanning owner |
 	mine := [self @env0:dynamicInstVarAt: #'___liveLevelMethod___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	mine isNil ifTrue: [^ nil].
+	owner := [self @env0:dynamicInstVarAt: #'___liveProcess___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	"The HOME is what the blocks of one Python frame share -- for a nested def,
 	which is itself a block, that is the enclosing method and not the def."
 	home := [mine @env0:homeMethod]
@@ -104,7 +139,16 @@ PyFrame >> ___liveLocalsFromLevels___ [
 	lvl := [self @env0:dynamicInstVarAt: #'___liveOuterLevel___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	lvl isNil ifTrue: [^ nil].
-	levels := [PyFrame @env0:___liveFrameContentsByLevel___]
+	"ANOTHER PROCESS'S FRAME IS READ OFF THAT PROCESS.  A generator body's frame
+	lives on the generator's process, which is suspended at a yield whenever
+	anyone else is running -- so reading the RUNNING stack found nothing, and
+	the frame fell back to the snapshot taken when it was built, before the body
+	had bound anything since (test_generators' GeneratorDeallocTest).  A
+	suspended process's levels are numbered from its own top, and the distance
+	from the outer end means the same level either way."
+	levels := [(owner isNil or: [owner == GsProcess @env0:_current])
+			ifTrue: [PyFrame @env0:___liveFrameContentsByLevel___]
+			ifFalse: [PyFrame @env0:___liveFrameContentsByLevelOf___: owner]]
 		@env0:on: Error do: [:e |
 			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
 			e @env0:return: nil].
@@ -226,6 +270,23 @@ PyFrame >> ___liveLocalsSnapshotOrEmpty___ [
 	empty := dictClass @env0:new.
 	self @env0:dynamicInstVarAt: #'___emptyLocals___' put: empty.
 	^ empty
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+PyFrame >> ___liveLocalsViewNow___ [
+	"Make this frame's PyFrameLocals view, keep it, and answer it -- the snapshot
+	when no view can be made.  Kept so ``f.f_locals is f.f_locals'' holds; see
+	f_locals for who gets one."
+
+	| proxy |
+	proxy := [(Python @env0:at: #'PyFrameLocals') @env0:onFrame: self]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil].
+	proxy isNil ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
+	self @env0:dynamicInstVarAt: #'___liveLocalsView___' put: proxy.
+	^ proxy
 
 ]
 
@@ -442,7 +503,7 @@ PyFrame >> f_locals [
 	the method chain.  The probe below is for that same slot being set after this
 	method was found, and costs one read."
 
-	| stored cached proxy |
+	| stored cached |
 	stored := [self @env0:dynamicInstVarAt: #'f_locals']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	stored isNil ifFalse: [^ stored].
@@ -451,9 +512,10 @@ PyFrame >> f_locals [
 	cached isNil ifFalse: [^ cached].
 	"No recorded identity means this frame was not built by the live walk, so
 	there is nothing to re-read it from."
-	([self @env0:dynamicInstVarAt: #'___liveMethod___']
+	(([self @env0:dynamicInstVarAt: #'___liveMethod___']
 		@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
-			ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
+			and: [self ___adoptSuspendedGenerator___ not])
+				ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
 	"NO TEMPS TO SHOW: fall back to this frame's GLOBALS, which for a module-level
 	frame is not a fallback at all but the right answer -- CPython's module frame
 	has no fast locals, so its f_locals IS its globals mapping.  Measured against
@@ -482,8 +544,17 @@ PyFrame >> f_locals [
 				nm := [(self @env0:dynamicInstVarAt: #'f_code')
 					@env0:dynamicInstVarAt: #'co_name']
 					@env0:on: AbstractException do: [:e | e @env0:return: nil].
+				"...unless it can be RE-READ.  No snapshot means nothing was bound
+				when the frame was built, not that nothing will be: a frame taken
+				before its function's first assignment -- ``fr = sys._getframe()''
+				as a generator body's first line -- read {} for good, while
+				CPython's proxy shows what the function binds afterwards.  A
+				frame with a level to re-read gets the view like any other."
 				(nm @env0:= '<module>') == true ifFalse: [
-					^ self ___liveLocalsSnapshotOrEmpty___].
+					([self @env0:dynamicInstVarAt: #'___liveLevelMethod___']
+						@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
+							ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
+					^ self ___liveLocalsViewNow___].
 				"THE STORED SLOT FIRST.  A doit's namespace is handed to the
 				constructor and parked in the dynamic instVar (see BaseException
 				class >> ___doitGlobalsFor___); the f_globals METHOD derives one from
@@ -498,12 +569,6 @@ PyFrame >> f_locals [
 							e @env0:return: None]].
 				(g isNil or: [g == None]) ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
 				^ g].
-	proxy := [(Python @env0:at: #'PyFrameLocals') @env0:onFrame: self]
-		@env0:on: Error do: [:e |
-			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
-			e @env0:return: nil].
-	proxy isNil ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
-	self @env0:dynamicInstVarAt: #'___liveLocalsView___' put: proxy.
-	^ proxy
+	^ self ___liveLocalsViewNow___
 
 ]

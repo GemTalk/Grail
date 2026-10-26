@@ -723,16 +723,34 @@ sys >> _getframe: depth [
 
 { #category : 'Grail-Built-in Functions' }
 sys >> _getsizeof: positional kw: kwargs [
-	"getsizeof(object[, default]) - Return size of object in bytes."
-	| obj default |
+	"getsizeof(object[, default]) -- what the object's __sizeof__() answers, as
+	CPython's sys.getsizeof asks it.  So a class that defines __sizeof__ is
+	reported through it, and an int reports CPython's int model
+	(Integer >> __sizeof__) rather than GemStone's physical size, which was
+	read directly here and answered 0 for every small int.  Objects with no
+	__sizeof__ of their own still report their physical size
+	(Object >> __sizeof__).
+
+	CPython adds the garbage collector's header for a GC-tracked object; a
+	GemStone object has none, so nothing is added.  A TypeError from
+	__sizeof__ answers ``default'' when one is given, and the answer must be a
+	non-negative int -- CPython's checks and messages."
+
+	| obj default size |
 	obj := positional @env0:at: 1.
 	default := (positional __len__ @env0:> 1)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [nil].
-	^ [obj @env0:physicalSize] @env0:on: Error do: [:ex |
-		default ifNil: [TypeError ___signal___: 'object does not provide size'].
-		default
-	]
+	size := [obj @env1:__sizeof__]
+		@env0:on: TypeError
+		do: [:ex |
+			default @env0:isNil ifTrue: [ex @env0:pass].
+			^ default].
+	(size @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: 'an integer is required'].
+	size @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: '__sizeof__() should return >= 0'].
+	^ size
 
 ]
 
@@ -1181,6 +1199,14 @@ sys >> initialize [
 	probe misses and lands on the varargs _audit:kw: below, which then gives
 	CPython's complaint.  It also makes ``hook = sys.audit'' a callable value."
 	self @env0:at: #audit put: (BoundMethod receiver: self selector: #audit).
+	"getrefcount and call_tracing had the excepthook defect exactly: an
+	accessor reading a key nobody had put, so even ``getattr(sys,
+	'getrefcount', None)'' raised the uncatchable LookupError -- and
+	numpy.testing makes that read at import, so no numpy test module loaded.
+	Seeded rather than the accessors removed: Rowan's reload cannot delete an
+	env-1 method (it looks the method up in env 0)."
+	self @env0:at: #getrefcount put: (BoundMethod receiver: self selector: #getrefcount).
+	self @env0:at: #call_tracing put: (BoundMethod receiver: self selector: #call_tracing).
 
 ]
 
@@ -1468,6 +1494,17 @@ sys >> is_finalizing [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+sys >> is_remote_debug_enabled [
+	"is_remote_debug_enabled() -> False.  New in 3.14 (PEP 768): whether a
+	debugger may attach to this process through sys.remote_exec.  Grail has no
+	remote_exec, so it never is.  test.support's support_remote_exec_only
+	asks it while decorating, so test_sys could not even be imported."
+
+	^ false
+
+]
+
 { #category : 'Grail-Accessors' }
 sys >> modules [
 	"The Python-level ``sys.modules'' read.  Delegates to the class-side
@@ -1508,11 +1545,12 @@ sys >> set_coroutine_origin_tracking_depth: depth [
 sys >> set_int_max_str_digits: maxdigits [
 	"set_int_max_str_digits(maxdigits): set the per-session limit on the
 	number of digits int(str) will convert.  0 disables the limit; CPython
-	rejects a positive value below 640 (the minimum threshold)."
+	rejects a positive value below 640 (the minimum threshold), in its own
+	words: ``maxdigits must be >= 640 or 0 for unlimited''."
 	(maxdigits @env0:isKindOf: Integer) ifFalse: [
 		TypeError ___signal___: 'an integer is required'].
 	((maxdigits @env0:~= 0) and: [maxdigits @env0:< 640]) ifTrue: [
-		ValueError ___signal___: 'maxdigits must be 0 or larger than 640'].
+		ValueError ___signal___: 'maxdigits must be >= 640 or 0 for unlimited'].
 	(SessionTemps @env0:current) @env0:at: #GrailIntMaxStrDigits put: maxdigits.
 	^ None
 

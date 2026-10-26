@@ -42,6 +42,18 @@ StringIO class >> ___construct___: initialValue newline: newlineArg [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+StringIO class >> __module__ [
+
+	"CPython's io classes come from the C accelerator, _io.  Grail's had no
+	__module__ at all, so test.support.check__all__ -- which asks it of every
+	name a module holds -- counted plistlib's imported BytesIO as plistlib's
+	own public API (test_plistlib test__all__)."
+
+	^ '_io'
+
+]
+
 { #category : 'Grail-Initialization' }
 StringIO class >> __new__ [
 	^ self __new__: ''

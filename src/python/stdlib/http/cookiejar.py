@@ -17,20 +17,12 @@
 # present: re (full SRE engine), time, datetime, calendar, copy, threading,
 # urllib.parse, http.client.
 #
-# ONE ADAPTATION -- ``os.fdopen``:
-# FileCookieJar.save (both LWPCookieJar and MozillaCookieJar) writes through
+# NO ADAPTATION LEFT.  FileCookieJar.save writes through
 # ``os.fdopen(os.open(filename, O_CREAT|O_WRONLY|O_TRUNC, 0o600), 'w')`` so the
-# cookie file is created mode 0600 and never briefly world-readable.  Grail's
-# os has os.open and os.close but no os.fdopen, so both sites go through the
-# _open_cookie_file_for_write helper defined below.
-#
-# WHAT IS LEFT OF THAT DEVIATION: nothing a reader can exploit.  It began as a
-# real security difference -- a saved cookie file got the process umask
-# (typically 0644), readable by any local user -- and then narrowed to a WINDOW
-# once os.chmod arrived: between open() and chmod the file existed at the
-# umask.  The helper now CREATES the file with os.open and mode 0600, as
-# CPython does, so it never exists at the umask at all; only then is it
-# reopened by name for the text-mode writer.
+# cookie file is created mode 0600 and never briefly world-readable.  Grail had
+# no os.fdopen, so both save sites went through a helper that created the file
+# 0600 with os.open and reopened it by name.  os.fdopen exists now, and both
+# sites are CPython's again.
 #
 # ---------------------------------------------------------------------------
 
@@ -74,25 +66,6 @@ import threading as _threading
 import http.client  # only for the default HTTP port
 from calendar import timegm
 
-
-def _open_cookie_file_for_write(filename):
-    """Open a cookie file for writing, mode 0600 (see the Grail header).
-
-    CPython creates it 0600 atomically via os.open/os.fdopen.  Grail has
-    os.open but no os.fdopen, so this creates the file 0600 with os.open --
-    it never exists at the umask -- and reopens it by name.  The chmod is kept
-    for a file that ALREADY existed, whose mode O_CREAT leaves alone; os.chmod
-    reads the mode back, so a failure to apply it is an OSError the caller
-    sees rather than a silently umask-moded cookie file.
-    """
-    os.close(os.open(filename, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600))
-    f = open(filename, 'w')
-    try:
-        os.chmod(filename, 0o600)
-    except OSError:
-        f.close()
-        raise
-    return f
 
 
 debug = False   # set to True to enable debugging via the logging module
@@ -1949,7 +1922,10 @@ class LWPCookieJar(FileCookieJar):
             if self.filename is not None: filename = self.filename
             else: raise ValueError(MISSING_FILENAME_TEXT)
 
-        with _open_cookie_file_for_write(filename) as f:
+        with os.fdopen(
+            os.open(filename, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600),
+            'w',
+        ) as f:
             # There really isn't an LWP Cookies 2.0 format, but this indicates
             # that there is extra information in here (domain_dot and
             # port_spec) while still being compatible with libwww-perl, I hope.
@@ -2141,7 +2117,10 @@ class MozillaCookieJar(FileCookieJar):
             if self.filename is not None: filename = self.filename
             else: raise ValueError(MISSING_FILENAME_TEXT)
 
-        with _open_cookie_file_for_write(filename) as f:
+        with os.fdopen(
+            os.open(filename, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600),
+            'w',
+        ) as f:
             f.write(NETSCAPE_HEADER_TEXT)
             now = time.time()
             for cookie in self:
