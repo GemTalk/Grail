@@ -4,6 +4,22 @@ Class {
 	#category : 'Grail-SUnit'
 }
 
+{ #category : 'Grail-Tests - Tokens' }
+SecretsTestCase >> testDefaultEntropyIsPublicAndTheTokensDefault [
+	"CPython's secrets publishes DEFAULT_ENTROPY, the byte count a token
+	function uses when nbytes is None; test_secrets reads it.  Grail used 32
+	without naming it."
+
+	self assert: (self eval: 'import secrets; secrets.DEFAULT_ENTROPY') equals: 32.
+	self
+		assert: (self eval: 'import secrets; len(secrets.token_bytes(None))')
+		equals: 32.
+	self
+		assert: (self eval: 'import secrets; len(secrets.token_hex())')
+		equals: 64
+
+]
+
 { #category : 'Grail-Tests - Session-Local State' }
 SecretsTestCase >> testGeneratorIsHostRandomCsprng [
 	"Regression for commit 3a8f2e9: secrets must be backed by HostRandom — the OS
