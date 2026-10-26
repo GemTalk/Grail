@@ -70,6 +70,10 @@ State:
                          (generator expressions, Smalltalk-built helpers).
   * codeObject         — the PyCode codeThunk built, memoized on the
                          first gi_code read.
+  * codeFunction       — the function block a function-local or exec'd
+                         def's generator was made by, whose own __code__
+                         gi_code then answers (CPython's ``g.gi_code is
+                         f.__code__''); nil for a def compiled to a method.
   * frameObject        — the PyFrame gi_frame answers while the body has
                          not finished; dropped when it does, because
                          CPython's gi_frame is None after completion.
@@ -101,6 +105,7 @@ Class {
 		'consumerProcess',
 		'codeThunk',
 		'codeObject',
+		'codeFunction',
 		'frameObject',
 		'delegationTarget',
 		'inlineYields'

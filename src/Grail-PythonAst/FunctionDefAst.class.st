@@ -1347,7 +1347,7 @@ FunctionDefAst >> ___emitIRNestedBodyOn___: aBuilder [
 			aBuilder add: (self ___emitIRPyCodeExprOn___: aBuilder qualname: qual nested: true)].
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
-			send: #withBlock:name:qualname:code:
+			send: #withBlock:name:qualname:nestedCode:
 			to: (aBuilder globalNamed: self ___lazyWrapperClass___ asSymbol)
 			with: { genBlk. aBuilder obj: name asString. aBuilder obj: qual asString. codeThunk }
 			env: 1)
@@ -2160,14 +2160,18 @@ FunctionDefAst >> ___emitLazyWrapperTailOn___: aStream nested: isNested [
 	own __code__ (the closure form stamps nested: true, the method form
 	nested: false): CPython's cr_code IS f.__code__, so the closest Grail can
 	come is two code objects that agree field for field, and test_func_1 masks
-	cr_code.co_flags directly."
+	cr_code.co_flags directly.
+
+	The closure form sends nestedCode: instead, which takes the names and code
+	from the function block itself at call time -- see PyGeneratorBase class >>
+	withBlock:name:qualname:nestedCode:."
 
 	| qual |
 	qual := self ___qualifiedNameFor___: name.
 	aStream
 		nextPutAll: '] name: '''; nextPutAll: name;
 		nextPutAll: ''' qualname: '''; nextPutAll: qual;
-		nextPutAll: ''' code: ['.
+		nextPutAll: (isNested ifTrue: [''' nestedCode: ['] ifFalse: [''' code: [']).
 	self emitPyCodeExprOn: aStream qualname: qual nested: isNested.
 	aStream nextPutAll: ']'
 
