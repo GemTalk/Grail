@@ -2052,6 +2052,7 @@ ByteArray >> __contains__: rawItem [
 
 { #category : 'Grail-Introspection' }
 ByteArray >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a bytes / bytearray SUBCLASS instance -- a live view
 	of its dynamic-instVar storage, the same one PythonInstance publishes.
 	Subclassing bytes is how user code attaches attributes (``a.x = 10''), and
