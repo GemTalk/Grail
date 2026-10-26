@@ -260,7 +260,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_subclassinit` | __init_subclass__ (language). |
 | ✅ | `test_super` | super() (language). |
 |  | `test_syntax` | SyntaxError coverage (language). |
-|  | `test_tstring` | Template strings / PEP 750 (language, new in 3.14). |
+| ❗ | `test_tstring` | Template strings / PEP 750 (language, new in 3.14). |
 | ✅ | `test_tuple` | tuple — core type (in harness). |
 | ❗ | `test_type_aliases` | type X = ... aliases / PEP 695 (language). |
 |  | `test_type_annotations` | Annotation syntax/semantics (language). |

@@ -1580,9 +1580,56 @@ fail+err, which is the `pep` doctest catching output that belongs to the
 `coroutine` doctest before it.  Its `del g; gc_collect()` should print
 `finally` on the spot; Grail finalizes that generator late (which is why
 `coroutine` already fails), and the late print lands in whichever doctest is
-running -- `refleaks` on main (already failing), `pep` here.  Bisected to the
-`___pyCallValue___:kw:` change, which moves the timing; `pep` passes when
-the module runs under a plain unittest loader.
+running -- `refleaks` in the board's run (already failing), `pep` here.
+Which one it lands in follows the code's layout, not any one change: it is
+`pep` on main plus only the unrelated #1756 as well (measured on a fresh
+stone, twice), and `pep` passes when the module runs under a plain unittest
+loader.
 
 Not covered, because argon2 needs neither: `ffi.callback` / `@ffi.def_extern`
 (libffi closures calling back into Python) and API-mode `ffi.verify`.
+
+### The tutorial tests' last walls *(2026-10-23)*
+
+On `jmason/fastapi8`, from main at `93e24c39` (after #1745 and #1756).  The
+baseline there: **1,275 of 1,288** tutorial tests with CPython's outcome
+(`test_wsgi` passing since #1756), the core slice unchanged at 1,268 of
+1,270.  Of the 13, the 8 sql_databases tests are out of scope -- GemStone is
+its own datastore -- which left five tests and, behind them, six walls,
+each a general Grail bug:
+
+| wall | symptom in the tutorials | fix |
+|---|---|---|
+| an EMPTY environment value read as unset | `monkeypatch.setenv("OPENAPI_URL", "")` -- pydantic-settings took the field's default and the schema was still served (conditional_openapi) | GemStone's `gemEnvironmentVariable:` answers nil for `''`; `os_Environ class >> ___envRawPut___:value:` keeps an empty value in the overlay it already kept over-long ones in |
+| `x == C` / `x != C` never reached a class operand's METACLASS | dirty-equals' bare `IsAnyStr` (a class, matching through `DirtyEqualsMeta.__eq__`) compared False, so `errors() == [{... 'url': IsAnyStr}]` failed (settings) | `___cmpEq___:` / `___cmpNe___:` ask the metaclass when x's own dunder is a builtin's, which declines a class, or a Python one that answered NotImplemented (`___cmpByOperandMetaclass___:op:`); a class's own `!=` goes through its metaclass as `==` already did |
+| a Grail callback's exception came back from C a NEW object | pydantic_core keeps a validator's ValueError in the error's ctx; the copy had no `__dict__`, so FastAPI's `jsonable_encoder` failed on `vars()` of it (query_params_str_validations tutorial015) | the raised-exception token C holds for it (`shim_pyo3.cc`) carries the exception's wrapper, past CPython's 72-byte layout, and crosses back as the very object (`pyobj_oop`).  Its `__traceback__` is still None: the shim's guard catches it before any Python handler records one |
+| a function captured from a class body broke on `del` of the attribute when no base defined the name | strawberry keeps each `@strawberry.field` resolver, deletes the class attribute, and calls the resolver with the root value None: "type object 'Query' has no method 'user'" (graphql) | the call falls back to the `___grailOrig_` original the `del` pinned (`UnboundMethod >> ___grailDeletedOriginalNargs:kwOk:`), for a handle minted before the pin; the pin had only redirected a name something still answered |
+| a timer due at INFINITY reached select as its timeout | `anyio.sleep_forever()` is `asyncio.sleep(math.inf)`, and every TestClient websocket session ends in one; with nothing else pending, select could not convert the timeout, the OverflowError escaped `run_forever`, and the portal's loop stopped under a test still using it ("This portal is not running", then a CancelledError -- tutorial003 once its neighbours had run) | the wait is capped as CPython's is (`MAXIMUM_SELECT_TIMEOUT`, 24 h) |
+| a plain `call_soon` from another thread did not wake a waiting loop | Starlette's TestClient hands one websocket session's broadcast to another's loop through an anyio memory stream, which wakes the waiting receiver with a non-threadsafe `call_soon`; the receiving loop slept and the scheduler deadlocked (websockets tutorial003).  CPython passes only because its test sleeps long enough for the message to be buffered first | Grail's loop wakes when `call_soon` arrives while it waits -- only another thread can be the caller then.  A deliberate difference from CPython, whose loop sleeps through the call |
+
+Pinned by five checks in `tests/python/fastapi_walls.py` (the call_soon one
+records each implementation's answer) and `CPythonShimTestCase >>
+testCApiAnExceptionTakenFromACallbackIsTheOneRaised`, through a new
+`_grail_demo` case that takes a callback's exception with
+`PyErr_GetRaisedException`.
+
+**Where it stands:** **1,280 of 1,288** tutorial tests with CPython's
+outcome -- every test but the 8 out-of-scope sql_databases ones
+(`p10/tut3.grail`).  The core slice is unchanged at 1,268 of 1,270: the
+FORWARDREF closure case and the traceback frame path through
+`contextlib.__enter__`, both recorded under Phase 6 part 2.
+
+Two existing checks moved with the fixes.  `urllib_defrag_and_proxies.py`
+had pinned the empty-variable deviation as a deliberate XFAIL ("so the day it
+changes is visible"); it now asserts CPython's answer, and the file has no
+deviations left.  And the first gate run caught a slip in the comparison
+change itself: after a reflected `__eq__`/`__ne__` had already declined, the
+metaclass step overwrote the record of it, so the reflected method ran a
+second time (`ComparisonProtocolTestCase`, `ComparisonBlockingTestCase`,
+test_compare, test_binop); fixed before the gates below.
+
+**Gates** (Darwin arm64, fresh `gs40` extent, after that fix): `run_tests.sh`
+**8340 run, 8340 passed**, 8 of 8 shards; the CPython conformance gate **0
+regressions, 3 improvements** (test_generators, test_long, test_random);
+`check_python_fixtures.sh` 716 fixtures agree with CPython.
+

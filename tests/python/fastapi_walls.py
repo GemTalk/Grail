@@ -1737,6 +1737,111 @@ check('a_deployed_class_private_default',
       (1, 'd', 'KeyError'))
 
 
+
+# --- the tutorial tests' last walls (jmason/fastapi8) ------------------------
+
+# os.environ['X'] = '' vanished: GemStone answers nil for an empty
+# environment variable, which read as unset, so pydantic-settings took the
+# field's default (conditional_openapi's OPENAPI_URL='').
+os.environ['GRAIL_FAW_EMPTY'] = ''
+check('an_empty_environment_value_is_set',
+      (os.environ.get('GRAIL_FAW_EMPTY'), 'GRAIL_FAW_EMPTY' in os.environ,
+       os.getenv('GRAIL_FAW_EMPTY'), os.environ.pop('GRAIL_FAW_EMPTY'),
+       'GRAIL_FAW_EMPTY' in os.environ),
+      ('', True, '', '', False))
+
+
+# ``x == C'' and ``x != C'' for a CLASS C whose metaclass defines them: x's own
+# dunder declines a class unless it is written in Python, and the metaclass
+# decides.  dirty_equals' bare matchers (``{'url': IsAnyStr}'') are classes
+# compared exactly so (settings' test_settings_validation_error).
+class _CmpMeta(type):
+    def __eq__(cls, other): return 'meta-eq'
+    def __ne__(cls, other): return 'meta-ne'
+    __hash__ = type.__hash__
+class _CmpK(metaclass=_CmpMeta): pass
+class _CmpOwnEq:
+    def __eq__(self, other): return 'own-eq'
+class _CmpDeclines:
+    def __eq__(self, other): return NotImplemented
+check('a_class_operand_compares_through_its_metaclass',
+      ('x' == _CmpK, 'x' != _CmpK, 1 == _CmpK, None == _CmpK, (1,) == _CmpK,
+       _CmpK != 'x', _CmpOwnEq() == _CmpK, _CmpDeclines() == _CmpK),
+      ('meta-eq', 'meta-ne', 'meta-eq', 'meta-eq', 'meta-eq',
+       'meta-ne', 'own-eq', 'meta-eq'))
+
+
+# A function captured from a class body keeps running after ``del'' of the
+# class attribute even when no base defines the name -- strawberry keeps each
+# @strawberry.field resolver so, deletes the attribute, and calls the resolver
+# with the root value None (graphql's test_query).
+def _keep_fn(fn):
+    return ('kept', fn)
+class _DelPlain:
+    def m(self): return 'plain'
+class _DelDecorated:
+    @_keep_fn
+    def m(self): return 'decorated'
+_plain_capture = _DelPlain.m
+_decorated_capture = _DelDecorated.m[1]
+del _DelPlain.m
+del _DelDecorated.m
+check('a_capture_survives_del_with_no_inherited_method',
+      (_plain_capture(None), _plain_capture(_DelPlain()), _decorated_capture(None),
+       hasattr(_DelPlain, 'm'), hasattr(_DelDecorated, 'm')),
+      ('plain', 'plain', 'decorated', False, False))
+
+
+# A plain call_soon from another thread while the loop waits: CPython leaves it
+# undefined -- its loop sleeps through it, here until wait_for's guard -- and
+# an anyio memory stream fed from one loop wakes a receiver on another exactly
+# so: Starlette's TestClient, two websocket sessions broadcasting to each other
+# (websockets tutorial003), which passes on CPython only because its test
+# sleeps long enough for the message to be buffered first.  Grail's loop wakes
+# at once, a deliberate difference, so each implementation's answer is pinned.
+def _call_soon_from_another_thread():
+    import asyncio, threading, time
+    box = {}
+    async def main():
+        loop = asyncio.get_running_loop()
+        fut = loop.create_future()
+        threading.Thread(
+            target=lambda: (time.sleep(0.2), loop.call_soon(fut.set_result, 5))).start()
+        start = time.monotonic()
+        try:
+            box['result'] = await asyncio.wait_for(fut, 1)
+        except TimeoutError:
+            box['result'] = 'timeout'
+        box['prompt'] = time.monotonic() - start < 0.9
+    asyncio.run(main())
+    return box['result'], box['prompt']
+check('a_cross_thread_call_soon_wakes_a_waiting_loop',
+      _call_soon_from_another_thread(),
+      (5, True) if sys.implementation.name == 'grail' else ('timeout', False))
+
+
+
+# A loop whose only timer is due at infinity -- anyio.sleep_forever() is
+# asyncio.sleep(math.inf), and every Starlette TestClient websocket session
+# ends in one -- handed select an infinite timeout, which it cannot convert:
+# OverflowError out of run_forever stopped the loop under a test still using
+# it (websockets tutorial003, run after its neighbours).  CPython caps the wait.
+def _wait_beside_an_infinite_timer():
+    import asyncio, math, threading, time
+    async def main():
+        loop = asyncio.get_running_loop()
+        forever = asyncio.create_task(asyncio.sleep(math.inf))
+        fut = loop.create_future()
+        threading.Thread(target=lambda: (
+            time.sleep(0.1), loop.call_soon_threadsafe(fut.set_result, 'woke'))).start()
+        got = await fut
+        forever.cancel()
+        return got
+    return asyncio.run(main())
+check('a_timer_due_at_infinity_does_not_stop_the_loop',
+      _wait_beside_an_infinite_timer(), 'woke')
+
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]
