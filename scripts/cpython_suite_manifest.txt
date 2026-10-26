@@ -726,3 +726,22 @@ test.test_patma
 # EXISTING ~/.grail/site-packages, which a CI container has none of, so it is
 # empty there.  CPython's always lists its stdlib directories.
 test.test_grammar
+
+# --- Core language (added 2026-10-26): PEP 695 type aliases and parameters ---
+#
+# test_type_aliases and test_type_params are CPython 3.14.4's, vendored
+# verbatim.  Neither could be imported: a parameterised alias in a CLASS BODY,
+# ``class Parent[A]: type TA1[B] = dict[A, B]'', was refused with a
+# SyntaxError, because its scope function is a def the class body calls and
+# whose lazily evaluated value reads the class's own parameter -- which a
+# class-body def could not see.  It can now (a class-body def called by the
+# body, and the lambda it returns, read the enclosing locals), and the rewrite
+# accepts an alias in a class body; a parameterised CLASS nested in a class
+# body is still refused.  Measured on Darwin arm64:
+#
+#   type_aliases  30t 4F/7E    TypeAliasType pickling and __module__, an alias
+#                              in a generic method of a generic class
+#   type_params  108t 16F/42E  SyntaxError checks, private-name mangling of
+#                              type params, codegen gaps in nested scopes
+test.test_type_aliases
+test.test_type_params
