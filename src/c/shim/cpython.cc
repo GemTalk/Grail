@@ -117,6 +117,7 @@ static int is_foreign_type(PyObject *obj);         /* a wheel's type object */
 static inline int plausible_pyobj(const void *p);  /* could this be a PyObject*? */
 static void report_bad_pyobj(const char *where, const void *p);
 extern "C" int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
+extern "C" PyObject *_grail_raised_token_exc(PyObject *o);   /* shim_pyo3.cc */
 
 /* A TYPE MIRROR: the C-side face of a Grail CLASS (docs/Support_Pydantic.md,
    Phase 5 / W1).  A wrapper cannot be a type -- it is 32 bytes with the OOP at
@@ -244,6 +245,14 @@ static inline OopType pyobj_oop(PyObject *obj) {
        a type's fields far past the end of a body. */
     if (is_subtype_body(obj)) return subtype_body_oop(obj);
     if (is_type_mirror(obj)) return (OopType)(uintptr_t)((PyTypeObject *)obj)->tp_weaklist;
+    /* A raised-exception token for a Grail callback's exception is that
+       exception (shim_pyo3.cc, _grail_raised_token_exc).  The test reads the
+       TYPE's flags, so only for a plausible type: a dead object's ob_type is
+       garbage, and is_foreign below is what reports it. */
+    if (plausible_pyobj(obj->ob_type)) {
+        PyObject *grail_exc = _grail_raised_token_exc(obj);
+        if (grail_exc != NULL) return pyobj_oop(grail_exc);
+    }
     if (is_foreign(obj)) return foreign_proxy_oop(obj);
     if (*(uint64_t *)((char *)obj + 24) == GRAIL_FLOAT_MAGIC)
         return GciFltToOop(*(double *)((char *)obj + 16));
@@ -1026,12 +1035,16 @@ static PyObject *current_error_instance = NULL;
    Grail unhandled the ORIGINAL exception object is what is raised. */
 static int32_t g_cb_error_flag = 0;
 static int current_error_from_grail = 0;
+/* ...and that exception, as its wrapper, so the token err_publish makes for
+   it crosses back to Grail as the very object raised (pyobj_oop). */
+static PyObject *current_error_grail_exc = NULL;
 
 static void forget_saved_gs_error(void) {
     have_saved_gs_error = 0;
     saved_gs_error_text[0] = '\0';
     current_error_instance = NULL;
     current_error_from_grail = 0;
+    current_error_grail_exc = NULL;
 }
 
 /* THE INDICATOR IN THE THREAD STATE.  Cython keeps a pending exception in
@@ -1052,6 +1065,7 @@ extern "C" char *_grail_tstate_bytes(void);                                   /*
 extern "C" PyObject *_grail_raised_token(PyObject *type, const char *msg, int from_grail);   /* shim_pyo3.cc */
 extern "C" int _grail_raised_token_read(PyObject *o, PyObject **type, const char **msg, int *from_grail);
 extern "C" void _grail_raised_token_recycle(PyObject *o);
+extern "C" void _grail_raised_token_set_exc(PyObject *o, PyObject *exc);
 static PyObject *g_err_published = NULL;
 static int g_err_sync_busy = 0;
 
@@ -1071,8 +1085,10 @@ static void err_publish(void) {
     if (current_error_type != NULL) {
         if (current_error_instance != NULL && is_foreign_exc_instance(current_error_instance))
             now = current_error_instance;
-        else
+        else {
             now = _grail_raised_token(current_error_type, current_error_msg, current_error_from_grail);
+            if (current_error_from_grail) _grail_raised_token_set_exc(now, current_error_grail_exc);
+        }
     }
     if (old != NULL && old == g_err_published && old != now) _grail_raised_token_recycle(old);
     *slot = now;
@@ -1109,6 +1125,7 @@ static void err_adopt(void) {
         current_error_type = type;
         snprintf(current_error_msg, sizeof(current_error_msg), "%s", msg);
         current_error_from_grail = from_grail;
+        current_error_grail_exc = _grail_raised_token_exc(cur);
     } else {
         char text[sizeof(current_error_msg)];
         g_err_sync_busy = 1;            /* str() may run, and clear, the indicator */
@@ -1649,9 +1666,11 @@ static void take_callback_error(void) {
     fetch_string(GciFetchOop(arr, GciOopToI64(i1)), base, sizeof(base));
     fetch_string(GciFetchOop(arr, GciOopToI64(i2)), msg, sizeof(msg));
     int64 ptr = GciOopToI64(GciFetchOop(arr, GciOopToI64(i3)));
-    int64 typ = 0;
+    int64 typ = 0, grail_exc = 0;
     if (GciFetchSize_(arr) >= 4)
         typ = GciOopToI64(GciFetchOop(arr, GciOopToI64(GciI64ToOop(4))));
+    if (GciFetchSize_(arr) >= 5)
+        grail_exc = GciOopToI64(GciFetchOop(arr, GciOopToI64(GciI64ToOop(5))));
     GciErr(&e);
     PyObject *inst = (PyObject *)(intptr_t)ptr;
     /* The check_gci_error diagnostic covers a GemStone error; a callback
@@ -1682,6 +1701,7 @@ static void take_callback_error(void) {
         PyErr_SetString(t ? t : PyExc_Exception, msg);
     }
     current_error_from_grail = 1;
+    current_error_grail_exc = grail_exc ? (PyObject *)(intptr_t)grail_exc : NULL;
     err_publish();
 }
 
