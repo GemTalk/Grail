@@ -331,6 +331,25 @@ RangeTestCase >> test_startStopStep [
 ]
 
 { #category : 'Grail-Tests' }
+RangeTestCase >> testEqualityHashReadOnlyAttributesAndConstructorErrorsAreCPythons [
+	"Ranges holding the same elements are equal and hash alike, start, stop
+	and step refuse a store and a delete, and range() with no, too many or
+	keyword arguments names range.  tests/python/range_equality_hash_and_errors.py
+	holds the checks and agrees with CPython 3.14 (test_range's
+	test_comparison, test_attributes and test_range_constructor_error_messages)."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'range_equality_hash_and_errors' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/range_equality_hash_and_errors.py')
+		name: 'range_equality_hash_and_errors'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '14 checks, 0 disagreeing [], keys match: True'
+
+]
+
+{ #category : 'Grail-Tests' }
 RangeTestCase >> testMembershipIsArithmeticForAnIntAndRichEqualityOtherwise [
 	"``in'', count and index answer an exact int or a bool by arithmetic, so a
 	range of 2**99 elements with step 2 answers at once (#1380); anything else
