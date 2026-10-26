@@ -65,15 +65,11 @@ WhileAst >> ___emitIRStatementOn___: aBuilder [
 					aBuilder handlerBlockNamed: #'___ex___' }
 				env: 0)].
 		aBuilder add: (aBuilder whileTrue: condBlk do: iterBlk).
-		"while-else (cut 68): inside the outer block, after the drain, so a
-		PythonBreak from the body propagates past it to the handler."
-		(self ___irElseStatements___) do: [:s | s ___emitIRStatementOn___: aBuilder]].
-	aBuilder add: (aBuilder
-		send: #on:do:
-		to: outerBlk
-		with: { aBuilder globalNamed: #PythonBreak.
-			aBuilder handlerBlockNamed: #'___ex___' }
-		env: 0).
+		"while-else (cut 68): the block answers false when the test ran out,
+		and the else clause runs after the handler; see
+		___emitIRBreakHandlerFor___:else:on:."
+		self ___irElseStatements___ isEmpty ifFalse: [aBuilder add: aBuilder falseLit]].
+	self ___emitIRBreakHandlerFor___: outerBlk else: self ___irElseStatements___ on: aBuilder.
 	^ self
 
 ]
@@ -84,8 +80,8 @@ WhileAst >> ___irEligibleStatementLocals___: localNames [
 	body.  while-else stays on text (its break-skips-else placement is its own
 	shape)."
 
-	"An else clause (cut 68) is emittable when its statements are: it goes
-	inside the PythonBreak-protected block after the whileTrue:, as the text
+	"An else clause (cut 68) is emittable when its statements are: it runs
+	after the PythonBreak handler, when no break ended the loop, as the text
 	places it."
 	((self ___irElseStatements___) allSatisfy: [:s | s ___irEligibleStatementLocals___: localNames])
 		ifFalse: [^ false].
@@ -214,6 +210,9 @@ WhileAst >> printSmalltalkOn: aStream [
 	so `break` / `continue` inside the loop body behave correctly
 	without escaping the enclosing method."
 
+	| hasElse |
+	hasElse := orelse notNil and: [orelse size > 0].
+	hasElse ifTrue: [aStream nextPut: $(].
 	aStream nextPutAll: '['; lf; increaseIndent.
 	aStream nextPut: $[.
 	test printSmalltalkWithParenthesisOn: aStream.
@@ -222,28 +221,31 @@ WhileAst >> printSmalltalkOn: aStream [
 	body printSmalltalkOn: aStream.
 	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonContinue do: [:___ex___ | nil].'; lf.
 	aStream decreaseIndent; nextPutAll: '].'; lf.
-	(orelse notNil and: [orelse size > 0]) ifTrue: [
-		"Python while-else: the else body runs only when the loop
-		terminates WITHOUT break.  Emit it INSIDE the outer block, after
-		the whileTrue: drain, so a PythonBreak signalled from the body
-		propagates past it to the handler below and skips it — the same
-		structure ForAst uses for for-else.  (This used to be emitted
-		after the handler, i.e. unconditionally; textwrap's max_lines
-		placeholder backtracking depends on the correct semantics.)
+	hasElse ifFalse: [
+		aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+		^ self].
+	"Python while-else: the else body runs only when the loop terminates
+	WITHOUT break -- and OUTSIDE this loop's PythonBreak handler.  The
+	block answers false when the test ran out, the handler true when a
+	break ended the loop, the same structure ForAst uses for for-else.  (It
+	used to run unconditionally, after the handler, and then inside it,
+	where a ``break'' IN the else clause was caught by this loop instead of
+	leaving the enclosing one.)
 
-		orelse may be either an Array of statements or a SuiteAst —
-		the parser produces both shapes depending on context.  Both
-		respond to printSmalltalkOn:, so route through that rather
-		than iterating directly."
-		(orelse isKindOf: SuiteAst)
-			ifTrue: [orelse printSmalltalkOn: aStream]
-			ifFalse: [orelse do: [:stmt |
-				stmt printSmalltalkOn: aStream.
-				aStream lf.
-			]].
-		aStream lf.
-	].
-	aStream decreaseIndent; nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | nil].'.
+	orelse may be either an Array of statements or a SuiteAst -- the parser
+	produces both shapes depending on context.  Both respond to
+	printSmalltalkOn:, so route through that rather than iterating
+	directly."
+	aStream nextPutAll: 'false'; lf.
+	aStream decreaseIndent;
+		nextPutAll: '] @env0:on: PythonBreak do: [:___ex___ | true]) ifFalse: ['; lf;
+		increaseIndent.
+	(orelse isKindOf: SuiteAst)
+		ifTrue: [orelse printSmalltalkOn: aStream]
+		ifFalse: [orelse do: [:stmt |
+			stmt printSmalltalkOn: aStream.
+			aStream lf]].
+	aStream lf; decreaseIndent; nextPutAll: '].'
 
 ]
 

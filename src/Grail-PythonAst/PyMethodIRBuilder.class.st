@@ -848,13 +848,23 @@ PyMethodIRBuilder >> handlerBlockNamed: aSymbol [
 	shape the text path emits for its PythonBreak / PythonContinue handlers.
 	The arg is declared on the block only (never registered as a method local)."
 
+	^ self handlerBlockNamed: aSymbol answering: self nilLit
+
+]
+
+{ #category : 'control' }
+PyMethodIRBuilder >> handlerBlockNamed: aSymbol answering: aValueNode [
+	"``[:aSymbol | aValueNode]'' -- a one-argument handler block answering
+	aValueNode.  A loop with an else clause answers true from its PythonBreak
+	handler, so the else clause can run only when no break ended the loop."
+
 	| blk leaf |
 	lexLevel := lexLevel + 1.
 	blk := GsComBlockNode new lexLevel: lexLevel.
 	self setSourcePosition: blk.
 	leaf := GsComVarLeaf new blockArg: aSymbol argNumber: 1 forBlock: blk.
 	blk appendArg: leaf.
-	blk appendStatement: self nilLit.
+	blk appendStatement: aValueNode.
 	lexLevel := lexLevel - 1.
 	^ blk
 
