@@ -10,7 +10,9 @@
 #      in a transaction and commits its objects under gemdb.root['upgrade']
 #   3. install Grail m over it                 (./install.sh again: the upgrade)
 #   4. the app redeploys: tests/upgrade/redeploy_phase.py imports it in a transaction
-#      and commits, which rebuilds its modules (and the stdlib's) under m
+#      and commits, which rebuilds its modules (and the stdlib's) under m. Skipped with
+#      GRAIL_UPGRADE_SKIP_REDEPLOY=1, which leaves it to install.sh's own redeploy
+#      (scripts/redeployModules.gs); verify then checks the import wrote nothing
 #   5. the app reads: tests/upgrade/verify_phase.py checks that the data is intact,
 #      that hashed containers still find fresh keys, that every stored object is an
 #      instance of the CURRENT class, and that old objects run with the app's code;
@@ -119,7 +121,13 @@ export GEMSTONE_NAME='$STONE'
 export PATH='$PATH'
 EOF
     printf 'set user DataCurator pass swordfish gemstone %s\n' "$STONE" > "$g/.topazini"
-    (cd "$g" && ./install.sh) > "$2" 2>&1 || {
+    # The install's own topaz logs (install.out, redeployModules.out, ...) beside
+    # its log: the next install in this directory starts by deleting them.
+    local logs=${2%.log}-out
+    (cd "$g" && ./install.sh) > "$2" 2>&1
+    local rc=$?
+    mkdir -p "$logs" && cp "$g"/*.out "$logs/" 2>/dev/null
+    [ $rc -eq 0 ] || {
         echo "upgrade: install failed; the end of $2:"
         tail -30 "$2"
         return 1
@@ -161,10 +169,14 @@ run_case() {            # run_case <case> -- 0 if every check passed
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
         | grep '^SNAPSHOT' > "$d/snapshot-m.txt"
 
-    log "redeploy"
-    in_grail ./grail "$WORK/app/redeploy_phase.py" > "$d/redeploy.log" 2>&1 \
-        && grep -q 'redeploy phase:' "$d/redeploy.log" || {
-        echo "upgrade: the redeploy phase failed:"; tail -30 "$d/redeploy.log"; return 1; }
+    if [ "${GRAIL_UPGRADE_SKIP_REDEPLOY:-0}" = 1 ]; then
+        log "redeploy skipped: the app relies on the install's own redeploy"
+    else
+        log "redeploy"
+        in_grail ./grail "$WORK/app/redeploy_phase.py" > "$d/redeploy.log" 2>&1 \
+            && grep -q 'redeploy phase:' "$d/redeploy.log" || {
+            echo "upgrade: the redeploy phase failed:"; tail -30 "$d/redeploy.log"; return 1; }
+    fi
 
     log "verify"
     in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1

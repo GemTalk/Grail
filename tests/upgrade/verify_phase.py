@@ -20,14 +20,20 @@ test stays a gate for everything else while the gap stays visible.
 
 Changes nothing: it aborts at the end, so it can be run again.
 """
-import json
-import os
-import pickle
-import sys
-
+# FIRST, before this script's own imports: binding the app -- and everything it
+# imports -- after an upgrade must write nothing, or the session is dirty and
+# gemdb.transaction() refuses to begin.  (json and pickle come after: the app does
+# not use them, so nothing deployed them, and their first import is a build.)
 import gemdb
 import gemstone
 import upgrade_app
+
+WRITES_AT_IMPORT = (gemstone.needs_commit, list(gemstone.uncommitted_imports))
+
+import json  # noqa: E402
+import os  # noqa: E402
+import pickle  # noqa: E402
+import sys  # noqa: E402
 
 FAILED = []
 
@@ -65,6 +71,10 @@ with open(sys.argv[1]) as f:
 probe = sys.argv[3] if len(sys.argv) > 3 and sys.argv[2] == '--probe' else None
 
 stored = gemdb.root['upgrade']
+
+check('runs.import_writes_nothing',
+      lambda: (not WRITES_AT_IMPORT[0],
+               'importing the app left the session dirty; modules built: %s' % WRITES_AT_IMPORT[1]))
 
 # intact: one check per value, so one broken type does not hide the rest.
 for name in sorted(expected):
