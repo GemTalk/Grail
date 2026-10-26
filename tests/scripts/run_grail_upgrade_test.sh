@@ -102,8 +102,23 @@ EOF
 tree_from_checkout() {  # tree_from_checkout <dir> -- the working tree, without build output
     rm -rf "$1"
     mkdir -p "$1"
+    # Python rather than rsync, which GemTalk's CI container does not have. A file
+    # git still lists but the working tree has deleted is skipped.
     (cd "$PROJECT_ROOT" && git ls-files -z --cached --others --exclude-standard) \
-        | (cd "$PROJECT_ROOT" && rsync -a --from0 --files-from=- ./ "$1/")
+        | python3 -c '
+import os, shutil, sys
+src, dst = sys.argv[1], sys.argv[2]
+for rel in sys.stdin.buffer.read().decode().split("\0"):
+    s = os.path.join(src, rel)
+    if not rel or not os.path.lexists(s):
+        continue
+    d = os.path.join(dst, rel)
+    os.makedirs(os.path.dirname(d), exist_ok=True)
+    if os.path.islink(s):
+        os.symlink(os.readlink(s), d)
+    else:
+        shutil.copy2(s, d)
+' "$PROJECT_ROOT" "$1"
 }
 
 tree_from_ref() {       # tree_from_ref <dir> <ref>
@@ -115,9 +130,13 @@ tree_from_ref() {       # tree_from_ref <dir> <ref>
 install_tree() {        # install_tree <tree> <log> -- install it in place, over what is there
     local g=$WORK/grail
     mkdir -p "$g"
-    # --checksum: n and m can differ by one character in a file written the same second, which a
-    # size-and-time comparison takes for unchanged -- and then m is never installed.
-    rsync -a --checksum --delete --exclude .setenv --exclude .topazini "$1/" "$g/"
+    # Emptied and copied whole, keeping only this directory's .setenv and .topazini.
+    # A full copy cannot mistake m's files for n's -- they can differ by one
+    # character in a file written the same second -- and needs no rsync, which
+    # GemTalk's CI container does not have. The build output goes too; install.sh
+    # rebuilds it.
+    find "$g" -mindepth 1 -maxdepth 1 ! -name .setenv ! -name .topazini -exec rm -rf {} +
+    cp -a "$1/." "$g/"
     cat > "$g/.setenv" <<EOF
 export GEMSTONE='$GEMSTONE'
 export GEMSTONE_GLOBAL_DIR='$GEMSTONE_GLOBAL_DIR'
