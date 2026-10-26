@@ -765,6 +765,21 @@ test.test_fstring
 test.test_type_aliases
 test.test_type_params
 
+# --- Core language (added 2026-10-26): the types module ---
+#
+# test_types is CPython 3.14.4's, vendored verbatim.  It could not be
+# imported: it does ``import _datetime'' at module level, and Grail, whose
+# datetime is native, had no module of that name.  src/python/stdlib/
+# _datetime.py now answers datetime's own classes under the accelerator's
+# name, as CPython's datetime.py re-exports them; the C API capsule
+# datetime_CAPI is left out, so code probing for it still sees it missing
+# (test_sys's sizeof check, test_datetime's C variant).  Measured on Darwin
+# arm64:
+#
+#   types 129t 26F/21E/3S   ClassCreation corner cases, mappingproxy of a
+#                           non-dict mapping, types._GeneratorWrapper
+test.test_types
+
 # --- Core language (added 2026-10-26): break in a loop's else clause ---
 #
 # test_graphlib is CPython 3.14.4's, vendored verbatim.  It timed out on its
