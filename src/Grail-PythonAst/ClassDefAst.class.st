@@ -2770,8 +2770,8 @@ ClassDefAst >> ___isClassBodyDeleteStatement___: stmt [
 	exclusion and simply emit as they would anywhere else."
 
 	(stmt isKindOf: DeleteAst) ifFalse: [^ false].
-	stmt targets isEmpty ifTrue: [^ false].
-	^ stmt targets allSatisfy: [:t |
+	stmt deletedTargets isEmpty ifTrue: [^ false].
+	^ stmt deletedTargets allSatisfy: [:t |
 		(t isKindOf: NameAst)
 			ifTrue: [(self ___classBodyDeclaresElsewhere___: t id asSymbol) not
 				and: [(self ___classBodyBindsAsDefinition___: t id asSymbol) not]]
