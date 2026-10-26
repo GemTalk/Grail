@@ -28,10 +28,10 @@ Where the in-scope tiers stand:
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
 | P1 | 60 | 10 | 20 | 90 |
-| P2 | 23 | 2 | 9 | 34 |
+| P2 | 23 | 3 | 8 | 34 |
 | P3 | 20 | 5 | 31 | 56 |
 | P4 | 22 | 7 | 46 | 75 |
-| **In-scope** | **125** | **24** | **106** | **255** |
+| **In-scope** | **125** | **25** | **105** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **149 are wired into the harness** (P1 70 · P2 25 · P3 25 · P4 29) and **125 of those score OK**.
+Of the 255 in-scope modules, **150 are wired into the harness** (P1 70 · P2 26 · P3 25 · P4 29) and **125 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -292,7 +292,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ✅ | `test_decimal` | decimal — arbitrary-precision arithmetic. Scored for the first time here: the module reads `Context.flags` at IMPORT time, which the old hand-written decimal lacked, so the row could not be measured at all. 368 tests · 3 fail · 14 error · 200 skip. |
 | ✅ | `test_defaultdict` | collections.defaultdict. |
 | ✅ | `test_deque` | collections.deque. |
-|  | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
+| ❗ | `test_dynamicclassattribute` | types.DynamicClassAttribute (used by enum). |
 | ✅ | `test_enum` | enum — core (in harness). |
 | ✅ | `test_fractions` | fractions — core numeric (in harness). |
 | ✅ | `test_functools` | functools — core (in harness). |
@@ -820,7 +820,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_policy` ERROR, 33 tests: 0 failed, 3 errors, 0 skipped
 - `test.test_email.test_utils` ERROR, 22 tests: 1 failed, 10 errors, 1 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_fstring`, `test_grammar`, `test_patma`.
+Wired, but not on the board until the next nightly measures them: `test_dynamicclassattribute`, `test_fstring`, `test_grammar`, `test_patma`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

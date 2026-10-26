@@ -164,6 +164,44 @@ r['enum_property_dict_entry_is_not_a_property'] = repr(
     isinstance(HasEnumProp.__dict__['e'], property))
 
 
+# ...and an OUTER decorator receives that descriptor, not a builtin property.
+# CPython's DynamicClassAttribute is a plain class with a __dict__, so
+# ``@abstractmethod @DynamicClassAttribute'' marks it, where over the builtin
+# the store is refused.  test_dynamicclassattribute builds such a class at
+# import, so it could not be loaded.
+import abc as _abc
+from types import DynamicClassAttribute as _DynamicClassAttribute
+
+
+class HasAbstractDynamic(metaclass=_abc.ABCMeta):
+    @_abc.abstractmethod
+    @_DynamicClassAttribute
+    def color(self):
+        return 1
+
+
+r['outer_decorator_marks_a_dynamic_class_attribute'] = repr((
+    isinstance(HasAbstractDynamic.__dict__['color'], property),
+    HasAbstractDynamic.__dict__['color'].__isabstractmethod__,
+    sorted(HasAbstractDynamic.__abstractmethods__)))
+
+
+def _outer_decorator_over_builtin_property():
+    try:
+        class HasAbstractBuiltin(metaclass=_abc.ABCMeta):
+            @_abc.abstractmethod
+            @property
+            def p(self):
+                return 1
+    except AttributeError:
+        return 'AttributeError'
+    return 'marked'
+
+
+r['outer_decorator_over_builtin_property_is_refused'] = repr(
+    _outer_decorator_over_builtin_property())
+
+
 EXPECTED = {
     'dca_is_property': repr(False),
     'property_is_dca': repr(False),
@@ -193,6 +231,8 @@ EXPECTED = {
     'decorated_pydoc_kind': repr('readonly property'),
     'decorated_inspect_kind': repr('property'),
     'enum_property_dict_entry_is_not_a_property': repr(False),
+    'outer_decorator_marks_a_dynamic_class_attribute': repr((False, True, ['color'])),
+    'outer_decorator_over_builtin_property_is_refused': repr('AttributeError'),
 }
 
 GRAIL_ONLY = {

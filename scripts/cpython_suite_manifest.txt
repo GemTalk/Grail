@@ -745,3 +745,17 @@ test.test_grammar
 #   fstring 90t 37F/4E/4S   ast.parse answers Grail's lowering (BinOp / Call)
 #                           where CPython has JoinedStr; SyntaxError messages
 test.test_fstring
+
+# --- Core language (added 2026-10-26): types.DynamicClassAttribute ---
+#
+# test_dynamicclassattribute is CPython 3.14.4's, vendored verbatim.  It
+# could not be imported: ``@abc.abstractmethod @DynamicClassAttribute'' in a
+# class body handed abstractmethod a builtin property, whose store of
+# __isabstractmethod__ is refused.  The parser reads @DynamicClassAttribute
+# and @enum.property as #property, and the descriptor an outer decorator
+# receives was always the builtin; it is now Grail's DynamicClassAttribute
+# unless the decorator WAS the builtin.  Measured on Darwin arm64:
+#
+#   dynamicclassattribute 12t 6F/1S   docstring copying, __isabstractmethod__
+#                                     evaluated lazily (CPython: at __init__)
+test.test_dynamicclassattribute
