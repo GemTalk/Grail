@@ -1355,10 +1355,13 @@ CPythonShim >> ___staticTypeObjectFor: aClass [
 CPythonShim >> ___takeCallbackError [
 	"{ Python name of the nearest shim exception type. message. the C instance
 	of a wheel's own exception it carries, or 0. the C type object of its own
-	class, or 0 } for the exception
+	class, or 0. the exception's own wrapper } for the exception
 	___guardCallback: recorded -- the shim's take_callback_error installs it as
 	C's pending error.  The exception itself is kept, should C hand the error
-	back unhandled (___noteReraiseCallbackException)."
+	back unhandled (___noteReraiseCallbackException).  Its wrapper rides in the
+	token C holds for it, so the token crosses back as this very object:
+	pydantic_core keeps a validator's exception in the error's ctx, and it came
+	back a new exception, with no __dict__ or __traceback__."
 
 	| ex base cls text fo ptr typ |
 	ex := SessionTemps current at: #'GrailShimCallbackException' otherwise: nil.
@@ -1380,7 +1383,7 @@ CPythonShim >> ___takeCallbackError [
 	decimal validator, which catches InvalidOperation to report
 	decimal_parsing, let ``Decimal('five')'''s escape instead."
 	typ := [(self typeObjectFor: ex class) memoryAddress] on: Error do: [:e | e return: 0].
-	^ { base ifNil: ['Exception']. text. ptr. typ }
+	^ { base ifNil: ['Exception']. text. ptr. typ. (self wrap: ex) memoryAddress }
 
 ]
 

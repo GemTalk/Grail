@@ -1118,6 +1118,29 @@ CPythonShimTestCase >> testBytesAsStringRefusesANonBytes [
 ]
 
 { #category : 'Grail-Tests - C API' }
+CPythonShimTestCase >> testCApiAnExceptionTakenFromACallbackIsTheOneRaised [
+	"The exception a Grail callback raised, taken by C as one object
+	(PyErr_GetRaisedException, PyO3's whole error path) and handed back, is the
+	very object raised.  It came back a NEW exception of the same type, with no
+	__dict__: pydantic_core hands a validator's ValueError back in its error's
+	ctx, and FastAPI's jsonable_encoder answers vars() of it
+	(query_params_str_validations tutorial015).  Values are CPython's; its
+	__traceback__ is not compared -- Grail's is None there, the shim's guard
+	having caught the exception before any Python handler did."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+box = []
+def f():
+    e = ValueError(''bad id''); box.append(e); raise e
+got = d.capi(''raised_by'', f)
+repr((got is box[0], vars(got), type(got).__name__, str(got)))') equals: '(True, {}, ''ValueError'', ''bad id'')'
+
+]
+
+{ #category : 'Grail-Tests - C API' }
 CPythonShimTestCase >> testCApiBuffersSequencesAndBuiltinTypes [
 	"A bytes object's buffer outlives the call that took it (kept, then read back in a later
 	call, after memory of its size has been reused): numpy's frombuffer keeps the view's pointer
