@@ -80,6 +80,11 @@ jobs:
       - name: cpython regression-gate self-test
         run: tests/scripts/test_regression_gate.sh
 
+      # The nightly runs the suite in shards and builds the board from their
+      # outputs; a plan that dropped a module would just shrink the board.
+      - name: cpython-suite shard plan + report self-test
+        run: tests/scripts/test_cpython_suite_shards.sh
+
       # The fixture gate runs tests/python's self-running fixtures under real
       # CPython, so it needs the version the fixtures were written against --
       # the runner's system python3 is 3.10 and predates ExceptionGroup.  This
