@@ -21,6 +21,7 @@ test stays a gate for everything else while the gap stays visible.
 Changes nothing: it aborts at the end, so it can be run again.
 """
 import json
+import os
 import pickle
 import sys
 
@@ -131,13 +132,22 @@ check('runs.pickle_namedtuple',
 check('runs.equal_to_new', equal_to_new)
 check('runs.mutate', mutate)
 
+_chosen = os.environ.get('GRAIL_UPGRADE_CHANGES', 'all').strip()
+CHANGES = ({'env1_removal', 'session_removal', 'classes', 'shape'}
+           if _chosen in ('', 'all') else set(_chosen.split(',')))
+
 if probe:
     for name in ('error', 'complex', 'dict', 'list', 'account'):
         check('probe.changed_method.' + name,
               lambda name=name: expect_equal(stored[name]._grail_upgrade_probe(), probe))
-    check('probe.removed_method',
-          lambda: (not hasattr(stored['error'], '_grail_upgrade_removed'),
-                   'the method m removed still answers'))
+    if 'env1_removal' in CHANGES:
+        check('probe.removed_method',
+              lambda: (not hasattr(stored['error'], '_grail_upgrade_removed'),
+                       'the method m removed still answers'))
+    if 'session_removal' in CHANGES:
+        check('probe.removed_session_method',
+              lambda: (not hasattr(stored['dict'], '_grail_upgrade_removed_session'),
+                       'the session method m removed from Object still answers'))
 
     def present(name):
         try:
@@ -145,10 +155,11 @@ if probe:
             return True
         except KeyError:
             return False
-    check('probe.removed_class', lambda: (not present('GrailUpgradeDoomed'),
-                                          'GrailUpgradeDoomed is still visible'))
-    check('probe.added_class', lambda: (present('GrailUpgradeAdded'),
-                                        'GrailUpgradeAdded is not visible'))
+    if 'classes' in CHANGES:
+        check('probe.removed_class', lambda: (not present('GrailUpgradeDoomed'),
+                                              'GrailUpgradeDoomed is still visible'))
+        check('probe.added_class', lambda: (present('GrailUpgradeAdded'),
+                                            'GrailUpgradeAdded is not visible'))
 
 gemstone.system.abort()
 print('verify phase: %d failed' % len(FAILED))

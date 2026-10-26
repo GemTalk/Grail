@@ -23,9 +23,10 @@
 #                 keep every Grail class (tests/upgrade/snapshot.gs before and after
 #                 are identical): what tells an upgrade from a reinstall.
 #   synthetic     n and m are this checkout plus tests/upgrade/make_variant.py's
-#                 edits -- a changed, a removed and an added method and class, and a
-#                 shape change -- and verify_phase.py also checks the stored objects
-#                 run m's code.
+#                 edits -- a changed, a removed and an added method and class, removed
+#                 kernel session methods, and a shape change -- and verify_phase.py
+#                 also checks the stored objects run m's code. GRAIL_UPGRADE_CHANGES
+#                 picks which kinds of change (make_variant.py; default all).
 #   release=REF   n = git REF (a previous release), m = this checkout.
 #
 # "This checkout" is the working tree, uncommitted edits included. Grail is installed
@@ -130,7 +131,7 @@ in_grail() {            # in_grail <cmd...> -- run in the installed Grail, with 
 }
 
 run_case() {            # run_case <case> -- 0 if every check passed
-    local name=$1 d=$WORK/$1 probe=()
+    local name=$1 d=$WORK/$1 probe=() probe_m=
     rm -rf "$d"
     mkdir -p "$d"
     log "=== $name"
@@ -141,7 +142,7 @@ run_case() {            # run_case <case> -- 0 if every check passed
         synthetic)  tree_from_checkout "$d/n"; tree_from_checkout "$d/m"
                     python3 "$PROJECT_ROOT/tests/upgrade/make_variant.py" "$d/n" n > /dev/null || return 1
                     python3 "$PROJECT_ROOT/tests/upgrade/make_variant.py" "$d/m" m > /dev/null || return 1
-                    probe=(--probe m) ;;
+                    probe=(--probe m); probe_m=m ;;
         release=*)  tree_from_ref "$d/n" "${name#release=}" || return 1; tree_from_checkout "$d/m" ;;
     esac
 
@@ -167,7 +168,8 @@ run_case() {            # run_case <case> -- 0 if every check passed
 
     log "verify"
     in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1
-    in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" < /dev/null > "$d/classes.log" 2>&1
+    GRAIL_UPGRADE_PROBE=$probe_m in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" \
+        < /dev/null > "$d/classes.log" 2>&1
     grep -h '^UPGRADE \|^verify phase\|^check_classes' "$d/verify.log" "$d/classes.log" > "$d/results.txt"
 
     if [ "$name" = noop ]; then
