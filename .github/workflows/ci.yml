@@ -76,9 +76,23 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
+      # Full history: check_rowan_floor.py compares the change with its base.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: cpython regression-gate self-test
         run: tests/scripts/test_regression_gate.sh
+
+      # A Grail release is installed over an existing one, and the Rowan in a
+      # user's database cannot apply every kind of removal on that upgrade --
+      # rowan/needs-newer-rowan.txt lists the ones it cannot, and
+      # tests/scripts/run_rowan_dependency_matrix.sh measures them.  So a change
+      # that makes one is refused here, before it can strand an install.
+      - name: check_rowan_floor self-test
+        run: tests/scripts/test_rowan_floor_check.sh
+      - name: no removal the installed Rowan cannot apply
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        run: python3 scripts/check_rowan_floor.py "${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}"
 
       # The nightly runs the suite in shards and builds the board from their
       # outputs; a plan that dropped a module would just shrink the board.

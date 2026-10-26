@@ -9261,8 +9261,18 @@ FunctionDefAst >> printSmalltalkOn: aStream [
 		its chain reads the base through the slot, so the real
 		``@pass_context def sync_do_map'' after two @overload stubs wrapped the
 		previous stub's _overload_dummy instead of its own method (jinja2's
-		|map filter)."
-		self ___rebindsAnEarlierModuleBinding___ ifTrue: [
+		|map filter).
+
+		A DECORATED def clears it whatever stored it, because the PREVIOUS body
+		can have: a module rebuilt into its committed instance (a source edit or
+		an install: docs/Persistent_Modules_and_Classes.md D2, D7) still holds
+		that body's decorated value there, and the chain then wrapped the old
+		wrapper, whose closure held the previous body's function and globals --
+		typing's ``@_tp_cache'' looked its function up in a ``_caches'' the new
+		body had replaced, and every generic subscript raised KeyError.  An
+		undecorated def keeps the narrower rule: clearing for every one was
+		tried and reverted (___rebindsAnEarlierModuleBinding___)."
+		(self applicableModuleDecorators notEmpty or: [self ___rebindsAnEarlierModuleBinding___]) ifTrue: [
 			aStream
 				lf;
 				nextPutAll: 'self @env0:removeDynamicInstVar: #''';
