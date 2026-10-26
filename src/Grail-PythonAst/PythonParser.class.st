@@ -2611,9 +2611,11 @@ PythonParser >> atMatchStatement [
 	next := position + 1 <= tokens size ifTrue: [tokens at: position + 1] ifFalse: [nil].
 	next ifNil: [^false].
 	"An operator that cannot begin an expression means ``match'' is being
-	used as a plain name.  '-', '~', '*', '(' and '[' CAN begin one."
+	used as a plain name.  '-', '+', '~', '*', '(', '[', '{' and the Ellipsis
+	'...' CAN begin one -- ``match ...:'' is a statement (test_patma), which
+	read as an expression statement and was invalid syntax."
 	(next type == #OP and: [
-		(#('-' '~' '*' '(' '[' '{') includes: next value) not]) ifTrue: [^false].
+		(#('-' '+' '~' '*' '(' '[' '{' '...') includes: next value) not]) ifTrue: [^false].
 	next isEndMarker ifTrue: [^false].
 	next type == #NEWLINE ifTrue: [^false].
 	"Scan the logical line: the colon that opens the block is the LAST
@@ -5435,23 +5437,46 @@ PythonParser >> parseMatchStar [
 
 { #category : 'Grail-parsing - match' }
 PythonParser >> parseMatchSubject [
-	"The subject expression.  A bare comma makes it a TUPLE, without
-	parentheses: ``match x, y:'' matches the pair."
+	"The subject expression, CPython's ``subject_expr'' (Grammar/python.gram):
+
+	    subject_expr: star_named_expression ',' star_named_expressions?
+	                | named_expression
+
+	A bare comma makes it a TUPLE, without parentheses: ``match x, y:''
+	matches the pair.  Every element is a NAMED expression -- a walrus is
+	allowed, ``match w := x,:'' -- and a tuple's elements may be starred.
+	Each element was read as a plain expression, so a walrus anywhere in
+	the subject was ``invalid syntax'' and test_patma could not compile at
+	all.  A starred subject that is not part of a tuple (``match *x:'') is
+	CPython's ``invalid syntax''."
 
 	| first elts startTok |
 	startTok := self peek.
-	first := self parseExpression.
-	(self atOp: ',') ifFalse: [^first].
+	first := self parseMatchSubjectElement.
+	(self atOp: ',') ifFalse: [
+		(first isKindOf: StarredAst) ifTrue: [
+			^ self ___syntaxError___: 'invalid syntax' at: startTok].
+		^ first].
 	elts := Array with: first.
 	[self matchOp: ','] whileTrue: [
 		(self atOp: ':') ifTrue: [^TupleAst new
 			elts: elts; ctx: self loadCtx;
 			from: startTok to: self lastToken ; yourself].
-		elts := elts copyWith: self parseExpression].
+		elts := elts copyWith: self parseMatchSubjectElement].
 	^TupleAst new
 		elts: elts;
 		ctx: self loadCtx;
 		from: startTok to: self lastToken ; yourself
+
+]
+
+{ #category : 'Grail-parsing - match' }
+PythonParser >> parseMatchSubjectElement [
+
+	"One element of a match subject: CPython's star_named_expression -- a
+	walrus, or a starred expression."
+
+	^ self ___withWalrus___: true do: [self parseStarExpression]
 
 ]
 
