@@ -792,4 +792,7 @@ test.test_types
 #   cmath 33t 3F/3E/1S   the functions that were ALREADY native and are not
 #                        ported yet: tanh's zero signs, log's base argument,
 #                        polar's infinities, specific values
+#
+# They are now (cmath >> ___ported___:with: forwards every function), and with
+# abs(-0.0) fixed underneath, test_cmath measures 33t OK/1S.
 test.test_cmath

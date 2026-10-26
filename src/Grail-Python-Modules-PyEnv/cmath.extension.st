@@ -10,6 +10,19 @@ cmath >> ___asComplex: z [
 
 ]
 
+{ #category : 'Grail-Private' }
+cmath >> ___ported___: aName with: anArray [
+	"_grail_cmath's aName applied to anArray.  Every function of this module is
+	CPython's Modules/cmathmodule.c ported to Python there, special-value
+	tables included; the methods that computed by textbook formulas (sqrt
+	through polar form, tan as sin/cos) lost the signs of zeros and the C99
+	special values, and overflowed and raised where CPython does not."
+
+	^ ((importlib ___runtimeModule___: '_grail_cmath') ___pyAttrLoad___: aName)
+		___pyCallValue___: anArray kw: nil
+
+]
+
 { #category : 'Grail-Inverse Functions' }
 cmath >> __getattr__: aName [
 	"PEP 562, for the functions this class does not implement: the inverse
@@ -32,25 +45,17 @@ cmath >> __getattr__: aName [
 
 { #category : 'Grail-Trigonometric Functions' }
 cmath >> cos: z [
-	"cmath.cos(z) — cos(a+bi) = cos(a)*cosh(b) - i*sin(a)*sinh(b)"
+	"cmathmodule.c's cos; see ___ported___:with:."
 
-	| zComplex real imag |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	^ complex __new__: ((real @env0:cos) @env0:* (imag @env0:cosh)) _: (((real @env0:sin) @env0:* (imag @env0:sinh)) @env0:negated)
+	^ self ___ported___: #cos with: { z }
 
 ]
 
 { #category : 'Grail-Hyperbolic Functions' }
 cmath >> cosh: z [
-	"cmath.cosh(z) — cosh(a+bi) = cosh(a)*cos(b) + i*sinh(a)*sin(b)"
+	"cmathmodule.c's cosh; see ___ported___:with:."
 
-	| zComplex real imag |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	^ complex __new__: ((real @env0:cosh) @env0:* (imag @env0:cos)) _: ((real @env0:sinh) @env0:* (imag @env0:sin))
+	^ self ___ported___: #cosh with: { z }
 
 ]
 
@@ -62,14 +67,9 @@ cmath >> e [
 
 { #category : 'Grail-Exponential and Logarithmic' }
 cmath >> exp: z [
-	"cmath.exp(z) — exp(a+bi) = exp(a) * (cos(b) + i*sin(b))"
+	"cmathmodule.c's exp; see ___ported___:with:."
 
-	| zComplex real imag expReal |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	expReal := real @env0:exp.
-	^ complex __new__: (expReal @env0:* (imag @env0:cos)) _: (expReal @env0:* (imag @env0:sin))
+	^ self ___ported___: #exp with: { z }
 
 ]
 
@@ -99,67 +99,49 @@ cmath >> initialize [
 
 { #category : 'Grail-Classification' }
 cmath >> isfinite: z [
-	"cmath.isfinite(z) — True if both real and imag parts are finite"
+	"cmathmodule.c's isfinite; see ___ported___:with:."
 
-	| zComplex real imag realKind imagKind |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	realKind := real @env0:_getKind.
-	imagKind := imag @env0:_getKind.
-	^ ((realKind @env0:<= 2) or: [realKind == 4])
-		and: [(imagKind @env0:<= 2) or: [imagKind == 4]]
+	^ self ___ported___: #isfinite with: { z }
 
 ]
 
 { #category : 'Grail-Classification' }
 cmath >> isinf: z [
-	"cmath.isinf(z) — True if either part is infinity"
+	"cmathmodule.c's isinf; see ___ported___:with:."
 
-	| zComplex real imag realKind imagKind |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	realKind := real @env0:_getKind.
-	imagKind := imag @env0:_getKind.
-	^ (realKind == 3) or: [imagKind == 3]
+	^ self ___ported___: #isinf with: { z }
 
 ]
 
 { #category : 'Grail-Classification' }
 cmath >> isnan: z [
-	"cmath.isnan(z) — True if either part is NaN"
+	"cmathmodule.c's isnan; see ___ported___:with:."
 
-	| zComplex real imag |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	^ (real @env0:_isNaN) or: [imag @env0:_isNaN]
+	^ self ___ported___: #isnan with: { z }
 
 ]
 
 { #category : 'Grail-Exponential and Logarithmic' }
 cmath >> log: z [
-	"cmath.log(z) — log(|z|) + i*arg(z)"
+	"cmathmodule.c's log; see ___ported___:with:."
 
-	| zComplex real imag r theta |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	r := (((real @env0:* real) @env0:+ (imag @env0:* imag)) @env0:sqrt).
-	theta := imag @env0:arcTan2: real.
-	^ complex __new__: (r @env0:ln) _: theta
+	^ self ___ported___: #log with: { z }
+
+]
+
+{ #category : 'Grail-Exponential and Logarithmic' }
+cmath >> log: z _: base [
+	"cmathmodule.c's log(z, base); see ___ported___:with:."
+
+	^ self ___ported___: #log with: { z. base }
 
 ]
 
 { #category : 'Grail-Exponential and Logarithmic' }
 cmath >> log10: z [
-	"cmath.log10(z) — log(z) / log(10)"
+	"cmathmodule.c's log10; see ___ported___:with:."
 
-	| logZ ln10 |
-	logZ := self log: z.
-	ln10 := 10.0 @env0:ln.
-	^ logZ __truediv__: (complex __new__: ln10 _: 0.0)
+	^ self ___ported___: #log10 with: { z }
 
 ]
 
@@ -177,13 +159,9 @@ cmath >> nanj [
 
 { #category : 'Grail-Polar Coordinates' }
 cmath >> phase: z [
-	"cmath.phase(z) — return the phase (argument) of z in radians"
+	"cmathmodule.c's phase; see ___ported___:with:."
 
-	| zComplex real imag |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	^ imag @env0:arcTan2: real
+	^ self ___ported___: #phase with: { z }
 
 ]
 
@@ -195,82 +173,57 @@ cmath >> pi [
 
 { #category : 'Grail-Polar Coordinates' }
 cmath >> polar: z [
-	"cmath.polar(z) — return (r, theta) as a tuple"
+	"cmathmodule.c's polar; see ___ported___:with:."
 
-	| zComplex real imag r theta |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	r := (((real @env0:* real) @env0:+ (imag @env0:* imag)) @env0:sqrt).
-	theta := imag @env0:arcTan2: real.
-	^ tuple @env0:withAll: (tuple @env0:with: r with: theta)
+	^ self ___ported___: #polar with: { z }
 
 ]
 
 { #category : 'Grail-Polar Coordinates' }
 cmath >> rect: r _: theta [
-	"cmath.rect(r, theta) — convert polar to rectangular"
+	"cmathmodule.c's rect; see ___ported___:with:."
 
-	| rFloat thetaFloat |
-	rFloat := r @env0:asFloat.
-	thetaFloat := theta @env0:asFloat.
-	^ complex __new__: (rFloat @env0:* (thetaFloat @env0:cos)) _: (rFloat @env0:* (thetaFloat @env0:sin))
+	^ self ___ported___: #rect with: { r. theta }
 
 ]
 
 { #category : 'Grail-Trigonometric Functions' }
 cmath >> sin: z [
-	"cmath.sin(z) — sin(a+bi) = sin(a)*cosh(b) + i*cos(a)*sinh(b)"
+	"cmathmodule.c's sin; see ___ported___:with:."
 
-	| zComplex real imag |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	^ complex __new__: ((real @env0:sin) @env0:* (imag @env0:cosh)) _: ((real @env0:cos) @env0:* (imag @env0:sinh))
+	^ self ___ported___: #sin with: { z }
 
 ]
 
 { #category : 'Grail-Hyperbolic Functions' }
 cmath >> sinh: z [
-	"cmath.sinh(z) — sinh(a+bi) = sinh(a)*cos(b) + i*cosh(a)*sin(b)"
+	"cmathmodule.c's sinh; see ___ported___:with:."
 
-	| zComplex real imag |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	^ complex __new__: ((real @env0:sinh) @env0:* (imag @env0:cos)) _: ((real @env0:cosh) @env0:* (imag @env0:sin))
+	^ self ___ported___: #sinh with: { z }
 
 ]
 
 { #category : 'Grail-Exponential and Logarithmic' }
 cmath >> sqrt: z [
-	"cmath.sqrt(z) — sqrt(r) * (cos(theta/2) + i*sin(theta/2))"
+	"cmathmodule.c's sqrt; see ___ported___:with:."
 
-	| zComplex real imag r theta sqrtR halfTheta |
-	zComplex := self ___asComplex: z.
-	real := zComplex real.
-	imag := zComplex imag.
-	r := (((real @env0:* real) @env0:+ (imag @env0:* imag)) @env0:sqrt).
-	theta := imag @env0:arcTan2: real.
-	sqrtR := r @env0:sqrt.
-	halfTheta := theta @env0:/ 2.0.
-	^ complex __new__: (sqrtR @env0:* (halfTheta @env0:cos)) _: (sqrtR @env0:* (halfTheta @env0:sin))
+	^ self ___ported___: #sqrt with: { z }
 
 ]
 
 { #category : 'Grail-Trigonometric Functions' }
 cmath >> tan: z [
-	"cmath.tan(z) — sin(z) / cos(z)"
+	"cmathmodule.c's tan; see ___ported___:with:."
 
-	^ (self sin: z) __truediv__: (self cos: z)
+	^ self ___ported___: #tan with: { z }
 
 ]
 
 { #category : 'Grail-Hyperbolic Functions' }
 cmath >> tanh: z [
-	"cmath.tanh(z) — sinh(z) / cosh(z)"
+	"cmathmodule.c's tanh; see ___ported___:with:."
 
-	^ (self sinh: z) __truediv__: (self cosh: z)
+	^ self ___ported___: #tanh with: { z }
 
 ]
 
