@@ -967,6 +967,10 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 	existing := reg at: key otherwise: nil.
 	built := self ___builtThisLoad___: aModuleName.
 	claimed := (built at: 1) includes: key.
+	"No key yet, but a previous build of this module may still hold the class:
+	a module deployed by a Grail before #1802, which recorded none."
+	(existing isNil and: [claimed not]) ifTrue: [
+		existing := self ___previousBuiltClass___: aName module: aModuleName parent: aParent].
 	rebuilding := SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil.
 	reuse := (existing isKindOf: Behavior)
 		and: [claimed not
@@ -7137,6 +7141,42 @@ importlib class >> ___popInitializingModule___ [
 	| stack |
 	stack := self ___initializingModuleStack___.
 	stack @env0:isEmpty ifFalse: [stack @env0:removeLast]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___previousBuiltClass___: aName module: aModuleName parent: aParent [
+	"The class a PREVIOUS build of aModuleName made by a call named aName, found
+	without a key: for a module committed by a Grail that recorded none
+	(before #1802), so the first upgrade from it keeps the class too, as every
+	later one does through the key (___builtSubclassOf:...).
+
+	A rebuild runs the body over the committed instance's old globals, so at the
+	claim the global aName still names the previous build's class -- ``Pair =
+	namedtuple('Pair', ...)'', ``Built = type('Built', ...)'', and the namedtuple
+	``class TP(typing.NamedTuple)'' is bound to.  For ``class Span(namedtuple(
+	'Span', ...))'' the global is the subclass, and the namedtuple its
+	superclass.  A candidate must be COMMITTED (never something this run made),
+	be named aName, have aParent as its superclass, and not be a class
+	statement's own class -- in the canonical class set -- unless a metaclass
+	built it.  Anything else answers nil, and the class is minted."
+
+	| inst g |
+	inst := self ___canonicalModules___ at: aModuleName asString otherwise: nil.
+	(inst isNil or: [inst isCommitted not]) ifTrue: [^ nil].
+	g := [inst @env1:___pyAttrLoad___: aName asString asSymbol]
+		on: AbstractException do: [:ex | ex return: nil].
+	(g isKindOf: Behavior) ifFalse: [^ nil].
+	{ g. g superclass } do: [:c |
+		((c isKindOf: Behavior)
+			and: [c isCommitted
+			and: [c superclass == aParent
+			and: [([(c @env1:___pyAttrLoad___: #'__name__') asString = aName asString]
+					on: AbstractException do: [:ex | ex return: false])
+			and: [((self ___canonicalClassKnown___: c) not
+				or: [self ___isMetaclassBuilt___: c])]]]])
+					ifTrue: [^ c]].
+	^ nil
 
 ]
 
