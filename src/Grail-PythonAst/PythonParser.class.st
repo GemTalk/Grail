@@ -1866,15 +1866,18 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	__qualname__ (CallAst class >> ___isTypeParamScope___:), as CPython's
 	annotation scope is.
 
-	NOT DONE directly in a CLASS BODY (classNesting > 0), where the scope
-	function would be a method called during the body.  There the old path
-	stands: a class keeps its parameter NAMES, and a parameterised alias is
-	refused.  Answers whether it rewrote anything; when it did, the tokens at
+	A CLASS directly in a class body (classNesting > 0) is NOT rewritten: it
+	keeps its parameter NAMES only.  An ALIAS there is -- its scope function
+	is a def the class body calls, and its lazy value reads the class's own
+	parameters, which a class-body def sees through the class's closure cells
+	(stored before the body runs; see ClassDefAst >>
+	___emitClosureCellStoresOn:className:saved:savedWrite:).  That is
+	test_type_aliases' ``class Parent[A]: type TA1[B] = dict[A, B]''.
+	Answers whether it rewrote anything; when it did, the tokens at
 	``position'' now start the scope function's ``def''."
 
 	| i decoRanges kwTok nameTok isClass lb rb params w ref out names c indent
 	  bodyStart bodyEnd end name segs valueEnd |
-	classNesting > 0 ifTrue: [^ false].
 	i := position.
 	decoRanges := OrderedCollection new.
 	[i <= tokens size and: [(tokens at: i) isOp: '@']] whileTrue: [
@@ -1888,6 +1891,7 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	isClass := kwTok isKeyword: 'class'.
 	(isClass or: [decoRanges isEmpty and: [kwTok isName and: [kwTok value = 'type']]])
 		ifFalse: [^ false].
+	(isClass and: [classNesting > 0]) ifTrue: [^ false].
 	nameTok := tokens at: i + 1.
 	(nameTok isName and: [(tokens at: i + 2) isOp: '[']) ifFalse: [^ false].
 	lb := i + 2.
