@@ -204,6 +204,15 @@ def length_hint(obj, default=0):
 
 def concat(a, b):
     "Same as a + b, for a and b sequences."
+    # CPython's PySequence_Concat tries a's own sq_concat first, before +.
+    # A wheel's object answers it in C (numpy's raises: an array's + adds
+    # elementwise), and list's and tuple's take only their own type, where +
+    # would let the other operand's __radd__ answer (below).
+    sq_concat = getattr(a, '___sq_concat___', None)
+    if sq_concat is not None:
+        r = sq_concat(b)
+        if r is not None:
+            return r
     # CPython's concat requires a sequence; numbers raise TypeError.  Grail's
     # ``hasattr(int_instance, '__getitem__')`` returns True (a default dunder
     # on Object), so an explicit numeric guard is layered on top.  The
@@ -214,6 +223,10 @@ def concat(a, b):
         name = {int: 'int', float: 'float', complex: 'complex', bool: 'bool'
                 }.get(type(a), type(a).__name__)
         raise TypeError("'%s' object can't be concatenated" % name)
+    for seq in (list, tuple):
+        if isinstance(a, seq) and not isinstance(b, seq):
+            raise TypeError('can only concatenate %s (not "%s") to %s'
+                            % (seq.__name__, type(b).__name__, seq.__name__))
     return a + b
 
 

@@ -398,6 +398,23 @@ f'.
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAKeywordListReachesACMethodInCPythonsLayout [
+	"A keyword argument to a C method of a wheel's object reaches C in CPython's
+layout when it is a list or tuple.  The shim's builtin-method call took the
+keyword values out of a Grail dict as Grail objects, and C read the list's
+wrapper as items: numpy's ndarray.view(dtype=[...]) segfaulted.  Values are
+CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.Buf()
+repr([b.inline(seq=s) for s in ([(''a'', ''i4''), (''b'', ''f4'', (2,))], [1, 2, 3], (4, 5), [])] + [b.inline()])') equals: '[[2, 3], [1, 2, 3], [4, 5], [], None]'
+
+]
+
 { #category : 'Grail-Tests - NumPy Dispatch' }
 CPythonShimTestCase >> testALikeDispatcherAndADispatcherErrorGoThroughC [
 	"A like= dispatcher (no relevant_arg_func) is left to C, and so is a call its dispatcher
@@ -616,6 +633,27 @@ CPythonShimTestCase >> testAnImportedModuleKeepsAReferenceInTheImportCache [
 		with: 'json' with: 5) >= 1.
 	self assert: (shim callModule: '_shimtest' method: 'test_import_refcount'
 		with: 'json' with: 5) >= 1
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testAnIntTooBigForCIsAnOverflowError [
+	"PyLong_AsLong and PyLong_AsSsize_t raise OverflowError for an int that
+	does not fit in 64 bits, as CPython's do.  The failed conversion was left
+	as a GCI error that no except clause could catch, so numpy's
+	np.copyto(np.arange(3), 2**80) ended the pytest session.  Values are
+	CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a):
+    try:
+        return f(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([t(d.capi, k, v) for k in (''as_long'', ''as_ssize_t'') for v in (5, -(2**62), 2**63 - 1, 2**63, -(2**80), 2**80)])') equals: '[5, -4611686018427387904, 9223372036854775807, (''raised'', ''OverflowError'', ''Python int too large to convert to C long''), (''raised'', ''OverflowError'', ''Python int too large to convert to C long''), (''raised'', ''OverflowError'', ''Python int too large to convert to C long''), 5, -4611686018427387904, 9223372036854775807, (''raised'', ''OverflowError'', ''Python int too large to convert to C ssize_t''), (''raised'', ''OverflowError'', ''Python int too large to convert to C ssize_t''), (''raised'', ''OverflowError'', ''Python int too large to convert to C ssize_t'')]'
 
 ]
 
@@ -859,6 +897,41 @@ def t(f, *a, **k):
         return (''raised'', type(e).__name__, str(e))
 x = d.Text(''h\u00e9llo'')
 ascii((str(x), repr(x), x.upper(), str.upper(x), t(str.split, d.Text(''a b'')), isinstance(x, str), type(x).__name__, t(d.capi, ''str_read'', x), t(d.capi, ''str_slots'', d.Text(''ab'')), t(d.capi, ''str_slots'', ''ab''), len(x), x + ''!'', ''>'' + x, x * 2, x == ''h\u00e9llo'', hash(x) == hash(''h\u00e9llo''), ''ll'' in x, x[1], list(d.Text(''ab'')), bool(d.Text('''')), bool(x)))') equals: '(''h\xe9llo'', "Text(''h\xe9llo'')", ''H\xc9LLO'', ''H\xc9LLO'', [''a'', ''b''], True, ''Text'', (5, ''h\xe9llo''), (''ab'', "''ab''"), (''ab'', "''ab''"), 5, ''h\xe9llo!'', ''>h\xe9llo'', ''h\xe9lloh\xe9llo'', True, True, True, ''\xe9'', [''a'', ''b''], False, True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testATupleReadFromADictHasCPythonsLayout [
+	"A tuple Python stored in a dict reaches C in CPython's layout, so C can read
+it with PyTuple_GET_SIZE and PyTuple_GET_ITEM, and two lookups answer the
+same object.  The size field of the Grail wrapper is its OOP: numpy's
+as_strided, which rebuilds an array from an __array_interface__ dict with
+new ""shape"" and ""strides"" tuples, failed with ""number of dimensions must be
+within [0, 64], got 1385564417"".  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+s = (2, 3)
+repr([d.capi(''dict_tuple_inline'', {''k'': v}) for v in (s, tuple([4]), (), (''a'', (1, 2)), [1, 2])])') equals: '[(2, [2, 3], True), (1, [4], True), (0, [], True), (2, [''a'', (1, 2)], True), None]'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testATupleSliceHasCPythonsLayout [
+	"PyTuple_GetSlice answers a tuple in CPython's layout, with CPython's bounds
+clamping, so C can read it with PyTuple_GET_SIZE and PyTuple_GET_ITEM.  It
+answered a Grail tuple, whose size field is its OOP: numpy's dtype parser
+slices ('x', 'i4', (2,)) to ('i4', (2,)), so every structured dtype with a
+subarray field raised ""Tuple must have size 2, but has size 756128001"".
+Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr([d.capi(''tuple_slice_inline'', t) for t in ((''x'', ''i4'', (2,)), (), (1,), tuple(range(6)))])') equals: '[[(2, [''i4'', (2,)]), (3, [''x'', ''i4'', (2,)]), (2, [''x'', ''i4'']), (0, [])], [(0, []), (0, []), (0, []), (0, [])], [(0, []), (1, [1]), (1, [1]), (0, [])], [(2, [1, 2]), (6, [0, 1, 2, 3, 4, 5]), (2, [0, 1]), (0, [])]]'
 
 ]
 
@@ -1790,6 +1863,23 @@ class A: pass
 a = A()
 r = weakref.ref(a)
 repr((C(''call_no_args'', r) is a, t(''call_no_args'', 5)))') equals: '(True, (''TypeError'', "''int'' object is not callable"))'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testCMakesMoreTuplesThanTheRegistryOnceHeld [
+	"C can build any number of tuples and fill each one.  The shim records
+	the tuples C makes in CPython's layout, and its record was a fixed set
+	that stopped taking entries at 131072.  numpy makes dozens per ufunc
+	call, so about 2000 calls of assert_array_equal in, a new tuple went
+	unrecorded, PyTuple_SetItem took it for a Grail object, and the error
+	that followed failed inside its own handlers until the stack ran out."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.capi(''many_tuples'', 300000))') equals: '(None,)'
 
 ]
 
@@ -3405,6 +3495,26 @@ CPythonShimTestCase >> testKwargsVarargsDict [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testLenAndBoolOfACBytesSubclassReadItsLength [
+	"len() and bool() of a C subclass of bytes read its length, as numpy.bytes_
+needs.  The type has no length slot of its own and the search stopped at
+the shim's bytes, so len() raised TypeError and an empty one was true:
+np.array([b''], 'S3').astype(bool) answered True.  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def t(f, *a):
+    try:
+        return f(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+repr([(t(len, o), t(bool, o)) for o in (d.capi(''bytesub_obj'', b''''), d.capi(''bytesub_obj'', b''\x00''), d.capi(''bytesub_obj'', b''ab''))])') equals: '[(0, False), (1, True), (2, True)]'
+
+]
+
 { #category : 'Grail-Tests - Object Protocol' }
 CPythonShimTestCase >> testLengthList [
 	"test_length on a list returns its size."
@@ -3929,6 +4039,32 @@ CPythonShimTestCase >> testObTypeTuple [
 		callModule: '_shimtest' method: 'test_ob_type'
 		with: #(1 2 3).
 	self assert: result equals: 'tuple'.
+
+]
+
+{ #category : 'Grail-Tests - NumPy Test Suite' }
+CPythonShimTestCase >> testOperatorConcatUsesTheSequenceConcatSlot [
+	"operator.concat tries the first operand's own sq_concat before +, as
+CPython's PySequence_Concat does, and a list or tuple takes only its own
+type.  It was a + b, so numpy's operator.concat(array, array) added the
+arrays elementwise where numpy's sq_concat raises TypeError, and
+operator.concat(list, array) let the array's __radd__ answer.  Values are
+CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d, operator
+def t(f, *a):
+    try:
+        return f(*a)
+    except Exception as e:
+        return (''raised'', type(e).__name__, str(e))
+def tt(f, *a):
+    r = t(f, *a)
+    return r[:2] if isinstance(r, tuple) and r[:1] == (''raised'',) else r
+b = d.Buf()
+repr([t(operator.concat, *p) for p in ((b, 5), (b, [1]), (d.Text(''ab''), ''c''), ([1], [2]), ([1], (2,)), ((1,), [2]), ((1,), (2,)), (''a'', ''b''), (5, b))] + [tt(operator.concat, [1], b), tt(operator.concat, (1,), b), t(lambda: ([1] + b)[:2])])') equals: '[(''buf_concat'', 5), (''buf_concat'', [1]), ''abc'', [1, 2], (''raised'', ''TypeError'', ''can only concatenate list (not "tuple") to list''), (''raised'', ''TypeError'', ''can only concatenate tuple (not "list") to tuple''), (1, 2), ''ab'', (''raised'', ''TypeError'', "''int'' object can''t be concatenated"), (''raised'', ''TypeError''), (''raised'', ''TypeError''), (''buf_add'', [1])]'
 
 ]
 

@@ -1292,6 +1292,55 @@ Still open:
   looks the method up in env 0. So these fixes rewrite or seed rather than
   delete. CI's fresh installs are unaffected.
 
+## Stage 12 (2026-10-26): five of the six core modules agree
+
+The "stack exhaustion" in Stage 11 was not a leak of frames. The shim
+records every tuple and list C builds in CPython's layout in a fixed set, and
+the set stopped taking entries at 131072. numpy makes dozens per ufunc call,
+so after about 2000 calls of `assert_array_equal` a new tuple went
+unrecorded. `PyTuple_SetItem` then took it for a Grail object, and the error
+that followed failed inside its own handlers until the stack ran out.
+
+| gap | effect |
+|---|---|
+| The set of real-layout objects was fixed at 262144 slots and stopped recording at half full. It now doubles. | `test_api` ended its session in `test_copyto_permute`. |
+| An int too big for 64 bits, given to `PyLong_AsLong` or `PyLong_AsSsize_t`, left a GCI error no `except` could catch. It is now `OverflowError`, with CPython's message. | `np.copyto(np.arange(3), 2**80)` ended the pytest session. |
+| A wheel's subclass of `bytes` or `str` had no length: the slot search stopped at the shim's base type. | `len(np.bytes_(b''))` raised, and an empty one was true, so `astype(bool)` of a bytes array answered True for `b''`. |
+| A tuple Python stored in a dict reached C as a Grail wrapper, whose size field is its OOP. | `as_strided` with a new shape: "number of dimensions must be within [0, 64], got 1385564417". |
+| `PyTuple_GetSlice` answered a Grail tuple. | Every structured dtype with a subarray field: "Tuple must have size 2, but has size 756128001". |
+| Keyword arguments to a C method came out of a Grail dict as Grail objects. | `ndarray.view(dtype=[...])` segfaulted. |
+| `operator.concat` was `a + b`. CPython's tries the first operand's own `sq_concat` first, and a list or tuple takes only its own type. | `operator.concat` of two arrays added them. |
+
+| module | CPython | Grail |
+|---|---|---|
+| `test_errstate` | 8 passed | 8 passed |
+| `test_indexerrors` | 8 passed | 8 passed |
+| `test_abc` | 5 passed | 5 passed |
+| `test_shape_base` | 213 passed | 213 passed |
+| `test_api` | 59 passed | 58 passed, 1 failed (`memoryview`, below) |
+| `test_numerictypes` | 138 passed | 138 passed |
+
+Still open:
+* **Nothing the shim allocates is ever freed.** `_Py_Dealloc` is a no-op, so
+  a real-layout container never releases its items, their wrappers' refcounts
+  never fall, and the wrapper sweep never drops them. Measured: about 7 KB of
+  temporary object memory stays live per `assert_array_equal` call, after a
+  full mark-sweep. Wrappers, foreign proxies (`GrailForeignProxies` keeps
+  every C object that ever crossed) and the Grail copies of C tuples
+  (`GrailRealTupleOrigins`) all accumulate. With the pytest run's own
+  retention, `test_api -v` filled 300 MB of old space. Holding the proxy and
+  tuple maps weakly was tried. It cut growth by about 40% and left the
+  wrapper map, which is the bulk, so it was not kept. The fix is a lifetime
+  design for the shim, not another weak map.
+* `np.array(memoryview(b'1.0'))` builds an `int64` array where CPython builds
+  `uint8`. numpy reads a memoryview's `Py_buffer` inline
+  (`PyMemoryView_GET_BUFFER`), the shim's `PyMemoryView_FromObject` answers a
+  Grail memoryview, and `PyObject_CheckBuffer` does not recognize one.
+* An ndarray or dtype instance answers `__name__` with its type's name; in
+  CPython it is an AttributeError. pytest names parameters by `__name__`, so
+  ids differ from CPython's.
+* hypothesis still needs a real `tokenize`.
+
 ## Repro
 
 ```

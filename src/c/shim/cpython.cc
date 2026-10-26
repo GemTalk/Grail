@@ -255,7 +255,7 @@ static inline PyObject *addr_to_pyobj(OopType addrOop) {
     return (PyObject *)(intptr_t)GciOopToI64(addrOop);
 }
 
-static int64 oopToLongWithIndex(OopType oop);  /* forward decl */
+static int64 oopToLongWithIndex(OopType oop, const char *ctype = "long");  /* forward decl */
 
 /* ====================================================================
  * Server — the CPythonShim instance, set by shimInit
@@ -1850,7 +1850,7 @@ extern "C" PyObject *PyLong_FromLong(long v) {
  * wrapper class — they continue to call PyLong_AsLong /
  * PyLong_AsSsize_t / PyLong_AsUnsignedLong as if the OOP were
  * always a plain SmallInteger. */
-static int64 oopToLongWithIndex(OopType oop) {
+static int64 oopToLongWithIndex(OopType oop, const char *ctype) {
     if (GCI_OOP_IS_SMALL_INT(oop)) {
         return GciOopToI64(oop);
     }
@@ -1883,7 +1883,15 @@ static int64 oopToLongWithIndex(OopType oop) {
         PyErr_SetString(PyExc_TypeError, "object cannot be interpreted as an integer");
         return -1;
     }
-    return GciOopToI64(indexed);
+    if (GCI_OOP_IS_SMALL_INT(indexed)) return GciOopToI64(indexed);
+    /* An int too big for 64 bits is CPython's OverflowError.  The failed
+       conversion was left as a GCI error, which no except clause could catch:
+       np.copyto(np.arange(3), 2**80) ended the pytest session. */
+    GciErrSType e;
+    int64 v = GciOopToI64(indexed);
+    if (!GciErr(&e)) return v;
+    PyErr_Format(PyExc_OverflowError, "Python int too large to convert to C %s", ctype);
+    return -1;
 }
 
 /* Convert a foreign object (a wheel's own C object, e.g. a numpy.int64 /
@@ -1918,7 +1926,7 @@ static inline OopType int_conv_oop(PyObject *obj) {
 
 extern "C" Py_ssize_t PyLong_AsSsize_t(PyObject *obj) {
     if (obj == NULL) return 0;
-    return (Py_ssize_t)oopToLongWithIndex(int_conv_oop(obj));
+    return (Py_ssize_t)oopToLongWithIndex(int_conv_oop(obj), "ssize_t");
 }
 
 extern "C" long PyLong_AsLong(PyObject *obj) {
@@ -2382,33 +2390,54 @@ typedef struct {
     Py_ssize_t    allocated;
 } ShimListObject;
 
-/* Registry of real-layout object pointers: fixed open-addressing set,
-   entries never removed (bounded by a module load's allocations). */
-#define REAL_REG_CAP 262144            /* power of two */
-static PyObject *g_real_reg[REAL_REG_CAP];
-static int       g_real_reg_count = 0;
+/* Registry of real-layout object pointers: an open-addressing set, entries
+   never removed (_Py_Dealloc frees nothing, so no address is reused).  It
+   doubles at half full.  It used to be fixed and stop recording at half
+   full: numpy makes dozens of real tuples per ufunc call, and after a few
+   thousand calls a new tuple went unrecorded, read as a Grail object, and
+   PyTuple_SetItem sent at:put: to a foreign pointer. */
+static PyObject **g_real_reg = NULL;
+static size_t     g_real_reg_cap = 0;   /* power of two */
+static size_t     g_real_reg_count = 0;
 
-static inline size_t real_reg_slot(PyObject *p) {
+static inline size_t real_reg_slot(PyObject *p, size_t cap) {
     uintptr_t x = (uintptr_t)p;
     x = (x >> 4) ^ (x >> 21) ^ (x >> 38);
-    return (size_t)(x & (REAL_REG_CAP - 1));
+    return (size_t)(x & (cap - 1));
+}
+static void real_reg_insert(PyObject **table, size_t cap, PyObject *p) {
+    size_t i = real_reg_slot(p, cap);
+    while (table[i] != NULL) i = (i + 1) & (cap - 1);
+    table[i] = p;
 }
 static void real_reg_add(PyObject *p) {
-    if (g_real_reg_count >= REAL_REG_CAP / 2) return;   /* keep load factor < 0.5 */
-    size_t i = real_reg_slot(p);
+    if (g_real_reg_count + 1 > g_real_reg_cap / 2) {     /* keep load factor <= 0.5 */
+        size_t cap = g_real_reg_cap ? g_real_reg_cap * 2 : 262144;
+        PyObject **table = (PyObject **)calloc(cap, sizeof(PyObject *));
+        if (table == NULL) {
+            fprintf(stderr, "grail shim: cannot grow the real-layout registry to %zu\n", cap);
+            abort();
+        }
+        for (size_t j = 0; j < g_real_reg_cap; j++)
+            if (g_real_reg[j] != NULL) real_reg_insert(table, cap, g_real_reg[j]);
+        free(g_real_reg);
+        g_real_reg = table;
+        g_real_reg_cap = cap;
+    }
+    size_t i = real_reg_slot(p, g_real_reg_cap);
     while (g_real_reg[i] != NULL) {
         if (g_real_reg[i] == p) return;
-        i = (i + 1) & (REAL_REG_CAP - 1);
+        i = (i + 1) & (g_real_reg_cap - 1);
     }
     g_real_reg[i] = p;
     g_real_reg_count++;
 }
 static int is_real_layout(PyObject *obj) {
     if (g_real_reg_count == 0 || obj == NULL) return 0;
-    size_t i = real_reg_slot(obj);
+    size_t i = real_reg_slot(obj, g_real_reg_cap);
     while (g_real_reg[i] != NULL) {
         if (g_real_reg[i] == obj) return 1;
-        i = (i + 1) & (REAL_REG_CAP - 1);
+        i = (i + 1) & (g_real_reg_cap - 1);
     }
     return 0;
 }
@@ -2741,6 +2770,9 @@ static PyObject *real_layout_arg(PyObject *o, int depth) {
     return o;
 }
 
+/* real_layout_arg for the shim's other files (shim_pyo3.cc's gcm_call). */
+extern "C" PyObject *_grail_real_layout(PyObject *o) { return real_layout_arg(o, 0); }
+
 /* Bridge a real-layout object to an equivalent Grail value's OOP.  Lists
    and tuples exist: build a fresh Grail collection and fill it with each
    (bridged) element.  Elements may themselves be real-layout (recurses) or
@@ -2986,7 +3018,26 @@ static int dict_lookup(PyObject *dict, OopType keyOop, PyObject **out) {
     if (check_gci_error()) return -1;
     int64 addr = GciOopToI64(addrOop);
     if (addr == 0) return 0;
-    *out = (PyObject *)(intptr_t)addr;
+    PyObject *found = (PyObject *)(intptr_t)addr;
+    /* A tuple Python put in the dict comes back in CPython's layout: a wheel
+       reads it inline, and numpy's __array_interface__ reader takes
+       PyTuple_GET_SIZE of "shape" and "strides" -- which on the wrapper is
+       its OOP, so as_strided(a, shape=(2,)) failed with "number of
+       dimensions must be within [0, 64], got 1385564417".  Tuples only: a
+       copy of a list would hide C's changes to it from Grail.  The copy is
+       recorded as the tuple's origin, so the next lookup answers it again
+       instead of making another. */
+    if (plausible_pyobj(found) && found->ob_type == &PyTuple_Type && !is_real_layout(found)) {
+        OopType tupleOop = pyobj_oop(found);
+        PyObject *real = real_layout_arg(found, 0);
+        if (real != found) {
+            OopType note[2] = { tupleOop, GciI64ToOop((int64)(intptr_t)real) };
+            GciPerform(server, "___noteRealTuple:origin:", note, 2);
+            if (check_gci_error()) return -1;
+        }
+        found = real;
+    }
+    *out = found;
     return 1;
 }
 
@@ -3603,7 +3654,7 @@ static int foreign_setattr(PyObject *obj, const char *name, PyObject *value) {
 enum ForeignOpKind {
     FOP_BIN, FOP_RBIN, FOP_IBIN, FOP_CMP, FOP_UNARY, FOP_BOOL, FOP_LEN,
     FOP_HASH, FOP_ITER, FOP_NEXT, FOP_GETITEM, FOP_SETITEM, FOP_DELITEM,
-    FOP_CONTAINS, FOP_INIT
+    FOP_CONTAINS, FOP_INIT, FOP_CONCAT
 };
 
 struct ForeignOpDef {
@@ -3652,6 +3703,9 @@ static const ForeignOpDef g_foreign_ops[] = {
     {"__iter__", FOP_ITER, 0, "iter()"}, {"__next__", FOP_NEXT, 0, "next()"},
     {"__getitem__", FOP_GETITEM, 0, "[]"}, {"__setitem__", FOP_SETITEM, 0, "[]="},
     {"__delitem__", FOP_DELITEM, 0, "del []"}, {"__contains__", FOP_CONTAINS, 0, "in"},
+    /* sq_concat, which has no dunder: operator.concat asks for it by this
+       Grail-internal name, so no attribute read answers it. */
+    {"___sq_concat___", FOP_CONCAT, 0, "concat()"},
     {NULL, 0, 0, NULL}
 };
 #undef NBO
@@ -3675,10 +3729,27 @@ static void *foreign_nb_slot(PyTypeObject *t, int off) {
 static void *foreign_mp_subscript(PyTypeObject *t) { return FOREIGN_SLOT(t, T->tp_as_mapping ? (void *)T->tp_as_mapping->mp_subscript : NULL); }
 static void *foreign_mp_ass(PyTypeObject *t)       { return FOREIGN_SLOT(t, T->tp_as_mapping ? (void *)T->tp_as_mapping->mp_ass_subscript : NULL); }
 static void *foreign_mp_length(PyTypeObject *t)    { return FOREIGN_SLOT(t, T->tp_as_mapping ? (void *)T->tp_as_mapping->mp_length : NULL); }
-static void *foreign_sq_length(PyTypeObject *t)    { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_length : NULL); }
+/* A wheel's subclass of bytes or str (numpy.bytes_, numpy.str_) has no
+   length slot of its own, and the search stops at the shim's static base.
+   Its length is the field at offset 16, where PyBytesObject keeps ob_size
+   and PyASCIIObject its length.  Without it, len() of one raised TypeError
+   and bool() of an empty one was true, so np.array([b''], 'S3').astype(bool)
+   answered True. */
+static Py_ssize_t foreign_builtin_length(PyObject *o) { return *(Py_ssize_t *)((char *)o + 16); }
+static void *foreign_sq_length(PyTypeObject *t) {
+    void *f = FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_length : NULL);
+    if (f != NULL) return f;
+    PyObject *const *items;
+    Py_ssize_t nm = real_mro_items(t, &items);
+    for (Py_ssize_t i = 1; i < nm; i++)
+        if (items[i] == (PyObject *)&PyBytes_Type || items[i] == (PyObject *)&PyUnicode_Type)
+            return (void *)foreign_builtin_length;
+    return NULL;
+}
 static void *foreign_sq_item(PyTypeObject *t)      { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_item : NULL); }
 static void *foreign_sq_ass_item(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_ass_item : NULL); }
 static void *foreign_sq_contains(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_contains : NULL); }
+static void *foreign_sq_concat(PyTypeObject *t)    { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_concat : NULL); }
 static void *foreign_tp_richcompare(PyTypeObject *t) { return FOREIGN_SLOT(t, (void *)T->tp_richcompare); }
 /* Iteration searches HEAP types too.  The shim's PyType_FromSpec registers
    every type it builds as a shim type, and every PyO3 class is built that way
@@ -3767,6 +3838,7 @@ static int foreign_op_present(PyTypeObject *t, const ForeignOpDef *d) {
         case FOP_DELITEM:  return foreign_mp_ass(t) != NULL || foreign_sq_ass_item(t) != NULL;
         case FOP_CONTAINS: return foreign_sq_contains(t) != NULL;
         case FOP_INIT:     return foreign_tp_init(t) != NULL;
+        case FOP_CONCAT:   return 0;   /* no attribute: see g_foreign_ops */
     }
     return 0;
 }
@@ -4007,6 +4079,13 @@ static PyObject *foreign_op_invoke_slots(PyObject *self, const ForeignOpDef *d, 
             Py_hash_t h = f(self);
             if (h == -1 && PyErr_Occurred()) return NULL;
             return PyLong_FromSsize_t((Py_ssize_t)h);
+        }
+        case FOP_CONCAT: {
+            /* The type's own sq_concat, as PySequence_Concat tries first;
+               NULL with no error set when it has none. */
+            binaryfunc f = (binaryfunc)foreign_sq_concat(t);
+            if (f == NULL) return NULL;
+            return f(self, a);
         }
         case FOP_ITER: {
             getiterfunc f = (getiterfunc)foreign_tp_iter(t);
@@ -10474,10 +10553,27 @@ extern "C" int PyList_Reverse(PyObject *list) {
 extern "C" PyObject *PyTuple_GetSlice(PyObject *tuple, Py_ssize_t low,
                                       Py_ssize_t high) {
     if (tuple == NULL) return NULL;
-    OopType args[3] = { pyobj_oop(tuple), GciI64ToOop(low), GciI64ToOop(high) };
-    OopType result = GciPerform(server, "PyTuple_GetSlice:from:to:", args, 3);
-    if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    /* Built here, in CPython's layout, as PyTuple_New builds one: a wheel
+       reads the slice inline.  numpy's dtype parser slices a field such as
+       ('x', 'i4', (2,)) to ('i4', (2,)) and takes PyTuple_GET_SIZE of it;
+       the Grail tuple the slice used to be answered its OOP, so
+       np.dtype([('x', 'i4', (2,))]) raised "Tuple must have size 2, but has
+       size 756128001".  Bounds clamp as CPython's do. */
+    Py_ssize_t n = PyTuple_Size(tuple);
+    if (n < 0) return NULL;
+    if (low < 0) low = 0;
+    if (high > n) high = n;
+    if (high < low) high = low;
+    PyObject *r = PyTuple_New(high - low);
+    if (r == NULL) return NULL;
+    int real = is_real_layout(tuple);
+    for (Py_ssize_t i = low; i < high; i++) {
+        PyObject *item = PyTuple_GetItem(tuple, i);
+        if (item == NULL) return NULL;
+        ((ShimTupleObject *)r)->ob_item[i - low] =
+            real ? Py_NewRef(item) : real_layout_arg(Py_NewRef(item), 1);
+    }
+    return r;
 }
 
 /* --- Sets (backed by the Grail `set` class) --- */
