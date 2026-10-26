@@ -79,6 +79,13 @@ verify_phase.py cannot ask for it."
 		report value: (Object new respondsTo: #'_grailUpgradeRemovedSession0') not
 			value: 'probe.removed_session_method_env0'
 			value: 'the env-0 session method m removed from Object still answers'].
+"No Grail class named Package after the install (#1799): Rowan's Tonel reader
+resolves package.st's Package marker through the symbol list, so one would break the
+next Rowan load into this image -- Grail's own, or any other project's."
+report value: (grailDicts allSatisfy: [:dict | (dict at: #Package otherwise: nil) isNil])
+	value: 'no_package_class'
+	value: 'a Grail dictionary still binds Package: '
+		, ((grailDicts select: [:dict | (dict at: #Package otherwise: nil) notNil]) collect: [:d | d name]) asArray printString.
 out nextPutAll: 'check_classes: ' , failed printString , ' failed'; lf.
 failed > 0 ifTrue: [System abortTransaction. ExitClientError signal: 'check_classes failed'].
 System abortTransaction.
