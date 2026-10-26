@@ -703,4 +703,9 @@ test.test_email.test_utils
 #
 #   grammar 75t 12F/4E   SyntaxError checks Grail does not make, a decorator
 #                        spelled [f][0].__call__.__call__, assert warnings
+#
+# Linux CI measures 12F/5E.  The extra error is test_selectors' first line,
+# ``c = sys.path[0]'': Grail's sys.path holds only $PYTHONPATH, a venv and an
+# EXISTING ~/.grail/site-packages, which a CI container has none of, so it is
+# empty there.  CPython's always lists its stdlib directories.
 test.test_grammar
