@@ -9234,9 +9234,17 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	The innermost frame whose receiver is this very object and whose class
 	carries the cell decides, so object's own methods on the way down (this
 	one, ___classCell___:) are passed over, and no class can answer that does
-	not hold the cell itself."
+	not hold the cell itself.
 
-	| probe st i cls blk |
+	A BLOCK's frame carries the block in its receiver slot, not the block's
+	self, so a frame running a block that captured this receiver counts too.
+	That is the only frame a lambda has when it ESCAPES a receiverless def --
+	``def mk(): return lambda: A'' in a class body, the lambda called after mk
+	returned, which is what a parameterised type alias in a class body does
+	with its lazily evaluated value.  Measured on 4.0.0.a5: the slot is the
+	ExecBlock, and its selfValue is the receiver."
+
+	| probe st i cls blk slot |
 	BaseException @env0:___ensureStackCapture___.
 	probe := [Error @env0:new @env0:signal: 'grail closure-cell probe']
 		@env0:on: Error do: [:ex | ex @env0:return: ex].
@@ -9245,7 +9253,9 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	"A SmallInteger, then (method, ip, receiver) triples, innermost first."
 	i := 2.
 	[i @env0:+ 2 @env0:<= st @env0:size] @env0:whileTrue: [
-		(st @env0:at: i @env0:+ 2) == self ifTrue: [
+		slot := st @env0:at: i @env0:+ 2.
+		(slot == self or: [(slot @env0:isKindOf: ExecBlock)
+			and: [slot @env0:selfValue == self]]) ifTrue: [
 			cls := [(st @env0:at: i) @env0:inClass]
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 			cls == nil ifFalse: [

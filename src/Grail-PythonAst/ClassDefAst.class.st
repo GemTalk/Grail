@@ -1402,10 +1402,11 @@ ClassDefAst >> ___emitClassAttrStoreOpen___: aName on: aStream [
 { #category : 'Grail-code generation' }
 ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: savedCapturedNames savedWrite: savedCapturedWriteNames [
 	"Emit the per-class closure-cell stores.  Factored out because it runs
-	TWICE per classdef: once before the metaclass hook, so a method that runs
-	DURING class construction can read its cells, and once after the decorator
-	loop, so the self-name cell holds the final decorated class.  Both call
-	sites are in printSmalltalkRuntimeOn:."
+	THREE times per classdef: before the body, so a body-level call of a
+	class-body def can read its cells; before the metaclass hook, so a method
+	that runs DURING class construction can; and after the decorator loop, so
+	the self-name cell holds the final decorated class.  All three call sites
+	are in printSmalltalkRuntimeOn:."
 
 	"READER CELLS: store every enclosing-function local the class's
 	method bodies referenced (NameAst emitted ___classCell___ reads for
@@ -6569,6 +6570,19 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"CLOSURE CELLS, EARLIEST EMIT -- before the body runs.  A def in the class
+	body that the body itself CALLS (``def mk(): return A'' then ``f = mk()'')
+	reads the enclosing function's locals through these cells, as any method
+	does, and the stores used to come only after the body: CPython answers the
+	local, Grail raised ``cannot access free variable''.  The methods are
+	compiled above, so the captured set is complete here.  PEP 695 needs it: a
+	parameterised type alias in a class body is a scope function the body
+	calls, reading the class's own type parameters."
+	self
+		___emitClosureCellStoresOn: aStream
+		className: self ___stVarName___
+		saved: savedCapturedNames
+		savedWrite: savedCapturedWriteNames.
 	"The names this class declares as @property, as a
 	class-side method so the record is committed with the class -- a session
 	stamp would not survive deployment.  A property compiles to an accessor
