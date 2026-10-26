@@ -61,6 +61,55 @@ PyGeneratorBase class >> withBlock: aBlock name: aName qualname: aQualname code:
 ]
 
 { #category : 'Grail-Private' }
+PyGeneratorBase class >> withBlock: aBlock name: aName qualname: aQualname nestedCode: aCodeThunk [
+	"withBlock:name:qualname:code: for a def that IS A BLOCK -- a
+	function-local or exec'd def, which codegen compiles to a closure rather
+	than a method.
+
+	CPython takes a generator's names and code from the FUNCTION OBJECT at call
+	time: a renamed ``func.__name__'' names the next generator, and
+	``g.gi_code is f.__code__''.  The literals are the def's, so a rename was
+	ignored and gi_code built a second code object (test_generators' test_name
+	and its syntax doctest).  Codegen emits this send directly in the
+	function's block, so the frame above this one is that block's activation,
+	and its receiver is the function.  Reading it costs ~135ns per generator
+	created; a def compiled to a method still sends code:, and no other call
+	pays anything."
+
+	| gen |
+	gen := self withBlock: aBlock name: aName qualname: aQualname code: aCodeThunk.
+	gen ___adoptFunction___: ((GsProcess @env0:_frameContentsAt: 2) @env0:at: 10).
+	^ gen
+
+]
+
+{ #category : 'Grail-Private' }
+PyGeneratorBase >> ___adoptFunction___: aFunction [
+	"Record aFunction, the block whose call made this generator (see
+	withBlock:name:qualname:nestedCode:), and take its names if they are not
+	the def's.
+
+	CHEAP UNLESS THE FUNCTION WAS CHANGED.  Reading all three of its names and
+	code eagerly cost ~1.7us on a ~660ns generator call.  An unchanged
+	function's names ARE the def's literals, already stored, so the one probe
+	made here is whether it has per-object slots at all -- a rename, or
+	functools.update_wrapper's writes -- and the names are re-read only then.
+	Its code waits for the first gi_code read (___functionCode___)."
+
+	| attrs n q |
+	(aFunction @env0:isKindOf: ExecBlock) ifFalse: [^ self].
+	codeFunction := aFunction.
+	attrs := ExecBlockAttrs.
+	((attrs @env0:slotTable) @env0:includesKey: aFunction) ifFalse: [^ self].
+	self ___functionCode___ @env0:isNil ifTrue: [^ self].
+	n := attrs @env0:slotAt: aFunction attr: '__name__'.
+	n @env0:isNil ifFalse: [self @env0:dynamicInstVarAt: #'__name__' put: n].
+	q := attrs @env0:slotAt: aFunction attr: '__qualname__'.
+	q @env0:isNil ifFalse: [self @env0:dynamicInstVarAt: #'__qualname__' put: q]
+
+]
+
+{ #category : 'Grail-Private' }
 PyGeneratorBase >> ___captureConsumerState___ [
 	"The consumer's exception bookkeeping, saved across a resume of the generator
 	body: its ``currently-handled exception'' (CPython sys.exc_info()) AND the
@@ -274,7 +323,7 @@ PyGeneratorBase >> ___codeObjectOrSignal___: anAttrName [
 				('''' @env0:, (bytes ___pyTypeNameOf___: self)
 					@env0:, ''' object has no attribute '''
 					@env0:, anAttrName @env0:, '''')].
-		codeObject := codeThunk @env0:value].
+		codeObject := self ___functionCode___ @env0:ifNil: [codeThunk @env0:value]].
 	^ codeObject
 
 ]
@@ -325,6 +374,31 @@ PyGeneratorBase >> ___finalizeFromFrameClear___ [
 	is closed; a finished one has nothing left to do."
 
 	started == true ifFalse: [done := true. self @env0:___releaseBody___]
+
+]
+
+{ #category : 'Grail-Private' }
+PyGeneratorBase >> ___functionCode___ [
+	"The __code__ of the function block that made this generator, when that
+	block is this generator's own def; nil otherwise, and for a def compiled to
+	a method, which records no function.
+
+	The block above a nestedCode: send is always the def's own, but the check
+	is cheap here -- gi_code is rarely read -- and keeps a stray caller from
+	lending its code: the def's co_name must match, which a rename leaves
+	alone."
+
+	| code coName defName |
+	(codeFunction @env0:isNil @env0:or: [codeThunk @env0:isNil]) ifTrue: [^ nil].
+	code := ExecBlockAttrs @env0:slotAt: codeFunction attr: '__code__'.
+	code @env0:isNil ifTrue: [^ nil].
+	coName := [code @env0:dynamicInstVarAt: #'co_name']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	defName := [codeThunk @env0:value @env0:dynamicInstVarAt: #'co_name']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(coName @env0:notNil @env0:and: [coName @env0:asString @env0:= defName @env0:asString])
+		ifFalse: [^ nil].
+	^ code
 
 ]
 
@@ -1167,6 +1241,30 @@ PyGeneratorBase >> ___subIterAdvance___: it [
 	^ (it @env0:isKindOf: PyGeneratorBase)
 		ifTrue: [it @env1:___send___: None]
 		ifFalse: [it @env1:__next__]
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___suspendedBodyLevel___ [
+	"Where this generator's body is parked, as a live frame needs to find it
+	again: { its process . the body's level counted from that process's OUTER
+	end . the body block's method } -- or nil unless it is suspended at a yield.
+	Read by PyFrame >> ___adoptSuspendedGenerator___ for gi_frame's f_locals.
+
+	Counted from the outer end because that is the end that does not move:
+	the frames above the body -- the yield's wait -- are the ones a later read
+	may find different."
+
+	| meth depth |
+	(started == true and: [running ~~ true and: [done ~~ true]]) ifFalse: [^ nil].
+	(proc @env0:isNil or: [block @env0:isNil]) ifTrue: [^ nil].
+	meth := block @env0:method.
+	depth := proc @env0:stackDepth.
+	depth @env0:to: 1 by: -1 do: [:i | | fc |
+		fc := proc @env0:_frameContentsAt: i.
+		(fc @env0:notNil @env0:and: [(fc @env0:at: 1) == meth])
+			ifTrue: [^ { proc . depth @env0:- i . meth }]].
+	^ nil
 
 ]
 

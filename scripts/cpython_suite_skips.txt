@@ -37,6 +37,8 @@ test.test_dict|DictTest.test_container_iterator|refcycle collection (gc.collect 
 test.test_dict|DictTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted (test_list's twin is skipped too)
 test.test_generators|__test__.coroutine|`del g` inside support.catch_unraisable_exception() expects the generator to be finalized on the spot, so cm.unraisable is set before the next line -- refcount finalization. Grail finalizes it at a later GC, which also prints its "Exception ignored while closing generator" during whichever doctest is running then: in __test__.refleaks it was absorbed, in __test__.pep or __test__.email it failed a passing test (nightly 39918472792)
 test.test_generators|__test__.refleaks|the Leaker example's `del leaker` expects __del__ to have run before the next line, inside support.catch_unraisable_exception() -- refcount finalization; Grail's GC is not refcounted
+test.test_generators|FinalizationTest.test_refcycle|asserts sys.getrefcount(g) >= 2 before anything else -- a refcount, which Grail's GC does not keep.  The finalization it goes on to check does happen: a generator caught in a cycle is finalized by support.gc_collect()
+test.test_generators|GeneratorTest.test_close_clears_frame|expects the argument's __del__ to run the moment close() drops the generator's frame, before the next line -- refcount finalization; Grail's GC is not refcounted
 test.test_scope|ScopeTests.testLeaks|counts 100 closure-captured objects back to zero via __del__ after the last reference drops — refcount finalization, and gc_collect() cannot stand in for it on a non-refcounted VM
 # test_dynamic's two CPython-internals tests.  The module as a whole is about
 # rebinding globals/builtins, which Grail does implement; these two are not.
@@ -339,6 +341,14 @@ test.test_pickle|PyPicklerTests.test_long|a 1,000,064-bit integer (``nbase << 10
 # The VM's own probe: 130143 bits builds, 130144 raises error 2503.
 test.test_long|LongTest.test_bit_count|its last case is 2**1234567; GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; every smaller case passes
 test.test_long|LongTest.test_karatsuba|its largest operands are 210,000 bits; GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError; every smaller case passes
+# test_random's test_getrandbits_2G_bits asks for ONE 2**31-bit integer, 16500
+# times the same ceiling; it is not a bigmemtest, so CPython simply runs it.
+# getrandbits raises the catchable OverflowError past 130144 bits, and matches
+# CPython bit for bit up to and including it (seeded draws compared at 1 ..
+# 130144 bits).  randbytes(16268), the widest getrandbits it can make, used to
+# END THE PROCESS in to_bytes, which built 2**(8n) one bit past the value;
+# that is fixed (tests/python/int_bytes_at_ceiling.py).
+test.test_random|MersenneTwister_TestBasicOps.test_getrandbits_2G_bits|a 2**31-bit integer from getrandbits(2**31); GemStone's LargeInteger ceiling is ~130144 bits -- a VM limit, raised catchably as OverflowError
 # --- Phase 4 (2026-08-03): two tests that HANG the scoring session ---
 # Both are single-line hangs inside an otherwise-scorable module, so they are
 # skip-listed (never counted as passes) to let the rest of the module score;
