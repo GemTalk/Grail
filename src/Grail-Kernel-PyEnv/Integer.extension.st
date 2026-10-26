@@ -652,7 +652,7 @@ Integer class >> from_bytes: bytes _: byteorder _: signed [
 	"int.from_bytes(bytes, byteorder='big', *, signed=False)
 	Return the integer represented by the given array of bytes."
 
-	| bytesArray result isBigEndian isSigned |
+	| bytesArray result isBigEndian isSigned negative |
 	"Extract bytes - assuming bytes is a Python bytes object or similar.
 	Python's bytes IS Smalltalk's ByteArray with the Python protocol
 	layered on (see Bytes.gs); bytearray subclasses it (Bytearray.gs).
@@ -666,35 +666,40 @@ Integer class >> from_bytes: bytes _: byteorder _: signed [
 	isBigEndian := self ___isBigEndian___: byteorder.
 	isSigned := (signed == true) or: [signed == true].
 
-	result := 0.
-	isBigEndian
-		ifTrue: [
-			bytesArray @env0:do: [:each |
-				result := ((result @env0:bitShift: 8) @env0:bitOr: each).
-			].
-		]
-		ifFalse: [
-			| shift |
-			shift := 0.
-			bytesArray @env0:do: [:each |
-				result := (result @env0:bitOr: (each @env0:bitShift: shift)).
-				shift := (shift @env0:+ 8).
-			].
-		].
+	"A signed value whose top bit is set is NEGATIVE.  It used to be assembled
+	unsigned and then have 2**(8n) subtracted, and 2**(8n) is one bit wider
+	than the widest n-byte value: at GemStone's LargeInteger ceiling (~130144
+	bits) it could not be built, and the kernel's NumericError (error 2503)
+	ended the process.  So a negative one is decoded as -(inverted + 1),
+	assembling the INVERTED bytes, which never exceeds the value's own width."
+	negative := isSigned and: [(bytesArray @env0:size) @env0:> 0
+		and: [((isBigEndian
+				ifTrue: [bytesArray @env0:first]
+				ifFalse: [bytesArray @env0:last]) @env0:bitAnd: 16r80) @env0:~= 0]].
 
-	"Handle signed conversion"
-	(isSigned and: [(bytesArray @env0:size) @env0:> 0]) ifTrue: [
-		| highByte |
-		highByte := isBigEndian
-			ifTrue: [bytesArray @env0:first]
-			ifFalse: [bytesArray @env0:last].
-		((highByte @env0:bitAnd: 16r80) @env0:~= 0) ifTrue: [
-			"Negative number - subtract 2^(numBits)"
-			result := (result @env0:- 
-				(1 @env0:bitShift: ((bytesArray @env0:size) @env0:* 8))
-			).
-		].
-	].
+	"More bytes than GemStone's LargeInteger holds: the catchable OverflowError
+	Grail raises for that ceiling elsewhere (see ___pyShiftLeft___:), not the
+	kernel's uncatchable NumericError.  CPython has no ceiling and answers."
+	result := [ | acc |
+		acc := 0.
+		isBigEndian
+			ifTrue: [
+				bytesArray @env0:do: [:each |
+					acc := (acc @env0:bitShift: 8) @env0:bitOr:
+						(negative ifTrue: [255 @env0:- each] ifFalse: [each])]]
+			ifFalse: [
+				| shift |
+				shift := 0.
+				bytesArray @env0:do: [:each |
+					acc := acc @env0:bitOr:
+						((negative ifTrue: [255 @env0:- each] ifFalse: [each])
+							@env0:bitShift: shift).
+					shift := shift @env0:+ 8]].
+		negative
+			ifTrue: [(acc @env0:+ 1) @env0:negated]
+			ifFalse: [acc]]
+				@env0:on: NumericError
+				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity'].
 
 	^ result
 
@@ -750,15 +755,24 @@ Integer >> ___fitsInBytes___: aCount signed: aBoolean [
 	after the two's-complement step and against the UNSIGNED limit, so
 	``(128).to_bytes(1, 'big', signed=True)'' answered b'\x80' and
 	``(-129).to_bytes(1, 'little', signed=True)'' b'\x7f', where CPython
-	raises ``int too big to convert''."
+	raises ``int too big to convert''.
+
+	Read from the receiver's BIT LENGTH, never by building 2**(8n): that bound
+	is one bit wider than the widest value that fits, so for a receiver at
+	GemStone's LargeInteger ceiling (~130144 bits) it could not exist, and the
+	kernel's NumericError (error 2503) ended the process.
+	``random.randbytes(16268)'' is ``getrandbits(130144).to_bytes(16268)'' and
+	died exactly so (test_random).  A negative n's magnitude is measured as
+	-n - 1, which is no wider than n, so nothing here grows past the receiver."
 
 	| bits |
 	bits := aCount @env0:* 8.
 	aBoolean ifFalse: [
-		^ self @env0:>= 0 and: [self @env0:< (1 @env0:bitShift: bits)]].
+		^ self @env0:>= 0 and: [self @env0:highBit @env0:<= bits]].
 	bits @env0:= 0 ifTrue: [^ self @env0:= 0].
-	^ (self @env0:>= (1 @env0:bitShift: bits @env0:- 1) @env0:negated)
-		and: [self @env0:< (1 @env0:bitShift: bits @env0:- 1)]
+	^ (self @env0:>= 0
+		ifTrue: [self]
+		ifFalse: [self @env0:negated @env0:- 1]) @env0:highBit @env0:< bits
 
 ]
 
@@ -1944,9 +1958,12 @@ Integer >> to_bytes: length _: byteorder _: signed [
 		OverflowError ___signal___: 'can''t convert negative int to unsigned'].
 	(self ___fitsInBytes___: numBytes signed: isSigned) ifFalse: [
 		OverflowError ___signal___: 'int too big to convert'].
-	"Two's complement"
-	(val @env0:< 0) ifTrue: [
-		val := (1 @env0:bitShift: (numBytes @env0:* 8)) @env0:+ val].
+	"No explicit two's complement for a negative value: GemStone's bitAnd: and
+	bitShift: already treat a negative integer as infinite two's complement
+	(-1 bitAnd: 255 is 255, -1 bitShift: -8 is -1), so the loop below writes
+	its bytes directly.  The old step added 2**(8n), which for a length at
+	GemStone's LargeInteger ceiling could not be built (error 2503, see
+	___fitsInBytes___:signed:)."
 
 	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
 	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython
