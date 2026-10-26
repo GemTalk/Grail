@@ -76,6 +76,18 @@ class Color(enum.Enum):
     GREEN = 2
 
 
+class Mode(str, enum.Enum):
+    """A str mixin: its members are byte-format objects (a CharacterCollection
+    subclass), so a rebuild cannot keep them by copying instance variables."""
+    READ = 'r'
+    WRITE = 'w'
+
+
+class Level(enum.StrEnum):
+    LOW = 'low'
+    HIGH = 'high'
+
+
 Pair = collections.namedtuple('Pair', 'left right')
 
 
@@ -157,6 +169,10 @@ def build():
         'point': Point(3, -4),
         'tagged': Tagged('v'),
         'color': Color.GREEN,
+        'mode': Mode.WRITE,
+        'level': Level.HIGH,
+        'enum_keyed_dict': {Color.GREEN: 'color', Mode.WRITE: 'mode', Level.HIGH: 'level'},
+        'enum_keyed_set': {Color.GREEN, Mode.WRITE, Level.HIGH},
         'pair': Pair(1, 2),
         'func': module_func,
         'closure': make_scaler(3),
@@ -202,6 +218,7 @@ def expected_types():
         'counter': collections.Counter, 'deque': collections.deque,
         'account': Account, 'slotted': Slotted, 'error': AppError,
         'registry': Registry, 'point': Point, 'tagged': Tagged, 'color': Color,
+        'mode': Mode, 'level': Level,
         'pair': Pair,
     }
 
@@ -240,6 +257,9 @@ def describe(stored):
         'point': [s['point'].x, s['point'].y, s['point'].norm1()],
         'tagged': [s['tagged'].value, s['tagged'].tag],
         'color': [s['color'].name, s['color'].value],
+        'mode': [s['mode'].name, s['mode'].value, str(s['mode']), len(s['mode'])],
+        'level': [s['level'].name, s['level'].value, str(s['level']), len(s['level'])],
+        'enum_members': [[m.name for m in Color], [m.name for m in Mode], [m.name for m in Level]],
         'pair': [s['pair'].left, s['pair'].right],
         'func': s['func'](5),
         'closure': s['closure'](5),
