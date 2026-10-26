@@ -1710,6 +1710,11 @@ builtins >> ___formatIntValue___: value parsed: p [
 		^ self ___formatPadBody___: body fill: fill align: align width: width signLength: 0].
 	prefix := ''.
 	(type == nil or: [type @env0:= $d or: [type @env0:= $n]]) ifTrue: [
+		"A decimal rendering is an int -> str conversion and obeys
+		sys.set_int_max_str_digits, as str() does: format(10 ** 4300, 'd')
+		and format(10 ** 4300, ',') raise in CPython.  The other bases are
+		power-of-two and exempt."
+		value ___checkIntStrDigitLimit___.
 		digits := value @env0:abs @env0:printString]
 	ifFalse: [
 		type @env0:= $b ifTrue: [
@@ -3575,6 +3580,9 @@ builtins >> ___printfConvert___: value conv: conv flags: flags width: width prec
 	absval := iv @env0:abs.
 	prefix := ''.
 	(conv @env0:= $d @env0:or: [conv @env0:= $i @env0:or: [conv @env0:= $u]]) ifTrue: [
+		"Decimal, so sys.set_int_max_str_digits applies: '%d' % (10 ** 4300)
+		raises in CPython, as str() does.  o/x/X are power-of-two, exempt."
+		absval ___checkIntStrDigitLimit___.
 		digits := absval @env0:printString].
 	conv @env0:= $o ifTrue: [
 		digits := absval @env0:printStringRadix: 8.
