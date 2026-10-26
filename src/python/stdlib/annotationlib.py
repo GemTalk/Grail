@@ -84,13 +84,14 @@ _FORWARDREF_MARKER = '__grail_forwardref__'
 
 def _is_forwardref_marker(value):
     """True for the marker tuple a generated annotate function answers:
-    (marker, source) or (marker, source, evaluator).
+    (marker, source), (marker, source, evaluator) or (marker, source,
+    evaluator, enclosing_names).
 
     Checked by shape rather than isinstance, so a genuine string or tuple
     annotation is never mistaken for one -- the first element has to be the
     private marker string.
     """
-    return (isinstance(value, tuple) and len(value) in (2, 3)
+    return (isinstance(value, tuple) and len(value) in (2, 3, 4)
             and value[0] == _FORWARDREF_MARKER)
 
 
@@ -103,9 +104,14 @@ def _forwardref_from_marker(marker, owner):
     closure cells the expression reads, so a variable assigned AFTER the def
     (test_closure's ``x = 1``) resolves on a later evaluate().  A Grail block
     already shares that scope, so it is kept whole instead of per cell.
+
+    The fourth element, when present, answers the names the expression reads
+    from enclosing functions that are bound now -- the closure cells CPython's
+    partial evaluation reads (PyAnnotate >> ___enclosingNamesFrom___:).
     """
     return _forwardref_value(
-        marker[1], owner, marker[2] if len(marker) == 3 else None)
+        marker[1], owner, marker[2] if len(marker) >= 3 else None,
+        marker[3] if len(marker) == 4 else None)
 
 
 # CPython's slot names, in CPython's order.  They are read as an API --
@@ -794,7 +800,7 @@ def _resolved_text(ref):
     return text
 
 
-def _forwardref_value(source, owner, evaluator):
+def _forwardref_value(source, owner, evaluator, enclosing=None):
     """What CPython's FORWARDREF answers for one annotation that failed to
     evaluate: a partial evaluation where one exists, else a ForwardRef.
 
@@ -816,6 +822,12 @@ def _forwardref_value(source, owner, evaluator):
     # first -- CPython's second pass runs with every global a stringifier.
     names = _StringifierDict({}, owner=owner, is_class=is_class,
                              format=Format.FORWARDREF)
+    # ...except an enclosing function's names, which CPython reads from the
+    # annotate function's closure cells rather than its fake globals: bound to
+    # their values, so ``Depends(get_current_user)'' beside an undefined
+    # ``DummyUser'' keeps the function, not a ForwardRef for it.
+    if enclosing is not None:
+        names.update(enclosing())
     try:
         result = eval(code, {}, names)
     except Exception:

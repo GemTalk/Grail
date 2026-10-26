@@ -196,6 +196,44 @@ def the_rendered_traceback_names_both():
             and text.rstrip().endswith('ValueError: from generator'))
 
 
+
+def _raises_at_once():
+    raise ValueError('at once')
+    yield
+
+
+def _enter_like_contextlib(g):
+    try:
+        return next(g)
+    except StopIteration:
+        raise RuntimeError("generator didn't yield") from None
+
+
+def _through_a_finally(fn):
+    try:
+        return fn()
+    finally:
+        pass
+
+
+def a_handler_and_a_finally_keep_the_generators_frames():
+    """The generator's frames survive a NON-matching ``except'' (which passes
+    the exception on) inside a ``try/finally'' (which re-signals it): FastAPI
+    enters a yield dependency through contextlib's __enter__, whose ``except
+    StopIteration'' is that handler, under contextvars' Context.run, whose
+    ``finally'' is that one.  The finally re-signalled a copy, and the
+    generator half of the traceback, keyed by the original, was lost
+    (test_traceback_for_dependency_with_yield).  Frame NAMES only, so this
+    check stays independent of the line numbers above."""
+    try:
+        _through_a_finally(lambda: _enter_like_contextlib(_raises_at_once()))
+    except ValueError as e:
+        names = [name for name, _ in _chain(e)]
+    return names == ['a_handler_and_a_finally_keep_the_generators_frames',
+                     '_through_a_finally', '<lambda>', '_enter_like_contextlib',
+                     '_raises_at_once']
+
+
 if __name__ == '__main__':
     for label, fn, expected in (
             ('for', consume_for, EXPECTED_FOR),
@@ -206,3 +244,6 @@ if __name__ == '__main__':
         actual = _chain(fn())
         print('%-12s %s %s' % (label, 'OK ' if actual == expected else 'DIFF',
                                actual))
+    print('%-12s %s' % ('handler+finally',
+                        'OK ' if a_handler_and_a_finally_keep_the_generators_frames()
+                        else 'DIFF'))
