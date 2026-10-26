@@ -11,8 +11,8 @@
 # check written from a Grail session rather than measured against CPython gets
 # caught here instead of becoming permanent "conformance evidence".
 #
-# One check is marked grail_only and prints XFAIL under CPython.  It documents
-# a Grail deviation that is real and deliberate; see the comment on it.
+# A check marked grail_only prints XFAIL under CPython: it documents a Grail
+# deviation that is real and deliberate.  There are none at present.
 
 import os
 
@@ -172,21 +172,16 @@ def getproxies_prefers_the_lowercase_spelling():
     )
 
 
-def getproxies_empty_value_cannot_unset_the_uppercase_one():
-    # GRAIL DEVIATION -- XFAIL under CPython, deliberately, and the cause is
-    # below urllib entirely.  In CPython an empty lowercase <scheme>_proxy is
-    # not "no opinion" but an explicit "no proxy for this scheme", and the
-    # second pass pops the scheme, so this environment yields {}.
-    #
-    # GemStone cannot represent an empty environment variable: setting one to
-    # '' is how os.unsetenv and ``del os.environ[k]'' UNSET it (see
-    # os_Environ >> __delitem__), and reading it back answers nil.  So
-    # ``http_proxy=""'' is indistinguishable from http_proxy being absent, the
-    # scan never sees the name, and the uppercase value survives.  Closing this
-    # needs a System-level environment primitive, not a change here.
+def getproxies_an_empty_lowercase_value_unsets_the_uppercase_one():
+    # An empty lowercase <scheme>_proxy is not "no opinion" but an explicit
+    # "no proxy for this scheme": the second pass pops the scheme, so this
+    # environment yields {}.  Grail answered {'http': 'http://UPPER:2'} -- a
+    # deliberate XFAIL here until os.environ could hold an empty value, which
+    # GemStone's environment cannot (it answers nil for one); os_Environ now
+    # keeps an empty value itself.
     return _with_env(
         {'http_proxy': '', 'HTTP_PROXY': 'http://UPPER:2'},
-        lambda: getproxies_environment() == {'http': 'http://UPPER:2'},
+        lambda: getproxies_environment() == {},
     )
 
 
@@ -336,7 +331,7 @@ checks = [
     getproxies_reads_lowercase_scheme_variables,
     getproxies_strips_the_proxy_suffix_and_lowercases_the_scheme,
     getproxies_prefers_the_lowercase_spelling,
-    getproxies_empty_value_cannot_unset_the_uppercase_one,
+    getproxies_an_empty_lowercase_value_unsets_the_uppercase_one,
     getproxies_ignores_an_empty_uppercase_value,
     getproxies_no_proxy_is_carried_as_the_no_key,
     getproxies_drops_uppercase_http_proxy_under_request_method,
@@ -358,15 +353,9 @@ checks = [
 
 # Checks CPython is EXPECTED to fail -- each documents a deliberate Grail
 # deviation, so they print XFAIL rather than FAIL under CPython and an XPASS
-# (the difference having gone away) is a failure of this gate.
-#
-#   getproxies_empty_value_cannot_unset_the_uppercase_one -- GemStone has no
-#     representation for an empty environment variable ('' is how it unsets
-#     one), so CPython's "empty lowercase name suppresses the uppercase one"
-#     rule cannot fire.  See the comment on the check.
-grail_only = {
-    'getproxies_empty_value_cannot_unset_the_uppercase_one',
-}
+# (the difference having gone away) is a failure of this gate.  None now: the
+# empty-proxy-variable one closed when os.environ learned to hold ''.
+grail_only = set()
 
 
 if __name__ == '__main__':
