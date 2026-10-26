@@ -69,6 +69,16 @@ out nextPutAll: 'check_classes: walked ' , seen size printString , ' objects, '
 		report value: cls classHistory last == cls value: 'version.' , cls name
 			value: 'reachable objects use version ' , (cls classHistory indexOfIdentical: cls) printString
 				, ' of ' , cls name , ' but the class history has ' , cls classHistory size printString].
+"The env-0 session method the synthetic m removes from Object
+(tests/upgrade/make_variant.py, session_removal) -- it has no Python name, so
+verify_phase.py cannot ask for it."
+((System gemEnvironmentVariable: 'GRAIL_UPGRADE_PROBE') = 'm'
+	and: [ | c | c := System gemEnvironmentVariable: 'GRAIL_UPGRADE_CHANGES'.
+		c isNil or: [c isEmpty or: [c = 'all' or: [(c subStrings: ',') includes: 'session_removal']]]])
+	ifTrue: [
+		report value: (Object new respondsTo: #'_grailUpgradeRemovedSession0') not
+			value: 'probe.removed_session_method_env0'
+			value: 'the env-0 session method m removed from Object still answers'].
 out nextPutAll: 'check_classes: ' , failed printString , ' failed'; lf.
 failed > 0 ifTrue: [System abortTransaction. ExitClientError signal: 'check_classes failed'].
 System abortTransaction.

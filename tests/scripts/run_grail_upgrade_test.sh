@@ -10,7 +10,9 @@
 #      in a transaction and commits its objects under gemdb.root['upgrade']
 #   3. install Grail m over it                 (./install.sh again: the upgrade)
 #   4. the app redeploys: tests/upgrade/redeploy_phase.py imports it in a transaction
-#      and commits, which rebuilds its modules (and the stdlib's) under m
+#      and commits, which rebuilds its modules (and the stdlib's) under m. Skipped with
+#      GRAIL_UPGRADE_SKIP_REDEPLOY=1, which leaves it to install.sh's own redeploy
+#      (scripts/redeployModules.gs); verify then checks the import wrote nothing
 #   5. the app reads: tests/upgrade/verify_phase.py checks that the data is intact,
 #      that hashed containers still find fresh keys, that every stored object is an
 #      instance of the CURRENT class, and that old objects run with the app's code;
@@ -23,9 +25,10 @@
 #                 keep every Grail class (tests/upgrade/snapshot.gs before and after
 #                 are identical): what tells an upgrade from a reinstall.
 #   synthetic     n and m are this checkout plus tests/upgrade/make_variant.py's
-#                 edits -- a changed, a removed and an added method and class, and a
-#                 shape change -- and verify_phase.py also checks the stored objects
-#                 run m's code.
+#                 edits -- a changed, a removed and an added method and class, removed
+#                 kernel session methods, and a shape change -- and verify_phase.py
+#                 also checks the stored objects run m's code. GRAIL_UPGRADE_CHANGES
+#                 picks which kinds of change (make_variant.py; default all).
 #   release=REF   n = git REF (a previous release), m = this checkout.
 #
 # "This checkout" is the working tree, uncommitted edits included. Grail is installed
@@ -33,7 +36,11 @@
 # lives outside it, so neither its path nor Grail's changes between the installs.
 #
 # Needs: $GEMSTONE (4.0.0.a5 or later) and $GEMSTONE_GLOBAL_DIR, from ./.setenv or
-# the environment. GRAIL_UPGRADE_EXTENT names another extent to start from (default
+# the environment. GRAIL_UPGRADE_RELOAD_ROWAN names an externals directory (a Rowan
+# masterV4 checkout as RowanV3, beside RowanClientServicesV3 and the rest) to reload
+# Rowan from into the live database, data and all, between installing n and m:
+# whether an existing database can get a newer Rowan without being recreated.
+# GRAIL_UPGRADE_EXTENT names another extent to start from (default
 # $GEMSTONE/bin/extent0.rowan3.dbf) -- one with a newer Rowan loaded, say. Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
 # grail_upgrade); touches no other stone. Work goes in GRAIL_UPGRADE_DIR (default
 # out/upgrade), removed at the end unless --keep or a case failed.
@@ -95,8 +102,23 @@ EOF
 tree_from_checkout() {  # tree_from_checkout <dir> -- the working tree, without build output
     rm -rf "$1"
     mkdir -p "$1"
+    # Python rather than rsync, which GemTalk's CI container does not have. A file
+    # git still lists but the working tree has deleted is skipped.
     (cd "$PROJECT_ROOT" && git ls-files -z --cached --others --exclude-standard) \
-        | (cd "$PROJECT_ROOT" && rsync -a --from0 --files-from=- ./ "$1/")
+        | python3 -c '
+import os, shutil, sys
+src, dst = sys.argv[1], sys.argv[2]
+for rel in sys.stdin.buffer.read().decode().split("\0"):
+    s = os.path.join(src, rel)
+    if not rel or not os.path.lexists(s):
+        continue
+    d = os.path.join(dst, rel)
+    os.makedirs(os.path.dirname(d), exist_ok=True)
+    if os.path.islink(s):
+        os.symlink(os.readlink(s), d)
+    else:
+        shutil.copy2(s, d)
+' "$PROJECT_ROOT" "$1"
 }
 
 tree_from_ref() {       # tree_from_ref <dir> <ref>
@@ -108,9 +130,13 @@ tree_from_ref() {       # tree_from_ref <dir> <ref>
 install_tree() {        # install_tree <tree> <log> -- install it in place, over what is there
     local g=$WORK/grail
     mkdir -p "$g"
-    # --checksum: n and m can differ by one character in a file written the same second, which a
-    # size-and-time comparison takes for unchanged -- and then m is never installed.
-    rsync -a --checksum --delete --exclude .setenv --exclude .topazini "$1/" "$g/"
+    # Emptied and copied whole, keeping only this directory's .setenv and .topazini.
+    # A full copy cannot mistake m's files for n's -- they can differ by one
+    # character in a file written the same second -- and needs no rsync, which
+    # GemTalk's CI container does not have. The build output goes too; install.sh
+    # rebuilds it.
+    find "$g" -mindepth 1 -maxdepth 1 ! -name .setenv ! -name .topazini -exec rm -rf {} +
+    cp -a "$1/." "$g/"
     cat > "$g/.setenv" <<EOF
 export GEMSTONE='$GEMSTONE'
 export GEMSTONE_GLOBAL_DIR='$GEMSTONE_GLOBAL_DIR'
@@ -118,7 +144,13 @@ export GEMSTONE_NAME='$STONE'
 export PATH='$PATH'
 EOF
     printf 'set user DataCurator pass swordfish gemstone %s\n' "$STONE" > "$g/.topazini"
-    (cd "$g" && ./install.sh) > "$2" 2>&1 || {
+    # The install's own topaz logs (install.out, redeployModules.out, ...) beside
+    # its log: the next install in this directory starts by deleting them.
+    local logs=${2%.log}-out
+    (cd "$g" && ./install.sh) > "$2" 2>&1
+    local rc=$?
+    mkdir -p "$logs" && cp "$g"/*.out "$logs/" 2>/dev/null
+    [ $rc -eq 0 ] || {
         echo "upgrade: install failed; the end of $2:"
         tail -30 "$2"
         return 1
@@ -130,7 +162,7 @@ in_grail() {            # in_grail <cmd...> -- run in the installed Grail, with 
 }
 
 run_case() {            # run_case <case> -- 0 if every check passed
-    local name=$1 d=$WORK/$1 probe=()
+    local name=$1 d=$WORK/$1 probe=() probe_m=
     rm -rf "$d"
     mkdir -p "$d"
     log "=== $name"
@@ -141,7 +173,7 @@ run_case() {            # run_case <case> -- 0 if every check passed
         synthetic)  tree_from_checkout "$d/n"; tree_from_checkout "$d/m"
                     python3 "$PROJECT_ROOT/tests/upgrade/make_variant.py" "$d/n" n > /dev/null || return 1
                     python3 "$PROJECT_ROOT/tests/upgrade/make_variant.py" "$d/m" m > /dev/null || return 1
-                    probe=(--probe m) ;;
+                    probe=(--probe m); probe_m=m ;;
         release=*)  tree_from_ref "$d/n" "${name#release=}" || return 1; tree_from_checkout "$d/m" ;;
     esac
 
@@ -155,19 +187,34 @@ run_case() {            # run_case <case> -- 0 if every check passed
     # After the write: the app's import deployed its modules, and an upgrade must keep those too.
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
         | grep '^SNAPSHOT' > "$d/snapshot-n.txt"
+    if [ -n "${GRAIL_UPGRADE_RELOAD_ROWAN:-}" ]; then
+        # A newer Rowan into the live database, data and all, before Grail m.
+        log "reload Rowan from $GRAIL_UPGRADE_RELOAD_ROWAN"
+        (cd "$WORK/grail" && EXTERNALS_ST_BASE=$GRAIL_UPGRADE_RELOAD_ROWAN \
+            ROWAN_PROJECTS_HOME=${ROWAN_PROJECTS_HOME:-$GRAIL_UPGRADE_RELOAD_ROWAN} \
+            topaz -lq -S "$PROJECT_ROOT/tests/upgrade/reload_rowan.gs") < /dev/null > "$d/reload-rowan.log" 2>&1 \
+            && grep -q 'reload_rowan: reloaded' "$d/reload-rowan.log" || {
+            echo "upgrade: the Rowan reload failed; the end of $d/reload-rowan.log:"
+            tail -30 "$d/reload-rowan.log"; return 1; }
+    fi
     log "install m (the upgrade)"
     install_tree "$d/m" "$d/install-m.log" || return 1
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
         | grep '^SNAPSHOT' > "$d/snapshot-m.txt"
 
-    log "redeploy"
-    in_grail ./grail "$WORK/app/redeploy_phase.py" > "$d/redeploy.log" 2>&1 \
-        && grep -q 'redeploy phase:' "$d/redeploy.log" || {
-        echo "upgrade: the redeploy phase failed:"; tail -30 "$d/redeploy.log"; return 1; }
+    if [ "${GRAIL_UPGRADE_SKIP_REDEPLOY:-0}" = 1 ]; then
+        log "redeploy skipped: the app relies on the install's own redeploy"
+    else
+        log "redeploy"
+        in_grail ./grail "$WORK/app/redeploy_phase.py" > "$d/redeploy.log" 2>&1 \
+            && grep -q 'redeploy phase:' "$d/redeploy.log" || {
+            echo "upgrade: the redeploy phase failed:"; tail -30 "$d/redeploy.log"; return 1; }
+    fi
 
     log "verify"
     in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1
-    in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" < /dev/null > "$d/classes.log" 2>&1
+    GRAIL_UPGRADE_PROBE=$probe_m in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" \
+        < /dev/null > "$d/classes.log" 2>&1
     grep -h '^UPGRADE \|^verify phase\|^check_classes' "$d/verify.log" "$d/classes.log" > "$d/results.txt"
 
     if [ "$name" = noop ]; then

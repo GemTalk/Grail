@@ -106,6 +106,11 @@ symbol dictionary and method environment:
 * **Generated methods** (identifier, Unicode and HTML tables, builtin
   docstrings) are written by their generators through `scripts/tonel_methods.py`;
   re-run the generator rather than editing them.
+* **Do not remove a method from a `-PyEnv` package** while
+  `rowan/needs-newer-rowan.txt` lists `env1_removal`: the Rowan in users' databases
+  cannot apply it as an upgrade, and CI refuses it (`scripts/check_rowan_floor.py`).
+  Remove the class, or leave the method. docs/Releases_and_Rowan.md says why and when
+  that changes.
 * **Needs Rowan `masterV4` 7d50ec0c8 or later** -- GemStone 4.0.0.a5 and later
   ship it in `extent0.rowan3.dbf`, which is the extent CI and a fresh stone use
   (`shadowsGlobals`, `unicodeSource`, `gs_superclassDictionary`, and session-method
