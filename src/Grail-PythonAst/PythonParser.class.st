@@ -6664,6 +6664,10 @@ PythonParser >> setDelCtx: anExpr [
 	varNames := anExpr class allInstVarNames.
 	index := varNames indexOf: #ctx.
 	index > 0 ifTrue: [anExpr instVarAt: index put: self delCtx].
+	"``del (a, [b, c])'' deletes every element, so each is a Del target in
+	its own right -- CPython's tree marks them Del too."
+	((anExpr isKindOf: TupleAst) or: [anExpr isKindOf: ListAst]) ifTrue: [
+		anExpr elts do: [:each | self setDelCtx: each]].
 	^anExpr
 
 ]

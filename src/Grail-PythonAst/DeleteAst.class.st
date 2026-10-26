@@ -97,7 +97,7 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 	  del name  -> name := nil.                 [the local's temp; a deleted
 	               parameter lives in a temp too, like a reassigned one]"
 
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst)
 			ifTrue: [
 				aBuilder atNode: self.
@@ -188,8 +188,8 @@ DeleteAst >> ___irEligibleStatementLocals___: localNames [
 	stays on text and its guard.  In a module def none of the text's other
 	name branches (module-scope, class-body, the ``__class__'' cell) apply."
 
-	targets isEmpty ifTrue: [^ false].
-	^ targets allSatisfy: [:t |
+	self deletedTargets isEmpty ifTrue: [^ false].
+	^ self deletedTargets allSatisfy: [:t |
 		((t isKindOf: SubscriptAst)
 			and: [(t value ___irEligibleValueLocals___: localNames)
 			and: [t slice ___irEligibleValueLocals___: localNames]])
@@ -211,7 +211,7 @@ DeleteAst >> ___irFlowBound___: boundIn locals: localSet [
 	self ___irReadLocalNamesInto___: reads locals: localSet.
 	(reads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
 	out := boundIn copy.
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [out remove: t id asString ifAbsent: []]].
 	^ out
 
@@ -293,7 +293,7 @@ DeleteAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	"A bare-name target is neither read nor written here -- it is UNBOUND, which
 	___irFlowBound___:locals: accounts for."
 
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifFalse: [
 			t value ___irReadLocalNamesInto___: aSet locals: localSet.
 			(t isKindOf: SubscriptAst) ifTrue: [
@@ -309,12 +309,26 @@ DeleteAst >> ___irRefusalDetail___: localSet [
 	are different cuts -- one wants the class-body definitional store, the other
 	the class cell -- and a single row cannot say which the next cut is about."
 
-	targets do: [:t |
+	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
 			CallAst classBodyRuntimeClass notNil ifTrue: [^ #'DeleteAst:classBody'].
 			(self ___irNameTargetEligible___: t locals: localSet)
 				ifFalse: [^ #'DeleteAst:name']]].
 	^ #'DeleteAst:target'
+
+]
+
+{ #category : 'Grail-Accessing' }
+DeleteAst >> deletedTargets [
+	"Each name, attribute and subscript the statement deletes, left to right.
+	``del (a, [b, c])'' is ``del a, b, c'': a tuple or list target deletes its
+	elements.  targets keeps the parsed shape, which is what ast.parse reports
+	-- CPython's tree holds the Tuple too -- so every emit reads this instead."
+
+	| leaves |
+	leaves := OrderedCollection new.
+	targets do: [:each | each ___addDeletedTargetsTo___: leaves].
+	^ leaves
 
 ]
 
@@ -354,7 +368,7 @@ DeleteAst >> printSmalltalkOn: aStream [
 
 	See https://docs.python.org/3/reference/simple_stmts.html#the-del-statement"
 
-	targets do: [:target |
+	self deletedTargets do: [:target |
 		(target isKindOf: SubscriptAst) ifTrue: [
 			"del x[key] → (x) __delitem__: (key)"
 			aStream nextPut: $(.

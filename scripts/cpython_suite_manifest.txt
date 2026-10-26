@@ -689,3 +689,18 @@ test.test_email.test_parser
 test.test_email.test_pickleable
 test.test_email.test_policy
 test.test_email.test_utils
+
+# --- Core language (added 2026-10-26): the grammar ---
+#
+# test_grammar is CPython 3.14.4's, vendored verbatim.  It could not be
+# compiled: ``del x, y, (z, xyz)'' (test_del_stmt) reached the emit with a
+# parenthesized tuple as one target -- ``del for TupleAst is not yet
+# supported''.  A tuple or list del target now deletes its elements left to
+# right, as codegen_tuple / codegen_list do (Python/codegen.c); the parsed
+# tree keeps the Tuple, as CPython's does.  test.support.warnings_helper gains
+# CPython's check_syntax_warning, which the module imports.  Measured on
+# Darwin arm64:
+#
+#   grammar 75t 12F/4E   SyntaxError checks Grail does not make, a decorator
+#                        spelled [f][0].__call__.__call__, assert warnings
+test.test_grammar
