@@ -58,7 +58,7 @@ reads the project with Grail's dictionaries out of the symbol list.
 | Check | What it proves | Where it runs |
 |---|---|---|
 | `scripts/check_rowan_floor.py <base>` | the change removes nothing of a kind in `needs-newer-rowan.txt` | `ci.yml` `scripts` job, every PR and merge-group run |
-| `tests/scripts/run_grail_upgrade_test.sh noop release=<ref>` | an install of this tree over `<ref>` keeps stored data working | before a release, locally (it starts its own stones) |
+| `tests/scripts/run_grail_upgrade_test.sh noop release=<ref>` | an install of this tree over `<ref>` keeps stored data working, and binding the app afterwards writes nothing | nightly and on install PRs (`grail-upgrade.yml`), and before a release |
 | `tests/scripts/run_rowan_dependency_matrix.sh --required-extent <x>` | each kind in the list fails on the product's Rowan and passes on the required one; and tells you when the product has caught up | when the list or the engine changes |
 
 The matrix's required extent is the product's `extent0.rowan3.dbf` with Rowan reloaded
@@ -90,9 +90,12 @@ product's own Rowan passes a kind in the list: that is the signal to move the fl
    round (below).
 
 The first GemDB release after GemDB 1.8 is also the first that moves its users from a
-topaz-installed Grail (`a78e8c03`) to a Rowan-installed one. Run
-`release=a78e8c03` before shipping it: if that upgrade does not hold, that release has
-to recreate databases.
+topaz-installed Grail (`a78e8c03`) to a Rowan-installed one. **Measured: it holds**
+(`release=a78e8c03`, 167 checks, 0 failures), and `grail-upgrade.yml` runs it nightly.
+
+After installing, `install.sh` rebuilds and commits every deployed module the install
+made stale (`scripts/redeployModules.gs`), in every namespace, so an application's
+first import after the upgrade binds warm and writes nothing.
 
 ## When the Rowan floor moves
 
@@ -113,5 +116,14 @@ cannot get a newer one. Two ways forward:
 - **(b) GemDB ships Rowan** as a payload, like Grail and MCP, and loads it into an
   existing database as SystemUser when it upgrades. Data survives, and GemDB becomes
   the place that knows which Rowan a database has -- which is what Rowan#977 (a project
-  declaring the Rowan it needs) would then check. Loading masterV4 into a5's extent this
-  way works: the matrix's required extent is made exactly so.
+  declaring the Rowan it needs) would then check.
+
+  **Measured: this works on a LIVE database.** `GRAIL_UPGRADE_RELOAD_ROWAN` makes the
+  upgrade test reload Rowan masterV4 (`tests/upgrade/reload_rowan.gs`) into the stock
+  a5 database after the app has committed its data, and before Grail m: the synthetic
+  upgrade -- including the env-1 removal a5's Rowan cannot apply -- passes, 177 checks,
+  0 failures. What GemDB would need is that script and the Rowan sources (the GemStone
+  build's `externals_st` layout) in its payload, run as SystemUser.
+
+  Every GemStone build since 2026-10-21 already has that Rowan (`build.pl` clones
+  `masterV4`'s head for `extent0.rowan3.dbf`), but only a5 is on `dl.gemdb.com`.
