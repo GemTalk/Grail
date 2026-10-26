@@ -9594,14 +9594,22 @@ Object >> ___grailEmptyClassHolder___ [
 	The holder OBJECT is kept rather than replaced: the rebuild's late
 	``___dynInstVars___ == nil ifTrue: [... Object new]'' emit is conditional,
 	so a fresh one would survive, but an earlier part of the same rebuild (a
-	nested class, a class-body ``if'') stores through whatever is there now."
+	nested class, a class-body ``if'') stores through whatever is there now.
+
+	One entry is kept: ___grailEnumRecord___, the member record of a mixin enum
+	(Enum class >> ___grailRecordHolderFor:).  It is not a class attribute but
+	the previous build's members, which the rebuild reads after this reset so as
+	to keep them (Enum class >> ___grailKeepPreviousMember:named:in:), and
+	replaces when it is done.  An Enum-rooted class keeps the same record in a
+	classInstVar, which this reset never touched."
 
 	| holder |
 	holder := [self @env0:perform: #___dynInstVars___ env: 1]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	holder == nil ifTrue: [^ self].
 	holder @env0:dynamicInstanceVariables @env0:asArray @env0:do: [:nm |
-		holder @env0:removeDynamicInstVar: nm].
+		nm @env0:== #'___grailEnumRecord___'
+			ifFalse: [holder @env0:removeDynamicInstVar: nm]].
 	^ self
 
 ]

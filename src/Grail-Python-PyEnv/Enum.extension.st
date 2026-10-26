@@ -3967,19 +3967,51 @@ Enum class >> ___grailRecordFor: cls [
 	Without the class-side copy, every enum in a deployed module read as
 	having no members: http.HTTPStatus, socket.AddressFamily, and ssl's
 	VerifyMode/VerifyFlags/Options, where create_default_context() raised
-	``<flag 'VerifyFlags'> has no members''."
+	``<flag 'VerifyFlags'> has no members''.
 
-	| rec stored |
+	A class rooted at a storage class rather than Enum -- a mixin enum such as
+	``class Mode(str, Enum)'', whose Smalltalk superclass is Unicode32 -- has no
+	grailEnumRecord slot, and its record rides in its ___dynInstVars___ holder
+	instead (___grailRecordHolderFor:)."
+
+	| rec stored holder |
 	rec := self ___grailRegistry___ @env0:at: cls otherwise: nil.
 	rec @env0:notNil ifTrue: [^ rec].
-	((cls @env0:isKindOf: Behavior)
-		and: [(cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot'
-			environmentId: 1) @env0:notNil]) ifFalse: [^ nil].
-	stored := cls ___grailEnumRecordSlot.
+	(cls @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	(cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot'
+		environmentId: 1) @env0:notNil
+			ifTrue: [stored := cls ___grailEnumRecordSlot]
+			ifFalse: [
+				holder := self ___grailRecordHolderFor: cls.
+				holder @env0:isNil ifTrue: [^ nil].
+				stored := holder @env0:dynamicInstVarAt: #'___grailEnumRecord___'].
 	stored @env0:isNil ifTrue: [^ nil].
 	rec := stored @env0:collect: [:each | each @env0:copy].
 	self ___grailRegistry___ @env0:at: cls put: rec.
 	^ rec
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailRecordHolderFor: cls [
+	"Where the record of an enum class with no grailEnumRecord slot is kept on
+	the class, so it is committed with it: the class's ___dynInstVars___ holder,
+	under ___grailEnumRecord___, or nil when the class has no holder.
+
+	Every mixin enum is such a class: ``class Mode(str, Enum)'' is a Unicode32
+	subclass, ``class Level(float, Enum)'' an AbstractPyFloat one, and Enum's
+	class side, which declares the slot, is not on their chain.  Their record
+	was then kept in the session alone, so in any later session the class had
+	no members -- ``list(Mode)'' answered [] -- and a rebuild had no previous
+	members to keep (___grailKeepPreviousMember:named:in:).
+
+	The holder's ``___...'' entries are Grail-internal: ___classDict___ leaves
+	them out of the class's __dict__."
+
+	^ ((cls @env0:class @env0:whichClassIncludesSelector: #'___dynInstVars___'
+		environmentId: 1) @env0:notNil)
+			ifTrue: [cls @env0:perform: #'___dynInstVars___' env: 1]
+			ifFalse: [nil]
 
 ]
 
@@ -4353,10 +4385,15 @@ Enum class >> ___grailStoreRecord: rec for: cls [
 	"Register cls's record in this session AND on the class (see
 	___grailRecordFor:), so it survives the class being committed."
 
+	| holder |
 	self ___grailRegistry___ @env0:at: cls put: rec.
 	((cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot:'
 		environmentId: 1) @env0:notNil)
-		ifTrue: [cls ___grailEnumRecordSlot: rec].
+		ifTrue: [cls ___grailEnumRecordSlot: rec]
+		ifFalse: [
+			holder := self ___grailRecordHolderFor: cls.
+			holder @env0:isNil ifFalse: [
+				holder @env0:dynamicInstVarAt: #'___grailEnumRecord___' put: rec]].
 	^ rec
 
 ]
