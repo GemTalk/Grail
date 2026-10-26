@@ -726,3 +726,22 @@ test.test_patma
 # EXISTING ~/.grail/site-packages, which a CI container has none of, so it is
 # empty there.  CPython's always lists its stdlib directories.
 test.test_grammar
+
+# --- Core language (added 2026-10-26): f-strings ---
+#
+# test_fstring is CPython 3.14.4's, vendored verbatim.  It could not be
+# compiled, for three reasons in the scans that split an f-string into fields:
+#   * a triple-quoted literal inside a field, f'{"x" """eric"s""" "y"}', closed
+#     on its first quote -- both the tokenizer and the parser paired nested
+#     quotes one character at a time;
+#   * a field nested in a format spec was split by a scan of its own that
+#     matched braces blindly and parsed the text bare, so {value:{ 1}} was an
+#     INDENT, {3:{"}"}>10} ended at the quoted brace, and {1 + 1:1d} read
+#     ``1 + 1:1d'' as the expression; the spec is now parsed as an f-string;
+#   * f"{3!s  }" -- whitespace after a conversion -- kept ``!s'' in the
+#     expression.
+# Measured on Darwin arm64:
+#
+#   fstring 90t 37F/4E/4S   ast.parse answers Grail's lowering (BinOp / Call)
+#                           where CPython has JoinedStr; SyntaxError messages
+test.test_fstring

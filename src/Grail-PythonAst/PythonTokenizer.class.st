@@ -541,6 +541,16 @@ PythonTokenizer >> ___addCodePoint___: aCodePoint to: aBuilder [
 
 ]
 
+{ #category : 'Grail-private' }
+PythonTokenizer >> ___atTripleQuote___ [
+	"Is the character at the cursor the first of three identical quotes?"
+
+	| quote |
+	quote := self peek.
+	^ (self peekAt: 1) == quote and: [(self peekAt: 2) == quote]
+
+]
+
 { #category : 'Grail-tokenizing' }
 PythonTokenizer >> ___bodyOffsetOf: anIndex literal: lit [
 	"Where CPython says the source character at anIndex sits in the literal's
@@ -1473,7 +1483,7 @@ PythonTokenizer >> tokenizeString [
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  fields nestQuote fieldStarts isTString frame bodyStart lit |
+	  fields nestQuote nestTriple fieldStarts isTString frame bodyStart lit |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -1521,6 +1531,7 @@ PythonTokenizer >> tokenizeString [
 	fields := OrderedCollection new.
 	fieldStarts := nil.
 	nestQuote := nil.
+	nestTriple := false.
 	[
 		char := self peek.
 		char ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
@@ -1553,7 +1564,11 @@ PythonTokenizer >> tokenizeString [
 		Nested quotes are tracked so a brace inside an embedded literal cannot
 		shift the depth.  That tracking is also what makes arbitrary nesting
 		work: each nested f-string's quotes pair off in turn, so the scan
-		finds the right closing quote without recursing."
+		finds the right closing quote without recursing.  A nested literal
+		that opens with three quotes closes only on three: its body may hold
+		the quote character alone, as in f'{'x' '''eric's'''}' -- test_fstring
+		spells it with double quotes -- and pairing those one at a time left a
+		string open that swallowed the rest of the source."
 		(isFString and: [fields notEmpty or: [nestQuote notNil]]) ifTrue: [
 			nestQuote
 				ifNil: [
@@ -1572,7 +1587,11 @@ PythonTokenizer >> tokenizeString [
 						ifFalse: [
 							"Expression."
 							(char == $' or: [char == $"])
-								ifTrue: [nestQuote := char. str add: self advance]
+								ifTrue: [
+									nestQuote := char.
+									nestTriple := self ___atTripleQuote___.
+									nestTriple ifTrue: [str add: self advance. str add: self advance].
+									str add: self advance]
 								ifFalse: [
 							char == $#
 								ifTrue: [
@@ -1597,7 +1616,10 @@ PythonTokenizer >> tokenizeString [
 							str add: self advance.
 							self atEnd ifFalse: [str add: self advance]]
 						ifFalse: [
-							char == nestQuote ifTrue: [nestQuote := nil].
+							(char == nestQuote and: [nestTriple not or: [self ___atTripleQuote___]])
+								ifTrue: [
+									nestTriple ifTrue: [str add: self advance. str add: self advance].
+									nestQuote := nil].
 							str add: self advance]]
 		] ifFalse: [
 			triple ifTrue: [
