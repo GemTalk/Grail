@@ -516,6 +516,26 @@ PythonParser >> ___checkDeclarationLegal___: aName kind: aKind at: aToken [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___checkFieldExpressionStart___: anExpressionText token: aTok field: aFieldStart index: anIndex [
+	"CPython's refusals for a replacement field whose expression cannot start
+	the way it does (invalid_replacement_field, Grammar/python.gram), raised
+	before the field is parsed -- Grail parses it wrapped in parentheses, where
+	both would be legal or would fail with the parenthesis's own message:
+	  * a lambda opening the expression or one of its comma-separated items
+	    (``{1, lambda: x}''): its ``:'' ends the expression, so CPython asks
+	    for the parentheses that would keep it whole;
+	  * ``**'': no expression starts with it."
+
+	(self ___hasTopLevelLambda___: anExpressionText) ifTrue: [
+		^ self ___fstringError___: 'lambda expressions are not allowed without parentheses'
+			token: aTok fieldAt: aFieldStart index: anIndex].
+	(anExpressionText beginsWith: '**') ifTrue: [
+		^ self ___fstringError___: 'expecting a valid expression after ''{'''
+			token: aTok fieldAt: aFieldStart index: anIndex]
+
+]
+
 { #category : 'Grail-target validation' }
 PythonParser >> ___checkFirstAssignTarget___: first [
 	"Raise CPython's SyntaxError for a statement's FIRST assignment target,
@@ -1220,6 +1240,32 @@ PythonParser >> ___ftstringExprWithoutComments___: text [
 		i := i + 1].
 	"A ``#'' inside a string literal removes nothing."
 	^ out contents = text ifTrue: [text] ifFalse: [out contents]
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___hasTopLevelLambda___: anExpressionText [
+	"Whether a lambda opens anExpressionText or one of its top-level
+	comma-separated items -- not one inside brackets, ``{(lambda: 1)}'', and
+	not a name that merely starts with it, ``{lambdax}''.  Tokenized
+	parenthesised, as the field is parsed, so a multi-line field has no
+	NEWLINE tokens; text the tokenizer refuses answers false and is left to
+	the parse to report."
+
+	| fieldTokens depth previous |
+	fieldTokens := [PythonTokenizer tokenize: '(' , anExpressionText , ')']
+		on: SyntaxError do: [:ex | ex return: #()].
+	depth := 0.
+	previous := nil.
+	2 to: fieldTokens size do: [:i |
+		| token |
+		token := fieldTokens at: i.
+		((token isKeyword: 'lambda') and: [depth = 0
+			and: [previous isNil or: [previous isOp: ',']]]) ifTrue: [^ true].
+		((token isOp: '(') or: [(token isOp: '[') or: [token isOp: '{']]) ifTrue: [depth := depth + 1].
+		((token isOp: ')') or: [(token isOp: ']') or: [token isOp: '}']]) ifTrue: [depth := depth - 1].
+		previous := token].
+	^ false
 
 ]
 
@@ -4866,6 +4912,7 @@ PythonParser >> parseFStringLiteral [
 				1 to: lead do: [:k |
 					(rawExpr at: k) == Character lf ifTrue: [
 						leadNewlines := leadNewlines + 1]].
+				self ___checkFieldExpressionStart___: innerSource token: tok field: exprStart index: exprStart + lead.
 				wrapped := innerSource isEmpty not.
 				wrapped ifTrue: [
 					innerSource := '(' , innerSource , ')'].
@@ -4927,15 +4974,19 @@ PythonParser >> parseFStringLiteral [
 			]
 		] ifFalse: [
 			ch == $} ifTrue: [
-				"``}}`` literal — single ``}`` outside placeholder is a
-				syntax error, but we forgive it (Grail not strict)."
+				"``}}`` is a literal ``}``.  A single one outside a field is
+				CPython's SyntaxError -- it was forgiven here, so ``f'x}''' and
+				``f'{{}''' compiled (test_fstring test_mismatched_braces).  A brace
+				an escape decoded to arrives doubled (PythonTokenizer >>
+				tokenizeString), so only a brace written as itself gets here alone."
 				((pos < len) and: [(value at: pos + 1) == $}]) ifTrue: [
 					parts add: #literal -> '}'.
 					pos := pos + 2.
 				] ifFalse: [
-					parts add: #literal -> '}' asString.
-					pos := pos + 1.
-				]
+					^ self ___syntaxError___:
+						(tok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '])
+							, 'single ''}'' is not allowed'
+						at: tok]
 			] ifFalse: [
 				"Plain literal run."
 				| runStart |
