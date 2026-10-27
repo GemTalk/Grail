@@ -5213,10 +5213,19 @@ builtins >> _compile: positional kw: kwargs [
 			this one: a module-level await is a SyntaxError to the ordinary
 			parser, so without the relaxation compile() refuses the source here
 			and never reaches the branch that would wrap it."
-			parsed := [ModuleAst @env0:parseSource: source allowTopLevelAwait:
+			"THE TOKENIZER'S WARNINGS NAME THIS FILE, as CPython's name
+			tok->filename: an invalid escape, ``1if x else y''.  It cannot be
+			handed down through the parse, so it rides the session for its
+			duration (PythonTokenizer >> ___compileFilename___)."
+			SessionTemps @env0:current @env0:at: #'GrailCompileFilename'
+				put: ((args @env0:size @env0:>= 2)
+					ifTrue: [args @env0:at: 2]
+					ifFalse: ['<string>']).
+			parsed := [[ModuleAst @env0:parseSource: source allowTopLevelAwait:
 				((args @env0:size @env0:>= 4)
 					@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
 						@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])]
+					@env0:ensure: [SessionTemps @env0:current @env0:removeKey: #'GrailCompileFilename' ifAbsent: [nil]]]
 				@env0:on: SyntaxError
 				do: [:ex |
 					"Re-raise so the Python ``str(e)'' carries the parser's message.

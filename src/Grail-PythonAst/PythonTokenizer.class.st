@@ -568,6 +568,15 @@ PythonTokenizer >> ___bodyOffsetOf: anIndex literal: lit [
 ]
 
 { #category : 'Grail-private' }
+PythonTokenizer >> ___compileFilename___ [
+	"The file a warning of this tokenizer names: compile()'s filename while
+	compile() parses (builtins >> _compile:kw:), else '<string>'."
+
+	^ SessionTemps current at: #'GrailCompileFilename' ifAbsent: ['<string>']
+
+]
+
+{ #category : 'Grail-private' }
 PythonTokenizer >> ___dotStartsNumberTail___ [
 	"After digits and a dot, decide whether the identifier-looking char that
 	follows the dot actually CONTINUES the number literal rather than starting an
@@ -667,6 +676,24 @@ PythonTokenizer >> ___hexEscapeDigits___: aCount for: aLetter backslash: aBacksl
 	^ self ___escapeError___: 'truncated \' , aLetter asString
 			, ((String new: aCount) atAllPut: $X; yourself) , ' escape'
 		from: aBackslash to: position - 1 literal: lit
+
+]
+
+{ #category : 'Grail-private' }
+PythonTokenizer >> ___invalidCharacter___: aCharacter [
+	"A character that can start no token -- CPython's lexer refuses a non-ASCII
+	one by name: ``invalid character '⁄' (U+2044)'', or ``invalid
+	non-printable character U+00A0'' when it has no glyph.  It became a
+	one-character operator here, and the parser said only ``invalid syntax''."
+
+	| hex |
+	hex := aCharacter codePoint printStringRadix: 16 showRadix: false.
+	hex size < 4 ifTrue: [hex := (String new: 4 - hex size withAll: $0) , hex].
+	^ PythonParser ___signal___: SyntaxError
+		message: ((String new @env1:___pyIsPrintableCodePoint___: aCharacter codePoint)
+			ifTrue: ['invalid character ''' , (String with: aCharacter) , ''' (U+' , hex , ')']
+			ifFalse: ['invalid non-printable character U+' , hex])
+		in: source from: position - 1 to: nil
 
 ]
 
@@ -805,7 +832,7 @@ PythonTokenizer >> ___warnInvalidEscape___: escText octal: isOctal at: bsPos [
 		'Such sequences will not work in the future. Did you mean "\\' , escText ,
 		'"? A raw string is also an option.'.
 	raised := false.
-	[warningsMod @env1:warn_explicit: msg _: cat _: '<string>' _: line]
+	[warningsMod @env1:warn_explicit: msg _: cat _: self ___compileFilename___ _: line]
 		on: AbstractException
 		do: [:ex |
 			(cat handles: ex) ifFalse: [ex pass].
@@ -819,11 +846,36 @@ PythonTokenizer >> ___warnInvalidEscape___: escText octal: isOctal at: bsPos [
 			with: ('"\' , escText , '"' , kind ,
 				'Did you mean "\\' , escText , '"? A raw string is also an option.')
 			with: (tuple withAll: (Array
-				with: '<string>'
+				with: self ___compileFilename___
 				with: (loc at: 1)
 				with: (loc at: 2)
 				with: (loc at: 3))))
 		kw: nil
+
+]
+
+{ #category : 'Grail-private' }
+PythonTokenizer >> ___warnSyntax___: aMessage [
+	"Warn aMessage on this line, as CPython's _PyTokenizer_parser_warn does, and
+	answer whether a filter made the warning an error -- the caller then raises
+	the SyntaxError at its own cursor.  Anything else the warnings machinery
+	raises is passed on.  Silent, answering false, while the warnings module
+	is not importable: a bootstrap parse runs before it exists."
+
+	| warningsModule category raised |
+	warningsModule := [(importlib @env1:modules) at: #warnings ifAbsent: [nil]]
+		on: AbstractException do: [:ex | ex return: nil].
+	warningsModule isNil ifTrue: [^ false].
+	category := System myUserProfile symbolList objectNamed: #'SyntaxWarning'.
+	category isNil ifTrue: [^ false].
+	raised := false.
+	[warningsModule @env1:warn_explicit: aMessage _: category _: self ___compileFilename___ _: line]
+		on: AbstractException
+		do: [:ex |
+			(category handles: ex) ifFalse: [ex pass].
+			raised := true.
+			ex return: nil].
+	^ raised
 
 ]
 
@@ -1222,6 +1274,9 @@ PythonTokenizer >> tokenizeNumber [
 		ch == $i ifTrue: [r := 'fns' includes: (source atOrNil: position)].
 		ch == $o ifTrue: [r := self ___numberFollowedBy___: 'r'].
 		ch == $n ifTrue: [r := self ___numberFollowedBy___: 'ot'].
+		(r and: [self ___warnSyntax___: 'invalid ' , kind , ' literal']) ifTrue: [
+			position := position - 1.
+			^ self ___numberError___: 'invalid ' , kind , ' literal'].
 		(r not and: [ch notNil and: [ch codePoint < 128
 			and: [ch isLetter or: [ch isDigit or: [ch == $_]]]]]) ifTrue: [
 				position := position - 1.
@@ -1400,6 +1455,7 @@ PythonTokenizer >> tokenizeOperator [
 	startLine := line.
 	startPos := position .
 	char := self advance.
+	char codePoint >= 128 ifTrue: [^ self ___invalidCharacter___: char].
 	next := self peek.
 
 	"Three-character operators  **= //= <<= >>= ... "
