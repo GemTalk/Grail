@@ -765,7 +765,7 @@ math >> copysign: x _: y [
 	-nan) indistinguishable (test_float.py's test_nan_signs)."
 
 	| mag neg fy |
-	mag := (self ___real___: x) @env0:abs.
+	mag := (self ___real___: x) ___fabs___.
 	fy := self ___real___: y.
 	neg := (fy @env0:signBit) @env0:== 1.
 	^ neg ifTrue: [mag @env0:negated] ifFalse: [mag]
@@ -909,7 +909,7 @@ math >> expm1: x [
 
 { #category : 'Grail-Floating Point Functions' }
 math >> fabs: x [
-	^ (self ___real___: x) @env0:abs
+	^ (self ___real___: x) ___fabs___
 
 ]
 
