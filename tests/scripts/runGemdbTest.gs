@@ -298,6 +298,35 @@ check value: 'explicit commit of a generator: SessionStateError, then abort, the
   value: (r copyFrom: 1 to: 37) = 'refused:True:False/needs-abort/False/'.
 check value: 'the refusal names where the generator is held, in Python terms'
   value: r = 'refused:True:False/needs-abort/False/gemdb.root[''gemdb_test''][''gen'']/True'.
+
+"A C EXTENSION'S OBJECT IS NEVER COMMITTED either.  Its proxy holds a pointer
+into this gem's process, which a later session would read as garbage, and the
+shim can release the C object only while the proxy is temporary
+(docs/Shim_Memory.md), so ShimForeignObject is instancesNonPersistent.  It
+used to commit silently.  _grail_demo stands in for numpy; without the built
+module the check is skipped."
+r := evalPython value: '
+import gemdb
+try:
+    import _grail_demo
+except ImportError:
+    _grail_demo = None
+if _grail_demo is None:
+    r = "skipped"
+else:
+    gemdb.root["gemdb_test"]["px"] = _grail_demo.Buf()
+    try:
+        gemdb.commit()
+        r = "committed"
+    except gemdb.SessionStateError as e:
+        r = "refused:" + e.path
+    gemdb.abort()
+    r = r + "/" + str("px" in gemdb.root["gemdb_test"])
+r
+'.
+r = 'skipped' ifTrue: [out nextPutAll: 'SKIP  C extension commit check: lib/_grail_demo.so not built'; cr].
+check value: 'a C extension object is refused at commit, and named; abort drops it'
+  value: (r = 'skipped' or: [r = 'refused:gemdb.root[''gemdb_test''][''px'']/False']).
 check value: 'refused commit recovered: session clean' value: System needsCommit not.
 
 "The block form aborts the refused transaction itself, and the retrying

@@ -1,7 +1,13 @@
 "Grail reverse proxy for a foreign C PyObject* owned by a prebuilt CPython
 extension (e.g. a numpy DType).  Holds the raw pointer (cPtr) and the name
 its Python __name__ reports (typeName).  Created by
-CPythonShim>>foreignProxyForPointer:typeName:."
+CPythonShim>>foreignProxyForPointer:typeName:.
+
+Instances are never committed: the pointer is into this gem's process, so a
+committed proxy would point at nothing in the next session, and a C object
+can be released only while its proxy is temporary (docs/Shim_Memory.md).  A
+commit that reaches one is refused with TransactionError 2407, as for a
+generator's Semaphore."
 Class {
 	#name : 'ShimForeignObject',
 	#superclass : 'Object',
@@ -11,6 +17,9 @@ Class {
 		'view',
 		'compareHash',
 		'arrayDispatch'
+	],
+	#gs_options : [
+		'instancesNonPersistent'
 	]
 }
 
