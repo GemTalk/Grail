@@ -333,6 +333,28 @@ PythonParser >> ___atEvalInputEnd___ [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___balancedJoinOf: pieces from: startTok [
+	"The pieces of an f-string joined by ``+'', as a BALANCED tree: the same
+	additions in the same left-to-right order, but log2(n) deep where a left
+	fold is n deep.  Every pass over the tree -- validation, both codegen arms
+	-- recurses through it, and test_fstring's test_many_expressions joins 256
+	f-strings of 255 fields: some 130,000 pieces, which a left fold turned into
+	a RecursionError."
+
+	| middle |
+	pieces size = 1 ifTrue: [^ pieces first].
+	middle := pieces size // 2.
+	^ BinOpAst new
+		left: (self ___balancedJoinOf: (pieces copyFrom: 1 to: middle) from: startTok);
+		op: (AddAst new from: startTok to: startTok; yourself);
+		right: (self ___balancedJoinOf: (pieces copyFrom: middle + 1 to: pieces size) from: startTok);
+		from: startTok to: self lastToken;
+		___beAnFStringJoin___;
+		yourself
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___bodyRangeAfterColon___: colon [
 	"{first. last. end} token indexes of the block a header's colon opens: an
@@ -513,6 +535,26 @@ PythonParser >> ___checkDeclarationLegal___: aName kind: aKind at: aToken [
 		^ self ___signalDeclarationSyntaxError___: 'name ''' , aName asString
 			, ''' is assigned to before ' , aKind , ' declaration' at: aToken
 	]
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___checkFieldExpressionStart___: anExpressionText token: aTok field: aFieldStart index: anIndex [
+	"CPython's refusals for a replacement field whose expression cannot start
+	the way it does (invalid_replacement_field, Grammar/python.gram), raised
+	before the field is parsed -- Grail parses it wrapped in parentheses, where
+	both would be legal or would fail with the parenthesis's own message:
+	  * a lambda opening the expression or one of its comma-separated items
+	    (``{1, lambda: x}''): its ``:'' ends the expression, so CPython asks
+	    for the parentheses that would keep it whole;
+	  * ``**'': no expression starts with it."
+
+	(self ___hasTopLevelLambda___: anExpressionText) ifTrue: [
+		^ self ___fstringError___: 'lambda expressions are not allowed without parentheses'
+			token: aTok fieldAt: aFieldStart index: anIndex].
+	(anExpressionText beginsWith: '**') ifTrue: [
+		^ self ___fstringError___: 'expecting a valid expression after ''{'''
+			token: aTok fieldAt: aFieldStart index: anIndex]
 
 ]
 
@@ -1220,6 +1262,32 @@ PythonParser >> ___ftstringExprWithoutComments___: text [
 		i := i + 1].
 	"A ``#'' inside a string literal removes nothing."
 	^ out contents = text ifTrue: [text] ifFalse: [out contents]
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___hasTopLevelLambda___: anExpressionText [
+	"Whether a lambda opens anExpressionText or one of its top-level
+	comma-separated items -- not one inside brackets, ``{(lambda: 1)}'', and
+	not a name that merely starts with it, ``{lambdax}''.  Tokenized
+	parenthesised, as the field is parsed, so a multi-line field has no
+	NEWLINE tokens; text the tokenizer refuses answers false and is left to
+	the parse to report."
+
+	| fieldTokens depth previous |
+	fieldTokens := [PythonTokenizer tokenize: '(' , anExpressionText , ')']
+		on: SyntaxError do: [:ex | ex return: #()].
+	depth := 0.
+	previous := nil.
+	2 to: fieldTokens size do: [:i |
+		| token |
+		token := fieldTokens at: i.
+		((token isKeyword: 'lambda') and: [depth = 0
+			and: [previous isNil or: [previous isOp: ',']]]) ifTrue: [^ true].
+		((token isOp: '(') or: [(token isOp: '[') or: [token isOp: '{']]) ifTrue: [depth := depth + 1].
+		((token isOp: ')') or: [(token isOp: ']') or: [token isOp: '}']]) ifTrue: [depth := depth - 1].
+		previous := token].
+	^ false
 
 ]
 
@@ -4640,7 +4708,7 @@ PythonParser >> parseFStringLiteral [
 	Implicit concatenation (``f'a' 'b' f'c'``) is supported by
 	walking forward while the token is STRING or FSTRING."
 
-	| startTok tok value parts pos len ch result piece converted
+	| startTok tok value parts pos len ch result converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
 	  wrapped anchor sawT sawNonT sawF uncommented hadComment |
@@ -4866,6 +4934,7 @@ PythonParser >> parseFStringLiteral [
 				1 to: lead do: [:k |
 					(rawExpr at: k) == Character lf ifTrue: [
 						leadNewlines := leadNewlines + 1]].
+				self ___checkFieldExpressionStart___: innerSource token: tok field: exprStart index: exprStart + lead.
 				wrapped := innerSource isEmpty not.
 				wrapped ifTrue: [
 					innerSource := '(' , innerSource , ')'].
@@ -4927,15 +4996,19 @@ PythonParser >> parseFStringLiteral [
 			]
 		] ifFalse: [
 			ch == $} ifTrue: [
-				"``}}`` literal — single ``}`` outside placeholder is a
-				syntax error, but we forgive it (Grail not strict)."
+				"``}}`` is a literal ``}``.  A single one outside a field is
+				CPython's SyntaxError -- it was forgiven here, so ``f'x}''' and
+				``f'{{}''' compiled (test_fstring test_mismatched_braces).  A brace
+				an escape decoded to arrives doubled (PythonTokenizer >>
+				tokenizeString), so only a brace written as itself gets here alone."
 				((pos < len) and: [(value at: pos + 1) == $}]) ifTrue: [
 					parts add: #literal -> '}'.
 					pos := pos + 2.
 				] ifFalse: [
-					parts add: #literal -> '}' asString.
-					pos := pos + 1.
-				]
+					^ self ___syntaxError___:
+						(tok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '])
+							, 'single ''}'' is not allowed'
+						at: tok]
 			] ifFalse: [
 				"Plain literal run."
 				| runStart |
@@ -4964,18 +5037,9 @@ PythonParser >> parseFStringLiteral [
 		sawF ifTrue: [result ___beAnFString___].
 		^ result
 	].
-	"Build a left-folded chain of BinOp(+) over each piece."
-	result := self ___fstringPartToAst: parts first from: startTok.
-	2 to: parts size do: [:i |
-		piece := self ___fstringPartToAst: (parts at: i) from: startTok.
-		result := BinOpAst new
-			left: result;
-			op: (AddAst new from: startTok to: startTok ; yourself);
-			right: piece;
-			from: startTok to: self lastToken ;
-			___beAnFStringJoin___ ;
-			yourself.
-	].
+	result := self
+		___balancedJoinOf: (parts collect: [:part | self ___fstringPartToAst: part from: startTok])
+		from: startTok.
 	"An f-string with no fields folds to its text, still an f-string to CPython."
 	(sawF and: [result isKindOf: ConstantAst]) ifTrue: [result ___beAnFString___].
 	^ result

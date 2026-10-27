@@ -317,6 +317,14 @@ module >> ___globalAt___: aSym otherwise: aBlock [
 	dynamic instVar, which is found above and never reaches the tombstone.  No
 	store hook is needed, and none can be forgotten."
 	(self ___isDeletedGlobal___: aSym) ifTrue: [^ aBlock @env0:value].
+	"``__annotations__'' is no global until something READS it as an attribute:
+	CPython's module type computes it from __annotate__ and only then caches it
+	in the namespace, so before that a bare name -- in module code or in a
+	function -- is a NameError (test_grammar test_var_annot_in_module).  The
+	accessor below serves ``mod.__annotations__'', which ___pyAttrLoad___:
+	still performs, and the dict it caches is the dynamic instVar found above;
+	so is the one a ``from __future__ import annotations'' module stores."
+	aSym == #'__annotations__' ifTrue: [^ aBlock @env0:value].
 	cls := self @env0:class.
 	s := aSym @env0:asString.
 	"Value-attribute accessors (the ``__name__'' / ``__doc__'' / …
