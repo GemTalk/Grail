@@ -1,14 +1,34 @@
 Extension { #name : 'PyGenericAlias' }
 
 { #category : 'Grail-Instantiation' }
-PyGenericAlias class >> ___fromSubscript___: item origin: aClass [
-	"Build an alias for ``aClass[item]''.  A multi-element subscript
-	(``dict[K, V]'') arrives as a tuple; a single one arrives bare."
+PyGenericAlias class >> ___argumentsOf___: item [
+	"The arguments of a subscript: a multi-element one (``dict[K, V]'')
+	arrives as a tuple, a single one bare."
 
-	^ self origin: aClass
-		args: ((item isKindOf: tuple)
-			ifTrue: [item @env0:asArray]
-			ifFalse: [Array @env0:with: item])
+	^ (item isKindOf: tuple)
+		ifTrue: [item @env0:asArray]
+		ifFalse: [Array @env0:with: item]
+
+]
+
+{ #category : 'Grail-Instantiation' }
+PyGenericAlias class >> ___checkArguments___: anArray keywords: aDictionary [
+	"CPython's ga_new (Objects/genericaliasobject.c:897): no keywords, and
+	exactly two arguments -- origin and arguments -- after the type."
+
+	(aDictionary @env0:notNil and: [aDictionary @env0:isEmpty @env0:not]) ifTrue: [
+		^ TypeError ___signal___: 'GenericAlias() takes no keyword arguments'].
+	anArray @env0:size @env0:= 2 ifFalse: [
+		^ TypeError ___signal___: 'GenericAlias expected 2 arguments, got '
+			@env0:, anArray @env0:size @env0:printString]
+
+]
+
+{ #category : 'Grail-Instantiation' }
+PyGenericAlias class >> ___fromSubscript___: item origin: aClass [
+	"Build an alias for ``aClass[item]''."
+
+	^ self origin: aClass args: (self ___argumentsOf___: item)
 
 ]
 
@@ -68,6 +88,24 @@ PyGenericAlias class >> ___isTypeVar___: anObject [
 ]
 
 { #category : 'Grail-Instantiation' }
+PyGenericAlias class >> ___new__: positional kw: keywords [
+	"``GenericAlias.__new__(cls, *args, **kwargs)'' when keywords come along
+	or the arity is not __new__:_:_:'s -- a subclass's ``super().__new__(cls,
+	*args, **kwargs)''.  The generic Object class form ignored the keywords,
+	and given only the type it allocated a bare alias whose every read was a
+	MessageNotUnderstood no Python handler could catch."
+
+	| cls arguments |
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: 'GenericAlias.__new__(): not enough arguments'].
+	cls := positional @env0:at: 1.
+	arguments := positional @env0:copyFrom: 2 to: positional @env0:size.
+	self ___checkArguments___: arguments keywords: keywords.
+	^ cls ___fromSubscript___: (arguments @env0:at: 2) origin: (arguments @env0:at: 1)
+
+]
+
+{ #category : 'Grail-Instantiation' }
 PyGenericAlias class >> __new__: cls _: origin _: args [
 	"``GenericAlias.__new__(cls, origin, args)'', which is what a Python
 	SUBCLASS reaches through ``super().__new__(cls, origin, args)'' --
@@ -83,14 +121,7 @@ PyGenericAlias class >> origin: aClass args: anArgArray [
 	"The Smalltalk-side constructor.  anArgArray is a plain Array of the
 	subscript arguments, already flattened out of any tuple."
 
-	| inst |
-	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #'__origin__' put: aClass.
-	inst @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: anArgArray).
-	"__parameters__ is computed on first READ (PyGenericAlias >>
-	__parameters__), as CPython does -- most aliases are never asked."
-	inst @env0:dynamicInstVarAt: #'__unpacked__' put: false.
-	^ inst
+	^ self @env0:new ___initializeOrigin___: aClass args: anArgArray
 
 ]
 
@@ -102,8 +133,7 @@ PyGenericAlias class >> value: positional value: keywords [
 	"A SUBCLASS is called the ordinary way, so its own __new__ and __init__
 	run; only GenericAlias itself takes this shortcut."
 	self == PyGenericAlias ifFalse: [^ super value: positional value: keywords].
-	(positional == nil or: [positional @env0:size @env0:< 2]) ifTrue: [
-		TypeError ___signal___: 'GenericAlias expected 2 arguments'].
+	self ___checkArguments___: (positional ifNil: [#()]) keywords: keywords.
 	origin := positional @env0:at: 1.
 	rest := positional @env0:at: 2.
 	^ self ___fromSubscript___: rest origin: origin
@@ -134,6 +164,19 @@ PyGenericAlias >> ___argRepr___: anObject [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+PyGenericAlias >> ___initializeOrigin___: aClass args: anArgArray [
+	"anArgArray is a plain Array of the subscript arguments, already
+	flattened out of any tuple."
+
+	self @env0:dynamicInstVarAt: #'__origin__' put: aClass.
+	self @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: anArgArray).
+	"__parameters__ is computed on first READ (PyGenericAlias >>
+	__parameters__), as CPython does -- most aliases are never asked."
+	self @env0:dynamicInstVarAt: #'__unpacked__' put: false
+
+]
+
 { #category : 'Grail-Private' }
 PyGenericAlias >> ___nameOf___: anObject [
 	| n |
@@ -144,6 +187,25 @@ PyGenericAlias >> ___nameOf___: anObject [
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	n == nil ifTrue: [^ anObject @env0:printString].
 	^ n @env0:asString
+
+]
+
+{ #category : 'Grail-Instantiation' }
+PyGenericAlias >> ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew [
+	"A Python subclass with no __new__ of its own -- ``class SubClass(GenericAlias)''
+	-- is allocated bare by the general construction path, and built here as
+	CPython's ga_new builds any subtype it is handed
+	(Objects/genericaliasobject.c:897): no keywords, exactly two positionals,
+	origin and arguments.  Left bare, reading its __origin__ was a Smalltalk
+	MessageNotUnderstood no Python handler could catch (test_genericalias
+	test_subclassing_types_genericalias).  A subclass that defines __new__ built
+	itself through GenericAlias.__new__."
+
+	hasNew ifTrue: [^ self].
+	self @env0:class ___checkArguments___: positional keywords: keywords.
+	self
+		___initializeOrigin___: (positional @env0:at: 1)
+		args: (self @env0:class ___argumentsOf___: (positional @env0:at: 2))
 
 ]
 
