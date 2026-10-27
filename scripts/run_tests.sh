@@ -356,6 +356,11 @@ timed "gemstone-system" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/
 # needs two concurrent sessions and lives in run_gemdb_conflict_test.sh.
 timed "gemdb" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runGemdbTest.gs < /dev/null || EXIT=$?
 timed "gemdb-conflict" tests/scripts/run_gemdb_conflict_test.sh || EXIT=$?
+# How much temporary memory a call across the C-extension shim leaves behind
+# (docs/Shim_Memory.md, Step 0): a SHIM-MEMORY line with bytes per call. It
+# reports and does not fail until a later step gives it a threshold; it fails
+# only when the workload cannot run. Its own session, because it measures one.
+timed "shim-memory" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runShimMemoryTest.gs < /dev/null || EXIT=$?
 # contextvars' current Context, and a committed regex's recompiled pointer,
 # are per-session state: two RPC sessions set one ContextVar and do Decimal
 # arithmetic with overlapping transactions, and every commit must succeed.
