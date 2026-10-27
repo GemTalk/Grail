@@ -324,6 +324,31 @@ PythonParser class >> parse: aString [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser >> ___bodyRangeAfterColon___: colon [
+	"{first. last. end} token indexes of the block a header's colon opens: an
+	indented body, after however many NEWLINE tokens (a comment line is one),
+	from its first statement to the token before its DEDENT, which is end; or
+	a one-line body, through its NEWLINE, which is end.  nil when there is
+	none."
+
+	| indent dedent end |
+	indent := colon + 1.
+	[indent <= tokens size and: [(tokens at: indent) isNewline]]
+		whileTrue: [indent := indent + 1].
+	(indent > (colon + 1) and: [indent <= tokens size
+		and: [(tokens at: indent) type == #INDENT]])
+		ifTrue: [
+			dedent := self ___indexOfMatchingDedent___: indent.
+			dedent isNil ifTrue: [^ nil].
+			^ Array with: indent + 1 with: dedent - 1 with: dedent].
+	end := colon + 1.
+	[end <= tokens size and: [(tokens at: end) isNewline not]] whileTrue: [end := end + 1].
+	end > tokens size ifTrue: [^ nil].
+	^ Array with: colon + 1 with: end with: end
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser >> ___canStartExpression___: aTok [
 	"Could an expression begin at aTok?  For the errors that depend on what
 	follows: a missing comma, a statement where an expression was due."
@@ -800,6 +825,27 @@ PythonParser >> ___declarativeDecoratorSymbolFor: aDecoratorNode [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___emitParameters: segments withDefaultsAs: aPrefix like: ref into: out [
+	"A def's parameter list, segment by segment, with the n-th default replaced
+	by the name aPrefix , n , '___' -- the scope function's parameter that
+	carries it in (___rewriteGenericFunctionAt___:decorators:)."
+
+	| n |
+	n := 0.
+	segments do: [:seg |
+		| at |
+		at := self ___topLevelEqualsIn___: seg.
+		at isNil
+			ifTrue: [seg do: [:k | out add: (tokens at: k)]]
+			ifFalse: [
+				n := n + 1.
+				(seg copyFrom: 1 to: at) do: [:k | out add: (tokens at: k)].
+				self ___synth: aPrefix , n printString , '___' like: ref into: out].
+		self ___synth: ',' like: ref into: out]
+
+]
+
 { #category : 'Grail-parsing - type params' }
 PythonParser >> ___emitTypeParam: p like: ref into: out [
 	"``T = ___typing___._grail_type_param(kind, 'T', bound, constraints,
@@ -1130,6 +1176,26 @@ PythonParser >> ___ftstringExprWithoutComments___: text [
 		i := i + 1].
 	"A ``#'' inside a string literal removes nothing."
 	^ out contents = text ifTrue: [text] ifFalse: [out contents]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___headerColonAfter___: anIndex [
+	"The index of the ``:'' that ends a compound statement's header, searching
+	after anIndex outside brackets -- past a def's ``-> R'' -- or nil at the
+	end of the line."
+
+	| depth k |
+	depth := 0.
+	k := anIndex + 1.
+	[k <= tokens size and: [(tokens at: k) isNewline not]] whileTrue: [
+		| t |
+		t := tokens at: k.
+		((t isOp: '(') or: [(t isOp: '[') or: [t isOp: '{']]) ifTrue: [depth := depth + 1].
+		((t isOp: ')') or: [(t isOp: ']') or: [t isOp: '}']]) ifTrue: [depth := depth - 1].
+		(depth = 0 and: [t isOp: ':']) ifTrue: [^ k].
+		k := k + 1].
+	^ nil
 
 ]
 
@@ -1831,6 +1897,19 @@ PythonParser >> ___parseStarExpressionsOrYield___ [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___parsingForAst___ [
+	"Whether this parse builds the tree the ast module answers (builtins >>
+	___astTreeFor___:mode:optimized:level:), which is the tree the source
+	spells: a generic def or class there stays a FunctionDef or ClassDef with
+	its type_params, not the annotation scope ___rewriteTypeParamStatement___
+	compiles it as.  A generic type alias is still rewritten -- the parser has
+	no module-level TypeAlias with parameters to build instead."
+
+	^ (SessionTemps current at: #'GrailParsingForAst' otherwise: nil) == true
+
+]
+
 { #category : 'Grail-parsing - statements' }
 PythonParser >> ___py2StatementKeywordOf___: aStmt [
 	"``print'' or ``exec'' when aStmt is an expression statement that is exactly
@@ -1965,6 +2044,108 @@ PythonParser >> ___retractTargetRead___: aNameAst [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
+	"``[async] def f[T](params) -> R: body'' at module or function level,
+	rewritten as the class and alias forms are (___rewriteTypeParamStatement___)
+	into the annotation scope CPython's compiler builds for it:
+
+	    def ___generic_parameters_of_f___(___tpdefault1___):
+	        global f                  -- nonlocal f inside a function
+	        ___typing___ = __import__('_typing')
+	        T = ___typing___._grail_type_param(0, 'T', None, None, None)
+	        def f(x=___tpdefault1___) -> R:
+	            body
+	        f.__type_params__ = (T,)
+	        return f
+	    f = deco(___generic_parameters_of_f___(<the default>))
+	    del ___generic_parameters_of_f___
+
+	so T is bound for the body and the annotations, which used to raise
+	NameError.  The DEFAULTS are evaluated outside, before the scope function
+	runs, as CPython evaluates them (Python/codegen.c, codegen_function):
+	``def f[A](a=list[A]())'' stays a NameError.  The global / nonlocal
+	declaration makes the def bind the function's own name, so a body that
+	calls f reaches the decorated f, as in CPython, not a scope-local copy.
+	A def in a class body -- a method -- is not rewritten here."
+
+	| defAt nameTok lb rb pOpen pClose colon range params name w ref out names
+	  segments defaults |
+	defAt := ((tokens at: i) isKeyword: 'async') ifTrue: [i + 1] ifFalse: [i].
+	defAt + 2 > tokens size ifTrue: [^ false].
+	nameTok := tokens at: defAt + 1.
+	(nameTok isName and: [(tokens at: defAt + 2) isOp: '[']) ifFalse: [^ false].
+	lb := defAt + 2.
+	rb := self ___indexOfClose___: lb.
+	rb isNil ifTrue: [^ false].
+	pOpen := rb + 1.
+	(pOpen <= tokens size and: [(tokens at: pOpen) isOp: '(']) ifFalse: [^ false].
+	pClose := self ___indexOfClose___: pOpen.
+	pClose isNil ifTrue: [^ false].
+	colon := self ___headerColonAfter___: pClose.
+	colon isNil ifTrue: [^ false].
+	range := self ___bodyRangeAfterColon___: colon.
+	range isNil ifTrue: [^ false].
+	self ___checkTypeParamsAt___: lb.
+	params := self ___typeParamsFrom: lb + 1 to: rb - 1.
+	params isEmpty ifTrue: [^ false].
+	name := nameTok value asString.
+	w := '___generic_parameters_of_' , name , '___'.
+	ref := tokens at: i.
+	names := String new.
+	params do: [:p | names := names , (p at: 2) , ','].
+	segments := self ___segmentsFrom: pOpen + 1 to: pClose - 1.
+	defaults := OrderedCollection new.
+	segments do: [:seg |
+		(self ___topLevelEqualsIn___: seg) ifNotNil: [:at |
+			defaults add: (seg copyFrom: at + 1 to: seg size)]].
+	out := OrderedCollection new.
+	self ___synth: 'def ' , w , '(' like: ref into: out.
+	1 to: defaults size do: [:n |
+		self ___synth: '___tpdefault' , n printString , '___,' like: ref into: out].
+	self ___synth: '):' like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synthType: #INDENT like: ref into: out.
+	self ___synth: (((variableStack size > 1) and: [((globalStack last) includes: name asSymbol) not])
+			ifTrue: ['nonlocal '] ifFalse: ['global ']) , name
+		like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	params do: [:p | self ___emitTypeParam: p like: ref into: out].
+	i to: defAt do: [:k | out add: (tokens at: k)].
+	out add: nameTok.
+	out add: (tokens at: pOpen).
+	self ___emitParameters: segments withDefaultsAs: '___tpdefault' like: ref into: out.
+	pClose to: colon do: [:k | out add: (tokens at: k)].
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synthType: #INDENT like: ref into: out.
+	(range at: 1) to: (range at: 2) do: [:k | out add: (tokens at: k)].
+	self ___synthType: #DEDENT like: ref into: out.
+	self ___synth: name , '.__type_params__ = (' , names , ')' like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synth: 'return ' , name like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synthType: #DEDENT like: ref into: out.
+	self ___synth: name , ' =' like: ref into: out.
+	decoRanges do: [:r |
+		(r at: 1) to: (r at: 2) do: [:k | out add: (tokens at: k)].
+		self ___synth: '(' like: ref into: out].
+	self ___synth: w , '(' like: ref into: out.
+	defaults do: [:expression |
+		expression do: [:k | out add: (tokens at: k)].
+		self ___synth: ',' like: ref into: out].
+	self ___synth: ')' like: ref into: out.
+	decoRanges size timesRepeat: [self ___synth: ')' like: ref into: out].
+	self ___synthType: #NEWLINE like: ref into: out.
+	self ___synth: 'del ' , w like: ref into: out.
+	self ___synthType: #NEWLINE like: ref into: out.
+	tokens := (tokens copyFrom: 1 to: position - 1) , out asArray
+		, (tokens copyFrom: (range at: 3) + 1 to: tokens size).
+	^ true
+
+]
+
 { #category : 'Grail-parsing - type params' }
 PythonParser >> ___rewriteTypeParamStatement___ [
 	"PEP 695 type parameters on a CLASS or a TYPE ALIAS, by rewriting the tokens
@@ -2030,7 +2211,13 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 		i := j + 1].
 	i + 2 > tokens size ifTrue: [^ false].
 	kwTok := tokens at: i.
+	"A generic FUNCTION outside a class body has a rewrite of its own."
+	((kwTok isKeyword: 'def') or: [(kwTok isKeyword: 'async')
+		and: [(tokens at: i + 1) isKeyword: 'def']]) ifTrue: [
+			(classNesting > 0 or: [self ___parsingForAst___]) ifTrue: [^ false].
+			^ self ___rewriteGenericFunctionAt___: i decorators: decoRanges].
 	isClass := kwTok isKeyword: 'class'.
+	(isClass and: [self ___parsingForAst___]) ifTrue: [^ false].
 	(isClass or: [decoRanges isEmpty and: [kwTok isName and: [kwTok value = 'type']]])
 		ifFalse: [^ false].
 	(isClass and: [classNesting > 0]) ifTrue: [^ false].

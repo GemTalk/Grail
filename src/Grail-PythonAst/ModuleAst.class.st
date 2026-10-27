@@ -314,6 +314,23 @@ ModuleAst class >> ___resignalSyntaxError___: ex [
 ]
 
 { #category : 'Grail-parsing' }
+ModuleAst class >> ___scopeNamesOf___: aFunctionDef [
+	"___boundNamesOf___: aFunctionDef's body and, when aFunctionDef is the
+	annotation scope a PEP 695 rewrite synthesized (PythonParser >>
+	___rewriteTypeParamStatement___), a marker for each type parameter it
+	binds -- which a nonlocal may not resolve to (___validateNonlocal___:of:in:)."
+
+	| names |
+	names := self ___boundNamesOf___: aFunctionDef body.
+	(CallAst ___isTypeParamScope___: aFunctionDef) ifTrue: [
+		aFunctionDef body body do: [:statement |
+			(self ___typeParameterBoundBy___: statement) ifNotNil: [:name |
+				names add: (self ___typeParameterMarkerFor___: name)]]].
+	^ names
+
+]
+
+{ #category : 'Grail-parsing' }
 ModuleAst class >> ___selectorIsReserved___: aString [
 	| sym |
 	sym := Symbol _existingWithAll: aString.
@@ -349,6 +366,31 @@ ModuleAst class >> ___targetBindsReservedName___: aTarget [
 	(aTarget isKindOf: StarredAst) ifTrue: [
 		^ self ___targetBindsReservedName___: aTarget value].
 	^ false
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___typeParameterBoundBy___: aStatement [
+	"The name aStatement binds when it is a synthesized scope's
+	``T = ___typing___._grail_type_param(...)'', else nil."
+
+	| value |
+	(aStatement isKindOf: AssignAst) ifFalse: [^ nil].
+	aStatement targets size = 1 ifFalse: [^ nil].
+	(aStatement targets first isKindOf: NameAst) ifFalse: [^ nil].
+	value := aStatement value.
+	((value isKindOf: CallAst) and: [(value function isKindOf: AttributeAst)
+		and: [value function attr asString = '_grail_type_param']]) ifFalse: [^ nil].
+	^ aStatement targets first id asSymbol
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___typeParameterMarkerFor___: aName [
+	"A Symbol no identifier can spell, standing in a scope's bound names for
+	``aName is a type parameter here''."
+
+	^ ('type parameter ' , aName asString) asSymbol
 
 ]
 
@@ -533,7 +575,7 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		self ___validateContext___: node returns fn: fnSym loop: inLoop scopes: scopes.
 		self ___validateContext___: node body fn: #function loop: false
 			scopes: (scopes isNil ifTrue: [nil] ifFalse: [
-				scopes copyWith: (self ___boundNamesOf___: node body)]).
+				scopes copyWith: (self ___scopeNamesOf___: node)]).
 		^ self].
 	(node isKindOf: LambdaAst) ifTrue: [
 		self ___validateContext___: node args fn: fnSym loop: inLoop scopes: scopes.
@@ -593,13 +635,15 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		its BlockAst; ``__class__'' is the one name a class provides."
 		"A def's body text run on its own (scopes nil) cannot see the function
 		it came from, so its nonlocals are not checked."
-		(fnSym == #function and: [scopes notNil]) ifTrue: [
+		"A CLASS body's nonlocal resolves the same way, through every function
+		around it -- the class adds no scope of its own to scopes."
+		(scopes notNil and: [fnSym == #function or: [fnSym == #class]]) ifTrue: [
 			node names do: [:n |
-				(n asSymbol == #'__class__' or: [
-					(scopes copyFrom: 1 to: (scopes size - 1 max: 0))
-						anySatisfy: [:each | each includes: n asSymbol]]) ifFalse: [
-					^ self ___syntaxError___: 'no binding for nonlocal ''' , n asString , ''' found'
-						node: node]]].
+				n asSymbol == #'__class__' ifFalse: [
+					self ___validateNonlocal___: n asSymbol of: node
+						in: (fnSym == #function
+							ifTrue: [scopes copyFrom: 1 to: (scopes size - 1 max: 0)]
+							ifFalse: [scopes])]]].
 		^ self].
 	(node isKindOf: AssignAst) ifTrue: [
 		node targets do: [:each | self ___validateStarredTarget___: each].
@@ -629,6 +673,28 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 	node class allInstVarNames doWithIndex: [:n :i |
 		n == #parent ifFalse: [
 			self ___validateContext___: (node instVarAt: i) fn: fnSym loop: inLoop scopes: scopes]]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___validateNonlocal___: aName of: aNonlocal in: enclosingScopes [
+	"CPython's symbol table resolves a nonlocal to the nearest enclosing
+	function scope that binds it -- ``no binding for nonlocal 'x' found'' when
+	none does -- and refuses one that resolves to a type parameter, which
+	lives in a generic's annotation scope: ``nonlocal binding not allowed for
+	type parameter 'T''' (Python/symtable.c:702-710).  enclosingScopes are the
+	bound names of the scopes around aNonlocal, innermost last
+	(___scopeNamesOf___:)."
+
+	| binder |
+	binder := enclosingScopes reverse detect: [:each | each includes: aName] ifNone: [nil].
+	binder isNil ifTrue: [
+		^ self ___syntaxError___: 'no binding for nonlocal ''' , aName asString , ''' found'
+			node: aNonlocal].
+	(binder includes: (self ___typeParameterMarkerFor___: aName)) ifTrue: [
+		^ self ___syntaxError___: 'nonlocal binding not allowed for type parameter '''
+				, aName asString , ''''
+			node: aNonlocal]
 
 ]
 
