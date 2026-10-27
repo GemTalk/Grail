@@ -146,6 +146,12 @@ GeneratorExpAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+GeneratorExpAst >> ___inferredTypeName___ [
+	^ 'generator'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 GeneratorExpAst >> ___irChildLocals___: localSet [
 	^ ComprehensionAst ___irScopeLocals___: localSet generators: generators

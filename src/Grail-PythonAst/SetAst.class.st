@@ -103,6 +103,12 @@ SetAst >> ___emitSmalltalkOn___: aStream [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+SetAst >> ___inferredTypeName___ [
+	^ 'set'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 SetAst >> ___irEligibleValueLocals___: localNames [
 	"A set display whose every element is emittable.  A STARRED element is

@@ -31,6 +31,16 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-compile warnings' }
+AssertAst >> ___compileWarningsDo___: aBlock [
+	"A parenthesised assert -- ``assert (x, 'msg')'' -- tests a non-empty tuple
+	and so always passes (Python/codegen.c, codegen_assert)."
+
+	((test isKindOf: TupleAst) and: [test elts notEmpty]) ifTrue: [
+		aBlock value: 'assertion is always true, perhaps remove parentheses?' value: self]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 AssertAst >> ___emitIRStatementOn___: aBuilder [
 	"printSmalltalkOn:'s shape: the condition through ___isTruthy___ (Python's

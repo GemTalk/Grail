@@ -116,6 +116,12 @@ DictAst >> ___emitSmalltalkOn___: aStream [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+DictAst >> ___inferredTypeName___ [
+	^ 'dict'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 DictAst >> ___irEligibleValueLocals___: localNames [
 	"A dict display: every key and value emittable, and a ``{**m}'' unpack

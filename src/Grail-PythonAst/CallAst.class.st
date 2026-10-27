@@ -1899,6 +1899,21 @@ CallAst >> ___collectRebindableNamesIn___: aValue into: aSet nested: isNested [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+CallAst >> ___compileWarningsDo___: aBlock [
+	"A literal called -- ``[(1, 2) (3, 4)]'' -- where a comma was probably
+	meant: CPython's check_caller, which warns for every literal it can type
+	except a lambda."
+
+	| typeName |
+	typeName := function ___inferredTypeName___.
+	(typeName notNil and: [(function isKindOf: LambdaAst) not]) ifTrue: [
+		aBlock
+			value: '''' , typeName , ''' object is not callable; perhaps you missed a comma?'
+			value: function]
+
+]
+
 { #category : 'Grail-Direct Calls' }
 CallAst >> ___directCallSelector___ [
 	"The fixed-arity env-1 selector for a direct attribute call, or nil when this
@@ -3458,6 +3473,18 @@ CallAst >> ___hasVarargsClassConstructor___ [
 	^ (metacls whichClassIncludesSelector: #'_new:kw:' environmentId: 1) notNil
 		or: [(metacls whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) notNil
 		or: [(metacls whichClassIncludesSelector: #'value:value:' environmentId: 1) notNil]]
+
+]
+
+{ #category : 'Grail-compile warnings' }
+CallAst >> ___inferredTypeName___ [
+	"An f-string's replacement field is parsed to a call of ___fformat___,
+	which no Python name can spell (PythonParser >> ___wrapFStringExpr:...), and
+	it is a str, as CPython infers a FormattedValue."
+
+	^ ((function isKindOf: NameAst) and: [function id == #'___fformat___'])
+		ifTrue: ['str']
+		ifFalse: [nil]
 
 ]
 

@@ -128,6 +128,12 @@ TupleAst >> ___emitSmalltalkOn___: aStream [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+TupleAst >> ___inferredTypeName___ [
+	^ 'tuple'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 TupleAst >> ___irEligibleValueLocals___: localNames [
 	"A LOAD-context tuple display with all-eligible elements; a ``*b'' element
@@ -143,6 +149,15 @@ TupleAst >> ___irEligibleValueLocals___: localNames [
 TupleAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	elts do: [:e | e ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+
+]
+
+{ #category : 'Grail-compile warnings' }
+TupleAst >> ___isIdentityLiteral___ [
+	"A tuple of constants, as CPython's is_const_tuple reads it: every element
+	a Constant node, so a nested tuple disqualifies."
+
+	^ elts allSatisfy: [:element | element isKindOf: ConstantAst]
 
 ]
 
