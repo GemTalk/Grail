@@ -12816,6 +12816,27 @@ Object >> ___matchItemForKey___: aKey [
 ]
 
 { #category : 'Grail-Match Protocol' }
+Object >> ___matchKeysDistinct___: keys [
+	"CPython's match_keys (Python/ceval.c:764-790) for a mapping pattern whose
+	keys are not all literals: in order, a key equal to an earlier one is a
+	ValueError, and the match fails at the first key the subject lacks --
+	before any value is matched, so a pattern that raises has bound nothing.
+	Answers whether every key is present.  Literal duplicates never get here:
+	they are refused at compile time."
+
+	| seen |
+	seen := set @env0:new.
+	keys @env0:do: [:key |
+		(seen __contains__: key) ___isTruthy___ ifTrue: [
+			ValueError ___signal___: 'mapping pattern checks duplicate key ('
+				@env0:, ((builtins instance) repr: key) @env0:asString @env0:, ')'].
+		seen add: key.
+		(self ___matchHasKey___: key) ifFalse: [^ false]].
+	^ true
+
+]
+
+{ #category : 'Grail-Match Protocol' }
 Object >> ___matchLen___ [
 	"The subject's length for a sequence or mapping pattern's size gate --
 	len(), which CPython's GET_LEN is: a class registered as a Sequence or a
