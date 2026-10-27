@@ -762,6 +762,28 @@ PythonParser >> ___emitTypeParam: p like: ref into: out [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser >> ___endOfLegacyStatementArgument___ [
+	"The last token of what follows a Python-2 ``print'' or ``exec'' when it
+	parses, else nil.  CPython's invalid_legacy_expression needs
+	``b=star_expressions'' (Grammar/python.gram:1226), and a PEG rule accepts
+	the longest prefix that parses: ``print f(**)'' draws the message over
+	``print f'', while ``print {1:(foo.)}'' -- whose first atom fails whole,
+	so no prefix parses -- is plain invalid syntax at the brace
+	(test_grammar's test_former_statements_refer_to_builtins).  So when the
+	whole run does not parse, the prefix tried is ___parseLeadingAtom___'s."
+
+	| saved |
+	saved := position.
+	^ [[self parseStarExpressions. self lastToken]
+		on: SyntaxError do: [:ex |
+			position := saved.
+			ex return: ([self ___parseLeadingAtom___. self lastToken]
+				on: SyntaxError do: [:inner | inner return: nil])]]
+		ensure: [position := saved]
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser >> ___endOfNextExpression___ [
 	"The last token of the expression at the cursor, or the token there when
 	none parses: the end of a range CPython draws over a construct that runs
@@ -770,18 +792,6 @@ PythonParser >> ___endOfNextExpression___ [
 	| saved |
 	saved := position.
 	^ [[self parseExpression. self lastToken]
-		on: SyntaxError do: [:ex | ex return: (tokens at: saved)]]
-		ensure: [position := saved]
-
-]
-
-{ #category : 'Grail-parsing' }
-PythonParser >> ___endOfNextStarExpressions___ [
-	"___endOfNextExpression___ for a comma-separated run."
-
-	| saved |
-	saved := position.
-	^ [[self parseStarExpressions. self lastToken]
 		on: SyntaxError do: [:ex | ex return: (tokens at: saved)]]
 		ensure: [position := saved]
 
@@ -1582,6 +1592,19 @@ PythonParser >> ___parseFStringLiteralToken___: aToken [
 	tokens := Array with: aToken.
 	position := 1.
 	^ self parseFStringLiteral
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___parseLeadingAtom___ [
+	"The shortest prefix of an expression that PEG backtracking can leave
+	parsed: its unary operators and ``not''s, then one atom."
+
+	[self peek notNil
+		and: [(#('+' '-' '~' '*') anySatisfy: [:operator | self peek isOp: operator])
+			or: [self peek isKeyword: 'not']]]
+				whileTrue: [self advance].
+	^ self parseAtom
 
 ]
 
@@ -2714,10 +2737,12 @@ PythonParser >> checkSimpleStatementTerminator: lastStmt [
 	here with one is impossible; a dedent is the block parser's business."
 	(self ___py2StatementKeywordOf___: lastStmt) ifNotNil: [:kw |
 		"From the keyword to the end of what follows it, as CPython's
-		invalid_legacy_expression draws it."
-		^ self ___syntaxError___: 'Missing parentheses in call to ''' , kw
-			, '''. Did you mean ' , kw , '(...)?'
-			from: lastStmt to: self ___endOfNextStarExpressions___].
+		invalid_legacy_expression draws it -- when anything that follows
+		parses at all; otherwise the plain error below."
+		self ___endOfLegacyStatementArgument___ ifNotNil: [:end |
+			^ self ___syntaxError___: 'Missing parentheses in call to ''' , kw
+				, '''. Did you mean ' , kw , '(...)?'
+				from: lastStmt to: end]].
 	((tok isKeyword: 'if') and: [(lastStmt isKindOf: PassAst)
 		or: [(lastStmt isKindOf: BreakAst) or: [lastStmt isKindOf: ContinueAst]]]) ifTrue: [
 			^ self ___syntaxError___: 'expected expression before ''if'', but statement is given'
