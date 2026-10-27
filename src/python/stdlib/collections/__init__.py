@@ -225,6 +225,89 @@ class OrderedDict(dict):
         del self[key]
         return (key, value)
 
+    # The rest is CPython's (Lib/collections/__init__.py), over _order.  Grail
+    # stood without these, so reversed(od) walked the dict rather than
+    # move_to_end's order, two OrderedDicts in different orders compared
+    # equal, od.copy() answered a plain dict -- pprint formats a mappingproxy
+    # through its mapping's copy() (test_pprint test_mapping_proxy) -- and
+    # copy.copy() SHARED _order with the original, so both came back holding
+    # every key twice.  __reduce__ drops OrderedDict's own state and replays
+    # the items, which is what fixes the last.
+    def __reversed__(self):
+        'od.__reversed__() <==> reversed(od)'
+        for key in reversed(list(self._order)):
+            yield key
+
+    def __reduce__(self):
+        'Return state information for pickling'
+        state = self.__getstate__()
+        if state:
+            if isinstance(state, tuple):
+                state, slots = state
+            else:
+                slots = {}
+            state = state.copy()
+            slots = slots.copy()
+            for k in vars(OrderedDict()):
+                state.pop(k, None)
+                slots.pop(k, None)
+            if slots:
+                state = state, slots
+            else:
+                state = state or None
+        return self.__class__, (), state, None, iter(self.items())
+
+    def copy(self):
+        'od.copy() -> a shallow copy of od'
+        return self.__class__(self)
+
+    @classmethod
+    def fromkeys(cls, iterable, value=None):
+        '''Create a new ordered dictionary with keys from iterable and values set to value.
+        '''
+        self = cls()
+        for key in iterable:
+            self[key] = value
+        return self
+
+    def __eq__(self, other):
+        '''od.__eq__(y) <==> od==y.  Comparison to another OD is order-sensitive
+        while comparison to a regular mapping is order-insensitive.
+
+        '''
+        if isinstance(other, OrderedDict):
+            return dict.__eq__(self, other) and all(
+                mine == theirs for mine, theirs in zip(self, other))
+        return dict.__eq__(self, other)
+
+    # Order-sensitive too, as the C OrderedDict's odict_richcompare makes it
+    # (Objects/odictobject.c:1488); the pure-Python class inherits dict's.
+    def __ne__(self, other):
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    __hash__ = None
+
+    def __ior__(self, other):
+        self.update(other)
+        return self
+
+    def __or__(self, other):
+        if not isinstance(other, dict):
+            return NotImplemented
+        new = self.__class__(self)
+        new.update(other)
+        return new
+
+    def __ror__(self, other):
+        if not isinstance(other, dict):
+            return NotImplemented
+        new = self.__class__(other)
+        new.update(self)
+        return new
+
 
 class _deque_iterator:
     """Iterator over a deque.
