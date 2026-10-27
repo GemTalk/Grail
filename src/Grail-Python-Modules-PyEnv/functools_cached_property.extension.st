@@ -106,6 +106,17 @@ functools_cached_property >> ___pyOwnerNameFor___: instance [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+functools_cached_property >> __class_getitem__: item [
+	"``functools.cached_property[int]'' -- a types.GenericAlias, as CPython's
+	functools.cached_property answers through its own __class_getitem__.
+	Grail answered the class unchanged.  Run with the CLASS as receiver by
+	Metaclass3 >> ___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Descriptor' }
 functools_cached_property >> __get__: instance [
 	"``cp.__get__(obj)'' -- CPython's owner argument defaults to None."

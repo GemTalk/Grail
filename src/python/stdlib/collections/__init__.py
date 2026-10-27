@@ -9,6 +9,7 @@
 # subclass.  ChainMap is a wrapper around a list of dicts.
 
 import sys as _sys
+import grail as _grail
 
 from .abc import Mapping, MutableMapping, MutableSequence, Sequence
 
@@ -898,6 +899,16 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
     for i in range(len(default_values)):
         field_defaults[fields[len(fields) - len(default_values) + i]] = default_values[i]
 
+    # The class below is built by this CALL, not by a class statement of the
+    # caller's module, so nothing would give it the same identity the next time
+    # that module is rebuilt -- and since every install rebuilds deployed modules,
+    # every stored instance would be left on a class nothing names (#1802).  The
+    # claim keys the very next class created -- _NT -- by the module whose body is
+    # running and the typename, the way a module-level class statement is keyed,
+    # so a rebuild hands back the class it built before.  Outside a module body
+    # (a call at run time) it claims nothing, and the class is new, as in CPython.
+    _grail._claim_built_class(typename)
+
     class _NT(tuple):
         """The instance IS the tuple of its values, exactly as CPython's is.
 
@@ -1055,6 +1066,9 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
                 parts.append(
                     self._fields[i] + '=' + repr(tuple.__getitem__(self, i)))
             return type(self).__name__ + '(' + ', '.join(parts) + ')'
+
+    # Taken by _NT; cleared in case something else was created in its place.
+    _grail._claim_built_class(None)
 
     # Bind each field name to its own descriptor over the tuple slot, which
     # is how CPython does field access and is the only way the name exists as

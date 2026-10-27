@@ -135,6 +135,17 @@ enumerate >> ___setSource: anIterator start: aStart [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+enumerate >> __class_getitem__: item [
+	"``enumerate[int]'' -- a types.GenericAlias, as CPython's enumerate
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Iterator Protocol' }
 enumerate >> __length_hint__ [
 	"What the source has left, when it can say.  operator.length_hint falls

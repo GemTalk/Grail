@@ -5443,9 +5443,10 @@ Object class >> ___pythonBuiltinTypeModule___ [
 	"NoneType, ellipsis and NotImplementedType too: CPython's
 	``type(None).__module__'' is 'builtins', and typing's _type_repr reads it
 	-- ``repr(Callable[..., None])'' raised AttributeError without it."
-	((#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
-		#mappingproxy #memoryview #object #property #range #set #slice #str #tuple
-		#type #NoneType #ellipsis #NotImplementedType )
+	((#( #bool #bytearray #bytes #classmethod #complex #dict #enumerate #float
+		#frozenset #int #list #mappingproxy #memoryview #object #property #range
+		#set #slice #staticmethod #str #tuple #type #NoneType #ellipsis
+		#NotImplementedType )
 		@env0:includes: nm)
 		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
 		@env0:ifFalse: [^ nil].

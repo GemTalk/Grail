@@ -57,6 +57,13 @@ Metaclass3 >> ___grailClassGetitemDispatch___: index [
 			^ self @env0:with: index performMethod:
 				((metaOwner @env0:methodDictForEnv: 1)
 					@env0:at: #'__getitem__:' otherwise: nil)]].
+	"``type[int]'' is a types.GenericAlias, and type is the one class CPython
+	subscripts WITHOUT a __class_getitem__: PyObject_GetItem special-cases it
+	(Objects/abstract.c:185), so ``type.__class_getitem__'' does not exist
+	and no subclass of type inherits it -- see (c).  Grail answered type
+	itself unchanged."
+	self == type ifTrue: [
+		^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: index origin: self].
 	"(1) a class-body ASSIGNMENT (``__class_getitem__ = something'') becomes a
 	unary accessor on the metaclass.  It shadows an inherited def, which is
 	the ordinary nearest-wins rule, and it need not be callable at all --
@@ -153,8 +160,14 @@ Metaclass3 >> ___grailClassGetitemDispatch___: index [
 	types a __class_getitem__, and Grail's own classes do not all carry one,
 	so ``class Foo(list[V])'' and the annotations that subscript them keep
 	answering the class."
-	(self == object or: [(self @env0:inheritsFrom: PythonInstance)
-			and: [self ___grailPurePythonChain___]])
+	"So is a METACLASS -- a subclass of type -- with no hook of its own:
+	type's special case above is for type alone, so ``class M(type)'' then
+	``M[int]'' is ``type 'M' is not subscriptable'' (test_genericalias
+	test_type_subclass_generic)."
+	(self == object
+		or: [(self @env0:inheritsFrom: type)
+		or: [(self @env0:inheritsFrom: PythonInstance)
+			and: [self ___grailPurePythonChain___]]])
 		ifTrue: [
 			"...unless a base OFF the primary chain supplies the hook.  Grail
 			merges a secondary base's instance methods but not its class-side

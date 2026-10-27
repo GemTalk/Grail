@@ -71,6 +71,17 @@ SreMatch >> ___groupKey___: arg [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+SreMatch >> __class_getitem__: item [
+	"``re.Match[int]'' -- a types.GenericAlias, as CPython's re.Match answers
+	through its own __class_getitem__.  Grail answered the class unchanged.
+	Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Copy Protocol' }
 SreMatch >> __copy__ [
 	"CPython's Match.__copy__: a match is an immutable snapshot, so copying

@@ -85,6 +85,17 @@ PythonGenerator >> ___readOnlyGetsetNames___ [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PythonGenerator >> __class_getitem__: item [
+	"``generator[int]'' -- a types.GenericAlias, as CPython's generator
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Iterator Protocol' }
 PythonGenerator >> __iter__ [
 	"Generators are their own iterators."

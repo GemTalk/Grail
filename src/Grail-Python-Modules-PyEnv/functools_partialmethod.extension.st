@@ -164,6 +164,17 @@ functools_partialmethod >> ___wrappedKind___ [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+functools_partialmethod >> __class_getitem__: item [
+	"``functools.partialmethod[int]'' -- a types.GenericAlias, as CPython's
+	functools.partialmethod answers through its own __class_getitem__.
+	Grail answered the class unchanged.  Run with the CLASS as receiver by
+	Metaclass3 >> ___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Calling' }
 functools_partialmethod >> __get__: obj [
 

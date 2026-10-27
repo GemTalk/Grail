@@ -157,6 +157,17 @@ PythonAsyncGenerator >> __anext__ [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PythonAsyncGenerator >> __class_getitem__: item [
+	"``async_generator[int]'' -- a types.GenericAlias, as CPython's
+	async_generator answers through its own __class_getitem__.  Grail
+	answered the class unchanged.  Run with the CLASS as receiver by
+	Metaclass3 >> ___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Async Generator Protocol' }
 PythonAsyncGenerator >> aclose [
 	"``agen.aclose()'' -- shut the body down, running its ``finally'' blocks.

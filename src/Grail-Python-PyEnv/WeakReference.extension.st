@@ -47,6 +47,17 @@ WeakReference >> __call__ [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+WeakReference >> __class_getitem__: item [
+	"``weakref.ref[int]'' -- a types.GenericAlias, as CPython's weakref.ref
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Weak-Python' }
 WeakReference >> __eq__: other [
 	^self @env0:= other
