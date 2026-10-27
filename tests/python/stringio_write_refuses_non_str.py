@@ -4,13 +4,11 @@ CPython's StringIO.write refuses any argument that is not a str with
 "string argument expected, got '<type>'", and asks that before it asks
 whether the stream is closed (Modules/_io/stringio.c:554).  Grail wrote the
 argument's Smalltalk print string instead -- b'x' became 'aByteArray' and
-None 'aNoneType' -- so base64.encode into a StringIO produced garbage where
-test_base64 expects the TypeError.
+None 'aNoneType'.
 
 Every check here holds under CPython 3.14, which is what makes it evidence.
 """
 
-import base64
 import io
 
 r = {}
@@ -38,8 +36,6 @@ closed = io.StringIO()
 closed.close()
 r['closed_checks_type_first'] = (outcome(lambda: closed.write(b'x')),
                                  outcome(lambda: closed.write('x')))
-r['base64_encode_to_text'] = outcome(
-    lambda: base64.encode(io.BytesIO(b'abc'), io.StringIO()))
 
 EXPECTED = {
     'refused': ["TypeError: string argument expected, got 'bytes'",
@@ -51,7 +47,6 @@ EXPECTED = {
     'writelines_bytes': "TypeError: string argument expected, got 'bytes'",
     'closed_checks_type_first': ("TypeError: string argument expected, got 'bytes'",
                                  'ValueError: I/O operation on closed file'),
-    'base64_encode_to_text': "TypeError: string argument expected, got 'bytes'",
 }
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, '<missing>') != EXPECTED[k])
