@@ -13631,8 +13631,9 @@ Object >> ___pyAttrDelete___: aName [
 			(docs/Schema_Evolution_Design.md, cut 1)."
 			((self ___pySlotAt___: slotIdx) == nil
 				@env0:and: [(self @env0:dynamicInstVarAt: sym) == nil]) ifTrue: [
-				^ AttributeError ___signal___:
-					'''' @env0:, aName @env0:asString @env0:, ''''
+				"The bare name, unquoted: CPython's member descriptor refuses
+				with nothing else (Python/structmember.c:168)."
+				^ AttributeError ___signal___: aName @env0:asString
 			].
 			(self @env0:dynamicInstVarAt: sym) == nil ifFalse: [self @env0:removeDynamicInstVar: sym].
 			^ self ___pySlotAt___: slotIdx put: nil
@@ -13645,8 +13646,16 @@ Object >> ___pyAttrDelete___: aName [
 	PropertyDescriptor class attribute)."
 	(self ___pyInstanceDescriptorDelete___: aName) ifTrue: [^ self].
 	(self @env0:dynamicInstVarAt: sym) == nil ifTrue: [
-		AttributeError ___signal___:
-			'''' @env0:, aName @env0:asString @env0:, ''''
+		"CPython's delete miss is the load's ``'P' object has no attribute
+		'x''' -- with nothing stamped, as an ordinary instance keeps its
+		attributes inline (Objects/dictobject.c:6998) -- and a strictly slotted
+		object has no dict to miss in.  Grail raised the bare quoted name, a
+		KeyError's wording."
+		^ ((self ___respondsTo___: #'___pySlotsStrict___') and: [self ___pySlotsStrict___])
+			ifTrue: [self ___refuseAttrWithoutDict___: aName]
+			ifFalse: [
+				AttributeError ___signal___: '''' @env0:, self @env0:___pyDnuTypeName___ @env0:asString
+					@env0:, ''' object has no attribute ''' @env0:, aName @env0:asString @env0:, '''']
 	].
 	self @env0:removeDynamicInstVar: sym
 
@@ -15435,9 +15444,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		declared one except such a survivor."
 		(slotIdx @env0:~= 0 @env0:and: [strict
 			@env0:and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]]) ifTrue: [
-			^ AttributeError ___signal___:
-				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
-					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+			^ self ___refuseAttrWithoutDict___: aName].
 		slotIdx @env0:~= 0 ifTrue: [
 			self ___pySlotAt___: slotIdx put: aValue.
 			"ONE HOME PER NAME: a value stored per object before the name had a
@@ -15459,9 +15466,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		(self ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
 			(self ___pySlotsStrict___
 				and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]) ifTrue: [
-				^ AttributeError ___signal___:
-					'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
-						''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+				^ self ___refuseAttrWithoutDict___: aName
 			]
 		].
 	].
@@ -15701,6 +15706,18 @@ Object >> ___pyFunctionStrPrefix___: aCallee [
 						ifTrue: [(((mod @env0:asString @env0:, '.') @env0:, qn @env0:asString) @env0:, '() ')]
 						ifFalse: [qn @env0:asString @env0:, '() ']]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: '']
+
+]
+
+{ #category : 'Grail-Slots' }
+Object >> ___pyHasGenericSetattr___ [
+	"Whether this object's type stores and deletes attributes through object's
+	own __setattr__ and __delattr__ -- CPython's ``tp_setattro ==
+	PyObject_GenericSetAttr''.  A class defining either has a slot wrapper
+	there instead, which serves stores and deletes alike."
+
+	^ (self @env0:class @env0:whichClassIncludesSelector: #'__setattr__:_:' environmentId: 1) == Object
+		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__delattr__:' environmentId: 1) == Object]
 
 ]
 
@@ -16516,6 +16533,20 @@ Object >> ___reflectedFirst___: other selector: refSelector kwSelector: kwSelect
 	attrDunder == nil ifFalse: [
 		^ other ___callTypeAttr___: attrDunder with: { self }].
 	^ nil
+
+]
+
+{ #category : 'Grail-Slots' }
+Object >> ___refuseAttrWithoutDict___: aName [
+	"A strictly slotted object has no __dict__, so a name it did not declare
+	can be neither stored nor deleted.  CPython's generic setattr says so in
+	those words, with the name and the object stamped on the error; a type
+	with its own __setattr__ or __delattr__ gets the plain ``has no attribute''
+	(Objects/object.c:1989-1999)."
+
+	^ self ___pyHasGenericSetattr___
+		ifTrue: [AttributeError @env0:___signalNoDict___: aName on: self]
+		ifFalse: [AttributeError @env0:___signalMissing___: aName on: self]
 
 ]
 
