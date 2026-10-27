@@ -86,7 +86,15 @@ MatchMappingAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 					with: { aBuilder obj: keys size }
 					env: 0.
 				aBuilder add: (aBuilder andValue: size then: [
-					aBuilder add: (self ___emitIRMapFrom___: 1 subject: subjLeaf on: aBuilder)])]]
+					self ___keysNeedRuntimeCheck___
+						ifTrue: [
+							| distinct |
+							distinct := aBuilder
+								send: #'___matchKeysDistinct___:' to: (aBuilder var: subjLeaf)
+								with: { aBuilder arrayOf: (keys collect: [:each | each ___emitIRValueOn___: aBuilder]) }.
+							aBuilder add: (aBuilder andValue: distinct then: [
+								aBuilder add: (self ___emitIRMapFrom___: 1 subject: subjLeaf on: aBuilder)])]
+						ifFalse: [aBuilder add: (self ___emitIRMapFrom___: 1 subject: subjLeaf on: aBuilder)]])]]
 
 ]
 
@@ -112,6 +120,16 @@ MatchMappingAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	keys do: [:k | k ___irReadLocalNamesInto___: aSet locals: localSet].
 	patterns do: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+
+]
+
+{ #category : 'Grail-match' }
+MatchMappingAst >> ___keysNeedRuntimeCheck___ [
+	"Whether two keys could turn out equal only at run time -- several keys,
+	one of them a dotted name, as in ``{Keys.KEY: y, 'a': z}'' -- so the match
+	first runs CPython's duplicate check (Object >> ___matchKeysDistinct___:)."
+
+	^ keys size > 1 and: [keys anySatisfy: [:each | each isKindOf: AttributeAst]]
 
 ]
 
@@ -197,6 +215,10 @@ MatchMappingAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	GET_LEN does (Python/codegen.c:6038-6044), before it looks any up."
 	keys isEmpty ifFalse: [
 		aStream nextPutAll: ' and: [(', aName, ' ___matchLen___) @env0:>= ', keys size printString].
+	self ___keysNeedRuntimeCheck___ ifTrue: [
+		aStream nextPutAll: ' and: [(', aName, ' ___matchKeysDistinct___: {'.
+		keys do: [:each | each printSmalltalkWithParenthesisOn: aStream] separatedBy: [aStream nextPutAll: '. '].
+		aStream nextPutAll: '})'].
 	1 to: keys size do: [:i |
 		aStream nextPutAll: ' and: [(', aName, ' ___matchHasKey___: '.
 		(keys at: i) printSmalltalkWithParenthesisOn: aStream.
@@ -217,6 +239,7 @@ MatchMappingAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	clause closes its own bracket inline, so it must NOT be counted here."
 	(keys size * 2) timesRepeat: [aStream nextPutAll: ']'].
 	keys isEmpty ifFalse: [aStream nextPutAll: ']'].
+	self ___keysNeedRuntimeCheck___ ifTrue: [aStream nextPutAll: ']'].
 	aStream nextPutAll: ')'
 
 ]
