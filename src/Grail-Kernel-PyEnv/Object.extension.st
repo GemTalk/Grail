@@ -12797,11 +12797,14 @@ Object >> ___matchIsSequence___ [
 
 { #category : 'Grail-Match Protocol' }
 Object >> ___matchItemAt___: anIndex [
-	"One element of a sequence subject.  anIndex is a Python index, so it
-	may be NEGATIVE -- the patterns that follow a ``*rest'' are addressed
-	from the end, which is what lets them be tested without knowing the
-	subject's length."
+	"One element of a sequence subject.  A NEGATIVE anIndex addresses an
+	element after the star from the end, and is handed to __getitem__ as the
+	non-negative index CPython computes, len(subject) - k
+	(pattern_helper_sequence_subscr, Python/codegen.c:5835-5839: ``The
+	subject may not support negative indexing!'').  A Sequence whose
+	__getitem__ answers i for any i saw -1 here where CPython reads 41 of 42."
 
+	anIndex @env0:< 0 ifTrue: [^ self __getitem__: self ___matchLen___ @env0:+ anIndex].
 	^ self __getitem__: anIndex
 
 ]
