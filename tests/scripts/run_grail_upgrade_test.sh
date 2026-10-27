@@ -52,9 +52,14 @@
 # GRAIL_UPGRADE_FROM_PRODUCT names an OLDER product (e.g. a 4.0.0.a5 tree) to make
 # every case an engine upgrade as well: the stone starts from that product's
 # extent0.rowan3.dbf, Grail n is installed and the app writes under it, and then
-# scripts/upgrade_engine.sh moves the database to $GEMSTONE before Grail m is
-# installed (docs/Upgrading_GemStone.md). That needs GEMSTONE_SRC, a checkout of
-# GemTalk's gemstone repository, for the upgradeImage script 4.0 does not ship.
+# scripts/upgrade_engine.sh --in-place moves the database to $GEMSTONE where it
+# lies, the stone stopped, before the stone restarts under $GEMSTONE and Grail m
+# is installed (docs/Upgrading_GemStone.md).
+#
+# GRAIL_UPGRADE_USER names the account Grail is installed as and the apps run as
+# (default DataCurator). Any other is created by DataCurator on each fresh stone,
+# as GemDB Code creates its own account: its own security policy, and the
+# privileges CodeModification and CreateOnetimePassword, password swordfish.
 #
 # Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
 # grail_upgrade); touches no other stone. Work goes in GRAIL_UPGRADE_DIR (default
@@ -72,8 +77,8 @@ export PATH="$GEMSTONE/bin:$PATH"
 
 STONE=${GRAIL_UPGRADE_STONE:-grail_upgrade}
 FROM_PRODUCT=${GRAIL_UPGRADE_FROM_PRODUCT:-}
+GRAIL_USER=${GRAIL_UPGRADE_USER:-DataCurator}
 if [ -n "$FROM_PRODUCT" ]; then
-    : "${GEMSTONE_SRC:?GRAIL_UPGRADE_FROM_PRODUCT needs GEMSTONE_SRC, a gemstone repository checkout}"
     FROM_VERSION=$(awk 'NR==2{print $1; exit}' "$FROM_PRODUCT/version.txt")
 fi
 N_PRODUCT=${FROM_PRODUCT:-$GEMSTONE}
@@ -102,14 +107,8 @@ stop_stone() {
     GEMSTONE=$PRODUCT "$PRODUCT/bin/stopstone" "$STONE" SystemUser swordfish -i > /dev/null 2>&1
 }
 
-fresh_stone() {     # a new stone from $EXTENT
+start_stone() {     # start_stone -- the stone on $WORK/stone/extent0.dbf, under $PRODUCT
     local d=$WORK/stone
-    stop_stone
-    PRODUCT=$N_PRODUCT
-    rm -rf "$d"
-    mkdir -p "$d"
-    cp "$EXTENT" "$d/extent0.dbf"
-    chmod 644 "$d/extent0.dbf"
     cat > "$d/stone.conf" <<EOF
 DBF_EXTENT_NAMES = $d/extent0.dbf;
 STN_TRAN_LOG_DIRECTORIES = $d/, $d/;
@@ -119,6 +118,30 @@ EOF
     GEMSTONE=$PRODUCT "$PRODUCT/bin/startstone" -e "$d/stone.conf" -l "$d/stone.log" "$STONE" > "$d/startstone.out" 2>&1 \
         && GEMSTONE=$PRODUCT "$PRODUCT/bin/waitstone" "$STONE" 60 > /dev/null 2>&1 \
         || { echo "upgrade: startstone $STONE failed:"; tail -20 "$d/startstone.out"; return 1; }
+}
+
+fresh_stone() {     # a new stone from $EXTENT
+    local d=$WORK/stone
+    stop_stone
+    PRODUCT=$N_PRODUCT
+    rm -rf "$d"
+    mkdir -p "$d"
+    cp "$EXTENT" "$d/extent0.dbf"
+    chmod 644 "$d/extent0.dbf"
+    start_stone || return 1
+    [ "$GRAIL_USER" = DataCurator ] || create_user
+}
+
+create_user() {     # GRAIL_USER, as GemDB Code creates its account (src/account.ts)
+    printf '%s\n' "set user DataCurator pass swordfish gemstone $STONE" login run \
+        "| u | u := AllUsers userWithId: '$GRAIL_USER' ifAbsent: [nil]." \
+        "u isNil ifTrue: [u := AllUsers addNewUserWithId: '$GRAIL_USER' password: 'swordfish' createNewSecurityPolicy: true." \
+        "  u addPrivilege: #CodeModification. u addPrivilege: #CreateOnetimePassword." \
+        "  System commitTransaction]." \
+        "'USER ' , u userId" '%' logout exit \
+        | GEMSTONE=$PRODUCT "$PRODUCT/bin/topaz" -lq -I /dev/null > "$WORK/stone/create-user.out" 2>&1
+    grep -q "USER $GRAIL_USER" "$WORK/stone/create-user.out" || {
+        echo "upgrade: could not create the account $GRAIL_USER:"; tail -20 "$WORK/stone/create-user.out"; return 1; }
 }
 
 tree_from_checkout() {  # tree_from_checkout <dir> -- the working tree, without build output
@@ -165,7 +188,7 @@ export GEMSTONE_GLOBAL_DIR='$GEMSTONE_GLOBAL_DIR'
 export GEMSTONE_NAME='$STONE'
 export PATH='$PRODUCT/bin:$PATH'
 EOF
-    printf 'set user DataCurator pass swordfish gemstone %s\n' "$STONE" > "$g/.topazini"
+    printf 'set user %s pass swordfish gemstone %s\n' "$GRAIL_USER" "$STONE" > "$g/.topazini"
     # The install's own topaz logs (install.out, redeployModules.out, ...) beside
     # its log: the next install in this directory starts by deleting them.
     local logs=${2%.log}-out
@@ -234,10 +257,13 @@ run_case() {            # run_case <case> -- 0 if every check passed
         log "engine upgrade: $FROM_VERSION -> $GEMSTONE"
         stop_stone
         PRODUCT=$GEMSTONE
-        (GEMSTONE=$GEMSTONE "$PROJECT_ROOT/scripts/upgrade_engine.sh" "$WORK/stone/extent0.dbf" \
-            "$WORK/stone/engine" "$STONE" "$FROM_VERSION") > "$d/engine.log" 2>&1 || {
+        rm -f "$WORK/stone/extent0.dbf.pre-$FROM_VERSION"
+        (GEMSTONE=$GEMSTONE "$PROJECT_ROOT/scripts/upgrade_engine.sh" --in-place "$WORK/stone/extent0.dbf" \
+            "$STONE" "$FROM_VERSION") > "$d/engine.log" 2>&1 || {
             echo "upgrade: the engine upgrade failed; the end of $d/engine.log:"
             tail -30 "$d/engine.log"; return 1; }
+        # The stone's own config again, its a5 tranlogs still beside the extent.
+        start_stone || return 1
     fi
     log "install m (the upgrade)"
     install_tree "$d/m" "$d/install-m.log" || return 1

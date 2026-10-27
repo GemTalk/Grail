@@ -10,25 +10,41 @@ a newer Grail on the same engine.
 
 ## The procedure
 
-Stop every session, and keep a copy of the extent. Then:
+Stop every session and the stone. Then, with the new product:
 
 ```bash
 export GEMSTONE=/path/to/GemStone64Bit4.0.0.a8-...   # the NEW product
-export GEMSTONE_SRC=~/GemTalk/gemstone               # GemTalk's gemstone repository
-scripts/upgrade_engine.sh old/extent0.dbf new-dir/ mystone 4.0.0.a5
+export GEMSTONE_GLOBAL_DIR=...                        # as for any stone
+scripts/upgrade_engine.sh --in-place path/to/extent0.dbf upgrade_stone 4.0.0.a5
 ```
 
-`scripts/upgrade_engine.sh` copies the extent (never changes it), starts stone
-`mystone` on the copy under the new product, and runs:
+The extent is upgraded where it lies. `scripts/upgrade_engine.sh`:
 
-1. **upgradeImage**: GemStone's kernel upgrade. It recompiles the kernel and
-   removes every method of every kernel class. Because the bytecodes changed, it
-   also disables each user's session-method policy, and every `GsPackage` in
-   DataCurator's symbol list.
-2. **upgradeImageRowan.stone**: Rowan's upgrade, with every step GemTalk's own
-   conversion test uses. It restores Rowan's kernel extensions, repairs Rowan's
-   records of the projects SystemUser can see, and reloads Rowan, the base image
-   and those projects from the new product.
+- refuses if a stone is running on the extent (`lsof`) or a stone named
+  `upgrade_stone` is running;
+- copies the extent to `extent0.dbf.pre-4.0.0.a5`, and keeps it after a success
+  too;
+- starts a temporary stone, `upgrade_stone`, on the extent under the new
+  product. It has its own config, tranlog directory and logs in
+  `extent0.dbf.upgrade/`, and local passwordless logins on. It starts with `-N`:
+  the old tranlogs are not needed;
+- checks, with a passwordless login, that the extent was last written by the
+  version named;
+- runs **upgradeImage**, GemStone's kernel upgrade. It recompiles the kernel and
+  removes every method of every kernel class. Because the bytecodes changed, it
+  also disables every user's session-method policy (`GsPackagePolicy`), and every
+  `GsPackage` in DataCurator's symbol list;
+- runs **upgradeImageRowan.stone**, Rowan's upgrade, with every step GemTalk's own
+  conversion test uses. It restores Rowan's kernel extensions, repairs Rowan's
+  records of the projects SystemUser can see, and reloads Rowan, the base image
+  and those projects from the new product;
+- stops the stone and exits 0. Nothing is left running; the logs stay in
+  `extent0.dbf.upgrade/log`.
+
+On any failure it stops the stone, copies the backup back over the extent and
+exits non-zero. Each progress line starts `upgrade_engine: `, and the last line
+says what failed. The database's own stone config, tranlog directory and all,
+starts the upgraded extent as before, with the new product.
 
 Then, as **each** user with a Grail install, run `./install.sh` with the new
 product (a `.setenv` naming it and the stone). Rowan's upgrade does not touch
@@ -38,9 +54,11 @@ the install repairs it:
 - It drops every Grail LoadedMethod whose compiled method the upgrade removed
   (5,826 of them for one user), so the load compiles them again. Otherwise Rowan
   treats them as loaded and unchanged, and leaves them missing.
-- It re-enables the user's `GsPackage`. A disabled package's methods never reach
-  a new session, so enabling the policy alone would leave every kernel extension
-  missing.
+- It re-enables the user's `GsPackage` and `GsPackagePolicy`. A disabled
+  package's methods never reach a new session, so enabling the policy alone would
+  leave every kernel extension missing. upgradeImage disables the package only
+  in DataCurator's symbol list; for any other user (GemDB's `gemdb` account, say)
+  only the policy, and the install handles both.
 
 `install.sh`'s redeploy then rebuilds the deployed modules, and the
 application's data works as before.
@@ -74,22 +92,28 @@ check: CI's container has one product.
 
 ## The workarounds, and the defects behind them
 
-Each is marked `WORKAROUND` in `scripts/upgrade_engine.sh`. All but the last
-two are GemStone or Rowan defects, to report to GemTalk. Each workaround should
-go when a release fixes its defect.
+Each workaround is marked `WORKAROUND` in `scripts/upgrade_engine.sh`. Items
+1 and 3-6 are GemStone or Rowan defects, to report to GemTalk; 2, 7 and 8 are by
+design. Each workaround should go when a release fixes its defect.
 
-1. **4.0 ships no upgradeImage.** `bin/upgradeImage` and
-   `upgrade/upgradeImage.topaz` are commented out of
-   `build/release/PACKING.be`. The script takes `image/upgradeImage.topaz` from
-   the gemstone repository at the new product's tag, and exports `upgradeDir`,
-   which the shipped wrapper would have set (GemTalk's BatteryTest sets it the
-   same way).
-2. **upgradeImage's sub-scripts log in without a password.** Every
-   `set user SystemUser` (and DataCurator, GcUser, HostAgentUser) in
-   `upgradeImage.topaz`, `sessionmethods.topaz`, `installMonticello.topaz`,
-   `gcuser.gs`, `nameless.gs` and `LoadsWithoutRowan.gs` names no password, so
-   a non-interactive run fails at the first login. The script runs patched
-   copies.
+1. **4.0 ships no upgradeImage.** GemTalk stopped shipping `bin/upgradeImage`
+   and `upgrade/upgradeImage.topaz` in the alphas, deliberately (gemstone commit
+   `f7cd54f4cf`, "Do not ship upgradeImage scripts in Alpha releases"). As a
+   temporary measure (decided 2026-10-27), Grail carries a pinned copy of
+   `image/upgradeImage.topaz` from tag `4.0.0.a8`, in
+   `scripts/upgrade/4.0.0.a8/` with a README naming the commit. Every file it
+   inputs is in the a8 product, so nothing else is bundled. The script prefers
+   the product's own copy, so the bundled one goes once GemTalk ships it again.
+   It also exports `upgradeDir`, which the shipped wrapper would have set
+   (GemTalk's BatteryTest sets it the same way).
+2. **upgradeImage logs in without passwords.** Not a defect: GemStone's own
+   `upgradeImage.sh` requires local passwordless logins
+   (`STN_LOCAL_PASSWORDLESS_LOGINS_ENABLED`: linked topaz, the stone's host and
+   OS user, an empty password). The temporary stone's config turns them on, so
+   GemStone's scripts run unpatched, and the stone lives only as long as the
+   upgrade. (This branch first patched a password into every login of
+   `upgradeImage.topaz` and five sub-scripts; that is gone, and with it the need
+   to know SystemUser's password.)
 3. **The compiler classes fail to file in: "undefined symbol
    `Bc_SEND_SPECIAL_not_u32`".** The compiler classes have named the class
    variable since a5, but the upgrade path in `bom.c` never adds it to
@@ -123,14 +147,18 @@ go when a release fixes its defect.
    treats as a relative path. It also insists that each project be a git
    repository, which the product's copies are not. The script sets
    `ROWAN_PROJECTS_HOME` to copies of `$GEMSTONE/projects` with one commit
-   each, unless it already names clones.
+   each, unless `UPGRADE_ENGINE_PROJECTS_HOME` names clones. (A
+   `ROWAN_PROJECTS_HOME` already in the caller's environment is not used: it may
+   name something else.)
 7. **Rowan's upgrade repairs only the projects SystemUser can see.** This is
    by design, not a defect, but it leaves every per-user project as Grail's was
    left. `scripts/install_rowan.gs` and the pre-load doit now handle it for
    Grail (see the end of the procedure above).
 8. **`upgradeImage` disables DataCurator's packages.** It does this
-   deliberately when bytecodes change (`GsPackagePolicy _previousVersion < 33`).
-   The pre-load re-enables Grail's.
+   deliberately when bytecodes change (`GsPackagePolicy _previousVersion < 33`),
+   and for every other user disables only the `GsPackagePolicy`. The pre-load
+   re-enables Grail's package and policy either way; the harness proves both
+   (`GRAIL_UPGRADE_USER`, below).
 
 Do not file in `upgrade/bootstrap/UpgradeRowanV3.gs` by hand after upgradeImage.
 It restores Rowan's kernel extensions but not Rowan's records, and the next

@@ -1,0 +1,379 @@
+output pushnew  $upgradeLogDir/upgradeImage.out only
+!=========================================================================
+! Copyright (C) GemTalk Systems 1986-2026.  All Rights Reserved.
+!
+! file  upgradeImage.topaz
+!
+!========================================================================
+
+! parent script does "export stoneName = "
+
+set SOURCESTRINGCLASS String
+fileformat 8bit
+set tab 2
+
+set stone $stoneName
+set user SystemUser
+status
+time
+
+! if the Stone is not alive, exit
+iferr 1 exit
+set INCONVERSION
+login
+time
+
+display resultcheck
+display oops 
+omit origin
+level 0
+
+input $GEMSTONE/upgrade/system0.gs
+input $GEMSTONE/upgrade/gsnmethod0.gs
+input $GEMSTONE/upgrade/gsmethoddictionary0.gs
+commit
+logout
+login
+
+! fetch method dictionary
+display classoops
+object Object at: 7
+! an error here means incoming repository is older than Gs64 v3.3 .
+expectvalue %GsNMethod
+send ** at: #size otherwise: nil
+
+omit classoops
+expectvalue /String
+obj DbfHistory
+
+run
+System _atConfigId: -1 "- CFG_RT_GEM_NATIVE_CODE" put: 0 . 
+true
+%
+
+expectvalue true
+run
+  | hist |   "see also Filein3Init class >> oldImageVersion"
+  hist := DbfHistory .
+  (hist includesString: 'GemStone/S64 v4.0' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S64 v3.8' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S64 v3.7' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone 3.6' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S64 v3.6' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone 3.5' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone v3.5' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S64 v3.5' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S64 v3.4' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S 64 Bit 3.4' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S64 v3.3' ) ifTrue:[ ^ true ].
+  (hist includesString: 'GemStone/S 64 Bit 3.3' ) ifTrue:[ ^ true ].
+  Error signal:'Upgrade not supported from this version'
+%
+
+! 51453
+! Compare gem exe version with $GEMSTONE/version.txt.
+! Answers true on match, false on error or mismatch.
+! Smalltalk VM is not yet in a state where it can do the work.
+expectvalue true
+run
+System _zeroArgPrim: 1073
+%
+
+iferr 1 where
+iferr 2 stack
+!  uncomment for debugging upgrade
+!  iferr 2 topazwaitfordebug
+expectvalue /String
+run
+| dict list |
+dict := Globals at: #ObsoleteClasses .
+list := System myUserProfile symbolList .
+(list includesIdentical: dict) ifFalse:[ list add: dict . ^ 'added'].
+^ 'no change'
+%
+expectvalue /String
+run
+| dict list |
+dict := Globals at: #GsCompilerClasses .
+list := System myUserProfile symbolList .
+(list includesIdentical: dict) ifFalse:[ list add: dict . ^ 'added'].
+^ 'no change'
+%
+expectvalue /String
+run
+"ensure we can create new version of classes under AbstractExternalSession.
+ If asssocation in Globals is invariant , remove it an remove all methods on the class."
+| str | str := String new .  "fix 49141"
+#( GsLegacyExternalSession GsX509ExternalSession GsExternalSession) do:[:sym |
+  (Globals associationAt: sym otherwise: nil) ifNotNil:[:assoc |
+    assoc isInvariant ifTrue:[ 
+      assoc value removeAllMethods . assoc value class removeAllMethods .
+      Globals removeKey: sym .
+      str add: 'Removed ', sym ; lf .
+    ].
+  ].  
+].
+^ str
+%
+expectvalue /String
+run
+| str | str := String new .  "fix 49141"
+UnauthorizedObjectStub selfCanBeSpecial ifTrue:[ | fmt |
+  fmt := UnauthorizedObjectStub format .
+  UnauthorizedObjectStub _unsafeAt: 2 put:( fmt bitXor:16r2000 ) .
+  str addAll: 'Changed'.
+].
+^ str
+%
+
+commit
+logout
+set INCONVERSION
+login
+
+!
+! filein methods for kernel classes that are created in bom.c
+input $GEMSTONE/upgrade/bootstrap/Filein1A.gs
+commit
+! Filein1A-BootstrapOnly.gs is for methods that are not present
+!   in the image, either because they do not belong, or they are
+!   incomplete versions of the methods that get overwritten 
+!   later on during the bootstrap process
+input $GEMSTONE/upgrade/bootstrap/Filein1A-BootstrapOnly.gs
+commit
+expectvalue %String
+run
+  Globals at: #DbfOrigin ifAbsent:[
+   "dbf originated prior to v3.2.0, revert to 3.1.0.x equality based hash"
+    Symbol removeSelector: #hash .
+    DoubleByteSymbol removeSelector: #hash .
+    QuadByteSymbol removeSelector: #hash .
+    ^ 'removed'
+  ].
+^ 'no change'
+%
+
+expectvalue true
+run
+  "In 3.6, these classes do not implement  #objectSecurityPolicy: "
+  CanonStringDict   removeSelector: #objectSecurityPolicy: ifAbsent:[] .
+  Dictionary   removeSelector: #objectSecurityPolicy: ifAbsent:[] .
+  GsMethodDictionary   removeSelector: #objectSecurityPolicy: ifAbsent:[] .
+  KeyValueDictionary   removeSelector: #objectSecurityPolicy: ifAbsent:[] .
+  RcKeyValueDictionary removeSelector: #objectSecurityPolicy: ifAbsent:[] .
+true
+%
+commit
+
+input $GEMSTONE/upgrade/bootstrap/Filein1B.gs
+run
+(Globals at:#Upgrade1B) initialize 
+%
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein1C.gs
+run
+" clear 'conversion in progress flag' so next login can create
+   a process scheduler instance"
+ConversionStatus at: 1 put: false .
+true
+%
+commit
+logout
+! fresh session to get a processor scheduler instance
+login
+
+run
+System _atConfigId: -1 "- CFG_RT_GEM_NATIVE_CODE" put: 0 . 
+true
+%
+  
+expectvalue false
+run
+ConversionStatus at: 1
+% 
+
+input $GEMSTONE/upgrade/Filein2Upgrade.gs
+commit
+
+input $GEMSTONE/upgrade/bootstrap/Filein2A.gs
+commit
+run
+(Globals at:#Upgrade2A) initialize
+%
+commit
+! remaining stream classes and SUnit in filein2a_inits ; stream classes init
+input $GEMSTONE/upgrade/bootstrap/Filein2CInit.gs
+run
+(Globals at:#Upgrade2C) initialize
+%
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein2Traits.gs
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein2Streams.gs
+run
+(Globals at:#UpgradeStreams) initializeForUpgrade
+%
+commit
+logout
+! get fresh load of classes like GsHostProcess created in Filein2A, for Cdata finalization to work
+login
+
+input $GEMSTONE/upgrade/bootstrap/Filein3A.gs
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein3B.gs
+
+! filein methods that should only be installed if Rowan is not present, so needed during upgrade
+input $GEMSTONE/upgrade/bootstrap/Filein3B-BootstrapOnly.gs
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein3C-ObsoleteClasses.gs
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein3D-CompilerClasses.gs
+commit
+
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein3E-CompilerClasses.gs
+
+commit
+input $GEMSTONE/upgrade/bootstrap/Filein4-Special.gs
+
+input $GEMSTONE/upgrade/bootstrap/Filein3Init.gs
+run
+(Globals at:#Upgrade3Init)
+  _checkGsIndexOptions;
+  initialize .
+%
+commit
+input $GEMSTONE/upgrade/Filein3Upgrade.gs
+commit
+
+input $GEMSTONE/upgrade/bootstrap/Filein4.gs
+commit
+input $GEMSTONE/upgrade/bootstrap/GemStone-Tonel.gs
+commit
+input $GEMSTONE/upgrade/Filein4Upgrade.gs
+commit
+
+input $GEMSTONE/upgrade/bootstrap/FileSystemGs.gs
+commit
+
+input $GEMSTONE/upgrade/preRowanV2_tonel.topaz
+run
+| rowan_tonel_path |
+"RowanV3_tonel.gs should be used in base image and Rowan 3 image"
+rowan_tonel_path:= '$GEMSTONE/upgrade/bootstrap/RowanV3_tonel.gs'.
+(Published at: #Rowan ifAbsent: [])
+  ifNotNil: [:rowanClass |
+		((rowanClass respondsTo: #versionString) and: [rowanClass versionString beginsWith: '2'])
+      ifTrue: [ 
+        "Rowan 2 image use RowanV2_tonel.gs"
+        rowan_tonel_path:= '$GEMSTONE/upgrade/bootstrap/RowanV2_tonel.gs' ] ].
+GsFileIn fromServerPath: rowan_tonel_path.
+true
+%
+input $GEMSTONE/upgrade/postRowanV2_tonel.topaz
+commit
+
+input $GEMSTONE/upgrade/auditReservedOops.topaz
+logout
+
+! need to reinit loaded classes
+login
+run
+"can use symbolic name after Upgrade3Init"
+System gemConfigurationAt: #GemNativeCodeEnabled put: 0 .
+true
+%
+
+input $GEMSTONE/upgrade/GciLibraryA.gs
+commit
+
+display errorcheck
+! FFI  file generated by slowfilein
+input $GEMSTONE/upgrade/GciLibrary.gs
+run
+GciLibrary initializeFunctions . true
+%
+! FFI  file generated by slowfilein
+input $GEMSTONE/upgrade/GciErrSType.gs
+display resultcheck
+
+input $GEMSTONE/upgrade/GciLibraryB.gs
+commit
+run
+SystemRepository _setVersion . true
+%
+commit
+logout
+input $GEMSTONE/upgrade/sessionmethods.topaz
+input $GEMSTONE/upgrade/installMonticello.topaz
+
+! Create GcUser SymbolUser , and Nameless user profiles.  ! must come after bomlast !!!
+!  following must also be input from upgrade_img.topaz
+input $GEMSTONE/upgrade/gcuser.gs
+input $GEMSTONE/upgrade/nameless.gs
+
+set u SystemUser
+login
+run
+System gemConfigurationAt: #GemNativeCodeEnabled put: 0 .
+true
+%
+
+input $GEMSTONE/upgrade/HostAgentUser1.gs    
+!
+! Install the X509-Core package
+!
+input $GEMSTONE/upgrade/bootstrap/X509-Core.gs
+
+input $GEMSTONE/upgrade/LoadsWithoutRowan.gs
+input $GEMSTONE/upgrade/HostAgentUser2.gs    
+
+!  upgradeAllSymbols.topaz     not used
+
+!--------------------------------------
+! upgrade, leave passwords alone for SystemUser and DataCurator; 
+
+!--------------------------------------
+! no change to DbfOrigin during upgrade
+
+input $GEMSTONE/upgrade/version.topaz
+commit
+
+! stop and restart gcGems to make sure they are running - bug 47884
+expectvalue System
+send System stopAllGcGems
+expectvalue System
+send System startAllGcGems
+
+input $GEMSTONE/upgrade/clusterimage.gs
+
+! set sessionMethod conversion status to false
+run
+ConversionStatus at: 4 put: false.
+true
+%
+expectvalue 0
+send UserGlobals at: #ErrCount put: ErrorCount
+
+expectvalue true
+commit
+
+expectvalue /String
+obj DbfHistory
+
+! write a checkpoint here
+time
+expectvalue true
+send System startCheckpointSync
+time
+
+expectvalue false
+run
+System waitForAllGcGemsToStartForUpToSeconds: 30.
+System hasMissingGcGems
+%
+errorcount
+logout
+output pop
+errorcount
+exit
