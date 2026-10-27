@@ -3537,14 +3537,24 @@ CPythonShim >> PyUnicode_FromString: aString [
 	Decoding is a no-op for 7-bit content (and still answers Unicode7),
 	so only the previously-mojibake cases change.
 
-	Falls back to the old widening if the bytes are not valid UTF-8,
-	which keeps any caller that really did pass latin-1 working rather
-	than turning its output into an uncatchable ArgumentError."
+	A str holding a lone surrogate comes back as one.  PyUnicode_AsUTF8 hands
+	C such a str as WTF-8 (PyStrSurrogate >> ___wtf8Bytes___), which strict
+	UTF-8 refuses, and the surrogatepass decode is WTF-8's -- so a result _sre
+	built from its slices is the PyStrSurrogate it was made of.  The widening
+	answered those bytes as latin-1 characters: re.sub on a surrogate-escaped
+	str, which is how email's BytesGenerator mangles a From line, gave
+	'\xed\xb3\x83' for '\udcc3'.
+
+	Falls back to the old widening only when neither decode applies, which
+	keeps any caller that really did pass latin-1 working rather than turning
+	its output into an uncatchable ArgumentError."
 
 	| decoded |
 	decoded := [aString @env0:decodeFromUTF8]
 		@env0:on: Error
-		do: [:ex | ex @env0:return: aString @env0:asUnicodeString].
+		do: [:ex | ex @env0:return: ([aString @env0:asByteArray @env1:decode: 'utf-8' _: 'surrogatepass']
+			@env0:on: AbstractException
+			do: [:inner | inner @env0:return: aString @env0:asUnicodeString])].
 	^ (self wrap: decoded) memoryAddress
 
 ]
