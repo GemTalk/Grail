@@ -5444,8 +5444,8 @@ Object class >> ___pythonBuiltinTypeModule___ [
 	``type(None).__module__'' is 'builtins', and typing's _type_repr reads it
 	-- ``repr(Callable[..., None])'' raised AttributeError without it."
 	((#( #bool #bytearray #bytes #complex #dict #float #frozenset #int #list
-		#memoryview #object #property #range #set #slice #str #tuple #type
-		#NoneType #ellipsis #NotImplementedType )
+		#mappingproxy #memoryview #object #property #range #set #slice #str #tuple
+		#type #NoneType #ellipsis #NotImplementedType )
 		@env0:includes: nm)
 		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
 		@env0:ifFalse: [^ nil].
