@@ -460,7 +460,7 @@ static void init_cfunction_type(void) {
     if (done) return;
     done = 1;
     memset(&PyCFunction_Type, 0, sizeof(PyCFunction_Type));
-    PyCFunction_Type.ob_base.ob_base.ob_refcnt = 1;
+    PyCFunction_Type.ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
     PyCFunction_Type.ob_base.ob_base.ob_type = &PyType_Type;
     PyCFunction_Type.tp_name = "builtin_function_or_method";
     PyCFunction_Type.tp_basicsize = sizeof(GrailCMethodObject);
@@ -651,7 +651,7 @@ static PyObject *descr_getattro(PyObject *descr, PyObject *name) {
 }
 
 static void init_descr_type(PyTypeObject *t, const char *name, Py_ssize_t size) {
-    t->ob_base.ob_base.ob_refcnt = 1;
+    t->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
     t->ob_base.ob_base.ob_type = &PyType_Type;
     t->tp_name = name;
     t->tp_basicsize = size;
@@ -1146,8 +1146,10 @@ int PyUnicodeWriter_WriteChar(void *writer, Py_UCS4 ch) {
 
 /* Refcounting as calls: the shim's lifetimes are GemStone's, so these do
    what the inline forms do -- adjust the count -- and never deallocate. */
-void _Py_IncRef(PyObject *o) { if (o) o->ob_refcnt++; }
-void _Py_DecRef(PyObject *o) { if (o) o->ob_refcnt--; }
+/* What an abi3 wheel (PyO3's) calls for Py_INCREF / Py_DECREF: the same
+   rules as the macros, immortal objects included, and _Py_Dealloc at zero. */
+void _Py_IncRef(PyObject *o) { if (o) _grail_incref(o); }
+void _Py_DecRef(PyObject *o) { if (o) _grail_decref(o); }
 
 extern "C" unsigned long long PyLong_AsUnsignedLongLongMask_impl(PyObject *o);  /* cpython.cc */
 unsigned long long PyLong_AsUnsignedLongLongMask(PyObject *o) {

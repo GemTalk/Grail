@@ -1138,6 +1138,24 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         if (v == -1 && PyErr_Occurred()) return NULL;
         return PyLong_FromSsize_t(v);
     }
+    /* Whether decrementing a static object's count leaves it unchanged, as
+       CPython 3.14 does for an immortal object: the singletons, static
+       types, and this module's own type, which the shim's PyType_Ready
+       readies.  The count is put back after. */
+    if (IS("immortal_statics")) {
+        PyObject *objs[] = { Py_None, Py_True, Py_False, Py_NotImplemented, Py_Ellipsis,
+                             (PyObject *)&PyLong_Type, (PyObject *)&PyTuple_Type,
+                             (PyObject *)&Buf_Type };
+        PyObject *out = PyList_New(0);
+        for (size_t i = 0; i < sizeof(objs) / sizeof(objs[0]); i++) {
+            Py_ssize_t before = Py_REFCNT(objs[i]);
+            for (int k = 0; k < 3; k++) Py_INCREF(objs[i]);
+            Py_ssize_t during = Py_REFCNT(objs[i]);
+            for (int k = 0; k < 3; k++) Py_DECREF(objs[i]);
+            PyList_Append(out, before == during ? Py_True : Py_False);
+        }
+        return out;
+    }
     /* The exception types numpy raises from C under np.errstate. */
     if (IS("raise_fpe")) {
         PyErr_SetString(PyExc_FloatingPointError, "invalid value encountered");

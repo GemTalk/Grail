@@ -895,7 +895,7 @@ extern "C" {
      Py_Ellipsis was the address of the pointer, and numpy's ``index ==
      Py_Ellipsis'' never matched.  Typed and mapped to Grail's Ellipsis in
      cpython.cc (pyobj_oop, shimTypeAddr ``Ellipsis''). */
-  PyObject _Py_EllipsisObject={1,0};
+  PyObject _Py_EllipsisObject={GRAIL_IMMORTAL_REFCNT,0};
 }
 
 /* ====================================================================
@@ -926,7 +926,7 @@ extern "C" char _PyByteArray_empty_string[] = "";
    each check answers false and Cython takes its general path. */
 static PyTypeObject *grail_named_type(PyTypeObject *t, const char *name) {
     if (t->tp_name == NULL) {
-        t->ob_base.ob_base.ob_refcnt = 1;
+        t->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
         t->ob_base.ob_base.ob_type = &PyType_Type;
         t->tp_name = name;
         t->tp_basicsize = sizeof(PyObject);

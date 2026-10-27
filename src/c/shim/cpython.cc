@@ -308,7 +308,7 @@ PyTypeObject PyModule_Type;
 static void init_type(PyTypeObject *type, const char *name,
                       PyTypeObject *base, unsigned long flags) {
     memset(type, 0, sizeof(PyTypeObject));
-    type->ob_base.ob_base.ob_refcnt = 1;
+    type->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
     type->ob_base.ob_base.ob_type = &PyType_Type;
     type->tp_name = name;
     type->tp_base = base;
@@ -822,7 +822,7 @@ static PyObject *exc_tp_new(PyTypeObject *subtype, PyObject *args, PyObject *kwd
 
 static void init_exc_type(PyTypeObject *t, const char *name) {
     memset(t, 0, sizeof(PyTypeObject));
-    t->ob_base.ob_base.ob_refcnt = 1;
+    t->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
     t->ob_base.ob_base.ob_type = &PyType_Type;
     t->tp_name = name;
     t->tp_basicsize = sizeof(ShimBaseExceptionObject);
@@ -934,7 +934,7 @@ static int dyn_exception_count = 0;
    this address for it (CPythonShim>>initTypeAddresses).  A wheel's binary
    slot answers it to decline an operand -- numpy's do for a type they do not
    know -- and read as anything else, the other operand was never tried. */
-PyObject _Py_NotImplementedStruct = { 1, NULL };
+PyObject _Py_NotImplementedStruct = { GRAIL_IMMORTAL_REFCNT, NULL };
 static PyTypeObject _PyNotImplemented_Type;
 static OopType g_notimpl_oop = 0;
 /* Ellipsis the same way: numpy's indexing tests ``index == Py_Ellipsis'' by
@@ -970,11 +970,11 @@ static OopType notimpl_oop(void) {
  * can extract the GemStone value.
  * ==================================================================== */
 
-struct _object _Py_NoneStruct  = { 1, &_PyNone_Type };
+struct _object _Py_NoneStruct  = { GRAIL_IMMORTAL_REFCNT, &_PyNone_Type };
 /* lv_tag = (ndigits << 3) | sign, sign 0 positive and 1 zero: True is one
    digit of 1, False is zero -- CPython 3.14's own encoding of both. */
-_GrailLongSingleton _Py_TrueStruct  = { { 1, NULL }, 0x8, { 1, 0 } };  /* ob_type set by shimInit */
-_GrailLongSingleton _Py_FalseStruct = { { 1, NULL }, 0x1, { 0, 0 } };  /* ob_type set by shimInit */
+_GrailLongSingleton _Py_TrueStruct  = { { GRAIL_IMMORTAL_REFCNT, NULL }, 0x8, { 1, 0 } };  /* ob_type set by shimInit */
+_GrailLongSingleton _Py_FalseStruct = { { GRAIL_IMMORTAL_REFCNT, NULL }, 0x1, { 0, 0 } };  /* ob_type set by shimInit */
 
 /* _Py_Dealloc — called when refcount hits zero.
    In the shim, object lifetime is managed by GemStone. No-op. */
@@ -4323,7 +4323,7 @@ static void init_wrapper_types(void) {
     PyTypeObject *ts[2] = { &GrailSlotWrapper_Type, &GrailMethodWrapper_Type };
     const char *names[2] = { "wrapper_descriptor", "method-wrapper" };
     for (int i = 0; i < 2; i++) {
-        ts[i]->ob_base.ob_base.ob_refcnt = 1;
+        ts[i]->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
         ts[i]->ob_base.ob_base.ob_type = &PyType_Type;
         ts[i]->tp_name = names[i];
         ts[i]->tp_base = &PyBaseObject_Type;
@@ -7552,7 +7552,9 @@ extern "C" int PyType_Ready(PyTypeObject *type) {
        a cdef class's __pyx_vtable__ straight into tp_dict, and reads tp_mro. */
     if (type->tp_dict == NULL) type->tp_dict = PyDict_New();
     grail_set_mro(type);
-    type->ob_base.ob_base.ob_refcnt = 1;
+    /* Immortal, as CPython 3.14's headers already make a wheel's static
+       types: the shim never frees a type, so no count may reach zero. */
+    type->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
     /* Only default the metatype when unset — matching CPython, which does
        `if (Py_IS_TYPE(type, NULL)) Py_SET_TYPE(type, &PyType_Type);`.
        numpy allocates a DType *class* as an instance of its own metaclass
@@ -7703,7 +7705,7 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
     PyTypeObject *type = (PyTypeObject *)calloc(1, sizeof(PyTypeObject));
     if (!type) return NULL;
 
-    type->ob_base.ob_base.ob_refcnt = 1;
+    type->ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
     type->ob_base.ob_base.ob_type = &PyType_Type;
     /* COPY the name, as CPython does (ht_name / ht_qualname): the spec is the
        caller's, and PyO3 builds it from temporaries it frees as soon as
@@ -10215,7 +10217,7 @@ extern "C" PyObject *PyObject_SelfIter(PyObject *obj) {
 extern "C" PyObject *PySeqIter_New(PyObject *seq) {
     if (seq == NULL) { PyErr_BadInternalCall(); return NULL; }
     if (GrailSeqIter_Type.tp_name == NULL) {
-        GrailSeqIter_Type.ob_base.ob_base.ob_refcnt = 1;
+        GrailSeqIter_Type.ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
         GrailSeqIter_Type.ob_base.ob_base.ob_type = &PyType_Type;
         GrailSeqIter_Type.tp_name = "iterator";
         GrailSeqIter_Type.tp_basicsize = sizeof(GrailSeqIterObject);

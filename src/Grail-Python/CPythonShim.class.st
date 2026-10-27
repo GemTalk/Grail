@@ -499,7 +499,7 @@ CPythonShim >> ___buildSubtypeMirrorFor: aClass [
 	base := CByteArray fromCPointer: (CPointer forAddress: baseAddr) numBytes: size.
 	m := CByteArray gcMalloc: size.
 	0 to: size - 8 by: 8 do: [:off | m int64At: off put: (base int64At: off)].
-	m int64At: 0 put: 16r10000000.
+	m int64At: 0 put: 16rC0000000.
 	nameBytes := self ___cStringFor: (self ___mirrorNameFor: aClass).
 	m int64At: (lay at: 2) put: nameBytes memoryAddress.
 	basicSize := base int64At: (lay at: 3).
@@ -540,7 +540,7 @@ CPythonShim >> ___buildTypeMirrorFor: aClass [
 	lay := self ___mirrorLayout.
 	m := CByteArray gcMalloc: (lay at: 1).
 	0 to: (lay at: 1) - 8 by: 8 do: [:off | m int64At: off put: 0].
-	m int64At: 0 put: 16r10000000.
+	m int64At: 0 put: 16rC0000000.
 	m int64At: 8 put: (typeAddresses at: #type).
 	modName := [aClass @env1:___pyAttrLoad___: #'__module__'] on: AbstractException do: [:e | e return: nil].
 	qual := [aClass @env1:___pyAttrLoad___: #'__qualname__'] on: AbstractException do: [:e | e return: nil].
@@ -856,7 +856,7 @@ CPythonShim >> ___mroTupleFor: aMirror base: baseAddr [
 		addr := (CByteArray fromCPointer: (CPointer forAddress: addr) numBytes: size)
 			int64At: (lay at: 5)].
 	t := CByteArray gcMalloc: 32 + (8 * chain size).
-	t int64At: 0 put: 16r10000000.
+	t int64At: 0 put: 16rC0000000.
 	t int64At: 8 put: (lay at: 22).
 	t int64At: 16 put: chain size.
 	t int64At: 24 put: -1.
@@ -2497,12 +2497,15 @@ CPythonShim >> initTypeAddresses [
 	(docs/Support_Pydantic.md, Phase 5).  The wrappers above remain what
 	shimInit read the OOPs from; the shim's pyobj_oop answers those OOPs for
 	the statics.  The statics are 16 bytes, so nothing past offset 8 is
-	written, and their refcount is pinned high so sweep never drops them."
+	written, and their refcount is pinned high so sweep never drops them.
+	16rC0000000 is CPython 3.14's immortal count (3 << 30, docs/Shim_Memory.md):
+	a 3.14 wheel never changes a count whose low 32 bits read as negative.
+	The type mirrors start there too -- the shim never frees a type."
 	#( #(nil 'None') #(true 'True') #(false 'False') ) do: [:pair | | a v |
 		a := System userAction: #shimTypeAddr with: (pair at: 2).
 		a = 0 ifFalse: [
 			v := CByteArray fromCPointer: (CPointer forAddress: a) numBytes: 16.
-			v int64At: 0 put: 16r40000000.
+			v int64At: 0 put: 16rC0000000.
 			(pair at: 1) isNil
 				ifTrue: [noneWrapper := v]
 				ifFalse: [self valueToPyObject at: (pair at: 1) put: v]]].
@@ -2515,7 +2518,7 @@ CPythonShim >> initTypeAddresses [
 			a := System userAction: #shimTypeAddr with: nm asString.
 			a = 0 ifFalse: [ | v |
 				v := CByteArray fromCPointer: (CPointer forAddress: a) numBytes: 16.
-				v int64At: 0 put: 16r40000000.
+				v int64At: 0 put: 16rC0000000.
 				self valueToPyObject at: single put: v]]].
 
 ]
