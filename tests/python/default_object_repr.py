@@ -45,8 +45,12 @@ r['address_is_id'] = hex(id(f)) in repr(f)
 # str() falls through to __repr__, so it says the same thing.
 r['str_matches'] = str(f) == repr(f)
 
-# The whole point: two objects of one class no longer read identically.
-r['distinct'] = repr(Foo()) != repr(Foo())
+# The whole point: two objects of one class no longer read identically.  Both
+# are kept alive: a temporary's address may go to the next object made, as
+# CPython's ids may, and under a full run's load Grail's did, so the check
+# failed now and then (DefaultObjectReprTestCase).
+first, second = Foo(), Foo()
+r['distinct'] = repr(first) != repr(second)
 r['same_object'] = repr(f) == repr(f)
 
 # The NAME is the qualname, so a nested class carries its enclosing class.
