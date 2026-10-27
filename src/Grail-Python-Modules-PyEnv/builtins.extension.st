@@ -5241,8 +5241,19 @@ builtins >> _compile: positional kw: kwargs [
 					SyntaxError with no location and traceback.py had no source line
 					to draw a caret under.  That is why test_caret saw one output line
 					where CPython has four.  Passing the location tuple in the
-					constructor form keeps both halves."
-ModuleAst @env0:___resignalSyntaxError___: ex].
+					constructor form keeps both halves.
+
+					AND IT NAMES THIS FILE.  The parser locates an error knowing
+					only the source, so its location says ``<string>'' -- right
+					for exec() and eval(), wrong for compile(src, 'mod.py', ...),
+					whose SyntaxError CPython reports in mod.py.  A str name only:
+					CPython converts a bytes or path-like one, which this does not."
+					((args @env0:size @env0:>= 2)
+						@env0:and: [(args @env0:at: 2) @env0:isKindOf: CharacterCollection]) ifTrue: [
+						[(ex @env0:dynamicInstVarAt: #'lineno') @env0:isNil ifFalse: [
+							ex @env0:dynamicInstVarAt: #'filename' put: (args @env0:at: 2)]]
+								@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil]].
+					ModuleAst @env0:___resignalSyntaxError___: ex].
 			"EVAL MODE TAKES EXACTLY ONE EXPRESSION.  The parse above is a module
 			 parse whatever the mode, and a module may be empty or hold
 			 statements, so ``compile('', '<string>', 'eval')'' and
