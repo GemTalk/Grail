@@ -477,6 +477,24 @@ SetTestCase >> testSetRepr [
 
 ]
 
+{ #category : 'Grail-Tests' }
+SetTestCase >> testSetReprNamesAnyTypeButAnExactSet [
+	"repr writes ``{7}'' for an exact set and puts any other type's name around
+	the braces -- ``S({7})'' for a subclass, ``frozenset({7})'' always -- as
+	CPython's set_repr does.  tests/python/set_subclass_repr.py holds the
+	checks and agrees with CPython 3.14 (test_pprint's test_set_reprs)."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'set_subclass_repr' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/set_subclass_repr.py')
+		name: 'set_subclass_repr'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '5 checks, 0 disagreeing [], keys match: True'
+
+]
+
 { #category : 'Grail-Tests - Update Methods' }
 SetTestCase >> testSetSymmetricDifferenceUpdate [
 	"Test symmetric_difference_update method"
