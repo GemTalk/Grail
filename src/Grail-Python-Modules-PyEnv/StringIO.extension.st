@@ -35,7 +35,7 @@ StringIO class >> ___construct___: initialValue newline: newlineArg [
 		NotImplementedError ___signal___:
 			'Grail''s StringIO does not translate newlines; newline must be ''\n'' or '''''].
 	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #_buffer put: initial @env0:asString @env0:copy.
+	inst @env0:dynamicInstVarAt: #_buffer put: (inst ___carried___: initial) @env0:copy.
 	inst @env0:dynamicInstVarAt: #_pos put: 0.
 	inst @env0:dynamicInstVarAt: #_closed put: false.
 	^ inst
@@ -120,6 +120,31 @@ StringIO class >> _new: posArgs kw: kwArgs [
 ]
 
 { #category : 'Grail-Private' }
+StringIO >> ___carried___: aString [
+	"aString as the buffer holds it.  The buffer is a Smalltalk string, which
+	cannot hold a code point in the surrogate block, so a str holding one -- a
+	PyStrSurrogate, which is what decoding with surrogateescape gives, and so
+	what email's BytesParser hands its StringIO -- has each surrogate carried
+	as a private-use placeholder of this stream's own, the way PyStrSurrogate
+	runs a str method (___viaPlaceholders___:positional:kw:).  ___restored___:
+	maps them back.  The placeholders count down from U+10FFFD, where no real
+	text lives; a stream that also held those very code points would read them
+	back as surrogates."
+
+	| placeholders carrier |
+	(aString @env0:isKindOf: PyStrSurrogate) ifFalse: [^ aString @env0:asString].
+	placeholders := self ___surrogatePlaceholders___.
+	carrier := Unicode7 @env0:new.
+	aString @env0:___codePoints___ @env0:do: [:codePoint |
+		((aString @env0:___isSurrogate___: codePoint)
+			and: [(placeholders @env0:includesKey: codePoint) @env0:not]) ifTrue: [
+				placeholders @env0:at: codePoint put: 16r10FFFD @env0:- placeholders @env0:size].
+		carrier @env0:addCodePoint: (placeholders @env0:at: codePoint ifAbsent: [codePoint])].
+	^ carrier
+
+]
+
+{ #category : 'Grail-Private' }
 StringIO >> ___ioRead___: n [
 	"read(size=-1) - read up to size chars from the current position;
 	-1 / None means read until EOF."
@@ -136,7 +161,7 @@ StringIO >> ___ioRead___: n [
 	take @env0:<= 0 ifTrue: [^ ''].
 	result := (self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: (self @env0:dynamicInstVarAt: #_pos) @env0:+ 1 to: (self @env0:dynamicInstVarAt: #_pos) @env0:+ take.
 	self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ take).
-	^ result
+	^ self ___restored___: result
 
 ]
 
@@ -158,7 +183,7 @@ StringIO >> ___ioReadline___: limit [
 	"Include the \\n itself when present."
 	((self @env0:dynamicInstVarAt: #_pos) @env0:< max @env0:and: [((self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ 1) @env0:= Character @env0:lf]) ifTrue: [
 		self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ 1)].
-	^ (self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: start @env0:+ 1 to: (self @env0:dynamicInstVarAt: #_pos)
+	^ self ___restored___: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: start @env0:+ 1 to: (self @env0:dynamicInstVarAt: #_pos))
 
 ]
 
@@ -187,6 +212,40 @@ StringIO >> ___ioTruncate___: size [
 
 ]
 
+{ #category : 'Grail-Private' }
+StringIO >> ___restored___: aString [
+	"aString read out of the buffer, each placeholder ___carried___: put there
+	mapped back to its surrogate -- a PyStrSurrogate when there was one."
+
+	| placeholders surrogates codePoints restored |
+	placeholders := self @env0:dynamicInstVarAt: #_surrogates.
+	(placeholders @env0:isNil or: [placeholders @env0:isEmpty]) ifTrue: [^ aString].
+	surrogates := Dictionary @env0:new.
+	placeholders @env0:keysAndValuesDo: [:surrogate :placeholder |
+		surrogates @env0:at: placeholder put: surrogate].
+	restored := false.
+	codePoints := OrderedCollection @env0:new.
+	aString @env0:do: [:character | | codePoint |
+		codePoint := character @env0:codePoint.
+		(surrogates @env0:includesKey: codePoint) ifTrue: [
+			restored := true.
+			codePoint := surrogates @env0:at: codePoint].
+		codePoints @env0:add: codePoint].
+	restored ifFalse: [^ aString].
+	^ PyStrSurrogate @env0:___fromCodePoints___: codePoints
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___surrogatePlaceholders___ [
+	"Surrogate code point -> its placeholder in this stream's buffer; see
+	___carried___:."
+
+	^ (self @env0:dynamicInstVarAt: #_surrogates)
+		@env0:ifNil: [self @env0:dynamicInstVarAt: #_surrogates put: Dictionary @env0:new]
+
+]
+
 { #category : 'Grail-Context manager' }
 StringIO >> __enter__ [
 	^ self
@@ -212,7 +271,9 @@ StringIO >> __next__ [
 
 	| line |
 	line := self readline.
-	line @env0:isEmpty ifTrue: [
+	"Its length, not isEmpty: a line may be a PyStrSurrogate (___restored___:),
+	which is no Smalltalk collection."
+	line __len__ @env0:= 0 ifTrue: [
 		StopIteration ___signal___: ''
 	].
 	^ line
@@ -256,7 +317,7 @@ StringIO >> flush [
 StringIO >> getvalue [
 	"getvalue() - return the entire buffer contents as a single str."
 
-	^ (self @env0:dynamicInstVarAt: #_buffer) @env0:copy
+	^ self ___restored___: (self @env0:dynamicInstVarAt: #_buffer) @env0:copy
 
 ]
 
@@ -312,7 +373,7 @@ StringIO >> readlines [
 	out := list ___new___.
 	[
 		line := self readline.
-		line @env0:isEmpty
+		line __len__ @env0:= 0
 	] @env0:whileFalse: [out append: line].
 	^ out
 
@@ -397,7 +458,7 @@ StringIO >> write: data [
 		^ TypeError ___signal___: 'string argument expected, got '''
 			@env0:, data ___pyTypeNameForError___ @env0:, ''''].
 	self _checkOpen.
-	s := data @env0:asString.
+	s := self ___carried___: data.
 	n := s @env0:size.
 	endPos := (self @env0:dynamicInstVarAt: #_pos) @env0:+ n.
 	endPos @env0:> (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
