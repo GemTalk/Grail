@@ -566,6 +566,9 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		node generators doWithIndex: [:generator :index |
 			self ___validateContext___: generator iter
 				fn: (index = 1 ifTrue: [fnSym] ifFalse: [scopeName]) loop: inLoop scopes: scopes.
+			"A comprehension's target is an assignment target like a for
+			statement's: ``[x for *a in y]'' is the same starred-target error."
+			self ___validateStarredTarget___: generator target.
 			self ___validateContext___: generator target fn: scopeName loop: inLoop scopes: scopes.
 			self ___validateContext___: generator ifs fn: scopeName loop: inLoop scopes: scopes].
 		(node isKindOf: DictCompAst)
@@ -614,6 +617,10 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 	(node isKindOf: ExprAst) ifTrue: [
 		(node value isKindOf: StarredAst) ifTrue: [
 			^ self ___syntaxError___: 'can''t use starred expression here' node: node value]].
+	"So is a with statement's ``as'' target -- ``with x as *a:'' -- whose item
+	the generic walk below then validates as usual."
+	(node isKindOf: WithItemAst) ifTrue: [
+		node optional_vars ifNotNil: [:target | self ___validateStarredTarget___: target]].
 	(node isKindOf: ForAst) ifTrue: [
 		self ___validateStarredTarget___: node target.
 		self ___validateContext___: node target fn: fnSym loop: inLoop scopes: scopes.
