@@ -333,6 +333,28 @@ PythonParser >> ___atEvalInputEnd___ [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___balancedJoinOf: pieces from: startTok [
+	"The pieces of an f-string joined by ``+'', as a BALANCED tree: the same
+	additions in the same left-to-right order, but log2(n) deep where a left
+	fold is n deep.  Every pass over the tree -- validation, both codegen arms
+	-- recurses through it, and test_fstring's test_many_expressions joins 256
+	f-strings of 255 fields: some 130,000 pieces, which a left fold turned into
+	a RecursionError."
+
+	| middle |
+	pieces size = 1 ifTrue: [^ pieces first].
+	middle := pieces size // 2.
+	^ BinOpAst new
+		left: (self ___balancedJoinOf: (pieces copyFrom: 1 to: middle) from: startTok);
+		op: (AddAst new from: startTok to: startTok; yourself);
+		right: (self ___balancedJoinOf: (pieces copyFrom: middle + 1 to: pieces size) from: startTok);
+		from: startTok to: self lastToken;
+		___beAnFStringJoin___;
+		yourself
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___bodyRangeAfterColon___: colon [
 	"{first. last. end} token indexes of the block a header's colon opens: an
@@ -4686,7 +4708,7 @@ PythonParser >> parseFStringLiteral [
 	Implicit concatenation (``f'a' 'b' f'c'``) is supported by
 	walking forward while the token is STRING or FSTRING."
 
-	| startTok tok value parts pos len ch result piece converted
+	| startTok tok value parts pos len ch result converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
 	  wrapped anchor sawT sawNonT sawF uncommented hadComment |
@@ -5015,18 +5037,9 @@ PythonParser >> parseFStringLiteral [
 		sawF ifTrue: [result ___beAnFString___].
 		^ result
 	].
-	"Build a left-folded chain of BinOp(+) over each piece."
-	result := self ___fstringPartToAst: parts first from: startTok.
-	2 to: parts size do: [:i |
-		piece := self ___fstringPartToAst: (parts at: i) from: startTok.
-		result := BinOpAst new
-			left: result;
-			op: (AddAst new from: startTok to: startTok ; yourself);
-			right: piece;
-			from: startTok to: self lastToken ;
-			___beAnFStringJoin___ ;
-			yourself.
-	].
+	result := self
+		___balancedJoinOf: (parts collect: [:part | self ___fstringPartToAst: part from: startTok])
+		from: startTok.
 	"An f-string with no fields folds to its text, still an f-string to CPython."
 	(sawF and: [result isKindOf: ConstantAst]) ifTrue: [result ___beAnFString___].
 	^ result
