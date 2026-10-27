@@ -97,6 +97,25 @@ KwargsSplatTestCase >> testSplatPreservesDefaults [
 
 ]
 
+{ #category : 'Grail-Tests' }
+KwargsSplatTestCase >> testSplattedInstanceDictReachesTheCalleeAsAFreshDict [
+	"``f(**obj.__dict__)'' hands f a plain dict, as CPython does for every
+	``**'': a callee popping from it leaves obj alone, a named parameter binds
+	from it, and email.policy's ``+'' (clone(**other.__dict__)) works.
+	tests/python/kwargs_splat_instance_dict.py holds the checks and agrees with
+	CPython 3.14 (test_email test_policy)."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'kwargs_splat_instance_dict' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/kwargs_splat_instance_dict.py')
+		name: 'kwargs_splat_instance_dict'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '7 checks, 0 disagreeing [], keys match: True'
+
+]
+
 { #category : 'Grail-Tests - User kwargs' }
 KwargsSplatTestCase >> testUserKwargsGetByStringKey [
 	"``def collect(**kwargs): return kwargs.get('a', 'A?')'' —
