@@ -2,6 +2,15 @@ Extension { #name : 'PyAnnotate' }
 
 { #category : 'Grail-Annotations' }
 PyAnnotate class >> ___annotationValue___: aBlock source: aString format: aFormat [
+	"___annotationValue___:source:format:names:, for an annotation that reads no
+	enclosing function's names."
+
+	^ self ___annotationValue___: aBlock source: aString format: aFormat names: #()
+
+]
+
+{ #category : 'Grail-Annotations' }
+PyAnnotate class >> ___annotationValue___: aBlock source: aString format: aFormat names: namePairs [
 	"ONE annotation, rendered in one of PEP 649's formats.  The annotate
 	functions FunctionDefAst emits call this per annotated parameter, and
 	per return annotation.
@@ -26,6 +35,13 @@ PyAnnotate class >> ___annotationValue___: aBlock source: aString format: aForma
 	                        substitution THERE keeps ForwardRef a plain
 	                        Python class and keeps this method from having
 	                        to build Python objects from Smalltalk.
+
+	namePairs alternates a name the annotation reads from an ENCLOSING FUNCTION
+	with a block reading it (FunctionDefAst >> ___annotationEnclosingNamesIn___:).
+	A failed FORWARDREF evaluation carries them as a fourth element, a callable
+	answering the ones bound now, which annotationlib binds when it partially
+	evaluates the source -- CPython reads them from the annotate function's
+	closure cells.
 
 	Evaluating per-annotation rather than per-dict is what gives
 	FORWARDREF its per-KEY granularity: ``def f(a: int) -> nonexistent''
@@ -54,10 +70,14 @@ PyAnnotate class >> ___annotationValue___: aBlock source: aString format: aForma
 			do: [:ex |
 				ex @env0:return:
 					(tuple @env0:withAll:
-						{ '__grail_forwardref__' . aString .
+						({ '__grail_forwardref__' . aString .
 							"The def-closure shape, so Python can CALL it: a bare
 							 zero-argument block is not a Python callable."
-							[:positional :kwargs | aBlock @env0:value] })]].
+							[:positional :kwargs | aBlock @env0:value] }
+						@env0:, (namePairs @env0:isEmpty
+							ifTrue: [#()]
+							ifFalse: [{ [:positional :kwargs |
+								self ___enclosingNamesFrom___: namePairs] }])))]].
 	"VALUE (1) and VALUE_WITH_FAKE_GLOBALS (2) both evaluate -- CPython's
 	 generated annotate treats them alike.  Anything else is refused the way
 	 CPython's generated annotate refuses it, with NotImplementedError; that is
@@ -67,5 +87,23 @@ PyAnnotate class >> ___annotationValue___: aBlock source: aString format: aForma
 	((fmt @env0:= 1) @env0:or: [fmt @env0:= 2]) ifFalse: [
 		^ NotImplementedError ___signal___: ''].
 	^ aBlock @env0:value
+
+]
+
+{ #category : 'Grail-Annotations' }
+PyAnnotate class >> ___enclosingNamesFrom___: namePairs [
+	"A dict of the enclosing functions' names an annotation reads that are
+	bound now: each block of namePairs that answers.  One still unbound raises
+	(NameError, ``cannot access free variable'') and is left out, so it stays
+	a ForwardRef in the partial evaluation, as an empty cell does in CPython."
+
+	| d |
+	d := dict @env0:new.
+	1 @env0:to: namePairs @env0:size by: 2 do: [:i |
+		[d @env1:__setitem__: (namePairs @env0:at: i)
+			_: (namePairs @env0:at: i @env0:+ 1) @env0:value]
+			@env0:on: (Python @env0:at: #'Exception')
+			do: [:ex | ex @env0:return: nil]].
+	^ d
 
 ]

@@ -793,3 +793,41 @@ test.test_types
 #                        ported yet: tanh's zero signs, log's base argument,
 #                        polar's infinities, specific values
 test.test_cmath
+# --- Core language (added 2026-10-26): break in a loop's else clause ---
+#
+# test_graphlib is CPython 3.14.4's, vendored verbatim.  It timed out on its
+# first test: TopologicalSorter.prepare() never returned.  _find_cycle ends its
+# ``while True'' with a ``break'' in an inner while's ELSE clause, and Grail ran
+# a loop's else clause inside that loop's own PythonBreak handler -- so the
+# break was caught by the loop that had already ended and the outer loop went
+# on forever.  Both arms now run the else clause after the handler, when no
+# break ended the loop.  Measured on Darwin arm64:
+#
+#   graphlib 17t OK/1S
+test.test_graphlib
+
+# --- Core language (added 2026-10-26): template strings (PEP 750) ---
+#
+# test_tstring and test_string.test_templatelib are CPython 3.14.4's, vendored
+# verbatim with the helper they share, test/test_string/_support.py.  Neither
+# could be imported without that helper; Grail's t-strings needed nothing else
+# to load them.  Measured on Darwin arm64:
+#
+#   tstring      12t 3F
+#   templatelib  13t 2F
+test.test_tstring
+test.test_string.test_templatelib
+
+# --- Core language (added 2026-10-26): types.DynamicClassAttribute ---
+#
+# test_dynamicclassattribute is CPython 3.14.4's, vendored verbatim.  It
+# could not be imported: ``@abc.abstractmethod @DynamicClassAttribute'' in a
+# class body handed abstractmethod a builtin property, whose store of
+# __isabstractmethod__ is refused.  The parser reads @DynamicClassAttribute
+# and @enum.property as #property, and the descriptor an outer decorator
+# receives was always the builtin; it is now Grail's DynamicClassAttribute
+# unless the decorator WAS the builtin.  Measured on Darwin arm64:
+#
+#   dynamicclassattribute 12t 6F/1S   docstring copying, __isabstractmethod__
+#                                     evaluated lazily (CPython: at __init__)
+test.test_dynamicclassattribute

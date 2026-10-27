@@ -32,6 +32,20 @@ PyFrameLocals >> __iter__ [
 ]
 
 { #category : 'Grail-Live View' }
+PyFrameLocals >> __setitem__: key _: value [
+	"``f_locals[name] = value'' changes the frame's variable where the frame
+	can be written (PEP 667; PyFrame >> ___storeLocal___:value: says which
+	can), and the view holds the new value either way."
+
+	| fr |
+	fr := self @env0:___frame___.
+	(fr @env0:notNil and: [key @env0:isKindOf: CharacterCollection])
+		ifTrue: [fr ___storeLocal___: key value: value].
+	^ super __setitem__: key _: value
+
+]
+
+{ #category : 'Grail-Live View' }
 PyFrameLocals >> items [
 	^ self ___snapshot___ items
 

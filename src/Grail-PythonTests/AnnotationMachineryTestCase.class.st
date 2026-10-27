@@ -49,7 +49,7 @@ AnnotationMachineryTestCase >> testEveryCheckIsPresentAndAgreesWithCPython [
 
 	self
 		assert: ((testModule @env1:___pyAttrLoad___: #SUMMARY) asString)
-		equals: '35 checks, 0 disagreeing [], keys match: True'
+		equals: '36 checks, 0 disagreeing [], keys match: True'
 
 ]
 

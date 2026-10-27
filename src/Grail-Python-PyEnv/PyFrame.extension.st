@@ -11,15 +11,22 @@ PyFrame >> ___adoptSuspendedGenerator___ [
 	generator).  The body is on the generator's own process, and the identity a
 	live frame records -- process, level from the outer end, method -- can be
 	read off it there; f_locals then re-reads that stack like any other live
-	frame.  Recorded only while suspended: before the first next there is no
-	body frame, and once it finishes there is nothing to read."
+	frame.  Recorded only while suspended: once it finishes there is nothing
+	to read.
 
-	| ref gen where locals |
-	ref := [self @env0:dynamicInstVarAt: #'___generator___']
-		@env0:on: AbstractException do: [:e | e @env0:return: nil].
-	ref isNil ifTrue: [^ false].
-	gen := ref @env0:value.
+	BEFORE THE FIRST NEXT there is no body frame either, but there are
+	variables: the ones the body block captured, which is where the generator
+	function's arguments are (PyGeneratorBase >> ___unstartedLocals___).  The
+	frame is live from then on -- ___liveLocalsNow___ asks the generator which
+	of the two it is each time -- so the view made now keeps reading
+	correctly once the body runs."
+
+	| gen where locals |
+	gen := self ___frameGenerator___.
 	gen isNil ifTrue: [^ false].
+	gen ___pyHasStarted___ ifFalse: [
+		self @env0:dynamicInstVarAt: #'___liveLocals___' put: gen ___unstartedLocals___.
+		^ true].
 	where := gen ___suspendedBodyLevel___.
 	where isNil ifTrue: [^ false].
 	self @env0:dynamicInstVarAt: #'___liveProcess___' put: (where @env0:at: 1).
@@ -30,6 +37,19 @@ PyFrame >> ___adoptSuspendedGenerator___ [
 	self @env0:dynamicInstVarAt: #'___liveLocals___'
 		put: (locals ifNil: [PyFrame @env0:___pyDictFrom___: Dictionary @env0:new]).
 	^ true
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+PyFrame >> ___frameGenerator___ [
+	"The generator this frame is the gi_frame of, while that generator is
+	alive; nil otherwise.  Held weakly -- see PyGeneratorBase >> ___genFrame___."
+
+	| ref |
+	ref := [self @env0:dynamicInstVarAt: #'___generator___']
+		@env0:on: AbstractException do: [:e | e @env0:return: nil].
+	ref isNil ifTrue: [^ nil].
+	^ ref @env0:value
 
 ]
 
@@ -212,7 +232,17 @@ PyFrame >> ___liveLocalsNow___ [
 	locals it last had, which is what CPython's proxy does for a frame whose
 	execution finished."
 
-	| idx byLevels |
+	| idx byLevels gen |
+	"A GENERATOR'S FRAME follows its generator: captured variables before the
+	first next, the parked body's levels while suspended -- adopted the first
+	time it is found parked, since a frame made before the body started has
+	no level recorded -- and what it last had once the body has finished."
+	gen := self ___frameGenerator___.
+	gen isNil ifFalse: [
+		gen ___pyHasStarted___ ifFalse: [^ gen ___unstartedLocals___].
+		([self @env0:dynamicInstVarAt: #'___liveLevelMethod___']
+			@env0:on: AbstractException do: [:e | e @env0:return: nil]) isNil
+				ifTrue: [self ___adoptSuspendedGenerator___ ifFalse: [^ nil]]].
 	"THE CHEAP ROUTE FIRST.  ___liveLocalsAtOuterIndex___ re-walks the whole live
 	chain, which means RAISING to get the VM's stack capture, converting its
 	native ips, and building a PyFrame and a PyCode per frame -- all of it thrown
@@ -287,6 +317,25 @@ PyFrame >> ___liveLocalsViewNow___ [
 	proxy isNil ifTrue: [^ self ___liveLocalsSnapshotOrEmpty___].
 	self @env0:dynamicInstVarAt: #'___liveLocalsView___' put: proxy.
 	^ proxy
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+PyFrame >> ___storeLocal___: aName value: aValue [
+	"Write aValue into this frame's variable aName -- ``f_locals[name] =
+	value'', PEP 667 -- and answer whether the frame had one to write.
+
+	Only a generator's frame can be written, unstarted or parked: its
+	variables are in a captured context or on a suspended process, and both
+	hold still while they are changed.  Any other frame is running, or is a
+	traceback's record of one that has unwound, and its view keeps the
+	assignment to itself as before."
+
+	| gen |
+	gen := self ___frameGenerator___.
+	gen isNil ifTrue: [^ false].
+	gen ___pyHasStarted___ ifFalse: [^ gen ___setUnstartedLocal___: aName to: aValue].
+	^ gen ___setSuspendedLocal___: aName to: aValue
 
 ]
 

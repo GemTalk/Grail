@@ -250,6 +250,26 @@ def _attribute_error_is_deferred():
 r['fwd_attribute_error_deferred'] = outcome(_attribute_error_is_deferred)
 
 
+def _closure_name_beside_an_undefined_one():
+    # An enclosing function's name read next to one that is undefined: CPython
+    # reads it from the annotate function's closure cell, so it keeps its
+    # value while the undefined one becomes a ForwardRef.  FastAPI's
+    # ``Annotated[DummyUser | None, Depends(get_current_user)]'' with a local
+    # get_current_user (test_stringified_annotation_dependency_py314).
+    from typing import Annotated, get_args
+
+    def helper(): pass
+
+    def f(x: Annotated[DummyUndefined | None, helper], y: helper): pass
+    ann = get_annotations(f, format=Format.FORWARDREF)
+    first, second = get_args(ann['x'])
+    return second is helper, type(first).__name__, ann['y'] is helper
+
+
+r['fwd_closure_name_beside_an_undefined_one'] = outcome(
+    _closure_name_beside_an_undefined_one)
+
+
 EXPECTED = {
     'alias_arg_repr': "ok -> ['list[collections.OrderedDict]', 'list[~T]', 'list[None]']",
     'alias_as_base': "ok -> ['_FromAlias', 'dict', 'object']",
@@ -260,6 +280,7 @@ EXPECTED = {
     'def_type_params': "ok -> [('TypeVar', 'A'), ('TypeVarTuple', 'B'), ('ParamSpec', 'C')]",
     'fwd_attribute_error_deferred': "ok -> ('ForwardRef', 'obj.missing', True)",
     'fwd_closure_bound_later': "ok -> ('later', 1)",
+    'fwd_closure_name_beside_an_undefined_one': "ok -> (True, 'ForwardRef', True)",
     'fwd_evaluate_partial': '''ok -> ["set[ForwardRef('undefined')]", "dict[int, ForwardRef('undef')]", "ForwardRef('a + b')", 3]''',
     'fwd_per_key': "ok -> {'x': ('ForwardRef', 'builtins.undef'), 'y': 'list[int]', 'z': ('ForwardRef', '1 + int'), 'a': \"<class 'int'>\", 'b': \"set[ForwardRef('undefined', owner=<function _partial at 0x0>)]\"}",
     'interpolation_bad_conversion': "ValueError: Interpolation() argument 'conversion' must be one of 's', 'a' or 'r'",

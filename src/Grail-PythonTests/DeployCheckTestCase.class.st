@@ -92,66 +92,65 @@ DeployCheckTestCase >> testNestedPathNamesKeyAndAttribute [
 ]
 
 { #category : 'Grail-Tests-deploy' }
-DeployCheckTestCase >> testStaleGenerationDiscardsCanonicalRegistries [
-	"RUNTIME-GENERATION GUARD: install.gs bumps GrailRuntimeGeneration
-	because an install recreates the Python runtime classes -- canonical
-	modules deployed under the previous runtime hold compiled references
-	to the OLD exception classes and raise uncatchably when warm-bound.
-	importlib ___canonicalGenerationCheck___ must discard the stale
-	registries on first touch and stamp the deploy generation current.
+DeployCheckTestCase >> testStaleGenerationKeepsCanonicalRegistries [
+	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md D7): every
+	install bumps GrailRuntimeGeneration, and keeps Grail's classes.  So
+	importlib ___canonicalGenerationCheck___ must KEEP the deployed modules --
+	their classes and instances are what stored objects refer to -- and stamp
+	the deploy generation current; a module built under an older runtime
+	generation then reads as not current, which rebuilds it in place on its
+	next import.
 
-	The test simulates the post-install state (registry populated under a
-	back-dated deploy generation), clears the per-session memo to force a
-	re-check, touches an accessor, and asserts the registry was reset.
-	Every mutated global is restored afterwards -- the suite must not
-	disturb a standing deployment."
+	The test simulates the post-install state (registries populated, the deploy
+	generation back-dated, one module built under the previous runtime and one
+	under this one), clears the per-session memos to force a re-check, and
+	asserts both.  Every mutated global is restored afterwards -- the suite must
+	not disturb a standing deployment."
 
-	| ug st savedMemo savedDeployGen savedMods savedHashes savedDeps savedClasses savedSet marker |
+	| ug st runtimeGen savedMemo savedCurrency savedDeployGen savedMods savedHashes savedDeps mods hashes deps |
 	ug := UserGlobals.
 	st := SessionTemps current.
+	runtimeGen := ug at: #'GrailRuntimeGeneration' otherwise: 0.
 	savedMemo := st at: #'GrailCanonicalGenChecked' otherwise: nil.
+	savedCurrency := st at: #'GrailModuleCurrency' otherwise: nil.
 	savedDeployGen := ug at: #'GrailCanonicalDeployGeneration' otherwise: nil.
 	savedMods := ug at: #'GrailCanonicalModules' otherwise: nil.
 	savedHashes := ug at: #'GrailCanonicalModuleHashes' otherwise: nil.
 	savedDeps := ug at: #'GrailCanonicalModuleDeps' otherwise: nil.
-	savedClasses := ug at: #'GrailCanonicalClasses' otherwise: nil.
-	savedSet := ug at: #'GrailCanonicalClassSet' otherwise: nil.
 	[
-		"Simulate: a populated registry deployed under an OLDER generation."
-		marker := RcKeyValueDictionary new.
-		marker at: 'stale_marker_module' put: 42.
-		ug at: #'GrailCanonicalModules' put: marker.
-		ug at: #'GrailCanonicalDeployGeneration'
-			put: (ug at: #'GrailRuntimeGeneration' otherwise: 0) - 1.
+		mods := RcKeyValueDictionary new.
+		hashes := RcKeyValueDictionary new.
+		deps := RcKeyValueDictionary new.
+		#('stale_marker_module' 'current_marker_module') do: [:name |
+			mods at: name put: 42.
+			hashes at: name put: 'hash'].
+		deps at: 'stale_marker_module' put: { 'gen' . #() . runtimeGen - 1 }.
+		deps at: 'current_marker_module' put: { 'gen' . #() . runtimeGen }.
+		ug at: #'GrailCanonicalModules' put: mods.
+		ug at: #'GrailCanonicalModuleHashes' put: hashes.
+		ug at: #'GrailCanonicalModuleDeps' put: deps.
+		ug at: #'GrailCanonicalDeployGeneration' put: runtimeGen - 1.
 		st removeKey: #'GrailCanonicalGenChecked' ifAbsent: [].
-		"First touch must discard the stale registry and stamp current."
-		self deny: (importlib ___canonicalModules___ includesKey: 'stale_marker_module').
-		self assert: (ug at: #'GrailCanonicalDeployGeneration' otherwise: nil)
-			equals: (ug at: #'GrailRuntimeGeneration' otherwise: 0).
-		"Memoised: a second stale-marking within the session is NOT re-checked."
-		ug at: #'GrailCanonicalModules' put: marker.
-		self assert: (importlib ___canonicalModules___ includesKey: 'stale_marker_module')
+		st removeKey: #'GrailModuleCurrency' ifAbsent: [].
+		"First touch keeps the registries and stamps the deploy generation current."
+		self assert: (importlib ___canonicalModules___ includesKey: 'stale_marker_module').
+		self assert: (ug at: #'GrailCanonicalModuleDeps') == deps.
+		self assert: (ug at: #'GrailCanonicalDeployGeneration' otherwise: nil) equals: runtimeGen.
+		"Built under the previous runtime: not current, so its next import rebuilds it."
+		self deny: (importlib ___isCurrentModule___: 'stale_marker_module').
+		self assert: (importlib ___isCurrentModule___: 'current_marker_module')
 	] ensure: [
 		st removeKey: #'GrailCanonicalGenChecked' ifAbsent: [].
 		savedMemo isNil ifFalse: [st at: #'GrailCanonicalGenChecked' put: savedMemo].
-		savedDeployGen isNil
-			ifTrue: [ug removeKey: #'GrailCanonicalDeployGeneration' ifAbsent: []]
-			ifFalse: [ug at: #'GrailCanonicalDeployGeneration' put: savedDeployGen].
-		savedMods isNil
-			ifTrue: [ug removeKey: #'GrailCanonicalModules' ifAbsent: []]
-			ifFalse: [ug at: #'GrailCanonicalModules' put: savedMods].
-		savedHashes isNil
-			ifTrue: [ug removeKey: #'GrailCanonicalModuleHashes' ifAbsent: []]
-			ifFalse: [ug at: #'GrailCanonicalModuleHashes' put: savedHashes].
-		savedDeps isNil
-			ifTrue: [ug removeKey: #'GrailCanonicalModuleDeps' ifAbsent: []]
-			ifFalse: [ug at: #'GrailCanonicalModuleDeps' put: savedDeps].
-		savedClasses isNil
-			ifTrue: [ug removeKey: #'GrailCanonicalClasses' ifAbsent: []]
-			ifFalse: [ug at: #'GrailCanonicalClasses' put: savedClasses].
-		savedSet isNil
-			ifTrue: [ug removeKey: #'GrailCanonicalClassSet' ifAbsent: []]
-			ifFalse: [ug at: #'GrailCanonicalClassSet' put: savedSet]]
+		st removeKey: #'GrailModuleCurrency' ifAbsent: [].
+		savedCurrency isNil ifFalse: [st at: #'GrailModuleCurrency' put: savedCurrency].
+		{ #'GrailCanonicalDeployGeneration' -> savedDeployGen.
+		  #'GrailCanonicalModules' -> savedMods.
+		  #'GrailCanonicalModuleHashes' -> savedHashes.
+		  #'GrailCanonicalModuleDeps' -> savedDeps } do: [:each |
+			each value isNil
+				ifTrue: [ug removeKey: each key ifAbsent: []]
+				ifFalse: [ug at: each key put: each value]]]
 
 ]
 

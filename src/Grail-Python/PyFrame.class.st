@@ -714,6 +714,32 @@ PyFrame class >> ___pythonNameForFrameMethod___: meth home: home contents: fc [
 
 ]
 
+{ #category : 'Grail-Live Frames' }
+PyFrame class >> ___pythonNameForTemp___: aName [
+	"The f_locals name a generated temp is reported under, or nil when it is
+	not one of the program's variables (___isInternalTempName___).
+
+	One generated temp IS a variable: ``___gxsrcN___'', the generator
+	expression's outermost iterator, which CPython's frame has as ``.0'' and
+	shows in f_locals -- and which test_generators' test_modify_f_locals
+	replaces through it.  N is the expression's nesting depth, which keeps the
+	wrapper blocks' parameters apart; each expression is its own frame, so
+	every one of them is that frame's ``.0''."
+
+	| s sz |
+	aName isNil ifTrue: [^ nil].
+	s := aName asString.
+	sz := s size.
+	((sz > 11)
+		and: [(s copyFrom: 1 to: 8) = '___gxsrc'
+		and: [(s copyFrom: sz - 2 to: sz) = '___'
+		and: [(s copyFrom: 9 to: sz - 3) allSatisfy: [:c | c isDigit]]]])
+			ifTrue: [^ '.0'].
+	(self ___isInternalTempName___: s) ifTrue: [^ nil].
+	^ s
+
+]
+
 { #category : 'Grail-Attribute Access' }
 PyFrame class >> ___pythonValueAttrs___ [
 	"``f_globals'' is a NAMESPACE -- a value, not a callable -- so a read must
@@ -834,9 +860,9 @@ PyFrame class >> ___tempsFromFrameContents___: aFrameContents [
 	dict := Dictionary new.
 	nArgs := self ___transportArgCountIn___: aFrameContents.
 	1 to: names size do: [:i | | nm val |
-		nm := (names at: i) asString.
+		nm := self ___pythonNameForTemp___: (names at: i).
 		val := aFrameContents atOrNil: 10 + i.
-		((self ___isInternalTempName___: nm)
+		(nm isNil
 			or: [val isNil
 				or: [i <= nArgs]])
 			ifFalse: [dict at: nm put: val]].

@@ -255,6 +255,15 @@ UnboundMethod >> _resolutionRootFor: obj [
 
 { #category : 'Grail-Private' }
 UnboundMethod >> _resolveMethodNargs: nargs kwOk: kwOk from: rootClass [
+	"The method this handle names, walking rootClass's chain -- see
+	_resolveMethodNargs:kwOk:from:prefix:."
+
+	^ self _resolveMethodNargs: nargs kwOk: kwOk from: rootClass prefix: ''
+
+]
+
+{ #category : 'Grail-Private' }
+UnboundMethod >> _resolveMethodNargs: nargs kwOk: kwOk from: rootClass prefix: aPrefix [
 	"Walk rootClass's chain INCLUSIVE and return the method from the
 	CLOSEST class that publishes a usable form.  Checking per-class (rather
 	than scanning the whole chain for the fixed form, then the whole chain
@@ -306,6 +315,12 @@ UnboundMethod >> _resolveMethodNargs: nargs kwOk: kwOk from: rootClass [
 			2 to: nargs do: [:ignored | ws nextPutAll: '_:'].
 			ws contents asSymbol]].
 	vaSel := ('_' , selector asString , ':kw:') asSymbol.
+	"aPrefix names a renamed copy of the method -- ``___grailOrig_'' finds the
+	original a ``del'' or a rebinding kept (___grailDeletedOriginalNargs:kwOk:)
+	-- and is prepended to each selector as the copier prepends it."
+	aPrefix isEmpty ifFalse: [
+		fixedSel notNil ifTrue: [fixedSel := (aPrefix , fixedSel asString) asSymbol].
+		vaSel := (aPrefix , vaSel asString) asSymbol].
 	walker := rootClass.
 	[walker notNil] whileTrue: [
 		| fixedArityMethod varargsMethod |

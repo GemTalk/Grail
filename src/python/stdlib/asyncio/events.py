@@ -46,6 +46,10 @@ import select as _select
 import time as _time
 import weakref
 
+# The longest single wait, as CPython's base_events.MAXIMUM_SELECT_TIMEOUT: a
+# loop with a timer further off than this simply waits again.
+MAXIMUM_SELECT_TIMEOUT = 24 * 3600
+
 from asyncio import exceptions as _exceptions
 
 # The loop currently RUNNING, and the loop merely SET for this session.  Two
@@ -148,6 +152,8 @@ class EventLoop(AbstractEventLoop):
         # _write_to_self and select._select_waking.
         self._waker = _thread.allocate_lock()
         self._waker.acquire()
+        # True while the loop is blocked in that wait -- see call_soon.
+        self._waiting = False
         # run_in_executor(None, ...)'s pool, made on first use as CPython's.
         self._default_executor = None
         self._executor_shutdown_called = False
@@ -163,6 +169,15 @@ class EventLoop(AbstractEventLoop):
         self._check_closed()
         handle = Handle(callback, args, self, context)
         self._ready.append(handle)
+        # A loop blocked in its wait is not the caller, so this came from
+        # another green thread -- the non-threadsafe call CPython leaves
+        # undefined, and makes all the time: an anyio memory stream fed from
+        # one loop wakes a receiver waiting on another this way (Starlette's
+        # TestClient, two websocket sessions broadcasting to each other).
+        # CPython's loop sleeps through it until something else wakes it;
+        # waking it now costs nothing and does not depend on that timing.
+        if self._waiting:
+            self._write_to_self()
         return handle
 
     def call_soon_threadsafe(self, callback, *args, context=None):
@@ -274,8 +289,12 @@ class EventLoop(AbstractEventLoop):
             writers.append(watchable)
             w_of[id(watchable)] = fd
 
-        ready_r, ready_w = _select._select_waking(
-            readers, writers, timeout, self._waker)
+        self._waiting = True
+        try:
+            ready_r, ready_w = _select._select_waking(
+                readers, writers, timeout, self._waker)
+        finally:
+            self._waiting = False
 
         for obj in ready_r:
             entry = self._readers.get(r_of.get(id(obj)))
@@ -484,7 +503,14 @@ class EventLoop(AbstractEventLoop):
         """
         timeout = 0 if self._ready else None
         if timeout is None and self._scheduled:
-            timeout = max(0, self._scheduled[0]._when - self.time())
+            # Capped as CPython's base_events caps it: a timer due at
+            # infinity -- anyio.sleep_forever() is asyncio.sleep(math.inf),
+            # and every Starlette TestClient websocket session ends in one --
+            # reached select as an infinite timeout, which it cannot convert:
+            # OverflowError out of run_forever stopped the portal's loop
+            # under a test still using it.
+            timeout = min(max(0, self._scheduled[0]._when - self.time()),
+                          MAXIMUM_SELECT_TIMEOUT)
 
         if self._readers or self._writers:
             self._poll_io(timeout)
@@ -493,7 +519,11 @@ class EventLoop(AbstractEventLoop):
             # for call_soon_threadsafe, which is the only way work can arrive
             # from outside (a worker green thread finishing, a blocking portal
             # submitting).  A loop with neither waits forever, as CPython's.
-            _select._select_waking((), (), timeout, self._waker)
+            self._waiting = True
+            try:
+                _select._select_waking((), (), timeout, self._waker)
+            finally:
+                self._waiting = False
 
         now = self.time()
         while self._scheduled and self._scheduled[0]._when <= now:

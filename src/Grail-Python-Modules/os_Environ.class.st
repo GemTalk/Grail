@@ -27,8 +27,8 @@ Class {
 
 { #category : 'Grail-Env Overlay' }
 os_Environ class >> ___envOverlay___ [
-	"Names whose value is too long for the C environment, session-local
-	because a gem's environment is session-local anyway."
+	"Names whose value the C environment cannot hold -- too long, or empty --
+	session-local because a gem's environment is session-local anyway."
 
 	| t d |
 	t := SessionTemps current.
@@ -72,11 +72,18 @@ os_Environ class >> ___envRawPut___: aName value: aValue [
 	else is passed, so a genuinely bad write still fails loudly instead of
 	being quietly parked in the overlay."
 
+	"An EMPTY value is the other one the real environment cannot hold: it
+	takes it, but gemEnvironmentVariable: answers nil for it, which reads as
+	unset.  So ``os.environ['X'] = ''`` vanished -- pydantic-settings fell
+	back to a field's default (FastAPI's conditional_openapi tutorial) -- and
+	the overlay keeps it as set."
 	| s v |
 	s := aName asString.
 	v := aValue asString.
 	^ [System gemEnvironmentVariable: s put: v.
-	   self ___envOverlay___ removeKey: s ifAbsent: [].
+	   v isEmpty
+		ifTrue: [self ___envOverlay___ at: s put: v]
+		ifFalse: [self ___envOverlay___ removeKey: s ifAbsent: []].
 	   v]
 		on: Error
 		do: [:ex |

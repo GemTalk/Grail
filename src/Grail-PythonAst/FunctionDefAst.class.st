@@ -61,6 +61,32 @@ FunctionDefAst >> ___annotatedArgs___ [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___annotationEnclosingNamesIn___: aNode [
+	"The NameAsts -- one per name -- that the annotation aNode reads and a
+	FUNCTION enclosing this def binds: what CPython's annotate function reads
+	from closure cells.  Under FORWARDREF an annotation that fails is partially
+	evaluated from its source, where those names were invisible, so
+	``Annotated[DummyUser | None, Depends(get_current_user)]'' in a test body
+	made the local get_current_user a ForwardRef too, and FastAPI called it
+	(test_stringified_annotation_dependency_py314).  Globals are left out on
+	purpose: CPython's fake globals turn them into stringifiers, and the
+	partial evaluation resolves them afterwards as it already does."
+
+	| seen out |
+	seen := Set new.
+	out := OrderedCollection new.
+	aNode ___anyDescendantSatisfies___: [:n |
+		((n isKindOf: NameAst)
+				and: [(seen includes: n id asSymbol) not
+				and: [self ___enclosingFunctionBinds___: n id asSymbol]]) ifTrue: [
+			seen add: n id asSymbol.
+			out add: n].
+		false].
+	^ out
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___applicableLocalDecorators___ [
 	"The decorators a function-local def's emit applies: every one the
 	parser's re-classing did not already realise."
@@ -656,7 +682,7 @@ FunctionDefAst >> ___emitIRAnnotateBlockOn___: aBuilder [
 		| specs entry |
 		specs := OrderedCollection new.
 		entry := [:key :node |
-			| thunk |
+			| thunk args names |
 			"The future import's twin of emitOneAnnotation:on: -- the source string
 			 itself, with no thunk to build."
 			CallAst futureAnnotations ifTrue: [
@@ -678,15 +704,28 @@ FunctionDefAst >> ___emitIRAnnotateBlockOn___: aBuilder [
 				aBuilder nestedFunctionDo: [
 					aBuilder add: (node ___emitIRValueOn___: aBuilder)]].
 			aBuilder atNode: self.
+			args := { thunk.
+				aBuilder obj: node ___annotationSourceString___.
+				aBuilder send: #at: to: (aBuilder var: (argLeaves at: 1))
+					with: { aBuilder obj: 1 } env: 0 }.
+			"The enclosing functions' names it reads, each as a thunk -- the
+			text's emitOneAnnotation:on: twin."
+			names := self ___annotationEnclosingNamesIn___: node.
+			names isEmpty ifFalse: [
+				args := args , { aBuilder arrayOf: (names inject: OrderedCollection new into: [:acc :n |
+					acc add: (aBuilder obj: n id asString).
+					acc add: (aBuilder inBlockDo: [
+						aBuilder nestedFunctionDo: [
+							aBuilder add: (n ___emitIRValueOn___: aBuilder)]]).
+					acc]) }].
 			specs add: { #'at:put:'.
 				{ aBuilder obj: key.
 				  aBuilder
-					send: #'___annotationValue___:source:format:'
+					send: (names isEmpty
+						ifTrue: [#'___annotationValue___:source:format:']
+						ifFalse: [#'___annotationValue___:source:format:names:'])
 					to: (aBuilder globalNamed: #PyAnnotate)
-					with: { thunk.
-						aBuilder obj: node ___annotationSourceString___.
-						aBuilder send: #at: to: (aBuilder var: (argLeaves at: 1))
-							with: { aBuilder obj: 1 } env: 0 }
+					with: args
 					env: 1 }.
 				0 }]].
 		self ___annotatedArgs___ do: [:a | entry value: a name asString value: a annotation].
@@ -2306,6 +2345,21 @@ FunctionDefAst >> ___enclosingDefDeclares___: funcAst named: aSymbol [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___enclosingFunctionBinds___: aSymbol [
+	"Does a def, lambda or method ENCLOSING this one bind aSymbol as a Python
+	local?  Class bodies are passed over, as LEGB passes over them."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst]) ifTrue: [
+			(self ___functionBindsPythonLocal___: node named: aSymbol) ifTrue: [^ true]].
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___grailBodySourceText___ [
 	"This def's body as source text, DEDENTED to column zero and with its
 	``nonlocal'' declarations removed.
@@ -2422,7 +2476,14 @@ FunctionDefAst >> ___innermostDeclarativeWrapper___ [
 		(self isClassDeclarativeDecorator: (decorator_list at: i)) ifTrue: [^ nil]].
 	last asSymbol == #'classmethod' ifTrue: [^ #'PyClassMethod'].
 	last asSymbol == #'staticmethod' ifTrue: [^ #'PyStaticMethod'].
-	^ #'PropertyDescriptor'
+	"The parser reads @enum.property and @DynamicClassAttribute as #property
+	too, but the object is not the builtin: CPython's DynamicClassAttribute is
+	a plain class with a __dict__, so ``@abstractmethod @DynamicClassAttribute''
+	marks it, where over the builtin the store is refused
+	(test_dynamicclassattribute, at import)."
+	^ self ___isBuiltinPropertyDef___
+		ifTrue: [#'PropertyDescriptor']
+		ifFalse: [#'DynamicClassAttribute']
 
 ]
 
@@ -6077,6 +6138,7 @@ FunctionDefAst >> emitOneAnnotation: aNode on: aStream [
 	"PEP 563 stores the UNPARSED expression, so a string literal keeps its
 	 quotes; the root-verbatim rule of ___annotationSourceString___ is for
 	 recovering text, which is not what the future import does."
+	| names |
 	CallAst futureAnnotations ifTrue: [
 		^ self emitStringLiteral: (aNode ___unparse___: 4) on: aStream].
 	aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
@@ -6095,7 +6157,20 @@ FunctionDefAst >> emitOneAnnotation: aNode on: aStream [
 		ifFalse: [aNode printSmalltalkOn: aStream].
 	aStream nextPutAll: '] source: '.
 	self emitStringLiteral: aNode ___annotationSourceString___ on: aStream.
-	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'
+	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1)'.
+	"The enclosing functions' names it reads, each as a thunk, for FORWARDREF's
+	partial evaluation (___annotationEnclosingNamesIn___:)."
+	names := self ___annotationEnclosingNamesIn___: aNode.
+	names isEmpty ifFalse: [
+		aStream nextPutAll: ' names: {'.
+		names do: [:n |
+			aStream space.
+			self emitStringLiteral: n id asString on: aStream.
+			aStream nextPutAll: '. ['.
+			n printSmalltalkOn: aStream.
+			aStream nextPutAll: '].'].
+		aStream nextPutAll: ' }'].
+	aStream nextPutAll: ')'
 
 ]
 
@@ -9193,8 +9268,18 @@ FunctionDefAst >> printSmalltalkOn: aStream [
 		its chain reads the base through the slot, so the real
 		``@pass_context def sync_do_map'' after two @overload stubs wrapped the
 		previous stub's _overload_dummy instead of its own method (jinja2's
-		|map filter)."
-		self ___rebindsAnEarlierModuleBinding___ ifTrue: [
+		|map filter).
+
+		A DECORATED def clears it whatever stored it, because the PREVIOUS body
+		can have: a module rebuilt into its committed instance (a source edit or
+		an install: docs/Persistent_Modules_and_Classes.md D2, D7) still holds
+		that body's decorated value there, and the chain then wrapped the old
+		wrapper, whose closure held the previous body's function and globals --
+		typing's ``@_tp_cache'' looked its function up in a ``_caches'' the new
+		body had replaced, and every generic subscript raised KeyError.  An
+		undecorated def keeps the narrower rule: clearing for every one was
+		tried and reverted (___rebindsAnEarlierModuleBinding___)."
+		(self applicableModuleDecorators notEmpty or: [self ___rebindsAnEarlierModuleBinding___]) ifTrue: [
 			aStream
 				lf;
 				nextPutAll: 'self @env0:removeDynamicInstVar: #''';
