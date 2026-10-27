@@ -51,9 +51,19 @@ product (a `.setenv` naming it and the stone). Rowan's upgrade does not touch
 Grail, because Grail is each user's own project and SystemUser cannot see it. So
 the install repairs it:
 
-- It drops every Grail LoadedMethod whose compiled method the upgrade removed
-  (5,826 of them for one user), so the load compiles them again. Otherwise Rowan
-  treats them as loaded and unchanged, and leaves them missing.
+- It drops every Grail LoadedMethod whose method is gone: the class answers no
+  method, or another one, for the selector in the method's own environment,
+  session methods included. After a5 to a8 that is Grail's session methods
+  (1,568 for one user), which the disabled policy no longer installs. The load
+  then compiles them again; otherwise Rowan treats them as loaded and unchanged,
+  and leaves them missing. On an ordinary reinstall it finds none.
+- After the load it deletes those of them the new source no longer has. Rowan
+  has forgotten loading them, so it would not delete them itself.
+- Rowan's own audit is no use for this: it looks methods up in environment 0
+  only, so it reports every env-1 (Python) method missing on every reinstall.
+  Dropping all of those made Rowan forget it had loaded them, and a release that
+  removed one left it in place. The upgrade test's `synthetic` case caught it
+  (`probe.removed_method`, `probe.removed_session_method`).
 - It re-enables the user's `GsPackage` and `GsPackagePolicy`. A disabled
   package's methods never reach a new session, so enabling the policy alone would
   leave every kernel extension missing. upgradeImage disables the package only
@@ -76,12 +86,19 @@ way GemDB Code creates its own (own security policy; `CodeModification` and
 `CreateOnetimePassword`), instead of as DataCurator.
 
 Measured on Darwin arm64, 2026-10-27, on this branch merged with main
-(`#1833` included):
+(`#1833` included). The same cases on one engine (a8 to a8, no
+`GRAIL_UPGRADE_FROM_PRODUCT`) are the control:
 
-| case | n | m | as DataCurator | as `gemdb` |
-| --- | --- | --- | --- | --- |
-| `noop` | this checkout | this checkout | 244 passed, 0 failed | 244 passed, 0 failed |
-| `release=c8cbc92` | GemDB Code's pinned Grail | this checkout | 243 passed, 0 failed | 243 passed, 0 failed |
+| case | n | m | a5 → a8, DataCurator | a5 → a8, `gemdb` | a8 only, DataCurator | a8 only, `gemdb` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `noop` | this checkout | this checkout | 244 / 0 | 244 / 0 | 244 / 0 | 244 / 0 |
+| `synthetic` | this checkout, varied | this checkout, varied | 253 / 0 | 253 / 0 | 253 / 0 | 253 / 0 |
+| `release=c8cbc92` | GemDB Code's pinned Grail | this checkout | 243 / 0 | 243 / 0 | 243 / 0 | 243 / 0 |
+
+(passed / failed.) The install of m recompiled 1,568 (`noop`), 1,571
+(`synthetic`) and 1,528 (`release`) methods after the engine upgrade and none on
+one engine; in `synthetic` across the engines it deleted the 2 session methods m
+removed.
 
 No known gaps are left: the namedtuple identity gap closed with #1833 (before
 it, the same runs read 232 and 231 passed, 0 failed, with 2 known gaps).
@@ -89,9 +106,9 @@ it, the same runs read 232 and 231 passed, 0 failed, with 2 known gaps).
 after the engine upgrade.
 
 `upgrade_engine.sh --in-place` on its own, on a copy of an a5 extent holding
-Grail and app data (DataCurator's): 70 seconds, exit 0, the backup kept. The
+Grail and app data (DataCurator's): about 70 seconds, exit 0, the backup kept. The
 upgraded extent started under its ordinary a8 config, and `./install.sh` with
-a8 succeeded and the app's data read back. That install warned that the
+a8 succeeded (1,550 methods recompiled) and the app's data read back. That install warned that the
 redeploy could not rebuild 10 modules, because the Grail tree had moved:
 the database's modules were deployed from another checkout, with other
 source, and Grail's module identity guard refuses that by design. The harness,
