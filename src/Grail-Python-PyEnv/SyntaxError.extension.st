@@ -35,6 +35,29 @@ SyntaxError >> ___args___: anArray [
 
 ]
 
+{ #category : 'Grail-Python Protocol' }
+SyntaxError >> ___basenameOf___: aFilename [
+	"CPython's my_basename (Objects/exceptions.c:2805-2826), which __str__
+	renders the filename through: what follows the last separator, or the
+	whole name when there is none."
+
+	| start |
+	start := 1.
+	1 to: aFilename @env0:size do: [:index |
+		(aFilename @env0:at: index) == $/ ifTrue: [start := index @env0:+ 1]].
+	^ aFilename @env0:copyFrom: start to: aFilename @env0:size
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+SyntaxError >> ___field___: aName [
+	"The attribute ___args___: stores as a dynamic instVar -- the slot a
+	Python-level store (``e.lineno = 1'') writes too -- or nil."
+
+	^ self @env0:dynamicInstVarAt: aName
+
+]
+
 { #category : 'Grail-Python Attribute Access' }
 SyntaxError >> ___locElem___: loc at: anIndex [
 	"Element anIndex (1-based) of the location tuple, or nil when absent.
@@ -56,5 +79,35 @@ SyntaxError >> ___locElem___: loc at: anIndex [
 	^ [ ((loc __len__) @env0:>= anIndex)
 		ifTrue: [ loc __getitem__: (anIndex @env0:- 1) ]
 		ifFalse: [ none ] ] @env0:on: Error do: [:ex | none]
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+SyntaxError >> __str__ [
+	"CPython's SyntaxError_str (Objects/exceptions.c:2830-2873): the message,
+	then the file's BASENAME and the line in parentheses -- ``invalid syntax
+	(<string>, line 1)'' -- or whichever of the two is known, and str(msg)
+	alone when neither is.  A filename counts only when it is a str, a line
+	only when it is an int.
+
+	SyntaxError used to inherit BaseException's, the str of the whole args
+	tuple, so ``str(e)'' read ``('invalid syntax', ('<string>', 1, 4, '1 +',
+	1, 5))'' -- which test_grammar's test_max_level, matching the start of it,
+	does not accept."
+
+	| message file line |
+	message := self ___field___: #'msg'.
+	message == nil ifTrue: [message := ExecBlock @env0:___pyNone___].
+	message := str __new__: message.
+	file := self ___field___: #'filename'.
+	(file @env0:isKindOf: CharacterCollection)
+		ifTrue: [file := self ___basenameOf___: file]
+		ifFalse: [file := nil].
+	line := self ___field___: #'lineno'.
+	(line @env0:isKindOf: Integer) ifFalse: [line := nil].
+	(file == nil and: [line == nil]) ifTrue: [^ message].
+	file == nil ifTrue: [^ message @env0:, ' (line ' @env0:, line @env0:printString @env0:, ')'].
+	line == nil ifTrue: [^ message @env0:, ' (' @env0:, file @env0:, ')'].
+	^ message @env0:, ' (' @env0:, file @env0:, ', line ' @env0:, line @env0:printString @env0:, ')'
 
 ]
