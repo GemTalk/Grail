@@ -20,11 +20,18 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchAsAst >> ___captureNodesInto___: aCollection [
+	pattern ifNotNil: [:inner | inner ___captureNodesInto___: aCollection].
+	self ___addCapture___: name into: aCollection
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchAsAst >> ___emitIRBindTrueOn___: aBuilder subject: subjLeaf [
 	"``<store>. true'' as two statements of whatever block encloses them."
 
-	aBuilder add: (self ___emitIRMatchCaptureStore___: name
+	aBuilder add: (self ___emitIRPendingCapture___: name
 		from: (aBuilder var: subjLeaf) on: aBuilder).
 	aBuilder atNode: self.
 	^ aBuilder add: (aBuilder obj: true)
@@ -137,13 +144,13 @@ MatchAsAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 			bind-then-answer-true.  A block is the only grouping that takes
 			a statement sequence, and #value evaluates it in place."
 			aStream nextPutAll: '['.
-			self emitNameStoreOn: aStream target: name rhs: aName.
+			self printPendingCaptureOn: aStream target: name rhs: aName.
 			^ aStream nextPutAll: '. true] @env0:value'].
 	aStream nextPutAll: '('.
 	pattern printMatchTestOn: aStream subject: aName depth: anInteger.
 	name isNil ifTrue: [^ aStream nextPutAll: ')'].
 	aStream nextPutAll: ' and: ['.
-	self emitNameStoreOn: aStream target: name rhs: aName.
+	self printPendingCaptureOn: aStream target: name rhs: aName.
 	aStream nextPutAll: '. true])'
 
 ]

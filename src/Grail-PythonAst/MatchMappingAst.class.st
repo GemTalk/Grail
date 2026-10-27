@@ -18,6 +18,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchMappingAst >> ___captureNodesInto___: aCollection [
+	patterns do: [:each | each ___captureNodesInto___: aCollection].
+	self ___addCapture___: rest into: aCollection
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchMappingAst >> ___emitIRMapFrom___: i subject: subjLeaf on: aBuilder [
 	"Key i's presence test, then its value test, then the rest of the keys --
@@ -54,7 +61,7 @@ MatchMappingAst >> ___emitIRMapRestOn___: aBuilder subject: subjLeaf [
 	excl := aBuilder arrayOf: (keys collect: [:k | k ___emitIRValueOn___: aBuilder]).
 	^ aBuilder send: #value
 		to: (aBuilder inBlockDo: [
-			aBuilder add: (self ___emitIRMatchCaptureStore___: rest
+			aBuilder add: (self ___emitIRPendingCapture___: rest
 				from: (aBuilder
 					send: #'___matchRestExcluding___:' to: (aBuilder var: subjLeaf)
 					with: { excl })
@@ -229,7 +236,7 @@ MatchMappingAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 		aStream nextPutAll: '))'].
 	rest isNil ifFalse: [
 		aStream nextPutAll: ' and: ['.
-		rest printSmalltalkOn: aStream.
+		aStream nextPutAll: (self ___pendingCaptureTempFor___: rest).
 		aStream nextPutAll: ' := ', aName, ' ___matchRestExcluding___: {'.
 		1 to: keys size do: [:i |
 			i > 1 ifTrue: [aStream nextPutAll: '. '].

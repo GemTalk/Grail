@@ -28,6 +28,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+PatternAst >> ___addCapture___: aNameAst into: aCollection [
+	aNameAst isNil ifTrue: [^ self].
+	(aCollection anySatisfy: [:each | each id = aNameAst id]) ifFalse: [aCollection add: aNameAst]
+
+]
+
 { #category : 'Grail-validation' }
 PatternAst >> ___bind___: aName into: boundNames at: aNode [
 	"codegen_pattern_helper_store_name (Python/codegen.c:5741-5759): a case's
@@ -38,6 +45,52 @@ PatternAst >> ___bind___: aName into: boundNames at: aNode [
 			___syntaxError___: 'multiple assignments to name ''' , aName asString , ''' in pattern'
 			node: aNode].
 	boundNames add: aName
+
+]
+
+{ #category : 'Grail-match' }
+PatternAst >> ___captureNodesInto___: aCollection [
+	"Add the NameAst of every name this pattern captures, once per name, in
+	order.  A value or singleton pattern captures nothing."
+
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+PatternAst >> ___emitIRPendingCapture___: aNameAst from: rhsNode on: aBuilder [
+	"printPendingCaptureOn:target:rhs:'s IR twin."
+
+	^ aBuilder assign: (self ___irPendingCaptureLeafFor___: aNameAst on: aBuilder) from: rhsNode
+
+]
+
+{ #category : 'Grail-match' }
+PatternAst >> ___enclosingMatch___ [
+	"The match statement this pattern belongs to -- the nearest, for a
+	pattern of a match nested in another's case body."
+
+	| node |
+	node := self parent.
+	[node isNil or: [node isKindOf: MatchAst]] whileFalse: [node := node parent].
+	^ node
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+PatternAst >> ___irPendingCaptureLeafFor___: aNameAst on: aBuilder [
+	| temp |
+	temp := (self ___pendingCaptureTempFor___: aNameAst) asSymbol.
+	^ (aBuilder leafFor: temp) ifNil: [aBuilder tempNamed: temp]
+
+]
+
+{ #category : 'Grail-match' }
+PatternAst >> ___pendingCaptureTempFor___: aNameAst [
+	"The temp that holds what this pattern captures for aNameAst until the
+	whole case pattern has matched (MatchAst >> ___pendingCaptureTempFor___:)."
+
+	^ self ___enclosingMatch___ ___pendingCaptureTempFor___: aNameAst
 
 ]
 
@@ -60,6 +113,20 @@ PatternAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 
 	self error: 'printMatchTestOn:subject:depth: not implemented by ',
 		self class name
+
+]
+
+{ #category : 'Grail-match' }
+PatternAst >> printPendingCaptureOn: aStream target: aNameAst rhs: rhsSource [
+	"A capture's store, as an expression: into its pending temp, not into the
+	name, which only its case's commit binds (MatchCaseAst >>
+	printMatchTestOn:subject:depth:)."
+
+	aStream
+		nextPutAll: (self ___pendingCaptureTempFor___: aNameAst);
+		nextPutAll: ' := (';
+		nextPutAll: rhsSource;
+		nextPutAll: ')'
 
 ]
 

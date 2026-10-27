@@ -34,6 +34,17 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchAst >> ___capturedIds___ [
+	"The distinct ids the cases capture, in order of first appearance."
+
+	| nodes |
+	nodes := OrderedCollection new.
+	cases do: [:case | case pattern ___captureNodesInto___: nodes].
+	^ nodes collect: [:each | each id]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchAst >> ___emitIRCaseChainFrom___: i subject: subjLeaf on: aBuilder [
 	"Case i's test, with every later case in its ifFalse:.  The text's chain
@@ -104,6 +115,20 @@ MatchAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-match' }
+MatchAst >> ___pendingCaptureTempFor___: aNameAst [
+	"The temp a capture of aNameAst writes while its case pattern is being
+	matched.  CPython binds a case's names only once the whole pattern has
+	matched -- it keeps the captured values on the stack and stores them
+	after the pattern and before the guard (Python/codegen.c:6405-6413) -- so
+	a pattern that fails part-way, or an
+	alternative that fails after capturing, binds nothing.  Numbered per
+	match statement: a name need not be a valid Smalltalk temp."
+
+	^ '___mcap' , (self ___capturedIds___ indexOf: aNameAst id) printString , '___'
+
+]
+
 { #category : 'Grail-validation' }
 MatchAst >> ___validatePatterns___ [
 	"Raise what CPython's code generator raises for this statement's patterns
@@ -139,9 +164,17 @@ MatchAst >> printSmalltalkOn: aStream [
 	once per case, and ``match next(it):'' would consume the iterator on
 	every failed case."
 
-	| subj |
+	| subj captured |
 	subj := '___msub0___'.
-	aStream nextPutAll: '[:', subj, ' |'; lf; increaseIndent.
+	aStream nextPutAll: '[:', subj, ' |'.
+	"The pending temps captures write until their case pattern has matched
+	(___pendingCaptureTempFor___:)."
+	captured := self ___capturedIds___.
+	captured isEmpty ifFalse: [
+		aStream nextPutAll: ' |'.
+		1 to: captured size do: [:i | aStream nextPutAll: ' ___mcap', i printString, '___'].
+		aStream nextPutAll: ' |'].
+	aStream lf; increaseIndent.
 	1 to: cases size do: [:i |
 		aStream nextPutAll: '('.
 		(cases at: i) printMatchTestOn: aStream subject: subj depth: 0.

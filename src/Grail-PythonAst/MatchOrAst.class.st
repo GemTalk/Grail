@@ -17,6 +17,15 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchOrAst >> ___captureNodesInto___: aCollection [
+	"Every alternative binds the same names (___validateBinding___:...), so the
+	first one's are the or-pattern's."
+
+	patterns first ___captureNodesInto___: aCollection
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchOrAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 	"Short-circuit or:, NESTED rather than sibling, so an alternative after the

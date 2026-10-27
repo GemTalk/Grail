@@ -15,6 +15,12 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchStarAst >> ___captureNodesInto___: aCollection [
+	self ___addCapture___: name into: aCollection
+
+]
+
 { #category : 'Grail-AST export' }
 MatchStarAst >> ___fixUpPythonAst___: pyNode [
 	"CPython keeps this pattern's name as a plain str, not as a node."
