@@ -9417,6 +9417,27 @@ Object >> ___grailClassIsBuilding___: aClass [
 
 ]
 
+{ #category : 'Grail-Class Attr Overlay' }
+Object >> ___grailClassIsRebuilding___ [
+	"Is the receiver -- a class -- a COMMITTED class its module is rebuilding in
+	this session, between the class statement that reused it and the end of that
+	statement (importlib class >> ___canonicalSubclassOf:... and
+	___canonicalClassRegister___:name:value:)?  Such a class is being built, as
+	a new one is, and the rebuild commits what is compiled onto it: a forwarder
+	a dunder store needs, or a shadow over an inherited method, has to be
+	compiled there as for a new class.  Skipped because the class was COMMITTED,
+	a rebuilt dataclass lost the __hash__ and __eq__ forwarders its decorator
+	installs, and a later session hashed its instances by identity.
+
+	Session state, so only the session doing the rebuild sees it."
+
+	| rebuilding |
+	rebuilding := SessionTemps @env0:current @env0:at: #'GrailRebuildingClasses' otherwise: nil.
+	rebuilding == nil ifTrue: [^ false].
+	^ rebuilding @env0:includes: self
+
+]
+
 { #category : 'Grail-Attribute Access' }
 Object >> ___grailClassLacksSynthesizedDunder___: aSym [
 	"True when aSym names one of the synthesized defaults and the receiver --
@@ -11666,7 +11687,7 @@ Object >> ___grailShadowRuntimeDunder___: aName [
 	((s @env0:size @env0:> 4) and: [((s @env0:copyFrom: 1 to: 2) @env0:= '__')
 		and: [(s @env0:copyFrom: s @env0:size @env0:- 1 to: s @env0:size) @env0:= '__']])
 		ifFalse: [^ self].
-	self @env0:isCommitted ifTrue: [^ self].
+	(self @env0:isCommitted and: [self ___grailClassIsRebuilding___ not]) ifTrue: [^ self].
 	"ONLY over a BUILT-IN's method.  Everything a Python class inherits from
 	object, PythonInstance or another Python class already consults the
 	attribute store -- functools.total_ordering, dataclasses and
@@ -15360,7 +15381,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 				without the forwarder ``frozen.a = 2'' simply stored.  Not on a
 				COMMITTED class, for ___grailShadowRuntimeDunder___:'s reason: a
 				compiled method there is code every session shares."
-				(self @env0:isCommitted @env0:not
+				((self @env0:isCommitted @env0:not or: [self ___grailClassIsRebuilding___])
 					and: [object ___grailForwardsAssignedDunder___: aName]) ifTrue: [
 						self ___grailInstallProtocolForwarder___: aName value: aValue].
 				^ aValue].

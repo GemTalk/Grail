@@ -817,3 +817,17 @@ test.test_graphlib
 #   templatelib  13t 2F
 test.test_tstring
 test.test_string.test_templatelib
+
+# --- Core language (added 2026-10-26): types.DynamicClassAttribute ---
+#
+# test_dynamicclassattribute is CPython 3.14.4's, vendored verbatim.  It
+# could not be imported: ``@abc.abstractmethod @DynamicClassAttribute'' in a
+# class body handed abstractmethod a builtin property, whose store of
+# __isabstractmethod__ is refused.  The parser reads @DynamicClassAttribute
+# and @enum.property as #property, and the descriptor an outer decorator
+# receives was always the builtin; it is now Grail's DynamicClassAttribute
+# unless the decorator WAS the builtin.  Measured on Darwin arm64:
+#
+#   dynamicclassattribute 12t 6F/1S   docstring copying, __isabstractmethod__
+#                                     evaluated lazily (CPython: at __init__)
+test.test_dynamicclassattribute

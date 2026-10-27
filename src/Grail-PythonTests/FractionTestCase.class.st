@@ -309,6 +309,21 @@ FractionTestCase >> testFloatNegative [
 
 ]
 
+{ #category : 'Grail-Tests - Negative Conversion' }
+FractionTestCase >> testFloatOfIntSubclassTermsDividesThemAsInts [
+	"float() of a Fraction whose terms are an int subclass that refuses true
+	division (test_numeric_tower's DummyIntegral): CPython converts each term
+	with int() first, as numbers.Rational.__float__ does."
+
+	self assert: (self eval: 'import fractions
+class D(int):
+    def __truediv__(self, other):
+        return NotImplemented
+    __rtruediv__ = __truediv__
+float(fractions.Fraction._from_coprime_ints(D(1), D(2)))') equals: 0.5
+
+]
+
 { #category : 'Grail-Tests - Module Binding' }
 FractionTestCase >> testFractionsModuleProvidesFraction [
 	"Test that fractions module exposes the Fraction type"

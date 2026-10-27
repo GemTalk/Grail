@@ -1420,7 +1420,8 @@ TracebackTestCase >> testGeneratorTracebackSpansTheBoundary [
 	   'throw_reports_the_generators_frame'
 	   'an_exception_caught_inside_the_generator_is_invisible'
 	   'pep479_still_converts_stopiteration'
-	   'the_rendered_traceback_names_both' ) do: [:k |
+	   'the_rendered_traceback_names_both'
+	   'a_handler_and_a_finally_keep_the_generators_frames' ) do: [:k |
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'generator-frame check failed: ' , k].
 

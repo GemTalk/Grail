@@ -410,6 +410,29 @@ the new body's — and hybrids need reconciliation in both directions:
 The **module instance** follows the same rule: a stale deployed module is
 rebuilt into its committed instance rather than a new one (§4.4).
 
+A rebuild into the committed instance has to write what a first build writes,
+or a later session binds a module that is missing it. Until D7 made every
+install a rebuild, four such gaps went unnoticed, because a rebuild only
+followed a source edit:
+
+- **a function's handle** — a rebuild of a *committed* module did not cache
+  the `BoundMethod` its body read (`___mayCacheFunctionHandles___`), and
+  nothing cached a 0-arg function's at all, so `f.attr = v` in the body went
+  with the session (`typing.NamedTuple.__mro_entries__`);
+- **a decorated def's base** — the chain read the slot the previous body's
+  decorator had filled, and wrapped the old wrapper (`typing._tp_cache`);
+- **a reused class's decorator stores** — the class was still canonical from
+  the build before, so `@dataclass`'s stamps went to the session overlay (D3)
+  and the protocol forwarders they need were not compiled on a committed class;
+  the reuse now takes it out of the canonical set and marks it rebuilding
+  until the end of its class statement (`___grailClassIsRebuilding___`);
+- **an enum's members** — the body made new member objects; a rebuild now
+  keeps the previous ones, by name (`Enum class >> ___grailKeepPreviousMember:named:in:`).
+
+A class built by *calling* something — `collections.namedtuple`, whose class
+statement runs inside the function — is still new on every rebuild: it is not
+registered under its module and name as a module-level class statement is.
+
 Details and the failure table are in the history log, §B.
 
 ### D3. Runtime class-attribute mutation is session-local
@@ -469,16 +492,33 @@ The contract this buys is worth stating plainly: **within a session, Grail eithe
 behaves as CPython does or raises with instructions. The only silent divergence
 is at the session boundary.**
 
-### D7. An install invalidates every deployment
+### D7. An install makes every deployment stale
 
-`install.sh` recreates the Python runtime classes (exceptions, builtins) with new
-identity, so a module deployed under the previous install holds compiled
-references to dead class objects — producing exceptions no `except` clause can
-match. `install.gs` bumps `GrailRuntimeGeneration`;
-`___canonicalGenerationCheck___` (memoised once per session) compares it against
-`GrailCanonicalDeployGeneration` and, on a mismatch, discards every canonical
-registry in-transaction. **An install is a runtime upgrade, and a runtime upgrade
-implies redeploy** — enforced rather than remembered.
+An install may change Grail's runtime and codegen, so a module deployed under
+the previous install may hold compiled code that no longer matches them. The
+post-load bumps `GrailRuntimeGeneration`, and `___recordDepsOf___:` records,
+with each module it builds, the generation it was built under.
+`___isCurrentModule___:` answers false for a module built under another one, and
+its next import rebuilds it **into its committed instance and classes**, as a
+source edit does (D2). **An install is a runtime upgrade, and a runtime upgrade
+implies a rebuild** — enforced rather than remembered.
+
+Nothing is discarded, because an install keeps Grail's classes: Rowan patches the
+loaded project in place, and the pre-load keeps Grail's dictionaries, session
+methods and singletons. So a stored instance of an app's class, or of a stdlib
+class such as `Decimal`, is still an instance of the class its module rebuilds,
+and `except AppError` still catches a stored `AppError`.
+`___canonicalGenerationCheck___` (memoised once per session) only stamps
+`GrailCanonicalDeployGeneration`.
+
+It used to discard every canonical registry, because `install.gs` recreated
+Grail's classes with new identity and a deployed module's references to the old
+ones were dead. That stranded every stored instance of a Python class on the
+class its module had before the install
+(`tests/scripts/run_grail_upgrade_test.sh` measures it).
+
+Native modules (D8) keep their committed instances across installs for the same
+reason: `import sys` in a deployed module binds that instance.
 
 ### D8. Native (`.gs`) modules: one committed instance, session state
 

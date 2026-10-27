@@ -1633,3 +1633,29 @@ test_compare, test_binop); fixed before the gates below.
 regressions, 3 improvements** (test_generators, test_long, test_random);
 `check_python_fixtures.sh` 716 fixtures agree with CPython.
 
+
+### The core slice's last two *(2026-10-26)*
+
+On `jmason/fastapi9`, stacked on #1786.  The two core tests Phase 6 part 2
+left, each a general Grail gap:
+
+| test | wall | fix |
+|---|---|---|
+| `test_stringified_annotation_dependency_py314` | under FORWARDREF, an annotation that fails is partially evaluated from its source, where an ENCLOSING FUNCTION's names were invisible: `Annotated[DummyUser \| None, Depends(get_current_user)]`, with `get_current_user` a local of the test, made it a ForwardRef too, and FastAPI called it (`'ForwardRef' object is not callable`).  CPython reads such names from the annotate function's closure cells | codegen, both arms: an annotation reading names that a function enclosing the def binds (`FunctionDefAst >> ___annotationEnclosingNamesIn___:`) passes a thunk per name (`PyAnnotate >> ___annotationValue___:source:format:names:`); a failed FORWARDREF evaluation carries a callable answering the bound ones, and annotationlib binds them before the partial evaluation.  Globals stay stringifiers, as CPython's fake globals make them (`test_partial_evaluation`) |
+| `test_traceback_for_dependency_with_yield` | a generator's frames vanished from a traceback that passed through a NON-matching `except` (contextlib's `except StopIteration`, which passes the exception on) inside a `try/finally` (contextvars' `Context.run`): the finally re-signals a COPY (`___resignalable___:`), and the generator half of the traceback is stashed under the ORIGINAL's identity | `___resignalable___:` re-keys the stash to the copy (`___carryGeneratorStack___:to:`), keeping the copy's own consumer half |
+
+Pinned by `annotation_machinery.py`'s `fwd_closure_name_beside_an_undefined_one`
+and `generator_frames.py`'s
+`a_handler_and_a_finally_keep_the_generators_frames`, both agreeing with
+CPython.  One difference left on purpose: Grail's `contextvars.Context.run` is
+Python where CPython's is C, so a traceback through it has one more frame,
+`run`.  Hiding it would mean a frame-hiding rule for every traceback.
+
+**Where it stands:** the core slice **1,270 of 1,270** (was 1,268); the
+tutorials 1,280 of 1,288, the 8 out-of-scope sql_databases tests the only
+ones left.  Gates (Darwin arm64, `gs40`): `run_tests.sh` **8400 run, 8400
+passed**, 8 of 8 shards; the CPython conformance gate 3 regressions, all
+TIMEOUTs beside the SUnit suite (test_math, test_pickle, test___all__ -- each
+OK alone), and 10 improvements over the committed board, most of them main's
+own since the board was measured; `check_python_fixtures.sh` 728 fixtures
+agree with CPython.

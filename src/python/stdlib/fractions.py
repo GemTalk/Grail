@@ -968,8 +968,13 @@ class Fraction(numbers.Rational):
         double and still doesn't overflow on a huge numerator/denominator
         (float(num)/float(den) would give inf/inf -> nan).  This is NOT the
         Python Fraction being divided, so there is no recursion.
+
+        Through int(), as numbers.Rational.__float__ does (Lib/numbers.py:325):
+        a numerator or denominator may be an int SUBCLASS whose own true
+        division answers NotImplemented (test_numeric_tower's DummyIntegral),
+        and ``/'' on it raised TypeError where CPython answers the float.
         """
-        return float(a._numerator / a._denominator)
+        return float(int(a._numerator) / int(a._denominator))
 
     def __int__(a, _index=operator.index):
         """int(a)"""

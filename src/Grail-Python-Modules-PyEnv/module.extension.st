@@ -382,10 +382,14 @@ module >> ___globalAt___: aSym otherwise: aBlock [
 	    generator-function reference like ``func = _my_cm_impl''
 	    would auto-call the generator and lose the function handle."
 	owner := cls @env0:whichClassIncludesSelector: aSym environmentId: 1.
+	"Through ___functionHandleFor___: like every other arity, so a 0-arg
+	function's handle is cached as theirs are: a fresh BoundMethod per read gave
+	it no stable identity, and an attribute set on it in the module body
+	(``f.tag = ...'') was gone in every session that bound the deployed module."
 	owner notNil ifTrue: [
 		owner == module
 			ifTrue: [^ self @env0:perform: aSym env: 1]
-			ifFalse: [^ BoundMethod receiver: self selector: aSym]
+			ifFalse: [^ self ___functionHandleFor___: aSym]
 	].
 	"Legacy SymbolDictionary fallback for built-in modules that
 	store some attrs in the dict slot."
@@ -771,7 +775,15 @@ module >> ___mayCacheFunctionHandles___ [
 	or a ModuleType subclass's instance.  What its reads find is the CLASS's
 	method, not a namespace entry, and caching it put the method into
 	vars(m), which CPython never shows (``m.hello(); 'hello' in vars(m)'')."
-	^ self @env0:isCommitted @env0:not
+	"Nor does REBUILDING a committed module stop it.  A module rebuilt into its
+	committed instance (a source edit or an install:
+	docs/Persistent_Modules_and_Classes.md D2, D7) is being built as much as a
+	new one is, and its rebuild commits as its deploy did; a handle its body
+	does not cache is a per-session one, and what the body sets on it goes
+	with the session.  typing's ``NamedTuple.__mro_entries__ = ...'' was lost
+	that way, and every ``class P(NamedTuple)'' in a later session raised
+	``cannot subclass a non-class base''."
+	^ (self @env0:isCommitted @env0:not or: [self @env0:___bodyIsRunning___])
 		and: [self @env0:___globalStoreIsSessionLocal___ @env0:not
 		and: [self ___grailHasNoOwnDefs___ not]]
 

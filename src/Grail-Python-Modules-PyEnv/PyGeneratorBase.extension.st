@@ -147,6 +147,25 @@ PyGeneratorBase >> ___captureConsumerState___ [
 
 ]
 
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___capturedArgsOf___: aMethod [
+	"The arguments of aMethod that a block nested in it refers to, in order:
+	the ones the kernel copies into aMethod's context, where no offset of
+	aMethod's own names them.  A reference is a name some nested block holds
+	at a context offset (___referencedNamesUnder___:into:).  Grail's generated
+	blocks do not reuse an enclosing argument's name, so the name identifies
+	the argument."
+
+	| used names |
+	used := Set @env0:new.
+	self ___referencedNamesUnder___: aMethod into: used.
+	names := aMethod @env0:argsAndTemps.
+	^ ((1 @env0:to: aMethod @env0:numArgs)
+		@env0:select: [:k | used @env0:includes: (names @env0:at: k) @env0:asString])
+			@env0:collect: [:k | names @env0:at: k]
+
+]
+
 { #category : 'Grail-Coroutine Protocol' }
 PyGeneratorBase >> ___checkedAwaitIterator___: anIterator [
 	"What __await__ answered, validated as CPython's GET_AWAITABLE validates
@@ -368,6 +387,23 @@ PyGeneratorBase >> ___delegationTargetWhileAlive___ [
 
 ]
 
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___enclosingMethodOf___: aMethod in: aRoot [
+	"The method or block method among aRoot and the block methods nested in it
+	whose own block literals include aMethod, or nil: the code whose
+	activation built aMethod's block, and so the one that names what it
+	captured."
+
+	(aRoot @env0:_blockLiterals @env0:ifNil: [#()]) @env0:do: [:each | | m found |
+		m := (each @env0:isKindOf: ExecBlock) ifTrue: [each @env0:method] ifFalse: [each].
+		(m @env0:isKindOf: GsNMethod) ifTrue: [
+			m == aMethod ifTrue: [^ aRoot].
+			found := self ___enclosingMethodOf___: aMethod in: m.
+			found @env0:notNil ifTrue: [^ found]]].
+	^ nil
+
+]
+
 { #category : 'Grail-Private' }
 PyGeneratorBase >> ___finalizeFromFrameClear___ [
 	"_PyGen_Finalize for a generator that is not suspended: one never started
@@ -399,6 +435,22 @@ PyGeneratorBase >> ___functionCode___ [
 	(coName @env0:notNil @env0:and: [coName @env0:asString @env0:= defName @env0:asString])
 		ifFalse: [^ nil].
 	^ code
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___genexpSource___: anObject [
+	"A generator expression's outermost iterator, as its loop is about to take
+	it -- CPython's ``.0''.  It was acquired with __iter__ at construction, so
+	it is an iterator unless something replaced it since: a write through the
+	unstarted frame's f_locals (test_generators' test_modify_f_locals).
+	CPython's loop does not call iter() again and raises from FOR_ITER, so
+	neither does this; without the check the loop's __next__ send would fail
+	as a missing attribute instead."
+
+	(self ___isRealIterator___: anObject) ifTrue: [^ anObject].
+	^ TypeError ___signal___: ('''' @env0:, anObject ___pyTypeNameForError___
+		@env0:, ''' object is not an iterator')
 
 ]
 
@@ -767,6 +819,23 @@ PyGeneratorBase >> ___noteFirstSuspension___ [
 
 ]
 
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___ownsContext___: aMethod [
+	"Whether an activation of aMethod builds a VariableContext of its own:
+	it has temps at a context offset of lexical level 0, or a nested block
+	refers to one of its arguments, which the kernel then copies into one.  A
+	method or block that does neither runs in its enclosing context, and the
+	next context out belongs to code further out."
+
+	| ofs |
+	ofs := aMethod @env0:_argsAndTempsOffsets.
+	(aMethod @env0:numArgs @env0:+ 1 @env0:to: ofs @env0:size) @env0:do: [:j | | o |
+		o := ofs @env0:at: j.
+		(o @env0:> 0 @env0:and: [(o @env0:bitAnd: 16rFF) @env0:= 0]) ifTrue: [^ true]].
+	^ (self ___capturedArgsOf___: aMethod) @env0:isEmpty @env0:not
+
+]
+
 { #category : 'Grail-Private' }
 PyGeneratorBase >> ___probeDelegationAttr___: anIterator named: aName [
 	"Look aName up on a sub-iterator through the PYTHON attribute protocol,
@@ -931,6 +1000,25 @@ PyGeneratorBase >> ___readOnlyGetsetNames___ [
 { #category : 'Grail-Generator Protocol' }
 PyGeneratorBase >> ___readOnlyMemberNames___ [
 	^ #()
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___referencedNamesUnder___: aMethod into: aSet [
+	"Add to aSet every name a block nested in aMethod, at any depth, holds at
+	a context offset of lexical level 1 or more -- a variable of some
+	enclosing context that the block reads or writes."
+
+	(aMethod @env0:_blockLiterals @env0:ifNil: [#()]) @env0:do: [:each | | m names ofs |
+		m := (each @env0:isKindOf: ExecBlock) ifTrue: [each @env0:method] ifFalse: [each].
+		(m @env0:isKindOf: GsNMethod) ifTrue: [
+			names := m @env0:argsAndTemps.
+			ofs := m @env0:_argsAndTempsOffsets.
+			1 @env0:to: (names @env0:size @env0:min: ofs @env0:size) do: [:j | | o |
+				o := ofs @env0:at: j.
+				(o @env0:> 0 @env0:and: [(o @env0:bitAnd: 16rFF) @env0:> 0])
+					ifTrue: [aSet @env0:add: (names @env0:at: j) @env0:asString]].
+			self ___referencedNamesUnder___: m into: aSet]]
 
 ]
 
@@ -1135,6 +1223,77 @@ PyGeneratorBase >> ___setCodeThunk___: aBlockOrNil [
 
 ]
 
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___setSuspendedLocal___: aName to: aValue [
+	"Store aValue into the parked body's variable named aName, in the innermost
+	level of the body's Python frame that has one; answer whether one did.
+	gi_frame.f_locals[name] = value on a suspended generator (PEP 667).
+
+	The levels are the ones PyFrame >> ___liveLocalsFromLevels___ reads the
+	same frame from: the body block and, inward of it, the zero-argument blocks
+	of the same home, with the Smalltalk runtime's env-0 levels in between
+	skipped.  Innermost first, because that is the binding a read reports.
+
+	Stored the way GsProcess >> _frameAt:tempNamed:put: stores, through the
+	holder and offset _frameContentsAt: reports for each name, but without its
+	refusal to replace an ExecBlock: that guards a debugger against clobbering
+	a block's own plumbing, and every Python function is an ExecBlock."
+
+	| where parked bodyLevel home |
+	where := self ___suspendedBodyLevel___.
+	where @env0:isNil ifTrue: [^ false].
+	parked := where @env0:at: 1.
+	bodyLevel := parked @env0:stackDepth @env0:- (where @env0:at: 2).
+	home := (where @env0:at: 3) @env0:homeMethod.
+	1 @env0:to: bodyLevel do: [:i | | fc m names |
+		fc := parked @env0:_frameContentsAt: i.
+		m := fc @env0:isNil ifTrue: [nil] ifFalse: [fc @env0:at: 1].
+		(m @env0:notNil @env0:and: [i @env0:= bodyLevel @env0:or: [
+				m @env0:environmentId @env0:= 1 @env0:and: [
+					m @env0:selector @env0:isNil @env0:and: [
+						m @env0:numArgs @env0:= 0 @env0:and: [m @env0:homeMethod == home]]]]])
+			ifTrue: [
+				names := (fc @env0:at: 9) @env0:ifNil: [#()].
+				names @env0:doWithIndex: [:each :k | | detail |
+					((PyFrame @env0:___pythonNameForTemp___: each) @env0:= aName @env0:asString)
+						ifTrue: [
+							detail := (fc @env0:at: 3) @env0:atOrNil: k.
+							(detail @env0:notNil
+								@env0:and: [(#(#arg #temp #vcTemp) @env0:includes: (detail @env0:at: 2))
+								@env0:and: [(detail @env0:at: 3) @env0:notNil]])
+									ifTrue: [
+										"A VariableContext refuses at:put:, and its offset here is
+										already the _primitiveAt: one; the stack is a plain Array."
+										((detail @env0:at: 3) @env0:class == VariableContext)
+											ifTrue: [(detail @env0:at: 3) @env0:_primitiveAt: (detail @env0:at: 4) put: aValue]
+											ifFalse: [(detail @env0:at: 3) @env0:at: (detail @env0:at: 4) put: aValue].
+										^ true]]]]].
+	^ false
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___setUnstartedLocal___: aName to: aValue [
+	"Store aValue into the unstarted body's captured variable named aName --
+	``.0'' for a generator expression's iterator -- and answer whether there
+	was one: gi_frame.f_locals[name] = value before the first next (PEP 667,
+	test_generators' test_modify_f_locals).  See ___unstartedSlots___ for
+	where the variables are."
+
+	| key |
+	key := aName @env0:asString.
+	(self ___unstartedSlots___ @env0:ifNil: [#()]) @env0:do: [:each | | vc |
+		(each @env0:at: 3) @env0:= key ifTrue: [
+			"_primitiveAt:put: and not at:put:, which VariableContext refuses;
+			the index counts the named instVars, as _frameContentsAt:'s reads do."
+			vc := each @env0:at: 1.
+			vc @env0:_primitiveAt: (each @env0:at: 2) @env0:+ vc @env0:class @env0:instSize
+				put: aValue.
+			^ true]].
+	^ false
+
+]
+
 { #category : 'Grail-Private' }
 PyGeneratorBase >> ___signalEscapedException___ [
 	"Re-signal, on the CONSUMER process, the exception that escaped the generator
@@ -1202,6 +1361,51 @@ PyGeneratorBase >> ___signalExhausted___ [
 	rv := returnValue.
 	returnValue := None.
 	^ StopIteration ___signalReturn___: rv
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___slotNamesOf___: aContext from: aMethod [
+	"The f_locals names of aContext's slots, slot for slot (nil for a slot
+	that is not one of the program's variables, or that no name is known
+	for), where aContext was built by an activation of aMethod.
+
+	The kernel's rule, as ExecBlock >> vcTempNames applies it to a block's
+	own context: a temp at a positive offset of lexical level 0 is slot
+	offset + 1 - instSize.  The slots no temp reaches are the arguments the
+	kernel copied in (___capturedArgsOf___:), in order -- after the receiver,
+	when a METHOD captured that too, as the IR path's generator methods do;
+	it is reported under the name the def gave it (PyFrame class >>
+	___receiverNameForMethod___), as CPython reports ``self''.  When the
+	count does not come out exactly, those slots stay unnamed rather than
+	guessed."
+
+	| names ofs res base reached unnamed args |
+	names := aMethod @env0:argsAndTemps.
+	ofs := aMethod @env0:_argsAndTempsOffsets.
+	res := Array @env0:new: aContext @env0:size.
+	base := aContext @env0:class @env0:instSize.
+	reached := IdentitySet @env0:new.
+	aMethod @env0:numArgs @env0:+ 1 @env0:to: (ofs @env0:size @env0:min: names @env0:size) do: [:j | | o slot |
+		o := ofs @env0:at: j.
+		(o @env0:> 0 @env0:and: [(o @env0:bitAnd: 16rFF) @env0:= 0]) ifTrue: [
+			slot := (o @env0:bitShift: -8) @env0:+ 1 @env0:- base.
+			(slot @env0:between: 1 and: res @env0:size) ifTrue: [
+				reached @env0:add: slot.
+				res @env0:at: slot put: (PyFrame @env0:___pythonNameForTemp___: (names @env0:at: j))]]].
+	"Unnamed means no temp's offset reached the slot -- not a nil entry, which
+	is also what a temp that is not the program's translates to."
+	unnamed := (1 @env0:to: res @env0:size) @env0:reject: [:i | reached @env0:includes: i].
+	args := (self ___capturedArgsOf___: aMethod) @env0:collect: [:each |
+		PyFrame @env0:___pythonNameForTemp___: each].
+	(aMethod @env0:isMethodForBlock @env0:not
+		@env0:and: [unnamed @env0:size @env0:= (args @env0:size @env0:+ 1)])
+			ifTrue: [
+				args := (Array @env0:with: ((PyFrame @env0:___receiverNameForMethod___: aMethod)
+					@env0:ifNotNil: [:nm | nm @env0:asString])) @env0:, args].
+	unnamed @env0:size @env0:= args @env0:size ifTrue: [
+		unnamed @env0:doWithIndex: [:slot :k | res @env0:at: slot put: (args @env0:at: k)]].
+	^ res
 
 ]
 
@@ -1381,6 +1585,88 @@ PyGeneratorBase >> ___thrownInstanceFor___: aClassOrException [
 	(BaseException @env0:___currentException___) @env0:isNil ifFalse: [
 		inst ___applyImplicitContext___].
 	^ inst
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___unstartedLocals___ [
+	"Name -> value for the variables an unstarted body has captured, as a
+	PyDict: an unstarted gi_frame's f_locals.  An unbound (nil) slot is left
+	out, as for any frame; where two contexts name the same variable the
+	innermost is the one the body will read, and wins."
+
+	| out |
+	out := PyDict @env0:new.
+	(self ___unstartedSlots___ @env0:ifNil: [#()]) @env0:do: [:each | | nm v |
+		nm := each @env0:at: 3.
+		v := (each @env0:at: 1) @env0:at: (each @env0:at: 2).
+		(v @env0:notNil @env0:and: [(out @env0:includesKey: nm) @env0:not])
+			ifTrue: [out @env0:at: nm put: v]].
+	^ out
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___unstartedNameFilter___ [
+	"The names an unstarted frame reports, or nil for no limit: the def's
+	parameters (co_varnames, which Grail records as exactly those), and for a
+	generator expression ``.0''.  CPython's unstarted frame binds nothing
+	else, and the contexts ___unstartedSlots___ reads hold codegen's own
+	temps and, on the text path, a method's copy of each argument under a
+	second name."
+
+	| code names |
+	codeThunk @env0:isNil ifTrue: [^ #('.0')].
+	code := [self ___codeObjectOrSignal___: 'gi_code']
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
+	code @env0:isNil ifTrue: [^ nil].
+	names := [code @env0:dynamicInstVarAt: #'___varnames___']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	names @env0:isNil ifTrue: [^ nil].
+	^ names @env0:collect: [:each | each @env0:asString]
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___unstartedSlots___ [
+	"Where an UNSTARTED body's variables are: { context . slot . f_locals
+	name } for each, innermost context first -- or nil before there is a body
+	block, or once it has started.
+
+	Before the first next there is no body frame on any stack: what the
+	generator function bound -- its arguments, and for a generator expression
+	the iterator CPython calls ``.0'' -- is in the contexts the body block
+	closed over.  The kernel names a context's slots only from the code that
+	BUILT it (___slotNamesOf___:from:), and the body block's own method names
+	only its argument, so the code is found by walking out from the body
+	block through the methods that enclose it: each one that builds a context
+	(___ownsContext___:) names the next context out.  The walk stops at the
+	generator function's own boundary -- a method, or a block with arguments
+	(a nested def's, a generator expression's wrapper) -- because past it are
+	the enclosing function's variables, not this frame's.
+
+	Names are kept to ___unstartedNameFilter___'s.  A closure's free
+	variables are not reported, where CPython reports them: they are in a
+	context past the boundary, or copied into one without a name."
+
+	| vc meth home m allowed out |
+	(started == true @env0:or: [block @env0:isNil]) ifTrue: [^ nil].
+	vc := block @env0:staticLink.
+	meth := block @env0:method.
+	home := meth @env0:homeMethod.
+	allowed := self ___unstartedNameFilter___.
+	out := OrderedCollection @env0:new.
+	m := self ___enclosingMethodOf___: meth in: home.
+	[m @env0:notNil @env0:and: [vc @env0:notNil]] whileTrue: [
+		(self ___ownsContext___: m) ifTrue: [
+			(self ___slotNamesOf___: vc from: m) @env0:doWithIndex: [:nm :i |
+				(nm @env0:notNil @env0:and: [allowed @env0:isNil @env0:or: [allowed @env0:includes: nm]])
+					ifTrue: [out @env0:add: { vc . i . nm }]].
+			vc := vc @env0:parent].
+		(m @env0:isMethodForBlock @env0:not @env0:or: [m @env0:numArgs @env0:> 0])
+			ifTrue: [^ out].
+		m := self ___enclosingMethodOf___: m in: home].
+	^ out
 
 ]
 
