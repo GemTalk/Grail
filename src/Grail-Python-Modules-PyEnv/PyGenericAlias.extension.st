@@ -215,12 +215,15 @@ PyGenericAlias >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNa
 	``cannot subclass a non-class base''.
 
 	Not hypothetical: before partial opted into real aliases, ``partial[int]''
-	WAS partial, so subclassing it worked.  Opting in has to keep it working."
+	WAS partial, so subclassing it worked.  Opting in has to keep it working.
 
-	^ (self @env0:dynamicInstVarAt: #'__origin__')
-		___subclass___: aSymbol
-		instVarNames: ivarNames
-		classInstVarNames: classIvarNames
+	Object's sole-base path does it now, through this alias's own
+	__mro_entries__, and it also records what the header said: going to the
+	origin directly left ``class E(list[T])'' with no __orig_bases__, so
+	types.get_original_bases(E) answered ``(list,)''.  Kept rather than
+	removed only because an env-1 method cannot be (#1727)."
+
+	^ super ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: classIvarNames
 
 ]
 
