@@ -7847,6 +7847,11 @@ Object >> ___classDict___ [
 		because on a kernel class (int is Integer) they are session methods,
 		whose category reads back nil -- and are skipped with the merged ones.
 
+		So is a <grailSubclassInstanceDict>: list's __dict__ answers the
+		instance dict of a Python SUBCLASS's instances, and an exact list has
+		none, so ``list.__dict__'' holds no '__dict__' in CPython.  A Python
+		subclass that has one lists it in its own namespace.
+
 		And a name must be a Python IDENTIFIER: a Smalltalk binary selector
 		(``<'', ``<='') on a kernel-backed class is no attribute of anything."
 		merged := [| meth |
@@ -7854,7 +7859,8 @@ Object >> ___classDict___ [
 				@env0:= #'Grail-MI-Inherited')
 				or: [meth := defCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil.
 					meth @env0:notNil and: [meth @env0:pragmas @env0:anySatisfy: [:p |
-						p @env0:keyword == #grailProtocolRefusal]]]]
+						p @env0:keyword == #grailProtocolRefusal
+							or: [p @env0:keyword == #grailSubclassInstanceDict]]]]]
 			@env0:on: AbstractException do: [:e | e @env0:return: false].
 		(nm @env0:size @env0:> 0 and: [((nm @env0:at: 1) @env0:isLetter
 			or: [(nm @env0:at: 1) == $_]) @env0:not]) ifTrue: [nm := ''].
@@ -9631,6 +9637,36 @@ Object >> ___grailDerivedDataDescriptorFor: aSym [
 		walker == owner ifTrue: [^ nil].
 		walker := walker @env0:superClass].
 	^ nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___grailDirListsSelector___: aSelector in: aBehavior [
+	"Whether dir() lists the attribute aSelector implements in aBehavior's
+	chain.  Not when the method answering it is a stand-in of Grail's rather
+	than an attribute of the type, which ___classDict___ already leaves out of
+	``cls.__dict__'': a <grailProtocolRefusal> (int's __iter__, which only
+	raises CPython's TypeError), a <grailSubclassInstanceDict> (list's
+	__dict__, which only a Python subclass's instances have), or object's
+	attribute-miss fallback __getattr__:, which CPython's object does not have
+	(test_descrtut's pprint of dir(list)).
+
+	Only a dunder can be one of these, so every other selector costs a
+	character test and no method lookup."
+
+	| owner method |
+	((aSelector @env0:size @env0:> 4)
+		and: [(aSelector @env0:at: 1) == $_
+		and: [(aSelector @env0:at: 2) == $_
+		and: [(aSelector @env0:at: 3) ~~ $_]]]) ifFalse: [^ true].
+	owner := aBehavior @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	owner @env0:isNil ifTrue: [^ true].
+	(aSelector == #'__getattr__:' and: [owner == Object]) ifTrue: [^ false].
+	method := owner @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
+	^ method @env0:isNil
+		or: [(method @env0:pragmas @env0:anySatisfy: [:pragma |
+			pragma @env0:keyword == #grailProtocolRefusal
+				or: [pragma @env0:keyword == #grailSubclassInstanceDict]]) @env0:not]
 
 ]
 
@@ -13631,8 +13667,9 @@ Object >> ___pyAttrDelete___: aName [
 			(docs/Schema_Evolution_Design.md, cut 1)."
 			((self ___pySlotAt___: slotIdx) == nil
 				@env0:and: [(self @env0:dynamicInstVarAt: sym) == nil]) ifTrue: [
-				^ AttributeError ___signal___:
-					'''' @env0:, aName @env0:asString @env0:, ''''
+				"The bare name, unquoted: CPython's member descriptor refuses
+				with nothing else (Python/structmember.c:168)."
+				^ AttributeError ___signal___: aName @env0:asString
 			].
 			(self @env0:dynamicInstVarAt: sym) == nil ifFalse: [self @env0:removeDynamicInstVar: sym].
 			^ self ___pySlotAt___: slotIdx put: nil
@@ -13645,8 +13682,16 @@ Object >> ___pyAttrDelete___: aName [
 	PropertyDescriptor class attribute)."
 	(self ___pyInstanceDescriptorDelete___: aName) ifTrue: [^ self].
 	(self @env0:dynamicInstVarAt: sym) == nil ifTrue: [
-		AttributeError ___signal___:
-			'''' @env0:, aName @env0:asString @env0:, ''''
+		"CPython's delete miss is the load's ``'P' object has no attribute
+		'x''' -- with nothing stamped, as an ordinary instance keeps its
+		attributes inline (Objects/dictobject.c:6998) -- and a strictly slotted
+		object has no dict to miss in.  Grail raised the bare quoted name, a
+		KeyError's wording."
+		^ ((self ___respondsTo___: #'___pySlotsStrict___') and: [self ___pySlotsStrict___])
+			ifTrue: [self ___refuseAttrWithoutDict___: aName]
+			ifFalse: [
+				AttributeError ___signal___: '''' @env0:, self @env0:___pyDnuTypeName___ @env0:asString
+					@env0:, ''' object has no attribute ''' @env0:, aName @env0:asString @env0:, '''']
 	].
 	self @env0:removeDynamicInstVar: sym
 
@@ -15435,9 +15480,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		declared one except such a survivor."
 		(slotIdx @env0:~= 0 @env0:and: [strict
 			@env0:and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]]) ifTrue: [
-			^ AttributeError ___signal___:
-				'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
-					''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+			^ self ___refuseAttrWithoutDict___: aName].
 		slotIdx @env0:~= 0 ifTrue: [
 			self ___pySlotAt___: slotIdx put: aValue.
 			"ONE HOME PER NAME: a value stored per object before the name had a
@@ -15459,9 +15502,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		(self ___respondsTo___: #'___pySlotsStrict___') ifTrue: [
 			(self ___pySlotsStrict___
 				and: [(self @env0:class ___pyDeclaredSlotInChain___: aName @env0:asSymbol) @env0:not]) ifTrue: [
-				^ AttributeError ___signal___:
-					'''' @env0:, self @env0:class @env0:name @env0:asString @env0:,
-						''' object has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
+				^ self ___refuseAttrWithoutDict___: aName
 			]
 		].
 	].
@@ -15701,6 +15742,18 @@ Object >> ___pyFunctionStrPrefix___: aCallee [
 						ifTrue: [(((mod @env0:asString @env0:, '.') @env0:, qn @env0:asString) @env0:, '() ')]
 						ifFalse: [qn @env0:asString @env0:, '() ']]]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: '']
+
+]
+
+{ #category : 'Grail-Slots' }
+Object >> ___pyHasGenericSetattr___ [
+	"Whether this object's type stores and deletes attributes through object's
+	own __setattr__ and __delattr__ -- CPython's ``tp_setattro ==
+	PyObject_GenericSetAttr''.  A class defining either has a slot wrapper
+	there instead, which serves stores and deletes alike."
+
+	^ (self @env0:class @env0:whichClassIncludesSelector: #'__setattr__:_:' environmentId: 1) == Object
+		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__delattr__:' environmentId: 1) == Object]
 
 ]
 
@@ -16516,6 +16569,20 @@ Object >> ___reflectedFirst___: other selector: refSelector kwSelector: kwSelect
 	attrDunder == nil ifFalse: [
 		^ other ___callTypeAttr___: attrDunder with: { self }].
 	^ nil
+
+]
+
+{ #category : 'Grail-Slots' }
+Object >> ___refuseAttrWithoutDict___: aName [
+	"A strictly slotted object has no __dict__, so a name it did not declare
+	can be neither stored nor deleted.  CPython's generic setattr says so in
+	those words, with the name and the object stamped on the error; a type
+	with its own __setattr__ or __delattr__ gets the plain ``has no attribute''
+	(Objects/object.c:1989-1999)."
+
+	^ self ___pyHasGenericSetattr___
+		ifTrue: [AttributeError @env0:___signalNoDict___: aName on: self]
+		ifFalse: [AttributeError @env0:___signalMissing___: aName on: self]
 
 ]
 
@@ -17766,13 +17833,15 @@ Object >> __dir__ [
 				(walker @env0:== (Object @env0:class))
 					@env0:or: [walker @env0:inheritsFrom: (Object @env0:class)]]]
 				@env0:whileTrue: [
-					selectors @env0:addAll: (walker @env0:selectorsForEnvironment: 1).
+					selectors @env0:addAll: ((walker @env0:selectorsForEnvironment: 1)
+						@env0:select: [:selector | self ___grailDirListsSelector___: selector in: walker]).
 					walker := walker @env0:superclass].
 			"The class's own env-1 selectors are its METHODS -- the scan above
 			finds only the accessor pairs the metaclass holds, so without this
 			dir(C) answered ``data'' but not ``meth'' while dir(C()) answered
 			both."
-			selectors @env0:addAll: (self @env0:allSelectorsForEnvironment: 1).
+			selectors @env0:addAll: ((self @env0:allSelectorsForEnvironment: 1)
+				@env0:select: [:selector | self ___grailDirListsSelector___: selector in: self]).
 			"TWO NAMES FROM ``Object class'' ARE STILL DROPPED, and by name
 			rather than by where they live, because Object class holds a
 			MIXTURE: __new__ belongs to object and every Python class has it,
@@ -17786,7 +17855,8 @@ Object >> __dir__ [
 			selectors @env0:remove: #'__name__' ifAbsent: [nil].
 			selectors @env0:remove: #'__qualname__' ifAbsent: [nil]]
 		ifFalse: [
-			selectors @env0:addAll: (myClass @env0:allSelectorsForEnvironment: 1)].
+			selectors @env0:addAll: ((myClass @env0:allSelectorsForEnvironment: 1)
+				@env0:select: [:selector | self ___grailDirListsSelector___: selector in: myClass])].
 	selectors := selectors @env0:asArray.
 	"Filter out convenience methods (starting with ___)"
 	selectors := selectors @env0:reject: [:selector |
@@ -17889,10 +17959,14 @@ Object >> __dir__ [
 		__parameters__).  They live in instance storage that the __dict__ read
 		above reaches only when the class has one: collections.abc's
 		_CallableGenericAlias is a slotted subclass, so dir() of a Callable alias
-		lacked all three (test_typing CollectionsCallableTests.test_dir)."
+		lacked all three (test_typing CollectionsCallableTests.test_dir).
+		A whitelisted name the type does not list is left out as the scan
+		leaves it out: list whitelists __dict__ so that a subclass instance's
+		reads as a value, and an exact list has none."
 		[(self @env0:class @env0:respondsTo: #'___pythonValueAttrs___') ifTrue: [
 			(self @env0:class @env0:___pythonValueAttrs___) @env0:do: [:n |
-				names @env0:add: n @env0:asString]]]
+				(self ___grailDirListsSelector___: n @env0:asSymbol in: myClass)
+					ifTrue: [names @env0:add: n @env0:asString]]]]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		result := names].
 	"THE DUNDERS GRAIL SYNTHESIZES ARE NOT LISTED WHERE A CLASS LACKS THEM.
