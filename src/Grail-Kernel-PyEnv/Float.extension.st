@@ -944,9 +944,11 @@ Float >> __format__: formatSpec [
 	(f/F/e/E/g/G/% types, precision, sign, width, grouping) — see the
 	shared engine in builtins ___formatValue___:spec:.  Previously
 	float had NO __format__, so ``'{:.2f}'.format(x)`` died in the
-	DNU path with an uncatchable MessageNotUnderstood."
+	DNU path with an uncatchable MessageNotUnderstood.
 
-	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self __str__].
+	The engine answers str() for an empty spec itself, and checks that the
+	spec IS a str first; a preamble here asked a None spec for #isEmpty."
+
 	^ (builtins instance) ___formatValue___: self spec: formatSpec
 
 ]

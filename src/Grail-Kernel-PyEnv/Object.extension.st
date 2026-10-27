@@ -18268,7 +18268,7 @@ Object >> __format__: formatSpec [
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
 		(self ___typeDunder___: #'__format__') @env0:ifNotNil: [:___fn |
 			^ self ___callTypeAttr___: ___fn with: { formatSpec }]].
-	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [
+	((builtins instance) ___formatSpecArgument___: formatSpec) @env0:isEmpty ifTrue: [
 		^ self __str__ @env0:___strResult___
 	].
 	"Concatenate in env 0: Unicode7 has no env-1 ``,'', so the env-1 sends
