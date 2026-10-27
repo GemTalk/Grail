@@ -474,6 +474,20 @@ ClassDefAst >> ___classBodyConditionalNames___ [
 					"``except E as e'' binds e for the handler's extent."
 					h name ifNotNil: [:n | names add: n asSymbol].
 					collect value: h body]]].
+		"A ``match'' binds its captures on the class, and whatever its case
+		bodies assign; which case ran is a runtime fact, so all of it is
+		conditional.  Only the STORE side knew it (a capture goes through
+		___classBodyDefinitionalStore___), and a later read emitted a bare
+		identifier: ``class C: match 3: case m: pass'' followed by ``j = m''
+		failed to compile, ``undefined symbol m''."
+		(stmt isKindOf: MatchAst) ifTrue: [
+			stmt ___capturedIds___ do: [:id | names add: id asSymbol].
+			stmt cases do: [:case | collect value: case body]].
+		"A ``type X = ...'' alias binds X as the assignment it carries does
+		(TypeAliasAst >> printSmalltalkOn:), through the same definitional
+		store, so it is collected as that assignment.  Without it ``type A =
+		int'' followed by ``j = A'' failed to compile the same way."
+		(stmt isKindOf: TypeAliasAst) ifTrue: [collectStmt value: stmt assign].
 		"Under the name the def BINDS, as a nested class's is, since a read
 		looks the set up by its mangled name: a private ``def __helper'' in a
 		class-body ``if'' binds _K__helper (sortedcontainers' SortedDict)."
