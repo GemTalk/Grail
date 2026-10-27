@@ -4483,7 +4483,9 @@ PythonParser >> parseFStringLiteral [
 			left: result;
 			op: (AddAst new from: startTok to: startTok ; yourself);
 			right: piece;
-			from: startTok to: self lastToken ; yourself.
+			from: startTok to: self lastToken ;
+			___beAnFStringJoin___ ;
+			yourself.
 	].
 	^ result
 

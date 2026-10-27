@@ -5243,7 +5243,16 @@ ModuleAst @env0:___resignalSyntaxError___: ex].
 			 forward reference (test_syntax_error_empty_string)."
 			((mode @env0:= 'eval') @env0:and: [parsed @env0:notNil
 				@env0:and: [parsed @env0:isSingleExpressionBody @env0:not]]) ifTrue: [
-					^ SyntaxError ___signal___: 'invalid syntax']].
+					^ SyntaxError ___signal___: 'invalid syntax'].
+			"THE CODE GENERATOR'S WARNINGS, which CPython emits while compiling and
+			a filter may make errors: ``assert (x, 'msg')'', ``x is 1'', a literal
+			called or subscripted where a comma was meant (Python/codegen.c).
+			test_grammar checks each through warnings_helper.check_syntax_warning."
+			parsed @env0:notNil ifTrue: [
+				parsed @env0:___emitCompileWarningsIn___: source
+					filename: ((args @env0:size @env0:>= 2)
+						ifTrue: [args @env0:at: 2]
+						ifFalse: ['<string>'])]].
 	"RECORD THE MODE, and answer a FRESH string to key it by.
 
 	CPython's compile() answers a code object, and eval() treats a code object

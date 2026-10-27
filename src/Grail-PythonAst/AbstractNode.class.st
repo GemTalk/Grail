@@ -634,6 +634,14 @@ AbstractNode >> ___collectModuleScopeStarImportsInto___: aCollection [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+AbstractNode >> ___compileWarningsDo___: aBlock [
+	"Evaluate aBlock with the text and the located node of each SyntaxWarning
+	CPython's code generator emits for this node (Python/codegen.c).  Most
+	nodes have none."
+
+]
+
 { #category : 'Grail-validation' }
 AbstractNode >> ___comprehensionScopeName___ [
 	"What CPython's symbol table calls this node when it is a comprehension --
@@ -826,6 +834,42 @@ AbstractNode >> ___defaultSourceString___ [
 	nodes that genuinely differ override."
 
 	^ self ___annotationSourceString___
+
+]
+
+{ #category : 'Grail-compile warnings' }
+AbstractNode >> ___descendantsDo___: aBlock [
+	"Evaluate aBlock with this node and every node of its subtree, depth first.
+	Reflective over the instance variables, as ___anyDescendantSatisfies___:
+	is, so a new node type needs no teaching; ``parent'' points up and is
+	skipped."
+
+	| ivars |
+	aBlock value: self.
+	ivars := self class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| v |
+		(ivars at: i) == #'parent' ifFalse: [
+			v := self instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [v ___descendantsDo___: aBlock]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not])
+						ifTrue: [
+							v do: [:e | (e isKindOf: AbstractNode) ifTrue: [e ___descendantsDo___: aBlock]]]]]]
+
+]
+
+{ #category : 'Grail-compile warnings' }
+AbstractNode >> ___emitCompileWarningsIn___: aSource filename: aFilename [
+	"Emit the SyntaxWarnings CPython's code generator emits while compiling
+	this tree -- an always-true assert, ``is'' against a literal, a literal
+	called or subscripted where a comma was probably meant -- in the order
+	the code generator reaches them."
+
+	self ___descendantsDo___: [:node |
+		node ___compileWarningsDo___: [:aMessage :aLocatedNode |
+			aLocatedNode ___warnSyntax___: aMessage in: aSource filename: aFilename]]
 
 ]
 
@@ -2070,6 +2114,16 @@ AbstractNode >> ___inClassBodyRuntimeScope___ [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+AbstractNode >> ___inferredTypeName___ [
+	"The name of the type this expression evaluates to when the code generator
+	can tell from its shape alone -- CPython's infer_type (Python/codegen.c)
+	-- or nil.  What the missed-comma warnings name."
+
+	^ nil
+
+]
+
 { #category : 'Grail-IR Codegen' }
 AbstractNode >> ___irChildLocals___: localSet [
 	"The local-name set this node's CHILDREN are judged against by the census
@@ -2430,6 +2484,16 @@ AbstractNode >> ___isAstLocationName___: aName [
 
 	^ #('parent' 'beginLine' 'beginColumn' 'endLine' 'endColumn')
 		includes: aName
+
+]
+
+{ #category : 'Grail-compile warnings' }
+AbstractNode >> ___isIdentityLiteral___ [
+	"Whether this is a literal ``is'' should not be used with: a constant
+	other than None, True, False and Ellipsis, or a tuple of constants --
+	CPython's check_is_arg, negated."
+
+	^ false
 
 ]
 
@@ -3442,6 +3506,47 @@ AbstractNode >> ___upItems___: nodes on: aStream prec: prec [
 { #category : 'Grail-annotations' }
 AbstractNode >> ___upIv___: aSymbol [
 	^ self ___nodeInstVar___: self named: aSymbol
+
+]
+
+{ #category : 'Grail-compile warnings' }
+AbstractNode >> ___warnSyntax___: aMessage in: aSource filename: aFilename [
+	"Warn aMessage at this node, as CPython's _PyErr_EmitSyntaxWarning does:
+	through warnings.warn_explicit with the compiled file's name and this
+	node's line, and -- when a filter makes the warning an error -- a
+	SyntaxError of the same text at this node's place instead.  Anything else
+	the warnings machinery raises is passed on.  Silent while the warnings
+	module is not importable, as the tokenizer's escape warning is.
+
+	The error carries no source text: CPython reads the line back from the
+	named FILE (PyErr_SyntaxLocationObject), and a compile() of a string names
+	none, so its text is None."
+
+	| warningsModule category raised location |
+	warningsModule := [(importlib @env1:modules) at: #warnings ifAbsent: [nil]]
+		on: AbstractException do: [:ex | ex return: nil].
+	warningsModule isNil ifTrue: [^ self].
+	category := System myUserProfile symbolList objectNamed: #'SyntaxWarning'.
+	category isNil ifTrue: [^ self].
+	raised := false.
+	[warningsModule @env1:warn_explicit: aMessage _: category _: aFilename _: self beginLine]
+		on: AbstractException
+		do: [:ex |
+			(category handles: ex) ifFalse: [ex pass].
+			raised := true.
+			ex return: nil].
+	raised ifFalse: [^ self].
+	location := PythonParser ___sourceLocationIn___: aSource at: self beginPosition.
+	location isNil ifTrue: [location := Array with: self beginLine with: 1 with: nil].
+	^ SyntaxError @env1:___signalNew___:
+		(Array
+			with: aMessage
+			with: (tuple withAll: (Array
+				with: aFilename
+				with: (location at: 1)
+				with: (location at: 2)
+				with: None)))
+		kw: nil
 
 ]
 

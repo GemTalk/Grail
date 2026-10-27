@@ -27,7 +27,8 @@ Class {
 	#instVars : [
 		'left',
 		'op',
-		'right'
+		'right',
+		'joinsAnFString'
 	],
 	#category : 'Grail-Parser'
 }
@@ -39,6 +40,16 @@ BinOpAst class >> left: newLeft operand: operand right: newRight [
 		initializeLeft: newLeft
 		operand: operand
 		right: newRight.
+
+]
+
+{ #category : 'Grail-compile warnings' }
+BinOpAst >> ___beAnFStringJoin___ [
+	"Mark this ``+'' as one the parser folded an f-string's parts with
+	(PythonParser >> parseFStringLiteral), so the expression is the f-string --
+	a str to CPython -- rather than a ``+'' the source wrote."
+
+	joinsAnFString := true
 
 ]
 
@@ -98,6 +109,14 @@ BinOpAst >> ___emitSmalltalkOn___: aStream [
 	left printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' '; nextPutAll: helper; nextPutAll: ' '.
 	right printSmalltalkWithParenthesisOn: aStream.
+
+]
+
+{ #category : 'Grail-compile warnings' }
+BinOpAst >> ___inferredTypeName___ [
+	^ joinsAnFString == true
+		ifTrue: ['str']
+		ifFalse: [nil]
 
 ]
 

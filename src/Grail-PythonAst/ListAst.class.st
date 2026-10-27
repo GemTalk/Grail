@@ -109,6 +109,12 @@ ListAst >> ___emitSmalltalkOn___: aStream [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+ListAst >> ___inferredTypeName___ [
+	^ 'list'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ListAst >> ___irEligibleValueLocals___: localNames [
 	"A LOAD-context list display with all-eligible elements; a ``*b'' element

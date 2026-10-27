@@ -71,6 +71,12 @@ ListCompAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+ListCompAst >> ___inferredTypeName___ [
+	^ 'list'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ListCompAst >> ___irChildLocals___: localSet [
 	^ ComprehensionAst ___irScopeLocals___: localSet generators: generators

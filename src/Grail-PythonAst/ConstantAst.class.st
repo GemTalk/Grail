@@ -121,6 +121,19 @@ ConstantAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+ConstantAst >> ___inferredTypeName___ [
+	"The constant's own type.  None, the booleans and the Ellipsis marker are
+	answered by name: Ellipsis is the Symbol #'...' here, which would answer
+	str."
+
+	value isNil ifTrue: [^ 'NoneType'].
+	(value == true or: [value == false]) ifTrue: [^ 'bool'].
+	value == #'...' ifTrue: [^ 'ellipsis'].
+	^ value @env1:___pyTypeNameForError___
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ConstantAst >> ___irEligibleValueLocals___: localNames [
 	"The literal shapes ___emitIRValueOn___: reproduces: booleans, None, the
@@ -157,6 +170,12 @@ ConstantAst >> ___irRefusalDetail___: localSet [
 	(value isKindOf: PyStrSurrogate) ifTrue: [^ #'ConstantAst:surrogateStr'].
 	(value isKindOf: Symbol) ifTrue: [^ #'ConstantAst:Symbol'].
 	^ ('ConstantAst:' , value class name asString) asSymbol
+
+]
+
+{ #category : 'Grail-compile warnings' }
+ConstantAst >> ___isIdentityLiteral___ [
+	^ (value isNil or: [value == true or: [value == false or: [value == #'...']]]) not
 
 ]
 

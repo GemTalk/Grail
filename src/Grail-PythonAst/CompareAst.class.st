@@ -35,6 +35,31 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-compile warnings' }
+CompareAst >> ___compileWarningsDo___: aBlock [
+	"``is'' or ``is not'' with a literal on either side -- CPython's
+	codegen_check_compare, which reports the first such pair only."
+
+	| leftOperand |
+	leftOperand := left.
+	1 to: cmpopList size do: [:index |
+		| operator rightOperand literal |
+		operator := cmpopList at: index.
+		rightOperand := comparatorList at: index.
+		((operator isKindOf: IsAst) or: [operator isKindOf: IsNotAst]) ifTrue: [
+			literal := leftOperand ___isIdentityLiteral___
+				ifTrue: [leftOperand]
+				ifFalse: [rightOperand ___isIdentityLiteral___ ifTrue: [rightOperand] ifFalse: [nil]].
+			literal isNil ifFalse: [
+				^ aBlock
+					value: ((operator isKindOf: IsAst)
+						ifTrue: ['"is" with ''' , literal ___inferredTypeName___ , ''' literal. Did you mean "=="?']
+						ifFalse: ['"is not" with ''' , literal ___inferredTypeName___ , ''' literal. Did you mean "!="?'])
+					value: self]].
+		leftOperand := rightOperand]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 CompareAst >> ___emitIRChainFrom___: i on: aBuilder [
 	"The i-th comparison of the chain, and:-folded with the rest."
