@@ -7,17 +7,23 @@
 #
 #   1. install Grail n                         (./install.sh, as on a real machine)
 #   2. the app writes: tests/upgrade/write_phase.py imports tests/upgrade/upgrade_app.py
-#      in a transaction and commits its objects under gemdb.root['upgrade']
+#      in a transaction and commits its objects under gemdb.root['upgrade']. A second
+#      app, in the namespace grail_upgrade_ns (docs/App_Namespaces_Design.md), does
+#      the same: tests/upgrade/upgrade_ns_main.py, its top file, deploys its own
+#      modules there and commits its objects through gemdb.root, which in a
+#      namespace is the top file's globals
 #   3. install Grail m over it                 (./install.sh again: the upgrade)
-#   4. the app redeploys: tests/upgrade/redeploy_phase.py imports it in a transaction
-#      and commits, which rebuilds its modules (and the stdlib's) under m. Skipped with
-#      GRAIL_UPGRADE_SKIP_REDEPLOY=1, which leaves it to install.sh's own redeploy
-#      (scripts/redeployModules.gs); verify then checks the import wrote nothing
+#   4. the apps redeploy: tests/upgrade/redeploy_phase.py imports the app in a
+#      transaction and commits, which rebuilds its modules (and the stdlib's) under m;
+#      the namespaced app runs and commits. Skipped with GRAIL_UPGRADE_SKIP_REDEPLOY=1,
+#      which leaves it to install.sh's own redeploy (scripts/redeployModules.gs, in
+#      every namespace); verify then checks that binding each app wrote nothing
 #   5. the app reads: tests/upgrade/verify_phase.py checks that the data is intact,
 #      that hashed containers still find fresh keys, that every stored object is an
 #      instance of the CURRENT class, and that old objects run with the app's code;
 #      tests/upgrade/check_classes.gs checks the same from Smalltalk, for every
-#      class reachable from the stored objects
+#      class reachable from the stored objects; tests/upgrade/upgrade_ns_phases.py
+#      checks the namespaced app's as ns.<check>
 #
 # The cases (default: noop synthetic):
 #
@@ -161,10 +167,16 @@ in_grail() {            # in_grail <cmd...> -- run in the installed Grail, with 
     (cd "$WORK/grail" && PYTHONPATH="$WORK/app" "$@")
 }
 
+NS_APP=grail_upgrade_ns
+in_ns_app() {           # in_ns_app <phase> [args...] -- run the namespaced app's top file
+    in_grail ./grail --namespace "$NS_APP" "$WORK/app/upgrade_ns_main.py" "$@"
+}
+
 run_case() {            # run_case <case> -- 0 if every check passed
     local name=$1 d=$WORK/$1 probe=() probe_m=
     rm -rf "$d"
     mkdir -p "$d"
+    rm -f "$WORK/app/ns_main_ran_without_phase"
     log "=== $name"
     fresh_stone || return 1
 
@@ -183,6 +195,9 @@ run_case() {            # run_case <case> -- 0 if every check passed
     in_grail ./grail "$WORK/app/write_phase.py" "$d/expected.json" > "$d/write.log" 2>&1 \
         && grep -q 'write phase: stored' "$d/write.log" || {
         echo "upgrade: the write phase failed:"; tail -30 "$d/write.log"; return 1; }
+    in_ns_app write "$d/expected-ns.json" > "$d/write-ns.log" 2>&1 \
+        && grep -q 'write ns phase: stored' "$d/write-ns.log" || {
+        echo "upgrade: the namespaced app's write phase failed:"; tail -30 "$d/write-ns.log"; return 1; }
 
     # After the write: the app's import deployed its modules, and an upgrade must keep those too.
     in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/snapshot.gs" < /dev/null \
@@ -209,13 +224,18 @@ run_case() {            # run_case <case> -- 0 if every check passed
         in_grail ./grail "$WORK/app/redeploy_phase.py" > "$d/redeploy.log" 2>&1 \
             && grep -q 'redeploy phase:' "$d/redeploy.log" || {
             echo "upgrade: the redeploy phase failed:"; tail -30 "$d/redeploy.log"; return 1; }
+        in_ns_app redeploy > "$d/redeploy-ns.log" 2>&1 \
+            && grep -q 'redeploy ns phase:' "$d/redeploy-ns.log" || {
+            echo "upgrade: the namespaced app's redeploy phase failed:"; tail -30 "$d/redeploy-ns.log"; return 1; }
     fi
 
     log "verify"
     in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1
+    in_ns_app verify "$d/expected-ns.json" > "$d/verify-ns.log" 2>&1
     GRAIL_UPGRADE_PROBE=$probe_m in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" \
         < /dev/null > "$d/classes.log" 2>&1
-    grep -h '^UPGRADE \|^verify phase\|^check_classes' "$d/verify.log" "$d/classes.log" > "$d/results.txt"
+    grep -h '^UPGRADE \|^verify phase\|^verify ns phase\|^check_classes' \
+        "$d/verify.log" "$d/verify-ns.log" "$d/classes.log" > "$d/results.txt"
 
     if [ "$name" = noop ]; then
         if diff "$d/snapshot-n.txt" "$d/snapshot-m.txt" > "$d/snapshot.diff"; then
@@ -231,9 +251,10 @@ run_case() {            # run_case <case> -- 0 if every check passed
     pass=$(grep -c '^UPGRADE PASS' "$d/results.txt")
     fail=$(grep -c '^UPGRADE FAIL' "$d/results.txt")
     known=$(grep -c '^UPGRADE KNOWN' "$d/results.txt")
-    if ! grep -q '^verify phase:' "$d/results.txt" || ! grep -q '^check_classes: [0-9]* failed' "$d/results.txt"; then
-        echo "upgrade: a verify step did not finish; see $d/verify.log and $d/classes.log"
-        tail -20 "$d/verify.log" "$d/classes.log"
+    if ! grep -q '^verify phase:' "$d/results.txt" || ! grep -q '^verify ns phase:' "$d/results.txt" \
+            || ! grep -q '^check_classes: [0-9]* failed' "$d/results.txt"; then
+        echo "upgrade: a verify step did not finish; see $d/verify.log, $d/verify-ns.log and $d/classes.log"
+        tail -20 "$d/verify.log" "$d/verify-ns.log" "$d/classes.log"
         fail=$((fail + 1))
     fi
     grep '^UPGRADE \(FAIL\|KNOWN\)' "$d/results.txt" | sed 's/^/  /'

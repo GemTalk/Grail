@@ -1,6 +1,7 @@
 ! file tests/upgrade/snapshot.gs -- run by tests/scripts/run_grail_upgrade_test.sh
 !
-! One line per class in Grail's symbol dictionaries: dictionary, name, oop.
+! One line per class in Grail's symbol dictionaries, and per module class of
+! each app namespace: dictionary (or app), name, oop.
 ! Taken after each install; for an upgrade from n to n (the no-op control) the
 ! two must be identical -- an upgrade that changes nothing keeps every class,
 ! where a reinstall would make new ones.
@@ -23,6 +24,14 @@ lines := SortedCollection new.
 			dict keysAndValuesDo: [:k :v |
 				(v isBehavior and: [v name = k])
 					ifTrue: [lines add: 'SNAPSHOT ' , dictName , ' ' , k , ' ' , v asOop printString]]]].
+"And the module classes of each app namespace (docs/App_Namespaces_Design.md):
+an app's own modules are filed there, not in PythonModules."
+(UserGlobals at: #'GrailApps' otherwise: nil) ifNotNil: [:apps |
+	apps keysAndValuesDo: [:appName :ns |
+		(ns at: #'GrailModuleClasses' otherwise: nil) ifNotNil: [:dict |
+			dict keysAndValuesDo: [:k :v |
+				v isBehavior ifTrue: [
+					lines add: 'SNAPSHOT app:' , appName , ' ' , k , ' ' , v asOop printString]]]]].
 lines do: [:l | out nextPutAll: l; lf].
 %
 output pop

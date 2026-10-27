@@ -520,6 +520,34 @@ class its module had before the install
 Native modules (D8) keep their committed instances across installs for the same
 reason: `import sys` in a deployed module binds that instance.
 
+**The lazy first-touch bind enforces it too** (issue #1805). Committed code can
+reach a module it never imported through `module class >> instance`: a deployed
+Flask closure resolving contextvars' `_MISSING` while serving a request does.
+That path, `___canonicalInstanceForModuleClass___:`, used to adopt the committed
+instance as it stood, on the reasoning that "staleness is the next explicit
+import's concern". That was harmless while only a source edit made a module
+stale, but now every install does. So when `redeployModules.gs` was
+skipped (`GRAIL_NO_REDEPLOY=1`) or failed for a module, code that reached it
+lazily ran the previous install's compiled code against the new runtime, in
+exactly the sessions that never imported it.
+
+The lazy bind now judges the module the way an import does
+(`___lazyBindIsStale___:`, through `___generationNowOf___:`). A stale one is
+rebuilt **into its committed instance**, through the ordinary loader and parents
+first (`___rebuildStaleLazyBind___:instance:`). When that rebuild fails, the bind
+raises an ImportError that names the module and the failure. It never falls
+back to the stale build.
+
+It rebuilds rather than refusing because the lazy bind stands in for an import,
+and an import of a stale module rebuilds it. A refusal would turn an install
+whose redeploy was skipped into a failure at every first touch of a module the
+new runtime builds perfectly well. The rebuild costs what any import of a stale
+module costs: it writes in the session's transaction (§8.1), so a
+`with gemdb.transaction():` after it refuses, and a commit publishes it. The way
+to pay neither cost is the redeploy `install.sh` runs. A module whose source
+file is gone, but that is otherwise current, is still adopted as it stands.
+`runLazyBindStaleTest.gs` drives all of this across commits.
+
 ### D8. Native (`.gs`) modules: one committed instance, session state
 
 `sys`, `os`, `builtins`, `socket`, `time`, `gemstone`, … are Smalltalk classes
@@ -1247,6 +1275,10 @@ regress silently.
 13. **A deployed package's carried submodules are current** (§4.4): binding the
    package rebuilds a stale one in place, leaves a current one unimported, and
    writes nothing when nothing changed. Guarded by `runCarriedSubmoduleTest.gs`.
+14. **The lazy first-touch bind never serves a stale module** (D7): a module
+   reached through `module class >> instance` after an install made it stale is
+   rebuilt into its committed instance, and one whose rebuild fails raises
+   ImportError. Guarded by `runLazyBindStaleTest.gs`.
 
 Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 `runModuleBindTest.gs` (the session-A/B acceptance test, reload, the D6 guard),
@@ -1254,7 +1286,8 @@ Harnesses: `runCanonicalClassTest.gs` (cross-session reuse, edit workflow),
 (D3), `runPersistentStateTest.gs` (D4), `runAbortReimportTest.gs` (D9),
 `runEphemeronCommitTest.gs` (commit-safety), `runModuleCoherenceTest.gs`
 (dependency staleness, rebuild in place), `runCarriedSubmoduleTest.gs`
-(a package's carried submodules), `run_concurrent_import_test.sh`
+(a package's carried submodules), `runLazyBindStaleTest.gs` (a stale module
+reached without an import), `run_concurrent_import_test.sh`
 (two interleaved sessions: disjoint modules, then the same module).
 The sharded SUnit suite runs against the deployed framework closure, so warm
 binding is exercised by every run.

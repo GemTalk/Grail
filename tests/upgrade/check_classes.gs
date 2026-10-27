@@ -1,15 +1,18 @@
 ! file tests/upgrade/check_classes.gs -- run by tests/scripts/run_grail_upgrade_test.sh
 !
 ! The Smalltalk half of the verify phase: walks everything reachable from
-! GemDBRoot['upgrade'] (stopping at classes, methods and dictionaries in the
-! symbol list) and checks the CLASS of every object found, and every superclass
-! of it:
+! GemDBRoot['upgrade'], and from the namespaced app's committed globals
+! (stopping at classes, methods and dictionaries in the symbol list), and
+! checks the CLASS of every object found, and every superclass of it:
 !
 !   current.<Class>  a class one of Grail's dictionaries names is the one it
 !                    names NOW: an object of the previous install's copy of a
 !                    Grail class runs that install's code. (Python classes are
 !                    anonymous -- in no dictionary -- and verify_phase.py checks
 !                    those against the app module and the stdlib.)
+!   ns.present[.<global>]  the namespaced app's committed globals are there
+!   ns.placement.<module>  its modules are deployed in its namespace and not
+!                    in the default one's PythonModules
 !   version.<Class>  no object is an instance of an old version of its class
 !                    (classHistory last ~~ class): the version a migration left
 !                    behind
@@ -21,7 +24,7 @@ iferr 2 output pop
 iferr 3 exit 1
 login
 run
-| root seen todo classes symList grailDicts failed out visit report |
+| root seen todo classes symList grailDicts failed out visit report appNs appMain |
 out := GsFile stdout.
 failed := 0.
 report := [:ok :name :why |
@@ -35,6 +38,28 @@ root := (UserGlobals at: #GemDBRoot) at: 'upgrade'.
 seen := IdentitySet new.
 todo := OrderedCollection with: root.
 classes := IdentitySet new.
+"The namespaced app's too (tests/upgrade/upgrade_ns_main.py): what it committed
+through gemdb.root, which in its namespace is its top file's globals -- the
+committed __main__ -- and where its own module was deployed: in the namespace,
+not in the default one's PythonModules."
+appNs := (UserGlobals at: #'GrailApps' otherwise: nil)
+	ifNotNil: [:apps | apps at: 'grail_upgrade_ns' otherwise: nil].
+appMain := appNs isNil ifTrue: [nil] ifFalse: [
+	(appNs at: #'GrailCanonicalModules' otherwise: nil)
+		ifNotNil: [:reg | reg at: '__main__' otherwise: nil]].
+report value: appMain notNil value: 'ns.present'
+	value: 'the namespace grail_upgrade_ns, or its committed __main__, is missing'.
+appMain ifNotNil: [
+	#(#'stored' #'note') do: [:g | | v |
+		v := appMain dynamicInstVarAt: g.
+		report value: v notNil value: 'ns.present.' , g value: 'its global ' , g , ' is missing'.
+		v ifNotNil: [todo add: v]].
+	#('upgrade_ns_app' 'upgrade_ns_phases') do: [:m | | cls |
+		cls := (appNs at: #'GrailModuleClasses' otherwise: nil)
+			ifNotNil: [:d | d at: m asSymbol otherwise: nil].
+		report value: (cls notNil and: [(PythonModules at: m asSymbol otherwise: nil) isNil])
+			value: 'ns.placement.' , m
+			value: m , ' is not deployed in the namespace alone']].
 visit := [:obj |
 	(obj isNil or: [(seen includes: obj) or: [obj isSpecial]]) ifFalse: [
 		seen add: obj.

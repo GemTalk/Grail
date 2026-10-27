@@ -687,22 +687,88 @@ def coroutine(func):
 MappingProxyType = type(type.__dict__)
 
 
-class SimpleNamespace:
-    """``SimpleNamespace(**kwargs)`` — attribute-bag CPython types
-    helper.  Used by Werkzeug / Flask in a few places."""
+def _is_namespace(obj):
+    # PyObject_TypeCheck: the real type, not a faked ``__class__``.
+    return SimpleNamespace in type(obj).__mro__
 
-    def __init__(self, **kwargs):
+
+def _fully_qualified_name(cls):
+    if cls.__module__ == 'builtins':
+        return cls.__qualname__
+    return '%s.%s' % (cls.__module__, cls.__qualname__)
+
+
+_namespaces_in_repr = set()
+
+
+class SimpleNamespace:
+    """A simple attribute-based namespace."""
+
+    # CPython's Objects/namespaceobject.c, which Grail has no C for: a
+    # namespace is its instance __dict__, filled from one optional mapping or
+    # iterable of pairs and then from the keywords, both checked for string
+    # keys as PyArg_ValidateKeywordArguments checks them.
+
+    def __init__(self, /, *args, **kwargs):
+        if len(args) > 1:
+            raise TypeError('%s expected at most 1 argument, got %d'
+                            % (type(self).__name__, len(args)))
+        if args:
+            arg = args[0]
+            mapping = arg if type(arg) is dict else dict(arg)
+            for key in mapping:
+                if not isinstance(key, str):
+                    raise TypeError('keywords must be strings')
+            self.__dict__.update(mapping)
+        for key in kwargs:
+            if not isinstance(key, str):
+                raise TypeError('keywords must be strings')
         self.__dict__.update(kwargs)
 
     def __repr__(self):
-        keys = sorted(self.__dict__)
-        items = ("{}={!r}".format(k, self.__dict__[k]) for k in keys)
-        return "{}({})".format(type(self).__name__, ", ".join(items))
+        # namespace_repr: the exact type reads ``namespace``, and a namespace
+        # already being repr'd reads ``namespace(...)``, as Py_ReprEnter has it.
+        name = 'namespace' if type(self) is SimpleNamespace else type(self).__name__
+        if id(self) in _namespaces_in_repr:
+            return '%s(...)' % name
+        _namespaces_in_repr.add(id(self))
+        try:
+            namespace = self.__dict__
+            pairs = []
+            for key in list(namespace):
+                if isinstance(key, str) and key and key in namespace:
+                    pairs.append('%s=%r' % (key, namespace[key]))
+        finally:
+            _namespaces_in_repr.discard(id(self))
+        return '%s(%s)' % (name, ', '.join(pairs))
 
     def __eq__(self, other):
-        if isinstance(other, SimpleNamespace):
+        if _is_namespace(self) and _is_namespace(other):
             return self.__dict__ == other.__dict__
         return NotImplemented
+
+    def __ne__(self, other):
+        if _is_namespace(self) and _is_namespace(other):
+            return self.__dict__ != other.__dict__
+        return NotImplemented
+
+    __hash__ = None
+
+    def __reduce__(self):
+        """Return state information for pickling"""
+        return (type(self), (), self.__dict__)
+
+    def __replace__(self, /, **changes):
+        """Return a copy of the namespace object with new values for the specified attributes."""
+        result = type(self)()
+        if not _is_namespace(result):
+            raise TypeError("expect %s type, but %s() returned '%s' object"
+                            % (_fully_qualified_name(SimpleNamespace),
+                               _fully_qualified_name(type(self)),
+                               _fully_qualified_name(type(result))))
+        result.__dict__.update(self.__dict__)
+        result.__dict__.update(changes)
+        return result
 
 
 def new_class(name, bases=(), kwds=None, exec_body=None):

@@ -1211,33 +1211,49 @@ importlib class >> ___canonicalInstanceForModuleClass___: aModuleClass [
 	identity checks against committed state (the exact par.10.1 failure,
 	resurfacing through the singleton path instead of import).
 
-	When the registry holds a COMMITTED instance of aModuleClass: adopt
-	it as the session singleton FIRST
-	(so a __session_init__ that reads its own module's globals does not
-	recurse back here), register it in sys.modules (a later explicit
-	import is then a cache hit on the same instance), run the session
-	hook, and answer it.  Answers nil when nothing applies -- the caller
-	keeps the old mint-fresh behavior.  No hash check: committed code
-	referencing committed dependencies wants the instance it was
-	deployed with; staleness is the next explicit import's concern."
+	When the registry holds a COMMITTED instance of aModuleClass that is
+	CURRENT: adopt it as the session singleton FIRST (so a __session_init__
+	that reads its own module's globals does not recurse back here),
+	register it in sys.modules (a later explicit import is then a cache hit
+	on the same instance), run the session hook, and answer it.  Answers nil
+	when nothing applies -- the caller keeps the old mint-fresh behavior.
 
+	A STALE one is rebuilt into its committed instance first, as the import
+	this path stands in for would (___rebuildStaleLazyBind___:instance:), and refused
+	with an ImportError when that rebuild fails (issue #1805).  It used to be
+	adopted as it stood -- ``staleness is the next explicit import's
+	concern'' -- which was harmless while only a source edit made a module
+	stale.  Since D7 every install does, so a module whose redeploy was
+	skipped or failed ran the previous install's compiled code against the
+	new runtime, in exactly the sessions that never import it."
+
+	| found |
 	"In every namespace the session reads: the class may be the shared base's
-	or the app's (docs/App_Namespaces_Design.md §3.1)."
+	or the app's (docs/App_Namespaces_Design.md §3.1).  Found first and acted
+	on after, so a rebuild never writes the registry being enumerated."
 	self ___grailSessionNamespacesDo___: [:ns |
-		self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
-			((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
+		found isNil ifTrue: [
+			self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
+				(found isNil and: [(inst class == aModuleClass) and: [inst isCommitted]])
+					ifTrue: [found := { ns . aName asString . inst }]]]].
+	found isNil ifTrue: [^ nil].
+	^ self ___grailInNamespace___: (found at: 1) do: [ | aName inst |
+		aName := found at: 2.
+		inst := found at: 3.
+		self ___grailRecordNamespace___: (found at: 1) of: aName.
+		(self ___lazyBindIsStale___: aName)
+			ifTrue: [self ___rebuildStaleLazyBind___: aName instance: inst]
+			ifFalse: [
 				aModuleClass ___adoptInstance___: inst.
-				self ___grailRecordNamespace___: ns of: aName.
-				self registerModule: aName asString with: inst.
-				self ___restoreCanonicalMetaclasses___: aName asString.
-				self ___restoreCanonicalClassStructure___: aName asString.
+				self registerModule: aName with: inst.
+				self ___restoreCanonicalMetaclasses___: aName.
+				self ___restoreCanonicalClassStructure___: aName.
 				self ___restoreCanonicalMiRecords___.
 				self ___restoreAllCanonicalMetaclasses___.
 				self ___restoreAllBodyClassAttrs___.
 				inst ___replayDefaultsAssignments___.
 				self ___runSessionInit___: inst.
-				^ inst]]].
-	^ nil
+				inst]]
 
 ]
 
@@ -5500,6 +5516,30 @@ importlib class >> ___lastPathComponentOf___: aPath [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___lazyBindIsStale___: aName [
+	"Whether the committed module aName, reached by the lazy first-touch bind
+	(___canonicalInstanceForModuleClass___:), must be rebuilt before it is
+	served: the same test an import makes, and the one a carried submodule is
+	judged by -- its source as it is on disk now, its runtime generation (D7)
+	and its dependencies (par.4.4), through ___generationNowOf___:.
+
+	A module that is not tracked is never stale here, as it is never evidence
+	for a dependent.  Nor is one whose source file is gone but that is
+	otherwise current: an application deployed from a checkout that has since
+	moved keeps working, as it did.  Without its source it cannot be rebuilt,
+	so one that is ALSO stale for another reason is reported stale, and the
+	rebuild's failure says why."
+
+	| now |
+	(self ___isTrackedModule___: aName) ifFalse: [^ false].
+	(self ___sourceHashNowOf___: aName) isNil
+		ifTrue: [^ (self ___isCurrentModule___: aName) not].
+	now := self ___generationNowOf___: aName.
+	^ now notNil and: [now ~= (self ___recordedGenerationOf___: aName)]
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	"Load a module from a file path and register it.
 	Returns the module instance.
@@ -7168,6 +7208,78 @@ importlib class >> ___rebuildCarriedSubmodule___: aDottedName [
 			((ex isKindOf: Notification) or: [ex isKindOf: AlmostOutOfStackError])
 				ifTrue: [ex pass].
 			ex return: nil]
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___rebuildStaleLazyBind___: aName instance: anInstance [
+	"Rebuild the stale committed module aName, which committed code reached
+	without importing it (___canonicalInstanceForModuleClass___:), into its
+	committed instance anInstance, and answer it -- or refuse with an
+	ImportError when the rebuild fails (issue #1805).
+
+	WHY A REBUILD AND NOT A REFUSAL.  The lazy bind stands in for the import
+	the committed code's own module made when it was deployed, so it does
+	what that import would do in this session: an import of a stale module
+	rebuilds it in place (par.4.4), and so does binding a package that carries
+	a stale submodule (___refreshCarriedSubmodulesOf___:named:).  Refusing
+	instead would turn an install whose redeploy was skipped into a failure at
+	every first touch -- every request a deployed application serves -- for a
+	module the new runtime builds perfectly well.  The cost is the cost any
+	import of a stale module already has: the rebuild writes in this
+	transaction (par.8.1), so ``with gemdb.transaction():'' after it refuses
+	as it would after the import, and a commit publishes the rebuild, after
+	which no session rebuilds it again.  The way to avoid both is the one
+	install.sh takes: scripts/redeployModules.gs.
+
+	WHY A REFUSAL WHEN IT FAILS.  The previous build's code against the
+	current runtime is what this exists to stop serving, and a failed
+	rebuild leaves nothing better.  The ImportError names the module and the
+	failure.  The loader has already taken the half-built module out of
+	sys.modules and put its old hash back, so the next touch tries again and
+	is refused again, rather than being served the stale build.
+
+	Through the ordinary path, parents first, as ___rebuildCarriedSubmodule___:
+	does: ``pkg.mod'' reached with ``pkg'' unimported imports ``pkg'' too, and
+	binding a package judges what it carries, so the leaf may be loaded by
+	then; each step looks first.  Each from the file it was deployed from.
+
+	RE-ENTRY.  The loader adopts the instance as the session singleton before
+	the body runs, so the body's own reads never come back here.  Anything
+	that reaches this module's ``instance'' before that, while it is being
+	rebuilt, is answered the committed instance being rebuilt rather than
+	starting a second rebuild of it."
+
+	| inProgress prefix failure result |
+	inProgress := SessionTemps current at: #'GrailLazyRebuilding' ifAbsentPut: [Set new].
+	(inProgress includes: aName) ifTrue: [
+		anInstance class ___adoptInstance___: anInstance.
+		^ anInstance].
+	inProgress add: aName.
+	result := [[prefix := nil.
+		($. split: aName) inject: nil into: [:loaded :part | | path |
+			prefix := prefix isNil ifTrue: [part] ifFalse: [prefix , '.' , part].
+			(self @env1:lookupModule: prefix)
+				ifNil: [
+					path := (self ___deployedSourcePathOf___: prefix)
+						ifNil: [self @env1:___moduleNameToPath___: prefix].
+					path isNil ifTrue: [
+						ImportError @env1:___signal___: 'no source file for ''' , prefix , ''''].
+					self loadModuleFromPath: path name: prefix]
+				ifNotNil: [:m | m]]]
+		on: AbstractException do: [:ex | | text |
+			((ex isKindOf: Notification) or: [ex isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex pass].
+			text := [ex messageText] on: Error do: [:e | e return: nil].
+			failure := ex class name asString
+				, (text isNil ifTrue: [''] ifFalse: [': ' , text asString]).
+			ex return: nil]]
+		ensure: [inProgress remove: aName ifAbsent: []].
+	failure isNil ifTrue: [^ result].
+	^ ImportError @env1:___signal___: 'module ''' , aName ,
+		''' is deployed but stale -- built under an earlier install of Grail, or its source or a module it imports has changed since -- and rebuilding it where this session first reached it failed with ' ,
+		failure ,
+		'. Its previous build is not run against the current runtime. Import it to see the full error; scripts/redeployModules.gs rebuilds every stale deployed module.'
 
 ]
 

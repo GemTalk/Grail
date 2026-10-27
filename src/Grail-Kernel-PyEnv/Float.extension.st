@@ -629,6 +629,20 @@ Float >> ___comparandFor___: aNumber [
 ]
 
 { #category : 'Grail-Arithmetic' }
+Float >> ___fabs___ [
+	"C's fabs: the receiver with its sign bit clear, which is what CPython's
+	float_abs answers (Objects/floatobject.c:825).  The kernel's abs compares
+	with zero instead, so it answered -0.0 for -0.0 -- abs(-0.0), math.fabs
+	and math.copysign (which builds on the magnitude) all inherited it, and
+	cmath's sign-of-zero results came out wrong."
+
+	^ (self @env0:signBit) @env0:== 1
+		ifTrue: [self @env0:negated]
+		ifFalse: [self]
+
+]
+
+{ #category : 'Grail-Arithmetic' }
 Float >> ___pyDivModPair___: other [
 	"CPython's float_divmod (Objects/floatobject.c), answering the Array
 	{ floordiv. mod }.
@@ -753,9 +767,9 @@ Float >> ___reflectedOperand___: other [
 
 { #category : 'Grail-Arithmetic' }
 Float >> __abs__ [
-	"Return absolute value."
+	"Return absolute value: fabs, so abs(-0.0) is 0.0."
 
-	^ self @env0:abs
+	^ self ___fabs___
 
 ]
 
