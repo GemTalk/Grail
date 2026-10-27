@@ -717,10 +717,16 @@ AbstractNode >> ___copyAstFieldsInto___: pyNode [
 AbstractNode >> ___copyAstPositionInto___: pyNode [
 	"lineno / col_offset / end_lineno / end_col_offset, under the names a
 	reader looks for.  Absent on a node that carries no location, which is what
-	CPython does for the operator singletons."
+	CPython does for the operator singletons.
 
-	#( #('beginLine' 'lineno') #('beginColumn' 'col_offset')
-	   #('endLine' 'end_lineno') #('endColumn' 'end_col_offset') )
+	The columns are CPython's, UTF-8 byte offsets (AbstractLocationNode >>
+	___astColOffset___).  They were asked for as beginColumn, which no node
+	implements, and the read's error was swallowed with every other: no node
+	ast.parse answered had a col_offset, and test_fstring's position tests
+	stopped at the first one they read."
+
+	#( #('beginLine' 'lineno') #('___astColOffset___' 'col_offset')
+	   #('endLine' 'end_lineno') #('___astEndColOffset___' 'end_col_offset') )
 		do: [:pair |
 			| v |
 			v := [self perform: (pair at: 1) asSymbol]

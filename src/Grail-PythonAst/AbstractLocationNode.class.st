@@ -24,6 +24,42 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-AST export' }
+AbstractLocationNode >> ___astByteOffsetBefore___: aPosition [
+	"The UTF-8 length of the source text from the start of aPosition's line up
+	to, not including, aPosition.  CPython counts columns in bytes -- ``é = 1''
+	puts the ``='' at col_offset 3 -- while the column tracebacks print
+	(``column'') counts characters, so the two are not interchangeable."
+
+	| source lineStart |
+	(aPosition isNil or: [(self dynamicInstVarAt: #'___noColumns___') == true]) ifTrue: [^ nil].
+	source := self sourceString.
+	lineStart := aPosition > 1
+		ifTrue: [(source indexOfLast: Character lf startingAt: aPosition - 1) + 1]
+		ifFalse: [1].
+	^ (source copyFrom: lineStart to: aPosition - 1) encodeAsUTF8 size
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractLocationNode >> ___astColOffset___ [
+	"CPython's col_offset: the UTF-8 BYTE offset of the node's first character
+	within its line, from 0.  Nil when the node carries no columns."
+
+	^ self ___astByteOffsetBefore___: beginPosition
+
+]
+
+{ #category : 'Grail-AST export' }
+AbstractLocationNode >> ___astEndColOffset___ [
+	"CPython's end_col_offset: the UTF-8 byte offset just past the node's last
+	character, within the line that character is on."
+
+	endPosition isNil ifTrue: [^ nil].
+	^ self ___astByteOffsetBefore___: endPosition + 1
+
+]
+
 { #category : 'Grail-traceback' }
 AbstractLocationNode >> ___curPosStoreAvailable___ [
 	"Whether the code being emitted has a ``___curPos___'' temp to store into

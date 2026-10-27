@@ -562,8 +562,14 @@ builtins >> ___astTreeFor___: aSource mode: aMode optimized: wantOptimized level
 	PARSER answers, a FunctionDef / ClassDef / TypeAlias carrying its
 	type_params.  The flag rides the session for the parse, as
 	#GrailCompileFilename does for compile()."
-	tree := [SessionTemps @env0:current @env0:at: #'GrailParsingForAst' put: true.
-		(ModuleAst @env0:parseSource: aSource) @env0:___asPythonAst___]
+	"PARENTS BEFORE THE EXPORT: a node reaches its source text through them
+	(AbstractLocationNode >> sourceString), and its columns come from that text.
+	The compile path sets them in ensureModuleScope:, which this one never ran."
+	tree := [| module |
+		SessionTemps @env0:current @env0:at: #'GrailParsingForAst' put: true.
+		module := ModuleAst @env0:parseSource: aSource.
+		module @env0:setParent: nil.
+		module @env0:___asPythonAst___]
 			@env0:ensure: [SessionTemps @env0:current @env0:removeKey: #'GrailParsingForAst' ifAbsent: [nil]].
 	tree @env0:isNil ifTrue: [
 		^ TypeError ___signal___: 'compile(): cannot build an AST for this source'].
