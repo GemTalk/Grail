@@ -21,7 +21,7 @@ ParseErrorLocationTestCase >> testAParseErrorCarriesItsLocation [
 	several sites that have no token in scope to pass ('Unknown operator',
 	'Expected comparison operator'), which could not have been fixed
 	individually.  It is idempotent, so a site that reports its own location
-	(___signalGlobalSyntaxError___ does) keeps it.
+	(___signalDeclarationSyntaxError___ does) keeps it.
 
 	TWO RE-RAISES WERE DISCARDING IT, and finding the second is what made exec
 	work.  compile() and ModuleAst>>evaluateSource: each caught the parser's
