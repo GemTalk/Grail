@@ -76,7 +76,14 @@ MatchClassAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 	same shape the text emits for a class pattern with no sub-patterns."
 	(patterns size + kwdAttrs size) = 0 ifTrue: [^ gate].
 	^ aBuilder andValue: gate then: [
-		aBuilder add: (self ___emitIRClassFrom___: 1 subject: subjLeaf on: aBuilder)]
+		| accepts |
+		accepts := aBuilder
+			send: #'___matchClassAccepts___:keywords:of:' to: (aBuilder var: subjLeaf)
+			with: { aBuilder obj: patterns size.
+				aBuilder arrayOf: (kwdAttrs collect: [:each | aBuilder obj: each asString]).
+				cls ___emitIRValueOn___: aBuilder }.
+		aBuilder add: (aBuilder andValue: accepts then: [
+			aBuilder add: (self ___emitIRClassFrom___: 1 subject: subjLeaf on: aBuilder)])]
 
 ]
 
@@ -180,6 +187,15 @@ MatchClassAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	aStream nextPutAll: '((', aName, ' ___matchIsInstanceOf___: '.
 	cls printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ')'.
+	"CPython's match_class TypeErrors, once the isinstance test has passed
+	and before any attribute is read (Object >> ___matchClassAccepts___:keywords:of:)."
+	(patterns size + kwdAttrs size) > 0 ifTrue: [
+		aStream nextPutAll: ' and: [(', aName, ' ___matchClassAccepts___: ', patterns size printString,
+			' keywords: #('.
+		kwdAttrs do: [:each | aStream nextPutAll: ''''; nextPutAll: each asString; nextPutAll: ''''] separatedBy: [aStream space].
+		aStream nextPutAll: ') of: '.
+		cls printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ')'].
 	1 to: patterns size do: [:i |
 		aStream nextPutAll: ' and: [([:', sub, ' | (', sub, ' @env0:~~ #''___matchMiss___'') and: ['.
 		(patterns at: i) printMatchTestOn: aStream subject: sub depth: anInteger + 1.
@@ -193,6 +209,7 @@ MatchClassAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 		aStream nextPutAll: (kwdAttrs at: i) asString.
 		aStream nextPutAll: '''))'].
 	(patterns size + kwdAttrs size) timesRepeat: [aStream nextPutAll: ']'].
+	(patterns size + kwdAttrs size) > 0 ifTrue: [aStream nextPutAll: ']'].
 	aStream nextPutAll: ')'
 
 ]
