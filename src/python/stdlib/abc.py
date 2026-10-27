@@ -208,6 +208,7 @@ except ImportError:
                 raise RuntimeError("Refusing to create an inheritance cycle")
             cls._abc_registry.add(subclass)
             ABCMeta._abc_invalidation_counter += 1  # Invalidate negative cache
+            _grail_register_collection_flag(cls, subclass)
             return subclass
 
         def _dump_registry(cls, file=None):
@@ -347,6 +348,57 @@ else:
         def _abc_caches_clear(cls):
             """Clear the caches (for debugging or testing)."""
             _reset_caches(cls)
+
+
+# GRAIL: Py_TPFLAGS_SEQUENCE and Py_TPFLAGS_MAPPING, the type flags a sequence
+# or a mapping pattern tests (MATCH_SEQUENCE / MATCH_MAPPING), which Grail's
+# classes have no field for.  A type has the flag of the first class in its
+# MRO that has one (Objects/typeobject.c, inherit_patma_flags): a built-in that
+# carries it natively, an ABC that declares __abc_tpflags__ (Sequence,
+# Mapping), or a class an ABC with the flag registered -- registration sets it
+# (Modules/_abc.c:594), and _py_abc's register, the one this module defines,
+# never did.  Registrations are kept here, beside the registries themselves.
+_GRAIL_SEQUENCE_FLAG = 1 << 5
+_GRAIL_MAPPING_FLAG = 1 << 6
+_grail_registered_collection_flags = {}
+
+
+def _grail_native_collection_flags():
+    import types
+    return {list: _GRAIL_SEQUENCE_FLAG, tuple: _GRAIL_SEQUENCE_FLAG,
+            range: _GRAIL_SEQUENCE_FLAG, memoryview: _GRAIL_SEQUENCE_FLAG,
+            dict: _GRAIL_MAPPING_FLAG, types.MappingProxyType: _GRAIL_MAPPING_FLAG}
+
+
+def _grail_collection_flag(cls):
+    """The Py_TPFLAGS_SEQUENCE or Py_TPFLAGS_MAPPING bit cls carries, or 0."""
+    native = _grail_native_collection_flags()
+    for base in cls.__mro__:
+        if base in native:
+            return native[base]
+        if _grail_is_builtin(base):
+            # A built-in without the flag -- str, bytes, bytearray, object --
+            # carries none whatever is registered: CPython leaves an
+            # immutable type's flags alone (_PyType_SetFlagsRecursive).
+            continue
+        flag = _grail_registered_collection_flags.get(base)
+        if flag is None:
+            flag = base.__dict__.get('__abc_tpflags__', 0) & (
+                _GRAIL_SEQUENCE_FLAG | _GRAIL_MAPPING_FLAG)
+        if flag:
+            return flag
+    return 0
+
+
+def _grail_is_builtin(cls):
+    # Not every Grail built-in answers __module__ (mappingproxy does not).
+    return getattr(cls, '__module__', 'builtins') == 'builtins'
+
+
+def _grail_register_collection_flag(abc, subclass):
+    flag = _grail_collection_flag(abc)
+    if flag and not _grail_is_builtin(subclass):
+        _grail_registered_collection_flags[subclass] = flag
 
 
 def update_abstractmethods(cls):
