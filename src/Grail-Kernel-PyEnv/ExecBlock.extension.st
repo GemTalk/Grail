@@ -1,5 +1,14 @@
 Extension { #name : 'ExecBlock' }
 
+{ #category : 'Grail-Python protocol' }
+ExecBlock >> ___call__: positional kw: keywords [
+	"``f.__call__(*args, **kw)'' for every arity but one, and with keywords:
+	the call itself, as __call__: is."
+
+	^ self ___pyCallValue___: positional kw: keywords
+
+]
+
 { #category : 'Grail-Callable' }
 ExecBlock >> ___pyCallValue___: positional kw: kwargs [
 	"Polymorphic Python call.  A Smalltalk block stored as a Python
@@ -114,11 +123,15 @@ ExecBlock >> __annotations__ [
 ]
 
 { #category : 'Grail-Callable' }
-ExecBlock >> __call__: args [
-	"Call the block with the given arguments.
-	 This makes ExecBlock callable in Python's sense."
+ExecBlock >> __call__: anArgument [
+	"``f.__call__(x)'' is ``f(x)'', through the same call path.  This answered
+	``valueWithArguments: x'', taking x for an ARRAY of arguments, so
+	``deco.__call__(A)'' sent #do: to the class A -- an uncatchable
+	MessageNotUnderstood (test_grammar test_classdef's
+	``@[class_decorator][0].__call__.__call__'').  Any other arity, and
+	keywords, reach ___call__:kw:."
 
-	^ self @env0:valueWithArguments: args
+	^ self ___pyCallValue___: { anArgument } kw: nil
 
 ]
 
