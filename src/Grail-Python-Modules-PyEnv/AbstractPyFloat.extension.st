@@ -139,6 +139,7 @@ AbstractPyFloat >> ___pyHiddenStateNames___ [
 
 { #category : 'Grail-Introspection' }
 AbstractPyFloat >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a SUBCLASS instance (every instance of this root is
 	one: an exact builtin value is a kernel object) -- the live dynamic-instVar
 	view list and bytes publish, minus ___pyHiddenStateNames___.  test_pickle's

@@ -91,6 +91,26 @@ DirOfAClassTestCase >> testClassifyClassAttrsNowSeesTheMethods [
 
 ]
 
+{ #category : 'Grail-Tests' }
+DirOfAClassTestCase >> testDirOfABuiltinLeavesOutGrailsStandIns [
+	"dir() and cls.__dict__ leave out what answers a name on a builtin in Grail
+	but not in CPython: list's subclass-only __dict__, object's attribute-miss
+	__getattr__ and int's protocol refusals.  A Python subclass with an
+	instance dict still lists __dict__.  tests/python/dir_builtin_stand_ins.py
+	holds the checks and agrees with CPython 3.14 (test_descrtut's pprint of
+	dir(list))."
+
+	| fixture |
+	importlib @env1:modules removeKey: #'dir_builtin_stand_ins' ifAbsent: [].
+	fixture := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/dir_builtin_stand_ins.py')
+		name: 'dir_builtin_stand_ins'.
+	self
+		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
+		equals: '13 checks, 0 disagreeing [], keys match: True'
+
+]
+
 { #category : 'Grail-Tests - dir()' }
 DirOfAClassTestCase >> testDirOfAClassListsBothHalves [
 	"data / base_data come from the METACLASS chain (a class body's data

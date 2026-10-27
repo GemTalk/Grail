@@ -410,6 +410,7 @@ OrderedCollection >> __delitem__: index [
 
 { #category : 'Grail-Introspection' }
 OrderedCollection >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a list SUBCLASS instance -- a live view of its
 	dynamic-instVar storage, the same one PythonInstance and bytes publish.
 	Subclassing list is how user code hangs attributes off a sequence, and a

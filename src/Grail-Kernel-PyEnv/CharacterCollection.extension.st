@@ -2056,6 +2056,7 @@ CharacterCollection >> __contains__: item [
 
 { #category : 'Grail-Introspection' }
 CharacterCollection >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a str SUBCLASS instance -- the live dynamic-instVar
 	view list and bytes publish.  A plain ``class X(str)'' stays a subclass of
 	the kernel string class (Class.gs says why), so this is where its instances
