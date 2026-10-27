@@ -1504,6 +1504,13 @@ PythonTokenizer >> tokenizeOperator [
 
 	"Update paren depth"
   (char == $( or: [char == $[ or: [char == ${ ]]) ifTrue: [
+		"CPython's lexer holds at most 200 open brackets (MAXLEVEL,
+		Parser/lexer/state.h:7) and refuses the next one where it opens,
+		before any parsing (Parser/lexer/lexer.c:1305)."
+		parenDepth >= 200 ifTrue: [
+			^ PythonParser ___signal___: SyntaxError
+				message: 'too many nested parentheses'
+				in: source from: startPos to: nil].
 		parenDepth := parenDepth + 1.
 		openBrackets add: (Array with: char with: startPos with: startLine).
 	].
