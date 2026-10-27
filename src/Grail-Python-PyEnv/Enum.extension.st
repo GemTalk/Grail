@@ -417,6 +417,10 @@ Enum class >> ___grailBuildMembers: cls names: attrNames [
 	identity was kept: see ___grailKeepPreviousMember:named:in:.  Read before the
 	record below replaces them."
 	previous := (Enum ___grailRecordFor: cls) @env0:ifNotNil: [:rec | rec @env0:at: 2].
+	"...or, when none was committed, the members the namespace reset set aside.
+	Taken either way, so none is left in the session."
+	[:stashed | previous @env0:isNil ifTrue: [previous := stashed]]
+		@env0:value: (Enum ___grailStashedMembersOf: cls).
 	byValue := KeyValueDictionary @env0:new.
 	"A PyDict, which keeps insertion order: this map IS _member_map_ and
 	__members__, and CPython's is a dict in definition order, aliases where they
@@ -4331,6 +4335,27 @@ Enum class >> ___grailSpreadArgs: rawValue [
 			els @env0:asArray]
 			@env0:on: AbstractException do: [:e | Array @env0:with: rawValue]].
 	^ Array @env0:with: rawValue
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailStashedMembersOf: cls [
+	"The previous build's members of cls, by name, as the reset before a rebuild
+	that reuses cls found them in its holder (Object >> ___grailEmptyClassHolder___),
+	or nil.  Taken out of the session as it is answered, so each rebuild reads
+	only its own reset's.
+
+	The fallback for a class with no committed record.  A mixin enum's record
+	has been committed only since #1803 (___grailRecordHolderFor:), so on the
+	first upgrade from an older Grail its previous members are found only
+	this way: the class attributes the previous build bound each member to."
+
+	| stash own |
+	stash := SessionTemps @env0:current @env0:at: #GrailResetOwnInstances otherwise: nil.
+	stash @env0:isNil ifTrue: [^ nil].
+	own := stash @env0:at: cls otherwise: nil.
+	own @env0:isNil ifFalse: [stash @env0:removeKey: cls].
+	^ own
 
 ]
 

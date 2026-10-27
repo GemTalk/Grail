@@ -9601,15 +9601,33 @@ Object >> ___grailEmptyClassHolder___ [
 	the previous build's members, which the rebuild reads after this reset so as
 	to keep them (Enum class >> ___grailKeepPreviousMember:named:in:), and
 	replaces when it is done.  An Enum-rooted class keeps the same record in a
-	classInstVar, which this reset never touched."
+	classInstVar, which this reset never touched.
 
-	| holder |
+	The entries whose value is an instance of the receiver itself -- an enum's
+	members, under their names -- are set aside in the session first
+	(#GrailResetOwnInstances), for Enum class >> ___grailStashedMembersOf:.
+	They are how a rebuild finds the previous members when no record was
+	committed: a module committed by a Grail older than the record of a mixin
+	enum, on its first upgrade."
+
+	| holder own stash |
 	holder := [self @env0:perform: #___dynInstVars___ env: 1]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	holder == nil ifTrue: [^ self].
 	holder @env0:dynamicInstanceVariables @env0:asArray @env0:do: [:nm |
 		nm @env0:== #'___grailEnumRecord___'
-			ifFalse: [holder @env0:removeDynamicInstVar: nm]].
+			ifFalse: [ | v |
+				v := holder @env0:dynamicInstVarAt: nm.
+				v @env0:class @env0:== self ifTrue: [
+					own @env0:isNil ifTrue: [own := KeyValueDictionary @env0:new].
+					own @env0:at: nm @env0:asString put: v].
+				holder @env0:removeDynamicInstVar: nm]].
+	own @env0:isNil ifFalse: [
+		stash := SessionTemps @env0:current @env0:at: #GrailResetOwnInstances otherwise: nil.
+		stash @env0:isNil ifTrue: [
+			stash := IdentityKeyValueDictionary @env0:new.
+			SessionTemps @env0:current @env0:at: #GrailResetOwnInstances put: stash].
+		stash @env0:at: self put: own].
 	^ self
 
 ]
