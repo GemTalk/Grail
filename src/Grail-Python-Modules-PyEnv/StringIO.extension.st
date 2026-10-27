@@ -385,9 +385,17 @@ StringIO >> writable [
 
 { #category : 'Grail-Writing' }
 StringIO >> write: data [
-	"Overwrite from the current position; grow on append."
+	"Overwrite from the current position; grow on append.  Only a str is
+	written: CPython's StringIO.write refuses anything else, and asks before
+	it asks whether the stream is closed (Modules/_io/stringio.c:554).  Grail
+	wrote the argument's Smalltalk print string -- ``aByteArray'' for b'x',
+	``aNoneType'' for None -- so base64.encode into a StringIO succeeded with
+	garbage where test_base64 expects the TypeError."
 
 	| s n endPos |
+	((data @env0:isKindOf: CharacterCollection) or: [data @env0:isKindOf: AbstractPyStr]) ifFalse: [
+		^ TypeError ___signal___: 'string argument expected, got '''
+			@env0:, data ___pyTypeNameForError___ @env0:, ''''].
 	self _checkOpen.
 	s := data @env0:asString.
 	n := s @env0:size.
