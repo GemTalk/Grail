@@ -2,13 +2,24 @@ Extension { #name : 'TypeAliasType' }
 
 { #category : 'Grail-Instance Creation' }
 TypeAliasType class >> ___named___: aString valueThunk: aBlock [
-	"Build the alias.  aBlock is NOT run here -- see the class comment for
-	why the laziness is load-bearing."
+	"Build the alias of a plain ``type X = V''.  aBlock is NOT run here --
+	see the class comment for why the laziness is load-bearing.
 
-	| inst |
-	inst := self ___new___.
-	inst ___setName___: aString thunk: aBlock.
-	^ inst
+	It is typing.TypeAliasType's instance, the one a generic ``type X[T] = V''
+	and an explicit call already made (_typing._grail_type_alias), not this
+	class's: one statement answered two types, so ``isinstance(X,
+	typing.TypeAliasType)'' was false for the plain form, and it had no
+	__module__ or evaluate_value.  The block stays the thunk because it is
+	what reads a class body's names lazily (``class X: T = int; type U = T''),
+	wrapped in a Python callable's (positional, keywords) shape."
+
+	^ (((importlib @env0:___instance___) @env1:import_module: '_typing')
+		@env1:___pyAttrLoad___: #'_grail_type_alias')
+			@env1:value: {
+				aString @env0:asUnicodeString.
+				[:positional :keywords | aBlock @env0:value].
+				tuple @env0:new }
+			value: nil
 
 ]
 

@@ -119,11 +119,16 @@ def _cannot_subclass_instance(obj):
 
 class _ImmutableType(type):
     """A C-level type's immutability (Py_TPFLAGS_IMMUTABLETYPE): setting an
-    attribute on the TYPE is a TypeError, as it is on NoneType."""
+    attribute on the TYPE is a TypeError, as it is on NoneType.
+
+    The message names the type by its tp_name, which for a C type outside
+    builtins carries the module: ``'_typing._ConstEvaluator'``."""
 
     def __setattr__(cls, name, value):
+        tp_name = (cls.__qualname__ if cls.__module__ == 'builtins'
+                   else f'{cls.__module__}.{cls.__qualname__}')
         raise TypeError(
-            f"cannot set {name!r} attribute of immutable type {cls.__name__!r}")
+            f"cannot set {name!r} attribute of immutable type {tp_name!r}")
 
 
 _no_default_instance = []
@@ -160,6 +165,12 @@ class _Common:
     """
 
     def has_default(self):
+        # typevar_has_default (Objects/typevarobject.c:843): a declared lazy
+        # default counts without being evaluated, so ``class C[T = Undefined]``
+        # defines -- typing asks while building the class's Generic base.
+        lazy = self.__dict__.get('_lazy')
+        if lazy is not None and '__default__' in lazy:
+            return True
         return self.__default__ is not NoDefault
 
     def __getattr__(self, name):
@@ -169,11 +180,17 @@ class _Common:
         in the scope the class was written in, only when ``T.__bound__`` is
         asked for.  _grail_type_param stores the unevaluated form as a thunk
         under ``_lazy`` and leaves the attribute itself unset, so the first
-        read arrives here, runs the thunk once, and keeps the answer.
+        read arrives here, runs the thunk, and keeps the answer.
+
+        Only an answer is kept (typevar_bound, Objects/typevarobject.c:542):
+        the evaluate function stays, so a read that raised -- ``T:
+        Undefined`` before ``Undefined`` exists -- raises again next time
+        rather than finding the attribute gone, and ``evaluate_bound`` still
+        answers the function after the value is cached.
         """
         lazy = self.__dict__.get('_lazy')
         if lazy is not None and name in lazy:
-            value = lazy.pop(name)()
+            value = lazy[name]()
             if name == '__constraints__':
                 value = tuple(value)
             self.__dict__[name] = value
@@ -181,10 +198,24 @@ class _Common:
         raise AttributeError(
             f"{type(self).__name__!r} object has no attribute {name!r}")
 
+    @property
     def evaluate_default(self):
-        # PEP 649 lazy form.  Grail evaluates defaults eagerly, so the
-        # "evaluate" step is already done; answer the value.
-        return self.__default__
+        """PEP 649's evaluate function for the default, as an attribute
+        (typevar_evaluate_default, Objects/typevarobject.c:613)."""
+        return self._evaluator('__default__', lambda value: True)
+
+    def _evaluator(self, name, is_given):
+        """The evaluate function behind attribute ``name``: a PEP 695
+        parameter's lazy one -- or None, when it declared no such value --
+        and, for one made by calling the class, a _ConstEvaluator over the
+        value given, when is_given says it was given at all.  ``TypeVar('T')``
+        has a default to answer, NoDefault, but no bound; ``def f[T]()`` has
+        neither, because the compiler supplied no evaluate function."""
+        lazy = self.__dict__.get('_lazy')
+        if lazy is not None:
+            return lazy.get(name)
+        value = getattr(self, name)
+        return _ConstEvaluator._on(value) if is_given(value) else None
 
     def __or__(self, right):
         """``T | None``, PEP 604.
@@ -263,11 +294,15 @@ class TypeVar(_Common):
             f"Too few arguments for {alias!r}; actual {len(args)}, "
             f"expected at least {i + 1}")
 
+    @property
     def evaluate_bound(self):
-        return self.__bound__
+        """typevar_evaluate_bound (Objects/typevarobject.c:587)."""
+        return self._evaluator('__bound__', lambda bound: bound is not None)
 
+    @property
     def evaluate_constraints(self):
-        return self.__constraints__
+        """typevar_evaluate_constraints (Objects/typevarobject.c:600)."""
+        return self._evaluator('__constraints__', bool)
 
     def __repr__(self):
         if self.__covariant__:
@@ -432,8 +467,11 @@ class TypeAliasType:
 
     def __getattr__(self, name):
         # The lazy value of a ``type`` statement: see _grail_type_alias.
+        # The function stays, as compute_value does (typealias_get_value,
+        # Objects/typevarobject.c:1870): a read that raised retries, and
+        # evaluate_value answers it.
         if name == '__value__':
-            thunk = self.__dict__.pop('_value_thunk', None)
+            thunk = self.__dict__.get('_value_thunk')
             if thunk is not None:
                 value = thunk()
                 self.__dict__['__value__'] = value
@@ -449,8 +487,13 @@ class TypeAliasType:
         return tuple(_typing_module().Unpack[p] if isinstance(p, TypeVarTuple)
                      else p for p in self.__type_params__)
 
+    @property
     def evaluate_value(self):
-        return self.__value__
+        """typealias_evaluate_value (Objects/typevarobject.c:1903): the
+        ``type`` statement's lazy function, or one answering the value an
+        explicit call gave."""
+        thunk = self.__dict__.get('_value_thunk')
+        return thunk if thunk is not None else _ConstEvaluator._on(self.__value__)
 
     def __repr__(self):
         return self.__name__
@@ -476,6 +519,79 @@ class TypeAliasType:
         return _make_union((left, self))
 
 
+def _evaluate_function(name, thunk, module):
+    """A PEP 695 lazy value as CPython's compiler makes it: a function named
+    after what declared it, in the declaring module, of one positional-only
+    ``format`` defaulting to VALUE, that answers the two VALUE formats and
+    raises NotImplementedError for any other (Python/codegen.c:676), leaving
+    those to annotationlib.  thunk is the zero-argument callable over the
+    declaring scope -- the parser's lambda, or the block a plain ``type``
+    statement compiles to."""
+    def evaluate(format=1, /):
+        if format > 2:
+            raise NotImplementedError
+        return thunk()
+    evaluate.__name__ = evaluate.__qualname__ = name
+    evaluate.__module__ = module
+    return evaluate
+
+
+def _type_repr(value):
+    """typevarobject.c's _Py_typing_type_repr: how a _ConstEvaluator spells
+    a value for the STRING format."""
+    if value is ...:
+        return '...'
+    if value is type(None):
+        return 'None'
+    if hasattr(value, '__origin__') and hasattr(value, '__args__'):
+        return repr(value)
+    qualname = getattr(value, '__qualname__', None)
+    module = getattr(value, '__module__', None) if qualname is not None else None
+    if module is None:
+        return repr(value)
+    if module == 'builtins':
+        return str(qualname)
+    return f'{module}.{qualname}'
+
+
+class _ConstEvaluator(metaclass=_ImmutableType):
+    """The evaluate function of a value given outright -- typevarobject.c's
+    constevaluator, ``TypeVar('T', bound=int).evaluate_bound``.  Python
+    cannot create one; _on is how this module does."""
+
+    __slots__ = ('_value',)
+    __init_subclass__ = _not_a_base('_typing._ConstEvaluator')
+
+    def __new__(cls, *args, **kwargs):
+        raise TypeError("cannot create '_typing._ConstEvaluator' instances")
+
+    @classmethod
+    def _on(cls, value):
+        evaluator = object.__new__(cls)
+        evaluator._value = value
+        return evaluator
+
+    def __call__(self, *args, **kwargs):
+        """constevaluator_call (Objects/typevarobject.c:171): the value for
+        every format but STRING, which spells it -- a tuple element by
+        element."""
+        if kwargs:
+            raise TypeError("constevaluator.__call__() takes no keyword arguments")
+        if len(args) != 1:
+            raise TypeError("constevaluator.__call__() takes exactly one "
+                            f"argument ({len(args)} given)")
+        import operator
+        format = operator.index(args[0])
+        if format != 4:
+            return self._value
+        if isinstance(self._value, tuple):
+            return '(' + ', '.join(_type_repr(item) for item in self._value) + ')'
+        return _type_repr(self._value)
+
+    def __repr__(self):
+        return f'<constevaluator {self._value!r}>'
+
+
 def _grail_type_alias(name, value_thunk, type_params):
     """``type name[type_params] = value``, with the value left unevaluated.
 
@@ -489,7 +605,7 @@ def _grail_type_alias(name, value_thunk, type_params):
     alias.__name__ = name
     alias.__type_params__ = tuple(type_params)
     alias.__module__ = _caller_module(1)
-    alias._value_thunk = value_thunk
+    alias._value_thunk = _evaluate_function(name, value_thunk, alias.__module__)
     return alias
 
 
@@ -506,24 +622,26 @@ def _grail_type_param(kind, name, bound=None, constraints=None, default=None):
     # CPython's typevarobject.c makes these with ``__module__`` 'typing', not
     # the declaring module: the intrinsic runs with no Python caller of its own.
     module = 'typing'
+    declaring_module = _caller_module(1)
     if kind == 1:
         param = TypeVarTuple(name)
     elif kind == 2:
         param = ParamSpec(name, infer_variance=True)
     else:
         param = TypeVar(name, infer_variance=True)
+    # Always set, even empty: it is what marks a parameter the compiler made,
+    # whose evaluate_* is None for a value it did not declare.
     lazy = {}
     if bound is not None:
-        lazy['__bound__'] = bound
+        lazy['__bound__'] = _evaluate_function(name, bound, declaring_module)
         del param.__bound__
     if constraints is not None:
-        lazy['__constraints__'] = constraints
+        lazy['__constraints__'] = _evaluate_function(name, constraints, declaring_module)
         del param.__constraints__
     if default is not None:
-        lazy['__default__'] = default
+        lazy['__default__'] = _evaluate_function(name, default, declaring_module)
         del param.__default__
-    if lazy:
-        param._lazy = lazy
+    param._lazy = lazy
     param.__module__ = module
     return param
 
