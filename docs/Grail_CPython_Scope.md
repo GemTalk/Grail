@@ -28,10 +28,10 @@ Where the in-scope tiers stand:
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
 | P1 | 60 | 14 | 16 | 90 |
-| P2 | 23 | 4 | 7 | 34 |
+| P2 | 23 | 5 | 6 | 34 |
 | P3 | 20 | 5 | 31 | 56 |
 | P4 | 22 | 7 | 46 | 75 |
-| **In-scope** | **125** | **30** | **100** | **255** |
+| **In-scope** | **125** | **31** | **99** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **155 are wired into the harness** (P1 74 · P2 27 · P3 25 · P4 29) and **125 of those score OK**.
+Of the 255 in-scope modules, **156 are wired into the harness** (P1 74 · P2 28 · P3 25 · P4 29) and **125 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -820,7 +820,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_policy` ERROR, 33 tests: 0 failed, 3 errors, 0 skipped
 - `test.test_email.test_utils` ERROR, 22 tests: 1 failed, 10 errors, 1 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_dynamicclassattribute`, `test_fstring`, `test_grammar`, `test_graphlib`, `test_patma`, `test_tstring`, `test_type_aliases`, `test_type_params`, `test_types`.
+Wired, but not on the board until the next nightly measures them: `test_cmath`, `test_dynamicclassattribute`, `test_fstring`, `test_grammar`, `test_graphlib`, `test_patma`, `test_tstring`, `test_type_aliases`, `test_type_params`, `test_types`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
