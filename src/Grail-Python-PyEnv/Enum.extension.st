@@ -417,6 +417,10 @@ Enum class >> ___grailBuildMembers: cls names: attrNames [
 	identity was kept: see ___grailKeepPreviousMember:named:in:.  Read before the
 	record below replaces them."
 	previous := (Enum ___grailRecordFor: cls) @env0:ifNotNil: [:rec | rec @env0:at: 2].
+	"...or, when none was committed, the members the namespace reset set aside.
+	Taken either way, so none is left in the session."
+	[:stashed | previous @env0:isNil ifTrue: [previous := stashed]]
+		@env0:value: (Enum ___grailStashedMembersOf: cls).
 	byValue := KeyValueDictionary @env0:new.
 	"A PyDict, which keeps insertion order: this map IS _member_map_ and
 	__members__, and CPython's is a dict in definition order, aliases where they
@@ -3256,21 +3260,36 @@ Enum class >> ___grailKeepPreviousMember: aMember named: nameStr in: previousByN
 	Color.GREEN'') and hashed by it, so a new object for an old member strands
 	every stored one.  When the previous build had a member of this name and
 	class, it takes the state this build gave aMember and is answered in its
-	place.  A byte-format member (a StrEnum's) cannot take another's state this
-	way and stays the new one, as does any member the transfer fails for."
+	place: its named, indexed and dynamic instance variables.
 
-	| old names |
+	A byte-format member's indexed part is its bytes, not object references: a
+	``str'' mixin's (``class Mode(str, Enum)'', a Unicode32 subclass) or a
+	``bytes'' or ``bytearray'' mixin's (a ByteArray subclass).  It takes the new
+	member's size and contents through #size: and
+	#replaceFrom:to:with:startingAt:, which work in the class's own units
+	(characters, bytes) where #_basicSize counts bytes.  Both are the same class,
+	so they have the same storage.  StrEnum's own members are AbstractPyStr,
+	pointer-format.  Any other format, or a member the transfer fails for, stays
+	the new one."
+
+	| old names cls |
 	previousByName @env0:isNil ifTrue: [^ aMember].
 	old := previousByName @env0:at: nameStr ifAbsent: [nil].
 	(old @env0:isNil or: [old @env0:== aMember]) ifTrue: [^ aMember].
-	((old @env0:class @env0:== aMember @env0:class) and: [aMember @env0:class @env0:isPointers])
+	cls := aMember @env0:class.
+	((old @env0:class @env0:== cls) and: [cls @env0:isPointers or: [cls @env0:isBytes]])
 		ifFalse: [^ aMember].
-	^ [1 @env0:to: aMember @env0:class @env0:instSize do: [:i |
+	^ [1 @env0:to: cls @env0:instSize do: [:i |
 			old @env0:instVarAt: i put: (aMember @env0:instVarAt: i)].
-		aMember @env0:class @env0:isIndexable ifTrue: [
-			old @env0:_basicSize: aMember @env0:_basicSize.
-			1 @env0:to: aMember @env0:_basicSize do: [:i |
-				old @env0:_basicAt: i put: (aMember @env0:_basicAt: i)]].
+		cls @env0:isPointers
+			ifTrue: [
+				cls @env0:isIndexable ifTrue: [
+					old @env0:_basicSize: aMember @env0:_basicSize.
+					1 @env0:to: aMember @env0:_basicSize do: [:i |
+						old @env0:_basicAt: i put: (aMember @env0:_basicAt: i)]]]
+			ifFalse: [
+				old @env0:size: aMember @env0:size.
+				old @env0:replaceFrom: 1 to: aMember @env0:size with: aMember startingAt: 1].
 		names := aMember @env0:dynamicInstanceVariables.
 		old @env0:dynamicInstanceVariables @env0:do: [:n |
 			(names @env0:includes: n) ifFalse: [old @env0:removeDynamicInstVar: n]].
@@ -3967,19 +3986,51 @@ Enum class >> ___grailRecordFor: cls [
 	Without the class-side copy, every enum in a deployed module read as
 	having no members: http.HTTPStatus, socket.AddressFamily, and ssl's
 	VerifyMode/VerifyFlags/Options, where create_default_context() raised
-	``<flag 'VerifyFlags'> has no members''."
+	``<flag 'VerifyFlags'> has no members''.
 
-	| rec stored |
+	A class rooted at a storage class rather than Enum -- a mixin enum such as
+	``class Mode(str, Enum)'', whose Smalltalk superclass is Unicode32 -- has no
+	grailEnumRecord slot, and its record rides in its ___dynInstVars___ holder
+	instead (___grailRecordHolderFor:)."
+
+	| rec stored holder |
 	rec := self ___grailRegistry___ @env0:at: cls otherwise: nil.
 	rec @env0:notNil ifTrue: [^ rec].
-	((cls @env0:isKindOf: Behavior)
-		and: [(cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot'
-			environmentId: 1) @env0:notNil]) ifFalse: [^ nil].
-	stored := cls ___grailEnumRecordSlot.
+	(cls @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	(cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot'
+		environmentId: 1) @env0:notNil
+			ifTrue: [stored := cls ___grailEnumRecordSlot]
+			ifFalse: [
+				holder := self ___grailRecordHolderFor: cls.
+				holder @env0:isNil ifTrue: [^ nil].
+				stored := holder @env0:dynamicInstVarAt: #'___grailEnumRecord___'].
 	stored @env0:isNil ifTrue: [^ nil].
 	rec := stored @env0:collect: [:each | each @env0:copy].
 	self ___grailRegistry___ @env0:at: cls put: rec.
 	^ rec
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailRecordHolderFor: cls [
+	"Where the record of an enum class with no grailEnumRecord slot is kept on
+	the class, so it is committed with it: the class's ___dynInstVars___ holder,
+	under ___grailEnumRecord___, or nil when the class has no holder.
+
+	Every mixin enum is such a class: ``class Mode(str, Enum)'' is a Unicode32
+	subclass, ``class Level(float, Enum)'' an AbstractPyFloat one, and Enum's
+	class side, which declares the slot, is not on their chain.  Their record
+	was then kept in the session alone, so in any later session the class had
+	no members -- ``list(Mode)'' answered [] -- and a rebuild had no previous
+	members to keep (___grailKeepPreviousMember:named:in:).
+
+	The holder's ``___...'' entries are Grail-internal: ___classDict___ leaves
+	them out of the class's __dict__."
+
+	^ ((cls @env0:class @env0:whichClassIncludesSelector: #'___dynInstVars___'
+		environmentId: 1) @env0:notNil)
+			ifTrue: [cls @env0:perform: #'___dynInstVars___' env: 1]
+			ifFalse: [nil]
 
 ]
 
@@ -4288,6 +4339,27 @@ Enum class >> ___grailSpreadArgs: rawValue [
 ]
 
 { #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailStashedMembersOf: cls [
+	"The previous build's members of cls, by name, as the reset before a rebuild
+	that reuses cls found them in its holder (Object >> ___grailEmptyClassHolder___),
+	or nil.  Taken out of the session as it is answered, so each rebuild reads
+	only its own reset's.
+
+	The fallback for a class with no committed record.  A mixin enum's record
+	has been committed only since #1803 (___grailRecordHolderFor:), so on the
+	first upgrade from an older Grail its previous members are found only
+	this way: the class attributes the previous build bound each member to."
+
+	| stash own |
+	stash := SessionTemps @env0:current @env0:at: #GrailResetOwnInstances otherwise: nil.
+	stash @env0:isNil ifTrue: [^ nil].
+	own := stash @env0:at: cls otherwise: nil.
+	own @env0:isNil ifFalse: [stash @env0:removeKey: cls].
+	^ own
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
 Enum class >> ___grailStoredGnvFor: cls [
 	"The PyStaticMethod for cls's functional _generate_next_value_, found by
 	walking the superclass chain.  A functional enum stores its gnv keyed by the
@@ -4353,10 +4425,15 @@ Enum class >> ___grailStoreRecord: rec for: cls [
 	"Register cls's record in this session AND on the class (see
 	___grailRecordFor:), so it survives the class being committed."
 
+	| holder |
 	self ___grailRegistry___ @env0:at: cls put: rec.
 	((cls @env0:class @env0:whichClassIncludesSelector: #'___grailEnumRecordSlot:'
 		environmentId: 1) @env0:notNil)
-		ifTrue: [cls ___grailEnumRecordSlot: rec].
+		ifTrue: [cls ___grailEnumRecordSlot: rec]
+		ifFalse: [
+			holder := self ___grailRecordHolderFor: cls.
+			holder @env0:isNil ifFalse: [
+				holder @env0:dynamicInstVarAt: #'___grailEnumRecord___' put: rec]].
 	^ rec
 
 ]

@@ -95,6 +95,24 @@ for name, cls in sorted(upgrade_app.expected_types().items(), key=lambda kv: kv[
 check('type.enum_member_identity',
       lambda: (stored['color'] is upgrade_app.Color.GREEN,
                'stored Color.GREEN is not the current Color.GREEN'))
+check('type.enum_member_identity.str_mixin',
+      lambda: (stored['mode'] is upgrade_app.Mode.WRITE,
+               'stored Mode.WRITE is not the current Mode.WRITE'))
+check('type.enum_member_identity.strenum',
+      lambda: (stored['level'] is upgrade_app.Level.HIGH,
+               'stored Level.HIGH is not the current Level.HIGH'))
+for _cls, _name, _tag in (('Color', 'GREEN', 'color'), ('Mode', 'WRITE', 'mode'),
+                          ('Level', 'HIGH', 'level')):
+    check('lookup.enum_member.dict.' + _tag,
+          lambda c=_cls, n=_name, t=_tag: expect_equal(
+              stored['enum_keyed_dict'].get(getattr(getattr(upgrade_app, c), n), '<missing>'), t))
+    check('lookup.enum_member.set.' + _tag,
+          lambda c=_cls, n=_name: (getattr(getattr(upgrade_app, c), n) in stored['enum_keyed_set'],
+                                   'not found'))
+    check('lookup.enum_member.stored_key_is_member.' + _tag,
+          lambda c=_cls, n=_name: (
+              any(k is getattr(getattr(upgrade_app, c), n) for k in stored['enum_keyed_dict']),
+              'no stored key is the current member'))
 check('type.error_is_exception',
       lambda: (isinstance(stored['error'], Exception), 'not an instance of the current Exception'))
 
