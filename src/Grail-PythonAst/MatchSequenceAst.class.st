@@ -21,6 +21,12 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchSequenceAst >> ___captureNodesInto___: aCollection [
+	patterns do: [:each | each ___captureNodesInto___: aCollection]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchSequenceAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 	"Length gate first, then element tests, all short-circuited through and: so
@@ -57,7 +63,7 @@ MatchSequenceAst >> ___emitIRSeqElement___: i star: star subject: subjLeaf on: a
 			with: { aBuilder obj: i - 1. aBuilder obj: patterns size - i }.
 		^ aBuilder send: #value
 			to: (aBuilder inBlockDo: [
-				aBuilder add: (self ___emitIRMatchCaptureStore___: p name
+				aBuilder add: (self ___emitIRPendingCapture___: p name
 					from: slice on: aBuilder).
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder obj: true)])
@@ -181,7 +187,7 @@ MatchSequenceAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 				p name isNil
 					ifTrue: [aStream nextPutAll: 'true']
 					ifFalse: [
-						self emitNameStoreOn: aStream target: p name
+						self printPendingCaptureOn: aStream target: p name
 							rhs: aName , ' ___matchStarSlice___: '
 								, (i - 1) printString , ' fromEnd: '
 								, (patterns size - i) printString.

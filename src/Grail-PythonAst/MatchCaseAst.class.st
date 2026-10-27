@@ -22,8 +22,20 @@ MatchCaseAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 	never runs for a case whose pattern failed, and so a guard sees the
 	bindings the pattern just made."
 
-	| test |
+	| test captured |
 	test := pattern ___emitIRMatchTestOn___: aBuilder subject: subjLeaf.
+	"The commit of the pending captures, as printMatchTestOn:subject:depth:
+	makes it."
+	captured := OrderedCollection new.
+	pattern ___captureNodesInto___: captured.
+	captured isEmpty ifFalse: [
+		test := aBuilder andValue: test then: [
+			captured do: [:each |
+				aBuilder add: (self ___emitIRMatchCaptureStore___: each
+					from: (aBuilder var: (pattern ___irPendingCaptureLeafFor___: each on: aBuilder))
+					on: aBuilder)].
+			aBuilder atNode: self.
+			aBuilder add: (aBuilder obj: true)]].
 	guard isNil ifTrue: [^ test].
 	^ aBuilder andValue: test then: [
 		aBuilder add: (aBuilder
@@ -88,15 +100,31 @@ MatchCaseAst >> pattern: newValue [
 
 { #category : 'Grail-match' }
 MatchCaseAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
-	"Pattern first, then the guard -- in that order, and short-circuited,
-	because the guard is allowed to reference names the pattern binds."
+	"Pattern first, then the commit of what it captured, then the guard -- in
+	that order, and short-circuited.  The captures wait in pending temps
+	until the whole pattern has matched (MatchAst >>
+	___pendingCaptureTempFor___:), and are bound before the guard runs,
+	because the guard may reference them and they stay bound if it fails, as
+	in CPython (Python/codegen.c:6405-6419)."
 
-	guard isNil ifTrue: [
+	| captured |
+	captured := OrderedCollection new.
+	pattern ___captureNodesInto___: captured.
+	(guard isNil and: [captured isEmpty]) ifTrue: [
 		^ pattern printMatchTestOn: aStream subject: aName depth: anInteger].
 	aStream nextPutAll: '('.
+	captured isEmpty ifFalse: [aStream nextPutAll: '('].
 	pattern printMatchTestOn: aStream subject: aName depth: anInteger.
-	aStream nextPutAll: ' and: ['.
-	guard printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' ___isTruthy___])'
+	captured isEmpty ifFalse: [
+		aStream nextPutAll: ' and: ['.
+		captured do: [:each |
+			self emitNameStoreOn: aStream target: each rhs: (pattern ___pendingCaptureTempFor___: each).
+			aStream nextPutAll: '. '].
+		aStream nextPutAll: 'true])'].
+	guard isNil ifFalse: [
+		aStream nextPutAll: ' and: ['.
+		guard printSmalltalkWithParenthesisOn: aStream.
+		aStream nextPutAll: ' ___isTruthy___]'].
+	aStream nextPutAll: ')'
 
 ]

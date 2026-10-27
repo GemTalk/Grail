@@ -26,6 +26,12 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-match' }
+MatchClassAst >> ___captureNodesInto___: aCollection [
+	patterns , kwdPatterns do: [:each | each ___captureNodesInto___: aCollection]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchClassAst >> ___emitIRClassFrom___: i subject: subjLeaf on: aBuilder [
 	"Sub-pattern i, counting the positional ones first and then the keyword
