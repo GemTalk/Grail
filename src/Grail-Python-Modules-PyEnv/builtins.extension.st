@@ -555,7 +555,16 @@ builtins >> ___astTreeFor___: aSource mode: aMode optimized: wantOptimized level
 	the tree."
 
 	| tree astMod |
-	tree := (ModuleAst @env0:parseSource: aSource) @env0:___asPythonAst___.
+	"THE TREE IS THE SOURCE'S, NOT THE REWRITE'S.  A generic def, class or
+	type alias is rewritten in the token stream into the annotation scope
+	CPython's compiler builds (PythonParser >> ___rewriteTypeParamStatement___),
+	which is how Grail compiles it -- but ast.parse answers what CPython's
+	PARSER answers, a FunctionDef / ClassDef / TypeAlias carrying its
+	type_params.  The flag rides the session for the parse, as
+	#GrailCompileFilename does for compile()."
+	tree := [SessionTemps @env0:current @env0:at: #'GrailParsingForAst' put: true.
+		(ModuleAst @env0:parseSource: aSource) @env0:___asPythonAst___]
+			@env0:ensure: [SessionTemps @env0:current @env0:removeKey: #'GrailParsingForAst' ifAbsent: [nil]].
 	tree @env0:isNil ifTrue: [
 		^ TypeError ___signal___: 'compile(): cannot build an AST for this source'].
 	"THE TREE REMEMBERS ITS SOURCE.  ``compile(ast.parse(src), f, mode)'' has to
