@@ -1023,10 +1023,11 @@ complex >> __format__: formatSpec [
 	parts are formatted with the type/precision only and padding is applied once
 	at the end."
 
-	| b p type parts fill align width body |
-	(formatSpec @env0:isNil or: [formatSpec @env0:isEmpty]) ifTrue: [^ self __str__].
+	| b spec p type parts fill align width body |
 	b := builtins instance.
-	p := b ___parseFormatSpec___: formatSpec typeName: 'complex'.
+	spec := b ___formatSpecArgument___: formatSpec.
+	spec @env0:isEmpty ifTrue: [^ self __str__].
+	p := b ___parseFormatSpec___: spec typeName: 'complex'.
 	fill := p @env0:at: 1.
 	align := p @env0:at: 2.
 	width := p @env0:at: 5.

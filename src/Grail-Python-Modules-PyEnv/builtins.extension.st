@@ -1603,9 +1603,13 @@ builtins >> ___formatFloatValue___: value parsed: p [
 				precision: (precision == nil ifTrue: [6] ifFalse: [precision])
 				upper: type @env0:= $E]
 		ifFalse: [
-			"g / G / bare precision / bare float."
+			"g / G / bare precision / bare float.  A bare float is repr()'s text,
+			as CPython's format_float_short in 'r' mode makes it: GemStone's
+			printString writes the exponent without its sign or second digit, so
+			``format(1.25e200, '+')'' was '+1.25e200' and ``format(1e16, '')''
+			'1e16' (test_types test_float__format__)."
 			(type == nil and: [precision == nil]) ifTrue: [
-				digits := a @env0:printString]
+				digits := a __repr__ @env0:asString]
 			ifFalse: [
 				precision == nil ifTrue: [precision := 6].
 				precision @env0:= 0 ifTrue: [precision := 1].
@@ -1627,11 +1631,12 @@ builtins >> ___formatFloatValue___: value parsed: p [
 					ifFalse: [
 						digits := self ___sciDigitsFromParts___: sciParts upper: type @env0:= $G.
 						alt ifFalse: [digits := self ___stripTrailingZeros___: digits]]]]].
-		digits := digits @env0:, suffix.
 		"'#' also forces a decimal point even with zero fraction digits
 		('%#.0f' of 0 -> '0.', '%#.0e' of 1 -> '1.e+00', '%#.0g' of 2 ->
 		'2.') -- insert it right before any exponent marker (or at the
-		very end for f/F/plain g without one) when not already present."
+		very end for f/F/plain g without one) when not already present.
+		BEFORE the ``%'' suffix, which follows the point: ``'#.0%''' of 1.0
+		is '100.%', not '100%.' (test_types test_float__format__)."
 		(alt @env0:and: [(digits @env0:includes: $.) @env0:not]) ifTrue: [
 			| ePos2 |
 			ePos2 := 0.
@@ -1640,7 +1645,8 @@ builtins >> ___formatFloatValue___: value parsed: p [
 			digits := ePos2 @env0:= 0
 				ifTrue: [digits @env0:, '.']
 				ifFalse: [(digits @env0:copyFrom: 1 to: ePos2 @env0:- 1) @env0:, '.'
-					@env0:, (digits @env0:copyFrom: ePos2 to: digits @env0:size)]]].
+					@env0:, (digits @env0:copyFrom: ePos2 to: digits @env0:size)]].
+		digits := digits @env0:, suffix].
 	"PEP 682: with ``z'', a value that ROUNDS to zero loses its minus sign, so
 	``f'{-0.001:z.2f}''' is ``0.00'' while ``f'{-0.001:z.2e}''' keeps ``-1.00e-03''
 	because that one does NOT round to zero.  Testing the produced DIGITS rather
@@ -1794,6 +1800,22 @@ builtins >> ___formatPadBody___: body fill: fill align: align width: width signL
 ]
 
 { #category : 'Grail-Format Spec Engine' }
+builtins >> ___formatSpecArgument___: aSpec [
+	"The spec a built-in __format__ was handed, as the str it must be: CPython
+	refuses anything else with ``__format__() argument must be str, not X''.
+	Unchecked, ``(3).__format__(None)'' sent #isEmpty to None -- an
+	uncatchable Smalltalk error (test_types test_int__format__).  nil is
+	Grail's own spelling of no spec, from callers that have none."
+
+	aSpec == nil ifTrue: [^ ''].
+	(aSpec @env0:isKindOf: CharacterCollection) ifTrue: [^ aSpec].
+	(aSpec @env0:isKindOf: AbstractPyStr) ifTrue: [^ aSpec @env0:___strValue___].
+	^ TypeError ___signal___: '__format__() argument must be str, not '
+		@env0:, (self ___pyArgTypeName___: aSpec)
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
 builtins >> ___formatStrValue___: value parsed: p [
 	"Format a string per a parsed spec: optional .precision truncation,
 	then fill/align/width.  Default alignment is left."
@@ -1826,9 +1848,10 @@ builtins >> ___formatValue___: value spec: spec [
 	"Shared entry point behind int/float/str __format__.  Empty spec
 	is str(value); otherwise parse once and dispatch by type."
 
-	| p |
-	(spec == nil or: [spec @env0:isEmpty]) ifTrue: [^ value __str__].
-	p := self ___parseFormatSpec___: spec
+	| text p |
+	text := self ___formatSpecArgument___: spec.
+	text @env0:isEmpty ifTrue: [^ value __str__].
+	p := self ___parseFormatSpec___: text
 		typeName: (self ___pyTypeNameOf___: value).
 	(value isKindOf: Float) ifTrue: [
 		^ self ___formatFloatValue___: value parsed: p].
@@ -3366,7 +3389,7 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 		fill := $0.
 		i := i @env0:+ 1].
 	[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
-		width := (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
+		width := self ___specInteger___: (width @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
 		i := i @env0:+ 1].
 	(i @env0:<= n and: [#($, $_) @env0:includes: (spec @env0:at: i)]) ifTrue: [
 		grouping := spec @env0:at: i. i := i @env0:+ 1.
@@ -3382,7 +3405,7 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 		((i @env0:<= n) and: [(spec @env0:at: i) @env0:isDigit]) ifTrue: [
 			precision := 0.
 			[i @env0:<= n and: [(spec @env0:at: i) @env0:isDigit]] @env0:whileTrue: [
-				precision := (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
+				precision := self ___specInteger___: (precision @env0:* 10) @env0:+ (spec @env0:at: i) @env0:digitValue.
 				i := i @env0:+ 1].
 			"CPython stores the precision in a C int and rejects anything wider;
 			Grail's is an arbitrary-precision Integer, so ``format(1.2, '.%df' %
@@ -4586,6 +4609,21 @@ builtins >> ___sourceTextFor___: source what: aName [
 	str @env0:isNil ifTrue: [
 		^ self ___signalNonUtf8Source___: bytes].
 	^ self ___rejectNulBytesIn___: str @env0:asString
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
+builtins >> ___specInteger___: anInteger [
+	"A format spec's width or precision so far, refused as CPython's
+	get_integer refuses it (Python/formatter_unicode.c:61) once it passes a C
+	Py_ssize_t.  Grail's is an arbitrary-precision Integer: unchecked, a width
+	of ten thousand digits went on to pad by a LargeInteger and died in
+	Smalltalk with an uncatchable OutOfRange (test_types
+	test_format_spec_errors)."
+
+	anInteger @env0:> 9223372036854775807 ifTrue: [
+		^ ValueError ___signal___: 'Too many decimal digits in format string'].
+	^ anInteger
 
 ]
 
