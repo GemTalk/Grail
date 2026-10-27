@@ -43,17 +43,23 @@ FunctionDefAst >> ___allKeywordOnlyNames___ [
 
 { #category : 'Grail-code generation' }
 FunctionDefAst >> ___annotatedArgs___ [
-	"Every ArgAst across posonly/regular/kwonly params plus *vararg and
-	**kwarg, in declaration order, that carries an annotation.  Used to
-	build __annotations__ (CPython includes only annotated params)."
+	"Every ArgAst that carries an annotation, in the order CPython's
+	__annotate__ lists them (Python/codegen.c:1086-1104): the regular
+	parameters, THEN the positional-only ones, then *vararg, the keyword-only
+	ones and **kwarg -- so ``def f(a: int, /, b: str, *r: float, c: bytes)''
+	has __annotations__ keys b, a, r, c.  Used to build __annotations__
+	(CPython includes only annotated params).  The keyword-only parameters
+	used to come before *vararg."
 
 	| result |
 	result := OrderedCollection new.
 	args ifNil: [^ result].
-	(args posonlyargs, args args, args kwonlyargs) do: [:a |
+	(args args , args posonlyargs) do: [:a |
 		a annotation ifNotNil: [result add: a]].
 	(args vararg notNil and: [args vararg annotation notNil])
 		ifTrue: [result add: args vararg].
+	args kwonlyargs do: [:a |
+		a annotation ifNotNil: [result add: a]].
 	(args kwarg notNil and: [args kwarg annotation notNil])
 		ifTrue: [result add: args kwarg].
 	^ result
