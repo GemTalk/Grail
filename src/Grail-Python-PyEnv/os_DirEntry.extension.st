@@ -1,5 +1,16 @@
 Extension { #name : 'os_DirEntry' }
 
+{ #category : 'Grail-Introspection' }
+os_DirEntry >> __class_getitem__: item [
+	"``os.DirEntry[int]'' -- a types.GenericAlias, as CPython's os.DirEntry
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Filesystem' }
 os_DirEntry >> __fspath__ [
 	"DirEntry is path-like (PEP 519), so it can be passed straight to open()

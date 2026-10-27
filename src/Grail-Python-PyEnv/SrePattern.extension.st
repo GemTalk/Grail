@@ -276,6 +276,17 @@ SrePattern >> ___subWithExpansion___: repl in: aString count: count subn: return
 
 ]
 
+{ #category : 'Grail-Introspection' }
+SrePattern >> __class_getitem__: item [
+	"``re.Pattern[int]'' -- a types.GenericAlias, as CPython's re.Pattern
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Copy Protocol' }
 SrePattern >> __copy__ [
 	"CPython's Pattern.__copy__: a compiled pattern is IMMUTABLE and shared,

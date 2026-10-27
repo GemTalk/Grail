@@ -243,6 +243,9 @@ class _AssertRaisesContext:
                     + str(exc_value) + "'")
         return True
 
+    # CPython's (Lib/unittest/case.py:289).
+    __class_getitem__ = classmethod(__import__('types').GenericAlias)
+
 
 # ---- subTest context manager ---------------------------------------------
 

@@ -395,6 +395,17 @@ PythonCoroutine >> __await__ [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PythonCoroutine >> __class_getitem__: item [
+	"``coroutine[int]'' -- a types.GenericAlias, as CPython's coroutine
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Coroutine Protocol' }
 PythonCoroutine >> __name__ [
 	"The coroutine's own __name__ (a per-object value, set at call time and

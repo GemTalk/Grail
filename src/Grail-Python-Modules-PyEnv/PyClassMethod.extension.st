@@ -90,6 +90,17 @@ PyClassMethod >> __annotations__ [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PyClassMethod >> __class_getitem__: item [
+	"``classmethod[int]'' -- a types.GenericAlias, as CPython's classmethod
+	answers through its own __class_getitem__.  Grail answered the class
+	unchanged.  Run with the CLASS as receiver by Metaclass3 >>
+	___grailClassGetitemDispatch___:, as set's is."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Attribute Access' }
 PyClassMethod >> __doc__ [
 	^ self ___wrappedMeta___: #'__doc__'
