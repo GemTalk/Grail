@@ -79,7 +79,7 @@ PythonParser class >> ___fillSyntaxErrorLocation___: anError source: aSource at:
 	fixed individually.
 
 	IDEMPOTENT, and that is what makes it safe to layer over the sites that DO
-	report a location: ___signalGlobalSyntaxError___ builds its own, and a
+	report a location: ___signalDeclarationSyntaxError___ builds its own, and a
 	present lineno is left alone.  So a site can be given a precise location
 	later without this having to change.
 
@@ -241,7 +241,7 @@ PythonParser class >> ___sourceLocationIn___: aSource at: aPosition [
 	newline.  For ``    return x!'' CPython reports offset 13 -- the ``!'' at
 	column 13 of the indented line, not column 9 of the stripped one.
 
-	The existing ___signalGlobalSyntaxError___ reported the raw source INDEX as
+	The existing ___signalDeclarationSyntaxError___ reported the raw source INDEX as
 	the offset, with a comment that a real column ``would need a line-start
 	table''.  This is that table, computed on demand: a syntax error is raised
 	at most once per parse, so one scan of the source costs nothing worth
@@ -338,6 +338,27 @@ PythonParser >> ___canStartExpression___: aTok [
 
 ]
 
+{ #category : 'Grail-parsing - simple statements' }
+PythonParser >> ___checkAnnotatedNameLegal___: aName at: aToken [
+	"The other order of ___checkDeclarationLegal___:kind:at:'s annotation
+	test: a SIMPLE annotation of a name this function already declared
+	``global'' or ``nonlocal'' is refused with the same message
+	(Python/symtable.c:2015-2023)."
+
+	| declared |
+	self ___inFunctionScope___ ifFalse: [^ self].
+	declared := self ___mangle___: aName.
+	((globalStack last) includes: declared) ifTrue: [
+		^ self ___signalDeclarationSyntaxError___: 'annotated name ''' , aName asString
+			, ''' can''t be global' at: aToken
+	].
+	((nonlocalStack last) includes: declared) ifTrue: [
+		^ self ___signalDeclarationSyntaxError___: 'annotated name ''' , aName asString
+			, ''' can''t be nonlocal' at: aToken
+	]
+
+]
+
 { #category : 'Grail-target validation' }
 PythonParser >> ___checkAnnotationTarget___: expr [
 	"CPython's invalid_assignment rules for an annotated target: only a name,
@@ -413,6 +434,50 @@ PythonParser >> ___checkComprehension___: node generators: gens [
 
 ]
 
+{ #category : 'Grail-parsing - simple statements' }
+PythonParser >> ___checkDeclarationLegal___: aName kind: aKind at: aToken [
+	"CPython's symtable rejects ``global x'' -- and ``nonlocal x'', with the
+	same four messages naming that keyword -- when x is already a parameter
+	of, read in, annotated in or bound in THIS scope, testing in that order
+	(Python/symtable.c:2137-2147, 2170-2180).  Grail accepted all four
+	silently, so code CPython refuses to compile ran here with the name
+	quietly meaning something else; ``nonlocal'' was not checked at all.
+
+	Only inside a FUNCTION scope (___inFunctionScope___): at module level
+	``global x'' is legal and a no-op, and a CLASS body permits it too
+	(``class C: global x'' rebinds the module's x, which Grail already relies
+	on)."
+
+	self ___inFunctionScope___ ifFalse: [^ self].
+	((paramStack last) includes: aName) ifTrue: [
+		^ self ___signalDeclarationSyntaxError___: 'name ''' , aName asString
+			, ''' is parameter and ' , aKind at: aToken
+	].
+	"ownReadStack, NOT readStack: the latter carries free names propagated
+	OUT of nested scopes, so a read inside a nested def counted as a read
+	here.  That rejected test_builtin's ``global all, any, tuple'', where
+	every use of ``all'' is inside a nested def -- CPython compiles it,
+	and a whole module failed to import.
+
+	The check also skips comprehension TARGETS, and only here: a genuine
+	assignment puts the name in writeStack, which is tested below, so
+	skipping cannot hide a real ``assigned to before''."
+	(((ownReadStack last) includes: aName)
+		and: [((compTargetStack last) includes: aName) @env0:not]) ifTrue: [
+		^ self ___signalDeclarationSyntaxError___: 'name ''' , aName asString
+			, ''' is used prior to ' , aKind , ' declaration' at: aToken
+	].
+	((annotatedStack last) includes: aName) ifTrue: [
+		^ self ___signalDeclarationSyntaxError___: 'annotated name ''' , aName asString
+			, ''' can''t be ' , aKind at: aToken
+	].
+	((writeStack last) includes: aName) ifTrue: [
+		^ self ___signalDeclarationSyntaxError___: 'name ''' , aName asString
+			, ''' is assigned to before ' , aKind , ' declaration' at: aToken
+	]
+
+]
+
 { #category : 'Grail-target validation' }
 PythonParser >> ___checkFirstAssignTarget___: first [
 	"Raise CPython's SyntaxError for a statement's FIRST assignment target,
@@ -447,51 +512,6 @@ PythonParser >> ___checkFirstAssignTarget___: first [
 	bad isNil ifFalse: [
 		^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: bad)
 			node: bad]
-
-]
-
-{ #category : 'Grail-parsing - simple statements' }
-PythonParser >> ___checkGlobalDeclarationLegal___: aName at: aToken [
-	"CPython's symtable rejects ``global x'' when x is already a parameter
-	of, bound in, or read in THIS scope -- with four distinct messages.
-	Grail accepted all four silently, so code CPython refuses to compile
-	ran here with the name quietly meaning something else.
-
-	Only inside a FUNCTION scope: at module level ``global x'' is legal
-	and a no-op, and a CLASS body permits it too (``class C: global x''
-	rebinds the module's x, which Grail already relies on).  The scope
-	depth test is what keeps this from rejecting either."
-
-	| depth |
-	depth := variableStack size.
-	depth @env0:<= 1 ifTrue: [^ self].
-	classNesting @env0:> 0 ifTrue: [^ self].
-	((paramStack last) includes: aName) ifTrue: [
-		^ self ___signalGlobalSyntaxError___: 'name ''' , aName asString
-			, ''' is parameter and global' at: aToken
-	].
-	((annotatedStack last) includes: aName) ifTrue: [
-		^ self ___signalGlobalSyntaxError___: 'annotated name ''' , aName asString
-			, ''' can''t be global' at: aToken
-	].
-	((writeStack last) includes: aName) ifTrue: [
-		^ self ___signalGlobalSyntaxError___: 'name ''' , aName asString
-			, ''' is assigned to before global declaration' at: aToken
-	].
-	"ownReadStack, NOT readStack: the latter carries free names propagated
-	OUT of nested scopes, so a read inside a nested def counted as a read
-	here.  That rejected test_builtin's ``global all, any, tuple'', where
-	every use of ``all'' is inside a nested def -- CPython compiles it,
-	and a whole module failed to import.
-
-	The check also skips comprehension TARGETS, and only here: a genuine
-	assignment puts the name in writeStack, which is tested above, so
-	skipping cannot hide a real ``assigned to before''."
-	(((ownReadStack last) includes: aName)
-		and: [((compTargetStack last) includes: aName) @env0:not]) ifTrue: [
-		^ self ___signalGlobalSyntaxError___: 'name ''' , aName asString
-			, ''' is used prior to global declaration' at: aToken
-	]
 
 ]
 
@@ -1146,6 +1166,16 @@ PythonParser >> ___indexOfMatchingDedent___: indentIndex [
 			depth := depth - 1.
 			depth = 0 ifTrue: [^ k]]].
 	^ nil
+
+]
+
+{ #category : 'Grail-parsing - simple statements' }
+PythonParser >> ___inFunctionScope___ [
+	"Whether the statement being parsed is in a function's own scope: neither
+	the module's (variableStack holds one scope there) nor a class body's
+	(classNesting, which every def body zeroes)."
+
+	^ variableStack size @env0:> 1 and: [classNesting @env0:= 0]
 
 ]
 
@@ -1866,6 +1896,16 @@ PythonParser >> ___reportForTargetFrom___: aPosition comprehension: aBoolean [
 
 ]
 
+{ #category : 'Grail-scope tracking' }
+PythonParser >> ___retractTargetRead___: aNameAst [
+	"aNameAst was parsed as a load, and counted as a read of this scope, before
+	its statement made it a target: take that one mention back (see
+	ownReadStack in pushScope)."
+
+	ownReadStack last remove: aNameAst id ifAbsent: []
+
+]
+
 { #category : 'Grail-parsing - type params' }
 PythonParser >> ___rewriteTypeParamStatement___ [
 	"PEP 695 type parameters on a CLASS or a TYPE ALIAS, by rewriting the tokens
@@ -2084,9 +2124,10 @@ PythonParser >> ___segmentsFrom: first to: last [
 ]
 
 { #category : 'Grail-parsing - simple statements' }
-PythonParser >> ___signalGlobalSyntaxError___: aMessage at: aToken [
+PythonParser >> ___signalDeclarationSyntaxError___: aMessage at: aToken [
 	"A declaration CPython's symbol table refuses (``name 'x' is parameter and
-	global''), located as it locates it: the whole global statement."
+	global''), located as it locates it: the whole global, nonlocal or
+	annotated statement."
 
 	| i j |
 	i := self ___tokenIndexAt___: aToken position.
@@ -4012,17 +4053,27 @@ PythonParser >> parseExpressionOrAssignment [
 				value := self ___parseStarExpressionsOrYield___.
 			].
 			self ___checkAnnotationTarget___: expr.
-			self setStoreCtx: expr.
 			"``(x): int = 1'' is NOT simple: CPython evaluates the annotation
 			and binds x, but records nothing in __annotations__.  The parens
 			are gone from the tree, so the statement's first token says it."
 			simple := ((expr isKindOf: NameAst) and: [(startTok isOp: '(') not])
 				ifTrue: [1] ifFalse: [0].
-			"Remember the ANNOTATED name: ``x: int'' with no value binds
-			nothing, so it never reaches the write set, yet it still makes a
-			later ``global x'' an error -- with its own wording."
-			(expr isKindOf: NameAst)
-				ifTrue: [annotatedStack last add: expr id asSymbol].
+			"A Name target is BOUND only when the annotation is simple or there
+			is a value (Python/symtable.c:2024-2034), so ``(x): int'' alone
+			binds nothing and a later read of x is the enclosing scope's -- a
+			NameError, not an UnboundLocalError, for a name bound nowhere."
+			((expr isKindOf: NameAst) and: [simple = 0 and: [value isNil]])
+				ifTrue: [
+					self ___retractTargetRead___: expr.
+					expr ctx: self storeCtx]
+				ifFalse: [self setStoreCtx: expr].
+			"Remember the ANNOTATED name: it makes a later ``global x'' or
+			``nonlocal x'' an error with its own wording, and an earlier one
+			makes this statement one.  Only a SIMPLE annotation counts, as
+			only it sets the symtable's DEF_ANNOT."
+			simple = 1 ifTrue: [
+				self ___checkAnnotatedNameLegal___: expr id asSymbol at: startTok.
+				annotatedStack last add: expr id asSymbol].
 			^AnnAssignAst new
 				target: expr;
 				annotation: annotation;
@@ -4812,7 +4863,7 @@ PythonParser >> parseGlobal [
 	 under the raw spelling and a walrus writing the pre-mangled one reached a
 	 different variable."
 	names := names collect: [:n | self ___mangle___: n].
-	names do: [:n | self ___checkGlobalDeclarationLegal___: n at: tok].
+	names do: [:n | self ___checkDeclarationLegal___: n kind: 'global' at: tok].
 	names do: [:n |
 		globalStack last add: n.
 		variableStack first add: n.
@@ -5584,6 +5635,7 @@ PythonParser >> parseNonlocal [
 		names add: self advance value asSymbol.
 	].
 	names := names collect: [:n | self ___mangle___: n].
+	names do: [:n | self ___checkDeclarationLegal___: n kind: 'nonlocal' at: tok].
 	names do: [:n | nonlocalStack last add: n].
 	^NonlocalAst new
 		names: names;
@@ -6703,8 +6755,14 @@ PythonParser >> pushScope [
 	scope's readStack so closures and locals() work.  That makes readStack
 	the TRANSITIVE read set, and using it to answer ``was this name used
 	before the global declaration?'' reports reads that happened inside a
-	nested def -- a different scope, and legal."
-	ownReadStack add: IdentitySet new.
+	nested def -- a different scope, and legal.
+
+	A BAG, one occurrence per mention, because a store target is parsed as a
+	load and counted here before setStoreCtx: retargets it; the retarget
+	takes its occurrence back (___retractTargetRead___:), so what is left is
+	CPython's USE -- loads only (Python/symtable.c, Name_kind).  ``x = 2;
+	global x'' is therefore ``assigned to before'', not ``used prior''."
+	ownReadStack add: IdentityBag new.
 
 ]
 
@@ -6734,7 +6792,9 @@ PythonParser >> setDelCtx: anExpr [
 	see FunctionDefAst >> deletedNamesInSubtree."
 
 	| varNames index |
-	(anExpr isKindOf: NameAst) ifTrue: [self declareWrite: anExpr id asSymbol].
+	(anExpr isKindOf: NameAst) ifTrue: [
+		self ___retractTargetRead___: anExpr.
+		self declareWrite: anExpr id asSymbol].
 	varNames := anExpr class allInstVarNames.
 	index := varNames indexOf: #ctx.
 	index > 0 ifTrue: [anExpr instVarAt: index put: self delCtx].
@@ -6770,6 +6830,7 @@ PythonParser >> setStoreCtx: anExpr [
 	context (assignment target, for-loop target, augmented-assign
 	target, walrus, except-as, with-as, ...)."
 	(anExpr isKindOf: NameAst) ifTrue: [
+		self ___retractTargetRead___: anExpr.
 		self declareWrite: anExpr id.
 	].
 	"Recurse into tuples and lists (use instVarAt for elts)"
@@ -6905,7 +6966,7 @@ PythonParser >> source: aString [
 	compTargetStack := Array new.
 	compTargetStack add: IdentitySet new.
 	ownReadStack := Array new.
-	ownReadStack add: IdentitySet new.
+	ownReadStack add: IdentityBag new.
 	annotatedStack := Array new.
 	annotatedStack add: IdentitySet new.
 	classNesting := 0.
