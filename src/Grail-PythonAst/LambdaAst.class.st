@@ -354,6 +354,12 @@ LambdaAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+LambdaAst >> ___inferredTypeName___ [
+	^ 'function'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 LambdaAst >> ___irBodyHasYieldOrAwait___: node [
 	node isNil ifTrue: [^ false].

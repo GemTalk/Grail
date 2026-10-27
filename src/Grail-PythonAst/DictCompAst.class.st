@@ -61,6 +61,12 @@ DictCompAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-compile warnings' }
+DictCompAst >> ___inferredTypeName___ [
+	^ 'dict'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 DictCompAst >> ___irChildLocals___: localSet [
 	^ ComprehensionAst ___irScopeLocals___: localSet generators: generators

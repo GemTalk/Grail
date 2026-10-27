@@ -31,6 +31,31 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-compile warnings' }
+SubscriptAst >> ___compileWarningsDo___: aBlock [
+	"A literal subscripted where a comma was probably meant, for a load only --
+	CPython's check_subscripter, then check_index for a sequence literal
+	indexed by a literal that is no integer and no slice."
+
+	| valueType indexType |
+	(ctx isKindOf: LoadAst) ifFalse: [^ self].
+	valueType := value ___inferredTypeName___.
+	valueType isNil ifTrue: [^ self].
+	(#('NoneType' 'ellipsis' 'int' 'bool' 'float' 'complex' 'set' 'frozenset' 'generator' 'function' 'string.templatelib.Template')
+		includes: valueType) ifTrue: [
+			aBlock
+				value: '''' , valueType , ''' object is not subscriptable; perhaps you missed a comma?'
+				value: value].
+	indexType := slice ___inferredTypeName___.
+	(indexType notNil
+		and: [(#('int' 'bool') includes: indexType) not
+		and: [#('str' 'bytes' 'tuple' 'list') includes: valueType]]) ifTrue: [
+			aBlock
+				value: valueType , ' indices must be integers or slices, not ' , indexType , '; perhaps you missed a comma?'
+				value: value]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 SubscriptAst >> ___emitIRValueOn___: aBuilder [
 	"(value) __getitem__: (index); for a slice load, printSmalltalkOn:'s

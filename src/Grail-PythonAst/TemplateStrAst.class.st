@@ -29,6 +29,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-compile warnings' }
+TemplateStrAst >> ___compileWarningsDo___: aBlock [
+	"None of its own: the call this node is built as is the parser's, not the
+	source's."
+
+]
+
 { #category : 'Grail-annotations' }
 TemplateStrAst >> ___doubledBraces___: aString [
 	| out |
@@ -82,6 +89,12 @@ TemplateStrAst >> ___evaluatedSpecSource___: aSpec [
 				out nextPut: ch.
 				pos := pos + 1]].
 	^ out contents
+
+]
+
+{ #category : 'Grail-compile warnings' }
+TemplateStrAst >> ___inferredTypeName___ [
+	^ 'string.templatelib.Template'
 
 ]
 
