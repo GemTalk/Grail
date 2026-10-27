@@ -30,6 +30,10 @@ home := symList objectNamed: #''GrailSessionMethods''.
 	System myUserProfile insertDictionary: home at: 1.
 	GsPackage installIn: home].
 policy homeSymbolDict: home.
+"An engine upgrade (GemStone''s upgradeImage) DISABLES every GsPackage in DataCurator''s
+ symbol list, and a disabled package''s methods are never installed at login: enabling
+ the policy alone leaves every kernel extension missing from the next session."
+(home at: GsPackage globalName otherwise: nil) ifNotNil: [:pkg | pkg enabled ifFalse: [pkg enable]].
 policy externalSymbolList: { Globals }.
 policy enable.
 System commit.

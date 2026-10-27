@@ -47,7 +47,16 @@
 # Rowan from into the live database, data and all, between installing n and m:
 # whether an existing database can get a newer Rowan without being recreated.
 # GRAIL_UPGRADE_EXTENT names another extent to start from (default
-# $GEMSTONE/bin/extent0.rowan3.dbf) -- one with a newer Rowan loaded, say. Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
+# $GEMSTONE/bin/extent0.rowan3.dbf) -- one with a newer Rowan loaded, say.
+#
+# GRAIL_UPGRADE_FROM_PRODUCT names an OLDER product (e.g. a 4.0.0.a5 tree) to make
+# every case an engine upgrade as well: the stone starts from that product's
+# extent0.rowan3.dbf, Grail n is installed and the app writes under it, and then
+# scripts/upgrade_engine.sh moves the database to $GEMSTONE before Grail m is
+# installed (docs/Upgrading_GemStone.md). That needs GEMSTONE_SRC, a checkout of
+# GemTalk's gemstone repository, for the upgradeImage script 4.0 does not ship.
+#
+# Starts and stops its own stone (GRAIL_UPGRADE_STONE, default
 # grail_upgrade); touches no other stone. Work goes in GRAIL_UPGRADE_DIR (default
 # out/upgrade), removed at the end unless --keep or a case failed.
 set -u
@@ -62,7 +71,14 @@ fi
 export PATH="$GEMSTONE/bin:$PATH"
 
 STONE=${GRAIL_UPGRADE_STONE:-grail_upgrade}
-EXTENT=${GRAIL_UPGRADE_EXTENT:-$GEMSTONE/bin/extent0.rowan3.dbf}
+FROM_PRODUCT=${GRAIL_UPGRADE_FROM_PRODUCT:-}
+if [ -n "$FROM_PRODUCT" ]; then
+    : "${GEMSTONE_SRC:?GRAIL_UPGRADE_FROM_PRODUCT needs GEMSTONE_SRC, a gemstone repository checkout}"
+    FROM_VERSION=$(awk 'NR==2{print $1; exit}' "$FROM_PRODUCT/version.txt")
+fi
+N_PRODUCT=${FROM_PRODUCT:-$GEMSTONE}
+EXTENT=${GRAIL_UPGRADE_EXTENT:-$N_PRODUCT/bin/extent0.rowan3.dbf}
+PRODUCT=$N_PRODUCT     # the product the stone runs under now
 WORK=${GRAIL_UPGRADE_DIR:-$PROJECT_ROOT/out/upgrade}
 KEEP=0
 CASES=()
@@ -75,21 +91,21 @@ for arg in "$@"; do
 done
 [ ${#CASES[@]} -eq 0 ] && CASES=(noop synthetic)
 
-if [ -f "$GEMSTONE/sys/gemstone.key" ]; then
-    KEYFILE="$GEMSTONE/sys/gemstone.key"
-else
-    KEYFILE="$GEMSTONE/sys/community.starter.key"
-fi
+keyfile() {          # keyfile <product>
+    if [ -f "$1/sys/gemstone.key" ]; then echo "$1/sys/gemstone.key"
+    else echo "$1/sys/community.starter.key"; fi
+}
 
 log() { echo "upgrade: $*"; }
 
 stop_stone() {
-    stopstone "$STONE" SystemUser swordfish -i > /dev/null 2>&1
+    GEMSTONE=$PRODUCT "$PRODUCT/bin/stopstone" "$STONE" SystemUser swordfish -i > /dev/null 2>&1
 }
 
 fresh_stone() {     # a new stone from $EXTENT
     local d=$WORK/stone
     stop_stone
+    PRODUCT=$N_PRODUCT
     rm -rf "$d"
     mkdir -p "$d"
     cp "$EXTENT" "$d/extent0.dbf"
@@ -98,10 +114,10 @@ fresh_stone() {     # a new stone from $EXTENT
 DBF_EXTENT_NAMES = $d/extent0.dbf;
 STN_TRAN_LOG_DIRECTORIES = $d/, $d/;
 STN_TRAN_LOG_SIZES = 100, 100;
-KEYFILE = $KEYFILE;
+KEYFILE = $(keyfile "$PRODUCT");
 EOF
-    startstone -e "$d/stone.conf" -l "$d/stone.log" "$STONE" > "$d/startstone.out" 2>&1 \
-        && waitstone "$STONE" 60 > /dev/null 2>&1 \
+    GEMSTONE=$PRODUCT "$PRODUCT/bin/startstone" -e "$d/stone.conf" -l "$d/stone.log" "$STONE" > "$d/startstone.out" 2>&1 \
+        && GEMSTONE=$PRODUCT "$PRODUCT/bin/waitstone" "$STONE" 60 > /dev/null 2>&1 \
         || { echo "upgrade: startstone $STONE failed:"; tail -20 "$d/startstone.out"; return 1; }
 }
 
@@ -144,10 +160,10 @@ install_tree() {        # install_tree <tree> <log> -- install it in place, over
     find "$g" -mindepth 1 -maxdepth 1 ! -name .setenv ! -name .topazini -exec rm -rf {} +
     cp -a "$1/." "$g/"
     cat > "$g/.setenv" <<EOF
-export GEMSTONE='$GEMSTONE'
+export GEMSTONE='$PRODUCT'
 export GEMSTONE_GLOBAL_DIR='$GEMSTONE_GLOBAL_DIR'
 export GEMSTONE_NAME='$STONE'
-export PATH='$PATH'
+export PATH='$PRODUCT/bin:$PATH'
 EOF
     printf 'set user DataCurator pass swordfish gemstone %s\n' "$STONE" > "$g/.topazini"
     # The install's own topaz logs (install.out, redeployModules.out, ...) beside
@@ -164,7 +180,9 @@ EOF
 }
 
 in_grail() {            # in_grail <cmd...> -- run in the installed Grail, with the app on the path
-    (cd "$WORK/grail" && PYTHONPATH="$WORK/app" "$@")
+    # Through the install's .setenv: a linked topaz must be the stone's own product.
+    # shellcheck disable=SC1091
+    (cd "$WORK/grail" && source ./.setenv && PYTHONPATH="$WORK/app" "$@")
 }
 
 NS_APP=grail_upgrade_ns
@@ -211,6 +229,15 @@ run_case() {            # run_case <case> -- 0 if every check passed
             && grep -q 'reload_rowan: reloaded' "$d/reload-rowan.log" || {
             echo "upgrade: the Rowan reload failed; the end of $d/reload-rowan.log:"
             tail -30 "$d/reload-rowan.log"; return 1; }
+    fi
+    if [ -n "$FROM_PRODUCT" ]; then
+        log "engine upgrade: $FROM_VERSION -> $GEMSTONE"
+        stop_stone
+        PRODUCT=$GEMSTONE
+        (GEMSTONE=$GEMSTONE "$PROJECT_ROOT/scripts/upgrade_engine.sh" "$WORK/stone/extent0.dbf" \
+            "$WORK/stone/engine" "$STONE" "$FROM_VERSION") > "$d/engine.log" 2>&1 || {
+            echo "upgrade: the engine upgrade failed; the end of $d/engine.log:"
+            tail -30 "$d/engine.log"; return 1; }
     fi
     log "install m (the upgrade)"
     install_tree "$d/m" "$d/install-m.log" || return 1

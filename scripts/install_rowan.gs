@@ -57,6 +57,24 @@ moved := OrderedCollection new.
 				ifFalse: [Transcript show: 'Removed the leftover Package class from ' , dictName]]]].
 [ project := Rowan projectFromUrl: 'file:' , grailDir , '/rowan/specs/Grail.ston' diskUrl: 'file:' , grailDir ]
 	ensure: [ moved do: [:each | each key at: #Package put: each value ] ].
+"Forget the methods an engine upgrade removed.  GemStone's upgradeImage removes every
+method of every kernel class -- Grail's session methods on them included -- and disables
+each user's GsPackagePolicy, without telling Rowan; Rowan's own upgrade repairs only the
+projects SystemUser can see, and Grail is this user's.  Rowan then takes each of those
+methods for loaded and unchanged, and the load leaves them missing.  Dropping the
+LoadedMethod of every method its audit finds missing makes the load compile it again.
+Before the load's pre-load doit enables the policy, so no stale session method answers."
+([ Rowan projectNamed: 'Grail' ] on: Error do: [:ex | "a first install" ex return: nil ])
+	ifNotNil: [:loaded | | stale |
+		stale := 0.
+		(loaded auditOn: (WriteStream on: String new)) keysAndValuesDo: [:packageName :report |
+			report keysAndValuesDo: [:className :details |
+				details do: [:detail |
+					detail reason == #missingCompiledMethod ifTrue: [
+						detail loadedMethod loadedClass removeLoadedMethod: detail loadedMethod.
+						stale := stale + 1 ] ] ] ].
+		stale > 0 ifTrue: [
+			Transcript show: 'Recompiling ' , stale printString , ' Grail methods an engine upgrade removed' ] ].
 "Migrate instances to a new version of a class: a release that changes a Grail class's shape
 (an instance variable added or removed) gets a new class version, and objects an application
 stored are instances of the old one. Rowan's default migrator leaves them there. Reached through
