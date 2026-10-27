@@ -102,6 +102,23 @@ Set >> ___asElementSet___: other [
 
 ]
 
+{ #category : 'Grail-String Representation' }
+Set >> ___elementsRepr___ [
+	"The elements' reprs joined by ``, '' -- ``repr(list(self))[1:-1]'', which
+	set_repr wraps in braces and, for any but an exact set, in the type's name.
+	Empty for an empty set."
+
+	| stream first |
+	stream := AppendStream @env0:on: (Unicode7 ___new___).
+	first := true.
+	self @env0:do: [:each |
+		first ifFalse: [stream @env0:nextPutAll: ', '].
+		stream @env0:nextPutAll: each __repr__ @env0:___reprResult___.
+		first := false].
+	^ stream @env0:contents
+
+]
+
 { #category : 'Grail-Private' }
 Set >> ___resultSetClass___ [
 	"The Python type a set OPERATION result should have.  CPython returns the
