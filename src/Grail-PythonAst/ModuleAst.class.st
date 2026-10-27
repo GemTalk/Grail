@@ -534,13 +534,32 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 	(node isKindOf: ContinueAst) ifTrue: [
 		inLoop ifFalse: [^ self ___syntaxError___: '''continue'' not properly in loop' node: node].
 		^ self].
+	"A COMPREHENSION IS A SCOPE OF ITS OWN, whose outermost iterable alone runs
+	in the enclosing one.  Everything else in it is validated under its own
+	name in place of fnSym, so a yield there is CPython's symbol-table error
+	``'yield' inside list comprehension'' -- at module level too, where the
+	enclosing scope would have said ``outside function''."
+	node ___comprehensionScopeName___ ifNotNil: [:scopeName |
+		node generators doWithIndex: [:generator :index |
+			self ___validateContext___: generator iter
+				fn: (index = 1 ifTrue: [fnSym] ifFalse: [scopeName]) loop: inLoop scopes: scopes.
+			self ___validateContext___: generator target fn: scopeName loop: inLoop scopes: scopes.
+			self ___validateContext___: generator ifs fn: scopeName loop: inLoop scopes: scopes].
+		(node isKindOf: DictCompAst)
+			ifTrue: [
+				self ___validateContext___: node key fn: scopeName loop: inLoop scopes: scopes.
+				self ___validateContext___: node value fn: scopeName loop: inLoop scopes: scopes]
+			ifFalse: [self ___validateContext___: node elt fn: scopeName loop: inLoop scopes: scopes].
+		^ self].
 	((node isKindOf: YieldAst) or: [node isKindOf: YieldFromAst]) ifTrue: [
 		(#(#module #class) includes: fnSym) ifTrue: [
 			"CPython names the form: ``'yield from' outside function''."
 			^ self ___syntaxError___: ((node isKindOf: YieldFromAst)
 					ifTrue: ['''yield from'' outside function']
 					ifFalse: ['''yield'' outside function'])
-				node: node]].
+				node: node].
+		(fnSym isKindOf: Symbol) ifFalse: [
+			^ self ___syntaxError___: '''yield'' inside ' , fnSym node: node]].
 	(node isKindOf: NonlocalAst) ifTrue: [
 		fnSym == #module ifTrue: [
 			^ self ___syntaxError___: 'nonlocal declaration not allowed at module level'

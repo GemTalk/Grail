@@ -1651,6 +1651,14 @@ PythonParser >> ___parseParenExpr___ [
 
 	(self atOp: '**') ifTrue: [
 		^ self ___syntaxError___: 'cannot use double starred expression here' at: self peek].
+	"A YIELD EXPRESSION IS A WHOLE GROUP: CPython's group is ``'(' (yield_expr
+	| named_expression) ')''', one of the few places a yield may start -- see
+	___parseStarExpressionsOrYield___.  An f-string field arrives here too,
+	parsed as ``(expr)''."
+	(self atKeyword: 'yield') ifTrue: [
+		expr := self parseYieldExpression.
+		self expect: #OP value: ')'.
+		^ expr].
 	expr := self parseStarExpression.
 	self ___checkStrayEquals___: expr.
 
@@ -1696,6 +1704,18 @@ PythonParser >> ___parseParenExpr___ [
 		self expect: #OP value: ')'.
 		^expr
 	].
+
+]
+
+{ #category : 'Grail-parsing - expressions' }
+PythonParser >> ___parseStarExpressionsOrYield___ [
+	"An assignment's right-hand side: CPython's ``yield_expr |
+	star_expressions'', for ``='', the augmented forms and an annotated
+	assignment's value.  A yield expression may start here and nowhere inside
+	an expression -- see parseAtom."
+
+	(self atKeyword: 'yield') ifTrue: [^ self parseYieldExpression].
+	^ self parseStarExpressions
 
 ]
 
@@ -3120,9 +3140,13 @@ PythonParser >> parseAtom [
 			from: tok to: self lastToken ; yourself
 	].
 
-	"Yield expression"
+	"A yield expression is no atom.  CPython's grammar admits one only as a
+	statement, as the right-hand side of an assignment, and as a whole
+	parenthesised group -- ___parseStarExpressionsOrYield___ and
+	___parseParenExpr___ take those -- so one met here is inside a tuple, a
+	call or an operator: ``1, yield 2'', ``f(yield 1)''."
 	(tok isKeyword: 'yield') ifTrue: [
-		^self parseYieldExpression
+		^ self ___invalidSyntaxAt___: tok
 	].
 
 	"Await expression"
@@ -3929,7 +3953,7 @@ PythonParser >> parseExpressionOrAssignment [
 		"CPython: augassign ~ (yield_expr | star_expressions), so
 		``t += 1, 2'' adds a tuple -- the same right-hand side as the
 		annotated form below (#1419)."
-		value := self parseStarExpressions.
+		value := self ___parseStarExpressionsOrYield___.
 		"CPython: an augmented-assignment target must be a single Name,
 		Attribute, or Subscript.  A tuple/list/starred target (``x, b += 3'')
 		is a SyntaxError, not an unpacking assignment."
@@ -3960,7 +3984,7 @@ PythonParser >> parseExpressionOrAssignment [
 			since 3.8).  A single expression made the comma a SyntaxError,
 			which was the first thing keeping pyparsing from importing (#1419)."
 			(self matchOp: '=') ifTrue: [
-				value := self parseStarExpressions.
+				value := self ___parseStarExpressionsOrYield___.
 			].
 			self ___checkAnnotationTarget___: expr.
 			self setStoreCtx: expr.
@@ -3993,7 +4017,7 @@ PythonParser >> parseExpressionOrAssignment [
 		targets add: expr.
 		[self matchOp: '='] whileTrue: [
 			| nextExpr aTok |
-			nextExpr := self parseStarExpressions.
+			nextExpr := self ___parseStarExpressionsOrYield___.
 			"Check if followed by another '=' - if so, this is another target"
 			((aTok := self peek) notNil and: [ aTok isOp: '=']) ifTrue: [
 				(nextExpr isKindOf: YieldAst) | (nextExpr isKindOf: YieldFromAst) ifTrue: [
