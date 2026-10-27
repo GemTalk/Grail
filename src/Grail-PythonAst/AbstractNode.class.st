@@ -1503,6 +1503,28 @@ AbstractNode >> ___enclosingFunctionLocalBeyondClass___: aSymbol [
 
 ]
 
+{ #category : 'Grail-other' }
+AbstractNode >> ___evaluationIsInert___ [
+	"Whether evaluating this expression can neither raise nor have an effect,
+	so WHEN it is evaluated -- before or after its neighbours in a statement --
+	cannot be observed.  A store's evaluation order turns on it (AssignAst >>
+	___storeOrderIsObservable___)."
+
+	^ false
+
+]
+
+{ #category : 'Grail-other' }
+AbstractNode >> ___evaluationIsRepeatable___ [
+	"Whether evaluating this expression twice in a row cannot be told apart
+	from evaluating it once.  An augmented assignment's receiver and index are
+	evaluated once by CPython and read twice, by the load and by the store
+	(AugAssignAst >> ___targetOperandsAreRepeatable___)."
+
+	^ self ___evaluationIsInert___
+
+]
+
 { #category : 'Grail-AST export' }
 AbstractNode >> ___fixUpPythonAst___: pyNode [
 	"Adjust the translated node where Grail keeps a field in a different form

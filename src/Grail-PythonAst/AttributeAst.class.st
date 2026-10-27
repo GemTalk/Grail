@@ -308,6 +308,14 @@ AttributeAst >> ___nameIsLocalClassName___: id [
 ]
 
 { #category : 'Grail-other' }
+AttributeAst >> ___storeOperands___ [
+	"What a store to this target evaluates before it stores, in order."
+
+	^ { value }
+
+]
+
+{ #category : 'Grail-other' }
 AttributeAst >> assertContextIsLoad [
 
 	ctx assertIsLoad.

@@ -143,6 +143,14 @@ SubscriptAst >> ___irStampChild___ [
 ]
 
 { #category : 'Grail-other' }
+SubscriptAst >> ___storeOperands___ [
+	"What a store to this target evaluates before it stores, in order."
+
+	^ { value. slice }
+
+]
+
+{ #category : 'Grail-other' }
 SubscriptAst >> assertContextIsLoad [
 
 	ctx assertIsLoad.

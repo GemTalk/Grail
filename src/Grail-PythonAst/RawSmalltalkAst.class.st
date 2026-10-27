@@ -19,6 +19,14 @@ RawSmalltalkAst class >> source: aString [
 ]
 
 { #category : 'Grail-code generation' }
+RawSmalltalkAst >> ___evaluationIsInert___ [
+	"A synthesised operand is a temp the emitter has already bound."
+
+	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
 RawSmalltalkAst >> printSmalltalkOn: aStream [
 	aStream nextPutAll: source
 
