@@ -1074,8 +1074,7 @@ importlib class >> ___c3Linearize___: aClass bases: basesArray [
 				inTail := seqs anySatisfy: [:t | (t indexOf: cand) > 1].
 				inTail ifFalse: [head := cand]]].
 		head == nil ifTrue: [
-			TypeError @env1:___signal___:
-				'Cannot create a consistent method resolution order (MRO) for bases'].
+			TypeError @env1:___signal___: (self ___mroConflictMessageFor___: seqs)].
 		result add: head.
 		seqs do: [:s |
 			(s isEmpty not and: [s first == head]) ifTrue: [s removeFirst]]].
@@ -6873,6 +6872,28 @@ importlib class >> ___moduleSpecClass___ [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___mroConflictMessageFor___: sequences [
+	"CPython's set_mro_error (Objects/typeobject.c:3209): the head of every
+	sequence still unmerged when none can be taken, each class once, in that
+	order, by its __name__ -- ``... for bases object, Generic''.  Grail's ended
+	at ``for bases'', naming none of them."
+
+	| heads message |
+	heads := OrderedCollection new.
+	sequences do: [:sequence |
+		(sequence isEmpty not and: [(heads anySatisfy: [:head | head == sequence first]) not])
+			ifTrue: [heads add: sequence first]].
+	message := WriteStream on: String new.
+	message nextPutAll: 'Cannot create a consistent method resolution order (MRO) for bases'.
+	heads doWithIndex: [:each :index |
+		message
+			nextPutAll: (index = 1 ifTrue: [' '] ifFalse: [', ']);
+			nextPutAll: (self ___pythonNameOf___: each)].
+	^ message contents
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___mroDefinerOf___: aSelector forClass: aClass precedes: aWalker [
 	"In OVERRIDE mode -- a base written LEFT of the storage base -- does a
 	Python class that DEFINES aSelector's name come before aWalker in aClass's
@@ -7371,6 +7392,16 @@ importlib class >> ___pythonNameForSelector___: aSelector [
 			^ (s copyFrom: 2 to: idx - 1) asSymbol].
 	idx < 2 ifTrue: [^ nil].
 	^ (s copyFrom: 1 to: idx - 1) asSymbol
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___pythonNameOf___: aClass [
+	"aClass's Python __name__, or ``?'' when it cannot answer one, as CPython's
+	class_name falls back."
+
+	^ [(aClass @env1:___pyAttrLoad___: #'__name__') asString]
+		on: Error do: [:ex | ex return: '?']
 
 ]
 
