@@ -1546,7 +1546,7 @@ PythonTokenizer >> tokenizeString [
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  fields nestQuote nestTriple fieldStarts isTString frame bodyStart lit |
+	  fields nestQuote nestTriple fieldStarts isTString frame bodyStart lit specEscape |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -1631,8 +1631,17 @@ PythonTokenizer >> tokenizeString [
 		that opens with three quotes closes only on three: its body may hold
 		the quote character alone, as in f'{'x' '''eric's'''}' -- test_fstring
 		spells it with double quotes -- and pairing those one at a time left a
-		string open that swallowed the rest of the source."
-		(isFString and: [fields notEmpty or: [nestQuote notNil]]) ifTrue: [
+		string open that swallowed the rest of the source.
+
+		...except a backslash in the FORMAT SPEC of a non-raw f-string, which is
+		string data like the text between fields: CPython decodes it, so
+		``f'{x:\n}''' hands __format__ a newline while ``rf'{x:\xFF}''' hands it
+		the four characters (test_fstring test_custom_format_specifier,
+		test_raw_fstring_format_spec).  Kept verbatim, it reached __format__
+		undecoded.  It goes to the escape decoder the literal text uses."
+		specEscape := isRaw not and: [char == $\ and: [nestQuote isNil
+			and: [fields notEmpty and: [fields last at: 2]]]].
+		(isFString and: [specEscape not and: [fields notEmpty or: [nestQuote notNil]]]) ifTrue: [
 			nestQuote
 				ifNil: [
 					frame := fields last.
@@ -1734,10 +1743,11 @@ PythonTokenizer >> tokenizeString [
 			] ifFalse: [
 			"Handle escape sequences"
 			(char == $\ and: [isRaw not]) ifTrue: [
-				| escaped bsPos |
+				| escaped bsPos decodedFrom |
 				"The backslash's own index, for the location an invalid-escape
 				diagnostic reports -- see ___warnInvalidEscape___:octal:at:."
 				bsPos := position.
+				decodedFrom := str size.
 				self advance.
 				escaped := self advance.
 	      escaped ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
@@ -1846,6 +1856,14 @@ PythonTokenizer >> tokenizeString [
 					self ___warnInvalidEscape___: escaped asString octal: false at: bsPos.
 					str add: $\; add: escaped.
 				]]]]]]]]]]]]]]].
+				"A brace an escape DECODED to is a literal brace: only a brace written
+				as itself opens a field, so ``f'\x7b1+1}}''' is ``{1+1}'' and
+				``f'\N{LEFT CURLY BRACKET}x''' is ``{x'' (test_fstring
+				test_no_escapes_for_braces).  Grail evaluated the 1+1.  Doubled, it
+				reaches the parser in the form that already means one literal brace."
+				(isFString and: [str size = (decodedFrom + 1)
+					and: [str last == ${ or: [str last == $}]]])
+						ifTrue: [str add: str last].
 			] ifFalse: [
 				"A bytes literal may only hold ASCII SOURCE characters -- CPython
 				rejects b'<non-ascii>' at compile time (escapes like \xaa are fine
