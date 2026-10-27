@@ -34,6 +34,36 @@ StatementAst >> ___boundTargetNames___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+StatementAst >> ___emitIRBreakHandlerFor___: aLoopBlock else: elseStatements on: aBuilder [
+	"``[loop] @env0:on: PythonBreak do: [:___ex___ | nil]'' -- or, with an else
+	clause, ``([loop. false] @env0:on: PythonBreak do: [:___ex___ | true])
+	ifFalse: [else]'', the text's shape (WhileAst / ForAst >>
+	printSmalltalkOn:): the else clause runs only when no break ended the
+	loop, and OUTSIDE its handler, so a break IN the else clause leaves the
+	enclosing loop.  aLoopBlock already answers false when there is an else
+	clause."
+
+	| guarded |
+	guarded := aBuilder
+		send: #on:do:
+		to: aLoopBlock
+		with: { aBuilder globalNamed: #PythonBreak.
+			aBuilder
+				handlerBlockNamed: #'___ex___'
+				answering: (elseStatements isEmpty
+					ifTrue: [aBuilder nilLit]
+					ifFalse: [aBuilder trueLit]) }
+		env: 0.
+	elseStatements isEmpty ifTrue: [^ aBuilder add: guarded].
+	^ aBuilder add: (aBuilder
+		send: #ifFalse:
+		to: guarded
+		with: { aBuilder inBlockDo: [
+			elseStatements do: [:each | each ___emitIRStatementOn___: aBuilder]] })
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 StatementAst >> ___emitIRBuiltinsInstanceOn___: aBuilder [
 	"``((Python @env0:at: #builtins) @env0:___instance___)'' -- the receiver both import
 	forms send ___import__:kw: to."

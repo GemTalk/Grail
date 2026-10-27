@@ -36,7 +36,7 @@ secrets >> _defaultBytes: nbytes [
 	"Resolve the default byte count.  Python's secrets defaults to
 	DEFAULT_ENTROPY (=32) when nbytes is None."
 
-	(nbytes == nil or: [nbytes == None]) ifTrue: [^ 32].
+	(nbytes == nil or: [nbytes == None]) ifTrue: [^ self @env0:at: #DEFAULT_ENTROPY].
 	^ nbytes
 
 ]
@@ -111,7 +111,11 @@ secrets >> compare_digest: a _: b [
 
 { #category : 'Grail-Initialization' }
 secrets >> initialize [
-	"Lazy-init the underlying generator."
+	"The generator is made lazily (_generator).  DEFAULT_ENTROPY is the byte
+	count the token functions use when nbytes is None -- a public constant of
+	CPython's secrets.py, which test_secrets reads."
+
+	self @env0:at: #DEFAULT_ENTROPY put: 32
 
 ]
 

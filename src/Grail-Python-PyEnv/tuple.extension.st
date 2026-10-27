@@ -191,6 +191,7 @@ tuple >> __delitem__: index [
 
 { #category : 'Grail-Introspection' }
 tuple >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a tuple SUBCLASS instance -- the live dynamic-instVar
 	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
 	tuple, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),

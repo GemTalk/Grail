@@ -1045,6 +1045,9 @@ importlib class >> ___canonicalClassRegister___: aModuleName name: aClassName va
 	self ___canonicalClassRegistry___
 		at: (aModuleName asString , '.' , aClassName asString)
 		put: anObject.
+	"A rebuild of a reused class ends here too (___canonicalSubclassOf:...)."
+	(SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil) ifNotNil: [:rebuilding |
+		rebuilding remove: anObject ifAbsent: []].
 	"Membership in the canonical-class set is what routes RUNTIME
 	class-attribute stores into the session-local overlay
 	(object >> ___classAttrOverlayStore___).  Added HERE -- at the end of
@@ -1166,49 +1169,33 @@ importlib class >> ___canonicalClassStructure___ [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___canonicalGenerationCheck___ [
-	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md).
-	install.gs bumps ``GrailRuntimeGeneration'' on every install: the
-	install RECREATES the Python runtime classes (exceptions, builtins),
-	so every previously-deployed canonical module's compiled methods still
-	reference the OLD class objects -- a warm-bound module then raises
-	exceptions no ``except'' clause can match (the class identities
-	diverged; uncatchable).  When the committed registries were deployed
-	under a different generation, discard them IN-TRANSACTION (a
-	non-committing session simply acts cold; the next deploy commits the
-	reset) and stamp the deploy generation current so imports re-record
-	freshly.
+	"RUNTIME-GENERATION GUARD (docs/Persistent_Modules_and_Classes.md D7).
+	Every install bumps ``GrailRuntimeGeneration''.  An install KEEPS Grail's
+	classes -- Rowan patches the loaded project in place -- so a deployed
+	module's classes, instance and stored instances stay valid; what may not
+	is its compiled code, built by the previous install's codegen against the
+	previous runtime.  So nothing is discarded here: each deployed module
+	records the runtime generation it was built under
+	(___recordDepsOf___:srcHash:names:changed:), ___isCurrentModule___:
+	answers false for one built under another, and its next import rebuilds
+	it INTO its committed instance and classes, as a source edit does (D2).
+
+	This only stamps the deploy generation current, and installs the
+	self-send dispatchers committed overrides need (object class >>
+	___grailInstallRecordedSelfSendOverrides___), which wait for it.
 
 	Memoised per session via SessionTemps -- one check per gem, not one
 	per import."
 
-	| st runtimeGen deployGen |
+	| st runtimeGen |
 	st := SessionTemps current.
 	(st at: #'GrailCanonicalGenChecked' otherwise: nil) == true ifTrue: [^ self].
 	st at: #'GrailCanonicalGenChecked' put: true.
 	self ___ensureStackErrorFlavour___.
 	runtimeGen := UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0.
-	deployGen := UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil.
-	"The same once-per-session point installs the self-send dispatchers that
-	committed overrides need (object class >>
-	___grailInstallRecordedSelfSendOverrides___) -- but only once the record is
-	known to be current: a stale generation wipes it below, and the classes it
-	names are the ones the install replaced."
-	deployGen == runtimeGen ifTrue: [
-		object ___grailInstallRecordedSelfSendOverrides___.
-		^ self].
-	"Stale (or first-ever) deployment: drop every canonical registry -- the
-	name-keyed ones in EVERY namespace, since an install invalidates every
-	app's deployment as much as the default's, and the identity-keyed ones,
-	which only UserGlobals holds."
-	self ___grailAllNamespacesDo___: [:ns |
-		#( #'GrailCanonicalModules' #'GrailCanonicalModuleHashes' #'GrailCanonicalModuleDeps'
-		   #'GrailCanonicalClasses'
-		   #'GrailCanonicalMetaclasses' #'GrailCanonicalClassStructure'
-		   #'GrailCanonicalDirectMetaclasses' ) do: [:k |
-			ns removeKey: k ifAbsent: []]].
-	#( #'GrailCommittedSelfSendOverrides' #'GrailCanonicalClassSet' ) do: [:k |
-		UserGlobals removeKey: k ifAbsent: []].
-	UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen.
+	(UserGlobals at: #'GrailCanonicalDeployGeneration' otherwise: nil) == runtimeGen
+		ifFalse: [UserGlobals at: #'GrailCanonicalDeployGeneration' put: runtimeGen].
+	object ___grailInstallRecordedSelfSendOverrides___.
 	^ self
 
 ]
@@ -1224,33 +1211,49 @@ importlib class >> ___canonicalInstanceForModuleClass___: aModuleClass [
 	identity checks against committed state (the exact par.10.1 failure,
 	resurfacing through the singleton path instead of import).
 
-	When the registry holds a COMMITTED instance of aModuleClass: adopt
-	it as the session singleton FIRST
-	(so a __session_init__ that reads its own module's globals does not
-	recurse back here), register it in sys.modules (a later explicit
-	import is then a cache hit on the same instance), run the session
-	hook, and answer it.  Answers nil when nothing applies -- the caller
-	keeps the old mint-fresh behavior.  No hash check: committed code
-	referencing committed dependencies wants the instance it was
-	deployed with; staleness is the next explicit import's concern."
+	When the registry holds a COMMITTED instance of aModuleClass that is
+	CURRENT: adopt it as the session singleton FIRST (so a __session_init__
+	that reads its own module's globals does not recurse back here),
+	register it in sys.modules (a later explicit import is then a cache hit
+	on the same instance), run the session hook, and answer it.  Answers nil
+	when nothing applies -- the caller keeps the old mint-fresh behavior.
 
+	A STALE one is rebuilt into its committed instance first, as the import
+	this path stands in for would (___rebuildStaleLazyBind___:instance:), and refused
+	with an ImportError when that rebuild fails (issue #1805).  It used to be
+	adopted as it stood -- ``staleness is the next explicit import's
+	concern'' -- which was harmless while only a source edit made a module
+	stale.  Since D7 every install does, so a module whose redeploy was
+	skipped or failed ran the previous install's compiled code against the
+	new runtime, in exactly the sessions that never import it."
+
+	| found |
 	"In every namespace the session reads: the class may be the shared base's
-	or the app's (docs/App_Namespaces_Design.md §3.1)."
+	or the app's (docs/App_Namespaces_Design.md §3.1).  Found first and acted
+	on after, so a rebuild never writes the registry being enumerated."
 	self ___grailSessionNamespacesDo___: [:ns |
-		self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
-			((inst class == aModuleClass) and: [inst isCommitted]) ifTrue: [
+		found isNil ifTrue: [
+			self ___canonicalModules___ keysAndValuesDo: [:aName :inst |
+				(found isNil and: [(inst class == aModuleClass) and: [inst isCommitted]])
+					ifTrue: [found := { ns . aName asString . inst }]]]].
+	found isNil ifTrue: [^ nil].
+	^ self ___grailInNamespace___: (found at: 1) do: [ | aName inst |
+		aName := found at: 2.
+		inst := found at: 3.
+		self ___grailRecordNamespace___: (found at: 1) of: aName.
+		(self ___lazyBindIsStale___: aName)
+			ifTrue: [self ___rebuildStaleLazyBind___: aName instance: inst]
+			ifFalse: [
 				aModuleClass ___adoptInstance___: inst.
-				self ___grailRecordNamespace___: ns of: aName.
-				self registerModule: aName asString with: inst.
-				self ___restoreCanonicalMetaclasses___: aName asString.
-				self ___restoreCanonicalClassStructure___: aName asString.
+				self registerModule: aName with: inst.
+				self ___restoreCanonicalMetaclasses___: aName.
+				self ___restoreCanonicalClassStructure___: aName.
 				self ___restoreCanonicalMiRecords___.
 				self ___restoreAllCanonicalMetaclasses___.
 				self ___restoreAllBodyClassAttrs___.
 				inst ___replayDefaultsAssignments___.
 				self ___runSessionInit___: inst.
-				^ inst]]].
-	^ nil
+				inst]]
 
 ]
 
@@ -1527,6 +1530,22 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 				minted add: key.
 				"Reused structure, fresh namespace -- see the comment above."
 				existing @env1:___grailResetClassNamespace___.
+				"Out of the canonical set until ___canonicalClassRegister___ puts it
+				back at the end of this class statement.  Membership is what makes a
+				class-attribute store session-local (D3), and a decorator runs
+				after the body: a NEW class is not a member yet then, so
+				``@dataclass'' stamps __hash__ and __eq__ onto it, and they commit
+				with it.  A REUSED class still was, from the build before, so the
+				stamps went to this session's overlay -- and once the rebuild
+				committed, a later session's FrozenPoint hashed by identity and
+				every stored key of one went missing from its dict."
+				(UserGlobals at: #'GrailCanonicalClassSet' otherwise: nil) ifNotNil: [:bag |
+					[bag includes: existing] whileTrue: [bag remove: existing]].
+				"...and marked as rebuilding until then, so what the body and its
+				decorators compile onto it is compiled as for a new class: see
+				object >> ___grailClassIsRebuilding___."
+				(SessionTemps current at: #'GrailRebuildingClasses' ifAbsentPut: [IdentitySet new])
+					add: existing.
 				"Re-register the subclass link.  This branch does NOT go through
 				___subclass___, which is where creation normally records it, and
 				the body re-run has just had its previous registrations dropped
@@ -5256,10 +5275,11 @@ importlib class >> ___irTextSourcesFor___: aClassDefAst [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___isCurrentModule___: aName [
-	"Whether every dependency aName's body imported is unchanged since aName
-	was built (its OWN source is the caller's hash check).  A module with no
-	record -- never cold-loaded since records existed -- keeps the old
-	own-source-only rule.  A dependency that is no longer tracked is not
+	"Whether aName was built under the current runtime generation (an install
+	moves it: see ___canonicalGenerationCheck___), and every dependency its
+	body imported is unchanged since aName was built (its OWN source is the
+	caller's hash check).  A module with no record -- never cold-loaded since
+	records existed -- keeps the old own-source-only rule.  A dependency that is no longer tracked is not
 	evidence either way and is skipped.  A dependency already being checked
 	(a cycle the record did not break) counts as current.  Memoised per
 	session."
@@ -5269,6 +5289,8 @@ importlib class >> ___isCurrentModule___: aName [
 		^ self ___grailInNamespaceOf___: aName do: [self ___isCurrentModule___: aName]].
 	rec := self ___canonicalModuleDeps___ ifNotNil: [:reg | reg at: aName asString otherwise: nil].
 	rec isNil ifTrue: [^ true].
+	(rec size >= 3 and: [(rec at: 3) = (UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0)])
+		ifFalse: [^ false].
 	memo := self ___currencyMemo___.
 	(memo at: aName asString otherwise: nil) ifNotNil: [:v | ^ v].
 	checking := SessionTemps current at: #'GrailModuleCurrencyChecking' ifAbsentPut: [Set new].
@@ -5490,6 +5512,30 @@ importlib class >> ___lastPathComponentOf___: aPath [
 	i := p size.
 	[i > 0 and: [(p at: i) ~= $/]] whileTrue: [i := i - 1].
 	^ p copyFrom: i + 1 to: p size
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___lazyBindIsStale___: aName [
+	"Whether the committed module aName, reached by the lazy first-touch bind
+	(___canonicalInstanceForModuleClass___:), must be rebuilt before it is
+	served: the same test an import makes, and the one a carried submodule is
+	judged by -- its source as it is on disk now, its runtime generation (D7)
+	and its dependencies (par.4.4), through ___generationNowOf___:.
+
+	A module that is not tracked is never stale here, as it is never evidence
+	for a dependent.  Nor is one whose source file is gone but that is
+	otherwise current: an application deployed from a checkout that has since
+	moved keeps working, as it did.  Without its source it cannot be rebuilt,
+	so one that is ALSO stale for another reason is reported stale, and the
+	rebuild's failure says why."
+
+	| now |
+	(self ___isTrackedModule___: aName) ifFalse: [^ false].
+	(self ___sourceHashNowOf___: aName) isNil
+		ifTrue: [^ (self ___isCurrentModule___: aName) not].
+	now := self ___generationNowOf___: aName.
+	^ now notNil and: [now ~= (self ___recordedGenerationOf___: aName)]
 
 ]
 
@@ -7165,6 +7211,78 @@ importlib class >> ___rebuildCarriedSubmodule___: aDottedName [
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___rebuildStaleLazyBind___: aName instance: anInstance [
+	"Rebuild the stale committed module aName, which committed code reached
+	without importing it (___canonicalInstanceForModuleClass___:), into its
+	committed instance anInstance, and answer it -- or refuse with an
+	ImportError when the rebuild fails (issue #1805).
+
+	WHY A REBUILD AND NOT A REFUSAL.  The lazy bind stands in for the import
+	the committed code's own module made when it was deployed, so it does
+	what that import would do in this session: an import of a stale module
+	rebuilds it in place (par.4.4), and so does binding a package that carries
+	a stale submodule (___refreshCarriedSubmodulesOf___:named:).  Refusing
+	instead would turn an install whose redeploy was skipped into a failure at
+	every first touch -- every request a deployed application serves -- for a
+	module the new runtime builds perfectly well.  The cost is the cost any
+	import of a stale module already has: the rebuild writes in this
+	transaction (par.8.1), so ``with gemdb.transaction():'' after it refuses
+	as it would after the import, and a commit publishes the rebuild, after
+	which no session rebuilds it again.  The way to avoid both is the one
+	install.sh takes: scripts/redeployModules.gs.
+
+	WHY A REFUSAL WHEN IT FAILS.  The previous build's code against the
+	current runtime is what this exists to stop serving, and a failed
+	rebuild leaves nothing better.  The ImportError names the module and the
+	failure.  The loader has already taken the half-built module out of
+	sys.modules and put its old hash back, so the next touch tries again and
+	is refused again, rather than being served the stale build.
+
+	Through the ordinary path, parents first, as ___rebuildCarriedSubmodule___:
+	does: ``pkg.mod'' reached with ``pkg'' unimported imports ``pkg'' too, and
+	binding a package judges what it carries, so the leaf may be loaded by
+	then; each step looks first.  Each from the file it was deployed from.
+
+	RE-ENTRY.  The loader adopts the instance as the session singleton before
+	the body runs, so the body's own reads never come back here.  Anything
+	that reaches this module's ``instance'' before that, while it is being
+	rebuilt, is answered the committed instance being rebuilt rather than
+	starting a second rebuild of it."
+
+	| inProgress prefix failure result |
+	inProgress := SessionTemps current at: #'GrailLazyRebuilding' ifAbsentPut: [Set new].
+	(inProgress includes: aName) ifTrue: [
+		anInstance class ___adoptInstance___: anInstance.
+		^ anInstance].
+	inProgress add: aName.
+	result := [[prefix := nil.
+		($. split: aName) inject: nil into: [:loaded :part | | path |
+			prefix := prefix isNil ifTrue: [part] ifFalse: [prefix , '.' , part].
+			(self @env1:lookupModule: prefix)
+				ifNil: [
+					path := (self ___deployedSourcePathOf___: prefix)
+						ifNil: [self @env1:___moduleNameToPath___: prefix].
+					path isNil ifTrue: [
+						ImportError @env1:___signal___: 'no source file for ''' , prefix , ''''].
+					self loadModuleFromPath: path name: prefix]
+				ifNotNil: [:m | m]]]
+		on: AbstractException do: [:ex | | text |
+			((ex isKindOf: Notification) or: [ex isKindOf: AlmostOutOfStackError])
+				ifTrue: [ex pass].
+			text := [ex messageText] on: Error do: [:e | e return: nil].
+			failure := ex class name asString
+				, (text isNil ifTrue: [''] ifFalse: [': ' , text asString]).
+			ex return: nil]]
+		ensure: [inProgress remove: aName ifAbsent: []].
+	failure isNil ifTrue: [^ result].
+	^ ImportError @env1:___signal___: 'module ''' , aName ,
+		''' is deployed but stale -- built under an earlier install of Grail, or its source or a module it imports has changed since -- and rebuilding it where this session first reached it failed with ' ,
+		failure ,
+		'. Its previous build is not run against the current runtime. Import it to see the full error; scripts/redeployModules.gs rebuilds every stale deployed module.'
+
+]
+
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___recordBodyClassAttr___: aClass name: aSym value: aValue [
 	"Remember, COMMITTED, a class-attribute store a module BODY made on a
@@ -7300,7 +7418,11 @@ importlib class >> ___recordDepsOf___: aName srcHash: srcHash names: importedNam
 			rec isNil ifFalse: [stream nextPutAll: (rec at: 1) asString].
 			deps do: [:pair | stream nextPut: $|; nextPutAll: (pair at: 1); nextPut: $=; nextPutAll: (pair at: 2) asString].
 			gen := stream contents sha1Sum].
-	self ___canonicalModuleDepsForWrite___ at: aName asString put: { gen . deps asArray }.
+	"The third slot is the runtime generation it was built under: an install
+	moves that, and ___isCurrentModule___: then reads the module as stale."
+	self ___canonicalModuleDepsForWrite___
+		at: aName asString
+		put: { gen . deps asArray . UserGlobals at: #'GrailRuntimeGeneration' otherwise: 0 }.
 	"Built here, so current for the rest of the session; and every OTHER
 	module's verdict may have depended on the old version."
 	SessionTemps current removeKey: #'GrailModuleCurrency' ifAbsent: [].

@@ -53,6 +53,7 @@ set >> __class_getitem__: item [
 
 { #category : 'Grail-Introspection' }
 set >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a set SUBCLASS instance -- the live dynamic-instVar
 	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
 	set, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),
@@ -163,28 +164,16 @@ set >> __ixor__: other [
 
 { #category : 'Grail-String Representation' }
 set >> __repr__ [
-	"Return '{a, b, c}' or 'set()' for the empty set."
+	"CPython's set_repr (Objects/setobject.c:566): ``{a, b}'' for an exact
+	set, and the type's name around it for a subclass -- ``set2({7})'', as
+	test_pprint's test_set_reprs and test_same_as_repr read it.  An empty set
+	is the name and ``()''.  Grail answered the exact form for every set."
 
-	| stream first size |
-	size := self @env0:size.
-
-	"Handle empty set specially"
-	(size == 0) ifTrue: [
-		^ 'set()'
-	].
-
-	stream := WriteStream @env0:on: (String ___new___).
-	stream @env0:nextPut: ${.
-
-	first := true.
-	self @env0:do: [:each |
-		first ifFalse: [stream @env0:nextPutAll: ', '].
-		stream @env0:nextPutAll: each __repr__ @env0:___reprResult___.
-		first := false
-	].
-
-	stream @env0:nextPut: $}.
-	^ stream @env0:contents
+	| elements |
+	elements := self ___elementsRepr___.
+	elements @env0:isEmpty ifTrue: [^ self ___pyTypeNameForError___ @env0:, '()'].
+	self @env0:class == set ifTrue: [^ '{' @env0:, elements @env0:, '}'].
+	^ self ___pyTypeNameForError___ @env0:, '({' @env0:, elements @env0:, '})'
 
 ]
 

@@ -346,13 +346,13 @@ pyPath := System gemEnvironmentVariable:''PYTHON_LIB_PATH'' .
 	CPythonLibrary pythonHomePath: (System gemEnvironmentVariable:''PYTHON_PREFIX'') .
 	CPythonLibrary pythonPackagePath: (System gemEnvironmentVariable:''PYTHON_PACKAGE_PATH'') .
 ].
-"RUNTIME-GENERATION STAMP: this install just RECREATED the Python runtime
-classes (exceptions, builtins) with new object identity.  Any canonical
-module deployed under the previous runtime keeps compiled references to the
-OLD classes -- warm-binding it would raise exceptions no except clause can
-match.  Bumping the generation makes importlib''s
-___canonicalGenerationCheck___ discard the stale registries on first touch;
-the next deploy rebuilds them against the current runtime."
+"RUNTIME-GENERATION STAMP: this install may have changed Grail''s runtime and
+codegen, so a module deployed under the previous install may hold compiled code
+that no longer matches them.  Its classes and instance stay valid -- the install
+kept Grail''s classes -- so nothing is discarded: each deployed module records
+the generation it was built under, and importlib''s ___isCurrentModule___: reads
+one built under another as stale, which rebuilds it in place on its next import
+(docs/Persistent_Modules_and_Classes.md D7)."
 UserGlobals
 	at: #''GrailRuntimeGeneration''
 	put: ((UserGlobals at: #''GrailRuntimeGeneration'' otherwise: 0) + 1).

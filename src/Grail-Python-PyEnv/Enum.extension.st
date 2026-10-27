@@ -117,7 +117,7 @@ Enum class >> ___grailBuildMembers: cls names: attrNames [
 	semantics).  Members are written back as the class attributes and
 	recorded in EnumRegistry."
 
-	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers ntClass privPat |
+	| byValue byName members allOrdered lastInt maxInt allNames dynHolder autoResolved hasUserInit hasUserNew newDefClass tupleClass gnvClass gnvStaticClass genValues foreignMixin forcedMembers ntClass privPat previous |
 	"CPython _check_for_existing_members_: adding members to -- or otherwise
 	subclassing -- an enum that already HAS members is illegal (that enum is
 	final).  Raise before building anything (test_extending / test_extending2);
@@ -413,6 +413,10 @@ Enum class >> ___grailBuildMembers: cls names: attrNames [
 						TypeError ___signal___:
 							'_generate_next_value_ must be defined before members']]]] ]
 		@env0:value.
+	"The previous build's members, by name, when this is a rebuild of a class whose
+	identity was kept: see ___grailKeepPreviousMember:named:in:.  Read before the
+	record below replaces them."
+	previous := (Enum ___grailRecordFor: cls) @env0:ifNotNil: [:rec | rec @env0:at: 2].
 	byValue := KeyValueDictionary @env0:new.
 	"A PyDict, which keeps insertion order: this map IS _member_map_ and
 	__members__, and CPython's is a dict in definition order, aliases where they
@@ -1015,6 +1019,8 @@ Enum class >> ___grailBuildMembers: cls names: attrNames [
 							it hands its name to the member that already holds the value
 							and the throwaway just built is dropped."
 							aliasOf @env0:isNil ifFalse: [member := aliasOf].
+							aliasOf @env0:isNil ifTrue: [
+								member := Enum ___grailKeepPreviousMember: member named: nameStr in: previous].
 							aliasOf @env0:isNil ifTrue: [
 							byValue @env0:at: memberValue put: member.
 							"Definition-order roll of every non-alias member (see slot-4
@@ -3238,6 +3244,39 @@ Enum class >> ___grailIsStringType: mt [
 	^ (mt == CharacterCollection)
 		or: [(mt @env0:isKindOf: Behavior)
 			and: [mt @env0:inheritsFrom: CharacterCollection]]
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailKeepPreviousMember: aMember named: nameStr in: previousByName [
+	"A rebuild of an enum class whose identity was kept -- its module rebuilt in
+	place after a source edit or an install (docs/Persistent_Modules_and_Classes.md
+	D2, D7) -- keeps the member objects the previous build made.  Stored data
+	refers to them, and a member is compared by identity (``stored is
+	Color.GREEN'') and hashed by it, so a new object for an old member strands
+	every stored one.  When the previous build had a member of this name and
+	class, it takes the state this build gave aMember and is answered in its
+	place.  A byte-format member (a StrEnum's) cannot take another's state this
+	way and stays the new one, as does any member the transfer fails for."
+
+	| old names |
+	previousByName @env0:isNil ifTrue: [^ aMember].
+	old := previousByName @env0:at: nameStr ifAbsent: [nil].
+	(old @env0:isNil or: [old @env0:== aMember]) ifTrue: [^ aMember].
+	((old @env0:class @env0:== aMember @env0:class) and: [aMember @env0:class @env0:isPointers])
+		ifFalse: [^ aMember].
+	^ [1 @env0:to: aMember @env0:class @env0:instSize do: [:i |
+			old @env0:instVarAt: i put: (aMember @env0:instVarAt: i)].
+		aMember @env0:class @env0:isIndexable ifTrue: [
+			old @env0:_basicSize: aMember @env0:_basicSize.
+			1 @env0:to: aMember @env0:_basicSize do: [:i |
+				old @env0:_basicAt: i put: (aMember @env0:_basicAt: i)]].
+		names := aMember @env0:dynamicInstanceVariables.
+		old @env0:dynamicInstanceVariables @env0:do: [:n |
+			(names @env0:includes: n) ifFalse: [old @env0:removeDynamicInstVar: n]].
+		names @env0:do: [:n | old @env0:dynamicInstVarAt: n put: (aMember @env0:dynamicInstVarAt: n)].
+		old]
+			@env0:on: AbstractException do: [:e | aMember]
 
 ]
 

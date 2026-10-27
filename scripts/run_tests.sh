@@ -524,6 +524,14 @@ timed "module-coherence" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts
 # leaves a broken one to fail its own import.
 timed "carried-submodule" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCarriedSubmoduleTest.gs < /dev/null || EXIT=$?
 
+# The lazy first-touch bind never serves a stale module (issue #1805): committed
+# code reaches a module it never imported through ``module class >> instance''.
+# Bumps GrailRuntimeGeneration with no redeploy, as an install with
+# GRAIL_NO_REDEPLOY=1 leaves it, and checks that the lazy bind rebuilds a module
+# and a submodule into their committed instances, writes nothing once they are
+# current, and refuses one whose rebuild fails. Commits; restores the generation.
+timed "lazy-bind-stale" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runLazyBindStaleTest.gs < /dev/null || EXIT=$?
+
 # A warm-bound package imports what its body imported (issue #1475): the
 # body does not run on a warm bind, so ``from . import api'' left pkg.api out
 # of sys.modules and its __session_init__ unrun.  Checks the body's

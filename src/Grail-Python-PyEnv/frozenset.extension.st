@@ -45,6 +45,7 @@ frozenset >> __class_getitem__: item [
 
 { #category : 'Grail-Introspection' }
 frozenset >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a frozenset SUBCLASS instance -- the live dynamic-instVar
 	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
 	frozenset, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),
@@ -74,23 +75,13 @@ frozenset >> __hash__ [
 
 { #category : 'Grail-String Representation' }
 frozenset >> __repr__ [
-	"Return 'frozenset({a, b, c})' or 'frozenset()' for the empty set."
+	"CPython's set_repr (Objects/setobject.c:566), which always names a
+	frozenset's type: ``frozenset({a, b})'', ``fs2({a, b})'' for a subclass,
+	and the name and ``()'' when empty.  Grail spelled every one frozenset."
 
-	| stream first size |
-	size := self @env0:size.
-	(size @env0:= 0) ifTrue: [^ 'frozenset()'].
-
-	stream := AppendStream @env0:on: (Unicode7 ___new___).
-	stream @env0:nextPutAll: 'frozenset({'.
-
-	first := true.
-	self @env0:do: [:each |
-		first ifFalse: [stream @env0:nextPutAll: ', '].
-		stream @env0:nextPutAll: each __repr__ @env0:___reprResult___.
-		first := false
-	].
-
-	stream @env0:nextPutAll: '})'.
-	^ stream @env0:contents
+	| elements |
+	elements := self ___elementsRepr___.
+	elements @env0:isEmpty ifTrue: [^ self ___pyTypeNameForError___ @env0:, '()'].
+	^ self ___pyTypeNameForError___ @env0:, '({' @env0:, elements @env0:, '})'
 
 ]

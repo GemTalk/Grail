@@ -166,21 +166,15 @@ StdlibLongTailTestCase >> testExceptionDictAndVars [
 ]
 
 { #category : 'Grail-Tests - urllib.request proxies' }
-StdlibLongTailTestCase >> testGetproxiesEnvironmentCannotSeeAnEmptyProxyVariable [
-	"DELIBERATELY LESS than CPython, and the cause is below urllib entirely.
+StdlibLongTailTestCase >> testGetproxiesEnvironmentAnEmptyProxyVariableUnsetsTheUppercaseOne [
+	"An empty lowercase ``http_proxy'' is an explicit ``no proxy for http''
+	that suppresses an uppercase ``HTTP_PROXY'', so that environment yields {}.
+	This was pinned as Grail's deliberate deviation: GemStone answers nil for an
+	empty environment variable, so the empty name read as absent and the
+	uppercase value survived.  os_Environ now keeps an empty value itself
+	(___envRawPut___:value:), and CPython's answer is Grail's."
 
-	In CPython an empty lowercase ``http_proxy'' is an explicit ``no proxy for
-	http'' that suppresses an uppercase ``HTTP_PROXY'', so that environment
-	yields {}.  GemStone cannot represent an empty environment variable at all:
-	setting one to '' is precisely how os.unsetenv and ``del os.environ[k]''
-	UNSET it, and reading it back answers nil.  So the empty name is
-	indistinguishable from an absent one and the uppercase value survives.
-
-	Closing this needs a System-level environment primitive, not a change in
-	urllib.request; the test pins what Grail actually does so the day it changes
-	is visible."
-
-	self assertUrllibChecks: #( #'getproxies_empty_value_cannot_unset_the_uppercase_one' )
+	self assertUrllibChecks: #( #'getproxies_an_empty_lowercase_value_unsets_the_uppercase_one' )
 
 ]
 

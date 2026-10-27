@@ -42,6 +42,7 @@ from unittest import SkipTest
 _FORWARDED = frozenset({
     'TestCase', 'skip', 'skipIf', 'skipUnless', 'expectedFailure',
     'doModuleCleanups', 'addModuleCleanup', 'enterModuleContext',
+    '_AssertRaisesContext',
 })
 
 

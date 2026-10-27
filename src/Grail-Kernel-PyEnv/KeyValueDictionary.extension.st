@@ -472,6 +472,7 @@ KeyValueDictionary >> __delitem__: key [
 
 { #category : 'Grail-Introspection' }
 KeyValueDictionary >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a dict SUBCLASS instance -- a live view of its
 	dynamic-instVar storage, the same one PythonInstance and bytes publish.
 	Subclassing dict is how user code hangs attributes off a mapping, and a

@@ -15,6 +15,16 @@ Interval class >> __getitem__: index [
 ]
 
 { #category : 'Grail-Initialization' }
+Interval class >> __new__ [
+	"range() -- refused by name, as CPython's range_from_array does
+	(Objects/rangeobject.c:118).  The inherited fallback named the kernel
+	class: ``cannot create 'Interval' instances''."
+
+	^ TypeError ___signal___: 'range expected at least 1 argument, got 0'
+
+]
+
+{ #category : 'Grail-Initialization' }
 Interval class >> __new__: stop [
 	"range(stop) — creates range from 0 to stop-1 with step 1.
 	Receiver is the class."
@@ -71,6 +81,20 @@ Interval class >> __new__: start _: stop _: step [
 
 ]
 
+{ #category : 'Grail-Initialization' }
+Interval class >> _new: positional kw: keywords [
+	"range() with a keyword or with more than three arguments, the only calls
+	the class-call path sends here.  CPython refuses both by name
+	(Objects/rangeobject.c:141, 122); the fallbacks without this named the
+	kernel class, Interval."
+
+	keywords @env0:isEmpty ifFalse: [
+		^ TypeError ___signal___: 'range() takes no keyword arguments'].
+	^ TypeError ___signal___: 'range expected at most 3 arguments, got '
+		@env0:, positional @env0:size @env0:printString
+
+]
+
 { #category : 'Grail-Sequence Protocol' }
 Interval >> ___containsInt___: value [
 	"range_contains_long: value lies between start and stop on the step's
@@ -103,6 +127,36 @@ Interval >> ___isArithmeticMember___: value [
 
 ]
 
+{ #category : 'Grail-Attributes' }
+Interval >> ___pyAttrDelete___: aName [
+	"See ___refuseReadOnlyAttr___:."
+
+	self ___refuseReadOnlyAttr___: aName.
+	^ super ___pyAttrDelete___: aName
+
+]
+
+{ #category : 'Grail-Attributes' }
+Interval >> ___pyAttrStore___: aName put: aValue [
+	"See ___refuseReadOnlyAttr___:."
+
+	self ___refuseReadOnlyAttr___: aName.
+	^ super ___pyAttrStore___: aName put: aValue
+
+]
+
+{ #category : 'Grail-Attributes' }
+Interval >> ___refuseReadOnlyAttr___: aName [
+	"start, stop and step are Py_READONLY members of CPython's range
+	(Objects/rangeobject.c:775), so a store and a delete are both refused as
+	``readonly attribute''.  Grail accepted both without a word, and the
+	readers went on answering the range's own values."
+
+	(#('start' 'stop' 'step') @env0:includes: aName @env0:asString) ifTrue: [
+		^ AttributeError ___signal___: 'readonly attribute']
+
+]
+
 { #category : 'Grail-Sequence Protocol' }
 Interval >> __bool__ [
 	"Test if range is non-empty"
@@ -131,31 +185,20 @@ Interval >> __contains__: value [
 
 { #category : 'Grail-Comparison' }
 Interval >> __eq__: other [
-	"Test equality with another range"
+	"CPython's range_equals (Objects/rangeobject.c:515): two ranges are equal
+	when they hold the same elements -- the same length, then the same start
+	unless both are empty, then the same step unless they hold one element.
+	Comparing the steps of a one-element range made range(5, 6) differ from
+	range(5, 6, 2), though both are [5]."
 
-	| otherClass selfSize otherSize selfStart otherStart selfStep otherStep |
-	otherClass := other @env0:class.
-	(otherClass == range) ifFalse: [ ^ false ].
-
-	"Two ranges are equal if they produce the same sequence"
-	selfSize := self @env0:size.
-	otherSize := other @env0:size.
-
-	"Empty ranges are equal"
-	(selfSize == 0) ifTrue: [
-		^ otherSize == 0
-	].
-
-	"Non-empty ranges must have same start, stop, and step"
-	selfStart := self start.
-	otherStart := other start.
-	(selfStart @env0:= otherStart) ifFalse: [ ^ false ].
-
-	selfStep := self step.
-	otherStep := other step.
-	(selfStep @env0:= otherStep) ifFalse: [ ^ false ].
-
-	^ selfSize @env0:= otherSize
+	| size |
+	other @env0:class == range ifFalse: [^ false].
+	size := self @env0:size.
+	size @env0:= other @env0:size ifFalse: [^ false].
+	size @env0:= 0 ifTrue: [^ true].
+	self start @env0:= other start ifFalse: [^ false].
+	size @env0:= 1 ifTrue: [^ true].
+	^ self step @env0:= other step
 
 ]
 
@@ -216,9 +259,18 @@ Interval >> __getitem__: index [
 
 { #category : 'Grail-Hashing' }
 Interval >> __hash__ [
-	"Return hash of the range"
+	"CPython's range_hash (Objects/rangeobject.c:579): the hash of
+	(len, start, step), with None for the start of an empty range and for the
+	step of a one-element one, so ranges that __eq__: calls equal hash alike.
+	The kernel's hash sees the inclusive end, so range(0, 5, 2) and
+	range(0, 6, 2) -- both [0, 2, 4] -- hashed apart."
 
-	^ self @env0:hash
+	| size |
+	size := self @env0:size.
+	^ (tuple
+		@env0:with: size
+		with: (size @env0:= 0 ifTrue: [nil] ifFalse: [self start])
+		with: (size @env0:<= 1 ifTrue: [nil] ifFalse: [self step])) __hash__
 
 ]
 

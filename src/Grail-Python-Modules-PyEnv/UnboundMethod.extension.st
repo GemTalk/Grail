@@ -538,6 +538,34 @@ UnboundMethod >> ___firstBuiltinAbove___: aClass upTo: found [
 ]
 
 { #category : 'Grail-Calling' }
+UnboundMethod >> ___grailDeletedOriginalNargs: nargs kwOk: kwOk [
+	"The original of this handle's method when a ``del'' removed it and nothing
+	else answers the name -- or nil.  ___grailPinnedMethodFor___:receiver:
+	redirects a method that still RESOLVES, inherited from a base; with no base
+	defining it there was nothing to redirect, so ``f = D.m; del D.m; f(x)''
+	raised ``type object 'D' has no method 'm'''.  strawberry keeps each
+	@strawberry.field resolver so, then deletes the class attribute, and its
+	root query calls the resolver with None.
+
+	Only a handle minted before the pin: one minted after the ``del'' names a
+	method the class no longer has, as CPython's would."
+
+	| m sel pinnedAt |
+	m := self @env0:_resolveMethodNargs: nargs kwOk: kwOk
+		from: definingClass prefix: '___grailOrig_'.
+	m == nil ifTrue: [^ nil].
+	sel := (m @env0:selector @env0:asString @env0:copyFrom: 14 to: m @env0:selector @env0:size)
+		@env0:asSymbol.
+	pinnedAt := BoundMethod ___grailPinnedAt___: sel in: m @env0:inClass.
+	pinnedAt == nil ifTrue: [^ nil].
+	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
+		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
+			ifTrue: [^ nil].
+	^ m
+
+]
+
+{ #category : 'Grail-Calling' }
 UnboundMethod >> ___grailPinnedMethodFor___: aMethod receiver: obj [
 	"The compiled method this handle should actually run -- aMethod, or the
 	``___grailOrig_'' shadow when this handle was captured before the method was
@@ -1982,6 +2010,7 @@ UnboundMethod >> value: positional value: kwargs [
 		@env0:_resolveMethodNargs: nargs
 		kwOk: kwOk
 		from: (self @env0:_resolutionRootFor: obj).
+	method ifNil: [method := self ___grailDeletedOriginalNargs: nargs kwOk: kwOk].
 	method ifNil: [^ self ___callUnresolved___: obj rest: rest kw: kwargs].
 	"A CAPTURE KEEPS MEANING THE FUNCTION IT CAPTURED, exactly as a BoundMethod
 	does since PR #835.  Reassigns ``method'' rather than taking a temp: this
