@@ -30,6 +30,15 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+GeneratorExpAst >> ___annotationScopeOffender___ [
+	"Only the outermost iterable runs in the enclosing scope; the rest is the
+	comprehension's own, with its own rules."
+
+	^ generators first iter ___annotationScopeOffender___
+
+]
+
 { #category : 'code generation' }
 GeneratorExpAst >> ___checkedSourceFor___: aTempName [
 	"The expression the loop takes a SYNC first clause's iterator through:

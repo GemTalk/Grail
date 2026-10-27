@@ -33,6 +33,15 @@ Class {
 }
 
 { #category : 'Grail-validation' }
+DictCompAst >> ___annotationScopeOffender___ [
+	"Only the outermost iterable runs in the enclosing scope; the rest is the
+	comprehension's own, with its own rules."
+
+	^ generators first iter ___annotationScopeOffender___
+
+]
+
+{ #category : 'Grail-validation' }
 DictCompAst >> ___comprehensionScopeName___ [
 	^ 'dict comprehension'
 
