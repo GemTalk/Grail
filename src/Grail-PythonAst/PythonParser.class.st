@@ -324,6 +324,16 @@ PythonParser class >> parse: aString [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser >> ___atEvalInputEnd___ [
+	"Whether eval input has nothing left but newlines and its end marker.  A
+	NEWLINE can only trail it -- inside brackets the tokenizer emits none --
+	so ``1,'' ends at the comma rather than parsing the NEWLINE after it."
+
+	^ self peek isNil or: [self peek isEndMarker or: [self peek isNewline]]
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser >> ___bodyRangeAfterColon___: colon [
 	"{first. last. end} token indexes of the block a header's colon opens: an
 	indented body, after however many NEWLINE tokens (a comment line is one),
@@ -1801,6 +1811,55 @@ PythonParser >> ___parseDictValue___ [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___parseEvalExpression___ [
+	"One element of eval input: CPython's ``expression'', a lambda or a
+	conditional expression -- not a starred one, not a named expression, not a
+	yield, each of which only a statement or a bracket admits."
+
+	| tok |
+	tok := self peek.
+	((tok notNil and: [(tok isOp: '*') or: [tok isKeyword: 'yield']]))
+		ifTrue: [^ self ___invalidSyntaxAt___: tok].
+	^ (tok notNil and: [tok isKeyword: 'lambda'])
+		ifTrue: [self parseLambda]
+		ifFalse: [self parseTernary]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___parseEvalInput___ [
+	"CPython's eval rule, ``eval: expressions NEWLINE* ENDMARKER''
+	(Grammar/python.gram): one expression, or several separated by commas, and
+	nothing after.  The first token outside it is ``invalid syntax'' there.
+
+	Parsed as a module, ``x = 1 = 2'' raised the assignment's own ``cannot
+	assign to literal'', ``f'' = 3'' its f-string refusal, and ``x = 1'' or
+	``del x'' an ``invalid syntax'' with no location at all, found only after
+	the whole module had parsed (test_fstring test_assignment, test_del)."
+
+	| startTok value elements |
+	startTok := self peek.
+	self ___atEvalInputEnd___ ifTrue: [^ self ___invalidSyntaxAt___: startTok].
+	value := self ___parseEvalExpression___.
+	(self atOp: ',') ifTrue: [
+		elements := OrderedCollection with: value.
+		[(self matchOp: ',') and: [self ___atEvalInputEnd___ not]]
+			whileTrue: [elements add: self ___parseEvalExpression___].
+		value := TupleAst new
+			elts: elements asArray;
+			ctx: self loadCtx;
+			from: startTok to: self lastToken;
+			yourself].
+	self skipNewlines.
+	self ___atEvalInputEnd___ ifFalse: [^ self ___invalidSyntaxAt___: self peek].
+	^ Array with: (ExprAst new
+		value: value;
+		from: startTok to: self lastToken;
+		yourself)
+
+]
+
 { #category : 'Grail-parsing - atoms' }
 PythonParser >> ___parseFStringLiteralToken___: aToken [
 	"Parse aToken, and nothing else, as an f-string literal."
@@ -1955,6 +2014,16 @@ PythonParser >> ___parseStarExpressionsOrYield___ [
 
 	(self atKeyword: 'yield') ifTrue: [^ self parseYieldExpression].
 	^ self parseStarExpressions
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___parsingEvalInput___ [
+	"Whether this parse is of eval() input or compile(..., 'eval') source,
+	which CPython parses with its eval rule rather than as a module (ModuleAst
+	class >> parseEvalSource:)."
+
+	^ (SessionTemps current at: #'GrailParsingEvalInput' otherwise: nil) == true
 
 ]
 
@@ -5941,7 +6010,9 @@ PythonParser >> parseModule [
 
 	| body block module variables writes blocking scope |
 	self skipNewlines.
-	body := self parseStatements.
+	body := self ___parsingEvalInput___
+		ifTrue: [self ___parseEvalInput___]
+		ifFalse: [self parseStatements].
 	"PEP 572's comprehension restrictions, checked over the finished tree --
 	see ___validateComprehensions___: for why this cannot run at construction
 	time."

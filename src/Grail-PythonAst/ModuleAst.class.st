@@ -892,7 +892,7 @@ ModuleAst class >> evaluateExpressionSource: sourceString usingModuleScope: aSym
 	Used to implement Python's eval() builtin."
 
 	| module |
-	module := self parseSource: sourceString.
+	module := self parseEvalSource: sourceString.
 	module isSingleExpressionBody ifFalse: [
 		SyntaxError @env1:___signal___:
 			'eval() arg 1 must be a single expression: ' , sourceString].
@@ -1082,6 +1082,28 @@ ModuleAst class >> nextSeqFor: aKind [
 	temps := SessionTemps current.
 	temps at: key put: (temps at: key ifAbsent: [0]) + 1.
 	^ temps at: key
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> parseEvalSource: sourceString [
+	"parseEvalSource:allowTopLevelAwait:, for eval()."
+
+	^ self parseEvalSource: sourceString allowTopLevelAwait: false
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> parseEvalSource: sourceString allowTopLevelAwait: allowAwait [
+	"parseSource:allowTopLevelAwait:, by CPython's eval rule rather than as a
+	module: eval() input and compile(..., 'eval') source are one expression
+	list and nothing else (PythonParser >> ___parseEvalInput___).  The rule
+	rides the session for the parse, as #GrailParsingForAst does for
+	ast.parse."
+
+	^ [SessionTemps current at: #'GrailParsingEvalInput' put: true.
+		self parseSource: sourceString allowTopLevelAwait: allowAwait]
+			ensure: [SessionTemps current removeKey: #'GrailParsingEvalInput' ifAbsent: [nil]]
 
 ]
 
