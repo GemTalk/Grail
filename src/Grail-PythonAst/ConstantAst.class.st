@@ -200,6 +200,22 @@ ConstantAst >> ___irRefusalDetail___: localSet [
 
 ]
 
+{ #category : 'Grail-Docstrings' }
+ConstantAst >> ___isDocStringLiteral___ [
+	"Whether this literal, standing first in a body, is the docstring CPython
+	lifts into __doc__: a str, but not the Ellipsis marker -- the parser
+	records ``...'' as the Symbol #'...', and a Symbol IS a
+	CharacterCollection, so ``class E(str, Enum): ...'' had Ellipsis for its
+	__doc__ (FastAPI's test_schema_compat_pydantic_v2) -- and not an f-string,
+	which CPython never takes for one even when it has no fields:
+	``def f(): f'''Not a docstring''''' leaves f.__doc__ None (test_fstring
+	test_docstring)."
+
+	^ (value isKindOf: CharacterCollection)
+		and: [value ~~ #'...' and: [isAnFString ~~ true]]
+
+]
+
 { #category : 'Grail-compile warnings' }
 ConstantAst >> ___isIdentityLiteral___ [
 	^ (value isNil or: [value == true or: [value == false or: [value == #'...']]]) not
