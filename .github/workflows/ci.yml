@@ -143,7 +143,7 @@ jobs:
         run: python3 scripts/sync_scope_status.py --check
 
   test-main:
-    name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
+    name: test-main ${{ matrix.arm }} (${{ matrix.shard }})
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
@@ -170,9 +170,12 @@ jobs:
         # run_tests.sh) -- measured, the heaviest shard goes from 96% of the
         # cap to 75%.
         #
-        # Four runners of two shards each keeps the runner count where it was
-        # while every session compiles half as much.  `name` gives
-        # collision-free artifact names (matrix.shards contains a space).
+        # SIXTEEN partitions now, one runner each (#1872).  A shard is one
+        # session, about one CPU, and took 22 of a job's 29 minutes as two
+        # shards side by side -- so more cores per runner buy nothing, more
+        # runners do.  Shard 0's job also runs the suites run_tests.sh runs
+        # after the shards; the other fifteen stop at the shards
+        # (GRAIL_TEST_SHARDS_ONLY=1), since those suites need one run per arm.
         #
         # TWO ARMS, BOTH GATED.  Since #1087 the IR codegen path is the
         # DEFAULT, so the `ir` arm leaves GRAIL_IR_CODEGEN empty -- which reads
@@ -187,15 +190,11 @@ jobs:
         # ran in a separate workflow (ir-flag-on.yml, #1148) that nothing
         # required -- it ran in the merge queue, and the queue did not wait
         # for it.
+        arm: [ir, text]
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
         include:
-          - { arm: ir,   ircodegen: "",  name: a, shards: "0 1" }
-          - { arm: ir,   ircodegen: "",  name: b, shards: "2 3" }
-          - { arm: ir,   ircodegen: "",  name: c, shards: "4 5" }
-          - { arm: ir,   ircodegen: "",  name: d, shards: "6 7" }
-          - { arm: text, ircodegen: "0", name: a, shards: "0 1" }
-          - { arm: text, ircodegen: "0", name: b, shards: "2 3" }
-          - { arm: text, ircodegen: "0", name: c, shards: "4 5" }
-          - { arm: text, ircodegen: "0", name: d, shards: "6 7" }
+          - { arm: ir,   ircodegen: "" }
+          - { arm: text, ircodegen: "0" }
     # --shm-size lifts the container's default 64 MB /dev/shm so GemStone's
     # shared page cache fits. GEMSTONE/PATH come from the image ENV.
     container:
@@ -228,7 +227,7 @@ jobs:
       # first (checkout wrote it as root).  Everything runs in one shell, so no
       # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
       # they're dropped with `env -u`).
-      - name: install + run SUnit shards ${{ matrix.shards }}, ${{ matrix.arm }} arm (as non-root 'ci')
+      - name: install + run SUnit shard ${{ matrix.shard }} of 16, ${{ matrix.arm }} arm (as non-root 'ci')
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
@@ -237,7 +236,9 @@ jobs:
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
+            GRAIL_TEST_WORKERS=16 \
+            GRAIL_TEST_SHARDS="${{ matrix.shard }}" \
+            GRAIL_TEST_SHARDS_ONLY="${{ matrix.shard == 0 && '0' || '1' }}" \
             GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
@@ -339,7 +340,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # Per-leg name: matrix jobs must not collide on artifact names.
-          name: grail-ci-logs-${{ matrix.arm }}-shards-${{ matrix.name }}
+          name: grail-ci-logs-${{ matrix.arm }}-shard-${{ matrix.shard }}
           if-no-files-found: ignore
           retention-days: 7
           # .out logs + stone/gem logs; the extent is deliberately excluded.

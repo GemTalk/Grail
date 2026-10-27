@@ -330,6 +330,13 @@ printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0
 [ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
 if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 
+# GRAIL_TEST_SHARDS_ONLY=1 stops here: CI runs each shard on a runner of its own,
+# and the suites below need running once per arm, not once per shard.
+if [ "${GRAIL_TEST_SHARDS_ONLY:-0}" = 1 ]; then
+  printf 'TIMING | %-26s | %4ds\n' "TOTAL run_tests.sh" "$((SECONDS - SUITE_T0))"
+  exit $EXIT
+fi
+
 # Run embedded CPython tests in a separate session (can't coexist with shim)
 timed "cpython-embedded" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runCPythonTests.gs < /dev/null || EXIT=$?
 
