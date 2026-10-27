@@ -424,12 +424,27 @@ extern _GrailLongSingleton _Py_FalseStruct;
    In the shim, object lifetime is managed by GemStone, so this is a no-op. */
 void _Py_Dealloc(PyObject *op);
 
-#define Py_INCREF(op)  (++(((PyObject*)(op))->ob_refcnt))
-#define Py_DECREF(op)  do { \
-        PyObject *_py_decref_tmp = _PyObject_CAST(op); \
-        if (--_py_decref_tmp->ob_refcnt == 0) \
-            _Py_Dealloc(_py_decref_tmp); \
-    } while (0)
+/* Immortal objects, as CPython 3.14 has them (Include/refcount.h, 64-bit,
+   GIL build): a count whose low 32 bits read as negative is never changed,
+   and never reaches _Py_Dealloc.  Wheels compiled against 3.14's headers
+   already treat counts that way, and their own static objects start
+   immortal.  The shim's types and singletons start at
+   GRAIL_IMMORTAL_REFCNT -- 3.14's _Py_IMMORTAL_INITIAL_REFCNT -- because
+   the shim never frees one (docs/Shim_Memory.md, Step 1). */
+#define GRAIL_IMMORTAL_REFCNT ((Py_ssize_t)(3LL << 30))
+static inline int _Py_IsImmortal(PyObject *op) {
+    return (int32_t)op->ob_refcnt < 0;
+}
+static inline void _grail_incref(PyObject *op) {
+    if (!_Py_IsImmortal(op)) op->ob_refcnt++;
+}
+static inline void _grail_decref(PyObject *op) {
+    if (_Py_IsImmortal(op)) return;
+    if (--op->ob_refcnt == 0) _Py_Dealloc(op);
+}
+
+#define Py_INCREF(op)  _grail_incref(_PyObject_CAST(op))
+#define Py_DECREF(op)  _grail_decref(_PyObject_CAST(op))
 #define Py_XINCREF(op) do { if ((op) != NULL) Py_INCREF(op); } while (0)
 #define Py_XDECREF(op) do { if ((op) != NULL) Py_DECREF(op); } while (0)
 

@@ -4927,6 +4927,25 @@ repr((callable(getattr(sys, ''getrefcount'', None)), isinstance(sys.getrefcount(
 
 ]
 
+{ #category : 'Grail-Tests - Shim Memory' }
+CPythonShimTestCase >> testTheShimsSingletonsAndTypesAreImmortal [
+	"The shim's singletons and types are immortal, as CPython 3.14's are: a
+count whose low 32 bits read as negative is never changed, so it can never
+reach _Py_Dealloc.  None, True, False, NotImplemented and Ellipsis were
+pinned at 1 << 30 and the types started at 1 (PyType_Ready set 1 even on a
+wheel's own static type, which 3.14's headers had made immortal), so a C
+extension's increments and decrements moved them.  Harmless while the shim
+frees nothing; not once it does (docs/Shim_Memory.md, Step 1).  Values are
+CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.capi("immortal_statics"))') equals: '[True, True, True, True, True, True, True, True]'
+
+]
+
 { #category : 'Grail-Tests - NumPy Stage 3' }
 CPythonShimTestCase >> testThreadStateNamesTheMainInterpreter [
 	"PyThreadState_Get and PyInterpreterState_Main were stubs answering NULL; numpy's
