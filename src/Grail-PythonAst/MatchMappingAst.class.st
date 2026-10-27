@@ -105,6 +105,50 @@ MatchMappingAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchMappingAst >> ___literal: aValue equals: anotherValue [
+	"Python's ``=='' on two literal key values, which a set's membership test
+	asks: either side's __eq__, as PyUnionType class >> ___pyEq___:with:
+	asks it.  The AST holds None as nil, which has no __eq__."
+
+	| answer |
+	aValue == anotherValue ifTrue: [^ true].
+	(aValue isNil or: [anotherValue isNil]) ifTrue: [^ false].
+	answer := [aValue @env1:__eq__: anotherValue] on: AbstractException do: [:ex | ex return: nil].
+	answer == true ifTrue: [^ true].
+	answer := [anotherValue @env1:__eq__: aValue] on: AbstractException do: [:ex | ex return: nil].
+	^ answer == true
+
+]
+
+{ #category : 'Grail-validation' }
+MatchMappingAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_mapping and codegen_pattern_mapping_key
+	(Python/codegen.c:5983-6110): every key is a dotted name or a literal,
+	and no literal is looked up twice -- compared as a set compares them, so
+	0, 0.0, False and 0j are one key, reported as the later one.  Then the
+	values are subpatterns, which may be irrefutable, and ``**rest'' binds."
+
+	| seen |
+	seen := OrderedCollection new.
+	keys do: [:key |
+		(key isKindOf: AttributeAst) ifFalse: [
+			| literal |
+			literal := key ___foldedLiteral___.
+			literal isNil ifTrue: [
+				^ ModuleAst
+					___syntaxError___: 'mapping pattern keys may only match literals and attribute lookups'
+					node: self].
+			(seen anySatisfy: [:each | self ___literal: each value equals: literal value]) ifTrue: [
+				^ ModuleAst
+					___syntaxError___: 'mapping pattern checks duplicate key (' , literal ___constantRepr___ , ')'
+					node: self].
+			seen add: literal]].
+	patterns do: [:each | each ___validateBinding___: boundNames irrefutableAllowed: true].
+	rest ifNotNil: [:target | self ___bind___: target id into: boundNames at: self]
+
+]
+
 { #category : 'Grail-match' }
 MatchMappingAst >> keys [
 	^keys

@@ -77,6 +77,28 @@ MatchAsAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchAsAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_as (Python/codegen.c:5862-5885): a bare capture or
+	wildcard matches anything, so it may stand only where nothing is left to
+	try after it; ``P as x'' checks P under the same rule, then binds x."
+
+	pattern isNil
+		ifTrue: [
+			aBoolean ifFalse: [
+				name isNil ifTrue: [
+					^ ModuleAst
+						___syntaxError___: 'wildcard makes remaining patterns unreachable'
+						node: self].
+				^ ModuleAst
+					___syntaxError___: 'name capture ''' , name id asString
+						, ''' makes remaining patterns unreachable'
+					node: self]]
+		ifFalse: [pattern ___validateBinding___: boundNames irrefutableAllowed: aBoolean].
+	name ifNotNil: [:target | self ___bind___: target id into: boundNames at: self]
+
+]
+
 { #category : 'Grail-match' }
 MatchAsAst >> name [
 	^name

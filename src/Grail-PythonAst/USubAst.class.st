@@ -18,6 +18,15 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+USubAst >> ___foldedLiteral___ [
+	"``-1'', ``-1.5'', ``-1j''."
+
+	(operand isKindOf: ConstantAst) ifFalse: [^ nil].
+	^ ConstantAst new value: (operand value @env1:__neg__); yourself
+
+]
+
 { #category : 'Grail-IR Codegen' }
 USubAst >> ___irUnarySelector___ [
 	^ #__neg__

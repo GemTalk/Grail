@@ -97,6 +97,25 @@ MatchClassAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchClassAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_class (Python/codegen.c:5920-5975): no keyword names one
+	attribute twice -- the first attribute with a later repeat, located at
+	the repeat's pattern, as validate_kwd_attrs (5900-5918) finds it -- and
+	every sub-pattern, positional then keyword, may be irrefutable."
+
+	1 to: kwdAttrs size do: [:index |
+		index + 1 to: kwdAttrs size do: [:laterIndex |
+			(kwdAttrs at: index) = (kwdAttrs at: laterIndex) ifTrue: [
+				^ ModuleAst
+					___syntaxError___: 'attribute name repeated in class pattern: '
+						, (kwdAttrs at: index) asString
+					node: (kwdPatterns at: laterIndex)]]].
+	patterns , kwdPatterns do: [:each |
+		each ___validateBinding___: boundNames irrefutableAllowed: true]
+
+]
+
 { #category : 'Grail-match' }
 MatchClassAst >> cls [
 	^cls

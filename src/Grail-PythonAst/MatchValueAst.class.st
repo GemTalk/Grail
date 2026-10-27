@@ -46,6 +46,20 @@ MatchValueAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchValueAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_value (Python/codegen.c:6322-6335): a value pattern
+	compares against a literal or a dotted name -- MATCH_VALUE_EXPR, a
+	Constant or an Attribute once signed and complex numbers are folded.  An
+	f-string is neither."
+
+	((value isKindOf: AttributeAst) or: [value ___foldedLiteral___ notNil]) ifFalse: [
+		^ ModuleAst
+			___syntaxError___: 'patterns may only match literals and attribute lookups'
+			node: self]
+
+]
+
 { #category : 'Grail-match' }
 MatchValueAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	"``==''-comparison against the pattern's value.  Routed through

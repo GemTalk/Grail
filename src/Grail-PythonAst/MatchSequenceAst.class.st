@@ -107,6 +107,21 @@ MatchSequenceAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchSequenceAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_sequence (Python/codegen.c:6262-6283): one starred name
+	at most.  Each element is a subpattern, which may be irrefutable
+	(codegen_pattern_subpattern, 5853-5860): ``[x, _]'' can still fail on
+	the length."
+
+	(patterns select: [:each | each isKindOf: MatchStarAst]) size > 1 ifTrue: [
+		^ ModuleAst
+			___syntaxError___: 'multiple starred names in sequence pattern'
+			node: self].
+	patterns do: [:each | each ___validateBinding___: boundNames irrefutableAllowed: true]
+
+]
+
 { #category : 'Grail-match' }
 MatchSequenceAst >> patterns [
 	^patterns

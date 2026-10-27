@@ -384,6 +384,9 @@ PythonParser >> ___checkComplexLiteral___: aValue [
 	| real imag isNumber |
 	((aValue isKindOf: BinOpAst) and: [(aValue op isKindOf: AddAst) or: [aValue op isKindOf: SubAst]])
 		ifFalse: [^ aValue].
+	"An f-string's parts are folded with ``+'' too, and are no sum the source
+	wrote: ``case f'a' 'b':'' is refused later, as an f-string."
+	aValue ___isAnFStringJoin___ ifTrue: [^ aValue].
 	real := aValue left.
 	imag := aValue right.
 	(real isKindOf: USubAst) ifTrue: [real := real operand].
@@ -1462,16 +1465,10 @@ PythonParser >> ___markAsyncFunctionDef: funcNode [
 
 { #category : 'Grail-parsing - match' }
 PythonParser >> ___matchSequenceOf___: elts from: tok [
-	"Build a sequence pattern, rejecting the one arity error PEP 634
-	names: more than one star.  Two stars have no unambiguous split, so
-	this is a syntax error rather than a runtime surprise."
+	"Build a sequence pattern.  More than one star is CPython's code
+	generator's error, not its grammar's, so it is raised after the parse
+	with the others (MatchSequenceAst >> ___validateBinding___:irrefutableAllowed:)."
 
-	| stars |
-	stars := 0.
-	elts do: [:each | (each isKindOf: MatchStarAst) ifTrue: [stars := stars + 1]].
-	stars > 1 ifTrue: [
-		SyntaxError signal: 'multiple starred names in sequence pattern at line ',
-			tok line printString].
 	^MatchSequenceAst new
 		patterns: elts;
 		from: tok to: self lastToken ; yourself
@@ -4238,14 +4235,16 @@ PythonParser >> parseFStringLiteral [
 	| startTok tok value parts pos len ch result piece converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
-	  wrapped anchor sawT sawNonT uncommented hadComment |
+	  wrapped anchor sawT sawNonT sawF uncommented hadComment |
 	startTok := self peek.
 	parts := OrderedCollection new.
 	sawT := false.
 	sawNonT := false.
+	sawF := false.
 	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString or: [aTok isTString]]]] whileTrue: [
 		tok := self advance.
 		tok isTString ifTrue: [sawT := true] ifFalse: [sawNonT := true].
+		tok isFString ifTrue: [sawF := true].
 		value := tok value.
 		len := value size.
 		(tok isFString or: [tok isTString]) ifFalse: [
@@ -4546,10 +4545,12 @@ PythonParser >> parseFStringLiteral [
 		^ self ___templateFromParts___: parts from: startTok].
 	"Empty f-string → empty literal."
 	parts isEmpty ifTrue: [
-		^ConstantAst new
+		result := ConstantAst new
 			value: '';
 			kind: nil;
-			from: startTok to: self lastToken ; yourself
+			from: startTok to: self lastToken ; yourself.
+		sawF ifTrue: [result ___beAnFString___].
+		^ result
 	].
 	"Build a left-folded chain of BinOp(+) over each piece."
 	result := self ___fstringPartToAst: parts first from: startTok.
@@ -4563,6 +4564,8 @@ PythonParser >> parseFStringLiteral [
 			___beAnFStringJoin___ ;
 			yourself.
 	].
+	"An f-string with no fields folds to its text, still an f-string to CPython."
+	(sawF and: [result isKindOf: ConstantAst]) ifTrue: [result ___beAnFString___].
 	^ result
 
 ]
@@ -5320,6 +5323,9 @@ PythonParser >> parseMatchGroupOrSequence [
 			from: tok to: self lastToken ; yourself].
 	first := self parseMatchPattern.
 	(self atOp: ')') ifTrue: [
+		"group_pattern is ``'(' pattern ')''': a star pattern stands only in a
+		sequence, so ``(*x)'' is invalid where ``(*x,)'' is a sequence."
+		(first isKindOf: MatchStarAst) ifTrue: [^ self ___invalidSyntaxAt___: self peek].
 		self advance.
 		^first].
 	elts := Array with: first.
@@ -5349,6 +5355,10 @@ PythonParser >> parseMatchMapping [
 		(self atOp: '**')
 			ifTrue: [
 				self advance.
+				"double_star_pattern binds a pattern_capture_target, which is
+				never ``_'' (Grammar/python.gram)."
+				(self peek notNil and: [self peek isName and: [self peek value = '_']])
+					ifTrue: [^ self ___invalidSyntaxAt___: self peek].
 				rest := self parseMatchCaptureTarget.
 				"The double-star capture comes last."
 				((self atOp: ',') and: [(position + 1 <= tokens size)
@@ -5378,7 +5388,9 @@ PythonParser >> parseMatchMappingKey [
 	| tok |
 	tok := self peek.
 	(tok notNil and: [tok isName]) ifTrue: [^ self parseMatchDottedName].
-	^self parseBitwiseXor
+	"A key literal is a value pattern's literal: a complex one is a real and an
+	imaginary part (key_value_pattern's literal_expr)."
+	^ self ___checkComplexLiteral___: self parseBitwiseXor
 
 ]
 

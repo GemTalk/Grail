@@ -104,6 +104,20 @@ MatchAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchAst >> ___validatePatterns___ [
+	"Raise what CPython's code generator raises for this statement's patterns
+	(codegen_match_inner, Python/codegen.c:6375-6400): each case binds names
+	of its own, and an irrefutable pattern may stand only in a case that is
+	guarded, or last."
+
+	cases doWithIndex: [:case :index |
+		case pattern
+			___validateBinding___: OrderedCollection new
+			irrefutableAllowed: (case guard notNil or: [index = cases size])]
+
+]
+
 { #category : 'Grail-other' }
 MatchAst >> cases [
 	^cases

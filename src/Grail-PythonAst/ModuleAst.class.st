@@ -610,6 +610,20 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 ]
 
 { #category : 'Grail-parsing' }
+ModuleAst class >> ___validatePatternsIn___: aModule [
+	"The SyntaxErrors CPython's code generator raises for a match statement's
+	patterns -- an unreachable case, a name bound twice, alternatives that
+	bind different names, a duplicate mapping key, a value no pattern may
+	compare against (MatchAst >> ___validatePatterns___).  After the context
+	checks, as CPython's code generator runs after its symbol table, so a
+	symtable error elsewhere in the module is the one reported."
+
+	aModule ___descendantsDo___: [:each |
+		(each isKindOf: MatchAst) ifTrue: [each ___validatePatterns___]]
+
+]
+
+{ #category : 'Grail-parsing' }
 ModuleAst class >> ___validateStarredTarget___: aTarget [
 	"A starred assignment target stands only inside a list or tuple, and only
 	once per one."
@@ -1001,6 +1015,7 @@ ModuleAst class >> parseSource: sourceString [
 	AbstractNode ___currentModuleSource___: sourceString.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #module.
+	self ___validatePatternsIn___: module.
 	self ___wrapReservedSelectorBindingsIn___: module.
 	^module
 
@@ -1027,6 +1042,7 @@ ModuleAst class >> parseSource: sourceString allowTopLevelAwait: allowAwait [
 	AbstractNode ___currentModuleSource___: sourceString.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #async.
+	self ___validatePatternsIn___: module.
 	self ___wrapReservedSelectorBindingsIn___: module.
 	^ module
 

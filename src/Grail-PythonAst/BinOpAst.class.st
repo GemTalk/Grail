@@ -112,9 +112,27 @@ BinOpAst >> ___emitSmalltalkOn___: aStream [
 
 ]
 
+{ #category : 'Grail-validation' }
+BinOpAst >> ___foldedLiteral___ [
+	"A complex literal, ``1+2j'' or ``-1-2j'' -- the only sum a pattern
+	admits, which PythonParser >> ___checkComplexLiteral___: has already
+	required of a value pattern and a mapping key.  An f-string's join is not
+	one, whatever its parts (___beAnFStringJoin___)."
+
+	| real imaginary |
+	self ___isAnFStringJoin___ ifTrue: [^ nil].
+	real := left ___foldedLiteral___.
+	imaginary := right ___foldedLiteral___.
+	(real isNil or: [imaginary isNil]) ifTrue: [^ nil].
+	(op isKindOf: AddAst) ifTrue: [^ ConstantAst new value: (real value @env1:__add__: imaginary value); yourself].
+	(op isKindOf: SubAst) ifTrue: [^ ConstantAst new value: (real value @env1:__sub__: imaginary value); yourself].
+	^ nil
+
+]
+
 { #category : 'Grail-compile warnings' }
 BinOpAst >> ___inferredTypeName___ [
-	^ joinsAnFString == true
+	^ self ___isAnFStringJoin___
 		ifTrue: ['str']
 		ifFalse: [nil]
 
@@ -155,6 +173,15 @@ BinOpAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 { #category : 'Grail-IR Codegen' }
 BinOpAst >> ___irStampChild___ [
 	^ left
+
+]
+
+{ #category : 'Grail-compile warnings' }
+BinOpAst >> ___isAnFStringJoin___ [
+	"Whether the parser folded an f-string's parts with this ``+''
+	(___beAnFStringJoin___)."
+
+	^ joinsAnFString == true
 
 ]
 
