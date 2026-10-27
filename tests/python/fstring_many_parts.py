@@ -20,7 +20,11 @@ def build(n, extra=''):
 x = 'X'
 width = 1
 r['around_256'] = [eval(build(i)) == (x + ' ') * i for i in range(250, 260)]
-r['many_concatenated'] = eval(build(255) * 256) == (x + ' ') * (255 * 256)
+# CPython's own case joins 256 of build(255), 65,280 fields: Grail compiles that
+# to a single doit of some 140 MB, more native code than a long-running CI gem
+# has room for.  5,000 fields is 10,000 parts, which a left fold nests 10,000
+# levels deep and a balanced join 14, without that cost.
+r['many_fields'] = eval(build(5000)) == (x + ' ') * 5000
 r['nested_spec'] = eval(build(253, '{x:{width}} ')) == (x + ' ') * 254
 r['constants'] = eval("f'{1}' 'x' 'y'" * 1024) == '1xy' * 1024
 
@@ -37,7 +41,7 @@ r['evaluation_order'] = (len(joined), order == list(range(300)))
 
 EXPECTED = {
     'around_256': [True] * 10,
-    'many_concatenated': True,
+    'many_fields': True,
     'nested_spec': True,
     'constants': True,
     'evaluation_order': (len(''.join(str(i) for i in range(300))), True),
