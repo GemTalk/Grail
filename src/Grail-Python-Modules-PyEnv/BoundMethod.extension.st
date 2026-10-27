@@ -358,6 +358,15 @@ BoundMethod class >> receiver: aReceiver selector: aSymbol definingClass: aClass
 
 ]
 
+{ #category : 'Grail-Python protocol' }
+BoundMethod >> ___call__: positional kw: keywords [
+	"``f.__call__(*args, **kw)'' for every arity but one, and with keywords:
+	the call itself, as __call__: is."
+
+	^ self ___pyCallValue___: positional kw: keywords
+
+]
+
 { #category : 'Grail-Private' }
 BoundMethod >> ___classSideArityMessageFor___: aReceiver given: nGiven [
 	"CPython's TypeError text for calling this class-side Python def --
@@ -1240,11 +1249,11 @@ BoundMethod >> __builtins__ [
 ]
 
 { #category : 'Grail-Callable' }
-BoundMethod >> __call__: positional [
-	"Make BoundMethod respond to Python's `callable(...)` protocol.
-	Forwards to the standard varargs entry point with empty kwargs."
+BoundMethod >> __call__: anArgument [
+	"``m.__call__(x)'' is ``m(x)'' -- see ExecBlock >> __call__:.  This took x
+	for the positional ARRAY, so ``m.__call__([1, 2])'' called m(1, 2)."
 
-	^ self value: positional value: nil
+	^ self ___pyCallValue___: { anArgument } kw: nil
 
 ]
 

@@ -51,6 +51,15 @@ MethodBinding >> ___boundMeta___: aName [
 
 ]
 
+{ #category : 'Grail-Python protocol' }
+MethodBinding >> ___call__: positional kw: keywords [
+	"``f.__call__(*args, **kw)'' for every arity but one, and with keywords:
+	the call itself, as __call__: is."
+
+	^ self ___pyCallValue___: positional kw: keywords
+
+]
+
 { #category : 'Grail-Callable' }
 MethodBinding >> ___pyCallValue___: positional kw: kwargs [
 	"Forward the Python ``f(args, **kw)'' call site to the
@@ -67,11 +76,10 @@ MethodBinding >> __annotations__ [
 ]
 
 { #category : 'Grail-Callable' }
-MethodBinding >> __call__: positional [
-	"Make MethodBinding respond to Python''s ``callable(...)'' protocol.
-	Forwards to the varargs entry point with empty kwargs."
+MethodBinding >> __call__: anArgument [
+	"``m.__call__(x)'' is ``m(x)'' -- see ExecBlock >> __call__:."
 
-	^ self value: positional value: nil
+	^ self ___pyCallValue___: { anArgument } kw: nil
 
 ]
 
