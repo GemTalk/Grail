@@ -1,7 +1,8 @@
 # Shim memory: who frees what
 
-Status: design for review, 2026-10-26. Implemented so far: proxies are
-`instancesNonPersistent` (Step 2's precondition).
+Status: design for review, 2026-10-26; revised 2026-10-27 after trying
+Step 1b. Implemented so far: proxies are `instancesNonPersistent` (Step 2's
+precondition).
 
 The C-extension shim never frees anything it allocates, so a long-running
 numpy program grows until it runs out of temporary object memory. This
@@ -67,6 +68,12 @@ batches. Growth per call should fall at each step below, and reach about
 zero at the end. It should use `_grail_demo` rather than numpy, so it runs in
 CI, with a numpy run alongside it locally.
 
+`_tempObjSpaceUsed` sees Grail's objects, not C's. Step 1 frees only C
+memory (what `calloc` gave the shim), so it cannot move that figure; the
+proxies, origins and wrappers that hold Grail memory go at Steps 2 and 3.
+So the measurement reads the C heap too (`malloc_zone_statistics`), with the
+shim's own counts of objects allocated, released and quarantined.
+
 ## Step 1: C → C, real deallocation
 
 `_Py_Dealloc(op)` dispatches on what `op` is:
@@ -79,6 +86,14 @@ CI, with a numpy run alongside it locally.
   `free`);
 * a Grail wrapper: nothing. Its memory belongs to a `CByteArray`, and
   reaching zero only makes it eligible for the sweep.
+
+That last case means **the sweep stays off while freeing is on**, until
+Step 3. Releasing a container now decrements the wrappers it holds, and a
+wrapper's count is not honest (Step 3): the same wrapper can be held by
+other C objects whose handouts never added to it. So a container's release
+can take a wrapper to zero that C still holds, and the sweep would drop it.
+The sweep reclaims almost nothing today (Step 3), so turning it off costs
+little.
 
 `_Py_DecRef` (what abi3 wheels such as PyO3's call) must call `_Py_Dealloc`
 at zero, and the shim's own `Py_DECREF` macro in `cpython.h` must match the
@@ -115,12 +130,20 @@ that stored an item without increfing it. Known places to audit first:
 * every shim function that answers a new reference must give the caller one
   (see Step 3).
 
-**Quarantine mode.** To find these before they crash someone, add a mode,
-say `GRAIL_SHIM_QUARANTINE=1`, in which "free" poisons the block instead of
-releasing it: it overwrites `ob_type` with a type whose every slot reports
-the object (its address and original type) and aborts. Run the census, the
-numpy modules, SUnit and the CPython suite (which reaches the shim through
-`_sre`) in that mode before freeing is on by default.
+**Quarantine mode.** To find these before they crash someone,
+`GRAIL_SHIM_DEALLOC` chooses what `_Py_Dealloc` does: `off` (nothing, as
+today), `free`, or `quarantine`. In quarantine mode, "free" poisons the block
+instead of releasing it: it overwrites `ob_type` with a type the shim checks
+for, so a later use reports the object (its address and original type) and
+aborts. The block is never handed back to malloc, so its address is never
+reused. Without that, a stale pointer reads whatever malloc put there next
+and the report cannot name the object. Run the census, the numpy modules,
+SUnit and the CPython suite (which reaches the shim through `_sre`) in that
+mode before freeing is on by default.
+
+Quarantine catches a stale *use*, not an extra release on its own: an
+object released one decrement early, and never touched again, goes
+unreported. So every bug it finds also gets a test of its own.
 
 ## Step 2: C → Grail, a proxy owns a reference
 
@@ -228,7 +251,7 @@ design for it now.
 |---|---|---|
 | 0 | memory measurement (demo, numpy) | it reports growth per call, in CI |
 | 1a | immortal statics; `_Py_DecRef` and the macros as 3.14's | nothing changes yet; the census still agrees |
-| 1b | quarantine mode; `_Py_Dealloc` frees real-layout containers and wheel objects | census, numpy modules, SUnit and the CPython suite are clean in quarantine mode; growth per call falls |
+| 1b | quarantine mode; `_Py_Dealloc` frees real-layout containers and wheel objects; the sweep off while freeing | census, numpy modules, SUnit and the CPython suite are clean in quarantine mode; the C heap's growth per call falls |
 | 2 | proxies `instancesNonPersistent` (done); a trustworthy "no shim call in progress"; proxies and tuple origins own a reference; release list; `id()` of a proxy | the same, and growth falls again |
 | 3 | new references incref; immortal wrappers pinned; sweep retried | growth per call is about zero |
 
