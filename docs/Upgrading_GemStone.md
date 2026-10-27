@@ -67,17 +67,43 @@ application's data works as before.
 
 `tests/scripts/run_grail_upgrade_test.sh` with
 `GRAIL_UPGRADE_FROM_PRODUCT=<a5 product>` runs each case across the engine
-change. Grail n is installed and the app writes under a5. The database moves to
-a8, then Grail m is installed, the app redeploys, and the checks run.
+change. Grail n is installed and the app writes under a5. The stone stops,
+`upgrade_engine.sh --in-place` moves the extent to a8 where it lies, and the
+stone restarts under a8 with its own config, its a5 tranlogs still beside the
+extent. Then Grail m is installed, the app redeploys, and the checks run.
+`GRAIL_UPGRADE_USER=gemdb` runs the case as an account DataCurator creates the
+way GemDB Code creates its own (own security policy; `CodeModification` and
+`CreateOnetimePassword`), instead of as DataCurator.
 
-| case | n | m | result |
-| --- | --- | --- | --- |
-| `noop` | this checkout | this checkout | 232 passed, 0 failed, 2 known gaps |
-| `release=a78e8c03` | GemDB Code's pinned Grail | this checkout | 231 passed, 0 failed, 2 known gaps |
+Measured on Darwin arm64, 2026-10-27, on this branch merged with main
+(`#1833` included):
 
-The two known gaps are the namedtuple identity gap that #1833 closes. They
-fail the same way without an engine change. `noop.classes_kept` passes, so no
-Grail class is a new object after the engine upgrade.
+| case | n | m | as DataCurator | as `gemdb` |
+| --- | --- | --- | --- | --- |
+| `noop` | this checkout | this checkout | 244 passed, 0 failed | 244 passed, 0 failed |
+| `release=c8cbc92` | GemDB Code's pinned Grail | this checkout | 243 passed, 0 failed | 243 passed, 0 failed |
+
+No known gaps are left: the namedtuple identity gap closed with #1833 (before
+it, the same runs read 232 and 231 passed, 0 failed, with 2 known gaps).
+`noop.classes_kept` passes for both users, so no Grail class is a new object
+after the engine upgrade.
+
+`upgrade_engine.sh --in-place` on its own, on a copy of an a5 extent holding
+Grail and app data (DataCurator's): 70 seconds, exit 0, the backup kept. The
+upgraded extent started under its ordinary a8 config, and `./install.sh` with
+a8 succeeded and the app's data read back. That install warned that the
+redeploy could not rebuild 10 modules, because the Grail tree had moved:
+the database's modules were deployed from another checkout, with other
+source, and Grail's module identity guard refuses that by design. The harness,
+which installs n and m into one directory, rebuilds every module.
+
+A failure restores the extent byte for byte. With a bogus product (an a8 copy
+whose last upgradeImage input raises an error, after the kernel has been
+recompiled and committed) the script exited 1, said so on its last line, and
+the extent's SHA-256 matched the original's. So it did after a wrong
+`<from-version>`, which the passwordless login's banner catches before
+upgradeImage runs. It refuses outright, before any copy, when the extent is
+open or a stone of that name is running.
 
 The same procedure was also run by hand on a database an earlier upgrade test
 had left, with data from Grail a78e8c03 upgraded to #1799's fix. After
@@ -87,8 +113,8 @@ database: all 8 shards answered, with 8,450 run and 0 failed. The three
 NetLDI-backed tests (`gemdb-conflict`, `contextvars-session`,
 `concurrent-import`) passed once the `.setenv` named an a8 NetLDI.
 
-The harness needs both products and a gemstone checkout, so it is a local
-check: CI's container has one product.
+The engine-upgrade harness needs both products, so it is a local check: CI's
+container has one product. It no longer needs a gemstone checkout.
 
 ## The workarounds, and the defects behind them
 
