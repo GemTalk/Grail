@@ -32,6 +32,12 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+DictCompAst >> ___comprehensionScopeName___ [
+	^ 'dict comprehension'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 DictCompAst >> ___emitIRValueOn___: aBuilder [
 	"printSmalltalkOn:'s accumulator block over ``(PyDict perform: #new env: 0)''

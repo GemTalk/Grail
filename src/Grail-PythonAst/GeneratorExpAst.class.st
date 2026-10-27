@@ -43,6 +43,12 @@ GeneratorExpAst >> ___checkedSourceFor___: aTempName [
 
 ]
 
+{ #category : 'Grail-validation' }
+GeneratorExpAst >> ___comprehensionScopeName___ [
+	^ 'generator expression'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 GeneratorExpAst >> ___emitIRValueOn___: aBuilder [
 	"printSmalltalkOn:'s synchronous form, send for send:

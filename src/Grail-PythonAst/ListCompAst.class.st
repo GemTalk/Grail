@@ -30,6 +30,12 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+ListCompAst >> ___comprehensionScopeName___ [
+	^ 'list comprehension'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ListCompAst >> ___emitIRValueOn___: aBuilder [
 	"printSmalltalkOn:'s accumulator block, statement for statement:

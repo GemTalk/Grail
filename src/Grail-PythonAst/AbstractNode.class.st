@@ -642,6 +642,15 @@ AbstractNode >> ___compileWarningsDo___: aBlock [
 
 ]
 
+{ #category : 'Grail-validation' }
+AbstractNode >> ___comprehensionScopeName___ [
+	"What CPython's symbol table calls this node when it is a comprehension --
+	a scope of its own -- or nil."
+
+	^ nil
+
+]
+
 { #category : 'Grail-AST export' }
 AbstractNode >> ___copyAstFieldsInto___: pyNode [
 	"Copy this node's children onto the Python node, translating as it goes,
