@@ -25,9 +25,22 @@ The extent is upgraded where it lies. `scripts/upgrade_engine.sh`:
 - copies the extent to `extent0.dbf.pre-4.0.0.a5`, and keeps it after a success
   too;
 - starts a temporary stone, `upgrade_stone`, on the extent under the new
-  product. It has its own config, tranlog directory and logs in
-  `extent0.dbf.upgrade/`, and local passwordless logins on. It starts with `-N`:
-  the old tranlogs are not needed;
+  product, with `-N`: the old tranlogs are not needed. Its config is the
+  product's `system.conf`, then one executable config in `extent0.dbf.upgrade/`
+  (in a GemStone config file the last setting of a name wins):
+  - the database's own stone config, when `UPGRADE_ENGINE_STONE_CONFIG` names it
+    (one file, or several separated by `:` and read in order; for GemDB, its
+    `conf/system.conf:conf/gemdb.conf`). Its `KEYFILE`, `DBF_EXTENT_SIZES`,
+    `DBF_PRE_GROW`, page cache and so on hold for the upgrade too. Without it,
+    the product's key, and `DBF_EXTENT_SIZES` of at least the extent's own size:
+    a stone with no size allows only 8,192 MB, and refuses to start on GemDB's
+    pre-grown 10,240 MB extent ("Your repository is already of size 10240
+    Mbytes, which is larger than your maximum licensed repository size");
+  - then what the upgrade needs, overriding the database's: the extent's name,
+    its own tranlog directory with partial logging, local passwordless logins
+    on, and no statmonitor. `GEMSTONE_SYS_CONF` and `GEMSTONE_EXE_CONF` are
+    unset, so a caller's (GemDB exports both) does not configure the upgrade's
+    gems;
 - checks, with a passwordless login, that the extent was last written by the
   version named;
 - runs **upgradeImage**, GemStone's kernel upgrade. It recompiles the kernel and
@@ -99,6 +112,16 @@ Measured on Darwin arm64, 2026-10-27, on this branch merged with main
 (`synthetic`) and 1,528 (`release`) methods after the engine upgrade and none on
 one engine; in `synthetic` across the engines it deleted the 2 session methods m
 removed.
+
+With `GRAIL_UPGRADE_GEMDB_STONE=1` the harness configures the stone as GemDB
+Code configures its database's: a `conf` directory with `system.conf` and
+`<stone>.conf` named by `GEMSTONE_SYS_CONF`/`GEMSTONE_EXE_CONF`, the key copied
+beside it, a pre-grown 10,240 MB extent and a statmonitor. It hands that config
+to the upgrade through `UPGRADE_ENGINE_STONE_CONFIG`, and the a8 stone restarts
+on the same config, the a5-era key included. As `gemdb`, a5 → a8: `noop`
+244 / 0, `synthetic` 253 / 0, `release=c8cbc92` 243 / 0. Without a config, a
+copy of that 10,240 MB a5 extent upgraded in 59 s; a failed run on it (wrong
+`<from-version>`) restored it byte for byte.
 
 No known gaps are left: the namedtuple identity gap closed with #1833 (before
 it, the same runs read 232 and 231 passed, 0 failed, with 2 known gaps).

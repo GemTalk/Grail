@@ -56,6 +56,11 @@
 # lies, the stone stopped, before the stone restarts under $GEMSTONE and Grail m
 # is installed (docs/Upgrading_GemStone.md).
 #
+# GRAIL_UPGRADE_GEMDB_STONE=1 configures the stone as GemDB Code configures its
+# database's (a conf directory with its own key, a pre-grown 10240 MB extent, a
+# statmonitor), and hands that config to upgrade_engine.sh through
+# UPGRADE_ENGINE_STONE_CONFIG.
+#
 # GRAIL_UPGRADE_USER names the account Grail is installed as and the apps run as
 # (default DataCurator). Any other is created by DataCurator on each fresh stone,
 # as GemDB Code creates its own account: its own security policy, and the
@@ -78,6 +83,7 @@ export PATH="$GEMSTONE/bin:$PATH"
 STONE=${GRAIL_UPGRADE_STONE:-grail_upgrade}
 FROM_PRODUCT=${GRAIL_UPGRADE_FROM_PRODUCT:-}
 GRAIL_USER=${GRAIL_UPGRADE_USER:-DataCurator}
+GEMDB_STONE=${GRAIL_UPGRADE_GEMDB_STONE:-0}
 if [ -n "$FROM_PRODUCT" ]; then
     FROM_VERSION=$(awk 'NR==2{print $1; exit}' "$FROM_PRODUCT/version.txt")
 fi
@@ -109,6 +115,30 @@ stop_stone() {
 
 start_stone() {     # start_stone -- the stone on $WORK/stone/extent0.dbf, under $PRODUCT
     local d=$WORK/stone
+    if [ "$GEMDB_STONE" = 1 ]; then
+        # As GemDB Code configures its database's stone (src/database.ts): a
+        # conf directory holding system.conf and <stone>.conf, named by
+        # GEMSTONE_SYS_CONF and GEMSTONE_EXE_CONF; a pre-grown 10240 MB extent
+        # (more than the 8192 MB a stone allows without a size); and the key the
+        # engine it was created with shipped, copied beside it.
+        [ -f "$d/conf/gemdb.key" ] || { mkdir -p "$d/conf" "$d/stat"; cp "$(keyfile "$PRODUCT")" "$d/conf/gemdb.key"; }
+        cat > "$d/conf/system.conf" <<EOF
+DBF_EXTENT_NAMES = "$d/extent0.dbf";
+STN_TRAN_FULL_LOGGING = TRUE;
+STN_TRAN_LOG_DIRECTORIES = "$d/";
+STN_TRAN_LOG_SIZES = 1000;
+DBF_EXTENT_SIZES = 10240MB;
+STN_FREE_SPACE_THRESHOLD = 500MB;
+DBF_PRE_GROW = TRUE;
+STN_STATMONITOR_ARGS = "-i20 -u0 -z -R -k '00:00' -F'$d/stat/statmonitor_%%S_%Y-%m-%d_%H%M%S.out'";
+EOF
+        printf 'SHR_PAGE_CACHE_SIZE_KB = 100000;\nKEYFILE = "%s";\n' "$d/conf/gemdb.key" > "$d/conf/$STONE.conf"
+        GEMSTONE=$PRODUCT GEMSTONE_SYS_CONF=$d/conf GEMSTONE_EXE_CONF=$d/conf \
+            "$PRODUCT/bin/startstone" -l "$d/stone.log" "$STONE" > "$d/startstone.out" 2>&1 \
+            && GEMSTONE=$PRODUCT "$PRODUCT/bin/waitstone" "$STONE" 60 > /dev/null 2>&1 \
+            || { echo "upgrade: startstone $STONE failed:"; tail -20 "$d/startstone.out"; return 1; }
+        return 0
+    fi
     cat > "$d/stone.conf" <<EOF
 DBF_EXTENT_NAMES = $d/extent0.dbf;
 STN_TRAN_LOG_DIRECTORIES = $d/, $d/;
@@ -258,7 +288,10 @@ run_case() {            # run_case <case> -- 0 if every check passed
         stop_stone
         PRODUCT=$GEMSTONE
         rm -f "$WORK/stone/extent0.dbf.pre-$FROM_VERSION"
-        (GEMSTONE=$GEMSTONE "$PROJECT_ROOT/scripts/upgrade_engine.sh" --in-place "$WORK/stone/extent0.dbf" \
+        local stone_config=
+        [ "$GEMDB_STONE" = 1 ] && stone_config=$WORK/stone/conf/system.conf:$WORK/stone/conf/$STONE.conf
+        (GEMSTONE=$GEMSTONE UPGRADE_ENGINE_STONE_CONFIG=$stone_config \
+            "$PROJECT_ROOT/scripts/upgrade_engine.sh" --in-place "$WORK/stone/extent0.dbf" \
             "$STONE" "$FROM_VERSION") > "$d/engine.log" 2>&1 || {
             echo "upgrade: the engine upgrade failed; the end of $d/engine.log:"
             tail -30 "$d/engine.log"; return 1; }

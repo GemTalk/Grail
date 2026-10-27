@@ -21,6 +21,15 @@
 #
 # Env: GEMSTONE             the NEW product
 #      GEMSTONE_GLOBAL_DIR  as for any stone
+#      UPGRADE_ENGINE_STONE_CONFIG   optional: the database's own stone config,
+#                           one file or several separated by ':' (e.g. its
+#                           system.conf and <stone>.conf), read in that order
+#                           over the product's system.conf, so its KEYFILE,
+#                           DBF_EXTENT_SIZES, ... hold for the upgrade too. The
+#                           upgrade overrides only the extent name, the tranlogs
+#                           (its own, partial logging), passwordless logins and
+#                           the statmonitor. Without it: the product's key, and
+#                           DBF_EXTENT_SIZES of at least the extent's size.
 #      UPGRADE_ENGINE_PROJECTS_HOME  optional: git clones of the new product's
 #                           projects for Rowan's reload (default: copies made here)
 
@@ -31,6 +40,12 @@ usage() { sed -n '2,/^set -e/p' "$0" | sed -e '$d' -e 's/^# \{0,1\}//'; exit 2; 
 EXTENT=$2 STONE=$3 FROM=$4
 
 say() { echo "upgrade_engine: $*"; }
+# A copy that keeps mode and times: a clone where the filesystem can make one
+# (APFS, btrfs, XFS), which costs no time or space for a pre-grown extent.
+copy_file() {
+  cp -c -p "$1" "$2" 2>/dev/null || cp --reflink=auto --sparse=always -p "$1" "$2" 2>/dev/null \
+    || cp -p "$1" "$2"
+}
 die() { say "$*"; exit 1; }      # before the extent is touched: nothing to restore
 
 [ -n "${GEMSTONE:-}" ] && [ -x "$GEMSTONE/bin/startstone" ] \
@@ -38,6 +53,9 @@ die() { say "$*"; exit 1; }      # before the extent is touched: nothing to rest
 [ -n "${GEMSTONE_GLOBAL_DIR:-}" ] || die "GEMSTONE_GLOBAL_DIR must be set"
 [ -f "$EXTENT" ] || die "no extent at $EXTENT"
 export PATH="$GEMSTONE/bin:$PATH"
+# Every config is named on the command line; a caller's (GemDB exports both) would
+# otherwise configure the upgrade's gems.
+unset GEMSTONE_SYS_CONF GEMSTONE_EXE_CONF
 EXTENT=$(cd "$(dirname "$EXTENT")" && pwd)/$(basename "$EXTENT")
 TO=$(awk 'NR==2{print $1; exit}' "$GEMSTONE/version.txt")
 [ "$TO" != "$FROM" ] || die "the extent is already $FROM, the product's own version"
@@ -62,6 +80,12 @@ if command -v lsof > /dev/null 2>&1; then
   [ -z "$holders" ] || die "the extent is open (pid $holders): stop the stone running on $EXTENT first"
 fi
 
+old_ifs=$IFS; IFS=:
+for f in ${UPGRADE_ENGINE_STONE_CONFIG:-}; do
+  [ -f "$f" ] || { IFS=$old_ifs; die "no stone config at $f (UPGRADE_ENGINE_STONE_CONFIG)"; }
+done
+IFS=$old_ifs
+
 # ---- 1. backup ---------------------------------------------------------------
 BACKUP=$EXTENT.pre-$FROM
 if [ -e "$BACKUP" ]; then
@@ -71,7 +95,7 @@ if [ -e "$BACKUP" ]; then
   say "backup $BACKUP already matches the extent"
 else
   say "backing up the extent to $BACKUP"
-  cp -p "$EXTENT" "$BACKUP.partial"
+  copy_file "$EXTENT" "$BACKUP.partial"
   mv "$BACKUP.partial" "$BACKUP"
 fi
 
@@ -94,7 +118,7 @@ on_exit() {
   trap - EXIT INT TERM
   [ $rc -ne 0 ] || return 0
   stop_stone || { say "FAILED while $STEP, and stone $STONE would not stop: the extent is NOT restored; the original is $BACKUP"; exit $rc; }
-  if cp -p "$BACKUP" "$EXTENT" && cmp -s "$BACKUP" "$EXTENT"; then
+  if copy_file "$BACKUP" "$EXTENT.restoring" && mv -f "$EXTENT.restoring" "$EXTENT" && cmp -s "$BACKUP" "$EXTENT"; then
     say "FAILED while $STEP (logs in $LOG); the extent is restored from $BACKUP"
   else
     say "FAILED while $STEP, and restoring the extent failed: the original is $BACKUP"
@@ -111,25 +135,50 @@ STEP="starting stone $STONE"
 [ -d "$WORK" ] && chmod -R u+w "$WORK"
 rm -rf "$WORK"
 mkdir -p "$LOG" "$WORK/tranlogs" "$WORK/patched/bin"
-if [ -f "$GEMSTONE/sys/gemstone.key" ]; then KEYFILE=$GEMSTONE/sys/gemstone.key
-else KEYFILE=$GEMSTONE/sys/community.starter.key; fi
-# GemStone's upgrade logs in as SystemUser, DataCurator, GcUser and
-# HostAgentUser without passwords: it requires local passwordless logins (linked
-# topaz, this host, the stone's OS user, an empty password), as its own
-# upgradeImage.sh says. On for this stone only, which lives as long as the upgrade.
-cat > "$WORK/stone.conf" <<EOF
-DBF_EXTENT_NAMES = $EXTENT;
-STN_TRAN_LOG_DIRECTORIES = $WORK/tranlogs/, $WORK/tranlogs/;
-STN_TRAN_LOG_SIZES = 100, 100;
-KEYFILE = $KEYFILE;
+# The stone's config: the product's system.conf, then one executable config made
+# of the caller's own stone config (UPGRADE_ENGINE_STONE_CONFIG: its key, extent
+# size, page cache, ...) and, last, what the upgrade needs; in a GemStone config
+# file the last setting of a name wins.
+{
+  if [ -n "${UPGRADE_ENGINE_STONE_CONFIG:-}" ]; then
+    echo "# ---- the caller's stone config: $UPGRADE_ENGINE_STONE_CONFIG"
+    old_ifs=$IFS; IFS=:
+    for f in $UPGRADE_ENGINE_STONE_CONFIG; do
+      cat "$f"; echo
+    done
+    IFS=$old_ifs
+  else
+    if [ -f "$GEMSTONE/sys/gemstone.key" ]; then keyfile=$GEMSTONE/sys/gemstone.key
+    else keyfile=$GEMSTONE/sys/community.starter.key; fi
+    # Without an extent size the stone allows only 8192 MB, and refuses to start on
+    # a larger extent (a pre-grown one, say): never less than the extent's own size.
+    mb=$(( ($(wc -c < "$EXTENT") + 1048575) / 1048576 ))
+    [ "$mb" -ge 8192 ] || mb=8192
+    echo "KEYFILE = $keyfile;"
+    echo "DBF_EXTENT_SIZES = ${mb}MB;"
+  fi
+  # GemStone's upgrade logs in as SystemUser, DataCurator, GcUser and
+  # HostAgentUser without passwords: it requires local passwordless logins
+  # (linked topaz, this host, the stone's OS user, an empty password), as its own
+  # upgradeImage.sh says. On for this stone only, which lives as long as the
+  # upgrade; its tranlogs are spent afterwards, so partial logging, and no
+  # statmonitor.
+  cat <<EOF
+# ---- what the upgrade needs
+DBF_EXTENT_NAMES = "$EXTENT";
+STN_TRAN_LOG_DIRECTORIES = "$WORK/tranlogs/", "$WORK/tranlogs/";
+STN_TRAN_LOG_SIZES = 100MB, 100MB;
+STN_TRAN_FULL_LOGGING = FALSE;
 STN_LOCAL_PASSWORDLESS_LOGINS_ENABLED = TRUE;
+STN_STATMONITOR_ARGS = "";
 EOF
+} > "$WORK/stone.conf"
 chmod u+w "$EXTENT"
 say "starting stone $STONE on the extent under $TO"
 STARTED=1
 # The old tranlogs are not needed after a clean shutdown; -N starts without them.
 startstone -e "$WORK/stone.conf" -z "$GEMSTONE/data/system.conf" -l "$LOG/stone.log" -N "$STONE" \
-  > "$LOG/startstone.out" 2>&1 || fail "startstone $STONE failed: $(tail -1 "$LOG/startstone.out")"
+  > "$LOG/startstone.out" 2>&1 || fail "startstone $STONE failed: $(grep -h -m1 -A1 'larger than\|FATAL ERROR' "$LOG/stone.log" 2>/dev/null | tr -s ' \n' ' ' || tail -1 "$LOG/startstone.out") (see $LOG/stone.log)"
 waitstone "$STONE" 60 > /dev/null 2>&1 || fail "stone $STONE did not come up (see $LOG/stone.log)"
 
 # A passwordless login, as GemStone's upgradeImage.sh tests first; its banner
