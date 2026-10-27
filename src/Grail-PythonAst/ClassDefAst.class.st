@@ -4179,7 +4179,13 @@ ClassDefAst >> emitMethodAnnotationsTableOn: aStream className: aClassName [
 	dispatch type.  Listing only instance methods made that form report ``no
 	type annotation found'' for a class-side implementation and drop the
 	registration.  Overload stubs stay out, as they do for instanceMethodDefs
-	-- the stub is not the implementation."
+	-- the stub is not the implementation.
+
+	Each entry is built in a PrettyWriteStream, not a bare AppendStream: an
+	annotation holding a comprehension or a generator expression emits its
+	loop with indentation protocol (#increaseIndent), and on an AppendStream
+	that was a Smalltalk MessageNotUnderstood no Python handler could catch,
+	raised while compiling the class."
 
 	| annotated entries |
 	annotated := self ___allFunctionDefs___ select: [:def |
@@ -4187,7 +4193,7 @@ ClassDefAst >> emitMethodAnnotationsTableOn: aStream className: aClassName [
 	annotated isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
 	annotated do: [:def | | src |
-		src := AppendStream on: String new.
+		src := PrettyWriteStream on: Unicode7 new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
 		src nextPut: $;.
