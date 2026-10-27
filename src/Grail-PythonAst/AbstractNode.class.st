@@ -1534,6 +1534,18 @@ AbstractNode >> ___fixUpPythonAst___: pyNode [
 
 ]
 
+{ #category : 'Grail-validation' }
+AbstractNode >> ___foldedLiteral___ [
+	"The ConstantAst this expression folds to when it is a literal a pattern
+	may match -- a number, a string, bytes, None, a bool, a signed number or a
+	complex literal -- else nil.  CPython's AST optimizer folds the signed and
+	complex forms to a Constant before its code generator asks
+	(MATCH_VALUE_EXPR, Python/codegen.c)."
+
+	^ nil
+
+]
+
 { #category : 'Grail-codegen helpers' }
 AbstractNode >> ___functionBindsParameter___: funcAst named: aSymbol [
 	"True iff aSymbol is a PARAMETER of funcAst -- positional-only,

@@ -8,7 +8,8 @@ Class {
 	#superclass : 'ExpressionAst',
 	#instVars : [
 		'value',
-		'kind'
+		'kind',
+		'isAnFString'
 	],
 	#category : 'Grail-Parser'
 }
@@ -22,6 +23,16 @@ ConstantAst >> ___annotationSourceString___ [
 
 	(value isKindOf: CharacterCollection) ifTrue: [^ value asString].
 	^ self ___unparse___: 4
+
+]
+
+{ #category : 'Grail-validation' }
+ConstantAst >> ___beAnFString___ [
+	"Mark this constant as an f-string with no replacement fields, which
+	PythonParser >> parseFStringLiteral folds to its text: ``f'ab''' is a
+	JoinedStr to CPython, so a pattern may not match it."
+
+	isAnFString := true
 
 ]
 
@@ -124,6 +135,16 @@ ConstantAst >> ___emitIRValueOn___: aBuilder [
 { #category : 'Grail-other' }
 ConstantAst >> ___evaluationIsInert___ [
 	^ true
+
+]
+
+{ #category : 'Grail-validation' }
+ConstantAst >> ___foldedLiteral___ [
+	"Itself, unless it is an f-string with no replacement fields: CPython's
+	tree keeps that a JoinedStr, never a Constant (___beAnFString___)."
+
+	isAnFString == true ifTrue: [^ nil].
+	^ self
 
 ]
 

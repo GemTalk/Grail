@@ -39,6 +39,15 @@ MatchStarAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchStarAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_star (Python/codegen.c:5887-5893): ``*name'' binds name;
+	``*_'' binds nothing."
+
+	name ifNotNil: [:target | self ___bind___: target id into: boundNames at: self]
+
+]
+
 { #category : 'Grail-match' }
 MatchStarAst >> name [
 	^name

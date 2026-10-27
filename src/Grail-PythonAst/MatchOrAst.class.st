@@ -50,6 +50,33 @@ MatchOrAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-validation' }
+MatchOrAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"codegen_pattern_or (Python/codegen.c:6111-6256): each alternative binds
+	into a list of its own, and only the last may be irrefutable, and only
+	when the or-pattern itself may be.  Every alternative binds the first
+	one's names, in any order -- ``alternative patterns bind different
+	names'' otherwise -- and those names then join the case's, each once."
+
+	| firstBound |
+	patterns doWithIndex: [:alternative :index |
+		| alternativeBound |
+		alternativeBound := OrderedCollection new.
+		alternative
+			___validateBinding___: alternativeBound
+			irrefutableAllowed: (aBoolean and: [index = patterns size]).
+		firstBound isNil
+			ifTrue: [firstBound := alternativeBound]
+			ifFalse: [
+				(alternativeBound size = firstBound size
+					and: [firstBound allSatisfy: [:each | alternativeBound includes: each]]) ifFalse: [
+						^ ModuleAst
+							___syntaxError___: 'alternative patterns bind different names'
+							node: self]]].
+	firstBound do: [:each | self ___bind___: each into: boundNames at: self]
+
+]
+
 { #category : 'Grail-match' }
 MatchOrAst >> patterns [
 	^patterns

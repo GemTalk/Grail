@@ -28,6 +28,32 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+PatternAst >> ___bind___: aName into: boundNames at: aNode [
+	"codegen_pattern_helper_store_name (Python/codegen.c:5741-5759): a case's
+	pattern binds each name once."
+
+	(boundNames includes: aName) ifTrue: [
+		^ ModuleAst
+			___syntaxError___: 'multiple assignments to name ''' , aName asString , ''' in pattern'
+			node: aNode].
+	boundNames add: aName
+
+]
+
+{ #category : 'Grail-validation' }
+PatternAst >> ___validateBinding___: boundNames irrefutableAllowed: aBoolean [
+	"Raise the SyntaxError CPython's code generator raises for this pattern,
+	if any (Python/codegen.c, codegen_pattern and the codegen_pattern_* it
+	dispatches to).  boundNames collects the names the case binds so far;
+	aBoolean says whether an irrefutable pattern may stand here, which only
+	the last alternative of a case that is itself last or guarded may.  A
+	singleton pattern binds nothing and can always fail."
+
+	^ self
+
+]
+
 { #category : 'Grail-match' }
 PatternAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	"Subclass responsibility."
