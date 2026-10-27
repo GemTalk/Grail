@@ -81,11 +81,14 @@ MatchSequenceAst >> ___emitIRSeqFrom___: i star: star fixed: nFixed subject: sub
 	| here |
 	here := i = 0
 		ifTrue: [
-			| len |
-			len := aBuilder send: #'___matchLen___' to: (aBuilder var: subjLeaf) with: { }.
-			aBuilder atNode: self.
-			aBuilder send: (star = 0 ifTrue: [#=] ifFalse: [#'>='])
-				to: len with: { aBuilder obj: nFixed } env: 0]
+			self ___needsLengthCheck___
+				ifTrue: [
+					| len |
+					len := aBuilder send: #'___matchLen___' to: (aBuilder var: subjLeaf) with: { }.
+					aBuilder atNode: self.
+					aBuilder send: (star = 0 ifTrue: [#=] ifFalse: [#'>='])
+						to: len with: { aBuilder obj: nFixed } env: 0]
+				ifFalse: [aBuilder atNode: self. aBuilder obj: true]]
 		ifFalse: [self ___emitIRSeqElement___: i star: star subject: subjLeaf on: aBuilder].
 	i >= patterns size ifTrue: [^ here].
 	^ aBuilder andValue: here then: [
@@ -104,6 +107,18 @@ MatchSequenceAst >> ___irMatchTestEligible___: localNames [
 MatchSequenceAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	patterns do: [:p | p ___irReadLocalNamesInto___: aSet locals: localSet].
 	^ self
+
+]
+
+{ #category : 'Grail-match' }
+MatchSequenceAst >> ___needsLengthCheck___ [
+	"Whether the subject's length is asked at all: CPython compares it with the
+	pattern's size when there is no star, and with size - 1 when a star sits
+	among other elements, but a lone ``[*_]'' or ``[*rest]'' asks nothing
+	(Python/codegen.c:6293-6305) -- so a registered Sequence
+	with no __len__ still matches ``[*_]''."
+
+	^ self starIndex = 0 or: [patterns size > 1]
 
 ]
 
@@ -148,9 +163,12 @@ MatchSequenceAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	nFixed := star = 0 ifTrue: [patterns size] ifFalse: [patterns size - 1].
 	sub := self subjectNameAt: anInteger + 1.
 	aStream nextPutAll: '(', aName, ' ___matchIsSequence___ and: ['.
-	aStream nextPutAll: '(', aName, ' ___matchLen___) @env0:'.
-	aStream nextPutAll: (star = 0 ifTrue: ['= '] ifFalse: ['>= ']).
-	aStream nextPutAll: nFixed printString.
+	self ___needsLengthCheck___
+		ifTrue: [
+			aStream nextPutAll: '(', aName, ' ___matchLen___) @env0:'.
+			aStream nextPutAll: (star = 0 ifTrue: ['= '] ifFalse: ['>= ']).
+			aStream nextPutAll: nFixed printString]
+		ifFalse: [aStream nextPutAll: 'true'].
 	1 to: patterns size do: [:i |
 		| p |
 		p := patterns at: i.

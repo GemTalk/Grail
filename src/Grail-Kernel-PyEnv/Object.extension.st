@@ -12704,6 +12704,18 @@ Object >> ___matchAttr___: aName [
 ]
 
 { #category : 'Grail-Match Protocol' }
+Object >> ___matchCollectionFlag___ [
+	"The Py_TPFLAGS_SEQUENCE (32) or Py_TPFLAGS_MAPPING (64) bit of this
+	object's type, or 0 -- what a sequence or a mapping pattern tests
+	(MATCH_SEQUENCE, MATCH_MAPPING).  A built-in answers its own
+	(___matchNativeCollectionFlag___); any other class has the flag of the
+	first class in its MRO that has one (___matchInheritedCollectionFlag___)."
+
+	^ self ___matchNativeCollectionFlag___ ifNil: [self ___matchInheritedCollectionFlag___]
+
+]
+
+{ #category : 'Grail-Match Protocol' }
 Object >> ___matchDefinesOwnSelector___: aSelector [
 	"Does this object's class REALLY implement aSelector, as opposed to
 	inheriting the raising fallback every object carries?"
@@ -12729,6 +12741,20 @@ Object >> ___matchHasKey___: aKey [
 ]
 
 { #category : 'Grail-Match Protocol' }
+Object >> ___matchInheritedCollectionFlag___ [
+	"abc._grail_collection_flag of this object's class: the flag of the first
+	class in its MRO that has one (Objects/typeobject.c, inherit_patma_flags)
+	-- multiple inheritance takes the first, so ``class M(UserDict, C, list)''
+	is a mapping -- including what ABCMeta.register set."
+
+	| abcModule |
+	abcModule := (importlib @env0:___instance___) @env1:import_module: 'abc'.
+	^ (abcModule @env1:___pyAttrLoad___: #'_grail_collection_flag')
+		@env1:value: { self __class__ } value: nil
+
+]
+
+{ #category : 'Grail-Match Protocol' }
 Object >> ___matchIsInstanceOf___: aClass [
 	"The isinstance gate of a class pattern, routed through the builtin so
 	ABCs and __instancecheck__ behave as they do everywhere else."
@@ -12739,68 +12765,33 @@ Object >> ___matchIsInstanceOf___: aClass [
 
 { #category : 'Grail-Match Protocol' }
 Object >> ___matchIsMapping___ [
-	"PEP 634 mapping-pattern gate: a dict, or anything offering the
-	mapping protocol (keys + __getitem__)."
+	"PEP 634's mapping-pattern gate, CPython's MATCH_MAPPING: the subject's type
+	carries Py_TPFLAGS_MAPPING -- dict and types.MappingProxyType natively,
+	and any class with it in its MRO: a subclass of collections.abc.Mapping,
+	or of a class registered with it (___matchCollectionFlag___).  A class
+	that merely offers keys and __getitem__ is not one: CPython does not
+	duck-type the pattern, and this used to."
 
-	(self isKindOf: dict) ifTrue: [^ true].
-	"Same restriction as ___matchIsSequence___, and for the same reason."
-	(self isKindOf: PythonInstance) ifFalse: [^ false].
-	^ (self ___matchDefinesOwnSelector___: #'keys')
-		and: [self ___matchDefinesOwnSelector___: #'__getitem__:']
+	^ self ___matchCollectionFlag___ @env0:= 64
 
 ]
 
 { #category : 'Grail-Match Protocol' }
 Object >> ___matchIsSequence___ [
-	"PEP 634 sequence-pattern gate.
+	"PEP 634's sequence-pattern gate, CPython's MATCH_SEQUENCE: the subject's
+	type carries Py_TPFLAGS_SEQUENCE -- list, tuple, range and memoryview
+	natively, and any class with it in its MRO: collections.deque,
+	array.array, a subclass of collections.abc.Sequence or of a class
+	registered with it (___matchCollectionFlag___).
 
-	The exclusion is the whole point: str, bytes and bytearray are
-	sequences by every other measure, and PEP 634 rules them OUT so that
-	``case [a, b]:'' does not match the string 'ab'.  Matching them would
-	be silently wrong -- a two-character string quietly destructured into
-	two single-character bindings.
+	str, bytes and bytearray are the exclusion that matters: registered with
+	Sequence, but no flag, so ``case [a, b]:'' does not destructure 'ab' into
+	two single-character bindings.  A class that merely offers __len__ and
+	__getitem__ is not a sequence either -- CPython does not duck-type the
+	pattern, and this used to.  range used to be excluded here, on the claim
+	that CPython excludes it; it does not."
 
-	range is likewise excluded by CPython; everything else registered as a
-	Sequence (list, tuple, and user classes with __len__ + __getitem__)
-	matches."
-
-	(self isKindOf: CharacterCollection) ifTrue: [^ false].
-	(self isKindOf: AbstractPyStr) ifTrue: [^ false].
-	(self isKindOf: bytes) ifTrue: [^ false].
-	(self isKindOf: bytearray) ifTrue: [^ false].
-	(self isKindOf: range) ifTrue: [^ false].
-	(self isKindOf: list) ifTrue: [^ true].
-	(self isKindOf: tuple) ifTrue: [^ true].
-	"A MAPPING is not a sequence, and this is the exclusion that bites:
-	dict answers both __len__ and __getitem__:, so a duck-typed gate let
-	``case [x, y]:'' match a two-entry dict and then index it with 0 --
-	a KeyError from inside a pattern that should simply not have matched.
-	set is excluded for the same reason in reverse: no __getitem__:."
-	self ___matchIsMapping___ ifTrue: [^ false].
-	(self isKindOf: set) ifTrue: [^ false].
-	(self isKindOf: frozenset) ifTrue: [^ false].
-	"``___respondsTo___:'' is NOT enough: object itself carries __len__ and
-	__getitem__: fallbacks that exist only to raise, so probing for them
-	answered true for None -- and ``case [x, y]:'' then called __len__ on
-	it and surfaced the fallback's TypeError from inside a pattern that
-	should simply not have matched.  Ask WHICH class supplies them and
-	reject the generic roots, the same test builtins uses to decide
-	whether a class really implements a protocol."
-	"Duck-typing is offered ONLY to user-defined Python classes.  Grail's
-	built-in objects answer far more of the protocol than they implement
-	-- probing None found both __len__ and __getitem__:, so ``case [x, y]:''
-	matched None and then surfaced __len__'s TypeError from inside a
-	pattern that should simply not have matched.  Restricting the duck
-	test to PythonInstance keeps user Sequence classes working without
-	letting a builtin answer for a protocol it only raises on.
-
-	KNOWN GAP: a user class registered with collections.abc.Sequence but
-	NOT defining __len__/__getitem__: itself still does not match a
-	sequence pattern.  That is a silent non-match, so it is called out
-	here rather than left to be discovered."
-	(self isKindOf: PythonInstance) ifFalse: [^ false].
-	^ (self ___matchDefinesOwnSelector___: #'__len__')
-		and: [self ___matchDefinesOwnSelector___: #'__getitem__:']
+	^ self ___matchCollectionFlag___ @env0:= 32
 
 ]
 
@@ -12826,9 +12817,34 @@ Object >> ___matchItemForKey___: aKey [
 
 { #category : 'Grail-Match Protocol' }
 Object >> ___matchLen___ [
-	"The subject's length for a sequence pattern's arity gate."
+	"The subject's length for a sequence or mapping pattern's size gate --
+	len(), which CPython's GET_LEN is: a class registered as a Sequence or a
+	Mapping without a __len__ raises its TypeError, ``object of type 'P' has
+	no len()'', where sending __len__ was a Smalltalk doesNotUnderstand."
 
-	^ self __len__
+	^ (builtins instance) len: self
+
+]
+
+{ #category : 'Grail-Match Protocol' }
+Object >> ___matchNativeCollectionFlag___ [
+	"The collection flag of a built-in, or nil for an object whose class Python
+	code defined -- a Python class, or a subclass of a built-in, which
+	inherits the flag through its MRO instead.  list, tuple, range and
+	memoryview carry the sequence flag (Objects/listobject.c,
+	Objects/tupleobject.c, Objects/rangeobject.c:801,
+	Objects/memoryobject.c:3593), dict and mappingproxy the mapping one, and
+	every other built-in -- str, bytes and bytearray among them -- none."
+
+	| class |
+	class := self @env0:class.
+	(class == list or: [class == tuple]) ifTrue: [^ 32].
+	((self isKindOf: range) or: [self isKindOf: memoryview]) ifTrue: [^ 32].
+	(class == dict or: [self isKindOf: mappingproxy]) ifTrue: [^ 64].
+	((self isKindOf: PythonInstance)
+		or: [(self isKindOf: list) or: [(self isKindOf: tuple) or: [self isKindOf: dict]]])
+			ifTrue: [^ nil].
+	^ 0
 
 ]
 

@@ -10,7 +10,7 @@
 
 import sys as _sys
 
-from .abc import Mapping, MutableMapping, Sequence
+from .abc import Mapping, MutableMapping, MutableSequence, Sequence
 
 
 class defaultdict(dict):
@@ -2119,6 +2119,13 @@ class UserString:
 
 
 Sequence.register(UserString)
+# CPython registers deque with MutableSequence (Lib/collections/__init__.py:49)
+# and defines UserList and UserDict as MutableSequence and MutableMapping
+# subclasses.  Registering gives the same isinstance and issubclass answers --
+# which a sequence or mapping pattern asks -- without changing their MRO.
+MutableSequence.register(deque)
+MutableSequence.register(UserList)
+MutableMapping.register(UserDict)
 
 
 def _count_elements(mapping, iterable):

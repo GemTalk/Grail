@@ -214,3 +214,9 @@ class _array:
 _array.__name__ = 'array'
 _array.__qualname__ = 'array'
 array = _array
+
+# Modules/arraymodule.c:3294-3299 registers the type with
+# collections.abc.MutableSequence when the module loads, so an array is a
+# Sequence to isinstance and to a sequence pattern.
+import _collections_abc
+_collections_abc.MutableSequence.register(_array)

@@ -76,7 +76,17 @@ MatchMappingAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 	aBuilder atNode: self.
 	gate := aBuilder send: #'___matchIsMapping___' to: (aBuilder var: subjLeaf) with: { }.
 	^ aBuilder andValue: gate then: [
-		aBuilder add: (self ___emitIRMapFrom___: 1 subject: subjLeaf on: aBuilder)]
+		keys isEmpty
+			ifTrue: [aBuilder add: (self ___emitIRMapFrom___: 1 subject: subjLeaf on: aBuilder)]
+			ifFalse: [
+				| size |
+				size := aBuilder
+					send: #'>='
+					to: (aBuilder send: #'___matchLen___' to: (aBuilder var: subjLeaf) with: { })
+					with: { aBuilder obj: keys size }
+					env: 0.
+				aBuilder add: (aBuilder andValue: size then: [
+					aBuilder add: (self ___emitIRMapFrom___: 1 subject: subjLeaf on: aBuilder)])]]
 
 ]
 
@@ -183,6 +193,10 @@ MatchMappingAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	| sub |
 	sub := self subjectNameAt: anInteger + 1.
 	aStream nextPutAll: '(', aName, ' ___matchIsMapping___'.
+	"A mapping with keys first checks there are enough of them, as CPython's
+	GET_LEN does (Python/codegen.c:6038-6044), before it looks any up."
+	keys isEmpty ifFalse: [
+		aStream nextPutAll: ' and: [(', aName, ' ___matchLen___) @env0:>= ', keys size printString].
 	1 to: keys size do: [:i |
 		aStream nextPutAll: ' and: [(', aName, ' ___matchHasKey___: '.
 		(keys at: i) printSmalltalkWithParenthesisOn: aStream.
@@ -202,6 +216,7 @@ MatchMappingAst >> printMatchTestOn: aStream subject: aName depth: anInteger [
 	"Two per key (the presence test and the value test); the ``**rest''
 	clause closes its own bracket inline, so it must NOT be counted here."
 	(keys size * 2) timesRepeat: [aStream nextPutAll: ']'].
+	keys isEmpty ifFalse: [aStream nextPutAll: ']'].
 	aStream nextPutAll: ')'
 
 ]
