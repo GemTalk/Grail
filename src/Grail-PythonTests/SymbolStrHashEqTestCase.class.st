@@ -31,7 +31,7 @@ SymbolStrHashEqTestCase >> testASymbolHonoursTheHashEqInvariant [
 		name: 'symbol_str_hash_eq'.
 	sym := #'grail_symbol_hash_probe'.
 	self assert: (((mod @env1:___pyAttrLoad___: #'use')
-			@env1:__call__: (Array with: sym with: sym asString asUnicodeString)) = true)
+			@env1:___pyCallValue___: (Array with: sym with: sym asString asUnicodeString) kw: nil) = true)
 		description: 'the fixture would not accept the subject'.
 	#( 'it_is_an_instance_of_str'
 	   'it_is_equal_to_the_str_from_its_own_side'
