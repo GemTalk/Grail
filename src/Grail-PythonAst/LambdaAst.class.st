@@ -33,6 +33,14 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+LambdaAst >> ___annotationScopeOffender___ [
+	"A lambda is a function scope of its own, where all three are allowed."
+
+	^ nil
+
+]
+
 { #category : 'Grail-other' }
 LambdaAst >> ___argCountCheckDef___ [
 	"A FunctionDefAst carrying this lambda's arguments, whose arity-guard

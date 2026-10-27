@@ -28,6 +28,18 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+AwaitAst >> ___annotationScopeOffender___ [
+	^ self
+
+]
+
+{ #category : 'Grail-validation' }
+AwaitAst >> ___annotationScopeRefusalName___ [
+	^ 'await expression'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 AwaitAst >> ___emitIRValueOn___: aBuilder [
 	"printSmalltalkOn:'s two emits, decided the same way.  Inside a wrapped

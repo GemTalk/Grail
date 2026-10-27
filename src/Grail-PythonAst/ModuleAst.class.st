@@ -353,6 +353,24 @@ ModuleAst class >> ___targetBindsReservedName___: aTarget [
 ]
 
 { #category : 'Grail-parsing' }
+ModuleAst class >> ___validateAnnotation___: anExpression [
+	"CPython 3.14 evaluates every annotation in an annotation scope of its own
+	(PEP 649) -- a function's, a module's, a class's, a local variable's --
+	and its symbol table refuses a yield, an await or a named expression
+	there: ``named expression cannot be used within an annotation''
+	(Python/symtable.c:3109-3134).  A lambda in it is a function of its own,
+	and a comprehension past its outermost iterable a scope of its own, so
+	neither is searched."
+
+	anExpression isNil ifTrue: [^ self].
+	anExpression ___annotationScopeOffender___ ifNotNil: [:offender |
+		^ self ___syntaxError___: offender ___annotationScopeRefusalName___
+				, ' cannot be used within an annotation'
+			node: offender]
+
+]
+
+{ #category : 'Grail-parsing' }
 ModuleAst class >> ___validateAsyncPlacement___: node scope: scopeSym [
 	"Recursive scope walk enforcing CPython's async placement rules.  The
 	scope symbol is one of #module #sync #async #asyncgen #lambda #class
@@ -504,9 +522,14 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		node do: [:each | self ___validateContext___: each fn: fnSym loop: inLoop scopes: scopes].
 		^ self].
 	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	"An annotation is a scope of its own (___validateAnnotation___:), checked
+	before the walk below judges it as part of the enclosing one."
+	(node isKindOf: ArgAst) ifTrue: [self ___validateAnnotation___: node annotation].
+	(node isKindOf: AnnAssignAst) ifTrue: [self ___validateAnnotation___: node annotation].
 	(node isKindOf: FunctionDefAst) ifTrue: [
 		self ___validateContext___: node decoratorList fn: fnSym loop: inLoop scopes: scopes.
 		self ___validateContext___: node args fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateAnnotation___: node returns.
 		self ___validateContext___: node returns fn: fnSym loop: inLoop scopes: scopes.
 		self ___validateContext___: node body fn: #function loop: false
 			scopes: (scopes isNil ifTrue: [nil] ifFalse: [

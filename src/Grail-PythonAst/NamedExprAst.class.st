@@ -8,6 +8,18 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+NamedExprAst >> ___annotationScopeOffender___ [
+	^ self
+
+]
+
+{ #category : 'Grail-validation' }
+NamedExprAst >> ___annotationScopeRefusalName___ [
+	^ 'named expression'
+
+]
+
 { #category : 'Grail-other' }
 NamedExprAst >> ___checkNotInClassBodyComprehension___ [
 	"PEP 572 forbids a walrus inside a comprehension that sits in a CLASS body,

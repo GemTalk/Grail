@@ -26,6 +26,18 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-validation' }
+YieldAst >> ___annotationScopeOffender___ [
+	^ self
+
+]
+
+{ #category : 'Grail-validation' }
+YieldAst >> ___annotationScopeRefusalName___ [
+	^ 'yield expression'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 YieldAst >> ___emitIRValueOn___: aBuilder [
 	"``(___gen___ @env1:___yield___: v)'' -- the text's send, to the wrapper

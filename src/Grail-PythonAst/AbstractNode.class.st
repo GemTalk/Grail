@@ -232,6 +232,29 @@ AbstractNode >> ___addCompTargetLeafNames___: aTarget into: aCollection [
 
 ]
 
+{ #category : 'Grail-validation' }
+AbstractNode >> ___annotationScopeOffender___ [
+	"The first node of this subtree an annotation scope refuses -- a yield, an
+	await or a named expression (ModuleAst class >> ___validateAnnotation___:)
+	-- or nil.  Reflective over the instance variables, as
+	___descendantsDo___: is; ``parent'' points up and is skipped."
+
+	| ivars |
+	ivars := self class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| v |
+		(ivars at: i) == #'parent' ifFalse: [
+			v := self instVarAt: i.
+			(v isKindOf: AbstractNode) ifTrue: [
+				v ___annotationScopeOffender___ ifNotNil: [:offender | ^ offender]].
+			((v isKindOf: Array) or: [v isKindOf: OrderedCollection]) ifTrue: [
+				v do: [:each |
+					(each isKindOf: AbstractNode) ifTrue: [
+						each ___annotationScopeOffender___ ifNotNil: [:offender | ^ offender]]]]]].
+	^ nil
+
+]
+
 { #category : 'Grail-annotations' }
 AbstractNode >> ___annotationSourceString___ [
 	"The annotation as SOURCE TEXT -- what Format.STRING answers, and what
