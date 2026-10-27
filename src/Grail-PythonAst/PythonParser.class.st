@@ -38,7 +38,8 @@ Class {
 		'walrusRefusal',
 		'mangleClassStack',
 		'blockHeader',
-		'barryAsFlufl'
+		'barryAsFlufl',
+		'evalInput'
 	],
 	#category : 'Grail-Parser'
 }
@@ -311,8 +312,17 @@ PythonParser class >> parse: aString [
 	SyntaxError as e'' sees the instance the parser raised, now with its fields
 	filled in."
 
+	^ self parse: aString evalInput: false
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> parse: aString evalInput: isEvalInput [
+	"parse:, by CPython's eval rule when isEvalInput is true (parseEvalInput:)."
+
 	| parser |
 	parser := self basicNew.
+	parser ___evalInput___: isEvalInput.
 	^ [parser source: aString; parseModule]
 		on: SyntaxError
 		do: [:ex |
@@ -320,6 +330,19 @@ PythonParser class >> parse: aString [
 				source: aString
 				at: parser ___currentSourcePosition___.
 			ex pass]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> parseEvalInput: aString [
+	"Parse eval() input or compile(..., 'eval') source by CPython's eval rule,
+	``eval: expressions NEWLINE* ENDMARKER'' (___parseEvalInput___), into a
+	ModuleAst whose body is the one expression.  The rule is this parser's
+	own, so it reaches neither an inner parser (an f-string's) nor a parse
+	made while a handler for this one's SyntaxError runs (ModuleAst class >>
+	parseSource:allowTopLevelAwait:evalInput:)."
+
+	^ self parse: aString evalInput: true
 
 ]
 
@@ -960,6 +983,15 @@ PythonParser >> ___endOfNextExpression___ [
 	^ [[self parseExpression. self lastToken]
 		on: SyntaxError do: [:ex | ex return: (tokens at: saved)]]
 		ensure: [position := saved]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___evalInput___: aBoolean [
+	"Parse by CPython's eval rule rather than as a module (PythonParser class
+	>> parseEvalInput:)."
+
+	evalInput := aBoolean
 
 ]
 
@@ -2088,10 +2120,10 @@ PythonParser >> ___parseStarExpressionsOrYield___ [
 { #category : 'Grail-parsing' }
 PythonParser >> ___parsingEvalInput___ [
 	"Whether this parse is of eval() input or compile(..., 'eval') source,
-	which CPython parses with its eval rule rather than as a module (ModuleAst
-	class >> parseEvalSource:)."
+	which CPython parses with its eval rule rather than as a module (PythonParser
+	class >> parseEvalInput:)."
 
-	^ (SessionTemps current at: #'GrailParsingEvalInput' otherwise: nil) == true
+	^ evalInput == true
 
 ]
 
