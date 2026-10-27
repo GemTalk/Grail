@@ -818,3 +818,19 @@ test.test_string.test_templatelib
 #   dynamicclassattribute 12t 6F/1S   docstring copying, __isabstractmethod__
 #                                     evaluated lazily (CPython: at __init__)
 test.test_dynamicclassattribute
+
+# --- Stdlib (added 2026-10-27): binascii and base64 ---
+#
+# test_binascii and test_base64 are CPython 3.14.4's, vendored verbatim.
+# binascii.py is now a pure-Python port of Modules/binascii.c, which passes
+# both under CPython and agrees with the compiled 3.14.4 C on 1.4M calls;
+# base64.py is CPython's own.  Grail's two stand-ins lacked a2b_qp, b2a_qp,
+# crc_hqx, base32/16/85 and the non-strict base64 decoding the email
+# package relies on.  Measured on Darwin arm64:
+#
+#   binascii 93t OK/17S   (hypothesis tests skip)
+#   base64   41t 2F/16E/6S  memoryview.cast with a shape (13E; Grail's
+#                         memoryview is one-dimensional), io.StringIO.write
+#                         accepting bytes (2F)
+test.test_binascii
+test.test_base64

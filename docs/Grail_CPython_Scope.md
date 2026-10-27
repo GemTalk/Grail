@@ -29,9 +29,9 @@ Where the in-scope tiers stand:
 |------|------:|----------:|-------------:|------:|
 | P1 | 60 | 14 | 16 | 90 |
 | P2 | 23 | 4 | 7 | 34 |
-| P3 | 20 | 5 | 31 | 56 |
+| P3 | 20 | 7 | 29 | 56 |
 | P4 | 22 | 7 | 46 | 75 |
-| **In-scope** | **125** | **30** | **100** | **255** |
+| **In-scope** | **125** | **32** | **98** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **155 are wired into the harness** (P1 74 · P2 27 · P3 25 · P4 29) and **125 of those score OK**.
+Of the 255 in-scope modules, **157 are wired into the harness** (P1 74 · P2 27 · P3 27 · P4 29) and **125 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -326,8 +326,8 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ✅ | `test_annotationlib` | PEP 649 deferred annotations (new in 3.14) — annotation evaluation semantics. |
 |  | `test_argparse` | argparse — pure-Python CLI parsing. |
 |  | `test_atexit` | atexit callbacks — pure-ish, but 'interpreter exit' semantics differ in a persistent DB VM. *(edge — see below)* |
-|  | `test_base64` | base64 — pure-Python encoding. |
-|  | `test_binascii` | binascii encodings — pure semantics. |
+| ❗ | `test_base64` | base64 — pure-Python encoding. |
+| ❗ | `test_binascii` | binascii encodings — pure semantics. |
 | ✅ | `test_bufio` | Buffered I/O layer — in-scope for StringIO/BytesIO; real-file backing is OS. *(edge — see below)* |
 |  | `test_calendar` | calendar — pure Python. |
 |  | `test_charmapcodec` | charmap codec — pure text codec. |
@@ -820,7 +820,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_policy` ERROR, 33 tests: 0 failed, 3 errors, 0 skipped
 - `test.test_email.test_utils` ERROR, 22 tests: 1 failed, 10 errors, 1 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_dynamicclassattribute`, `test_fstring`, `test_grammar`, `test_graphlib`, `test_patma`, `test_tstring`, `test_type_aliases`, `test_type_params`, `test_types`.
+Wired, but not on the board until the next nightly measures them: `test_base64`, `test_binascii`, `test_dynamicclassattribute`, `test_fstring`, `test_grammar`, `test_graphlib`, `test_patma`, `test_tstring`, `test_type_aliases`, `test_type_params`, `test_types`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
