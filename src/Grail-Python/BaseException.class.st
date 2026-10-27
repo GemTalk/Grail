@@ -127,6 +127,32 @@ BaseException class >> ___caretSourceLineIn___: report [
 
 ]
 
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___carryGeneratorStack___: oldException to: newException [
+	"Re-key the generator half of oldException's traceback (___stashGeneratorStack___:)
+	to newException, which re-signals in its place -- leaving newException's own
+	capture alone, unlike ___moveGeneratorStack___:to:, because that capture is
+	the CONSUMER's half and newException carries it already.
+
+	For ___resignalable___:'s copy: the stash is keyed by identity, so the copy
+	that a ``finally'' re-signalled found none, and a generator's frames vanished
+	from the traceback -- FastAPI's yield dependency, entered through
+	contextlib's __enter__ (whose ``except StopIteration'' passes the exception
+	on, which is what forces the copy) under contextvars' Context.run (whose
+	``finally'' re-signals): test_traceback_for_dependency_with_yield."
+
+	| reg st |
+	oldException == newException ifTrue: [^ self].
+	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
+	reg isNil ifTrue: [^ self].
+	st := reg at: oldException otherwise: nil.
+	st isNil ifTrue: [^ self].
+	reg removeKey: oldException ifAbsent: [].
+	reg at: newException put: st.
+	^ self
+
+]
+
 { #category : 'Grail-Exception handling' }
 BaseException class >> ___catchAll___ [
 	"The selector for a handler that must see every Python exception AND a raw
@@ -4293,16 +4319,21 @@ BaseException class >> ___resignalable___: anException [
 	is PythonGenerator >> ___resignalable___:'s rule, applied at the other site that
 	re-raises a caught exception."
 
-	| ovf |
+	| ovf copy |
 	"A raw stack overflow a ``finally'' caught (BaseException class >> handles:
 	let ``on: BaseException'' take it) goes on as its RecursionError."
 	ovf := anException @env0:class.
 	(ovf == AlmostOutOfStackError or: [ovf == AlmostOutOfStack])
 		ifTrue: [^ self ___resignalable___: (self ___payloadOf___: anException)].
-	^ ((anException @env0:isKindOf: AbstractException)
+	((anException @env0:isKindOf: AbstractException)
 		@env0:and: [anException @env0:_basicSize @env0:> 0])
-			ifTrue: [anException @env0:copy]
-			ifFalse: [anException]
+			ifFalse: [^ anException].
+	"The copy re-signals in the original's place, so it takes the generator half
+	of the traceback with it."
+	copy := anException @env0:copy.
+	self ___carryGeneratorStack___: (self ___payloadOf___: anException)
+		to: (self ___payloadOf___: copy).
+	^ copy
 
 ]
 

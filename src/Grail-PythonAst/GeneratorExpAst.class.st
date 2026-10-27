@@ -30,6 +30,19 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'code generation' }
+GeneratorExpAst >> ___checkedSourceFor___: aTempName [
+	"The expression the loop takes a SYNC first clause's iterator through:
+	``(___gen___ @env1:___genexpSource___: ___gxsrcN___)''.  It was
+	acquired with __iter__ at construction, so this checks only for a
+	replacement since -- a write to the unstarted frame's ``.0'' -- and
+	raises CPython's FOR_ITER TypeError for a non-iterator (see
+	PyGeneratorBase >> ___genexpSource___:)."
+
+	^ '(___gen___ @env1:___genexpSource___: ' , aTempName , ')'
+
+]
+
 { #category : 'Grail-IR Codegen' }
 GeneratorExpAst >> ___emitIRValueOn___: aBuilder [
 	"printSmalltalkOn:'s synchronous form, send for send:
@@ -78,7 +91,15 @@ GeneratorExpAst >> ___emitIRValueOn___: aBuilder [
 							send: (self ___isAsyncGenexp___
 								ifTrue: [#'___asyncYield___:'] ifFalse: [#'___yield___:'])
 							to: (aBuilder var: gLeaf) with: { v } env: 1)]
-					outerSource: [aBuilder var: gxLeaf].
+					outerSource: [
+						"A SYNC first clause's iterator is checked as the loop takes
+						it (PyGeneratorBase >> ___genexpSource___:); an async one
+						was aiter'd at construction and is awaited, not iterated."
+						(generators at: 1) is_async = 1
+							ifTrue: [aBuilder var: gxLeaf]
+							ifFalse: [aBuilder
+								send: #'___genexpSource___:' to: (aBuilder var: gLeaf)
+								with: { aBuilder var: gxLeaf } env: 1]].
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder globalNamed: #None)
 			] ensure: [
@@ -315,7 +336,9 @@ GeneratorExpAst >> printSmalltalkOn: aStream [
 					elt printSmalltalkOn: aStream.
 					aStream nextPutAll: ').'; lf.
 				]
-				outerSource: gxTemp]
+				outerSource: ((generators at: 1) is_async = 1
+				ifTrue: [gxTemp]
+				ifFalse: [self ___checkedSourceFor___: gxTemp])]
 			ensure: [CallAst ___restoreScopeDepth___: savedScopeDepth].
 		aStream nextPutAll: 'None'; lf.
 		aStream decreaseIndent; nextPutAll: '] name: ''<genexpr>'' qualname: '''.
@@ -363,7 +386,7 @@ GeneratorExpAst >> printSmalltalkOn: aStream [
 				elt printSmalltalkOn: aStream.
 				aStream nextPutAll: ').'; lf.
 			]
-			outerSource: gxTemp]
+			outerSource: (self ___checkedSourceFor___: gxTemp)]
 		ensure: [CallAst ___restoreScopeDepth___: savedScopeDepth].
 	aStream nextPutAll: 'None'; lf.
 	aStream decreaseIndent; nextPutAll: '] name: ''<genexpr>'' qualname: '''.

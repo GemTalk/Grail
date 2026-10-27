@@ -1,0 +1,104 @@
+name: Grail upgrade
+
+# An application's Grail is upgraded IN PLACE: GemDB installs a newer Grail over
+# the one a user's database already has, with their data in it.
+# tests/scripts/run_grail_upgrade_test.sh is the proof that this keeps the data
+# working (docs/Releases_and_Rowan.md). Each case starts its own stone from the
+# product's extent0.rowan3.dbf, installs Grail n, has an app commit its objects,
+# installs m over it, and checks the result in a new session.
+#
+# The cases, by default:
+#
+#   noop               an upgrade that changes nothing must change nothing
+#   synthetic          one of each kind of change a release can make (the
+#                      container's Rowan applies them all -- this checks Grail)
+#   release=<GemDB>    from the Grail GemDB Code pins now: the upgrade its users
+#                      will make next
+#
+# What this cannot see is a change the Rowan in USERS' databases cannot apply:
+# the container's Rowan is newer than theirs. ci.yml's check_rowan_floor.py
+# covers that, and tests/scripts/run_rowan_dependency_matrix.sh measures it
+# against the engine GemDB pins.
+
+on:
+  # A PR that touches how Grail installs, or what the upgrade test checks.
+  pull_request:
+    paths:
+      - install.sh
+      - install_base.sh
+      - scripts/install_rowan.gs
+      - scripts/redeployModules.gs
+      - scripts/deploy*.gs
+      - rowan/**
+      - tests/upgrade/**
+      - tests/scripts/run_grail_upgrade_test.sh
+      - .github/workflows/grail-upgrade.yml
+  schedule:
+    - cron: '47 6 * * *'   # 06:47 UTC daily, before the conformance nightly
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Cases to run (run_grail_upgrade_test.sh arguments)"
+        type: string
+        # release=a78e8c03 is GemDB Code's PINNED_GRAIL_REF (vendor-pins.sh). Move
+        # it when GemDB does.
+        default: "noop synthetic release=a78e8c03"
+
+concurrency:
+  group: grail-upgrade-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    runs-on: ubuntu-22.04
+    # Each case is two installs and three short sessions, about 5 minutes here.
+    timeout-minutes: 45
+    container:
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
+      options: --shm-size=1g
+      credentials:
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
+    steps:
+      # Full history: a release=<ref> case installs that ref.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Same non-root 'ci' pattern as ci.yml. The harness starts and stops its
+      # own stones; setup-testing-env.sh provides the global directory and key.
+      - name: upgrade test (as non-root 'ci')
+        env:
+          CASES: ${{ inputs.cases || 'noop synthetic release=a78e8c03' }}
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            CASES="$CASES" \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            bash -ex -c '
+              git config --global --add safe.directory "$GITHUB_WORKSPACE"
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GITHUB_WORKSPACE"
+              # shellcheck disable=SC2086 -- CASES is a list of arguments
+              tests/scripts/run_grail_upgrade_test.sh $CASES
+            '
+
+      - name: upload the kept work of a failed case
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grail-upgrade-work
+          path: |
+            out/upgrade/*/*.log
+            out/upgrade/*/*.txt
+            out/upgrade/*/*.json
+            out/upgrade/grail/install.out
+          if-no-files-found: ignore

@@ -10,6 +10,26 @@ cmath >> ___asComplex: z [
 
 ]
 
+{ #category : 'Grail-Inverse Functions' }
+cmath >> __getattr__: aName [
+	"PEP 562, for the functions this class does not implement: the inverse
+	trigonometric and hyperbolic functions and isclose.  They are CPython's
+	Modules/cmathmodule.c, special-value tables included, ported to Python
+	in src/python/stdlib/_grail_cmath.py and imported on first use.  Without
+	them test_cmath, which lists them at module level, could not be imported.
+
+	A __getattr__ rather than unary methods, for zlib >> __getattr__:'s
+	reason: an attribute read and a zero-argument call both perform a unary
+	module method, and ``cmath.acos'' must be the function."
+
+	(#('acos' 'acosh' 'asin' 'asinh' 'atan' 'atanh' 'isclose')
+		@env0:includes: aName @env0:asString) ifFalse: [
+			^ AttributeError ___signal___:
+				'module ''cmath'' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''].
+	^ (importlib ___runtimeModule___: '_grail_cmath') ___pyAttrLoad___: aName @env0:asSymbol
+
+]
+
 { #category : 'Grail-Trigonometric Functions' }
 cmath >> cos: z [
 	"cmath.cos(z) — cos(a+bi) = cos(a)*cosh(b) - i*sin(a)*sinh(b)"

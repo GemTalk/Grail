@@ -1,0 +1,20 @@
+# Kinds of change a Grail release must not make until the Rowan in GemDB's pinned
+# engine extent applies them. One per line; read by scripts/check_rowan_floor.py
+# (which refuses a release diff that makes one) and
+# tests/scripts/run_rowan_dependency_matrix.sh (which measures them).
+#
+# Remove a line when the matrix reports the product's Rowan applies it, in the
+# same change that raises install.sh's floor to that product.
+#
+#   env1_removal     removing a method from a methodEnv-1 package (-PyEnv):
+#                    Rowan before masterV4 96eb7c01d looks for it in env 0, and the
+#                    reload fails. 4.0.0.a5 ships 7d50ec0c8.
+env1_removal
+#
+# Measured and NOT needed (run_rowan_dependency_matrix.sh, 4.0.0.a5, 2026-10-26):
+#
+#   session_removal  removing a session method from a Grail-Kernel* package works on
+#                    7d50ec0c8: the package is still in the project, so its
+#                    properties are known. (The fix in 9b8247a1d is for a package that
+#                    is GONE -- removed, or the project unloaded -- which an upgrade of
+#                    Grail does not do.)

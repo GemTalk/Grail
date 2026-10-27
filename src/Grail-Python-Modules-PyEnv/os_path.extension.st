@@ -71,6 +71,8 @@ os_path >> ___joinComponents___: somedPaths [
 
 	| result sep sepElement isBytes size paths |
 	paths := somedPaths @env0:collect: [:p | (os instance) ___fsPath___: p].
+	(paths @env0:anySatisfy: [:p | p isKindOf: PyStrSurrogate])
+		ifTrue: [^ self ___posixpath___: #join with: paths @env0:asArray].
 	(paths @env0:isEmpty) ifTrue: [^ ''].
 	"bytes components join as bytes, as in CPython's posixpath (#1511:
 	shutil.which(b'sh', path=b'/bin') joins them), with b'/' between them --
@@ -134,6 +136,17 @@ os_path >> ___lastSlashIn___: p [
 ]
 
 { #category : 'Grail-Path Manipulation' }
+os_path >> ___leavesToPosixpath___: aPath [
+	"Is aPath (already through os.fspath) one the Smalltalk ports here do not
+	handle -- bytes, or a str holding lone surrogates -- so that the function
+	answers what CPython's posixpath answers for it, through
+	___posixpath___:with:?"
+
+	^ (aPath @env0:isKindOf: ByteArray) or: [aPath isKindOf: PyStrSurrogate]
+
+]
+
+{ #category : 'Grail-Path Manipulation' }
 os_path >> ___plainPathString___: aPath [
 	"aPath reduced by os.fspath, when the result is a plain Smalltalk string the
 	ports here can scan; nil for bytes or a str holding lone surrogates, both of
@@ -145,6 +158,42 @@ os_path >> ___plainPathString___: aPath [
 	| p |
 	p := (os instance) fspath: aPath.
 	^ (p @env0:isKindOf: CharacterCollection) ifTrue: [p] ifFalse: [nil]
+
+]
+
+{ #category : 'Grail-Path Manipulation' }
+os_path >> ___posixpath___: aName with: anArray [
+	"posixpath.<aName>(*anArray): CPython's own algorithm, for the arguments
+	the Smalltalk ports here leave to it.
+
+	A str holding lone surrogates -- an undecodable filename, as os.listdir
+	and os.fsdecode answer it (PEP 383) -- cannot go to posixpath as it is:
+	PyStrSurrogate implements only part of the str protocol, and posixpath
+	reaches for rfind, rstrip, split and the rest.  So every argument goes as
+	its bytes (os.fsencode, surrogateescape) and every str in the answer comes
+	back through os.fsdecode, as CPython's posixpath would have answered it:
+	its bytes branch is the same algorithm over the same bytes.  A list
+	argument (commonpath, commonprefix) is converted element by element."
+
+	| theOs surrogates args result |
+	theOs := os instance.
+	surrogates := anArray @env0:anySatisfy: [:a |
+		(a isKindOf: PyStrSurrogate) or: [(a isKindOf: list)
+			and: [a @env0:anySatisfy: [:e | e isKindOf: PyStrSurrogate]]]].
+	surrogates ifFalse: [
+		^ (self ___posixpathModule @env1:___pyAttrLoad___: aName)
+			___pyCallValue___: anArray kw: nil].
+	args := anArray @env0:collect: [:a |
+		(a isKindOf: list)
+			ifTrue: [list @env0:withAll: (a @env0:collect: [:e | theOs fsencode: e])]
+			ifFalse: [theOs fsencode: a]].
+	result := (self ___posixpathModule @env1:___pyAttrLoad___: aName)
+		___pyCallValue___: args kw: nil.
+	(result @env0:isKindOf: ByteArray) ifTrue: [^ theOs fsdecode: result].
+	(result isKindOf: tuple) ifTrue: [
+		^ tuple @env0:withAll: (result @env0:collect: [:e |
+			(e @env0:isKindOf: ByteArray) ifTrue: [theOs fsdecode: e] ifFalse: [e]])].
+	^ result
 
 ]
 
@@ -216,6 +265,11 @@ os_path >> _realpath: positional kw: kwargs [
 
 	filename := (os instance) ___requiredArgument: 'filename' at: 1 in: positional kw: kwargs for: 'realpath'.
 	(self ___isStrict: kwargs) ifFalse: [^ self realpath: filename].
+	"A surrogate-escaped filename goes through its bytes; see ___posixpath___:with:."
+	(filename isKindOf: PyStrSurrogate) ifTrue: [
+		^ (os instance) fsdecode: (self ___posixpathModule
+			@env1:_realpath: { (os instance) fsencode: filename }
+			kw: (self ___strictKeyword: kwargs))].
 	^ self ___posixpathModule @env1:_realpath: { filename } kw: (self ___strictKeyword: kwargs)
 
 ]
@@ -226,6 +280,14 @@ os_path >> _relpath: positional kw: kwargs [
 	zoneinfo.available_timezones() calls ``relpath(fpath, start=tz_root)'',
 	and without this it matched no selector (#1452)."
 
+	| args |
+	args := positional @env0:asArray.
+	(kwargs notNil and: [kwargs @env0:includesKey: 'start'])
+		ifTrue: [args := args @env0:, { kwargs @env0:at: 'start' }].
+	"A surrogate-escaped argument goes through its bytes; see ___posixpath___:with:."
+	((args @env0:anySatisfy: [:a | a isKindOf: PyStrSurrogate])
+			and: [kwargs isNil or: [kwargs @env0:size @env0:<= 1]])
+		ifTrue: [^ self ___posixpath___: #relpath with: args].
 	^ self ___posixpathModule @env1:_relpath: positional kw: kwargs
 
 ]
@@ -234,6 +296,8 @@ os_path >> _relpath: positional kw: kwargs [
 os_path >> abspath: path [
 	"os.path.abspath(path) — return normalized absolute pathname."
 
+	(self ___leavesToPosixpath___: ((os instance) ___fsPath___: path))
+		ifTrue: [^ self ___posixpath___: #abspath with: { path }].
 	(self isabs: path) ifTrue: [^ self normpath: path].
 	^ self normpath: (self join: {(os instance) getcwd. path})
 
@@ -247,7 +311,7 @@ os_path >> basename: aPath [
 
 	| p |
 	p := self ___plainPathString___: aPath.
-	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:basename: aPath].
+	p @env0:isNil ifTrue: [^ self ___posixpath___: #basename with: { aPath }].
 	^ p @env0:copyFrom: (self ___lastSlashIn___: p) @env0:+ 1 to: p @env0:size
 
 ]
@@ -267,7 +331,7 @@ os_path >> commonpath: somePaths [
 	tests for (is_fs_root) -- so collection walked down from '/' through every
 	entry of /private/tmp: 264 of a 270s run, for 14 tests."
 
-	^ self ___posixpathModule @env1:commonpath: somePaths
+	^ self ___posixpath___: #commonpath with: { somePaths }
 
 ]
 
@@ -277,6 +341,8 @@ os_path >> commonprefix: somePaths [
 
 	| pathsSize minLen prefix i char allMatch paths |
 	paths := somePaths @env0:collect: [:p | (os instance) ___fsPath___: p].
+	(paths @env0:anySatisfy: [:p | self ___leavesToPosixpath___: p])
+		ifTrue: [^ self ___posixpath___: #commonprefix with: { list @env0:withAll: paths }].
 	(paths @env0:isEmpty) ifTrue: [^ ''].
 	pathsSize := paths @env0:size.
 	(pathsSize == 1) ifTrue: [^ paths @env0:first].
@@ -313,7 +379,7 @@ os_path >> dirname: aPath [
 
 	| p |
 	p := self ___plainPathString___: aPath.
-	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:dirname: aPath].
+	p @env0:isNil ifTrue: [^ self ___posixpath___: #dirname with: { aPath }].
 	^ self ___headOf___: p upTo: (self ___lastSlashIn___: p)
 
 ]
@@ -332,6 +398,7 @@ os_path >> expanduser: aPath [
 
 	| home path |
 	path := (os instance) ___fsPath___: aPath.
+	(self ___leavesToPosixpath___: path) ifTrue: [^ self ___posixpath___: #expanduser with: { path }].
 	(path @env0:size @env0:> 0 and: [(path @env0:at: 1) @env0:= $~]) ifFalse: [^ path].
 	home := System @env0:gemEnvironmentVariable: 'HOME'.
 	home @env0:isNil ifTrue: [^ path].
@@ -390,7 +457,10 @@ os_path >> initialize [
 os_path >> isabs: aPath [
 	"os.path.isabs(path) — True if path is absolute."
 
-	^ ((os instance) ___fsPath___: aPath) @env0:beginsWith: '/'
+	| path |
+	path := (os instance) ___fsPath___: aPath.
+	(self ___leavesToPosixpath___: path) ifTrue: [^ self ___posixpath___: #isabs with: { path }].
+	^ path @env0:beginsWith: '/'
 
 ]
 
@@ -417,7 +487,7 @@ os_path >> isjunction: path [
 	is this call.  posixpath re-exports genericpath's, so the coercion (and so
 	the TypeError for a non-path) is CPython's rather than a bare ``^ false''."
 
-	^ self ___posixpathModule @env1:isjunction: path
+	^ self ___posixpath___: #isjunction with: { path }
 
 ]
 
@@ -441,7 +511,7 @@ os_path >> ismount: path [
 	no primitive to shortcut it with: what it needs is os.lstat, os.fspath and
 	realpath, all of which Grail has."
 
-	^ self ___posixpathModule @env1:ismount: path
+	^ self ___posixpath___: #ismount with: { path }
 
 ]
 
@@ -453,7 +523,7 @@ os_path >> join: paths [
 	the elements when called with a list/tuple.  Variadic calls
 	``join(a, b, c)'' go through ``_join:kw:'' (2+ positional args)."
 
-	((paths isKindOf: CharacterCollection)) ifTrue: [^ paths].
+	((paths isKindOf: CharacterCollection) or: [self ___leavesToPosixpath___: paths]) ifTrue: [^ paths].
 	^ self ___joinComponents___: paths
 
 ]
@@ -503,7 +573,7 @@ os_path >> normpath: aPath [
 
 	| p initialSlashes comps newComps out |
 	p := self ___plainPathString___: aPath.
-	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:normpath: aPath].
+	p @env0:isNil ifTrue: [^ self ___posixpath___: #normpath with: { aPath }].
 	p @env0:isEmpty ifTrue: [^ '.'].
 	initialSlashes := 0.
 	(p @env0:at: 1) @env0:= $/ ifTrue: [
@@ -542,7 +612,7 @@ os_path >> realpath: path [
 	algorithm beside the one in the tree would be a second thing to get
 	wrong."
 
-	^ self ___posixpathModule @env1:realpath: path
+	^ self ___posixpath___: #realpath with: { path }
 
 ]
 
@@ -553,14 +623,14 @@ os_path >> relpath: path [
 	split, their common prefix dropped, and one ``..'' emitted per remaining
 	component of start."
 
-	^ self ___posixpathModule @env1:relpath: path
+	^ self ___posixpath___: #relpath with: { path }
 
 ]
 
 { #category : 'Grail-Path Manipulation' }
 os_path >> relpath: path _: start [
 
-	^ self ___posixpathModule @env1:relpath: path _: start
+	^ self ___posixpath___: #relpath with: { path. start }
 
 ]
 
@@ -581,7 +651,7 @@ os_path >> split: aPath [
 
 	| p i |
 	p := self ___plainPathString___: aPath.
-	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:split: aPath].
+	p @env0:isNil ifTrue: [^ self ___posixpath___: #split with: { aPath }].
 	i := self ___lastSlashIn___: p.
 	^ tuple @env0:with: (self ___headOf___: p upTo: i)
 		with: (p @env0:copyFrom: i @env0:+ 1 to: p @env0:size)
@@ -592,7 +662,10 @@ os_path >> split: aPath [
 os_path >> splitdrive: aPath [
 	"os.path.splitdrive(path) -- POSIX has no drives, so the drive is always empty."
 
-	^ tuple @env0:with: '' with: ((os instance) ___fsPath___: aPath)
+	| path |
+	path := (os instance) ___fsPath___: aPath.
+	(self ___leavesToPosixpath___: path) ifTrue: [^ self ___posixpath___: #splitdrive with: { path }].
+	^ tuple @env0:with: '' with: path
 
 ]
 
@@ -606,7 +679,7 @@ os_path >> splitext: aPath [
 
 	| p sepIndex dotIndex i |
 	p := self ___plainPathString___: aPath.
-	p @env0:isNil ifTrue: [^ self ___posixpathModule @env1:splitext: aPath].
+	p @env0:isNil ifTrue: [^ self ___posixpath___: #splitext with: { aPath }].
 	sepIndex := self ___lastSlashIn___: p.
 	dotIndex := self ___lastIndexOf___: $. in: p.
 	dotIndex @env0:> sepIndex ifTrue: [
@@ -629,6 +702,7 @@ os_path >> splitroot: aPath [
 	| path |
 
 	path := (os instance) ___fsPath___: aPath.
+	(self ___leavesToPosixpath___: path) ifTrue: [^ self ___posixpath___: #splitroot with: { path }].
 	(path @env0:beginsWith: '/') ifFalse: [^ tuple @env0:with: '' with: '' with: path].
 	(self ___hasExactlyTwoLeadingSlashes___: path)
 		ifTrue: [^ tuple @env0:with: '' with: '//' with: (path @env0:copyFrom: 3 to: path @env0:size)].

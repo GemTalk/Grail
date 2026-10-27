@@ -57,10 +57,14 @@ NativeModule class >> ___forgetSessionState___ [
 { #category : 'Grail-Singleton' }
 NativeModule class >> ___installCommittedInstance___ [
 	"Install-time only: mint this class's committed instance, empty and
-	invariant.  install.sh recreates the runtime classes on every run, so
-	the instance is recreated with them rather than migrated."
+	invariant -- or, on a reinstall, keep the one it has.  An install keeps
+	Grail's classes, and deployed modules and stored objects refer to this
+	instance (``import sys'' binds it), so a new one would leave them
+	holding a module nothing else does."
 
 	| inst view |
+	(grailCommittedInstance notNil and: [grailCommittedInstance class == self
+		and: [grailCommittedDictView notNil]]) ifTrue: [^ grailCommittedInstance].
 	inst := self new.
 	inst immediateInvariant.
 	grailCommittedInstance := inst.
