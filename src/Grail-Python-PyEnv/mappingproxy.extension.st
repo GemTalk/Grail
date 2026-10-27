@@ -25,8 +25,14 @@ mappingproxy class >> __new__: aMapping [
 	fell through the generic instantiation path and died with ``a PyDict does
 	not understand #'new''', an uncatchable Smalltalk error."
 
+	"CPython's mappingproxy_check_mapping (Objects/descrobject.c): anything
+	PyMapping_Check admits -- anything with a __getitem__ -- but a list or a
+	tuple.  A ChainMap, a UserDict, a user Mapping qualify; only dicts did."
 	((aMapping @env0:isKindOf: AbstractDictionary)
-		@env0:or: [aMapping @env0:isKindOf: KeyValueDictionary]) ifFalse: [
+		@env0:or: [(aMapping @env0:isKindOf: KeyValueDictionary)
+		@env0:or: [((aMapping @env0:isKindOf: list) @env0:or: [aMapping @env0:isKindOf: tuple]) @env0:not
+			@env0:and: [(aMapping ___matchDefinesOwnSelector___: #'__getitem__:')
+			@env0:and: [aMapping ___grailDirListsSelector___: #'__getitem__:' in: aMapping @env0:class]]]]) ifFalse: [
 		^ TypeError ___signal___: 'mappingproxy() argument must be a mapping, not '
 			@env0:, (aMapping ___pyTypeNameForError___) @env0:asString].
 	^ self ___on: aMapping
@@ -39,14 +45,30 @@ mappingproxy >> ___setMapping: aMapping [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+mappingproxy >> __class_getitem__: item [
+	"``types.MappingProxyType[int]'' -- a types.GenericAlias, as for set (see
+	set >> __class_getitem__:)."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Collection Protocol' }
 mappingproxy >> __contains__: key [
-	^ mapping @env0:includesKey: key
+	"The mapping's own ``in'' (mappingproxy_contains): a dict subclass's
+	__contains__ override answers, as it does in CPython."
+
+	^ mapping __contains__: key
 
 ]
 
 { #category : 'Grail-Mutation' }
 mappingproxy >> __delitem__: key [
+	<grailProtocolRefusal>
+	"CPython's mappingproxy has no item deletion at all; this only raises its
+	TypeError, and is no attribute of the type."
+
 	^ TypeError ___signal___: '''mappingproxy'' object does not support item deletion'
 
 ]
@@ -85,15 +107,28 @@ mappingproxy >> __hash__ [
 
 ]
 
+{ #category : 'Grail-Merge Operators' }
+mappingproxy >> __ior__: other [
+	"CPython's mappingproxy_ior: a read-only view cannot be updated in place."
+
+	^ TypeError ___signal___: '''|='' is not supported by mappingproxy; use ''|'' instead'
+
+]
+
 { #category : 'Grail-Iterator Protocol' }
 mappingproxy >> __iter__ [
-	^ (mapping keys) __iter__
+	"iter() of the mapping itself (mappingproxy_getiter), so a mapping's own
+	__iter__ answers -- not its keys()."
+
+	^ mapping __iter__
 
 ]
 
 { #category : 'Grail-Collection Protocol' }
 mappingproxy >> __len__ [
-	^ mapping @env0:size
+	"len() of the mapping (mappingproxy_len), so a __len__ override answers."
+
+	^ mapping __len__
 
 ]
 
@@ -146,6 +181,16 @@ mappingproxy >> __repr__ [
 
 ]
 
+{ #category : 'Grail-Iterator Protocol' }
+mappingproxy >> __reversed__ [
+	"The mapping's own reversed iterator (mappingproxy_reversed calls its
+	__reversed__).  Without one, reversed() fell back to indexing the proxy
+	by position, which for a dict is a KeyError."
+
+	^ mapping __reversed__
+
+]
+
 { #category : 'Grail-Merge Operators' }
 mappingproxy >> __ror__: other [
 	"PEP 584 reflected merge ``other | mp'' -- the proxy's entries win.
@@ -169,7 +214,20 @@ mappingproxy >> __ror__: other [
 
 { #category : 'Grail-Mutation' }
 mappingproxy >> __setitem__: key _: value [
+	<grailProtocolRefusal>
+	"CPython's mappingproxy has no item assignment at all; this only raises
+	its TypeError, and is no attribute of the type."
+
 	^ TypeError ___signal___: '''mappingproxy'' object does not support item assignment'
+
+]
+
+{ #category : 'Grail-String Representation' }
+mappingproxy >> __str__ [
+	"str() of the mapping itself (mappingproxy_str); repr() keeps the
+	``mappingproxy(...)'' wrapper."
+
+	^ mapping __str__
 
 ]
 
