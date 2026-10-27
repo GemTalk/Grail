@@ -55,6 +55,21 @@ importlib class >> ___allowBaseChange___: aKey while: aBlock [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___allowBaseChanges___: keys while: aBlock [
+	"Run aBlock with the base-change refusal lifted for every key in keys: what
+	an install's redeploy does for the base changes no stored instance depends
+	on (___grailUninhabitedBaseChanges___:)."
+
+	| st allowed |
+	st := SessionTemps current.
+	allowed := st at: #'GrailBaseChangeAllowed' otherwise: nil.
+	allowed isNil ifTrue: [allowed := Set new. st at: #'GrailBaseChangeAllowed' put: allowed].
+	keys do: [:k | allowed add: k asString].
+	^ aBlock ensure: [keys do: [:k | allowed remove: k asString ifAbsent: []]]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___allowVanished___: aModuleName while: aBlock [
 	"Run aBlock with the vanished-class refusal lifted for aModuleName."
 
@@ -1695,6 +1710,10 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 		and: [(self ___baseChangeAllowed___: key) not
 		and: [(self ___isMetaclassBuilt___: existing) not
 		and: [(self ___isMetaclassBuilt___: aParent) not]]]]]]) ifTrue: [
+			"Recorded, so the session that owns a clean transaction -- an
+			install's redeploy -- can find which keys were refused, and rebuild
+			those no stored instance depends on (___grailUninhabitedBaseChanges___:)."
+			(SessionTemps current at: #'GrailRefusedBaseChanges' ifAbsentPut: [Set new]) add: key.
 			^ ImportError @env1:___signal___:
 				'class ' , key , ' changed its bases (' ,
 				(existing superclass isNil ifTrue: ['nil'] ifFalse: [existing superclass name asString]) ,
@@ -4273,6 +4292,43 @@ importlib class >> ___grailTmpIndex___ [
 	n := self ___trailingDigitsOf___: (self ___lastPathComponentOf___: self grailDir).
 	n isEmpty ifFalse: [^ n].
 	^ '0'
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___grailUninhabitedBaseChanges___: keys [
+	"The keys, of those in keys, whose class no stored object depends on: no
+	instance of the registered class, nor of any class below it -- the
+	registry's subtree (___grailSlotSubtree___, every namespace the session
+	reads) and every Smalltalk subclass, so a method-local class is counted
+	too.  The base-change refusal protects stored instances; with none, the
+	rebuild against the new bases strands nothing, and an install rebuilds it
+	rather than leaving every application session to be refused.
+
+	Measured case: Grail c8cbc92 shipped its own email.message, with
+	EmailMessage(Message); later releases ship CPython's, with Message <-
+	MIMEPart <- EmailMessage. A database that imported email under c8cbc92
+	(GemDB's web app does, through flask) was refused on its first import
+	after the upgrade, though nothing stored an EmailMessage.
+
+	A repository scan (countInstances:), so it needs a clean transaction, and
+	answers nothing without one: the refusal then stands.  It runs only on a
+	refusal, once per changed class."
+
+	| reg result |
+	System needsCommit ifTrue: [^ #()].
+	reg := self ___canonicalClassRegistry___.
+	result := OrderedCollection new.
+	keys do: [:k | | cls tree counts |
+		cls := reg at: k asString otherwise: nil.
+		(cls isKindOf: Behavior) ifTrue: [
+			tree := IdentitySet new.
+			tree addAll: (cls @env1:___grailSlotSubtree___).
+			[tree addAll: cls allSubclasses] on: Error do: [:e | e return: nil].
+			tree add: cls.
+			counts := SystemRepository countInstances: tree asArray.
+			(counts detect: [:n | n > 0] ifNone: [nil]) isNil ifTrue: [result add: k asString]]].
+	^ result
 
 ]
 

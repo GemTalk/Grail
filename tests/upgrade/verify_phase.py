@@ -149,6 +149,17 @@ def mutate():
 
 check('runs.raise_and_catch', raise_and_catch)
 check('runs.pickle_round_trip', pickle_round_trip)
+def email_message():
+    import email.message
+    m = email.message.EmailMessage()
+    m['Subject'] = 'upgraded'
+    m.set_content('body')
+    text = m.as_string()
+    return ('Subject: upgraded' in text and 'body' in text
+            and email.message.MIMEPart in type(m).__mro__, text[:200])
+
+
+check('runs.email_message', email_message)
 check('runs.pickle_namedtuple',
       lambda: expect_equal(pickle.loads(pickle.dumps(stored['pair'])), stored['pair']))
 check('runs.equal_to_new', equal_to_new)
