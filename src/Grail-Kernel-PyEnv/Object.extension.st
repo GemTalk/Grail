@@ -12704,6 +12704,51 @@ Object >> ___matchAttr___: aName [
 ]
 
 { #category : 'Grail-Match Protocol' }
+Object >> ___matchClassAccepts___: positionalCount keywords: keywordNames of: aClass [
+	"Raise what CPython's match_class raises for a class pattern once the
+	isinstance test has passed (Python/ceval.c:839-930): __match_args__, when
+	positional sub-patterns ask for it, is an exact tuple of exact strs with
+	room for them all, and no attribute is named twice across the positional
+	names and the keywords (match_class_attr's ``seen'', 817-834).  Answers
+	true, to stand in the pattern's and: chain."
+
+	| className names matchArgs allowed seen |
+	className := (aClass @env1:__name__) @env0:asString.
+	names := OrderedCollection @env0:new.
+	positionalCount @env0:> 0 ifTrue: [
+		matchArgs := [aClass ___pyAttrLoad___: #'__match_args__']
+			@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
+		matchArgs == nil
+			ifTrue: [allowed := (self ___isSelfMatching___: aClass) ifTrue: [1] ifFalse: [0]]
+			ifFalse: [
+				matchArgs ___pyTypeNameForError___ @env0:= 'tuple' ifFalse: [
+					TypeError ___signal___: className @env0:, '.__match_args__ must be a tuple (got '
+						@env0:, matchArgs ___pyTypeNameForError___ @env0:, ')'].
+				allowed := matchArgs __len__].
+		allowed @env0:< positionalCount ifTrue: [
+			TypeError ___signal___: className @env0:, '() accepts ' @env0:, allowed @env0:printString
+				@env0:, ' positional sub-pattern' @env0:, (allowed @env0:= 1 ifTrue: [''] ifFalse: ['s'])
+				@env0:, ' (' @env0:, positionalCount @env0:printString @env0:, ' given)'].
+		matchArgs == nil ifFalse: [
+			0 to: positionalCount @env0:- 1 do: [:index |
+				| name |
+				name := matchArgs __getitem__: index.
+				name ___pyTypeNameForError___ @env0:= 'str' ifFalse: [
+					TypeError ___signal___: '__match_args__ elements must be strings (got '
+						@env0:, name ___pyTypeNameForError___ @env0:, ')'].
+				names @env0:add: name @env0:asString]]].
+	names @env0:addAll: keywordNames.
+	seen := Set @env0:new.
+	names @env0:do: [:name |
+		(seen @env0:includes: name) ifTrue: [
+			TypeError ___signal___: className @env0:, '() got multiple sub-patterns for attribute '
+				@env0:, ((builtins instance) repr: name) @env0:asString].
+		seen @env0:add: name].
+	^ true
+
+]
+
+{ #category : 'Grail-Match Protocol' }
 Object >> ___matchCollectionFlag___ [
 	"The Py_TPFLAGS_SEQUENCE (32) or Py_TPFLAGS_MAPPING (64) bit of this
 	object's type, or 0 -- what a sequence or a mapping pattern tests
