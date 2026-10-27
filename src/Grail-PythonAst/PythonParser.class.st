@@ -589,27 +589,72 @@ PythonParser >> ___checkStrayEquals___: anExpr [
 
 { #category : 'Grail-parsing' }
 PythonParser >> ___checkTypeParamsAt___: lb [
-	"A type parameter list: CPython refuses an empty one, and the same name
-	twice."
+	"A type parameter list: CPython refuses an empty one, the same name twice,
+	what its grammar does not admit in one parameter
+	(___checkTypeParamSegment___:), and -- in its code generator, so after
+	every grammar error in the list -- a parameter without a default after one
+	with a default (Python/codegen.c:1259-1297)."
 
-	| rb names |
+	| rb names segments sawDefault |
 	rb := self ___indexOfClose___: lb.
 	rb isNil ifTrue: [^ self].
 	rb = (lb + 1) ifTrue: [
 		^ PythonParser ___signal___: SyntaxError message: 'Type parameter list cannot be empty'
 			in: source from: (tokens at: rb) position to: nil].
+	segments := self ___segmentsFrom: lb + 1 to: rb - 1.
 	names := IdentitySet new.
-	(self ___segmentsFrom: lb + 1 to: rb - 1) do: [:seg |
-		| k t |
-		k := 1.
-		[k <= seg size and: [((tokens at: (seg at: k)) isOp: '*')
-			or: [(tokens at: (seg at: k)) isOp: '**']]] whileTrue: [k := k + 1].
-		k <= seg size ifTrue: [
-			t := tokens at: (seg at: k).
+	segments do: [:seg |
+		| t |
+		t := self ___typeParamNameIn___: seg.
+		t ifNotNil: [
 			(names includes: t value asString asSymbol) ifTrue: [
 				^ self ___syntaxError___: 'duplicate type parameter ''' , t value asString , ''''
 					at: t].
-			names add: t value asString asSymbol]]
+			names add: t value asString asSymbol].
+		self ___checkTypeParamSegment___: seg].
+	sawDefault := false.
+	segments do: [:seg |
+		(self ___topLevelEqualsIn___: seg) notNil
+			ifTrue: [sawDefault := true]
+			ifFalse: [
+				sawDefault ifTrue: [
+					^ self ___syntaxError___: 'non-default type parameter '''
+						, (self ___typeParamNameIn___: seg) value asString
+						, ''' follows default type parameter'
+						at: (tokens at: seg first)]]]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___checkTypeParamSegment___: seg [
+	"One type parameter, as CPython's type_param and invalid_type_param admit
+	it (Grammar/python.gram:685-695, 1230-1239): a TypeVarTuple or a ParamSpec
+	takes no bound -- ``cannot use bound with ParamSpec'', or ``constraints''
+	when the bound is a tuple, located at its colon -- and only a
+	TypeVarTuple's default may be starred, any other being invalid syntax at
+	the star.  seg is the parameter's token indexes."
+
+	| nameAt stars colonAt equalsAt |
+	nameAt := 1.
+	[nameAt <= seg size and: [((tokens at: (seg at: nameAt)) isOp: '*')
+		or: [(tokens at: (seg at: nameAt)) isOp: '**']]] whileTrue: [nameAt := nameAt + 1].
+	stars := nameAt = 1
+		ifTrue: [0]
+		ifFalse: [((tokens at: seg first) isOp: '**') ifTrue: [2] ifFalse: [1]].
+	equalsAt := self ___topLevelEqualsIn___: seg.
+	colonAt := (nameAt < seg size and: [(tokens at: (seg at: nameAt + 1)) isOp: ':'])
+		ifTrue: [nameAt + 1]
+		ifFalse: [nil].
+	(stars > 0 and: [colonAt notNil]) ifTrue: [
+		^ self ___syntaxError___: 'cannot use '
+			, ((self ___isTupleFrom: (seg at: colonAt + 1)
+				to: (seg at: (equalsAt ifNil: [seg size + 1]) - 1))
+					ifTrue: ['constraints'] ifFalse: ['bound'])
+			, ' with ' , (stars = 1 ifTrue: ['TypeVarTuple'] ifFalse: ['ParamSpec'])
+			at: (tokens at: (seg at: colonAt))].
+	(stars ~= 1 and: [equalsAt notNil and: [equalsAt < seg size
+		and: [(tokens at: (seg at: equalsAt + 1)) isOp: '*']]]) ifTrue: [
+			^ self ___invalidSyntaxAt___: (tokens at: (seg at: equalsAt + 1))]
 
 ]
 
@@ -1330,6 +1375,23 @@ PythonParser >> ___isTripleQuoteIn: aString at: anIndex [
 	quote := aString at: anIndex.
 	^ anIndex + 2 <= aString size
 		and: [(aString at: anIndex + 1) == quote and: [(aString at: anIndex + 2) == quote]]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___isTupleFrom: first to: last [
+	"Whether tokens first..last are one parenthesised tuple -- ``()'' or a
+	group with a comma at its own depth -- which is what makes a bound a list
+	of constraints."
+
+	| close |
+	first > last ifTrue: [^ false].
+	((tokens at: first) isOp: '(') ifFalse: [^ false].
+	close := self ___indexOfClose___: first.
+	close = last ifFalse: [^ false].
+	close = (first + 1) ifTrue: [^ true].
+	^ (self ___segmentsFrom: first + 1 to: close - 1) size > 1
+		or: [(tokens at: close - 1) isOp: ',']
 
 ]
 
@@ -2396,6 +2458,23 @@ PythonParser >> ___tokensHaveTopLevelComma___: someTokens [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___topLevelEqualsIn___: seg [
+	"The position within seg of its first ``='' outside brackets -- where a type
+	parameter's default starts -- or nil."
+
+	| depth |
+	depth := 0.
+	seg doWithIndex: [:index :at |
+		| t |
+		t := tokens at: index.
+		((t isOp: '(') or: [(t isOp: '[') or: [t isOp: '{']]) ifTrue: [depth := depth + 1].
+		((t isOp: ')') or: [(t isOp: ']') or: [t isOp: '}']]) ifTrue: [depth := depth - 1].
+		(depth = 0 and: [t isOp: '=']) ifTrue: [^ at]].
+	^ nil
+
+]
+
 { #category : 'Grail-parsing - type alias' }
 PythonParser >> ___typeAliasTarget___: aToken [
 	"The alias name as a STORE target -- ``type X = int'' binds X in the
@@ -2408,6 +2487,18 @@ PythonParser >> ___typeAliasTarget___: aToken [
 		token: aToken ; yourself.
 	self setStoreCtx: node.
 	^node
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___typeParamNameIn___: seg [
+	"The NAME token of the type parameter seg holds, past its stars, or nil."
+
+	seg do: [:index |
+		| t |
+		t := tokens at: index.
+		((t isOp: '*') or: [t isOp: '**']) ifFalse: [^ t isName ifTrue: [t] ifFalse: [nil]]].
+	^ nil
 
 ]
 
