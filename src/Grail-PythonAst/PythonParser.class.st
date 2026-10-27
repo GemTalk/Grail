@@ -1047,6 +1047,40 @@ PythonParser >> ___firstNamedExprIn___: node [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___formatSpecJoinedStrFor: formatSpec at: locTok [
+	"A field's format spec for ast.parse: an f-string of its own, so a spec
+	with a nested field goes through the same child parse compiled code uses,
+	and a literal one is its text alone."
+
+	(formatSpec includes: ${) ifTrue: [^ self ___fstringSpecExprFor: formatSpec at: locTok].
+	^ JoinedStrAst new
+		values: (formatSpec isEmpty
+			ifTrue: [#()]
+			ifFalse: [{ self ___fstringPartToAst: #literal -> formatSpec from: locTok }]);
+		from: locTok to: locTok;
+		yourself
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___formattedValueOf: exprAst conversion: conversionChar formatSpec: formatSpec at: locTok [
+	"A field as ast.parse answers it: CPython's FormattedValue, with the
+	conversion as its code point (-1 for none) and the spec as a JoinedStr of
+	its own -- empty for ``{x:}'', and holding a nested field's FormattedValue
+	for ``{x:{width}}''."
+
+	^ FormattedValueAst new
+		value: exprAst;
+		conversion: (conversionChar isNil ifTrue: [-1] ifFalse: [conversionChar codePoint]);
+		format_spec: (formatSpec isNil
+			ifTrue: [nil]
+			ifFalse: [self ___formatSpecJoinedStrFor: formatSpec at: locTok]);
+		from: locTok to: locTok;
+		yourself
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___fstringDebugEqualsIn___: text [
 	"Index of the trailing ``='' that makes a replacement field the
@@ -1458,6 +1492,33 @@ PythonParser >> ___isTupleFrom: first to: last [
 	close = (first + 1) ifTrue: [^ true].
 	^ (self ___segmentsFrom: first + 1 to: close - 1) size > 1
 		or: [(tokens at: close - 1) isOp: ',']
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___joinedStrFromParts___: parts from: startTok [
+	"What ast.parse answers for an f-string: CPython's JoinedStr, holding the
+	literal text -- adjacent pieces merged into one Constant, as CPython's
+	parser merges them -- and a FormattedValue per field.  Only the ast
+	module sees it; compiled code keeps the concatenation parseFStringLiteral
+	builds, which is why the ast form answered a Call or a BinOp."
+
+	| values literal |
+	values := OrderedCollection new.
+	literal := nil.
+	parts do: [:part |
+		part key == #literal
+			ifTrue: [literal := literal isNil ifTrue: [part value] ifFalse: [literal , part value]]
+			ifFalse: [
+				literal isNil ifFalse: [
+					values add: (self ___fstringPartToAst: #literal -> literal from: startTok).
+					literal := nil].
+				values add: part value]].
+	literal isNil ifFalse: [values add: (self ___fstringPartToAst: #literal -> literal from: startTok)].
+	^ JoinedStrAst new
+		values: values asArray;
+		from: startTok to: self lastToken;
+		yourself
 
 ]
 
@@ -4790,7 +4851,9 @@ PythonParser >> parseFStringLiteral [
 						 follows it are already gone (see above)."
 						parts add: #interp -> { exprAst. exprText asString. conversion. formatSpec }]
 					ifFalse: [
-						converted := self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok.
+						converted := self ___parsingForAst___
+							ifTrue: [self ___formattedValueOf: exprAst conversion: conversion formatSpec: formatSpec at: tok]
+							ifFalse: [self ___wrapFStringExpr: exprAst conversion: conversion formatSpec: formatSpec at: tok].
 						parts add: #expr -> converted].
 			]
 		] ifFalse: [
@@ -4821,6 +4884,8 @@ PythonParser >> parseFStringLiteral [
 		sawNonT ifTrue: [
 			SyntaxError signal: 'cannot mix t-string literals with string or bytes literals'].
 		^ self ___templateFromParts___: parts from: startTok].
+	(sawF and: [self ___parsingForAst___]) ifTrue: [
+		^ self ___joinedStrFromParts___: parts from: startTok].
 	"Empty f-string → empty literal."
 	parts isEmpty ifTrue: [
 		result := ConstantAst new
