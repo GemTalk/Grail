@@ -496,6 +496,16 @@ test.test_funcattrs|FunctionPropertiesTest.test_copying___code__|__code__ assign
 # driving tests/python/function_builtins_attr.py (CPython 3.14.6-measured).
 test.test_funcattrs|FunctionPropertiesTest.test___builtins__|needs FunctionType(code, globals) to yield a callable executing that code against that dict; Grail keeps no bytecode and binds globals statically at compile time -- the module-level name and f.__builtins__ themselves are implemented and pass
 #
+# test_generators' test_new_gen_from_gi_code is the same constructor, reached
+# through a generator: ``types.FunctionType(g.gi_code, {})(obj)'' must answer a
+# new generator running g's body over obj, with {} as its globals.  Both limits
+# above apply, and a third comes first: a generator EXPRESSION has no gi_code at
+# all (its body is a block with no def site to describe), which is the
+# AttributeError the test reports today.  Making function code objects point
+# back to their compiled block would still not pass it, since the globals are a
+# different dict.  test_modify_f_locals, its sibling, passes (PR #1783).
+test.test_generators|ModifyUnderlyingIterableTest.test_new_gen_from_gi_code|needs FunctionType(gi_code, {}) to run a generator's body as a new function against a new globals dict; Grail's code objects carry no instructions, globals bind at compile time, and a generator expression has no gi_code -- see test_funcattrs' test___builtins__ above
+#
 # test_func_default_args needs ``first_func.__defaults__ = (1, 2)'' to make
 # ``first_func()'' legal, where first_func was declared ``def first_func(a, b)''
 # with no defaults.  CPython consults a mutable func_defaults field at CALL
