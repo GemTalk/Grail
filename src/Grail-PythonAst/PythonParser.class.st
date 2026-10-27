@@ -4535,7 +4535,14 @@ PythonParser >> parseExpressionOrAssignment [
 			is a value (Python/symtable.c:2024-2034), so ``(x): int'' alone
 			binds nothing and a later read of x is the enclosing scope's -- a
 			NameError, not an UnboundLocalError, for a name bound nowhere."
-			((expr isKindOf: NameAst) and: [simple = 0 and: [value isNil]])
+			"So is a bare ``x: int'' in a CLASS body, simple or not: the symtable
+			marks x local there, but a class body looks every name up in its
+			namespace and then globals, and nothing was stored -- so a later
+			read is the enclosing scope's NameError.  Declared, the read
+			compiled to a temp the class body does not have, and the class
+			failed to compile: ``undefined symbol x''."
+			((expr isKindOf: NameAst) and: [value isNil
+				and: [simple = 0 or: [classNesting > 0]]])
 				ifTrue: [
 					self ___retractTargetRead___: expr.
 					expr ctx: self storeCtx]
