@@ -15929,8 +15929,7 @@ Object >> ___pyKwargsSplatFor___: aCallee [
 
 	"Grail's own dictionaries -- a dict, any Smalltalk dictionary Grail's
 	runtime builds keywords in (datetime's replace() hands a Dictionary), and
-	the live __dict__ / globals() views -- are what callees already read
-	keywords from."
+	the globals() view -- are what callees already read keywords from."
 	self @env0:class == dict ifTrue: [^ self].
 	"An instance of a PYTHON subclass of dict becomes a plain dict, as CPython
 	always hands the callee.  Passed through, the callee's binding copied it
@@ -15955,8 +15954,15 @@ Object >> ___pyKwargsSplatFor___: aCallee [
 				ifFalse: [
 					self @env0:keysAndValuesDo: [:k :v | d @env0:at: k put: v]].
 			^ d].
-	((self @env0:isKindOf: AbstractDictionary)
-		or: [self @env0:isKindOf: PyInstanceDict]) ifTrue: [^ self].
+	"A live __dict__ view is copied too, into the plain dict its copy()
+	answers.  A callee with ``**kw'' copies what it is handed and removes the
+	names it bound, and the copy of a VIEW is a second view of the same
+	object: removeKey:ifAbsent: is no view protocol, so
+	``self.clone(**other.__dict__)'' -- email.policy's ``+'' -- raised an
+	uncatchable MessageNotUnderstood, where an answer would have deleted the
+	caller's attributes."
+	(self @env0:isKindOf: PyInstanceDict) ifTrue: [^ self copy].
+	(self @env0:isKindOf: AbstractDictionary) ifTrue: [^ self].
 	"Any other MAPPING is copied into a dict, which is what CPython hands the
 	callee in every case: a user class with keys() and __getitem__ was passed
 	through as it stood, and the callee's first dictionary message to it was
