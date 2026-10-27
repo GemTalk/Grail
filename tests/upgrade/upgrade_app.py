@@ -91,6 +91,21 @@ class Level(enum.StrEnum):
 Pair = collections.namedtuple('Pair', 'left right')
 
 
+class Span(collections.namedtuple('Span', 'lo hi')):
+    """A class statement over a namedtuple built in its own header: its base is a
+    new class whenever namedtuple's is, and then so is it."""
+    def width(self):
+        return self.hi - self.lo
+
+
+def _built_kind(self):
+    return 'built:' + self.label
+
+
+# A class built by CALLING type() at module scope, not by a class statement.
+Built = type('Built', (object,), {'kind': _built_kind})
+
+
 def module_func(x):
     return x * 2 + 1
 
@@ -174,12 +189,21 @@ def build():
         'enum_keyed_dict': {Color.GREEN: 'color', Mode.WRITE: 'mode', Level.HIGH: 'level'},
         'enum_keyed_set': {Color.GREEN, Mode.WRITE, Level.HIGH},
         'pair': Pair(1, 2),
+        'span': Span(3, 8),
+        'typed_pair_obj': TypedPair(5, 'x'),
+        'built': _make_built('b1'),
         'func': module_func,
         'closure': make_scaler(3),
         'bound': acct.describe,
         'keyed_dict': keyed,
         'keyed_set': set(k for k, _ in key_values()),
     }
+
+
+def _make_built(label):
+    b = Built()
+    b.label = label
+    return b
 
 
 def key_values():
@@ -219,7 +243,7 @@ def expected_types():
         'account': Account, 'slotted': Slotted, 'error': AppError,
         'registry': Registry, 'point': Point, 'tagged': Tagged, 'color': Color,
         'mode': Mode, 'level': Level,
-        'pair': Pair,
+        'pair': Pair, 'span': Span, 'typed_pair_obj': TypedPair, 'built': Built,
     }
 
 
@@ -261,6 +285,9 @@ def describe(stored):
         'level': [s['level'].name, s['level'].value, str(s['level']), len(s['level'])],
         'enum_members': [[m.name for m in Color], [m.name for m in Mode], [m.name for m in Level]],
         'pair': [s['pair'].left, s['pair'].right],
+        'span': [s['span'].lo, s['span'].hi, s['span'].width()],
+        'typed_pair_obj': [s['typed_pair_obj'].first, s['typed_pair_obj'].second],
+        'built': s['built'].kind(),
         'func': s['func'](5),
         'closure': s['closure'](5),
         'bound': s['bound'](),

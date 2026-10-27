@@ -429,9 +429,29 @@ followed a source edit:
 - **an enum's members** — the body made new member objects; a rebuild now
   keeps the previous ones, by name (`Enum class >> ___grailKeepPreviousMember:named:in:`).
 
-A class built by *calling* something — `collections.namedtuple`, whose class
-statement runs inside the function — is still new on every rebuild: it is not
-registered under its module and name as a module-level class statement is.
+- **a class built by a call** — `collections.namedtuple`, whose class
+  statement runs inside the function, and `type(name, bases, ns)`, which is
+  also what a metaclass call and a metaclass that rewrites a class statement's
+  bases (`typing.NamedTuple`, `TypedDict`) come down to. Nothing keyed it, so
+  every rebuild minted a new class and stranded every stored instance (#1802).
+  Such a call made while a module body runs now **claims** the next class
+  creation (`importlib ___claimBuiltClass___:`, taken by `Class >>
+  ___subclass___:...`), keyed `module.Name()` — the running module, the name
+  the caller asked for, and a suffix that keeps it apart from a class
+  statement's `module.Name` (`class Point(namedtuple('Point', 'x y'))` makes
+  both). The reuse is a class statement's: same identity, fresh namespace, the
+  build re-run onto it, marked rebuilding until the body ends. Only the first
+  claim of a key in one body run reuses (a second `namedtuple('P', ...)` is a
+  second class, as in CPython), only while the superclass and instVars still
+  fit, and never a class something else is rebuilding. A built class does not
+  join the canonical class set, so D3 does not apply to it, as before; a key
+  the body stopped claiming is forgotten, not refused. A module deployed by a
+  Grail that recorded no such key is matched through its committed instance's
+  old globals instead (`___previousBuiltClass___:module:parent:`), so the first
+  upgrade keeps the class as well. Still new on every
+  rebuild: a class statement inside a function other than namedtuple's, and
+  any class built during `importlib.reload`, which does not mark a module body
+  as running.
 
 Details and the failure table are in the history log, §B.
 

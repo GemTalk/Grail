@@ -45,7 +45,19 @@ Class >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: clas
 	arguments to ``subclass:...''.  This helper hides the boilerplate
 	so the generated code reduces to a single send."
 
-	| filteredIvars filteredClassIvars newCls |
+	| filteredIvars filteredClassIvars newCls claim |
+	"A CLASS BUILT BY A CALL claims the next class creation -- this one --
+	under its module and name, so a rebuild of that module can hand back the
+	class it built before (importlib class >> ___claimBuiltClass___: and
+	___builtSubclassOf:...).  Taken whatever this class is, so a claim never
+	outlives the call that made it; the helper mints through here again, with
+	the claim gone, when it cannot reuse."
+	claim := SessionTemps @env0:current @env0:at: #'GrailBuiltClassClaim' otherwise: nil.
+	claim == nil ifFalse: [
+		SessionTemps @env0:current @env0:removeKey: #'GrailBuiltClassClaim'.
+		^ (Python @env0:at: #importlib)
+			@env0:___builtSubclassOf: self name: aSymbol pyName: (claim @env0:at: 2)
+				module: (claim @env0:at: 1) instVarNames: ivarNames classInstVarNames: classIvarNames].
 	"``class MyInt(int)``: Integer is sealed AND its instances are
 	immediate/byte-format, so no subclass can share its storage.
 	Substitute AbstractPyInt -- the Number-sibling whose _generality

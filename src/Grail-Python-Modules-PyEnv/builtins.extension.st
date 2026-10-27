@@ -8023,8 +8023,17 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 	could not compile this method'' instead of the AttributeError it used to
 	give.  ___subclass___: filters the name against the parent's hierarchy, so
 	asking for it when a base already declares it is a no-op."
+	"A type() call while a module body runs keeps its class across rebuilds of
+	that module, as the module's class statements do (importlib class >>
+	___builtSubclassOf:..., #1802): the call claims the creation just below.
+	That covers a metaclass call and a metaclass that rewrites a class
+	statement's bases too, which both come down to this method."
+	il @env0:___claimBuiltClass___: className.
 	newClass := storageBase ___subclass___: nameSym instVarNames: #()
 		classInstVarNames: #('___dynInstVars___').
+	"A base whose own ___subclass___: is not Class's leaves the claim untaken;
+	it must not fall to whatever class is created next."
+	il @env0:___claimBuiltClass___: nil.
 	"The mark object >> ___grailIsPythonClass___ reads for a class type()
 	built, as ___pyDefinedClass___ is for a class statement's.  It used to
 	infer one from the metaclass's OWN ___dynInstVars___ accessor, which a

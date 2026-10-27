@@ -360,8 +360,10 @@ Three things worth knowing:
   rebuilds it, and refuses in its turn with its own name.
 
 A computed base — `class Point(namedtuple("Point", "x y"))` — is not a base
-change and is never refused. It builds a fresh class every time the module
-runs, which Grail has always allowed and still does.
+change and is never refused. At module scope the namedtuple keeps its class
+across a rebuild (#1802), so `Point` keeps its base and its identity; a
+namedtuple class that cannot be reused is a fresh class, and `Point` re-mints
+with it, which Grail has always allowed and still does.
 
 A class rooted at a built-in (`Exception`, `dict`, `list`, `str`) stores its
 attributes per object, not by position, since its indexed part is its

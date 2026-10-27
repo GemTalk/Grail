@@ -487,8 +487,10 @@ attributes is safe. `drop_class` refuses while any instance exists, and its
 count is what the repository *holds* — an object unlinked in an earlier
 transaction is there until it is collected, so
 `gemdb.admin.garbage_collect()` may be the step between. A computed base
-(`class Point(namedtuple(...))`) is never refused: it builds a fresh class
-on every import by construction.
+(`class Point(namedtuple(...))`) is never refused. At module scope it now keeps
+its identity across a rebuild like any other class (#1802); where it does not —
+a namedtuple whose class could not be reused — it is a fresh class, and so is
+its subclass, as before.
 
 **A rename usually needs no call at all.** `__renamed__ = {"old":
 "new"}` in the class body does the free relabel at import, beside the
