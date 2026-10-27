@@ -1334,35 +1334,11 @@ ModuleAst >> ___docString___ [
 ]
 
 { #category : 'Grail-code generation' }
-ModuleAst >> ___emitModuleAnnotationsOn___: aStream [
-	"PEP 649 for the MODULE: store its annotate function in the module's own
-	namespace as ``__annotate__'', exactly where CPython puts it, so
-	``mod.__annotations__'' (module >> __annotations__) can compute and cache
-	the dict on first read.  Under ``from __future__ import annotations'' PEP 563
-	applies instead: the dict of SOURCE STRINGS is stored eagerly and
-	__annotate__ stays None -- both measured on CPython 3.14.6.
+ModuleAst >> ___emitAnnotateBlockOf___: stmts on: aStream [
+	"The PEP 649 annotate function for the annotated names in stmts: a block of
+	(format, keywords) answering their dict, each value evaluated when asked."
 
-	A REAL MODULE only.  exec() and eval() bodies come through this same emitter
-	and have no module instance for ``self'' to be."
-
-	| stmts |
-	(CallAst moduleClassBeingCompiled notNil
-		and: [ModuleAst compilingDoitScope isNil]) ifFalse: [^ self].
-	stmts := self ___moduleAnnotationStatements___.
-	stmts isEmpty ifTrue: [^ self].
-	CallAst futureAnnotations ifTrue: [
-		aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''__annotations__'' put: ((PyDict @env0:new)'.
-		stmts do: [:stmt |
-			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
-			"The UNPARSED expression, quotes and all (PEP 563)."
-			self emitStringLiteral: (stmt annotation ___unparse___: 4) on: aStream.
-			aStream nextPut: $;].
-		aStream nextPutAll: ' @env0:yourself).'; lf.
-		^ self].
-	"Through ___storeAnnotate___: rather than a plain store: the block is a new
-	closure on every run, and a re-run of an app's top file over its committed
-	globals must not write a new one in place of the same code."
-	aStream nextPutAll: 'self @env0:___storeAnnotate___: [:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
+	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
 	stmts do: [:stmt |
 		aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
 		aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
@@ -1371,7 +1347,75 @@ ModuleAst >> ___emitModuleAnnotationsOn___: aStream [
 		self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
 		aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
 		aStream nextPut: $;].
-	aStream nextPutAll: ' @env0:yourself)].'; lf
+	aStream nextPutAll: ' @env0:yourself)]'
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___emitDoitAnnotations___: stmts scope: aScope on: aStream [
+	"An exec() body's annotations, bound in its scope: ``__annotate__'', or the
+	``__annotations__'' dict of source strings under the annotations future
+	import -- see ___emitModuleAnnotationsOn___:."
+
+	| slot |
+	slot := CallAst futureAnnotations ifTrue: [#'__annotations__'] ifFalse: [#'__annotate__'].
+	aScope at: (NameAst doitScopeNameFor: slot) ifAbsentPut: [nil].
+	aStream nextPutAll: (NameAst doitScopeNameFor: slot) asString; nextPutAll: ' := '.
+	CallAst futureAnnotations
+		ifTrue: [self ___emitFutureAnnotationsDictOf___: stmts on: aStream]
+		ifFalse: [self ___emitAnnotateBlockOf___: stmts on: aStream].
+	aStream nextPut: $.; lf
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___emitFutureAnnotationsDictOf___: stmts on: aStream [
+	"PEP 563's eager ``__annotations__'' for the annotated names in stmts: each
+	annotation's UNPARSED source, quotes and all."
+
+	aStream nextPutAll: '((PyDict @env0:new)'.
+	stmts do: [:stmt |
+		aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
+		self emitStringLiteral: (stmt annotation ___unparse___: 4) on: aStream.
+		aStream nextPut: $;].
+	aStream nextPutAll: ' @env0:yourself)'
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___emitModuleAnnotationsOn___: aStream [
+	"PEP 649 for the MODULE: store its annotate function in the module's own
+	namespace as ``__annotate__'', exactly where CPython puts it, so
+	``mod.__annotations__'' (module >> __annotations__) can compute and cache
+	the dict on first read.  Under ``from __future__ import annotations'' PEP 563
+	applies instead: the dict of SOURCE STRINGS is stored eagerly and
+	__annotate__ stays None -- both measured on CPython 3.14.6.
+
+	An exec() body stores them in ITS namespace the same way -- the locals
+	mapping, when it was given one -- which is where CPython's exec puts them
+	(test_grammar test_var_annot_simple_exec).  Grail stored nothing there, so
+	annotations made by exec'd code could not be read back at all.  The doit
+	has no module instance for ``self'' to be, so the binding is a slot of its
+	scope, declared here as ensureModuleScope: declares the others."
+
+	| stmts doitScope |
+	stmts := self ___moduleAnnotationStatements___.
+	stmts isEmpty ifTrue: [^ self].
+	doitScope := ModuleAst compilingDoitScope.
+	doitScope notNil ifTrue: [
+		^ self ___emitDoitAnnotations___: stmts scope: doitScope first on: aStream].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ self].
+	CallAst futureAnnotations ifTrue: [
+		aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''__annotations__'' put: '.
+		self ___emitFutureAnnotationsDictOf___: stmts on: aStream.
+		aStream nextPut: $.; lf.
+		^ self].
+	"Through ___storeAnnotate___: rather than a plain store: the block is a new
+	closure on every run, and a re-run of an app's top file over its committed
+	globals must not write a new one in place of the same code."
+	aStream nextPutAll: 'self @env0:___storeAnnotate___: '.
+	self ___emitAnnotateBlockOf___: stmts on: aStream.
+	aStream nextPut: $.; lf
 
 ]
 
