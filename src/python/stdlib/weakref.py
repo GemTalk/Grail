@@ -181,6 +181,16 @@ class _CallableProxy(_Proxy):
                 "weakly-referenced object no longer exists"))
 
 
+# CPython's names for the proxy classes.  protobuf tests a message's parent
+# with ``isinstance(parent, weakref.ProxyType)''; without the name, its
+# pure-Python backend raised AttributeError on every nested message.  One
+# difference: _CallableProxy subclasses _Proxy here, so a callable proxy is
+# also an instance of ProxyType, where CPython's two types are unrelated.
+ProxyType = _Proxy
+CallableProxyType = _CallableProxy
+ProxyTypes = (ProxyType, CallableProxyType)
+
+
 class WeakValueDictionary:
     """Mapping whose values are held weakly. An entry vanishes when its value
     is reclaimed."""

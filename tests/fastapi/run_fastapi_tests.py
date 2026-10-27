@@ -16,7 +16,16 @@ import runpy
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# FastAPI's test_telemetry/ and test_tutorial/test_opentelemetry/ keep their
+# fixtures in a conftest.py, which pytest applies to every test beneath it.
+os.environ['GRAIL_RUNNER_CONFTESTS'] = '1'
 sys.path.insert(0, os.path.join(HERE, 'standins'))
+# ...and for a test's own SUBPROCESS too: test_telemetry runs each of several
+# tests in a fresh interpreter (``sys.executable -m tests.test_telemetry
+# ._subprocess''), which imports the test module and with it pytest.
+os.environ['PYTHONPATH'] = os.pathsep.join(
+    [os.path.join(HERE, 'standins'), os.path.join(HERE, '..', 'pydantic', 'minipytest')]
+    + [p for p in os.environ.get('PYTHONPATH', '').split(os.pathsep) if p])
 
 
 def _sdist_root(paths):

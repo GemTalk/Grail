@@ -130,6 +130,23 @@ check('shutdown_flushes_and_closes_the_handlers_given', _shutdown_flushes(),
       (True, [True]))
 
 
+
+# The level parameters are named ``level'', as in CPython, so they can be
+# passed by keyword.  Grail's were ``lvl'', after a compiler limit that no
+# longer holds, and ``Handler(level=...)'' -- what OpenTelemetry's
+# LoggingHandler and logfire do -- raised TypeError.
+def _level_keywords():
+    record = logging.LogRecord(name='n', level=logging.ERROR, pathname='p',
+                               lineno=1, msg='m', args=(), exc_info=None)
+    logger = logging.Logger(PREFIX + '.kw', level=logging.WARNING)
+    return (logging.Handler(level=logging.INFO).level, logger.level,
+            record.levelno, record.levelname,
+            logger.isEnabledFor(level=logging.ERROR))
+
+
+check('the_level_parameters_take_keywords', _level_keywords(),
+      (logging.INFO, logging.WARNING, logging.ERROR, 'ERROR', True))
+
 if __name__ == '__main__':
     for _name in sorted(RESULTS):
         _v = RESULTS[_name]

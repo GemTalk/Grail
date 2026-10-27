@@ -148,6 +148,33 @@ above.
 - A declaration inside the internal subset reaches the default handler whole;
   expat splits it into tokens as it does the DOCTYPE head.
 
+## OPEN: a failed package import evicts the submodules that DID import
+
+*(measured 2026-10-27, Darwin arm64, `gs40`)*
+
+```
+pk/__init__.py       from ._int import cli
+pk/_int/__init__.py  (empty)
+pk/_int/params.py    from . import config;  @dataclass(slots=True) class P: env_vars: list ...
+pk/_int/config.py    GLOBAL = Conf()        # reads params.PARAMS['a'].env_vars
+pk/_int/cli.py       from .config import GLOBAL;  import no_such_module_xyz
+```
+
+`import pk` fails on `no_such_module_xyz` in both.  Afterwards CPython's
+`sys.modules` still holds `pk._int`, `pk._int.config` and `pk._int.params` --
+CPython removes only the modules whose own import failed -- and Grail's holds
+none of them.  So a retry re-executes modules CPython would not, and the retry
+itself goes wrong: Grail's second `import pk` raises
+`AttributeError: 'P' object has no attribute 'env_vars'` where CPython's
+raises the same `ModuleNotFoundError` again.  That second error is its own
+defect -- re-executing a module that defines a `slots=True` dataclass leaves
+its instances without the slots -- and only the eviction exposes it.
+
+Met in FastAPI's `test_telemetry`: logfire's CLI imported `webbrowser`, which
+Grail lacked, and every later test that imported logfire reported the
+`env_vars` error instead.  Giving Grail `webbrowser` removed the trigger, not
+either defect.
+
 ## OPEN: a dunder set on a class at runtime is invisible to `iter()`, `len()`, `bool()`, `in`, `[]` and `int()`
 
 Found 2026-09-26 while fixing test_gettext (Grail's `MagicMock`).  A special

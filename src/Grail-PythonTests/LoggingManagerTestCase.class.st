@@ -35,10 +35,10 @@ LoggingManagerTestCase >> setUp [
 
 { #category : 'Grail-Tests - manager' }
 LoggingManagerTestCase >> testEveryFixtureCheckIsAssertedByATestHere [
-	"The lists above name 10 checks.  A check added to the fixture without
+	"The lists above name 11 checks.  A check added to the fixture without
 	being listed would pass unasserted here, so the count is pinned."
 
-	self assert: (self results @env1:__len__) equals: 10
+	self assert: (self results @env1:__len__) equals: 11
 
 ]
 
@@ -55,7 +55,8 @@ LoggingManagerTestCase >> testEveryLoggerReachesOneManager [
 LoggingManagerTestCase >> testLevelNamesAndShutdown [
 
 	self assertAll: #('level_names_answer_both_ways' 'the_name_to_level_map'
-		'shutdown_flushes_and_closes_the_handlers_given')
+		'shutdown_flushes_and_closes_the_handlers_given'
+		'the_level_parameters_take_keywords')
 
 ]
 

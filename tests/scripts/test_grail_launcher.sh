@@ -146,6 +146,24 @@ still here" ]; then ok; else
     fi
 fi
 
+# os._exit is NOT a SystemExit: it ends the process at once, with its status,
+# and neither an except nor a finally runs.  libc's _exit(2), as in CPython.
+cat > "$TMP/os_exit.py" <<'EOF'
+import os
+try:
+    print("before", flush=True)
+    os._exit(7)
+except BaseException:
+    print("caught")
+finally:
+    print("finally")
+EOF
+if run "os._exit exits with its status" 7 -- "$TMP/os_exit.py"; then
+    if [ "$(cat "$OUT_FILE")" = "before" ]; then ok; else
+        bad "os._exit runs no handler" "got: $(cat "$OUT_FILE")"
+    fi
+fi
+
 # --- an uncaught exception reports a traceback on stderr and exits 1 -------
 
 printf "print('some output')\nraise ValueError('boom')\n" > "$TMP/raise.py"

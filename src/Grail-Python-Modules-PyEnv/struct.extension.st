@@ -1110,7 +1110,10 @@ struct >> _unpackOne: typeChar order: order mode: mode bytes: bytes offset: offs
 
 	| size raw |
 	size := self _unitSize: typeChar mode: mode.
-	typeChar @env0:= $c ifTrue: [^ bytes @env0:copyFrom: offset @env0:+ 1 to: offset @env0:+ 1].
+	"A bytes object of one byte, whatever the buffer is: copyFrom:to: keeps the
+	source's class, so unpack_from('c', a_bytearray) answered a bytearray --
+	ctypes' c_char.value among others."
+	typeChar @env0:= $c ifTrue: [^ ByteArray @env0:with: (bytes @env0:at: offset @env0:+ 1)].
 	typeChar @env0:= $? ifTrue: [
 		"NOT ``= 0 not'': unary binds tighter than binary in Smalltalk, so
 		that parsed as ``= (0 not)'' and sent #not to the SmallInteger 0 --

@@ -93,6 +93,40 @@ ReraiseIdentityTestCase >> testAReraiseIsCaughtByAHandlerInsideTheExceptBody [
 ]
 
 { #category : 'Grail-Tests - Boundaries' }
+ReraiseIdentityTestCase >> testAReturnThroughAWithAndAFinallyKeepsItsValue [
+	"REGRESSION GUARD for the carrier in ___ensureFinally___:finally:.  A
+	``return'' travels as PythonReturn, which is a BaseException too; carried
+	like an exception, it arrived without its value and the function answered
+	nil."
+
+	self assert: (self resultAt: 'return_through_with_and_finally') asString
+		equals: '[5, ''zero'']'.
+
+]
+
+{ #category : 'Grail-Tests - Identity' }
+ReraiseIdentityTestCase >> testAWithInsideAFinallyKeepsTheObject [
+	"REGRESSION GUARD for BaseException class >> ___ensureFinally___:finally:.
+	The ``with'' passes the exception on, which leaves it a stale handler
+	frame, and the finally re-signalled a COPY -- the FIRST time a given
+	exception made the trip, so the second element alone read as working."
+
+	self assert: (self resultAt: 'with_inside_finally') asString
+		equals: '[True, True]'.
+
+]
+
+{ #category : 'Grail-Tests - Identity' }
+ReraiseIdentityTestCase >> testAWithInsideContextRunKeepsTheObject [
+	"contextvars' Context.run is a try/finally, and FastAPI runs every sync
+	endpoint through it: the exception its telemetry logged was not ``is'' the
+	one the endpoint raised."
+
+	self assert: (self resultAt: 'with_inside_context_run') asString equals: 'True'.
+
+]
+
+{ #category : 'Grail-Tests - Boundaries' }
 ReraiseIdentityTestCase >> testTheExceptionsOwnDataSurvives [
 	self assert: (self resultAt: 'args_survive') asString
 		equals: '[''payload text'', (''payload text'',)]'.

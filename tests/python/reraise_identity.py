@@ -145,6 +145,69 @@ r['reraise_frame_chain'] = repr(
     [(f.name, f.lineno) for f in traceback.extract_tb(_catch().__traceback__)])
 
 
+# --- a ``with'' inside a try/finally -----------------------------------------
+# The ``with'' passes the exception on, which leaves it a stale handler frame,
+# so the finally could not signal it again and signalled a COPY: the caller
+# caught a different object, the first time a given exception made the trip.
+# contextvars' Context.run is that try/finally, and FastAPI runs every sync
+# endpoint through it, so the exception it logged ``is'' not the one raised.
+
+class _Plain:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return None
+
+
+def _with_return(exc):
+    with _Plain():
+        raise exc
+
+
+def _finally_around(exc):
+    try:
+        return _with_return(exc)
+    finally:
+        pass
+
+
+_obj = ValueError('through finally')
+_seen = []
+for _i in range(2):
+    try:
+        _finally_around(_obj)
+    except ValueError as _e:
+        _seen.append(_e is _obj)
+r['with_inside_finally'] = repr(_seen)
+
+import contextvars
+_obj = ValueError('through Context.run')
+try:
+    contextvars.copy_context().run(_with_return, _obj)
+except ValueError as _e:
+    r['with_inside_context_run'] = repr(_e is _obj)
+
+
+# A ``return'' leaving the same shapes keeps its value: it travels as a
+# control-flow signal, which is a BaseException in Grail too, and must not be
+# re-sent the way an exception is.
+def _return_through(a):
+    try:
+        with _Plain():
+            try:
+                return 10 // a
+            except ZeroDivisionError:
+                return 'zero'
+            finally:
+                pass
+    finally:
+        pass
+
+
+r['return_through_with_and_finally'] = repr([_return_through(2), _return_through(0)])
+
+
 EXPECTED = {
     'args_survive': "['payload text', ('payload text',)]",
     'bare_reraise': "['ValueError', True]",
@@ -153,6 +216,9 @@ EXPECTED = {
     'reraise_frame_chain': "[('_catch', 138), ('_mid', 131), ('_leaf', 126)]",
     'reraise_inside_with': "['RuntimeError', True]",
     'reraised_repeatedly': 'True',
+    'return_through_with_and_finally': "[5, 'zero']",
+    'with_inside_context_run': 'True',
+    'with_inside_finally': '[True, True]',
 }
 
 
