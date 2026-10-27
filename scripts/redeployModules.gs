@@ -14,6 +14,9 @@
 ! Only STALE modules are rebuilt; a current one is left alone. A module whose
 ! source file is gone, or that fails to build, is reported and skipped: it stays
 ! stale, and rebuilds (or raises) on its next import, as it would have anyway.
+! A build failure is reported once, after the last pass, and only for a module no
+! pass rebuilt: one that fails before a dependency and rebuilds after it is
+! reported as rebuilt after a retry.
 ! Idempotent: a second run finds nothing stale.
 output pushnew redeployModules.out
 iferr 1 where
@@ -35,8 +38,18 @@ t0 := System _timeMs.
 rebuilt := 0. skipped := 0. failed := 0.
 apps := OrderedCollection with: nil.
 importlib ___grailApps___ ifNotNil: [:reg | reg keysDo: [:k | apps add: k]].
-apps do: [:app | | ns mods pass before |
+apps do: [:app | | ns mods pass before failures |
 	ns := importlib ___grailUseApp___: app.
+	"A FAILURE IS A MODULE'S LAST OUTCOME, NOT ITS FIRST.  A module rebuilt
+	before a deployed module it imports fails in that pass -- its import of a
+	stale app module off the install's sys.path is ``No module named ...'' --
+	and rebuilds in the next, once the dependency has (GemDB 1.9.0's routes_api,
+	before wire).  Reported as it happened, that read as a failure though the
+	module was rebuilt, and a module failing every pass was reported once per
+	pass (GemTalk/Grail#1884).  So a failure is held, module by module, until
+	the passes settle: one that later rebuilds is reported as rebuilt after a
+	retry, and only one still failing at the end counts as failed."
+	failures := Dictionary new.
 	mods := ns at: #'GrailCanonicalModules' otherwise: nil.
 	"PASSES until one rebuilds nothing.  A rebuild moves the module's generation,
 	which makes a module already rebuilt that imports it stale again -- measured:
@@ -83,11 +96,24 @@ apps do: [:app | | ns mods pass before |
 								out nextPutAll: 'redeployModules: COMMIT FAILED after ' , nm; cr.
 								ExitClientError signal: 'redeployModules commit failed' status: 1].
 							 rebuilt := rebuilt + 1.
+							 (failures removeKey: nm ifAbsent: [nil]) ifNotNil: [:earlier |
+								out nextPutAll: 'redeployModules: rebuilt ' , (app ifNil: ['']) , ' ' , nm
+									, ' on pass ' , pass printString , ', after: ' , earlier; cr].
 							 done := true]
 								on: Error , (System myUserProfile symbolList objectNamed: #BaseException)
 								do: [:e |
 									err := e messageText ifNil: [e class name].
 									System abortTransaction.
+									"The abort takes the build's committed state back -- a
+									deployed module's globals among it -- but not this
+									session's memo of module-level defaults (module class >>
+									___moduleDefaultsTable___), which then holds values the
+									globals no longer do: dataclasses' field() kept the
+									aborted build's MISSING against the committed one, and
+									the retry raised ``cannot specify both default and
+									default_factory'' (GemTalk/Grail#1884).  A cache, so
+									dropped: the next call evaluates each default again."
+									SessionTemps current removeKey: #'GrailModuleFunctionDefaults' ifAbsent: [nil].
 									e return: nil].
 							done ifFalse: [
 								refused := (SessionTemps current at: #'GrailRefusedBaseChanges' otherwise: #())
@@ -101,16 +127,16 @@ apps do: [:app | | ns mods pass before |
 												, ', so it is rebuilt on its new bases'; cr].
 										allowed addAll: refused.
 										attempt >= 5 ifTrue: [
-											failed := failed + 1.
-											out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm
-												, ': still refused after ' , attempt printString , ' rebuilds'; cr]]
+											failures at: nm put: 'still refused after ' , attempt printString , ' rebuilds']]
 									ifFalse: [
-										failed := failed + 1.
-										out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm , ': '
-											, err asString; cr.
+										failures at: nm put: err asString.
 										attempt := 5]]]]
 							value: Set new]]].
 	 rebuilt > before and: [pass < 5]] whileTrue.
+	(failures keys asSortedCollection: [:a :b | a <= b]) do: [:nm |
+		failed := failed + 1.
+		out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm , ': '
+			, (failures at: nm); cr].
 	System commitTransaction ifFalse: [
 		out nextPutAll: 'redeployModules: COMMIT FAILED for ' , (app ifNil: ['the default namespace']); cr.
 		ExitClientError signal: 'redeployModules commit failed' status: 1]].

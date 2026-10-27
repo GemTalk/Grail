@@ -23,7 +23,8 @@
 #      instance of the CURRENT class, and that old objects run with the app's code;
 #      tests/upgrade/check_classes.gs checks the same from Smalltalk, for every
 #      class reachable from the stored objects; tests/upgrade/upgrade_ns_phases.py
-#      checks the namespaced app's as ns.<check>
+#      checks the namespaced app's as ns.<check>; and install m's own redeploy
+#      (redeployModules-report.out) must have rebuilt every stale module it found
 #
 # The cases (default: noop synthetic):
 #
@@ -322,6 +323,21 @@ run_case() {            # run_case <case> -- 0 if every check passed
         < /dev/null > "$d/classes.log" 2>&1
     grep -h '^UPGRADE \|^verify phase\|^verify ns phase\|^check_classes' \
         "$d/verify.log" "$d/verify-ns.log" "$d/classes.log" > "$d/results.txt"
+
+    # The install's own redeploy (scripts/redeployModules.gs) rebuilt every stale
+    # deployed module: a module it could not is left for the app's first session
+    # to rebuild, and to commit (GemTalk/Grail#1884: werkzeug.routing, rebuilt
+    # after dataclasses, raised in field()).
+    local report=$d/install-m-out/redeployModules-report.out
+    if [ ! -f "$report" ]; then
+        echo "UPGRADE FAIL install.redeploy: install m wrote no $report" >> "$d/results.txt"
+    elif grep -qE '^redeployModules: [0-9]+ rebuilt, [0-9]+ skipped, 0 failed' "$report"; then
+        echo "UPGRADE PASS install.redeploy: $(grep -E '^redeployModules: [0-9]+ rebuilt' "$report")" >> "$d/results.txt"
+    else
+        grep '^redeployModules: FAILED' "$report" | sed 's/^/UPGRADE FAIL install.redeploy: /' >> "$d/results.txt"
+        grep -q '^redeployModules: FAILED' "$report" \
+            || echo "UPGRADE FAIL install.redeploy: no summary line in $report" >> "$d/results.txt"
+    fi
 
     if [ "$name" = noop ]; then
         if diff "$d/snapshot-n.txt" "$d/snapshot-m.txt" > "$d/snapshot.diff"; then
