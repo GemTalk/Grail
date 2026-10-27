@@ -5230,10 +5230,17 @@ builtins >> _compile: positional kw: kwargs [
 				put: ((args @env0:size @env0:>= 2)
 					ifTrue: [args @env0:at: 2]
 					ifFalse: ['<string>']).
-			parsed := [[ModuleAst @env0:parseSource: source allowTopLevelAwait:
-				((args @env0:size @env0:>= 4)
+			"Eval mode parses by CPython's eval rule, one expression list and
+			nothing else, so ``compile('x = 1', f, 'eval')'' is ``invalid syntax''
+			at the ``='' rather than the module parse's own error, or one with no
+			location found after it (ModuleAst class >> parseEvalSource:)."
+			parsed := [[| allowAwait |
+				allowAwait := (args @env0:size @env0:>= 4)
 					@env0:and: [((args @env0:at: 4) @env0:isKindOf: Integer)
-						@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]])]
+						@env0:and: [((args @env0:at: 4) @env0:bitAnd: 16r2000) @env0:~= 0]].
+				mode @env0:= 'eval'
+					ifTrue: [ModuleAst @env0:parseEvalSource: source allowTopLevelAwait: allowAwait]
+					ifFalse: [ModuleAst @env0:parseSource: source allowTopLevelAwait: allowAwait]]
 					@env0:ensure: [SessionTemps @env0:current @env0:removeKey: #'GrailCompileFilename' ifAbsent: [nil]]]
 				@env0:on: SyntaxError
 				do: [:ex |
