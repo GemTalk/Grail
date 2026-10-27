@@ -45,6 +45,7 @@ frozenset >> __class_getitem__: item [
 
 { #category : 'Grail-Introspection' }
 frozenset >> __dict__ [
+	<grailSubclassInstanceDict>
 	"``obj.__dict__'' for a frozenset SUBCLASS instance -- the live dynamic-instVar
 	view list and bytes publish.  Only a class PYTHON defined gets one: an EXACT
 	frozenset, and Grail's own Smalltalk subclasses of it (struct_time is a tuple),
