@@ -121,6 +121,12 @@ ConstantAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-other' }
+ConstantAst >> ___evaluationIsInert___ [
+	^ true
+
+]
+
 { #category : 'Grail-compile warnings' }
 ConstantAst >> ___inferredTypeName___ [
 	"The constant's own type.  None, the booleans and the Ellipsis marker are

@@ -1798,6 +1798,24 @@ NameAst >> ___enclosingFuncDeclaresReservedParam___: aSymbol [
 
 ]
 
+{ #category : 'Grail-other' }
+NameAst >> ___evaluationIsInert___ [
+	"The method's own receiver is always bound.  Any other name can raise
+	NameError or UnboundLocalError, and when it does is observable."
+
+	^ self ___irIsSelfReceiver___
+
+]
+
+{ #category : 'Grail-other' }
+NameAst >> ___evaluationIsRepeatable___ [
+	"A second read of a name answers what the first did, and a name that
+	raises raises on the first."
+
+	^ true
+
+]
+
 { #category : 'other' }
 NameAst >> ___generatorIterOf___: aComprehensionAst [
 	"The `iter' expression of one ComprehensionAst clause (the ``in xs'' part),

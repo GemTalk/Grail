@@ -37,38 +37,6 @@ Class {
 	#category : 'Grail-Parser'
 }
 
-{ #category : 'Grail-other' }
-AnnAssignAst >> ___attributeAssign___ [
-	"``obj.attr: T = v'' stores exactly as ``obj.attr = v'' does, so it is
-	emitted BY the AssignAst for that statement rather than by a second copy
-	of its attribute-store cascade.
-
-	The copy had drifted.  A foreign receiver compiled to the bare setter send
-	``obj @env1:attr: v'', which stored nothing on an ordinary instance and
-	raised nothing either: ``c.new_attr: int = 10'' followed by
-	``c.new_attr'' was an AttributeError (test.typinganndata.ann_module2,
-	which test_typing imports).  A self receiver went straight to
-	dynamicInstVarAt:put:, skipping a @property setter and a __setattr__
-	override -- both of which AssignAst routes through __setattr__:_:.
-
-	Built per call and parented under this node, so every scope walk from the
-	target still passes through here to the enclosing def or class."
-
-	| assign |
-	assign := AssignAst new
-		targets: (Array with: target);
-		value: value;
-		yourself.
-	assign
-		beginLine: self beginLine;
-		beginPosition: self beginPosition;
-		endLine: self endLine;
-		endPosition: self endPosition.
-	assign setParent: self.
-	^ assign
-
-]
-
 { #category : 'Grail-Class Body' }
 AnnAssignAst >> ___boundTargetNames___ [
 	"Symbol bound by this annotated assignment (Name target only)."
@@ -81,17 +49,12 @@ AnnAssignAst >> ___boundTargetNames___ [
 
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___emitIRStatementOn___: aBuilder [
-	| v objV idxV |
+	| v |
 	value isNil ifTrue: [^ self].
 	(target isKindOf: AttributeAst) ifTrue: [
-		^ self ___attributeAssign___ ___emitIRStatementOn___: aBuilder].
+		^ self ___plainAssign___ ___emitIRStatementOn___: aBuilder].
 	(target isKindOf: SubscriptAst) ifTrue: [
-		objV := target value ___emitIRValueOn___: aBuilder.
-		idxV := target slice ___emitIRValueOn___: aBuilder.
-		v := value ___emitIRValueOn___: aBuilder.
-		aBuilder atNode: self.
-		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
-		^ self].
+		^ self ___plainAssign___ ___emitIRStatementOn___: aBuilder].
 	v := value ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: (aBuilder leafFor: target id asSymbol) from: v).
@@ -106,7 +69,7 @@ AnnAssignAst >> ___irEligibleStatementLocals___: localNames [
 	instance's dynamic-instVar storage (or the class-side setter for a name in
 	classAttrNames); a foreign ``obj.attr: T = v'' is the setter send; a
 	subscript is __setitem__.  An attribute target is its AssignAst's
-	(___attributeAssign___).  A pure annotation (no value) emits nothing.  A
+	(___plainAssign___).  A pure annotation (no value) emits nothing.  A
 	module-scope Name target (a global-declared name) stays on text."
 
 	value isNil ifTrue: [^ true].
@@ -115,7 +78,7 @@ AnnAssignAst >> ___irEligibleStatementLocals___: localNames [
 		(self isModuleScopeAnnTarget: target) ifTrue: [^ false].
 		^ localNames includes: target id asString].
 	(target isKindOf: AttributeAst) ifTrue: [
-		^ self ___attributeAssign___ ___irEligibleStatementLocals___: localNames].
+		^ self ___plainAssign___ ___irEligibleStatementLocals___: localNames].
 	(target isKindOf: SubscriptAst) ifTrue: [
 		^ (target value ___irEligibleValueLocals___: localNames)
 			and: [target slice ___irEligibleValueLocals___: localNames]].
@@ -153,7 +116,7 @@ AnnAssignAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___irRefusalDetail___: localSet [
 	(value notNil and: [target isKindOf: AttributeAst]) ifTrue: [
-		^ self ___attributeAssign___ ___irRefusalDetail___: localSet].
+		^ self ___plainAssign___ ___irRefusalDetail___: localSet].
 	((target isKindOf: NameAst) and: [self isModuleScopeAnnTarget: target])
 		ifTrue: [^ #'AnnAssignAst:moduleTarget'].
 	^ #'AnnAssignAst:target'
@@ -199,6 +162,40 @@ AnnAssignAst >> ___isSimpleAnnotation___ [
 	the parser's flag is the ordinary case."
 
 	^ (target isKindOf: NameAst) and: [simple ~= 0]
+
+]
+
+{ #category : 'Grail-other' }
+AnnAssignAst >> ___plainAssign___ [
+	"``obj.attr: T = v'' stores exactly as ``obj.attr = v'' does, and
+	``xs[i]: T = v'' as ``xs[i] = v'', so both are emitted BY the AssignAst for
+	that statement rather than by a second copy of its store cascade.  That
+	includes the order: the value first, then the target (Python/codegen.c:5481,
+	codegen_annassign's ``We perform the actual assignment first'').
+
+	The copy had drifted.  A foreign receiver compiled to the bare setter send
+	``obj @env1:attr: v'', which stored nothing on an ordinary instance and
+	raised nothing either: ``c.new_attr: int = 10'' followed by
+	``c.new_attr'' was an AttributeError (test.typinganndata.ann_module2,
+	which test_typing imports).  A self receiver went straight to
+	dynamicInstVarAt:put:, skipping a @property setter and a __setattr__
+	override -- both of which AssignAst routes through __setattr__:_:.
+
+	Built per call and parented under this node, so every scope walk from the
+	target still passes through here to the enclosing def or class."
+
+	| assign |
+	assign := AssignAst new
+		targets: (Array with: target);
+		value: value;
+		yourself.
+	assign
+		beginLine: self beginLine;
+		beginPosition: self beginPosition;
+		endLine: self endLine;
+		endPosition: self endPosition.
+	assign setParent: self.
+	^ assign
 
 ]
 
@@ -265,21 +262,14 @@ AnnAssignAst >> printSmalltalkOn: aStream [
 
 	Target shapes are the same three AssignAst handles: NameAst
 	(plain `x := expr.`), AttributeAst (`obj.attr = expr`) and
-	SubscriptAst (`xs[i] = expr` → __setitem__).  An attribute target
-	IS an AssignAst -- see ___attributeAssign___."
+	SubscriptAst (`xs[i] = expr` → __setitem__).  An attribute or
+	subscript target IS an AssignAst -- see ___plainAssign___."
 
 	value isNil ifTrue: [^ self].
 	(target isKindOf: AttributeAst) ifTrue: [
-		^ self ___attributeAssign___ printSmalltalkOn: aStream].
+		^ self ___plainAssign___ printSmalltalkOn: aStream].
 	(target isKindOf: SubscriptAst) ifTrue: [
-		target value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ' __setitem__: '.
-		target slice printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPutAll: ' _: '.
-		value printSmalltalkWithParenthesisOn: aStream.
-		aStream nextPut: $..
-		^ self
-	].
+		^ self ___plainAssign___ printSmalltalkOn: aStream].
 	"Phase A: module-scope plain NameAst target writes through the
 	module instance's dynamic-instVar storage rather than a bare
 	assignment (no static instVar slot exists for the name)."

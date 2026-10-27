@@ -148,6 +148,11 @@ AssignAst >> ___emitIRChainOn___: aBuilder [
 		((t isKindOf: TupleAst) or: [t isKindOf: ListAst]) ifTrue: [
 			aBuilder atNode: t.
 			self ___emitIRUnpack___: t from: (aBuilder var: chainLeaf) holder: '___unpack___' on: aBuilder]].
+	"Released once every target has it, as ___emitIRUnpack___ releases its
+	holder: the text's chain temp is a BLOCK temp, garbage when the block
+	returns, and this METHOD temp would keep the value reachable until the
+	method does."
+	aBuilder add: (aBuilder assign: chainLeaf from: aBuilder nilLit).
 	^ self
 
 ]
@@ -194,6 +199,19 @@ AssignAst >> ___emitIRDunderClassCellStoreOn___: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+AssignAst >> ___emitIRReleaseStoredValueOn___: aBuilder [
+	"End the chain temp's hold on the value ___emitIRStoredValueOn___: bound
+	there, as ___emitIRUnpack___ ends its holder's: the text binds it in a
+	BLOCK temp, garbage when the block returns, while this METHOD temp would
+	keep the value reachable until the method does -- ``o.s = slice(o)''
+	then kept o alive past ``o = None'' (test_slice's test_cycle)."
+
+	self ___storeOrderIsObservable___ ifFalse: [^ self].
+	aBuilder add: (aBuilder assign: (aBuilder leafFor: #'___chain___') from: aBuilder nilLit)
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AssignAst >> ___emitIRStatementOn___: aBuilder [
 	"Four store shapes, matching printSmalltalkOn:'s target dispatch:
 	* ``name := value.'' -- a body-local temp registered on the builder
@@ -236,12 +254,12 @@ AssignAst >> ___emitIRStatementOn___: aBuilder [
 		aBuilder add: (self ___emitIRModuleStoreOf___: v to: tgt on: aBuilder).
 		^ self].
 	(tgt isKindOf: SubscriptAst) ifTrue: [
+		v := self ___emitIRStoredValueOn___: aBuilder.
 		objV := tgt value ___emitIRValueOn___: aBuilder.
 		idxV := tgt slice ___emitIRValueOn___: aBuilder.
-		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder send: #'__setitem__:_:' to: objV with: { idxV. v }).
-		^ self].
+		^ self ___emitIRReleaseStoredValueOn___: aBuilder].
 	(tgt isKindOf: AttributeAst) ifTrue: [
 		"``obj.__class__ = X'' is an in-place TYPE CHANGE, not an attribute
 		store -- printSmalltalkOn:'s own branch for it, reproduced send for
@@ -255,15 +273,15 @@ AssignAst >> ___emitIRStatementOn___: aBuilder [
 		__slots__ entry is ever named ``__class__'', so the order is the text's
 		rather than a precedence this path needs."
 		(tgt attr asString = '__class__') ifTrue: [
+			v := self ___emitIRStoredValueOn___: aBuilder.
 			objV := tgt value ___emitIRValueOn___: aBuilder.
-			v := value ___emitIRValueOn___: aBuilder.
 			aBuilder atNode: self.
 			aBuilder add: (aBuilder
 				send: #'___pyChangeClassOf:to:'
 				to: (aBuilder globalNamed: #object)
 				with: { objV. v }
 				env: 1).
-			^ self].
+			^ self ___emitIRReleaseStoredValueOn___: aBuilder].
 		"``self.x = v'' for a slot -- declared in __slots__, or inferred under
 		GRAIL_INFERRED_SLOTS: the accessor send ``self ___pyattr_x___: (v)'' the
 		text emits.  (Cut 51's named-instVar assign for a declared slot went with
@@ -274,14 +292,14 @@ AssignAst >> ___emitIRStatementOn___: aBuilder [
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder send: (acc , ':') asSymbol to: aBuilder selfNode with: { v } env: 1).
 				^ self].
+		v := self ___emitIRStoredValueOn___: aBuilder.
 		objV := tgt value ___emitIRValueOn___: aBuilder.
-		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
 			send: #'__setattr__:_:'
 			to: objV
 			with: { aBuilder obj: tgt ___mangledAttr___ asString. v }).
-		^ self].
+		^ self ___emitIRReleaseStoredValueOn___: aBuilder].
 	((tgt isKindOf: TupleAst) or: [tgt isKindOf: ListAst]) ifTrue: [
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
@@ -292,6 +310,24 @@ AssignAst >> ___emitIRStatementOn___: aBuilder [
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: v).
 	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AssignAst >> ___emitIRStoredValueOn___: aBuilder [
+	"The value node an attribute or subscript store writes, emitted BEFORE the
+	target's receiver and index.  Where the order is observable
+	(___storeOrderIsObservable___) it is bound to the chain temp first and the
+	store reads the temp, as printSmalltalkValueFirstStoreOn: does; otherwise
+	the node itself, placed in the store's send as before."
+
+	| v chainLeaf |
+	v := value ___emitIRValueOn___: aBuilder.
+	self ___storeOrderIsObservable___ ifFalse: [^ v].
+	chainLeaf := (aBuilder leafFor: #'___chain___') ifNil: [aBuilder tempNamed: #'___chain___'].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder assign: chainLeaf from: v).
+	^ aBuilder var: chainLeaf
 
 ]
 
@@ -585,6 +621,43 @@ AssignAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 ]
 
 { #category : 'Grail-other' }
+AssignAst >> ___storeOfTemp___: aTempName [
+	"This store, writing the value an emitter has already bound to aTempName.
+	Parented under this node, as AnnAssignAst >> ___plainAssign___ parents its
+	AssignAst, so every scope walk from it still passes through here."
+
+	| store |
+	store := self class new
+		targets: targets;
+		value: (RawSmalltalkAst source: aTempName);
+		yourself.
+	store
+		beginLine: self beginLine;
+		beginPosition: self beginPosition;
+		endLine: self endLine;
+		endPosition: self endPosition.
+	store setParent: self.
+	^ store
+
+]
+
+{ #category : 'Grail-other' }
+AssignAst >> ___storeOrderIsObservable___ [
+	"Whether this single attribute or subscript store would be told apart from
+	CPython's by evaluating its value LAST, as the store's own send does.
+	CPython evaluates the value first and the target's receiver and index
+	after it (Python/codegen.c:3009, Assign_kind visits the value before the
+	target), so ``no_name[k] = 1/0'' raises ZeroDivisionError rather than
+	NameError, and ``f().x = g()'' calls g before f.  Unobservable when either
+	side is inert -- ``self.x = v'', ``d[k] = 0'' -- which keeps the plain
+	store for the common shapes."
+
+	value ___evaluationIsInert___ ifTrue: [^ false].
+	^ (targets first ___storeOperands___ allSatisfy: [:each | each ___evaluationIsInert___]) not
+
+]
+
+{ #category : 'Grail-other' }
 AssignAst >> ___unpacksToNamesOnly___: aTarget [
 	"True when aTarget is a nest of tuples/lists whose every leaf is a plain
 	NameAst -- the shape classBodyAttributePairs can express as one subscript
@@ -803,6 +876,9 @@ AssignAst >> printSmalltalkOn: aStream [
 	| tgt |
 	targets size = 1 ifTrue: [
 		tgt := targets first.
+		(((tgt isKindOf: AttributeAst) or: [tgt isKindOf: SubscriptAst])
+			and: [self ___storeOrderIsObservable___])
+				ifTrue: [^ self printSmalltalkValueFirstStoreOn: aStream].
 		(tgt isKindOf: AttributeAst) ifTrue: [
 			^self printSmalltalkAttributeStoreOn: aStream target: tgt.
 		].
@@ -1051,6 +1127,21 @@ AssignAst >> printSmalltalkTupleStoreOn: aStream target: tgt [
 	aStream nextPutAll: '[| '; nextPutAll: holder; nextPutAll: ' | '; nextPutAll: holder; nextPutAll: ' := '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	self emitUnpackCoercionAndStoresOn: aStream elts: tgt elts holder: holder.
+	aStream nextPutAll: '] @env0:value.'
+
+]
+
+{ #category : 'Grail-other' }
+AssignAst >> printSmalltalkValueFirstStoreOn: aStream [
+	"A single attribute or subscript store in CPython's order (see
+	___storeOrderIsObservable___): the value is bound to the chain temp, as a
+	chained assignment binds it, and the store is the one a plain value takes,
+	reading the temp."
+
+	aStream nextPutAll: '[| ___chain___ | ___chain___ := '.
+	value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: '. '.
+	(self ___storeOfTemp___: '___chain___') printSmalltalkOn: aStream.
 	aStream nextPutAll: '] @env0:value.'
 
 ]

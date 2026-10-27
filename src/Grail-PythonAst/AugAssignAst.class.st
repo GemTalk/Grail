@@ -81,8 +81,9 @@ AugAssignAst >> ___emitIRComplexTargetOn___: aBuilder kind: aKind [
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
 	  (obj) __setitem__: (i) _: (((obj) __getitem__: (i))
 	          @env1:___augmentedOp___: (v) inplace: #'__ixxx__:' binary: #'__xxx__:')
-	The receiver (and index) expressions are emitted TWICE for the foreign and
-	subscript shapes, as the text prints them twice.
+	The receiver (and index) are read twice for the foreign and subscript
+	shapes, as the text prints them twice, and evaluated once -- through
+	___emitIROperand___:temp:on:, as the text binds them.
 
 	IT USED TO APPLY THE BARE BINARY SEND, and this docstring used to say the
 	text did too.  That was true when cut 62 was written and stopped being true
@@ -142,35 +143,32 @@ AugAssignAst >> ___emitIRComplexTargetOn___: aBuilder kind: aKind [
 			env: 1).
 		^ self].
 	aKind == #attrForeign ifTrue: [
-		| recv1 recv2 |
+		| receiver |
 		attr := target ___mangledAttr___ asSymbol.
-		recv1 := target value ___emitIRValueOn___: aBuilder.
-		recv2 := target value ___emitIRValueOn___: aBuilder.
-		load := aBuilder send: #'___pyAttrLoad___:' to: recv2 with: { aBuilder obj: attr } env: 1.
+		receiver := self ___emitIROperand___: target value temp: #'___augReceiver___' on: aBuilder.
+		load := aBuilder send: #'___pyAttrLoad___:' to: receiver value with: { aBuilder obj: attr } env: 1.
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
 		"``__setattr__:_:'' with a String name, as the text emits -- see
 		printSmalltalkAttributeAugAssignOn: for what ___pyAttrStore___:put:
 		stepped past."
 		aBuilder add: (aBuilder
-			send: #'__setattr__:_:' to: recv1
+			send: #'__setattr__:_:' to: receiver value
 			with: { aBuilder obj: attr asString. augOf value: load value: v }
 			env: 1).
-		^ self].
+		^ self ___emitIRRelease___: #(#'___augReceiver___') on: aBuilder].
 	aKind == #subscript ifTrue: [
-		| obj1 obj2 idx1 idx2 |
-		obj1 := target value ___emitIRValueOn___: aBuilder.
-		idx1 := target slice ___emitIRValueOn___: aBuilder.
-		obj2 := target value ___emitIRValueOn___: aBuilder.
-		idx2 := target slice ___emitIRValueOn___: aBuilder.
-		load := aBuilder send: #'__getitem__:' to: obj2 with: { idx2 } env: 1.
+		| receiver index |
+		receiver := self ___emitIROperand___: target value temp: #'___augReceiver___' on: aBuilder.
+		index := self ___emitIROperand___: target slice temp: #'___augIndex___' on: aBuilder.
+		load := aBuilder send: #'__getitem__:' to: receiver value with: { index value } env: 1.
 		v := value ___emitIRValueOn___: aBuilder.
 		aBuilder atNode: self.
 		aBuilder add: (aBuilder
-			send: #'__setitem__:_:' to: obj1
-			with: { idx1. augOf value: load value: v }
+			send: #'__setitem__:_:' to: receiver value
+			with: { index value. augOf value: load value: v }
 			env: 1).
-		^ self].
+		^ self ___emitIRRelease___: #(#'___augReceiver___' #'___augIndex___') on: aBuilder].
 	^ Error signal: 'IR codegen: unhandled augmented target kind ' , aKind printString
 
 ]
@@ -218,6 +216,37 @@ AugAssignAst >> ___emitIRModuleScopeAugOn___: aBuilder [
 		with: { aBuilder obj: nameSym. augSend }
 		env: 0).
 	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AugAssignAst >> ___emitIROperand___: anExpression temp: aTempName on: aBuilder [
+	"A block answering a fresh node for a receiver or index that the load and
+	the store both read.  CPython evaluates it ONCE (Python/codegen.c:5350-5368,
+	codegen_augassign COPYs it for the store), so unless every operand is
+	repeatable (___targetOperandsAreRepeatable___) it is bound to aTempName
+	here, in order, and each read is of the temp -- the text's binding
+	(printSmalltalkSubscriptAugAssignOn:)."
+
+	| leaf |
+	self ___targetOperandsAreRepeatable___ ifTrue: [^ [anExpression ___emitIRValueOn___: aBuilder]].
+	leaf := (aBuilder leafFor: aTempName) ifNil: [aBuilder tempNamed: aTempName].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder assign: leaf from: (anExpression ___emitIRValueOn___: aBuilder)).
+	^ [aBuilder var: leaf]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AugAssignAst >> ___emitIRRelease___: tempNames on: aBuilder [
+	"End the hold of the temps ___emitIROperand___:temp:on: bound, once the
+	store has read them: they are METHOD temps where the text's are BLOCK
+	temps, and would keep the receiver and index reachable until the method
+	returns (see AssignAst >> ___emitIRReleaseStoredValueOn___:)."
+
+	self ___targetOperandsAreRepeatable___ ifTrue: [^ self].
+	tempNames do: [:each |
+		aBuilder add: (aBuilder assign: (aBuilder leafFor: each) from: aBuilder nilLit)]
 
 ]
 
@@ -465,6 +494,17 @@ AugAssignAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 ]
 
 { #category : 'Grail-other' }
+AugAssignAst >> ___targetOperandsAreRepeatable___ [
+	"Whether the target's receiver and index can be evaluated twice -- once by
+	the load, once by the store, as the plain emitters print them -- without
+	that being told apart from CPython's single evaluation: names, constants
+	and self, which covers ``self.n += 1'' and ``d[k] += 1''."
+
+	^ target ___storeOperands___ allSatisfy: [:each | each ___evaluationIsRepeatable___]
+
+]
+
+{ #category : 'Grail-other' }
 AugAssignAst >> isModuleScopeAugTarget: aNameAst [
 	"Phase A: true if this aug-assign target is a module-scope name —
 	same discriminator as AssignAst's isModuleScopeStoreTarget:."
@@ -603,18 +643,38 @@ AugAssignAst >> printSmalltalkAttributeAugAssignOn: aStream [
 	raised ``'function' object has no attribute 'limit''' one line after
 	``f.limit = 3'' had worked (test_codecencodings_kr
 	test_callback_backward_index)."
+	self ___targetOperandsAreRepeatable___ ifTrue: [
+		^ self printSmalltalkAttributeAugAssignOn: aStream receiver: target value selectors: pair].
+	aStream nextPutAll: '[| ___augReceiver___ | ___augReceiver___ := '.
 	target value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: '. '.
+	self
+		printSmalltalkAttributeAugAssignOn: aStream
+		receiver: (RawSmalltalkAst source: '___augReceiver___')
+		selectors: pair.
+	aStream nextPutAll: '] @env0:value.'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AugAssignAst >> printSmalltalkAttributeAugAssignOn: aStream receiver: aReceiver selectors: aSelectorPair [
+	"``(r) @env1:__setattr__: 'x' _: (((r) @env1:___pyAttrLoad___: #x)
+	@env1:___augmentedOp___: (v) inplace: ... binary: ...)'' for any receiver
+	but self, printing aReceiver for both halves (see
+	printSmalltalkAttributeAugAssignOn:)."
+
+	aReceiver printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:__setattr__: '''.
 	aStream nextPutAll: target ___mangledAttr___.
 	aStream nextPutAll: ''' _: (('.
-	target value printSmalltalkWithParenthesisOn: aStream.
+	aReceiver printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' @env1:___pyAttrLoad___: #''';
 		nextPutAll: target ___mangledAttr___;
 		nextPutAll: ''')'.
 	aStream nextPutAll: ' @env1:___augmentedOp___: '.
 	value printSmalltalkWithParenthesisOn: aStream.
-	aStream nextPutAll: ' inplace: #'''; nextPutAll: (pair at: 1);
-		nextPutAll: ''' binary: #'''; nextPutAll: (pair at: 2);
+	aStream nextPutAll: ' inplace: #'''; nextPutAll: (aSelectorPair at: 1);
+		nextPutAll: ''' binary: #'''; nextPutAll: (aSelectorPair at: 2);
 		nextPutAll: ''').'.
 
 ]
@@ -775,19 +835,46 @@ AugAssignAst >> printSmalltalkSubscriptAugAssignOn: aStream [
 	is -- ``d[k] += [x]'' must extend the list already at d[k] rather than
 	build a new one and store it over the top, and a forward dunder that
 	DECLINES must reach the reflected one instead of storing NotImplemented
-	under the key.  The read and the store are unchanged."
+	under the key.  The read and the store are unchanged.
+
+	The receiver and index are evaluated ONCE, as CPython evaluates them
+	(Python/codegen.c:5356-5368, codegen_augassign COPYs them for the store):
+	unless both are repeatable (___targetOperandsAreRepeatable___), they are
+	bound to temps in order and both halves read the temps, so
+	``d[next(it)] += 1'' advances the iterator once."
+
+	self ___targetOperandsAreRepeatable___ ifTrue: [
+		^ self printSmalltalkSubscriptAugAssignOn: aStream receiver: target value index: target slice].
+	aStream nextPutAll: '[| ___augReceiver___ ___augIndex___ | ___augReceiver___ := '.
+	target value printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: '. ___augIndex___ := '.
+	target slice printSmalltalkWithParenthesisOn: aStream.
+	aStream nextPutAll: '. '.
+	self
+		printSmalltalkSubscriptAugAssignOn: aStream
+		receiver: (RawSmalltalkAst source: '___augReceiver___')
+		index: (RawSmalltalkAst source: '___augIndex___').
+	aStream nextPutAll: '] @env0:value.'
+
+]
+
+{ #category : 'Grail-other' }
+AugAssignAst >> printSmalltalkSubscriptAugAssignOn: aStream receiver: aReceiver index: anIndex [
+	"``(r) __setitem__: (i) _: (((r) __getitem__: (i)) @env1:___augmentedOp___:
+	(v) inplace: ... binary: ...)'', printing aReceiver and anIndex for both
+	halves (see printSmalltalkSubscriptAugAssignOn:)."
 
 	| opStream binSel |
 	opStream := AppendStream on: Unicode7 new.
 	op printSmalltalkOn: opStream.
 	binSel := opStream _contents trimSeparators.
-	target value printSmalltalkWithParenthesisOn: aStream.
+	aReceiver printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __setitem__: '.
-	target slice printSmalltalkWithParenthesisOn: aStream.
+	anIndex printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' _: (('.
-	target value printSmalltalkWithParenthesisOn: aStream.
+	aReceiver printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: ' __getitem__: '.
-	target slice printSmalltalkWithParenthesisOn: aStream.
+	anIndex printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPut: $).
 	aStream nextPutAll: ' @env1:___augmentedOp___: '.
 	value printSmalltalkWithParenthesisOn: aStream.
