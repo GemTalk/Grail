@@ -1677,7 +1677,17 @@ PythonTokenizer >> tokenizeString [
 								ifTrue: [
 									(frame at: 1) > 0
 										ifTrue: [frame at: 1 put: (frame at: 1) - 1]
-										ifFalse: [char == $} ifTrue: [fields removeLast]]]
+										ifFalse: [
+											"A ``)'' or ``]'' with nothing open in the field is
+											CPython's ``f-string: unmatched ')'''; only ``}'' closes the
+											field."
+											char == $}
+												ifTrue: [fields removeLast]
+												ifFalse: [
+													^ PythonParser ___signal___: SyntaxError
+														message: (isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '])
+															, 'unmatched ''' , char asString , ''''
+														in: source from: position to: nil]]]
 								ifFalse: [
 							(char == $: and: [(frame at: 1) = 0])
 								ifTrue: [frame at: 2 put: true]]].
