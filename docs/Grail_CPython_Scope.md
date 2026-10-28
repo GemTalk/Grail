@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 60 | 14 | 16 | 90 |
-| P2 | 23 | 6 | 5 | 34 |
-| P3 | 20 | 7 | 29 | 56 |
-| P4 | 22 | 7 | 46 | 75 |
-| **In-scope** | **125** | **34** | **96** | **255** |
+| P1 | 63 | 11 | 16 | 90 |
+| P2 | 26 | 3 | 5 | 34 |
+| P3 | 23 | 4 | 29 | 56 |
+| P4 | 23 | 6 | 46 | 75 |
+| **In-scope** | **135** | **24** | **96** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **159 are wired into the harness** (P1 74 · P2 29 · P3 27 · P4 29) and **125 of those score OK**.
+Of the 255 in-scope modules, **159 are wired into the harness** (P1 74 · P2 29 · P3 27 · P4 29) and **135 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,12 +136,12 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 67 | 3614 | 430 | 3029 | 12% |
-| P2 | 25 | 4175 | 554 | 3619 | 13% |
-| P3 | 25 | 3142 | 478 | 2612 | 15% |
-| P4 | 44 | 3398 | 142 | 3138 | 4% |
-| other | 22 | 1053 | 257 | 716 | 24% |
-| **all** | **183** | **15382** | **1861** | **13114** | **12%** |
+| P1 | 74 | 4386 | 441 | 3714 | 10% |
+| P2 | 30 | 4286 | 558 | 3715 | 13% |
+| P3 | 27 | 3276 | 502 | 2754 | 15% |
+| P4 | 46 | 3781 | 143 | 3536 | 4% |
+| other | 22 | 1053 | 257 | 728 | 24% |
+| **all** | **199** | **16782** | **1901** | **14447** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_c_locale_coercion` 6 of 8 · `test_utf8_mode` 13 of 12.
 <!-- /test-tally -->
@@ -200,7 +200,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_coroutines` | Coroutines / async-await (language). |
 | ✅ | `test_decorators` | Decorators (language). |
 | ❗ | `test_descr` | Descriptors / new-style class machinery (language). |
-| ❗ | `test_descrtut` | Descriptor tutorial doctests (language). |
+| ✅ | `test_descrtut` | Descriptor tutorial doctests (language). |
 | ✅ | `test_dict` | dict — core type (in harness). |
 | ✅ | `test_dictcomps` | Dict comprehensions (language). |
 | ✅ | `test_dictviews` | dict keys/values/items views (language). |
@@ -235,7 +235,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_keywordonlyarg` | Keyword-only arguments (language). |
 | ✅ | `test_list` | list — core type (in harness). |
 | ✅ | `test_listcomps` | List comprehensions (language). |
-| ❗ | `test_long` | Arbitrary-precision int (language). |
+| ✅ | `test_long` | Arbitrary-precision int (language). |
 | ✅ | `test_longexp` | Very long expressions (parser stress). |
 |  | `test_metaclass` | Metaclasses (language). |
 |  | `test_module` | Module objects & namespace (language). |
@@ -247,7 +247,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_print` | print() (language/builtin). |
 | ✅ | `test_property` | property descriptor (language). |
 | ✅ | `test_raise` | raise statement (language). |
-| ❗ | `test_range` | range (language/builtin). |
+| ✅ | `test_range` | range (language/builtin). |
 | ✅ | `test_richcmp` | Rich comparison operators (language). |
 | ✅ | `test_scope` | Lexical scoping / closures (language). |
 | ✅ | `test_set` | set/frozenset — core type (in harness). |
@@ -285,7 +285,7 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ✅ | `test_abc` | abc / ABCMeta — pure-Python, foundational to the type system. |
 | ✅ | `test_abstract_numbers` | numbers ABC tower — pure Python. |
 | ✅ | `test_bisect` | bisect — pure-Python algorithm. |
-| ❗ | `test_cmath` | cmath — complex math. |
+| ✅ | `test_cmath` | cmath — complex math. |
 | ✅ | `test_collections` | collections — core containers. |
 | ✅ | `test_copy` | copy — shallow/deep copy protocol. |
 | ✅ | `test_datetime` | datetime — core data type (in harness). |
@@ -297,19 +297,19 @@ Pure-Python (or thin-Smalltalk) foundations with no OS/C dependency. Highest pay
 | ✅ | `test_fractions` | fractions — core numeric (in harness). |
 | ✅ | `test_functools` | functools — core (in harness). |
 | ❗ | `test_genericalias` | types.GenericAlias — list[int] etc. (language/typing). |
-| ❗ | `test_graphlib` | graphlib.TopologicalSorter — pure algorithm. |
+| ✅ | `test_graphlib` | graphlib.TopologicalSorter — pure algorithm. |
 | ✅ | `test_heapq` | heapq — core (in harness). |
 | ✅ | `test_itertools` | itertools — core (in harness). |
 |  | `test_keyword` | keyword module — language keyword set. |
 | ✅ | `test_math` | math — core (in harness). |
 |  | `test_math_property` | math invariants — pure. |
-| ❗ | `test_numeric_tower` | Numeric coercion tower (language/numbers). |
+| ✅ | `test_numeric_tower` | Numeric coercion tower (language/numbers). |
 | ✅ | `test_operator` | operator — core (in harness). |
 |  | `test_ordered_dict` | OrderedDict. |
-| ❗ | `test_random` | random — Mersenne Twister PRNG. CPython's random.py over a native `_random`; wired 2026-10-04 at 114t 0F/14E. |
+| ✅ | `test_random` | random — Mersenne Twister PRNG. CPython's random.py over a native `_random`; wired 2026-10-04 at 114t 0F/14E. |
 | ✅ | `test_re` | re — core (in harness). |
 | ✅ | `test_statistics` | statistics — pure Python. |
-| ✅ | `test_string` | string module (vendored) — Formatter/Template (pure). |
+| ❗ | `test_string` | string module (vendored) — Formatter/Template (pure). |
 |  | `test_strtod` | String→double conversion (float parsing). |
 | ✅ | `test_textwrap` | textwrap — core (in harness). |
 |  | `test_unittest` | unittest (vendored) — the test framework itself. |
@@ -327,7 +327,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_argparse` | argparse — pure-Python CLI parsing. |
 |  | `test_atexit` | atexit callbacks — pure-ish, but 'interpreter exit' semantics differ in a persistent DB VM. *(edge — see below)* |
 | ❗ | `test_base64` | base64 — pure-Python encoding. |
-| ❗ | `test_binascii` | binascii encodings — pure semantics. |
+| ✅ | `test_binascii` | binascii encodings — pure semantics. |
 | ✅ | `test_bufio` | Buffered I/O layer — in-scope for StringIO/BytesIO; real-file backing is OS. *(edge — see below)* |
 |  | `test_calendar` | calendar — pure Python. |
 |  | `test_charmapcodec` | charmap codec — pure text codec. |
@@ -357,9 +357,9 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 |  | `test_optparse` | optparse — pure (legacy CLI). |
 |  | `test_pathlib` | pathlib — pure path algebra is in-scope; stat/IO methods are OS. *(edge — see below)* |
 | ✅ | `test_pickle` | pickle (partial support today) — pure-Python protocol. |
-| ❗ | `test_pickletools` | pickletools — pure. |
+| ✅ | `test_pickletools` | pickletools — pure. |
 | ❗ | `test_posixpath` | posixpath — pure POSIX path-string operations. |
-| ❗ | `test_pprint` | pprint — pure Python. |
+| ✅ | `test_pprint` | pprint — pure Python. |
 |  | `test_queue` | queue — pure structures (thread-safety atop them). |
 | ✅ | `test_reprlib` | reprlib — pure Python. |
 | ✅ | `test_sched` | sched — pure event scheduler. |
@@ -434,7 +434,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 | ❗ | `test_robotparser` | robotparser — robots.txt (pure, web stack). |
 |  | `test_runpy` | runpy — -m module execution (import/exec machinery). *(edge — see below)* |
 | ✅ | `test_sax` | xml.sax (vendored xml). |
-| ❗ | `test_secrets` | secrets — crypto-strong tokens (web/security). |
+| ✅ | `test_secrets` | secrets — crypto-strong tokens (web/security). |
 |  | `test_smtplib` | smtplib — SMTP client (net stack). |
 |  | `test_smtpnet` | smtplib against a live external server (needs real network). *(edge — see below)* |
 |  | `test_socket` | socket — net transport; requires a GemStone GsSocket bridge. *(edge — see below)* |
@@ -776,51 +776,49 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**41 of the 183 rows on the committed board are not OK.**
+**41 of the 199 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
-- `test.test_generators` ERROR, 59 tests: 8 failed, 1 errors, 3 skipped
-- `test.test_long` ERROR, 47 tests: 0 failed, 3 errors, 7 skipped
-- `test.test_random` ERROR, 116 tests: 0 failed, 1 errors, 5 skipped
-- `test.test_unicode_file_functions` FAIL, 30 tests: 10 failed, 0 errors, 0 skipped
-- `test.test_pickletools` ERROR, 190 tests: 1 failed, 1 errors, 16 skipped
-- `test.test_secrets` ERROR, 11 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_range` FAIL, 29 tests: 3 failed, 0 errors, 0 skipped
+- `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
 - `test.test_buffer` ERROR, 95 tests: 6 failed, 4 errors, 80 skipped
-- `test.test_numeric_tower` ERROR, 9 tests: 0 failed, 1 errors, 0 skipped
 - `test.test_largefile` ERROR, 16 tests: 0 failed, 2 errors, 6 skipped
-- `test.test_pprint` FAIL, 45 tests: 6 failed, 0 errors, 1 skipped
 - `test.test_multibytecodec` ERROR, 36 tests: 5 failed, 1 errors, 2 skipped
 - `test.test_str` ERROR, 138 tests: 20 failed, 8 errors, 11 skipped
-- `test.test_urllib` ERROR, 101 tests: 5 failed, 6 errors, 2 skipped
-- `test.test_ntpath` ERROR, 105 tests: 0 failed, 16 errors, 28 skipped
+- `test.test_urllib` ERROR, 101 tests: 4 failed, 6 errors, 2 skipped
+- `test.test_ntpath` ERROR, 105 tests: 0 failed, 1 errors, 28 skipped
 - `test.test_signal` ERROR, 57 tests: 4 failed, 6 errors, 43 skipped
-- `test.test_posixpath` ERROR, 94 tests: 11 failed, 11 errors, 29 skipped
-- `test.test_genericpath` ERROR, 25 tests: 0 failed, 6 errors, 3 skipped
-- `test.test_sys` ERROR, 97 tests: 5 failed, 19 errors, 56 skipped
-- `test.test_descrtut` FAIL, 8 tests: 2 failed, 0 errors, 0 skipped
+- `test.test_posixpath` ERROR, 94 tests: 1 failed, 1 errors, 29 skipped
+- `test.test_genericpath` ERROR, 25 tests: 0 failed, 1 errors, 3 skipped
+- `test.test_sys` ERROR, 97 tests: 5 failed, 18 errors, 56 skipped
 - `test.test_fileio` SKIP, 0 tests: 0 failed, 0 errors, 0 skipped
 - `test.test_exceptions` ERROR, 107 tests: 14 failed, 14 errors, 30 skipped
-- `test.test_descr` ERROR, 162 tests: 50 failed, 32 errors, 12 skipped
+- `test.test_descr` ERROR, 162 tests: 49 failed, 31 errors, 12 skipped
 - `test.test_filecmp` ERROR, 16 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_dbm_dumb` ERROR, 26 tests: 0 failed, 1 errors, 1 skipped
-- `test.test_robotparser` ERROR, 50 tests: 0 failed, 5 errors, 0 skipped
+- `test.test_robotparser` ERROR, 50 tests: 0 failed, 2 errors, 0 skipped
 - `test.test_rlcompleter` FAIL, 8 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_plistlib` ERROR, 70 tests: 0 failed, 1 errors, 5 skipped
 - `test.test_gzip` ERROR, 75 tests: 4 failed, 3 errors, 9 skipped
 - `test.test_zlib` ERROR, 76 tests: 5 failed, 8 errors, 8 skipped
-- `test.test_email.test__encoded_words` ERROR, 39 tests: 0 failed, 7 errors, 0 skipped
-- `test.test_email.test__header_value_parser` ERROR, 380 tests: 3 failed, 8 errors, 0 skipped
-- `test.test_email.test_contentmanager` ERROR, 113 tests: 1 failed, 3 errors, 0 skipped
-- `test.test_email.test_defect_handling` ERROR, 60 tests: 0 failed, 8 errors, 0 skipped
-- `test.test_email.test_email` ERROR, 536 tests: 4 failed, 38 errors, 2 skipped
+- `test.test_email.test__encoded_words` ERROR, 39 tests: 0 failed, 1 errors, 0 skipped
+- `test.test_email.test__header_value_parser` ERROR, 380 tests: 0 failed, 8 errors, 0 skipped
+- `test.test_email.test_contentmanager` FAIL, 113 tests: 1 failed, 0 errors, 0 skipped
+- `test.test_email.test_email` FAIL, 536 tests: 4 failed, 0 errors, 2 skipped
+- `test.test_email.test_generator` ERROR, 73 tests: 25 failed, 16 errors, 0 skipped
 - `test.test_email.test_headerregistry` ERROR, 192 tests: 0 failed, 2 errors, 0 skipped
-- `test.test_email.test_parser` ERROR, 8 tests: 0 failed, 5 errors, 0 skipped
-- `test.test_email.test_pickleable` ERROR, 12 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_email.test_policy` ERROR, 33 tests: 0 failed, 3 errors, 0 skipped
-- `test.test_email.test_utils` ERROR, 22 tests: 1 failed, 10 errors, 1 skipped
-
-Wired, but not on the board until the next nightly measures them: `test_base64`, `test_binascii`, `test_cmath`, `test_dynamicclassattribute`, `test_fstring`, `test_genericalias`, `test_grammar`, `test_graphlib`, `test_patma`, `test_tstring`, `test_type_aliases`, `test_type_params`, `test_types`.
+- `test.test_email.test_message` ERROR, 310 tests: 1 failed, 23 errors, 0 skipped
+- `test.test_email.test_parser` ERROR, 8 tests: 0 failed, 1 errors, 0 skipped
+- `test.test_email.test_utils` FAIL, 22 tests: 1 failed, 0 errors, 1 skipped
+- `test.test_patma` ERROR, 328 tests: 6 failed, 1 errors, 0 skipped
+- `test.test_grammar` ERROR, 75 tests: 2 failed, 1 errors, 0 skipped
+- `test.test_fstring` ERROR, 90 tests: 23 failed, 3 errors, 4 skipped
+- `test.test_type_aliases` ERROR, 30 tests: 3 failed, 3 errors, 0 skipped
+- `test.test_type_params` ERROR, 108 tests: 12 failed, 13 errors, 0 skipped
+- `test.test_types` ERROR, 129 tests: 15 failed, 9 errors, 3 skipped
+- `test.test_genericalias` ERROR, 36 tests: 2 failed, 3 errors, 0 skipped
+- `test.test_tstring` FAIL, 12 tests: 3 failed, 0 errors, 0 skipped
+- `test.test_string.test_templatelib` FAIL, 13 tests: 2 failed, 0 errors, 0 skipped
+- `test.test_dynamicclassattribute` FAIL, 12 tests: 6 failed, 0 errors, 1 skipped
+- `test.test_base64` ERROR, 41 tests: 0 failed, 16 errors, 6 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
