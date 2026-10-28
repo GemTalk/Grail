@@ -333,6 +333,7 @@ Set >> _difference: positional kw: kwargs [
 	"Variadic set.difference(*others)."
 
 	| result |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:___methodTypeName___ @env0:, '.difference'.
 	result := self ___resultSetClass___ @env0:withAll: self.
 	positional @env0:do: [:each | result := result difference: each].
 	^ result
@@ -344,6 +345,7 @@ Set >> _intersection: positional kw: kwargs [
 	"Variadic set.intersection(*others)."
 
 	| result |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:___methodTypeName___ @env0:, '.intersection'.
 	result := self ___resultSetClass___ @env0:withAll: self.
 	positional @env0:do: [:each | result := result intersection: each].
 	^ result
@@ -356,6 +358,7 @@ Set >> _union: positional kw: kwargs [
 	yields a copy).  BoundMethod routes a multi-/zero-arg call here."
 
 	| result |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:___methodTypeName___ @env0:, '.union'.
 	result := self ___resultSetClass___ @env0:withAll: self.
 	positional @env0:do: [:each | result := result union: each].
 	^ result

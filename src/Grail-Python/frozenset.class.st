@@ -66,6 +66,13 @@ frozenset class >> withAll: aCollection [
 
 ]
 
+{ #category : 'Grail-Python Names' }
+frozenset >> ___methodTypeName___ [
+
+	^ 'frozenset'
+
+]
+
 { #category : 'Grail-Facade Storage' }
 frozenset >> ___pyInitTable___ [
 	"Install a fresh PyDict as the element table (keys = elements)."

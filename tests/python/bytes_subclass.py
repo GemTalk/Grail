@@ -335,14 +335,24 @@ def _find_empty_past_end_ba():
     return (bytearray(b'abc').find(b'', 3) == 3
             and bytearray(b'abc').find(b'', 4) == -1)
 
-# replace() honors the ``count'' keyword (reached via the varargs fallback,
-# since the fixed-arity replace forms take positionals only).
+# replace() takes ``count'' POSITIONALLY: every parameter of bytes.replace and
+# bytearray.replace is positional-only in CPython 3.14
+# (Objects/clinic/bytesobject.c.h, ``replace($self, old, new, count=-1, /)''),
+# so the keyword is refused -- unlike str.replace, which takes it by name.
+def _replace_count_refusal(make):
+    try:
+        make(b'aa').replace(b'a', b'b', count=1)
+    except TypeError as exc:
+        return str(exc)
+    return 'no TypeError'
 def _replace_count_kw():
-    return (b'aa'.replace(b'a', b'b', count=0) == b'aa'
-            and b'aa'.replace(b'a', b'b', count=1) == b'ba'
-            and b'aaa'.replace(b'a', b'b', count=2) == b'bba')
+    return (b'aa'.replace(b'a', b'b', 0) == b'aa'
+            and b'aa'.replace(b'a', b'b', 1) == b'ba'
+            and b'aaa'.replace(b'a', b'b', 2) == b'bba'
+            and _replace_count_refusal(bytes) == 'bytes.replace() takes no keyword arguments')
 def _replace_count_kw_ba():
-    return bytearray(b'aa').replace(b'a', b'b', count=1) == bytearray(b'ba')
+    return (bytearray(b'aa').replace(b'a', b'b', 1) == bytearray(b'ba')
+            and _replace_count_refusal(bytearray) == 'bytearray.replace() takes no keyword arguments')
 
 # strip/lstrip/rstrip (no arg) trim the full ASCII whitespace set, including
 # \v (0x0b) and \f (0x0c) which were previously omitted.

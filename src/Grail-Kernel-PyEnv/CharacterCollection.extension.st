@@ -2609,6 +2609,7 @@ CharacterCollection >> _count: positional kw: kwargs [
 	"Varargs entry for ``count(sub[, start[, stop]])''."
 
 	| sub start stop |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'str.count'.
 	positional @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'count() takes at least 1 argument'
 	].
@@ -2660,6 +2661,7 @@ CharacterCollection >> _endswith: positional kw: kwargs [
 	BoundMethod fallback (getattr(s,'endswith')(...))."
 
 	| suffix start end |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'str.endswith'.
 	positional @env0:size @env0:< 1 ifTrue: [
 		TypeError ___signal___: 'endswith() takes at least 1 argument (0 given)'].
 	positional @env0:size @env0:> 3 ifTrue: [
@@ -2673,12 +2675,27 @@ CharacterCollection >> _endswith: positional kw: kwargs [
 ]
 
 { #category : 'Grail-String Methods' }
+CharacterCollection >> _expandtabs: positional kw: kwargs [
+	"``s.expandtabs(tabsize=4)'': its one parameter is nameable in CPython
+	(Objects/clinic/unicodeobject.c.h:297-298, ``expandtabs($self, /,
+	tabsize=8)''), and with no varargs entry the keyword reached the generic
+	refusal, which said str.expandtabs took none."
+
+	| arguments |
+	arguments := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('tabsize') positionalOnly: 0 required: 0 for: 'expandtabs'.
+	^ self ___expandtabs: ((arguments @env0:at: 1) ifNil: [8])
+
+]
+
+{ #category : 'Grail-String Methods' }
 CharacterCollection >> _find: positional kw: kwargs [
 	"Varargs entry for ``s.find(sub[, start[, stop]])'' — routes by
 	positional arity so a call site that can't resolve the arity
 	statically still reaches the right fixed-arity method."
 
 	| nargs |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'str.find'.
 	nargs := positional @env0:size.
 	nargs @env0:= 1 ifTrue: [^ self find: (positional @env0:at: 1)].
 	nargs @env0:= 2 ifTrue: [
@@ -2768,6 +2785,7 @@ CharacterCollection >> _rfind: positional kw: kwargs [
 	"Varargs entry for ``rfind(sub[, start[, stop]])''."
 
 	| sub |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'str.rfind'.
 	positional @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'rfind() takes at least 1 argument'
 	].
@@ -2785,6 +2803,7 @@ CharacterCollection >> _rindex: positional kw: kwargs [
 	"Varargs entry for ``rindex(sub[, start[, stop]])''."
 
 	| sub |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'str.rindex'.
 	positional @env0:isEmpty ifTrue: [
 		TypeError ___signal___: 'rindex() takes at least 1 argument'
 	].
@@ -2867,6 +2886,7 @@ CharacterCollection >> _startswith: positional kw: kwargs [
 	BoundMethod fallback (getattr(s,'startswith')(...))."
 
 	| prefix start end |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'str.startswith'.
 	positional @env0:size @env0:< 1 ifTrue: [
 		TypeError ___signal___: 'startswith() takes at least 1 argument (0 given)'].
 	positional @env0:size @env0:> 3 ifTrue: [

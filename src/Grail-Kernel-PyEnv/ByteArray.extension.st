@@ -2435,12 +2435,15 @@ ByteArray >> _hex: positional kw: kwargs [
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> _replace: positional kw: kwargs [
-	"Varargs form of replace(old, new, count=-1) -- reached via the
-	BoundMethod fallback (getattr(obj,'replace')(...)) when a ``count=''
-	keyword is present (the fixed-arity replace:_: / replace:_:_: fast paths
-	take positionals only)."
+	"Varargs form of replace(old, new, count=-1, /) -- reached via the
+	BoundMethod fallback (getattr(obj,'replace')(...)) when the call has a
+	keyword (the fixed-arity replace:_: / replace:_:_: fast paths take
+	positionals only).  Every parameter is positional-only in CPython 3.14
+	(Objects/clinic/bytesobject.c.h:791-792), so a keyword is refused, ``count''
+	too: str.replace takes it by name, bytes.replace does not."
 
 	| old new count |
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:class @env0:___constructorName___ @env0:, '.replace'.
 	positional @env0:size @env0:< 2 ifTrue: [
 		TypeError ___signal___: ('replace() takes at least 2 arguments ('
 			@env0:, positional @env0:size @env0:printString @env0:, ' given)')].
@@ -2451,8 +2454,7 @@ ByteArray >> _replace: positional kw: kwargs [
 	new := positional @env0:at: 2.
 	count := (positional @env0:size @env0:>= 3)
 		@env0:ifTrue: [positional @env0:at: 3]
-		@env0:ifFalse: [((kwargs @env0:isNil @env0:not) @env0:and: [kwargs @env0:includesKey: 'count'])
-			@env0:ifTrue: [kwargs @env0:at: 'count'] @env0:ifFalse: [-1]].
+		@env0:ifFalse: [-1].
 	^ self replace: old _: new _: count
 
 ]
