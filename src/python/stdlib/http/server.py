@@ -11,8 +11,8 @@
 import html as _html
 import socketserver
 
-__all__ = ["HTTPServer", "BaseHTTPRequestHandler", "HTTPMessage",
-           "SimpleHTTPRequestHandler", "CGIHTTPRequestHandler"]
+__all__ = ["HTTPServer", "ThreadingHTTPServer", "BaseHTTPRequestHandler",
+           "HTTPMessage", "SimpleHTTPRequestHandler", "CGIHTTPRequestHandler"]
 
 __version__ = "0.6"
 
@@ -122,6 +122,13 @@ class HTTPServer(socketserver.TCPServer):
         host, port = self.server_address[:2]
         self.server_name = host
         self.server_port = port
+
+
+class ThreadingHTTPServer(socketserver.ThreadingMixIn, HTTPServer):
+    """HTTPServer handling each request in a thread of its own, as CPython's.
+    FastAPI's telemetry tests run their OTLP collector on one."""
+
+    daemon_threads = True
 
 
 class BaseHTTPRequestHandler(socketserver.StreamRequestHandler):

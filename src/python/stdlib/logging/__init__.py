@@ -89,7 +89,7 @@ class LogRecord:
     Flask view that raised took the whole server down instead of answering 500.
     """
 
-    def __init__(self, name, lvl, pathname, lineno, msg, args, exc_info,
+    def __init__(self, name, level, pathname, lineno, msg, args, exc_info,
                  func=None, sinfo=None, **kwargs):
         import time
         ct = time.time()
@@ -101,8 +101,8 @@ class LogRecord:
                 and args[0]):
             args = args[0]
         self.args = args
-        self.levelname = getLevelName(lvl)
-        self.levelno = lvl
+        self.levelname = getLevelName(level)
+        self.levelno = level
         self.pathname = pathname
         try:
             base = pathname.replace('\\', '/').rsplit('/', 1)[-1]
@@ -338,12 +338,9 @@ class Filterer:
 class Handler(Filterer):
     """Base handler.  Subclasses override emit(record)."""
 
-    def __init__(self, lvl=NOTSET):
-        # Param named `lvl` (not `level`): in Grail a parameter and an instVar
-        # of the same name share a slot, so `self.level = level` would be a
-        # self-assignment.
+    def __init__(self, level=NOTSET):
         Filterer.__init__(self)
-        self.level = lvl
+        self.level = level
         self.formatter = None
         self.name = None
 
@@ -496,11 +493,10 @@ class Logger(Filterer):
 
     manager = _manager
 
-    def __init__(self, name, lvl=NOTSET):
-        # Param named `lvl`, not `level` -- see Handler.__init__.
+    def __init__(self, name, level=NOTSET):
         Filterer.__init__(self)
         self.name = name
-        self.level = lvl
+        self.level = level
         self.handlers = []
         self.propagate = True
         self.disabled = False
@@ -517,8 +513,8 @@ class Logger(Filterer):
             logger = logger.parent
         return _get_root_level()
 
-    def isEnabledFor(self, lvl):
-        return lvl >= self.getEffectiveLevel() and lvl > _disable_box[0]
+    def isEnabledFor(self, level):
+        return level >= self.getEffectiveLevel() and level > _disable_box[0]
 
     def addHandler(self, handler):
         if handler not in self.handlers:
@@ -573,9 +569,9 @@ class Logger(Filterer):
         except Exception:
             return '(unknown file)', 0, '(unknown function)', None
 
-    def makeRecord(self, name, lvl, fn, lno, msg, args, exc_info,
+    def makeRecord(self, name, level, fn, lno, msg, args, exc_info,
                    func=None, extra=None, sinfo=None):
-        rv = LogRecord(name, lvl, fn, lno, msg, args, exc_info, func, sinfo)
+        rv = LogRecord(name, level, fn, lno, msg, args, exc_info, func, sinfo)
         if extra is not None:
             existing = vars(rv)
             for key in extra:
@@ -584,10 +580,10 @@ class Logger(Filterer):
                 setattr(rv, key, extra[key])
         return rv
 
-    def _log(self, lvl, msg, args, exc_info=None, extra=None,
+    def _log(self, level, msg, args, exc_info=None, extra=None,
              stack_info=False, stacklevel=1):
         fn, lno, func, sinfo = self.findCaller(stack_info, stacklevel)
-        record = self.makeRecord(self.name, lvl, fn, lno, msg, args,
+        record = self.makeRecord(self.name, level, fn, lno, msg, args,
                                  exc_info, func, extra, sinfo)
         self.handle(record)
 
@@ -634,14 +630,14 @@ class Logger(Filterer):
     def exception(self, msg, *args, exc_info=True, **kwargs):
         self.error(msg, *args, exc_info=exc_info, **kwargs)
 
-    def log(self, lvl, msg, *args, **kwargs):
-        if self.isEnabledFor(lvl):
-            self._log(lvl, msg, args, **kwargs)
+    def log(self, level, msg, *args, **kwargs):
+        if self.isEnabledFor(level):
+            self._log(level, msg, args, **kwargs)
 
 
 class RootLogger(Logger):
-    def __init__(self, lvl):
-        Logger.__init__(self, 'root', lvl)
+    def __init__(self, level):
+        Logger.__init__(self, 'root', level)
 
 
 # Registry of named loggers -- Logger.manager.loggerDict, which is this very

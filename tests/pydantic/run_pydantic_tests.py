@@ -66,6 +66,10 @@ def _builtin_fixture(name, ctx):
         return mp
     if name == 'request':
         return pytest.FixtureRequest(ctx['name'])
+    if name == 'caplog':
+        cap = _LogCapture()
+        ctx['finalizers'].append(cap._finish)
+        return cap
     if name == 'create_module':
         tmp = _builtin_fixture('tmp_path', ctx)
 
@@ -101,7 +105,72 @@ def _builtin_fixture(name, ctx):
     raise LookupError(name)
 
 
-BUILTIN = {'tmp_path', 'monkeypatch', 'request', 'create_module'}
+BUILTIN = {'tmp_path', 'monkeypatch', 'request', 'create_module', 'caplog'}
+
+
+class _LogCapture:
+    """pytest's ``caplog'', the part FastAPI's tests read: every record the
+    root logger sees while the test runs (records, messages, text,
+    record_tuples), set_level / at_level, clear()."""
+
+    def __init__(self):
+        import logging
+        self._logging = logging
+        self._records = []
+        self._levels = []
+        outer = self
+
+        class _Handler(logging.Handler):
+            def emit(self, record):
+                outer._records.append(record)
+
+        self.handler = _Handler(level=0)
+        self.handler.setFormatter(logging.Formatter('%(levelname)-8s %(name)s:%(filename)s:%(lineno)d %(message)s'))
+        logging.getLogger().addHandler(self.handler)
+
+    @property
+    def records(self):
+        return list(self._records)
+
+    @property
+    def messages(self):
+        return [r.getMessage() for r in self._records]
+
+    @property
+    def record_tuples(self):
+        return [(r.name, r.levelno, r.getMessage()) for r in self._records]
+
+    @property
+    def text(self):
+        return ''.join(self.handler.format(r) + '\n' for r in self._records)
+
+    def clear(self):
+        self._records.clear()
+
+    def set_level(self, level, logger=None):
+        lg = self._logging.getLogger(logger)
+        self._levels.append((lg, lg.level))
+        lg.setLevel(level)
+        self.handler.setLevel(level)
+
+    def at_level(self, level, logger=None):
+        import contextlib
+
+        @contextlib.contextmanager
+        def ctx():
+            lg = self._logging.getLogger(logger)
+            old = lg.level
+            lg.setLevel(level)
+            try:
+                yield self
+            finally:
+                lg.setLevel(old)
+        return ctx()
+
+    def _finish(self):
+        self._logging.getLogger().removeHandler(self.handler)
+        for lg, level in reversed(self._levels):
+            lg.setLevel(level)
 
 
 def _resolve(name, ctx, module_fixtures, cache, fparams):
@@ -263,12 +332,40 @@ def _expand(func, extra_marks, fixtures=None):
     return out
 
 
+# pytest's conftest.py fixtures, for a caller that asks (run_fastapi_tests.py
+# sets GRAIL_RUNNER_CONFTESTS); pydantic's suite reimplements its one conftest
+# above instead.
+LOAD_CONFTESTS = os.environ.get('GRAIL_RUNNER_CONFTESTS') == '1'
+
+
+def _conftest_modules(module):
+    """The conftest.py modules pytest would apply to ``module'', outermost
+    first: one per package from the top of its dotted name down to its own,
+    where that package's directory has one."""
+    parts = module.__name__.split('.')[:-1]
+    out = []
+    for i in range(1, len(parts) + 1):
+        pkg = '.'.join(parts[:i])
+        try:
+            pkg_mod = importlib.import_module(pkg)
+        except ImportError:
+            continue
+        pkg_dir = os.path.dirname(getattr(pkg_mod, '__file__', '') or '')
+        if pkg_dir and os.path.exists(os.path.join(pkg_dir, 'conftest.py')):
+            out.append(importlib.import_module(pkg + '.conftest'))
+    return out
+
+
 def collect(module):
     fixtures = {}
-    for name, obj in list(vars(module).items()):
-        fd = getattr(obj, '__grail_fixture__', None)
-        if fd is not None:
-            fixtures[fd.name] = fd
+    # A conftest's fixtures first, the nearer overriding the farther, and the
+    # module's own over all of them -- pytest's precedence.
+    sources = _conftest_modules(module) if LOAD_CONFTESTS else []
+    for source in sources + [module]:
+        for name, obj in list(vars(source).items()):
+            fd = getattr(obj, '__grail_fixture__', None)
+            if fd is not None:
+                fixtures[fd.name] = fd
     items = []
     mod_marks = _marks(module)
     for name, obj in list(vars(module).items()):
@@ -375,6 +472,9 @@ def run_one(nodeid, cls, func, marks, kwargs, fixtures, mctx=None):
                 # a bare ``assert`` has no message; the statement says which one
                 detail = '[' + tb[-1].line.strip()[:120] + ']'
             outcome = ('failed', f'{type(e).__name__}: {detail} @{where}'.replace('\n', ' '))
+            if os.environ.get('GRAIL_RUNNER_TRACEBACKS') == '1':
+                # The one-line outcome names only the innermost frame.
+                traceback.print_exception(e, file=sys.stderr)
     finally:
         for fin in reversed(ctx['finalizers']):
             try:

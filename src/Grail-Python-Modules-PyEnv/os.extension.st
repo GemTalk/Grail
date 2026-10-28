@@ -1442,6 +1442,25 @@ os >> _chmod: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-Process Management' }
+os >> _exit: n [
+	"os._exit(n) -- end the process now, with status n: no atexit handlers, no
+	finally blocks, and no commit.  libc's _exit(2), as CPython's.  In a gem
+	that ends the session, whose uncommitted work is lost as an exiting
+	process's unflushed buffers are.
+
+	logfire wraps it at import time (atexit does not run in a forked child), so
+	its absence made logfire's config module unimportable."
+
+	| status |
+	status := self ___asCInt: n.
+	(CCallout @env0:library: (CLibrary @env0:named: self @env0:class ___libcName)
+		name: '_exit' result: #void args: #(#'int32'))
+			@env0:callWith: { status }.
+	^ None
+
+]
+
 { #category : 'Grail-File Descriptors' }
 os >> _fdopen: positional kw: kwargs [
 

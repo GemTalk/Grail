@@ -714,7 +714,7 @@ BaseException class >> ___ensureFinally___: protectedBlock finally: finallyBlock
 	which are BaseException -- with ``ranFinally'' keeping the two paths from
 	both firing."
 
-	| ranFinally propExc result |
+	| ranFinally propExc result payload |
 	ranFinally := false.
 	propExc := nil.
 	result := [ [protectedBlock value]
@@ -750,8 +750,23 @@ BaseException class >> ___ensureFinally___: protectedBlock finally: finallyBlock
 				ex return: nil] ]
 		ensure: [
 			ranFinally ifFalse: [finallyBlock value]].
-	propExc isNil ifFalse: [^ (self ___resignalable___: propExc) @env0:signal].
-	^ result
+	propExc isNil ifTrue: [^ result].
+	"Returning from the handler is not always enough to make the exception
+	signallable again: one a ``with'' statement PASSED further in keeps a stale
+	handler frame (see ___resignalable___:).  A Python exception then goes on
+	in a CARRIER, as PyGeneratorBase >> ___raiseThrown___: sends it, so the
+	object Python holds is the one that arrives: a COPY here lost identity for
+	``with cm: return f()'' inside any try/finally -- contextvars'
+	Context.run, so every sync FastAPI endpoint -- and the exception an
+	``except'' then logged ``is'' not the one raised.  Anything else keeps the
+	copy, whose named instance variables a Smalltalk handler may read --
+	including a PythonReturn, which is a BaseException too, and whose carrier
+	would arrive without the value being returned."
+	payload := self ___payloadOf___: propExc.
+	((payload @env0:isKindOf: BaseException)
+		@env0:and: [(self ___isControlFlowSignal___: propExc) @env0:not])
+			ifTrue: [^ self ___signalCarrying___: payload].
+	^ (self ___resignalable___: propExc) @env0:signal
 
 ]
 

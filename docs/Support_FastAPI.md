@@ -1659,3 +1659,71 @@ TIMEOUTs beside the SUnit suite (test_math, test_pickle, test___all__ -- each
 OK alone), and 10 improvements over the committed board, most of them main's
 own since the board was measured; `check_python_fixtures.sh` 728 fixtures
 agree with CPython.
+
+### The four unrun directories, and ctypes *(2026-10-27)*
+
+On `jmason/fastapi10`.  Four directories of FastAPI's tests had never been
+run: `test_modules_same_name_body`, `test_request_params`, `test_telemetry`
+and `test_ws_router`, 41 files and 971 tests.  The CPython reference
+(`~/.cache/grail-fastapi/p11/dirs.cpy`, 971 of 971) needed the runner to load
+each package's `conftest.py` (`GRAIL_RUNNER_CONFTESTS=1`, set by
+`run_fastapi_tests.py`), a `caplog` fixture, the stand-ins on `PYTHONPATH`
+for the tests' own subprocesses, and five more venv packages:
+opentelemetry-instrumentation-fastapi, logfire, sentry-sdk,
+opentelemetry-exporter-otlp-proto-http and trio.
+
+Under Grail, three of the four directories passed outright.  `test_telemetry`
+did not import: logfire and the OpenTelemetry stack import `ctypes`, which
+Grail did not have (#1413).  The walls, in the order met:
+
+| wall | fix |
+|---|---|
+| no `ctypes` | a pure-Python `ctypes` (`src/python/stdlib/ctypes/`): the C data types -- the simple types with CPython's conversions and error messages, arrays, pointers to objects, Structure and Union with native LP64 layout, `sizeof`/`alignment`/`from_buffer`/`from_buffer_copy`/`byref` -- over a bytearray.  No foreign function interface: `CDLL` raises `OSError`, what a caller already handles for a library that is not installed, and `addressof`/`cast`/`memmove` raise NotImplementedError.  `ctypes.util.find_library` answers None |
+| `struct.unpack('c', bytearray)` answered bytearray | it answers bytes, as CPython's does (`c_char` exposed it) |
+| no `http.server.ThreadingHTTPServer` | added, as CPython's |
+| no `weakref.ProxyType` | `ProxyType`, `CallableProxyType`, `ProxyTypes` name Grail's proxy classes; protobuf's pure-Python messages test against it.  One difference: a callable proxy is also a `ProxyType` |
+| `logging.Handler(level=...)` raised TypeError | the level parameters were named `lvl`, after a compiler limit that no longer holds; they are `level` now, so they take keywords |
+| no `os._exit` | libc's `_exit(2)`: logfire wraps it at import time |
+| no `webbrowser` | CPython's, unchanged: logfire's CLI imports it |
+| a sync endpoint's exception was not ``is`` the one raised | below |
+
+**The exception identity.**  FastAPI runs a sync endpoint through
+contextvars' `Context.run`, which in Grail is a Python `try/finally`, and the
+endpoint sits inside a `with`.  The `with` passes the exception on, which
+leaves it a stale handler frame; the `finally` then could not signal that
+object again and signalled a COPY.  So the first time a given exception made
+that trip, the caller caught a different object -- `assert record.exception
+is error` in test_exceptions.  `___ensureFinally___:finally:` now re-raises a
+Python exception in a carrier (`___signalCarrying___:`), as the generator path
+already did, and keeps the copy for Smalltalk errors and for the control-flow
+signals: a `return` through the finally is a PythonReturn, a BaseException too,
+and carried it arrived without its value (the IR smoke test's
+`nd_try_in_inner` caught that before it shipped).  Pinned by
+`reraise_identity.py`'s `with_inside_finally`, `with_inside_context_run` and
+`return_through_with_and_finally`.
+
+**Where it stands:** the four directories **929 of 971** (were 754, every
+test_telemetry test missing).  What is left:
+
+| tests | why |
+|---|---|
+| 35 | they run a subprocess with `sys.executable`, which Grail answers `''`.  Pointing it at the `grail` launcher is the next step; each subprocess then pays a cold FastAPI import (~80s on this machine) against tests written for a 15s budget |
+| 3 | trio: Grail's `select` has neither `epoll` nor `kqueue`, so `trio._core._run` raises "unsupported platform"; the two `Can't freeze a class with a custom __setattr__` failures are the retry of that failed import (docs/Issues.md, "a failed package import evicts the submodules that DID import") |
+| 1 | `test_environment_export_initializes_after_fork`: skipped, no `os.fork` |
+| 1 | `test_retained_context_does_not_keep_failed_request_alive`: a weakref to the request is still live after `gc.collect()` |
+| 1 | `test_request_objects_are_not_exported`: a private value reaches the exported OTLP payload; not yet traced |
+| 1 | `test_connection_context_route_and_data[True]`: with operation spans, the value a sync dependency returned is not ``is`` the one stored; not yet traced |
+
+**Known risk: filelock on Darwin.**  filelock 4.2.4's `_identity.py` calls
+`ctypes.CDLL(None)` at module level on Darwin, so with `ctypes` present its
+import fails with OSError instead of the ImportError it failed with before --
+the same outcome under a different exception.  Its Linux branch reads `/proc`
+and never touches ctypes.  A CDLL backed by CCallout would make it work.
+
+The core slice stays **1,270 of 1,270** and the tutorials **1,280 of 1,288**
+with the conftests loaded.  Gates (Darwin arm64, `gs40`): `run_tests.sh`
+**8471 run, 8471 passed**, 8 of 8 shards; the CPython conformance gate 1
+regression, test_bytes TIMEOUT beside the SUnit suite (OK alone, 321/0/0 as
+the board), and 28 improvements over the committed board, most of them
+main's own since it was measured; `check_python_fixtures.sh` 776 fixtures
+agree with CPython.

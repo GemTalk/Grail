@@ -28,13 +28,13 @@ see the deviation notes in the next section for what "partial" means.
 | Compression & Archiving | zlib (one-shot + streaming inflate), gzip (stream-only), zipfile (read), tarfile (read) | compression.zstd, bz2, lzma, zipfile/tarfile WRITE |
 | File Formats | csv, configparser, tomllib | netrc, plistlib |
 | Cryptographic Services | hashlib, hmac, secrets | — |
-| Generic OS Services | os, io (full file objects), time, logging (+config stub), platform, errno | logging.handlers, ctypes |
+| Generic OS Services | os, io (full file objects), time, logging (+config stub), platform, errno, ctypes (C data types only: CDLL raises OSError) | logging.handlers, ctypes FFI |
 | Command-line Interface | argparse, getpass | optparse, fileinput, curses, cmd |
 | Concurrent Execution | threading (cooperative), queue, contextvars, _thread, subprocess (real, over GsHostProcess), concurrent.futures (stub), multiprocessing (ThreadPool only, inline) | sched |
 | Networking & IPC | socket, ssl, select, selectors, asyncio (stub), signal (stub) | mmap |
 | Internet Data Handling | email (message model + utils), json, mimetypes, base64, binascii, quopri | mailbox |
 | Structured Markup | html, html.entities, html.parser, xml.etree (partial) | xml.dom, xml.sax, xml.parsers.expat |
-| Internet Protocols | urllib.parse/request/error, http(+client/server/cookies/cookiejar), wsgiref (util+headers), uuid, socketserver, ipaddress | webbrowser, urllib.robotparser, ftplib, poplib, imaplib, smtplib, xmlrpc |
+| Internet Protocols | urllib.parse/request/error, http(+client/server/cookies/cookiejar), wsgiref (util+headers), uuid, socketserver, ipaddress, webbrowser (CPython's, unchanged) | urllib.robotparser, ftplib, poplib, imaplib, smtplib, xmlrpc |
 | Multimedia | — | wave, colorsys |
 | Internationalization | gettext (stub), locale (stub) | — |
 | GUIs with Tk | — | tkinter, turtle, IDLE (out of scope) |
@@ -238,7 +238,9 @@ the same name):
   is enormous; revisit if a target library demands it (an import stub
   covers the synchronous paths of asgiref/django/jinja2).
 - tkinter/turtle/curses/readline, wave/colorsys, msvcrt/winreg,
-  pty/termios/fcntl, ctypes, ensurepip/venv, pdb/bdb/tracemalloc.
+  pty/termios/fcntl, ctypes' foreign function interface (loading a
+  library, calling a C function, addressof/cast/memmove), ensurepip/venv,
+  pdb/bdb/tracemalloc.
 
 ## Known cross-cutting language gaps (tracked in TODO.md / memory)
 
