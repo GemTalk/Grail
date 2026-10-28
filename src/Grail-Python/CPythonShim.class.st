@@ -882,7 +882,16 @@ CPythonShim >> ___nativeTypeAddrFor: aValue [
 
 	Decided once per class, since wrap: is the hot path; session state, like
 	the mirrors themselves.  No ^ inside a block: this runs inside a user
-	action (see typeAddrFor:)."
+	action (see typeAddrFor:).
+
+	UnboundMethod is the one class whose instances do not agree: a Python
+	def reports the class itself and a built-in type's method a descriptor
+	type (UnboundMethod >> __class__).  Read off whichever instance crossed
+	first, the decision typed every later one by it -- a Python class's
+	__enter__ crossed as ``object'' once a str method had, and C called it
+	unbound (CPythonShimTestCase >> testCBindsAGrailFunctionItFindsOnTheType).
+	Its mirror is a function, which the shim binds as a descriptor binds, so
+	it is the right type for both."
 
 	| cache cls addr pyType |
 	cls := aValue class.
@@ -893,8 +902,10 @@ CPythonShim >> ___nativeTypeAddrFor: aValue [
 	addr notNil ifTrue: [^ addr].
 	addr := typeAddresses at: Object ifAbsent: [0].
 	(cls ~~ Object and: [typeAddresses includesKey: #'___mirrorLayout___']) ifTrue: [
-		pyType := [(builtins @env1:instance) @env1:type: aValue]
-			on: AbstractException do: [:e | e return: nil].
+		pyType := cls == UnboundMethod
+			ifTrue: [cls]
+			ifFalse: [[(builtins @env1:instance) @env1:type: aValue]
+				on: AbstractException do: [:e | e return: nil]].
 		pyType == cls ifTrue: [
 			addr := [(self typeObjectFor: cls) memoryAddress]
 				on: AbstractException do: [:e | e return: addr]]].
