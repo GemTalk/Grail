@@ -3180,6 +3180,10 @@ builtins >> ___mergeCompileKeywords___: positional kw: kwargs [
 	| names args n |
 	kwargs @env0:isNil ifTrue: [^ positional].
 	names := #('source' 'filename' 'mode' 'flags' 'dont_inherit' 'optimize').
+	"``_feature_version'' is CPython's too, and accepted with no effect."
+	TypeError @env0:___refuseKeywordsIn___: kwargs
+		otherThan: (names @env0:copyWith: '_feature_version')
+		for: 'compile'.
 	n := positional @env0:size.
 	1 @env0:to: names @env0:size do: [:i |
 		(kwargs @env0:includesKey: (names @env0:at: i)) ifTrue: [
@@ -5465,8 +5469,7 @@ builtins >> _dir: positional kw: kwargs [
 	Grail's own wording for a missing method rather than CPython's for a
 	bad call."
 
-	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
-		^ TypeError ___signal___: 'dir() takes no keyword arguments'].
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'dir'.
 	(positional @env0:size @env0:> 1) ifTrue: [
 		^ TypeError ___signal___: ('dir expected at most 1 argument, got '
 			@env0:, positional @env0:size @env0:printString)].
@@ -5493,6 +5496,7 @@ builtins >> _eval: positional kw: kwargs [
 	  optLevel savedOpt suppliedGlobals |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'eval() takes at least 1 positional argument (0 given)'.
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('globals' 'locals') for: 'eval'.
 	source := positional @env0:at: 1.
 	"A CODE OBJECT COMPILED WITH TOP-LEVEL AWAIT IS AWAITED, NOT RUN.  CPython
 	makes such a module body a coroutine, so eval() of it answers the coroutine
@@ -5723,6 +5727,7 @@ builtins >> _exec: positional kw: kwargs [
 	  optLevel savedOpt suppliedGlobals lineMap |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'exec() takes at least 1 positional argument (0 given)'.
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('globals' 'locals' 'closure') for: 'exec'.
 	source := positional @env0:at: 1.
 	"exec() takes source TEXT, in any of the spellings CPython accepts: str,
 	bytes, bytearray or a buffer.  ___sourceTextFor___:what: decodes the
@@ -5959,8 +5964,7 @@ builtins >> _filter: positional kw: kwargs [
 	TypeError (test_itertools.TestBasicOps.test_filter's
 	``self.assertRaises(TypeError, filter)'')."
 
-	(kwargs @env0:notNil and: [kwargs @env0:size @env0:> 0]) ifTrue: [
-		TypeError ___signal___: 'filter() takes no keyword arguments'].
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'filter'.
 	positional @env0:size @env0:= 2 ifFalse: [
 		TypeError ___signal___: (('filter expected 2 arguments, got '
 			@env0:, positional @env0:size @env0:printString))].
@@ -5984,6 +5988,10 @@ builtins >> _getattr: positional kw: kwargs [
 	complaint (test_builtin test_getattr asserts both spellings)."
 
 	| anObject aName |
+	"NOT EVEN ``default'': it is positional-only in CPython, and
+	``getattr(obj, 'x', default=0)'' answered the attribute or raised as if no
+	default had been given."
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'getattr'.
 	self ___requireArgs___: positional atLeast: 2
 		message: 'getattr expected at least 2 arguments, got '
 			@env0:, positional @env0:size @env0:printString.
@@ -6039,6 +6047,9 @@ builtins >> _input: positional kw: kwargs [
 	3.7.5."
 
 	| promptText stdinObj provider line |
+	"NO KEYWORD, not even ``prompt'': CPython's is positional-only, and
+	``input(prompt='> ')'' went ahead and READ A LINE without the prompt."
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'input'.
 	"AT MOST ONE positional.  A second was ignored, so ``input('a', 'b')''
 	went ahead and READ A LINE where CPython refuses the call -- the kind
 	of leniency that turns a typo into a hang."
@@ -6149,6 +6160,9 @@ builtins >> _open: positional kw: kwargs [
 	closefd matters for a descriptor."
 
 	| nargs file mode encoding arg |
+	TypeError @env0:___refuseKeywordsIn___: kwargs
+		otherThan: #('file' 'mode' 'buffering' 'encoding' 'errors' 'newline' 'closefd' 'opener')
+		for: 'open'.
 	nargs := positional @env0:size.
 	file := (nargs @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
@@ -6203,6 +6217,7 @@ builtins >> _pow: positional kw: kwargs [
 	a method ARGUMENT, which is the same constraint float>>__round__: records
 	for its own coerced ndigits."
 	args := positional.
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('base' 'exp' 'mod') for: 'pow'.
 	(kwargs @env0:notNil @env0:and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
 		| slots names filled |
 		"THREE SLOTS, filled by POSITION first and then by NAME -- which is
@@ -6365,6 +6380,7 @@ builtins >> _print: positional kw: kwargs [
 	provide -- io.StringIO, a real file, or a user class."
 
 	| sep end target text flush |
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('sep' 'end' 'file' 'flush') for: 'print'.
 	sep := self ___printKwarg___: kwargs named: 'sep' default: ' '.
 	end := self ___printKwarg___: kwargs named: 'end'
 		default: (String @env0:with: Character @env0:lf).
@@ -6444,6 +6460,7 @@ builtins >> _round: positional kw: kwargs [
 	positional @env0:size @env0:> 2 ifTrue: [
 		^ TypeError ___signal___: 'round() takes at most 2 arguments ('
 			@env0:, positional @env0:size @env0:printString @env0:, ' given)'].
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('number' 'ndigits') for: 'round'.
 	ndigits := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
 		ifFalse: [
@@ -6515,6 +6532,9 @@ builtins >> _sorted: positional kw: kwargs [
 	self ___requireArgs___: positional atLeast: 1
 		message: 'sorted expected 1 argument, got '
 			@env0:, positional @env0:size @env0:printString.
+	"``sort()'', not ``sorted()'': CPython's sorted hands its keywords to
+	list.sort (Python/bltinmodule.c builtin_sorted), which is what refuses."
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('key' 'reverse') for: 'sort'.
 	iterable := positional @env0:at: 1.
 	keyFn := kwargs @env0:isNil
 		ifTrue: [nil]
@@ -6564,6 +6584,7 @@ builtins >> _sum: positional kw: kwargs [
 	| iterable start |
 	self ___requireArgs___: positional atLeast: 1
 		message: 'sum() takes at least 1 positional argument (0 given)'.
+	TypeError @env0:___refuseKeywordsIn___: kwargs otherThan: #('start') for: 'sum'.
 	iterable := positional @env0:at: 1.
 	start := (positional @env0:size @env0:>= 2)
 		ifTrue: [positional @env0:at: 2]
@@ -6587,8 +6608,7 @@ builtins >> _vars: positional kw: kwargs [
 	The zero-argument vars() is rewritten to locals() at compile time
 	(CallAst), so it does not arrive here."
 
-	(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
-		^ TypeError ___signal___: 'vars() takes no keyword arguments'].
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'vars'.
 	(positional @env0:size @env0:> 1) ifTrue: [
 		^ TypeError ___signal___: ('vars expected at most 1 argument, got '
 			@env0:, positional @env0:size @env0:printString)].
