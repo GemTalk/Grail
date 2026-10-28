@@ -1,5 +1,14 @@
 Extension { #name : 'ByteArray' }
 
+{ #category : 'Grail-Constructors' }
+ByteArray class >> ___constructorName___ [
+	"The name a refusal of bytes()'s arguments goes by, as CPython's clinic
+	names it for every subclass too."
+
+	^ 'bytes'
+
+]
+
 { #category : 'Grail-Introspection' }
 ByteArray class >> ___pythonValueAttrs___ [
 	"Selectors ___pyAttrLoad___ must treat as VALUE attribute reads rather

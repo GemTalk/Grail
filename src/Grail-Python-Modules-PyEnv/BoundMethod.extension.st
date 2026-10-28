@@ -2243,6 +2243,13 @@ BoundMethod >> value: positional value: kwargs [
 				arityMsg := self ___instanceSideArityMessageFor___: actualReceiver
 					given: actualArgs @env0:size].
 			arityMsg == nil ifFalse: [^ TypeError ___signal___: arityMsg].
+			"A native method with no ``_name:kw:'' entry takes no keyword, and
+			CPython says so before it counts (Objects/descrobject.c:267-290,
+			method_check_args):
+			``[].append(x=1)'' is ``list.append() takes no keyword arguments''."
+			(kwargs ~~ nil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+				^ TypeError ___signal___: self __qualname__ @env0:asString
+					@env0:, '() takes no keyword arguments'].
 			TypeError ___signal___: (selector @env0:asString
 				@env0:, '() takes a different number of arguments ('
 				@env0:, actualArgs @env0:size @env0:printString

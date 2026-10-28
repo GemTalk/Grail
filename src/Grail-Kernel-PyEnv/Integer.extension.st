@@ -686,27 +686,18 @@ Integer class >> _new: positional kw: kwargs [
 	(Object class>>value:value:) forwards keyword calls here.
 	partial(int, base=2)('101') reaches this via the partial invoke."
 
-	| obj base |
-	"CPython's int() takes its value POSITIONALLY ONLY -- 'x' is not a
-	nameable keyword (int(x=1.2) raises TypeError), unlike Grail's own
-	convenience of allowing kwargs at: 'x'.  Reject it up front to match
-	(test_int.py test_keyword_args)."
-	(kwargs @env0:notNil and: [kwargs @env0:includesKey: 'x']) ifTrue: [
-		TypeError ___signal___: 'int() got an unexpected keyword argument ''x'''
-	].
-	obj := (positional @env0:size @env0:>= 1)
-		ifTrue: [positional @env0:at: 1]
-		ifFalse: [
-			(kwargs @env0:notNil and: [kwargs @env0:includesKey: 'base']) ifTrue: [
-				TypeError ___signal___: 'int() missing string argument'
-			].
-			^ 0
-		].
-	base := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [kwargs == nil
-			ifTrue: [nil]
-			ifFalse: [kwargs @env0:at: 'base' ifAbsent: [nil]]].
+	| arguments obj base |
+	"int(x=0, /, base=10), bound as Argument Clinic binds it.  The value is
+	positional-only, so ``int(x=1.2)'' is refused by name (test_int.py
+	test_keyword_args), and so is every keyword but ``base'' -- which used to
+	be DROPPED, so ``int(bogus=1)'' answered 0 (test_descr test_keywords)."
+	arguments := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('x' 'base') positionalOnly: 1 required: 0 for: 'int'.
+	obj := arguments @env0:at: 1.
+	base := arguments @env0:at: 2.
+	obj == nil ifTrue: [
+		base == nil ifFalse: [^ TypeError ___signal___: 'int() missing string argument'].
+		^ 0].
 	base == nil ifTrue: [^ self __new__: obj].
 	^ self __new__: obj _: base
 

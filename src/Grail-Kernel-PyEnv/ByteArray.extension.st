@@ -547,32 +547,16 @@ ByteArray class >> _new: positional kw: kwargs [
 	encoding / errors.  Without this entry point any keyword call died with an
 	uncatchable ``#_new:kw: not understood'' on the metaclass."
 
-	| args source encoding errors n |
-	args := positional ifNil: [#()].
-	n := args @env0:size.
-	source := n @env0:>= 1 ifTrue: [args @env0:at: 1] ifFalse: [nil].
-	encoding := n @env0:>= 2 ifTrue: [args @env0:at: 2] ifFalse: [nil].
-	errors := n @env0:>= 3 ifTrue: [args @env0:at: 3] ifFalse: [nil].
-	n @env0:> 3 ifTrue: [
-		TypeError ___signal___: 'bytes() takes at most 3 arguments'].
-	kwargs ifNotNil: [
-		kwargs @env0:keysAndValuesDo: [:k :v | | key |
-			key := k @env0:asString.
-			key @env0:= 'source' ifTrue: [
-				source ifNotNil: [TypeError ___signal___:
-					'argument for bytes() given by name (''source'') and position (1)'].
-				source := v]
-			ifFalse: [key @env0:= 'encoding' ifTrue: [
-				encoding ifNotNil: [TypeError ___signal___:
-					'argument for bytes() given by name (''encoding'') and position (2)'].
-				encoding := v]
-			ifFalse: [key @env0:= 'errors' ifTrue: [
-				errors ifNotNil: [TypeError ___signal___:
-					'argument for bytes() given by name (''errors'') and position (3)'].
-				errors := v]
-			ifFalse: [
-				TypeError ___signal___: ('bytes() got an unexpected keyword argument '''
-					@env0:, key @env0:, '''')]]]]].
+	| arguments source encoding errors |
+	"bytes(source=b'', encoding=None, errors=None) and bytearray's, bound as
+	Argument Clinic binds them, under the name of the type being built:
+	bytearray's refusals spoke of bytes()."
+	arguments := TypeError @env0:___argumentsOf___: (positional ifNil: [#()]) keywords: kwargs
+		named: #('source' 'encoding' 'errors') positionalOnly: 0 required: 0
+		for: self @env0:___constructorName___.
+	source := arguments @env0:at: 1.
+	encoding := arguments @env0:at: 2.
+	errors := arguments @env0:at: 3.
 
 	"encoding / errors are only meaningful for a str source."
 	(encoding @env0:notNil or: [errors @env0:notNil]) ifTrue: [

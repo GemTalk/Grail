@@ -6026,10 +6026,13 @@ Object class >> value: positional value: kwargs [
 
 		CPython's wording, and the same wording tuple>>_new:kw: already
 		produces, so the two paths stay indistinguishable to a caller.
-		test_builtin test_construct_singletons."
+		test_builtin test_construct_singletons.
+
+		Named by its PYTHON name: the Smalltalk one made ``object(x=1)'' and
+		``super(x=1)'' refusals of ``Object()'' and ``Super()''."
 		(self @env0:class @env0:whichClassIncludesSelector: #'_new:kw:'
 			environmentId: 1) == nil ifTrue: [
-				^ TypeError ___signal___: (self @env0:name @env0:asString
+				^ TypeError ___signal___: (self __name__ @env0:asString
 					@env0:, '() takes no keyword arguments')].
 		^ self _new: positional kw: kwargs
 	].

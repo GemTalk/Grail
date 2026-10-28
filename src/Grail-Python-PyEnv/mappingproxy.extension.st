@@ -39,6 +39,19 @@ mappingproxy class >> __new__: aMapping [
 
 ]
 
+{ #category : 'Grail-Initialization' }
+mappingproxy class >> _new: positional kw: keywords [
+	"``mappingproxy(mapping=d)'' -- its one parameter is nameable in CPython
+	(Objects/descrobject.c mappingproxy_new), and a keyword call used to reach
+	the generic refusal, which said it took no keyword at all."
+
+	| arguments |
+	arguments := TypeError @env0:___argumentsOf___: positional keywords: keywords
+		named: #('mapping') positionalOnly: 0 required: 1 for: 'mappingproxy'.
+	^ self __new__: (arguments @env0:at: 1)
+
+]
+
 { #category : 'Grail-Private' }
 mappingproxy >> ___setMapping: aMapping [
 	mapping := aMapping
