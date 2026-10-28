@@ -6247,6 +6247,13 @@ Object >> ___allocateInstance___: positional kw: keywords [
 		___grailStrSubclassNew___:kw:."
 		(self @env0:inheritsFrom: CharacterCollection) ifTrue: [
 			^ self @env1:___grailStrSubclassNew___: positional kw: keywords].
+		"A weakref.ref subclass the same way: WeakReference's class-side __new__
+		ties the new instance to its referent, and plain #new never does, so
+		``class R(weakref.ref): pass'' made refs whose ``R(obj)()'' answered
+		None.  CPython's weakref_new takes the referent and an optional callback
+		and nothing else, whether or not the subclass has an __init__."
+		(self @env0:inheritsFrom: WeakReference) ifTrue: [
+			^ self ___grailWeakrefSubclassNew___: positional kw: keywords].
 		"CPython's object_new: with neither __new__ nor __init__ of its own
 		anywhere in the class's lineage, nothing can consume an argument, so
 		any argument is an error -- ``A() takes no arguments''.  Grail allocated
@@ -11926,6 +11933,25 @@ Object >> ___grailWeakrefAttribute___ [
 					ifTrue: [c ___grailGetSetDescriptor___: '__weakref__']
 					ifFalse: [None]]].
 	^ nil
+
+]
+
+{ #category : 'Grail-Instantiation' }
+Object >> ___grailWeakrefSubclassNew___: positional kw: keywords [
+	"An instance of the weakref.ref subclass the receiver is, built as
+	CPython's weakref_new builds one (Objects/weakrefobject.c): the referent
+	and an optional callback, positionally."
+
+	(keywords @env0:notNil and: [keywords @env0:notEmpty]) ifTrue: [
+		^ TypeError ___signal___: 'ref() takes no keyword arguments'].
+	positional @env0:isEmpty ifTrue: [
+		^ TypeError ___signal___: '__new__ expected at least 1 argument, got 0'].
+	positional @env0:size @env0:> 2 ifTrue: [
+		^ TypeError ___signal___: '__new__ expected at most 2 arguments, got '
+			@env0:, positional @env0:size @env0:printString].
+	^ positional @env0:size @env0:= 1
+		ifTrue: [self @env1:__new__: (positional @env0:at: 1)]
+		ifFalse: [self @env1:__new__: (positional @env0:at: 1) _: (positional @env0:at: 2)]
 
 ]
 
