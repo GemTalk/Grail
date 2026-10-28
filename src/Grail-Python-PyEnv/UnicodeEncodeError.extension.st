@@ -2,32 +2,30 @@ Extension { #name : 'UnicodeEncodeError' }
 
 { #category : 'Grail-Python Protocol' }
 UnicodeEncodeError >> __str__ [
-	"CPython's wording for the encode side -- see UnicodeDecodeError's.
-	The offending CHARACTER is shown as its Python escape, which is
-	\\xNN / \\uNNNN / \\UNNNNNNNN by magnitude, and a span of more than
-	one is given as a range with no character quoted."
+	"CPython's UnicodeEncodeError_str (Objects/exceptions.c:3663-3723):
+	empty for an error with no object; otherwise reason and encoding made
+	strs FIRST -- their __str__ may change the error -- the object checked
+	again, and the one offending character named, as its \\xNN / \\uNNNN /
+	\\UNNNNNNNN escape, only when start and end bracket exactly one in range.
+	Every field is read as it stands, so an assignment after construction
+	shows (test_exceptions test_unicode_change_attributes).
 
-	| enc obj st en why ws |
-	enc := self encoding. obj := self object.
-	st := self start. en := self end. why := self reason.
-	(enc == nil or: [obj == nil or: [st == nil or: [en == nil or: [why == nil]]]])
-		ifTrue: [^ super __str__].
-	ws := WriteStream @env0:on: String @env0:new.
-	ws @env0:nextPut: $'; @env0:nextPutAll: enc @env0:asString;
-		@env0:nextPutAll: ''' codec can''t encode '.
-	((en @env0:- st) @env0:= 1 and: [st @env0:< (obj @env0:size)])
-		ifTrue: [
-			ws @env0:nextPutAll: 'character ''';
-				@env0:nextPutAll: (self ___escapeForMessage___:
-					(self ___codePointAt___: st in: obj));
-				@env0:nextPutAll: ''' in position ';
-				@env0:nextPutAll: st @env0:printString]
-		ifFalse: [
-			ws @env0:nextPutAll: 'characters in position ';
-				@env0:nextPutAll: st @env0:printString;
-				@env0:nextPut: $-;
-				@env0:nextPutAll: (en @env0:- 1) @env0:printString].
-	ws @env0:nextPutAll: ': '; @env0:nextPutAll: why @env0:asString.
-	^ ws @env0:contents
+	A raise that passed a bare message keeps BaseException's str."
+
+	| reasonText encodingText object |
+	self ___hasFields___ ifFalse: [^ super __str__].
+	(self ___field___: #'object') == nil ifTrue: [^ ''].
+	reasonText := self ___strOf___: #'reason'.
+	encodingText := self ___strOf___: #'encoding'.
+	object := self ___checkedObjectOf___: 'string'
+		where: [:each | (each @env0:isKindOf: CharacterCollection) or: [each @env0:isKindOf: AbstractPyStr]].
+	(self ___namesOneItemOf___: object) ifTrue: [
+		^ '''' @env0:, encodingText @env0:, ''' codec can''t encode character '''
+			@env0:, (self ___escapeForMessage___:
+				(self ___codePointAt___: (self ___field___: #'start') in: object))
+			@env0:, ''' in position ' @env0:, (self ___field___: #'start') @env0:printString
+			@env0:, ': ' @env0:, reasonText].
+	^ '''' @env0:, encodingText @env0:, ''' codec can''t encode characters in '
+		@env0:, self ___rangeText___ @env0:, ': ' @env0:, reasonText
 
 ]
