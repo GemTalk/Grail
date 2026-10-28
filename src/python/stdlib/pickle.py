@@ -939,7 +939,8 @@ def _reduce_exception(obj, proto):
         if obj.filename2 is not None:
             args += (None, obj.filename2)
     if isinstance(obj, ImportError):
-        for k in ('name', 'path'):
+        # ImportError_getstate (Objects/exceptions.c:1885-1913) carries all three.
+        for k in ('name', 'path', 'name_from'):
             v = getattr(obj, k, None)
             if v is not None:
                 state[k] = v

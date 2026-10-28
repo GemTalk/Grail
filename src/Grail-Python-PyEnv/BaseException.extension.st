@@ -1582,6 +1582,26 @@ BaseException >> __notes__ [
 
 ]
 
+{ #category : 'Grail-Pickling' }
+BaseException >> __reduce__ [
+	"CPython's BaseException.__reduce__ (Objects/exceptions.c, and the
+	ImportError and OSError shapes at :1885-1930 and OSError_reduce):
+	``(type, args)'', with the instance __dict__ as state when there is one.
+	pickle.py computes exactly that for its own use, knowing which attributes
+	CPython keeps in C slots rather than in __dict__ (_reduce_exception), so
+	this answers what it does rather than keeping a second copy of that list.
+
+	Object's answered NotImplemented, which copy.copy and copy.deepcopy then
+	rebuilt without the arguments: every copied exception came back with
+	``args == ()'' and an empty str (test_exceptions ImportErrorTests
+	test_copy_pickle)."
+
+	| pickle |
+	pickle := ((Python @env0:at: #builtins) @env1:instance) @env1:___import__: { 'pickle' } kw: nil.
+	^ (pickle ___pyAttrLoad___: #'_reduce_exception') value: { self. 2 } value: nil
+
+]
+
 { #category : 'Grail-String Representation' }
 BaseException >> __repr__ [
 	"Return a detailed string representation of the exception."

@@ -33,7 +33,9 @@ SyntaxError >> ___args___: anArray [
 	put value: #'offset'     value: (self ___locElem___: loc at: 3).
 	put value: #'text'       value: (self ___locElem___: loc at: 4).
 	put value: #'end_lineno' value: (self ___locElem___: loc at: 5).
-	put value: #'end_offset' value: (self ___locElem___: loc at: 6)
+	put value: #'end_offset' value: (self ___locElem___: loc at: 6).
+	"A member CPython's SyntaxError always has, None unless assigned."
+	put value: #'print_file_and_line' value: none
 
 ]
 
