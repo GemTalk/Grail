@@ -24,8 +24,10 @@ SyntaxError >> ___args___: anArray [
 	put value: #'msg' value: (((anArray @env0:size) @env0:>= 1)
 		ifTrue: [ anArray @env0:at: 1 ] ifFalse: [ none ]).
 
-	loc := ((anArray @env0:size) @env0:>= 2)
-		ifTrue: [ anArray @env0:at: 2 ] ifFalse: [ nil ].
+	"The location is read from EXACTLY two arguments, as SyntaxError_init reads
+	it, and checked there (___checkedLocation___:)."
+	loc := ((anArray @env0:size) @env0:= 2)
+		ifTrue: [ self @env0:___checkedLocation___: (anArray @env0:at: 2) ] ifFalse: [ nil ].
 	put value: #'filename'   value: (self ___locElem___: loc at: 1).
 	put value: #'lineno'     value: (self ___locElem___: loc at: 2).
 	put value: #'offset'     value: (self ___locElem___: loc at: 3).
