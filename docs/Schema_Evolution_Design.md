@@ -330,6 +330,23 @@ MOVE and the class rename both write every instance, so both are commands.
   gemdb.schema.rebase('mod.Customer')";
 - a `__renamed__` target that already exists.
 
+**An install rebuilds a base change that strands nothing.** The refusal exists
+for stored instances, so a class with none (none of it, and none of any class
+below it) has nothing to protect. An import cannot know that, because counting
+is a repository scan and an import's session is dirty by the time the class
+statement runs. An install's redeploy (`scripts/redeployModules.gs`) can,
+because it aborts after a failed module. It reads the keys the refusal recorded
+(`GrailRefusedBaseChanges`), counts them
+(`importlib ___grailUninhabitedBaseChanges___:`, one `countInstances:` over the
+registry subtree and every Smalltalk subclass), and rebuilds the module with
+the refusal lifted for exactly the empty ones. A class with instances stays
+refused, with the `rebase` advice. The case that found it: Grail c8cbc92
+shipped its own `email.message` with `EmailMessage(Message)`, and later
+releases ship CPython's `Message <- MIMEPart <- EmailMessage`. Every database
+that had imported `email` (flask does) was refused on its next
+`import email.message`, though nothing stored an `EmailMessage`. An installer
+that skips the redeploy leaves that refusal to the application's first import.
+
 The commands, both owning a clean transaction:
 
 - `gemdb.schema.rebase(name)`: builds the class with its new bases as a new

@@ -60,19 +60,56 @@ apps do: [:app | | ns mods pass before |
 						out nextPutAll: 'redeployModules: skipped (no source) ' , (app ifNil: ['']) , ' ' , nm; cr]
 					ifFalse: [
 						"Committed one module at a time: a whole stdlib's rebuild in one
-						transaction overflows the gem's temporary object space."
-						[importlib loadModuleFromPath: path name: nm.
-						 System commitTransaction ifFalse: [
-							out nextPutAll: 'redeployModules: COMMIT FAILED after ' , nm; cr.
-							ExitClientError signal: 'redeployModules commit failed' status: 1].
-						 rebuilt := rebuilt + 1]
-							on: Error , (System myUserProfile symbolList objectNamed: #BaseException)
-							do: [:e |
-								failed := failed + 1.
-								out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm , ': '
-									, (e messageText ifNil: [e class name]) asString; cr.
-								System abortTransaction.
-								e return: nil]]]].
+						transaction overflows the gem's temporary object space.
+
+						A class whose bases changed is refused (importlib
+						___canonicalSubclassOf:...), to keep its stored instances from
+						being stranded on the old class.  Where nothing is stored against
+						it -- no instance of it or of any class below it -- the refusal
+						protects nothing, and this session, clean after the abort, can
+						count: such a module is rebuilt again with the refusal lifted for
+						exactly those classes.  Bounded, for a module whose classes keep
+						turning up new ones.  A class with instances stays refused, with
+						the advice to run gemdb.schema.rebase."
+						[:allowed | | attempt done |
+						 attempt := 0. done := false.
+						 [done or: [attempt >= 5]] whileFalse: [ | refused err |
+							attempt := attempt + 1.
+							err := nil.
+							SessionTemps current removeKey: #'GrailRefusedBaseChanges' ifAbsent: [].
+							(importlib @env1:lookupModule: nm) notNil ifTrue: [importlib removeModule: nm].
+							[importlib ___allowBaseChanges___: allowed while: [importlib loadModuleFromPath: path name: nm].
+							 System commitTransaction ifFalse: [
+								out nextPutAll: 'redeployModules: COMMIT FAILED after ' , nm; cr.
+								ExitClientError signal: 'redeployModules commit failed' status: 1].
+							 rebuilt := rebuilt + 1.
+							 done := true]
+								on: Error , (System myUserProfile symbolList objectNamed: #BaseException)
+								do: [:e |
+									err := e messageText ifNil: [e class name].
+									System abortTransaction.
+									e return: nil].
+							done ifFalse: [
+								refused := (SessionTemps current at: #'GrailRefusedBaseChanges' otherwise: #())
+									reject: [:k | allowed includes: k].
+								(refused notEmpty
+									and: [(importlib ___grailUninhabitedBaseChanges___: refused) size = refused size])
+									ifTrue: [
+										refused do: [:k |
+											out nextPutAll: 'redeployModules: ' , (app ifNil: ['']) , ' ' , nm
+												, ': nothing is stored against ' , k
+												, ', so it is rebuilt on its new bases'; cr].
+										allowed addAll: refused.
+										attempt >= 5 ifTrue: [
+											failed := failed + 1.
+											out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm
+												, ': still refused after ' , attempt printString , ' rebuilds'; cr]]
+									ifFalse: [
+										failed := failed + 1.
+										out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm , ': '
+											, err asString; cr.
+										attempt := 5]]]]
+							value: Set new]]].
 	 rebuilt > before and: [pass < 5]] whileTrue.
 	System commitTransaction ifFalse: [
 		out nextPutAll: 'redeployModules: COMMIT FAILED for ' , (app ifNil: ['the default namespace']); cr.

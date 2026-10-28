@@ -85,9 +85,12 @@ product's own Rowan passes a kind in the list: that is the signal to move the fl
    database built and filled by the previous GemDB release, then the new one installed
    over it, and its data checked. `run_grail_upgrade_test.sh release=<old PINNED_GRAIL_REF>`
    is that check for Grail; GemDB's own CI should drive it through GemDB's installer.
-3. **Engine change:** the database is recreated, so data is lost. Say so in the release
-   notes, and move Grail's `install.sh` floor and `needs-newer-rowan.txt` in the same
-   round (below).
+3. **Engine change:** the database moves to the new engine in place, data and all,
+   with `scripts/upgrade_engine.sh --in-place` and then Grail's install
+   ([Upgrading_GemStone.md](Upgrading_GemStone.md); measured from 4.0.0.a5 to a8).
+   Run `run_grail_upgrade_test.sh` with `GRAIL_UPGRADE_FROM_PRODUCT=<old product>` and
+   `GRAIL_UPGRADE_USER=gemdb` for that pair first. Move Grail's `install.sh` floor and
+   `needs-newer-rowan.txt` in the same round (below).
 
 The first GemDB release after GemDB 1.8 is also the first that moves its users from a
 topaz-installed Grail (`a78e8c03`) to a Rowan-installed one. **Measured: it holds**

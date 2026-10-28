@@ -9,6 +9,13 @@ import collections
 import dataclasses
 import datetime
 import decimal
+# A stdlib module whose class hierarchy changed between Grail releases: Grail
+# c8cbc92 shipped its own email.message, with EmailMessage(Message); later
+# releases ship CPython's, with Message <- MIMEPart <- EmailMessage. A database
+# that imported it under the old Grail holds the old registration; importing it
+# under the new one is a base change, with no stored instances (GemDB's web app
+# imports it through flask).
+import email.message
 import enum
 import fractions
 import typing

@@ -40,9 +40,9 @@ on:
       cases:
         description: "Cases to run (run_grail_upgrade_test.sh arguments)"
         type: string
-        # release=a78e8c03 is GemDB Code's PINNED_GRAIL_REF (vendor-pins.sh). Move
+        # release=c8cbc92 is GemDB Code's PINNED_GRAIL_REF (vendor-pins.sh). Move
         # it when GemDB does.
-        default: "noop synthetic release=a78e8c03"
+        default: "noop synthetic release=c8cbc92"
 
 concurrency:
   group: grail-upgrade-${{ github.ref }}
@@ -72,7 +72,7 @@ jobs:
       # own stones; setup-testing-env.sh provides the global directory and key.
       - name: upgrade test (as non-root 'ci')
         env:
-          CASES: ${{ inputs.cases || 'noop synthetic release=a78e8c03' }}
+          CASES: ${{ inputs.cases || 'noop synthetic release=c8cbc92' }}
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
