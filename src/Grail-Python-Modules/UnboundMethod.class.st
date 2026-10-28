@@ -36,6 +36,17 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Python Names' }
+UnboundMethod class >> ___methodDescriptorOverrides___ [
+	"Slot names a built-in type ALSO defines as an ordinary method, which is
+	then what its __dict__ holds (METH_COEXIST): ``dict.__getitem__'' is a
+	method descriptor, ``object.__repr__'' a slot wrapper."
+
+	^ #('dict.__getitem__' 'dict.__contains__' 'list.__getitem__' 'set.__contains__'
+		'frozenset.__contains__')
+
+]
+
 { #category : 'Grail-Calling' }
 UnboundMethod class >> ___noReceiver___ [
 	"The receiver ``Cls.f(...)'' runs a RECEIVERLESS def against: one whose
@@ -175,6 +186,128 @@ UnboundMethod class >> ___refuseReceiver___: aReceiver positional: positional kw
 				' (and ' , kg printString , ' keyword-only argument' , (kg > 1 ifTrue: ['s'] ifFalse: ['']) ,
 				') were given']
 			ifFalse: [given > 1 ifTrue: [' were given'] ifFalse: [' was given']])
+
+]
+
+{ #category : 'Grail-Python Names' }
+UnboundMethod class >> ___slotWrapperNames___ [
+	"The special methods a built-in type exposes as SLOT WRAPPERS rather than
+	as method descriptors: every name in CPython's slotdefs table that has a
+	wrapper function (Objects/typeobject.c:10952-11149), which leaves out
+	__getattr__ and __new__.  The two kinds word their refusals differently."
+
+	^ #(#'__abs__' #'__add__' #'__aiter__' #'__and__' #'__anext__'
+		#'__await__' #'__bool__' #'__buffer__' #'__call__' #'__contains__'
+		#'__del__' #'__delattr__' #'__delete__' #'__delitem__' #'__divmod__'
+		#'__eq__' #'__float__' #'__floordiv__' #'__ge__' #'__get__'
+		#'__getattribute__' #'__getitem__' #'__gt__' #'__hash__' #'__iadd__'
+		#'__iand__' #'__ifloordiv__' #'__ilshift__' #'__imatmul__' #'__imod__'
+		#'__imul__' #'__index__' #'__init__' #'__int__' #'__invert__' #'__ior__'
+		#'__ipow__' #'__irshift__' #'__isub__' #'__iter__' #'__itruediv__'
+		#'__ixor__' #'__le__' #'__len__' #'__lshift__' #'__lt__' #'__matmul__'
+		#'__mod__' #'__mul__' #'__ne__' #'__neg__' #'__next__' #'__or__'
+		#'__pos__' #'__pow__' #'__radd__' #'__rand__' #'__rdivmod__'
+		#'__release_buffer__' #'__repr__' #'__rfloordiv__' #'__rlshift__'
+		#'__rmatmul__' #'__rmod__' #'__rmul__' #'__ror__' #'__rpow__'
+		#'__rrshift__' #'__rshift__' #'__rsub__' #'__rtruediv__' #'__rxor__'
+		#'__set__' #'__setattr__' #'__setitem__' #'__str__' #'__sub__'
+		#'__truediv__' #'__xor__')
+
+]
+
+{ #category : 'Grail-Python Names' }
+UnboundMethod >> ___descriptorQualifiedName___ [
+
+	^ self ___descriptorTypeName___ , '.' , selector
+
+]
+
+{ #category : 'Grail-Python Names' }
+UnboundMethod >> ___descriptorTypeName___ [
+	"The built-in type this method belongs to, as CPython names it in a
+	descriptor's refusals: the prefix of its qualified name, and ``type'' for
+	Behavior, which holds what CPython keeps in type's own dict."
+
+	| qualifiedName suffix |
+	definingClass == Behavior ifTrue: [^ 'type'].
+	qualifiedName := (self @env1:__qualname__) asString.
+	suffix := '.' , selector.
+	(qualifiedName size > suffix size and: [qualifiedName endsWith: suffix])
+		ifFalse: [^ (definingClass @env1:__name__) asString].
+	^ qualifiedName copyFrom: 1 to: qualifiedName size - suffix size
+
+]
+
+{ #category : 'Grail-Python Names' }
+UnboundMethod >> ___isSlotWrapper___ [
+
+	^ (self class ___slotWrapperNames___ includes: selector)
+		and: [(self class ___methodDescriptorOverrides___ includes: self ___descriptorQualifiedName___) not]
+
+]
+
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___signalMissingParameters___ [
+	"The plain function's own refusal: every positional parameter without a
+	default is missing, the receiver's among them.
+
+	With NO signature to read, the old refusal stands, which claims nothing
+	about parameters.  That is the zero-parameter def capturing an enclosing
+	method's self, which CPython runs and Grail deliberately does not
+	(SuperPreconditionErrorsTestCase >>
+	testAZeroParameterMethodCapturingSelfIsStillRefused)."
+
+	| specification names |
+	specification := self @env1:__signature_spec__.
+	(specification isKindOf: Array) ifFalse: [
+		^ TypeError @env1:___signal___: 'unbound method ''' , selector
+			, ''' must be called with an instance as the first argument'].
+	names := (specification select: [:each | each size = 2 and: [(each at: 2) <= 1]])
+		collect: [:each | each at: 1].
+	^ BaseException @env1:___signalMissingArguments___: names
+		kind: 'positional'
+		qualifiedName: (self @env1:__qualname__) asString
+
+]
+
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___signalMissingReceiver___ [
+	"``Cls.f()'' with no argument, in CPython's words.  A def in a Python class
+	body is a plain function missing its parameters (Python/ceval.c:1386,
+	format_missing); a built-in type's method is a descriptor that needs an
+	argument (Objects/descrobject.c:267-283 method_check_args, and :536
+	wrapperdescr_call for a slot wrapper).  Both used to be Python 2's
+	``unbound method 'f' must be called with an instance as the first
+	argument''."
+
+	(self @env1:___isPythonClass___: self @env1:___pyOwnerClass___)
+		ifTrue: [^ self ___signalMissingParameters___].
+	self ___isSlotWrapper___ ifTrue: [
+		^ TypeError @env1:___signal___: 'descriptor ''' , selector , ''' of '''
+			, self ___descriptorTypeName___ , ''' object needs an argument'].
+	^ TypeError @env1:___signal___: 'unbound method ' , self ___descriptorQualifiedName___
+		, '() needs an argument'
+
+]
+
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___signalUnresolvedFor___: obj kw: keywords [
+	"No method took ``Cls.f(obj, ...)''.  A Python class keeps the
+	AttributeError.  A built-in type's descriptor refuses a receiver of
+	another type, and otherwise the call's shape: a keyword it takes none of,
+	as CPython's method_check_args does first (Objects/descrobject.c:267-290),
+	or the count.  All three used to be ``type object 'set' has no method
+	'add'''."
+
+	(self @env1:___isPythonClass___: self @env1:___pyOwnerClass___) ifTrue: [
+		^ AttributeError @env1:___signal___: 'type object ''' , definingClass name asString
+			, ''' has no method ''' , selector , ''''].
+	(obj isKindOf: definingClass) ifFalse: [^ self @env1:___signalDescriptorMismatch___: obj].
+	(keywords notNil and: [keywords isEmpty not]) ifTrue: [
+		^ TypeError @env1:___signal___: self ___descriptorQualifiedName___
+			, '() takes no keyword arguments'].
+	^ TypeError @env1:___signal___: self ___descriptorQualifiedName___
+		, '() takes a different number of arguments'
 
 ]
 
