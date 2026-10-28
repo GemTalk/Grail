@@ -580,7 +580,11 @@ extern "C" PyObject * PyObject_Format(PyObject *obj, PyObject *format_spec) {
     if (format_spec == NULL) return grail_call_builtin("format", "O", obj);
     return grail_call_builtin("format", "OO", obj, format_spec);
 }
+extern "C" int _grail_dealloc_keeps(void *p);   /* cpython.cc */
+/* free(), except for the object a quarantined _Py_Dealloc is releasing,
+   whose block is kept and poisoned (docs/Shim_Memory.md, Step 1). */
 extern "C" void PyObject_Free(void *ptr) {
+    if (_grail_dealloc_keeps(ptr)) return;
     free(ptr);
 }
 /* PyObject_GenericGetDict lives in cpython.cc. */
