@@ -217,13 +217,11 @@ UnboundMethod >> ___callKeywordsBound___: obj rest: rest kw: kwargs [
 	The names come from ___methodSignatureTable___, which is bound-shaped --
 	``self''/``cls'' left out -- and so lines up with ``rest''.  Anything that
 	cannot be bound exactly (no table, a parameter that is not plain
-	positional-or-keyword, the wrong total) keeps the AttributeError this
-	answered before."
+	positional-or-keyword, the wrong total) is refused as
+	___signalUnresolvedFor___:kw: says."
 
 	^ self ___callKeywordsBound___: obj rest: rest kw: kwargs ifUnbindable: [
-		AttributeError ___signal___:
-			('type object ''' @env0:, definingClass @env0:name @env0:asString
-				@env0:, ''' has no method ''' @env0:, selector @env0:asString @env0:, '''')]
+		self @env0:___signalUnresolvedFor___: obj kw: kwargs]
 
 ]
 
@@ -401,9 +399,7 @@ UnboundMethod >> ___callReceiverless___: positional kw: kwargs orSignal: obj [
 						@env0:, '() got an unexpected keyword argument '''
 						@env0:, k @env0:asString @env0:, '''')]]].
 	obj == nil ifFalse: [^ self ___signalDescriptorMismatch___: obj].
-	^ TypeError ___signal___:
-		('unbound method ''' @env0:, selector @env0:asString
-			@env0:, ''' must be called with an instance as the first argument')
+	^ self @env0:___signalMissingReceiver___
 
 ]
 
@@ -1274,7 +1270,7 @@ UnboundMethod >> ___signalDescriptorMismatch___: obj [
 
 	^ TypeError ___signal___:
 		('descriptor ''' @env0:, selector @env0:asString
-			@env0:, ''' for ''' @env0:, definingClass @env1:__name__ @env0:asString
+			@env0:, ''' for ''' @env0:, self @env0:___descriptorTypeName___
 			@env0:, ''' objects doesn''t apply to a '''
 			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
 
