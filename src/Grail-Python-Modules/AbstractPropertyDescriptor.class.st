@@ -11,6 +11,17 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Instantiation' }
+AbstractPropertyDescriptor class >> ___checkConstructorArguments___: positional keywords: keywords [
+	"Accept whatever the varargs constructor is handed.  PropertyDescriptor
+	refuses what property()'s signature does not admit; DynamicClassAttribute
+	is a Python class in CPython, whose refusals would be its __init__'s, so it
+	keeps this lenience."
+
+	^ self
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 AbstractPropertyDescriptor class >> ___pythonValueAttrs___ [
 	^ IdentitySet new

@@ -22,6 +22,17 @@ PyClassMethod class >> __name__ [
 ]
 
 { #category : 'Grail-Class-Call Fast Path' }
+PyClassMethod class >> __new__ [
+	"``classmethod()'' -- CallAst's zero-argument class-call fast path.  The
+	inherited allocating __new__ answered a classmethod wrapping NOTHING, whose
+	every use then failed far from the call; the class-call entry refuses it
+	as cm_init does."
+
+	^ self value: #() value: nil
+
+]
+
+{ #category : 'Grail-Class-Call Fast Path' }
 PyClassMethod class >> __new__: fn [
 	"``classmethod(fn)'' fixed-arity class-new fast path (see PyStaticMethod)."
 
@@ -46,22 +57,45 @@ PyClassMethod class >> __qualname__ [
 
 { #category : 'Grail-Instantiation' }
 PyClassMethod class >> value: positional value: keywords [
-	"classmethod(f) -- the class-call entry."
+	"classmethod(f) -- the class-call entry: allocate, then initialize, as
+	type.__call__ does.  The callable is __init__'s to set, not __new__'s."
 
-	^ self ___allocateInstance___: positional kw: keywords
+	| instance |
+	instance := self ___allocateInstance___: positional kw: keywords.
+	instance ___init__: positional kw: keywords.
+	^ instance
+
+]
+
+{ #category : 'Grail-Instantiation' }
+PyClassMethod >> ___init__: positional kw: keywords [
+	"cm_init (Objects/funcobject.c:1487-1497): no keyword, then exactly one
+	positional, which becomes the callable.  Both checks used to sit in
+	__new__, which let ``classmethod(f, x=1)'' through with the keyword dropped and
+	set the callable even for a subclass whose own __init__ never asks for it."
+
+	(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not]) ifTrue: [
+		^ TypeError ___signal___: 'classmethod() takes no keyword arguments'].
+	(positional == nil or: [positional @env0:size @env0:~= 1]) ifTrue: [
+		^ TypeError ___signal___: 'classmethod expected 1 argument, got '
+			@env0:, (positional == nil ifTrue: [0] ifFalse: [positional @env0:size])
+				@env0:printString].
+	self @env0:dynamicInstVarAt: #'__func__' put: (positional @env0:at: 1).
+	^ None
 
 ]
 
 { #category : 'Grail-Instantiation' }
 PyClassMethod >> ___new__: positional kw: keywords [
-	| inst |
-	(positional == nil or: [positional @env0:size @env0:~= 1]) ifTrue: [
-		TypeError ___signal___: 'classmethod expected 1 argument, got '
-			@env0:, (positional == nil ifTrue: [0] ifFalse: [positional @env0:size])
-				@env0:printString].
-	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #'__func__' put: (positional @env0:at: 1).
-	^ inst
+	"Run with the CLASS as receiver (Object >> ___allocateInstance___:kw:).
+	classmethod.__new__ is object's: it allocates and ignores its arguments, so an
+	instance whose __init__ does not set the callable wraps None
+	(test_descr test_classmethod_new)."
+
+	| instance |
+	instance := self @env0:new.
+	instance @env0:dynamicInstVarAt: #'__func__' put: None.
+	^ instance
 
 ]
 

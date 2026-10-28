@@ -47,6 +47,7 @@ AbstractPropertyDescriptor class >> _new: positional kw: kwargs [
 	first, then matching kwargs.  Returns the descriptor."
 
 	| nargs fg fs fd dc |
+	self @env0:___checkConstructorArguments___: positional keywords: kwargs.
 	nargs := positional @env0:size.
 	fg := (nargs @env0:>= 1)
 		@env0:ifTrue: [positional @env0:at: 1]
@@ -152,6 +153,7 @@ AbstractPropertyDescriptor >> ___init__: positional kw: kwargs [
 	``___pyPropInit___''."
 
 	| nargs fg fs fd dc |
+	self @env0:class @env0:___checkConstructorArguments___: positional keywords: kwargs.
 	nargs := positional @env0:size.
 	fg := (nargs @env0:>= 1)
 		ifTrue: [positional @env0:at: 1]
