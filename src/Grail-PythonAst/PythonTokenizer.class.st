@@ -17,6 +17,8 @@ Class {
 		'line',
 		'tokens',
 		'indentStack',
+		'altIndentStack',
+		'tabErrorPosition',
 		'parenDepth',
 		'atLineStart',
 		'sourceSize',
@@ -541,6 +543,22 @@ PythonTokenizer >> ___addCodePoint___: aCodePoint to: aBuilder [
 
 ]
 
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___altIndentationBefore___: aPosition [
+	"The current line's indentation counted with a tab as ONE column, as
+	CPython's altcol is (ALTTABSIZE): every space and tab is one, and a form
+	feed resets, as it does for the real column."
+
+	| alt |
+	alt := 0.
+	(self ___lineStartBefore___: aPosition) to: aPosition - 1 do: [:index |
+		(source at: index) == FormFeed
+			ifTrue: [alt := 0]
+			ifFalse: [alt := alt + 1]].
+	^ alt
+
+]
+
 { #category : 'Grail-private' }
 PythonTokenizer >> ___atTripleQuote___ [
 	"Is the character at the cursor the first of three identical quotes?"
@@ -698,6 +716,19 @@ PythonTokenizer >> ___invalidCharacter___: aCharacter [
 ]
 
 { #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___lineStartBefore___: aPosition [
+	"Where the indentation that ends at aPosition begins."
+
+	| start |
+	start := aPosition.
+	[start > 1 and: [(source at: start - 1) == $ 
+			or: [(source at: start - 1) == Tab or: [(source at: start - 1) == FormFeed]]]]
+		whileTrue: [start := start - 1].
+	^ start
+
+]
+
+{ #category : 'Grail-tokenizing' }
 PythonTokenizer >> ___literalEnd___: lit [
 	"The source index just past the closing quote of the literal being
 	scanned, found by reading on from where the scan stopped; nil when the
@@ -735,6 +766,15 @@ PythonTokenizer >> ___literalError___: aMessage literal: lit [
 
 	^ PythonParser ___signal___: SyntaxError message: aMessage
 		in: source from: (lit at: 1) to: (self ___literalEnd___: lit)
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___noteTabError___ [
+	"Remember where the FIRST inconsistent indentation is -- the start of its
+	line, where CPython puts a TabError -- and go on by the real column."
+
+	tabErrorPosition ifNil: [tabErrorPosition := self ___lineStartBefore___: position]
 
 ]
 
@@ -926,16 +966,34 @@ PythonTokenizer >> currentChar [
 
 { #category : 'Grail-tokenizing' }
 PythonTokenizer >> handleIndentation: indent [
-	"Emit INDENT or DEDENT tokens based on the new indentation level."
+	"Emit INDENT or DEDENT tokens based on the new indentation level.
 
-	| currentIndent |
+	THE INDENTATION IS MEASURED TWICE, as CPython's lexer measures it
+	(Parser/lexer/lexer.c:510-610): with a tab as eight columns, which decides
+	the level, and with a tab as ONE (___altIndentationBefore___:), which has
+	to agree about it -- the same level, a deeper one, or the level it
+	dedents to.  When the two disagree the line mixes tabs and spaces in a way
+	that means different things at different tab widths, and that is a
+	TabError.  Grail measured once, so ``\t1/0'' and ``    \t1/0'' were the
+	same level (test_exceptions testRaising, testSyntaxErrorMissingParens).
+
+	NOTED, NOT RAISED: CPython's parser pulls tokens as it goes, so an error
+	the parser meets on an earlier line is reported instead, and Grail
+	tokenizes the whole source first.  PythonParser class >> parse: decides
+	(___noteTabError___)."
+
+	| currentIndent alt |
 	currentIndent := indentStack last.
+	alt := self ___altIndentationBefore___: position.
 	indent > currentIndent ifTrue: [
+		alt <= altIndentStack last ifTrue: [self ___noteTabError___].
 		indentStack add: indent.
+		altIndentStack add: alt.
 		self addToken: #INDENT value: '' line: line position: position .
 	] ifFalse: [
 		[indent < indentStack last] whileTrue: [
 			indentStack removeLast.
+			altIndentStack removeLast.
 			self addToken: #DEDENT value: '' line: line position: position .
 		].
 		indent ~= indentStack last ifTrue: [
@@ -951,6 +1009,7 @@ PythonTokenizer >> handleIndentation: indent [
 				at: (PythonParser ___endOfLinePositionIn___: source at: position)
 				endOffset: -1.
 		].
+		alt ~= altIndentStack last ifTrue: [self ___noteTabError___].
 	].
 
 ]
@@ -1115,6 +1174,8 @@ PythonTokenizer >> source: aString [
 	line := 1.
 	tokens := { } .
 	indentStack := { 0 } .
+	altIndentStack := { 0 } .
+	tabErrorPosition := nil.
 	parenDepth := 0.
 	"Positions of the brackets still open, innermost last, so an unterminated
 	 one can be reported AT ITSELF rather than at end of input."
@@ -1127,6 +1188,14 @@ PythonTokenizer >> source: aString [
 PythonTokenizer >> sourceSize [
 
 	^ sourceSize
+
+]
+
+{ #category : 'Grail-accessing' }
+PythonTokenizer >> tabErrorPosition [
+	"Where the first line whose tabs and spaces disagree begins, or nil."
+
+	^ tabErrorPosition
 
 ]
 

@@ -39,7 +39,8 @@ Class {
 		'mangleClassStack',
 		'blockHeader',
 		'barryAsFlufl',
-		'evalInput'
+		'evalInput',
+		'tabErrorPosition'
 	],
 	#category : 'Grail-Parser'
 }
@@ -318,14 +319,23 @@ PythonParser class >> parse: aString [
 
 { #category : 'Grail-parsing' }
 PythonParser class >> parse: aString evalInput: isEvalInput [
-	"parse:, by CPython's eval rule when isEvalInput is true (parseEvalInput:)."
+	"parse:, by CPython's eval rule when isEvalInput is true (parseEvalInput:).
+
+	A TabError the tokenizer noted (PythonTokenizer >> handleIndentation:) is
+	raised HERE, in the order CPython's lazy tokenizer would meet it: an error
+	the parser finds before that line stands, and anything else -- an error at
+	or after it, or a parse that succeeds -- is the TabError."
 
 	| parser |
 	parser := self basicNew.
 	parser ___evalInput___: isEvalInput.
-	^ [parser source: aString; parseModule]
+	^ [ | module |
+		module := parser source: aString; parseModule.
+		parser ___signalPendingTabError___.
+		module]
 		on: SyntaxError
 		do: [:ex |
+			(parser ___tabErrorPrecedes___: ex) ifTrue: [parser ___signalPendingTabError___].
 			self ___fillSyntaxErrorLocation___: ex
 				source: aString
 				at: parser ___currentSourcePosition___.
@@ -2617,6 +2627,20 @@ PythonParser >> ___signalDeclarationSyntaxError___: aMessage at: aToken [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser >> ___signalPendingTabError___ [
+	"The TabError the tokenizer noted, if it noted one: CPython's E_TABSPACE,
+	on its line at offset 1 with an end_offset of 0."
+
+	tabErrorPosition ifNil: [^ self].
+	^ PythonParser ___signalLocated___: TabError
+		message: 'inconsistent use of tabs and spaces in indentation'
+		in: source
+		at: tabErrorPosition
+		endOffset: 0
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser >> ___signalSyntaxError___: aMessage from: startTok to: endTok [
 	"Raise a SyntaxError that SPANS a range of source, not just a point.
 
@@ -2786,6 +2810,20 @@ PythonParser >> ___synthType: aType like: refTok into: out [
 PythonParser >> ___synthType: aType value: aString like: refTok into: out [
 	out add: ((PythonToken type: aType value: aString line: refTok line position: refTok position)
 		endPosition: refTok endPosition; endLine: refTok endLine; yourself)
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___tabErrorPrecedes___: aSyntaxError [
+	"Would CPython's lexer have met the noted TabError before the parser met
+	aSyntaxError?  It would unless the parser failed on an earlier line --
+	``\tif 1:'' is an unexpected indent on line 1, whatever line 3 does."
+
+	| failure |
+	tabErrorPosition ifNil: [^ false].
+	(aSyntaxError isKindOf: TabError) ifTrue: [^ false].
+	failure := self ___currentSourcePosition___.
+	^ failure isNil or: [failure >= tabErrorPosition]
 
 ]
 
@@ -7472,8 +7510,19 @@ PythonParser >> skipTypeParams [
 { #category : 'Grail-initialization' }
 PythonParser >> source: aString [
 
+	| tokenizer |
 	source := aString.
-	tokens := PythonTokenizer tokenize: aString.
+	tokenizer := PythonTokenizer on: aString.
+	"An error the TOKENIZER raises comes after any TabError it noted, which is
+	on an earlier line, so CPython's lexer would have stopped at the TabError."
+	tokens := [tokenizer tokenize]
+		on: SyntaxError
+		do: [:ex |
+			tabErrorPosition := tokenizer tabErrorPosition.
+			((ex isKindOf: TabError) not and: [tabErrorPosition notNil])
+				ifTrue: [self ___signalPendingTabError___].
+			ex pass].
+	tabErrorPosition := tokenizer tabErrorPosition.
 	position := 1.
 	walrusAllowed := false.
 	inWalrusValue := false.
