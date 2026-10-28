@@ -13,6 +13,14 @@ Class {
 	#category : 'Grail-Collections-Ordered'
 }
 
+{ #category : 'Grail-Constructors' }
+bytearray class >> ___constructorName___ [
+	"bytearray() refuses its arguments in its own name, not bytes()'s."
+
+	^ 'bytearray'
+
+]
+
 { #category : 'Grail-Buffer Protocol' }
 bytearray >> add: aByte [
 	"Append one byte, refusing while a buffer export is live.

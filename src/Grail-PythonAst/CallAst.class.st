@@ -1865,8 +1865,15 @@ CallAst >> ___arityMismatchMessageFor___: aSymbol [
 	SPLIT OUT so the two paths cannot drift.  The IR emit spells this same
 	raise as one send carrying one literal, and the literal has to be the
 	text's byte for byte -- test_asyncgen asserts on the TypeError's text, so
-	a divergence here would be a wrong answer rather than a cosmetic one."
+	a divergence here would be a wrong answer rather than a cosmetic one.
 
+	A KEYWORD at such a call means the builtin takes none: every builtin that
+	takes one has a ``_name:kw:'' entry, and a call reaching it never gets
+	here.  CPython checks keywords before the count for these
+	(Objects/methodobject.c:407-419, cfunction_check_kwargs), so ``len(obj=1)''
+	is that refusal whatever the arity."
+
+	keywords isEmpty ifFalse: [^ aSymbol asString , '() takes no keyword arguments'].
 	^ aSymbol asString , '() takes wrong number of arguments ('
 		, arguments size printString , ' positional, '
 		, keywords size printString , ' keyword) - no matching method'

@@ -184,6 +184,19 @@ memoryview class >> __new__: anObject [
 
 ]
 
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> _new: positional kw: keywords [
+	"``memoryview(object=b)'' -- its one parameter is nameable in CPython
+	(Objects/memoryobject.c memoryview_impl), and a keyword call used to reach
+	the generic refusal, which said it took no keyword at all."
+
+	| arguments |
+	arguments := TypeError @env0:___argumentsOf___: positional keywords: keywords
+		named: #('object') positionalOnly: 0 required: 1 for: 'memoryview'.
+	^ self __new__: (arguments @env0:at: 1)
+
+]
+
 { #category : 'Grail-Private' }
 memoryview >> ___checkReleased___ [
 	"A released view refuses every operation, as CPython's does."
