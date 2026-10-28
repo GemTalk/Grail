@@ -24,3 +24,8 @@ def step(n):
         _grail_demo.capi('is_true', [i, (i, 'a')])
         _grail_demo.capi('call_inline', _answer)
     return n
+
+
+def memory():
+    """(objects the shim allocated, released and quarantined; C heap bytes)."""
+    return _grail_demo.capi("shim_memory")

@@ -34,6 +34,28 @@
 #include <Python.h>
 #endif
 #include <stddef.h>   /* offsetof */
+#if defined(__APPLE__)
+#include <malloc/malloc.h>   /* malloc_zone_statistics: capi("shim_memory") */
+#elif defined(__GLIBC__)
+#include <malloc.h>          /* mallinfo2 */
+#endif
+/* The shim's release counters (cpython.cc); weak, so this module still
+   loads under CPython, where they are absent. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void _grail_dealloc_stats(size_t *allocated, size_t *released, size_t *quarantined) __attribute__((weak));
+int _grail_dealloc_set_mode(int mode) __attribute__((weak));
+/* CPython's API, exported by the shim but not declared in cpython.h:
+   capi("new_refs"). */
+PyObject *PyNumber_Add(PyObject *a, PyObject *b);
+PyObject *PyContextVar_New(const char *name, PyObject *default_value);
+PyObject *PyContextVar_Set(PyObject *var, PyObject *value);
+int PyContextVar_Get(PyObject *var, PyObject *default_value, PyObject **value);
+#ifdef __cplusplus
+}
+#endif
+enum { GRAIL_DEALLOC_QUARANTINE = 1 };   /* as cpython.cc numbers the modes */
 #include <errno.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -1138,6 +1160,22 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         if (v == -1 && PyErr_Occurred()) return NULL;
         return PyLong_FromSsize_t(v);
     }
+    /* (objects the shim has allocated, released and quarantined, C heap
+       bytes in use), for tests/scripts/runShimMemoryTest.gs.  Under CPython
+       the shim's counters are absent and read 0. */
+    if (IS("shim_memory")) {
+        size_t allocated = 0, released = 0, quarantined = 0, heap = 0;
+        if (_grail_dealloc_stats != NULL) _grail_dealloc_stats(&allocated, &released, &quarantined);
+#if defined(__APPLE__)
+        malloc_statistics_t st;
+        malloc_zone_statistics(NULL, &st);
+        heap = st.size_in_use;
+#elif defined(__GLIBC__)
+        heap = mallinfo2().uordblks;
+#endif
+        return Py_BuildValue("(nnnn)", (Py_ssize_t)allocated, (Py_ssize_t)released,
+                             (Py_ssize_t)quarantined, (Py_ssize_t)heap);
+    }
     /* Whether decrementing a static object's count leaves it unchanged, as
        CPython 3.14 does for an immortal object: the singletons, static
        types, and this module's own type, which the shim's PyType_Ready
@@ -1155,6 +1193,100 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
             PyList_Append(out, before == during ? Py_True : Py_False);
         }
         return out;
+    }
+    /* PySequence_GetItem answers a new reference, from a list or a tuple
+       alike: what it adds to the item's count, which CPython makes 1 each.
+       numpy's concatenate DECREFs each item it gets. */
+    if (IS("sequence_getitem_ref")) {
+        PyObject *item = PyList_New(0);
+        PyObject *list = PyList_New(0);
+        PyList_Append(list, item);
+        PyObject *tuple = PyTuple_Pack(1, item);
+        Py_ssize_t before = Py_REFCNT(item);
+        PyObject *got = PySequence_GetItem(list, 0);
+        Py_ssize_t from_list = Py_REFCNT(item) - before;
+        Py_XDECREF(got);
+        got = PySequence_GetItem(tuple, 0);
+        Py_ssize_t from_tuple = Py_REFCNT(item) - before;
+        Py_XDECREF(got);
+        Py_DECREF(tuple);
+        Py_DECREF(list);
+        Py_DECREF(item);
+        return Py_BuildValue("(nn)", from_list, from_tuple);
+    }
+    /* Quarantine mode keeps what it releases.  A Buf has neither destructor
+       nor free of its own, as numpy's ndarray has none, so it is released
+       through object's.  What one release moves the counts by: (released,
+       quarantined), (1, 1) when the block is kept. */
+    if (IS("quarantine_keeps")) {
+        if (_grail_dealloc_set_mode == NULL || _grail_dealloc_stats == NULL) Py_RETURN_NONE;
+        size_t a0, r0, q0, a1, r1, q1;
+        PyObject *b = Buf_Type.tp_alloc(&Buf_Type, 0);
+        if (b == NULL) return NULL;
+        int was = _grail_dealloc_set_mode(GRAIL_DEALLOC_QUARANTINE);
+        _grail_dealloc_stats(&a0, &r0, &q0);
+        Py_DECREF(b);
+        _grail_dealloc_stats(&a1, &r1, &q1);
+        _grail_dealloc_set_mode(was);
+        return Py_BuildValue("(nn)", (Py_ssize_t)(r1 - r0), (Py_ssize_t)(q1 - q0));
+    }
+    /* What each API that answers a new reference adds to the count of the C
+       object it answers, which CPython makes 1 each.  a is (buf, obj,
+       mapping, func, it), where obj.b, obj + obj, obj == obj, mapping['b'],
+       func() and next(it) are all buf.  Each reference is released before the next.
+       Py_BuildValue's dict is a Grail dict, which holds buf through its
+       proxy, and the proxy's one reference is all buf has from Grail: so
+       that one adds nothing, where CPython's dict adds 1. */
+    if (IS("new_refs")) {
+        PyObject *buf = PyTuple_GetItem(a, 0), *obj = PyTuple_GetItem(a, 1);
+        PyObject *mapping = PyTuple_GetItem(a, 2), *func = PyTuple_GetItem(a, 3);
+        PyObject *key = PyUnicode_FromString("b");
+        PyObject *var = PyContextVar_New("_grail_demo_new_refs", NULL);
+        PyObject *token = PyContextVar_Set(var, buf);
+        PyObject *out = PyList_New(0);
+        Py_ssize_t before;
+        PyObject *r;
+#define NEW_REF_DELTA(expr) do { before = Py_REFCNT(buf); r = (expr); \
+            PyObject *n = PyLong_FromSsize_t(Py_REFCNT(buf) - before); \
+            PyList_Append(out, n); Py_DECREF(n); Py_XDECREF(r); } while (0)
+        NEW_REF_DELTA(PyObject_GetAttrString(obj, "b"));
+        NEW_REF_DELTA(PyObject_GetItem(mapping, key));
+        NEW_REF_DELTA(PyObject_CallObject(func, NULL));
+        NEW_REF_DELTA(PyNumber_Add(obj, obj));
+        NEW_REF_DELTA(PyObject_RichCompare(obj, obj, Py_EQ));
+        NEW_REF_DELTA(PyTuple_Pack(1, buf));
+        NEW_REF_DELTA(Py_BuildValue("(O)", buf));
+        Py_INCREF(buf);   /* N takes this one */
+        before = Py_REFCNT(buf) - 1;
+        r = Py_BuildValue("(N)", buf);
+        { PyObject *n = PyLong_FromSsize_t(Py_REFCNT(buf) - before);
+          PyList_Append(out, n); Py_DECREF(n); Py_XDECREF(r); }
+        NEW_REF_DELTA(Py_BuildValue("[O]", buf));
+        NEW_REF_DELTA(Py_BuildValue("{s:O}", "b", buf));
+        PyObject *v = NULL;
+        before = Py_REFCNT(buf);
+        PyContextVar_Get(var, NULL, &v);
+        { PyObject *n = PyLong_FromSsize_t(Py_REFCNT(buf) - before);
+          PyList_Append(out, n); Py_DECREF(n); Py_XDECREF(v); }
+        /* PySequence_Fast's list holds what an iterator gave it, once. */
+        NEW_REF_DELTA(PySequence_Fast(PyTuple_GetItem(a, 4), "not iterable"));
+#undef NEW_REF_DELTA
+        Py_XDECREF(token);
+        Py_XDECREF(var);
+        Py_DECREF(key);
+        return out;
+    }
+    /* PyIter_Next answers a new reference too: what one call adds to the
+       count of the C object a Grail iterator yields, which CPython makes 1. */
+    if (IS("iter_next_ref")) {
+        PyObject *got = PyIter_Next(a);
+        if (got == NULL) Py_RETURN_NONE;
+        Py_ssize_t before = Py_REFCNT(got);
+        PyObject *again = PyIter_Next(a);
+        Py_ssize_t added = again == got ? Py_REFCNT(got) - before : -1;
+        Py_XDECREF(again);
+        Py_DECREF(got);
+        return PyLong_FromSsize_t(added);
     }
     /* The exception types numpy raises from C under np.errstate. */
     if (IS("raise_fpe")) {

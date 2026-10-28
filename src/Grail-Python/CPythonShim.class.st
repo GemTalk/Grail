@@ -1218,6 +1218,21 @@ CPythonShim >> ___removeModule: modules named: aName [
 
 ]
 
+{ #category : 'Grail-Wrapping' }
+CPythonShim >> ___retainForeignPointer: ptrInt [
+	"Add one to the reference count of the C object at ptrInt, as C's
+	Py_INCREF does: written straight into its ob_refcnt, so it needs no user
+	action and can run inside one.  An immortal count -- its low 32 bits
+	negative, CPython 3.14's rule -- is left alone."
+
+	| word count |
+	word := CByteArray fromCPointer: (CPointer forAddress: ptrInt) numBytes: 8.
+	count := word int64At: 0.
+	(count bitAnd: 16r80000000) = 0 ifFalse: [^ self].
+	word int64At: 0 put: count + 1
+
+]
+
 { #category : 'Grail-Calling' }
 CPythonShim >> ___shimErrorTextFor: anException [
 	"Answer ``<PythonExceptionName>: <text>'' for an exception the C shim
@@ -2281,7 +2296,14 @@ CPythonShim >> foreignProxyForPointer: ptrInt typeName: nameStr [
 	DType) so Grail code that receives it can use it.  Called from the C
 	shim's pyobj_oop when a foreign object crosses into Grail.  The map is
 	session-scoped (foreign pointers die with the process) and lives in
-	SessionTemps, so the committed singleton's shape is untouched."
+	SessionTemps, so the committed singleton's shape is untouched.
+
+	A new proxy takes a reference to its C object (___retainForeignPointer:),
+	so C cannot free an object Grail holds: one passed to a Python callback
+	as a borrowed argument and kept would otherwise dangle once the shim
+	frees objects (docs/Shim_Memory.md, Step 1).  The map holds proxies for
+	the session, so the reference is never released yet; Step 2 releases it
+	when the proxy is collected."
 
 	| map |
 	map := SessionTemps current
@@ -2290,6 +2312,7 @@ CPythonShim >> foreignProxyForPointer: ptrInt typeName: nameStr [
 	^ map at: ptrInt ifAbsent: [ | p |
 		p := ShimForeignObject new.
 		p setCPtr: ptrInt typeName: nameStr.
+		self ___retainForeignPointer: ptrInt.
 		map at: ptrInt put: p.
 		p ]
 
@@ -3642,6 +3665,17 @@ CPythonShim >> PyUnicode_UTF8Buffer: aString [
 
 ]
 
+{ #category : 'Grail-Management' }
+CPythonShim >> shimFreesCObjects [
+	"Whether the C shim releases C objects whose count reaches zero, as its
+	_Py_Dealloc reads GRAIL_SHIM_DEALLOC: unless it is off, which is the way
+	back to the shim's behaviour before docs/Shim_Memory.md, Step 1.  The
+	sweep waits while it does."
+
+	^ (System gemEnvironmentVariable: 'GRAIL_SHIM_DEALLOC') ~= 'off'
+
+]
+
 { #category : 'Grail-Private' }
 CPythonShim >> storeOop: anOop in: aCByteArray at: offset [
 	"Store a 64-bit OOP into a CByteArray at the given byte offset.
@@ -3658,9 +3692,18 @@ CPythonShim >> storeOop: anOop in: aCByteArray at: offset [
 
 { #category : 'Grail-Management' }
 CPythonShim >> sweep [
-	"Remove PyObject wrappers whose refcount has reached zero."
+	"Remove PyObject wrappers whose refcount has reached zero.
+
+	Not while the shim frees C objects (shimFreesCObjects, the default): a
+	freed container releases its items, and a wrapper's count is not
+	yet honest -- a cached wrapper is handed out as a new reference without
+	being incremented -- so it can reach zero while C still holds it.
+	docs/Shim_Memory.md, Step 3 makes the counts honest and turns this back
+	on.  It reclaims almost nothing today anyway (0 in about 150,000 wraps,
+	measured on test_re)."
 
 	| map toRemove |
+	self shimFreesCObjects ifTrue: [^ self].
 	"Read the session's map directly so a sweep before anything has been
 	wrapped does not create one."
 	map := SessionTemps current at: #GrailShimWrapperMap otherwise: nil.

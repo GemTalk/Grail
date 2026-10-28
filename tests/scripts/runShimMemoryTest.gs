@@ -8,10 +8,11 @@ output pushnew runShimMemoryTest.out
 ! between, is what each call retains -- what a long-running numpy program
 ! accumulates until it runs out of memory.
 !
-! It REPORTS and does not fail: today the shim frees nothing, so the number
-! is large, and the steps in docs/Shim_Memory.md exist to bring it down.  A
-! later step gives it a threshold.  It fails only when the workload cannot
-! run.
+! It REPORTS and does not fail: the proxies, origins and wrappers a call
+! leaves hold Grail memory until Steps 2 and 3 of docs/Shim_Memory.md, so the
+! number is still large.  Step 1 frees C objects, which the C heap line
+! shows.  A later step gives it a threshold.  It fails only when the
+! workload cannot run.
 !
 ! The workload defaults to tests/scripts/shim_memory_workload.py, which needs
 ! lib/_grail_demo.so (built by install.sh) and is skipped without it.
@@ -35,7 +36,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out path batch demo mod used first last batches perCall |
+| out path batch demo mod used first last batches perCall heap stats |
 out := GsFile stdout.
 path := System gemEnvironmentVariable: 'GRAIL_SHIM_MEMORY_WORKLOAD'.
 (path isNil or: [path isEmpty]) ifTrue: [
@@ -52,12 +53,24 @@ mod := importlib loadModuleFromPath: path name: 'shim_memory_workload'.
 which is memory kept once, not per call."
 mod @env1:step: batch.
 used := OrderedCollection new.
+heap := OrderedCollection new.
 1 to: batches do: [:i |
   mod @env1:step: batch.
   System _vmMarkSweep.
   used add: System _tempObjSpaceUsed.
+  "A workload that defines memory() -- (allocated, released, quarantined,
+  C heap bytes), from _grail_demo -- also reports the C side, which is what
+  Step 1 frees: _tempObjSpaceUsed sees only Grail's objects."
+  stats := [mod @env1:memory] on: Error do: [:e | e return: nil].
   out nextPutAll: 'SHIM-MEMORY | batch '; print: i;
-    nextPutAll: ' | '; print: used last // 1024; nextPutAll: ' KB in use'; cr].
+    nextPutAll: ' | '; print: used last // 1024; nextPutAll: ' KB in use'.
+  stats ifNotNil: [
+    heap add: (stats at: 4).
+    out nextPutAll: ' | allocated '; print: (stats at: 1);
+      nextPutAll: ' | released '; print: (stats at: 2);
+      nextPutAll: ' | quarantined '; print: (stats at: 3);
+      nextPutAll: ' | C heap '; print: (stats at: 4) // 1024; nextPutAll: ' KB'].
+  out cr].
 first := used first.
 last := used last.
 perCall := (last - first) // ((batches - 1) * batch).
@@ -65,6 +78,10 @@ out nextPutAll: 'SHIM-MEMORY | '; nextPutAll: path;
   nextPutAll: ' | '; print: perCall;
   nextPutAll: ' bytes per call retained after a mark-sweep ('; print: (batches - 1) * batch;
   nextPutAll: ' calls)'; cr.
+heap size = batches ifTrue: [
+  out nextPutAll: 'SHIM-MEMORY | '; nextPutAll: path; nextPutAll: ' | ';
+    print: (heap last - heap first) // ((batches - 1) * batch);
+    nextPutAll: ' bytes of C heap per call'; cr].
 ExitClientError signal: 'shim memory measured' status: 0
 %
 logout

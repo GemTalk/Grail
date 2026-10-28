@@ -27,6 +27,7 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <execinfo.h>
+#include <unistd.h>     /* getpid, sleep: GRAIL_SHIM_DEALLOC_PAUSE */
 #include <stdarg.h>
 #include <dlfcn.h>
 #include <ctype.h>
@@ -111,6 +112,10 @@ static OopType real_obj_to_oop(PyObject *obj);
 static void register_shim_type(PyTypeObject *t);   /* shim type registry */
 static int is_shim_type(PyTypeObject *t);          /* type the shim created */
 static int is_foreign(PyObject *obj);              /* not a Grail wrapper */
+static int dealloc_mode(void);                     /* GRAIL_SHIM_DEALLOC; 0 when off */
+static int is_freed(PyObject *op);                 /* quarantined (GRAIL_SHIM_DEALLOC) */
+static const char *freed_type_name_ext(const void *p);   /* "?" when never quarantined */
+static void report_freed_use(const char *where, PyObject *op);
 static OopType foreign_number_oop(PyObject *obj, int want_float); /* nb_* slot */
 static OopType foreign_proxy_oop(PyObject *obj);   /* reverse proxy bridge */
 static int is_foreign_type(PyObject *obj);         /* a wheel's type object */
@@ -236,6 +241,7 @@ static inline OopType pyobj_oop(PyObject *obj) {
        stderr line is the attribution; CHECK_pyObj raises at the API
        boundary, where there is a return path. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("pyobj_oop", obj); return none_oop; }
+    if (is_freed(obj)) report_freed_use("pyobj_oop", obj);
     if (has_grail_prefix(obj)) {
         OopType oop = *(OopType *)((char *)obj - 8);
         return oop != 0 ? oop : prefixed_value_oop(obj);
@@ -262,6 +268,23 @@ static inline OopType pyobj_oop(PyObject *obj) {
 /* Convert a SmallInteger OOP (memory address) to a PyObject pointer. */
 static inline PyObject *addr_to_pyobj(OopType addrOop) {
     return (PyObject *)(intptr_t)GciOopToI64(addrOop);
+}
+
+static int grail_owned(PyObject *o);   /* with _Py_Dealloc */
+/* A reference for the caller of an API whose CPython contract answers a new
+   one.  A C object's count goes up -- its release now frees it
+   (docs/Shim_Memory.md, Step 1); a Grail wrapper's is left to Step 3. */
+static inline PyObject *c_new_ref(PyObject *p) {
+    if (p != NULL && plausible_pyobj(p) && !_Py_IsImmortal(p) && !grail_owned(p)) Py_INCREF(p);
+    return p;
+}
+static inline PyObject *new_ref_from(OopType addrOop) {
+    return c_new_ref(addr_to_pyobj(addrOop));
+}
+/* The shim's own release of such a reference: a C object's count goes
+   down, a Grail wrapper's is left alone, as c_new_ref left it. */
+static inline void c_release(PyObject *p) {
+    if (p != NULL && plausible_pyobj(p) && !_Py_IsImmortal(p) && !grail_owned(p)) Py_DECREF(p);
 }
 
 static int64 oopToLongWithIndex(OopType oop, const char *ctype = "long");  /* forward decl */
@@ -304,7 +327,19 @@ PyTypeObject PyByteArray_Type;
 PyTypeObject PyFunction_Type;
 PyTypeObject PyModule_Type;
 
-/* Helper to initialize a type object with common fields */
+static void grail_object_dealloc(PyObject *op);   /* below, with _Py_Dealloc */
+/* cpython.h makes PyObject_Free libc's free, for the shim's own C modules.
+   Here it is the exported one, which quarantine mode tells from a free: it
+   is every type's tp_free (init_type), and as free numpy's ndarray, which
+   inherits it, went back to malloc instead of into quarantine. */
+#undef PyObject_Free
+extern "C" void PyObject_Free(void *ptr);          /* shim_numpy.cc */
+
+/* Helper to initialize a type object with common fields.  Every one gets
+   CPython's default destructor and free, so a wheel's type that inherits
+   from it can be freed (docs/Shim_Memory.md, Step 1).  A Grail wrapper with
+   one of these types never reaches them: _Py_Dealloc leaves it to the
+   sweep. */
 static void init_type(PyTypeObject *type, const char *name,
                       PyTypeObject *base, unsigned long flags) {
     memset(type, 0, sizeof(PyTypeObject));
@@ -313,6 +348,8 @@ static void init_type(PyTypeObject *type, const char *name,
     type->tp_name = name;
     type->tp_base = base;
     type->tp_flags = flags | Py_TPFLAGS_READY;
+    type->tp_dealloc = grail_object_dealloc;
+    type->tp_free = PyObject_Free;
 }
 
 static void init_exception_types(void);   /* below, with the exception objects */
@@ -402,7 +439,7 @@ static PyObject *grail_static_type_call(PyTypeObject *type, PyObject *args, PyOb
         r = GciPerform(server, "PyObject_Call:args:", cargs, 2);
     }
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(r);
+    return new_ref_from(r);
 }
 
 /* bytes.__new__(type, ...): Grail's bytes() decides the value, and a SUBTYPE
@@ -976,11 +1013,8 @@ struct _object _Py_NoneStruct  = { GRAIL_IMMORTAL_REFCNT, &_PyNone_Type };
 _GrailLongSingleton _Py_TrueStruct  = { { GRAIL_IMMORTAL_REFCNT, NULL }, 0x8, { 1, 0 } };  /* ob_type set by shimInit */
 _GrailLongSingleton _Py_FalseStruct = { { GRAIL_IMMORTAL_REFCNT, NULL }, 0x1, { 0, 0 } };  /* ob_type set by shimInit */
 
-/* _Py_Dealloc — called when refcount hits zero.
-   In the shim, object lifetime is managed by GemStone. No-op. */
-extern "C" void _Py_Dealloc(PyObject *op) {
-    (void)op;
-}
+/* _Py_Dealloc -- called when a count reaches zero -- is defined below, with
+   the real-layout objects it frees (docs/Shim_Memory.md, Step 1). */
 
 /* ====================================================================
  * Error state (single-threaded)
@@ -2416,6 +2450,10 @@ typedef struct {
    full: numpy makes dozens of real tuples per ufunc call, and after a few
    thousand calls a new tuple went unrecorded, read as a Grail object, and
    PyTuple_SetItem sent at:put: to a foreign pointer. */
+/* Objects the shim has allocated: real-layout tuples and lists, and a
+   wheel's objects through the generic allocators.  With _Py_Dealloc's
+   release count, the memory measurement shows how many stay live. */
+static size_t g_alloc_objects = 0;
 static PyObject **g_real_reg = NULL;
 static size_t     g_real_reg_cap = 0;   /* power of two */
 static size_t     g_real_reg_count = 0;
@@ -2451,6 +2489,7 @@ static void real_reg_add(PyObject *p) {
     }
     g_real_reg[i] = p;
     g_real_reg_count++;
+    g_alloc_objects++;
 }
 static int is_real_layout(PyObject *obj) {
     if (g_real_reg_count == 0 || obj == NULL) return 0;
@@ -2460,6 +2499,30 @@ static int is_real_layout(PyObject *obj) {
         i = (i + 1) & (g_real_reg_cap - 1);
     }
     return 0;
+}
+/* Forget p when it is freed: its address can then be reused by anything.
+   Backward-shift deletion -- each later entry of the probe run moves into
+   the hole unless its home slot lies cyclically in (hole, entry] -- keeps
+   every entry reachable from its home slot without tombstones. */
+static void real_reg_remove(PyObject *p) {
+    if (g_real_reg_count == 0 || p == NULL) return;
+    size_t mask = g_real_reg_cap - 1;
+    size_t i = real_reg_slot(p, g_real_reg_cap);
+    while (g_real_reg[i] != p) {
+        if (g_real_reg[i] == NULL) return;
+        i = (i + 1) & mask;
+    }
+    g_real_reg[i] = NULL;
+    g_real_reg_count--;
+    for (size_t j = (i + 1) & mask; g_real_reg[j] != NULL; j = (j + 1) & mask) {
+        size_t h = real_reg_slot(g_real_reg[j], g_real_reg_cap);
+        int stays = i <= j ? (h > i && h <= j) : (h > i || h <= j);
+        if (!stays) {
+            g_real_reg[i] = g_real_reg[j];
+            g_real_reg[j] = NULL;
+            i = j;
+        }
+    }
 }
 
 /* ====================================================================
@@ -2553,6 +2616,21 @@ static void report_bad_pyobj(const char *where, const void *p) {
    dangerous than the offset-24 read is_foreign already did to get us here;
    the caller has checked plausible_pyobj. */
 static void report_pyobj_words(const void *p) {
+    /* Where a block can be freed (GRAIL_SHIM_DEALLOC is not off), also say
+       who handed it over. */
+    if (dealloc_mode()) {
+        void *frames[32];
+        int n = backtrace(frames, 32);
+        backtrace_symbols_fd(frames, n, 2);
+        fprintf(stderr, "SHIM-BADPTR   quarantined earlier as: %s\n", freed_type_name_ext(p));
+        /* GRAIL_SHIM_DEALLOC_PAUSE: stop here long enough to ask the malloc
+           history of the block (MallocStackLogging=1; malloc_history PID ADDR). */
+        if (getenv("GRAIL_SHIM_DEALLOC_PAUSE") != NULL) {
+            fprintf(stderr, "SHIM-PAUSE pid %d block %p\n", (int)getpid(), p);
+            fflush(stderr);
+            sleep(120);
+        }
+    }
     const uint64_t *w = (const uint64_t *)p;
     fprintf(stderr, "SHIM-BADPTR   block@%p words [0]=0x%llx [1]=0x%llx "
                     "[2]=0x%llx [3]=0x%llx (a live wrapper has [3]=0x%llx)\n",
@@ -2573,6 +2651,7 @@ static int is_foreign(PyObject *obj) {
        this predicate total; pyobj_oop raises on the same condition, so the
        caller gets a reportable error rather than a proxy for garbage. */
     if (!plausible_pyobj(obj)) { report_bad_pyobj("is_foreign", obj); return 0; }
+    if (is_freed(obj)) report_freed_use("is_foreign", obj);
     if (is_real_layout(obj)) return 0;
     if (has_grail_prefix(obj)) return 0;   /* a Grail int, str, bytes, complex, slice or bytearray */
     /* A subtype body IS a C object -- the base's slots, through its subtype
@@ -2705,6 +2784,244 @@ typedef struct {
     PyObject     *ob_item[1];   /* inline, flexible (offset 32) */
 } ShimTupleObject;
 
+/* ====================================================================
+ * Deallocation (docs/Shim_Memory.md, Step 1)
+ *
+ * GRAIL_SHIM_DEALLOC chooses what a count reaching zero does:
+ *   unset or "free" the object is freed;
+ *   "quarantine"    every destructor runs, but each object that would be
+ *                   freed is poisoned instead and kept, and a later use of
+ *                   it is reported and aborts the gem;
+ *   "off"           nothing -- the shim's behaviour before Step 1, kept as
+ *                   a way back.
+ * Freeing became the default once the census, numpy's own test modules,
+ * SUnit and the CPython suite ran clean in quarantine mode.
+ *
+ * What is freed: a tuple or list the shim built in CPython's layout (its
+ * items are released first), and a wheel's own object (through its type's
+ * tp_dealloc, which ends in tp_free).  Never: an immortal object, a Grail
+ * wrapper (its memory is a CByteArray's, and reaching zero only makes it
+ * eligible for CPythonShim>>sweep), a subtype body (Grail memory) or a type
+ * mirror.
+ * ==================================================================== */
+enum { DEALLOC_OFF = 0, DEALLOC_QUARANTINE = 1, DEALLOC_FREE = 2 };
+static int g_dealloc_mode = -1;
+static int dealloc_mode(void) {
+    if (g_dealloc_mode < 0) {
+        const char *m = getenv("GRAIL_SHIM_DEALLOC");
+        g_dealloc_mode = m == NULL ? DEALLOC_FREE
+            : strcmp(m, "quarantine") == 0 ? DEALLOC_QUARANTINE
+            : strcmp(m, "off") == 0 ? DEALLOC_OFF
+            : DEALLOC_FREE;
+    }
+    return g_dealloc_mode;
+}
+
+/* A quarantined object: its type becomes this one, the rest of its body is
+   filled with 0xDB (so an inline read of a field yields an unmistakable
+   0xdbdbdbdb... pointer), and its address and original type are recorded. */
+static PyTypeObject GrailFreed_Type;
+typedef struct { void *addr; const char *tp_name; } FreedRecord;
+static FreedRecord *g_freed = NULL;
+static size_t g_freed_count = 0, g_freed_cap = 0;
+
+static int is_freed(PyObject *op) {
+    return op != NULL && op->ob_type == &GrailFreed_Type;
+}
+static const char *freed_type_name(void *p);
+static const char *freed_type_name_ext(const void *p) { return freed_type_name((void *)p); }
+static const char *freed_type_name(void *p) {
+    for (size_t i = g_freed_count; i > 0; i--)
+        if (g_freed[i - 1].addr == p) return g_freed[i - 1].tp_name;
+    return "?";
+}
+/* Always printed, and the gem stops: quarantine mode exists to find these. */
+static void report_freed_use(const char *where, PyObject *op) {
+    fprintf(stderr, "SHIM-QUARANTINE %s: %p is a freed %s\n",
+            where, (void *)op, freed_type_name(op));
+    fflush(stderr);
+    abort();
+}
+/* GRAIL_SHIM_DEALLOC_TRACE names a type (its tp_name, as a report gives
+   it): each release of one prints a C backtrace, so a "released twice"
+   report can be paired with the release that came first. */
+static void trace_release(PyObject *op) {
+    static const char *want = (const char *)-1;
+    if (want == (const char *)-1) want = getenv("GRAIL_SHIM_DEALLOC_TRACE");
+    if (want == NULL || op->ob_type == NULL || !plausible_pyobj(op->ob_type)) return;
+    const char *nm = op->ob_type->tp_name;
+    if (nm == NULL || strcmp(nm, want) != 0) return;
+    void *frames[48];
+    int n = backtrace(frames, 48);
+    fprintf(stderr, "SHIM-DEALLOC-TRACE release of %s at %p (count %ld):\n", nm, (void *)op, (long)op->ob_refcnt);
+    fflush(stderr);
+    backtrace_symbols_fd(frames, n, 2);
+}
+
+static void quarantine(PyObject *op, size_t size) {
+    if (GrailFreed_Type.tp_name == NULL) {
+        GrailFreed_Type.ob_base.ob_base.ob_refcnt = GRAIL_IMMORTAL_REFCNT;
+        GrailFreed_Type.ob_base.ob_base.ob_type = &PyType_Type;
+        GrailFreed_Type.tp_name = "grail-freed-object";
+        GrailFreed_Type.tp_basicsize = sizeof(PyObject);
+    }
+    if (g_freed_count == g_freed_cap) {
+        size_t cap = g_freed_cap ? g_freed_cap * 2 : 4096;
+        FreedRecord *r = (FreedRecord *)realloc(g_freed, cap * sizeof(FreedRecord));
+        if (r == NULL) abort();
+        g_freed = r;
+        g_freed_cap = cap;
+    }
+    PyTypeObject *t = op->ob_type;
+    g_freed[g_freed_count].addr = op;
+    g_freed[g_freed_count].tp_name = (t != NULL && plausible_pyobj(t) && t->tp_name) ? t->tp_name : "?";
+    g_freed_count++;
+    if (size > sizeof(PyObject)) memset((char *)op + sizeof(PyObject), 0xDB, size - sizeof(PyObject));
+    op->ob_refcnt = 1;        /* one decrement more reaches _Py_Dealloc, which reports it */
+    op->ob_type = &GrailFreed_Type;
+}
+
+/* The object whose tp_dealloc is running, so that its tp_free can be told
+   from a free of anything else: in quarantine mode PyObject_Free and
+   PyObject_GC_Del keep that one block (_grail_dealloc_keeps). */
+static PyObject *g_dealloc_target = NULL;
+static int g_dealloc_target_freed = 0;
+extern "C" int _grail_dealloc_keeps(void *p) {
+    if (p == NULL || p != (void *)g_dealloc_target || g_dealloc_mode != DEALLOC_QUARANTINE)
+        return 0;
+    g_dealloc_target_freed = 1;
+    return 1;
+}
+
+/* How many objects _Py_Dealloc has released, for the memory measurement
+   (tests/scripts/runShimMemoryTest.gs, through _grail_demo). */
+static size_t g_dealloc_released = 0;
+extern "C" void _grail_dealloc_stats(size_t *allocated, size_t *released, size_t *quarantined) {
+    *allocated = g_alloc_objects;
+    *released = g_dealloc_released;
+    *quarantined = g_freed_count;
+}
+/* Sets the mode, answering the one it replaces: for _grail_demo's test of
+   quarantine mode itself, in a session that runs with it off. */
+extern "C" int _grail_dealloc_set_mode(int mode) {
+    int was = dealloc_mode();
+    g_dealloc_mode = mode;
+    return was;
+}
+
+static void release_block(PyObject *op, size_t size, int mode) {
+    g_dealloc_released++;
+    if (mode == DEALLOC_QUARANTINE) quarantine(op, size);
+    else free(op);
+}
+
+static void real_dealloc(PyObject *op, int mode) {
+    trace_release(op);
+    real_reg_remove(op);
+    size_t size;
+    if (op->ob_type == &PyTuple_Type) {
+        ShimTupleObject *t = (ShimTupleObject *)op;
+        for (Py_ssize_t i = 0; i < t->ob_size; i++) Py_XDECREF(t->ob_item[i]);
+        size = sizeof(ShimTupleObject) + (size_t)(t->ob_size > 0 ? t->ob_size - 1 : 0) * sizeof(PyObject *);
+    } else {
+        ShimListObject *l = (ShimListObject *)op;
+        for (Py_ssize_t i = 0; i < l->ob_size; i++) Py_XDECREF(l->ob_item[i]);
+        /* The item array too -- kept and poisoned in quarantine mode, so a
+           read through a stale ob_item shows as 0xdbdb... */
+        if (mode == DEALLOC_QUARANTINE) {
+            if (l->ob_item != NULL && l->allocated > 0)
+                memset(l->ob_item, 0xDB, (size_t)l->allocated * sizeof(PyObject *));
+        } else {
+            free(l->ob_item);
+        }
+        size = sizeof(ShimListObject);
+    }
+    release_block(op, size, mode);
+}
+
+static void foreign_dealloc(PyObject *op, int mode) {
+    PyTypeObject *t = op->ob_type;
+    if (t == NULL || !plausible_pyobj(t)) return;
+    trace_release(op);
+    size_t size = t->tp_basicsize > 0 ? (size_t)t->tp_basicsize : sizeof(PyObject);
+    PyObject *saved = g_dealloc_target;
+    int saved_freed = g_dealloc_target_freed;
+    g_dealloc_target = op;
+    g_dealloc_target_freed = 0;
+    /* A destructor must not clobber an error being reported (CPython's
+       subtype_dealloc keeps it the same way). */
+    PyObject *et, *ev, *etb;
+    PyErr_Fetch(&et, &ev, &etb);
+    if (t->tp_dealloc != NULL) t->tp_dealloc(op);
+    else if (mode == DEALLOC_QUARANTINE) g_dealloc_target_freed = 1;
+    else free(op);
+    PyErr_Restore(et, ev, etb);
+    int freed = g_dealloc_target_freed;
+    g_dealloc_target = saved;
+    g_dealloc_target_freed = saved_freed;
+    g_dealloc_released++;
+    if (mode == DEALLOC_QUARANTINE && freed) quarantine(op, size);
+}
+
+extern "C" void _Py_Dealloc(PyObject *op) {
+    int mode = dealloc_mode();
+    if (mode == DEALLOC_OFF || op == NULL || !plausible_pyobj(op)) return;
+    if (is_freed(op)) { report_freed_use("_Py_Dealloc (released twice)", op); return; }
+    if (_Py_IsImmortal(op)) return;
+    if (has_grail_prefix(op)) return;
+    if (is_real_layout(op)) { real_dealloc(op, mode); return; }
+    if (is_subtype_body(op) || is_type_mirror(op)) return;
+    if (is_grail_wrapper_magic(*(uint64_t *)((char *)op + 24))) return;
+    foreign_dealloc(op, mode);
+}
+
+/* What a type with no destructor of its own inherits: CPython's
+   object_dealloc, which is its tp_free.  Set on the shim's own types, so a
+   wheel's type that inherits from one has a tp_dealloc and a tp_free. */
+static void grail_object_dealloc(PyObject *op) {
+    freefunc f = op->ob_type->tp_free;
+    if (f != NULL) f(op);
+    else PyObject_Free(op);
+}
+
+/* Memory Grail owns behind a PyObject*: a wrapper, a prefixed int, str or
+   bytes, a subtype body or a type mirror.  Its count is not yet honest --
+   CPythonShim>>wrap: resets it instead of adding one per handout (Step 3) --
+   so Step 1 releases only what C allocated. */
+static int grail_owned(PyObject *o) {
+    if (has_grail_prefix(o)) return 1;
+    if (is_real_layout(o)) return 0;
+    return is_subtype_body(o) || is_type_mirror(o)
+        || is_grail_wrapper_magic(*(uint64_t *)((char *)o + 24));
+}
+
+static PyObject *real_layout_arg(PyObject *o, int depth);   /* below */
+
+/* A reference of its own to an argument the shim puts in a tuple or an
+   array it will release after the call: real_layout_arg's copy is new
+   already; anything else is the caller's and gets an increment, which the
+   release balances. */
+static PyObject *arg_ref(PyObject *o, int depth) {
+    PyObject *r = real_layout_arg(o, depth);
+    if (r == o) Py_XINCREF(r);
+    return r;
+}
+
+/* Release a copy real_layout_arg made of an argument, after the call. */
+static void release_arg_copy(PyObject *copy, PyObject *original) {
+    if (copy != NULL && copy != original) Py_DECREF(copy);
+}
+
+/* The Grail value of a new reference C answered, then the reference
+   released, as a CPython caller releases a result it is done with.  A
+   proxy or a tuple origin record holds its own reference by now; a Grail
+   wrapper's count is left alone (grail_owned). */
+static OopType take_result(PyObject *r) {
+    OopType oop = pyobj_oop(r);
+    c_release(r);
+    return oop;
+}
+
 /* A type's tp_mro, read inline when it is a real-layout tuple -- the one
    grail_set_mro builds -- and nothing otherwise: PyType_IsSubtype runs on
    every type check, and asking the server for a Grail tuple's items there
@@ -2792,6 +3109,7 @@ static PyObject *real_layout_arg(PyObject *o, int depth) {
 
 /* real_layout_arg for the shim's other files (shim_pyo3.cc's gcm_call). */
 extern "C" PyObject *_grail_real_layout(PyObject *o) { return real_layout_arg(o, 0); }
+extern "C" void _grail_release(PyObject *o) { c_release(o); }
 
 /* Bridge a real-layout object to an equivalent Grail value's OOP.  Lists
    and tuples exist: build a fresh Grail collection and fill it with each
@@ -2811,8 +3129,11 @@ static OopType real_obj_to_oop(PyObject *obj) {
         }
         /* The Grail copy goes back to C as THIS object, so a wheel that reads
            it with PyTuple_GET_ITEM finds its own layout again
-           (CPythonShim>>___noteRealTuple:origin:). */
+           (CPythonShim>>___noteRealTuple:origin:).  The record holds a
+           reference to it, or C could free a tuple the copy still answers
+           (docs/Shim_Memory.md, Step 1; Step 2 releases it with the copy). */
         OopType gtOop = pyobj_oop(gt);
+        Py_INCREF(obj);
         OopType note[2] = { gtOop, GciI64ToOop((int64)(intptr_t)obj) };
         GciPerform(server, "___noteRealTuple:origin:", note, 2);
         return gtOop;
@@ -2860,7 +3181,8 @@ static void raise_error(const char *message);
       report_bad_pyobj( msg, anObj); \
       raise_error( msg " arg is not a PyObject* (an OOP or a corrupted slot)"); \
       return 0; \
-    }
+    } \
+    if (is_freed((PyObject *)(anObj))) report_freed_use(msg, (PyObject *)(anObj));
 
 extern "C" int PyList_Append(PyObject *list, PyObject *item) {
     CHECK_pyObj(list, "PyList_Append list");
@@ -3241,7 +3563,7 @@ static PyObject *do_import_via_server(const char *name) {
         fflush(stderr);
         return NULL;
     }
-    return addr_to_pyobj(r);               /* 0 if server returned 0 (not found) */
+    return new_ref_from(r);               /* 0 if server returned 0 (not found) */
 }
 
 extern "C" PyObject *_grail_import_level(PyObject *name, PyObject *globals, PyObject *locals,
@@ -3359,7 +3681,7 @@ extern "C" PyObject *PyContextVar_New(const char *name, PyObject *default_value)
             return NULL;
         }
     }
-    return addr_to_pyobj(r);
+    return new_ref_from(r);
 }
 
 extern "C" int PyContextVar_Get(PyObject *var, PyObject *default_value,
@@ -3372,7 +3694,10 @@ extern "C" int PyContextVar_Get(PyObject *var, PyObject *default_value,
     /* check_gci_error, not a bare GciErr: it also takes a raised callback,
        and it leaves C a pending error -- the -1 used to come with none. */
     if (check_gci_error()) return -1;
-    *value = addr_to_pyobj(r);
+    /* A new reference, as CPython's: numpy keeps the memory-handler capsule
+       it reads here in every array and releases it in array_dealloc, so the
+       first array freed freed the capsule (GRAIL_SHIM_DEALLOC=quarantine). */
+    *value = new_ref_from(r);
     return 0;
 }
 
@@ -3382,7 +3707,7 @@ extern "C" PyObject *PyContextVar_Set(PyObject *var, PyObject *value) {
     OopType args[2] = { pyobj_oop(var), pyobj_oop(value) };
     OopType r = GciPerform(server, "PyContextVar_Set:value:", args, 2);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(r);
+    return new_ref_from(r);
 }
 
 
@@ -4184,12 +4509,16 @@ static PyObject *foreign_op_invoke_slots(PyObject *self, const ForeignOpDef *d, 
             for (;;) {
                 PyObject *item = PyIter_Next(it);
                 if (item == NULL) {
+                    c_release(it);
                     if (PyErr_Occurred()) return NULL;
                     return foreign_bool_obj(0);
                 }
                 int eq = PyObject_RichCompareBool(item, a, Py_EQ);
-                if (eq < 0) return NULL;
-                if (eq) return foreign_bool_obj(1);
+                c_release(item);
+                if (eq != 0) {
+                    c_release(it);
+                    return eq < 0 ? NULL : foreign_bool_obj(1);
+                }
             }
         }
     }
@@ -4800,7 +5129,7 @@ extern "C" PyObject *PyObject_GetAttrString(PyObject *obj, const char *name) {
     OopType args[2] = { pyobj_oop(obj), GciNewString(name) };
     OopType addrOop = GciPerform(server, "PyObject_GetAttrString:name:", args, 2);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(addrOop);
+    return new_ref_from(addrOop);
 }
 
 extern "C" int PyObject_HasAttrString(PyObject *obj, const char *name) {
@@ -5272,6 +5601,7 @@ static void *allocate_module_state(PyModuleDef *def) {
 extern "C" PyObject *_PyObject_New(PyTypeObject *type) {
     PyObject *obj = (PyObject *)calloc(1, (size_t)type->tp_basicsize);
     if (!obj) return NULL;
+    g_alloc_objects++;
     obj->ob_refcnt = 1;
     obj->ob_type = type;
     return obj;
@@ -5281,6 +5611,7 @@ extern "C" PyVarObject *_PyObject_NewVar(PyTypeObject *type, Py_ssize_t nitems) 
     size_t size = (size_t)type->tp_basicsize + (size_t)nitems * (size_t)type->tp_itemsize;
     PyVarObject *obj = (PyVarObject *)calloc(1, size);
     if (!obj) return NULL;
+    g_alloc_objects++;
     obj->ob_base.ob_refcnt = 1;
     obj->ob_base.ob_type = type;
     obj->ob_size = nitems;
@@ -5289,7 +5620,7 @@ extern "C" PyVarObject *_PyObject_NewVar(PyTypeObject *type, Py_ssize_t nitems) 
 
 extern "C" void PyObject_GC_Track(void *op)   { (void)op; }
 extern "C" void PyObject_GC_UnTrack(void *op)  { (void)op; }
-extern "C" void PyObject_GC_Del(void *op)      { free(op); }
+extern "C" void PyObject_GC_Del(void *op)      { if (!_grail_dealloc_keeps(op)) free(op); }
 
 /* ====================================================================
  * CPython API — Integer (additional)
@@ -5549,6 +5880,12 @@ extern "C" PyObject *PyUnicode_Substring(PyObject *str, Py_ssize_t start,
  * CPython API — Tuple (additional)
  * ==================================================================== */
 
+/* The tuple holds a reference of its own to each item, as CPython's does:
+   PyTuple_SetItem steals one, so each is incremented first.  Without it a
+   caller that releases its own reference -- numpy's
+   add_and_return_legacy_wrapping_ufunc_loop packs (DTypes, method) and
+   releases both -- left the tuple holding freed objects once the shim
+   frees (found by GRAIL_SHIM_DEALLOC=quarantine). */
 extern "C" PyObject *PyTuple_Pack(Py_ssize_t n, ...) {
     PyObject *tuple = PyTuple_New(n);
     if (!tuple) return NULL;
@@ -5556,6 +5893,7 @@ extern "C" PyObject *PyTuple_Pack(Py_ssize_t n, ...) {
     va_start(vargs, n);
     for (Py_ssize_t i = 0; i < n; i++) {
         PyObject *item = va_arg(vargs, PyObject *);
+        Py_XINCREF(item);
         PyTuple_SetItem(tuple, i, item);
     }
     va_end(vargs);
@@ -5570,12 +5908,20 @@ extern "C" PyObject *PySequence_GetItem(PyObject *seq, Py_ssize_t i) {
     if (seq == NULL) {
       return addr_to_pyobj(OOP_NIL);
     }
-    if (PyList_Check(seq)) return PyList_GetItem(seq, i);
-    if (PyTuple_Check(seq)) return PyTuple_GetItem(seq, i);
-    OopType args[2] = { pyobj_oop(seq), GciI64ToOop(i) };
-    OopType r = GciPerform(server, "PySequence_GetItem:at:", args, 2);
-    if (check_gci_error()) return NULL;
-    return addr_to_pyobj(r);
+    /* A new reference, unlike PyList_GetItem/PyTuple_GetItem: numpy's
+       concatenate DECREFs each item it gets, and a borrowed one released
+       the list's own reference to it. */
+    PyObject *item = NULL;
+    if (PyList_Check(seq)) item = PyList_GetItem(seq, i);
+    else if (PyTuple_Check(seq)) item = PyTuple_GetItem(seq, i);
+    else {
+        OopType args[2] = { pyobj_oop(seq), GciI64ToOop(i) };
+        OopType r = GciPerform(server, "PySequence_GetItem:at:", args, 2);
+        if (check_gci_error()) return NULL;
+        return new_ref_from(r);
+    }
+    Py_XINCREF(item);
+    return item;
 }
 
 extern "C" Py_ssize_t PySequence_Length(PyObject *seq) {
@@ -5593,7 +5939,7 @@ extern "C" PyObject *PyObject_GetItem(PyObject *obj, PyObject *key) {
     OopType args[2] = { pyobj_oop(obj), pyobj_oop(key) };
     OopType result = GciPerform(server, "PyObject_GetItem:key:", args, 2);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    return new_ref_from(result);
 }
 
 extern "C" int PyObject_SetItem(PyObject *obj, PyObject *key, PyObject *value) {
@@ -5707,7 +6053,9 @@ extern "C" PyObject *PyObject_Call(PyObject *callable, PyObject *args,
        from a Grail wrapper that read the wrapper's magic as an item pointer,
        and np.dtype("S10,S9") segfaulted.  A copy, as for mp_subscript's
        answer: C mutating it does not reach the Grail list. */
-    return real_layout_arg(addr_to_pyobj(result), 0);
+    PyObject *p = addr_to_pyobj(result);
+    PyObject *r = real_layout_arg(p, 0);
+    return r == p ? c_new_ref(p) : r;
 }
 
 /* callable(*args) in Grail, whatever it is in C: the server half of
@@ -5718,7 +6066,7 @@ extern "C" PyObject *_grail_call_in_grail(PyObject *callable, PyObject *args) {
     OopType cargs[2] = { pyobj_oop(callable), args ? pyobj_oop(args) : OOP_NIL };
     OopType result = GciPerform(server, "PyObject_Call:args:", cargs, 2);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    return new_ref_from(result);
 }
 
 extern "C" PyObject *PyObject_CallOneArg(PyObject *callable, PyObject *arg) {
@@ -5815,7 +6163,7 @@ static PyObject *number_op(const char *op, int n, PyObject *a, PyObject *b, PyOb
                         GciI64ToOop(n) };
     OopType r = GciPerform(server, "PyNumber_Op:a:b:c:n:", args, 5);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(r);
+    return new_ref_from(r);
 }
 extern "C" PyObject *PyNumber_Add(PyObject *a, PyObject *b)         { return number_op("add", 2, a, b, NULL); }
 extern "C" PyObject *PyNumber_Subtract(PyObject *a, PyObject *b)    { return number_op("sub", 2, a, b, NULL); }
@@ -5914,7 +6262,7 @@ extern "C" PyObject *PyObject_RichCompare(PyObject *v, PyObject *w, int op) {
     OopType args[3] = { pyobj_oop(v), pyobj_oop(w), GciI64ToOop(op) };
     OopType result = GciPerform(server, "PyObject_RichCompare:with:op:", args, 3);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    return new_ref_from(result);
 }
 
 extern "C" PyObject *PyObject_Type(PyObject *obj) {
@@ -7185,14 +7533,19 @@ static OopType shimCall(OopType modOop, OopType methOop,
         pyArgs[5] = NULL;
     }
 
+    PyObject *given[6];
+    memcpy(given, pyArgs, sizeof(given));
     if (is_wheel_module(modName))
         for (int i = 0; i < nargs && i < 6; i++) pyArgs[i] = real_layout_arg(pyArgs[i], 0);
 
     /* 6. Call the method */
     PyObject *result = call_method(module, methIdx, pyArgs, nargs);
 
-    /* 7. Clear buffer cache (free materialized bytes/string buffers) */
+    /* 7. Clear buffer cache (free materialized bytes/string buffers), and
+       release the argument copies -- before the error check, which does
+       not return */
     buffer_cache_clear();
+    for (int i = 0; i < nargs && i < 6; i++) release_arg_copy(pyArgs[i], given[i]);
 
     /* 8. Check for error */
     check_and_raise_error();
@@ -7202,7 +7555,7 @@ static OopType shimCall(OopType modOop, OopType methOop,
         return OOP_NIL;
     if (returnCPtr)
         return GciI64ToOop((intptr_t)result);
-    OopType res = pyobj_oop(result);
+    OopType res = take_result(result);
     check_and_raise_error();
     return res;
 }
@@ -7271,10 +7624,15 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
         OopType valAddrOop = GciFetchOop(kwValsOop, GciOopToI64(idxOop));
         /* The name is already a Smalltalk String — wrap it as a PyObject */
         OopType nameAddr = GciPerform(server, "PyUnicode_FromString:", &nameOop, 1);
-        PyTuple_SetItem(kwnames, i, addr_to_pyobj(nameAddr));
+        /* The tuple owns a reference to its name: SetItem steals one */
+        PyObject *name = addr_to_pyobj(nameAddr);
+        Py_INCREF(name);
+        PyTuple_SetItem(kwnames, i, name);
         args[npos + i] = (PyObject *)(intptr_t)GciOopToI64(valAddrOop);
     }
 
+    PyObject *given[SHIM_KW_MAX_ARGS];
+    memcpy(given, args, sizeof(PyObject *) * (size_t)(npos + nkw));
     if (is_wheel_module(modName))
         for (Py_ssize_t i = 0; i < npos + nkw; i++) args[i] = real_layout_arg(args[i], 0);
 
@@ -7285,10 +7643,12 @@ static OopType shimCallKw(OopType modOop, OopType methOop,
                                          args, npos, kwnames, nkw);
 
     buffer_cache_clear();
+    for (Py_ssize_t i = 0; i < npos + nkw; i++) release_arg_copy(args[i], given[i]);
+    Py_DECREF(kwnames);
     check_and_raise_error();
     
     if (!result) return OOP_NIL;
-    OopType res = pyobj_oop(result);
+    OopType res = take_result(result);
     check_and_raise_error();
     return res;
 }
@@ -7652,6 +8012,7 @@ extern "C" PyObject *PyType_GenericAlloc(PyTypeObject *type,
         PyErr_NoMemory();
         return NULL;
     }
+    g_alloc_objects++;
     obj->ob_refcnt = 1;
     obj->ob_type = type;
     if (type->tp_itemsize != 0)
@@ -8378,7 +8739,7 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
         /* A Grail list or tuple argument as a real-layout copy: the tuple is
            real already, so call_foreign's to_real_tuple would not look at its
            elements (real_layout_arg). */
-        PyTuple_SetItem(tuple, i, real_layout_arg((PyObject *)(intptr_t)GciOopToI64(addrOop), 1));
+        PyTuple_SetItem(tuple, i, arg_ref((PyObject *)(intptr_t)GciOopToI64(addrOop), 1));
     }
     PyObject *kwargs = NULL;
     if (nkw > 0) {
@@ -8388,13 +8749,16 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
             OopType nameOop = GciFetchOop(kwNamesOop, GciOopToI64(idxOop));
             OopType valAddrOop = GciFetchOop(kwValsOop, GciOopToI64(idxOop));
             OopType nameAddr = GciPerform(server, "PyUnicode_FromString:", &nameOop, 1);
-            PyDict_SetItem(kwargs, addr_to_pyobj(nameAddr),
-                           real_layout_arg((PyObject *)(intptr_t)GciOopToI64(valAddrOop), 0));
+            PyObject *val = (PyObject *)(intptr_t)GciOopToI64(valAddrOop);
+            PyObject *copy = real_layout_arg(val, 0);
+            PyDict_SetItem(kwargs, addr_to_pyobj(nameAddr), copy);   /* does not steal */
+            release_arg_copy(copy, val);
         }
     }
     PyErr_Clear();
     PyObject *result = PyObject_Call(callable, tuple, kwargs);
     buffer_cache_clear();
+    Py_DECREF(tuple);
     if (result == NULL && PyErr_Occurred() == NULL && getenv("GRAIL_SHIM_DIAG")) {
         fprintf(stderr, "SHIM-DIAG: call of %s answered NULL with no error set\n",
                 Py_TYPE(callable) && Py_TYPE(callable)->tp_name ? Py_TYPE(callable)->tp_name : "?");
@@ -8402,7 +8766,7 @@ static OopType shimCallObject(OopType ptrOop, OopType posArrOop,
     }
     check_and_raise_error();
     if (!result) return OOP_NIL;
-    OopType res = pyobj_oop(result);
+    OopType res = take_result(result);
     check_and_raise_error();
     return res;
 }
@@ -8453,7 +8817,7 @@ static OopType shimForeignGetAttr(OopType ptrOop, OopType nameOop)
     buffer_cache_clear();
     check_and_raise_error();
     if (!v) return OOP_NIL;
-    OopType res = pyobj_oop(v);
+    OopType res = take_result(v);
     check_and_raise_error();
     return res;
 }
@@ -8513,9 +8877,11 @@ static OopType shimForeignOp(OopType ptrOop, OopType nameOop, OopType aAddrOop, 
     }
     PyObject *r = foreign_op_invoke(self, op, a, b);
     buffer_cache_clear();
+    release_arg_copy(a, (PyObject *)(intptr_t)aa);
+    release_arg_copy(b, (PyObject *)(intptr_t)ba);
     check_and_raise_error();
     if (r == NULL) return OOP_NIL;
-    OopType res = pyobj_oop(r);
+    OopType res = take_result(r);
     check_and_raise_error();
     return res;
 }
@@ -8669,7 +9035,7 @@ static PyObject *grail_mirror_tp_new(PyTypeObject *subtype, PyObject *args, PyOb
     OopType cls = pyobj_oop((PyObject *)subtype);
     OopType r = GciPerform(server, "PyType_GenericNew:", &cls, 1);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(r);
+    return new_ref_from(r);
 }
 
 /* tp_alloc of a subtype mirror: the Grail half and the body together
@@ -8713,7 +9079,7 @@ static PyObject *subtype_python_attr(OopType target, const char *name, int *foun
             PyErr_Format(PyExc_AttributeError, "attribute '%.200s' could not be read", name);
         return NULL;
     }
-    return addr_to_pyobj(r);
+    return new_ref_from(r);
 }
 
 static PyObject *foreign_generic_getattr(PyObject *obj, const char *name);
@@ -9776,9 +10142,12 @@ static PyObject *build_value_item(const char **pf, va_list *ap) {
             break;
         }
         case 'O': case 'N': case 'S': {
+            /* Every unit answers a new reference, as CPython's: O and S add
+               one to the caller's object, N takes the caller's. */
             PyObject *obj = va_arg(*ap, PyObject *);
             if (obj && is_foreign(obj)) diag_foreign(obj);
             result = obj ? obj : Py_None;
+            if (*f != 'N') Py_INCREF(result);
             f++;
             break;
         }
@@ -9804,9 +10173,12 @@ static PyObject *build_value_item(const char **pf, va_list *ap) {
                 for (int j = 0; j < count; j++)
                     PyTuple_SetItem(result, j, items[j]);
             } else {
+                /* PyList_Append adds a reference of its own */
                 result = PyList_New(0);
-                for (int j = 0; j < count; j++)
+                for (int j = 0; j < count; j++) {
                     PyList_Append(result, items[j]);
+                    Py_DECREF(items[j]);
+                }
             }
             break;
         }
@@ -9820,7 +10192,9 @@ static PyObject *build_value_item(const char **pf, va_list *ap) {
                 if (*f == ':') f++;
                 PyObject *val = build_value_item(&f, ap);
                 if (!val) return NULL;
-                PyDict_SetItem(dict, key, val);
+                PyDict_SetItem(dict, key, val);   /* does not steal */
+                Py_DECREF(key);
+                Py_DECREF(val);
             }
             if (*f == '}') f++;
             result = dict;
@@ -10040,7 +10414,7 @@ extern "C" PyObject *PyObject_GetIter(PyObject *obj) {
     OopType arg = pyobj_oop(obj);
     OopType result = GciPerform(server, "PyObject_GetIter:", &arg, 1);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    return new_ref_from(result);
 }
 
 extern "C" PyObject *PyIter_Next(PyObject *iterator) {
@@ -10059,7 +10433,9 @@ extern "C" PyObject *PyIter_Next(PyObject *iterator) {
     if (check_gci_error()) return NULL;
     int64 addr = GciOopToI64(result);
     if (addr == 0) return NULL;  /* exhausted — NULL without error */
-    return (PyObject *)(intptr_t)addr;
+    /* A new reference: Cython DECREFs each item, and an itertools.cycle
+       hands the same C objects out again on every pass. */
+    return c_new_ref((PyObject *)(intptr_t)addr);
 }
 
 /* PySequence_Fast: a list or tuple as itself, anything else iterated into a
@@ -10090,13 +10466,16 @@ extern "C" PyObject *PySequence_Fast(PyObject *o, const char *m) {
         return NULL;
     }
     PyObject *l = PyList_New(0);
-    if (l == NULL) return NULL;
+    if (l == NULL) { c_release(it); return NULL; }
     for (;;) {
         PyObject *item = PyIter_Next(it);
         if (item == NULL) break;
-        if (PyList_Append(l, item) < 0) return NULL;
+        int rc = PyList_Append(l, item);
+        c_release(item);
+        if (rc < 0) break;
     }
-    if (PyErr_Occurred()) return NULL;
+    c_release(it);
+    if (PyErr_Occurred()) { Py_DECREF(l); return NULL; }
     return l;
 }
 
@@ -10549,7 +10928,7 @@ extern "C" PyObject *PyList_GetSlice(PyObject *list, Py_ssize_t low,
     OopType args[3] = { pyobj_oop(list), GciI64ToOop(low), GciI64ToOop(high) };
     OopType result = GciPerform(server, "PyList_GetSlice:from:to:", args, 3);
     if (check_gci_error()) return NULL;
-    return addr_to_pyobj(result);
+    return new_ref_from(result);
 }
 
 extern "C" PyObject *PyList_AsTuple(PyObject *list) {
