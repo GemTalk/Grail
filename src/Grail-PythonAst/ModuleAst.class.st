@@ -1097,13 +1097,9 @@ ModuleAst class >> parseEvalSource: sourceString [
 ModuleAst class >> parseEvalSource: sourceString allowTopLevelAwait: allowAwait [
 	"parseSource:allowTopLevelAwait:, by CPython's eval rule rather than as a
 	module: eval() input and compile(..., 'eval') source are one expression
-	list and nothing else (PythonParser >> ___parseEvalInput___).  The rule
-	rides the session for the parse, as #GrailParsingForAst does for
-	ast.parse."
+	list and nothing else (PythonParser >> ___parseEvalInput___)."
 
-	^ [SessionTemps current at: #'GrailParsingEvalInput' put: true.
-		self parseSource: sourceString allowTopLevelAwait: allowAwait]
-			ensure: [SessionTemps current removeKey: #'GrailParsingEvalInput' ifAbsent: [nil]]
+	^ self parseSource: sourceString allowTopLevelAwait: allowAwait evalInput: true
 
 ]
 
@@ -1153,13 +1149,35 @@ ModuleAst class >> parseSource: sourceString allowTopLevelAwait: allowAwait [
 	it by wrapping the source in an async def -- but it cannot decide until it
 	has a tree to look at, which is what this is for."
 
-	| module |
 	allowAwait ifFalse: [^ self parseSource: sourceString].
-	module := PythonParser parse: sourceString.
+	^ self parseSource: sourceString allowTopLevelAwait: allowAwait evalInput: false
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> parseSource: sourceString allowTopLevelAwait: allowAwait evalInput: isEvalInput [
+	"parseSource:allowTopLevelAwait:, by CPython's eval rule when isEvalInput
+	is true (parseEvalSource:allowTopLevelAwait:).
+
+	THE RULE IS THE PARSER'S, NOT THE SESSION'S.  It used to ride SessionTemps
+	(#GrailParsingEvalInput), set for the parse and removed by an ensure: -- but
+	an ensure: runs when the stack UNWINDS, and a Python ``except SyntaxError:''
+	body runs before that, on top of the failed parse.  So after a failed
+	``compile(src, f, 'eval')'' every compile(), exec() or import inside the
+	handler parsed by the eval rule too, and ``compile('x = 1', f, 'exec')''
+	there was invalid syntax: the eval-then-exec fallback CPython's own REPL
+	(and code.InteractiveConsole) is built on (GemTalk/Grail#1883).  Held by
+	the one parser instance that parses this source, it reaches neither a
+	nested parse nor one made from a handler."
+
+	| module |
+	module := isEvalInput
+		ifTrue: [PythonParser parseEvalInput: sourceString]
+		ifFalse: [PythonParser parse: sourceString].
 	module source isNil ifTrue: [module source: sourceString].
 	AbstractNode ___currentModuleSource___: sourceString.
 	self ___validateContext___: module.
-	self ___validateAsyncPlacement___: module scope: #async.
+	self ___validateAsyncPlacement___: module scope: (allowAwait ifTrue: [#async] ifFalse: [#module]).
 	self ___validatePatternsIn___: module.
 	self ___wrapReservedSelectorBindingsIn___: module.
 	^ module
