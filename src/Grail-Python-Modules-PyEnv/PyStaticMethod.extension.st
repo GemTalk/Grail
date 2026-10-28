@@ -13,7 +13,13 @@ PyStaticMethod class >> ___pyCallValue___: positional kw: kwargs [
 
 { #category : 'Grail-Reflection' }
 PyStaticMethod class >> __name__ [
-	^ 'staticmethod'
+	"Object class's, which answers 'staticmethod' for this class from the
+	module-attribute identity table and a Python subclass's own name for the
+	subclass.  Answering 'staticmethod' outright named every subclass so too
+	(``class Sub(staticmethod): pass'' had __name__ 'staticmethod').  Kept, rather than
+	removed, only because an env-1 method cannot be (#1727)."
+
+	^ super __name__
 
 ]
 
@@ -32,7 +38,13 @@ PyStaticMethod class >> __new__: fn [
 
 { #category : 'Grail-Reflection' }
 PyStaticMethod class >> __qualname__ [
-	^ 'staticmethod'
+	"Object class's, which answers 'staticmethod' for this class from the
+	module-attribute identity table and a Python subclass's own name for the
+	subclass.  Answering 'staticmethod' outright named every subclass so too
+	(``class Sub(staticmethod): pass'' had __name__ 'staticmethod').  Kept, rather than
+	removed, only because an env-1 method cannot be (#1727)."
+
+	^ super __qualname__
 
 ]
 

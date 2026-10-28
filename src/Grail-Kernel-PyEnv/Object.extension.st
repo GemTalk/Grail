@@ -4839,6 +4839,13 @@ Object class >> ___moduleAttrIdentityTable___ [
 		reprs from those two -- Grail's ``WeakReference'' leaked into both, with no
 		__module__ at all."
 		t @env0:at: #'WeakReference' put: #('ReferenceType' 'weakref').
+		"staticmethod and classmethod.  Their Smalltalk names are PyStaticMethod
+		and PyClassMethod, so the builtin-type name list (which compares the
+		Smalltalk name) never matched them, and ``staticmethod.__module__'' fell
+		through to the instances' forwarding __module__ method: it answered a
+		FUNCTION, and ``staticmethod[int]'' repr'd as ``<class 'staticmethod'>[int]''."
+		t @env0:at: #'PyStaticMethod' put: #('staticmethod' 'builtins').
+		t @env0:at: #'PyClassMethod' put: #('classmethod' 'builtins').
 
 		"os / string / time."
 		t @env0:at: #'os_PathLike' put: #('PathLike' 'os').
@@ -5448,10 +5455,9 @@ Object class >> ___pythonBuiltinTypeModule___ [
 	"NoneType, ellipsis and NotImplementedType too: CPython's
 	``type(None).__module__'' is 'builtins', and typing's _type_repr reads it
 	-- ``repr(Callable[..., None])'' raised AttributeError without it."
-	((#( #bool #bytearray #bytes #classmethod #complex #dict #enumerate #float
-		#frozenset #int #list #mappingproxy #memoryview #object #property #range
-		#set #slice #staticmethod #str #tuple #type #NoneType #ellipsis
-		#NotImplementedType )
+	((#( #bool #bytearray #bytes #complex #dict #enumerate #float #frozenset
+		#int #list #mappingproxy #memoryview #object #property #range #set #slice
+		#str #tuple #type #NoneType #ellipsis #NotImplementedType )
 		@env0:includes: nm)
 		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
 		@env0:ifFalse: [^ nil].
