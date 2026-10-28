@@ -32,3 +32,21 @@ UnicodeError class >> ___pythonValueAttrs___ [
 		yourself
 
 ]
+
+{ #category : 'Grail-Python Attribute Access' }
+UnicodeError >> ___fieldNames___ [
+	"The constructor arguments CPython's UnicodeEncodeError and
+	UnicodeDecodeError keep as attributes, in order: ``cls(encoding, object,
+	start, end, reason)''."
+
+	^ #(#encoding #object #start #end #reason)
+
+]
+
+{ #category : 'Grail-Python Attribute Access' }
+UnicodeError >> ___normalizedObject___: anObject [
+	"The object as the attribute keeps it: as given, for a str."
+
+	^ anObject
+
+]
