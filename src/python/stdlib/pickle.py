@@ -560,10 +560,12 @@ def _is_python_subclass(obj):
     ClassDefAst stamps every class it builds with ___pyDefinedClass___, which
     is exactly the question being asked.
 
-    Except for the three types a Grail callable REPORTS (issue #1436):
-    types.FunctionType, MethodType and BuiltinFunctionType are written in
-    Python, but what reports them is Grail's BoundMethod, a function or a
-    builtin as far as pickling is concerned.
+    Except for the types a Grail callable REPORTS (issue #1436):
+    types.FunctionType, MethodType, BuiltinFunctionType and the built-in
+    descriptor types (MethodDescriptorType, WrapperDescriptorType,
+    MethodWrapperType) are written in Python, but what reports them is Grail's
+    BoundMethod or UnboundMethod, a function or a builtin as far as pickling is
+    concerned.
     """
     t = type(obj)
     if t in _grail_callable_types():
@@ -579,7 +581,10 @@ def _grail_callable_types():
     if _GRAIL_CALLABLE_TYPES is None:
         import types
         _GRAIL_CALLABLE_TYPES = (types.FunctionType, types.MethodType,
-                                 types.BuiltinFunctionType)
+                                 types.BuiltinFunctionType,
+                                 types.MethodDescriptorType,
+                                 types.WrapperDescriptorType,
+                                 types.MethodWrapperType)
     return _GRAIL_CALLABLE_TYPES
 
 
@@ -639,6 +644,8 @@ def _is_function_like(obj):
     return (not _is_python_subclass(obj)
             and type(obj).__name__ in ('function', 'BoundMethod', 'method',
                                        'builtin_function_or_method',
+                                       'method_descriptor',
+                                       'wrapper_descriptor',
                                        'MethodBinding', 'ExecBlock'))
 
 
@@ -1271,7 +1278,8 @@ class _Pickler:
         # before the types module is reachable.
         receiver = (getattr(obj, '__self__', None)
                     if type(obj).__name__ in ('BoundMethod', 'method',
-                                              'builtin_function_or_method')
+                                              'builtin_function_or_method',
+                                              'method-wrapper')
                     else None)
         if receiver is not None and not isinstance(receiver, _ModuleType):
             # CPython's method.__reduce__ names __func__; a types.MethodType

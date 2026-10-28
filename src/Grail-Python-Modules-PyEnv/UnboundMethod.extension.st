@@ -1198,6 +1198,17 @@ UnboundMethod >> ___pyOwnerClass___ [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+UnboundMethod >> ___pyTypeNameForError___ [
+	"type(self).__name__ for ``'X' object has no attribute ...'' and the other
+	messages that name a type: a built-in type's method is its descriptor type,
+	``'method_descriptor' object has no attribute 'x''', where Object's version
+	read the name of this class, 'function'."
+
+	^ (self __class__ @env1:__name__) @env0:asString
+
+]
+
 { #category : 'Grail-Python Metadata' }
 UnboundMethod >> ___rawAnnotateForClass___: aClass [
 	"The annotate FUNCTION itself, where ___annotationsForClass___: answers the
@@ -1459,6 +1470,31 @@ UnboundMethod >> __builtins__ [
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		found isNil ifFalse: [^ found]].
 	^ (Python @env0:at: #'PyModuleDict') @env0:___forModuleNamed___: 'builtins'
+
+]
+
+{ #category : 'Grail-Reflection' }
+UnboundMethod >> __class__ [
+	"``type(str.upper)'' (object >> ___pyMetaclass___ asks this): a built-in
+	type's method read off the type is a METHOD DESCRIPTOR, or for a slot a
+	SLOT WRAPPER -- types.MethodDescriptorType and types.WrapperDescriptorType,
+	named 'method_descriptor' and 'wrapper_descriptor' (___isBuiltinTypeMethod___)
+	-- and anything else is a function, which this class reports as it always
+	has.
+	``__new__'' is the exception CPython makes: a built-in function.
+
+	All of them used to answer 'function', so ``isinstance(str.join,
+	types.MethodDescriptorType)'' was False (test_types
+	test_method_descriptor_types, test_slot_wrapper_types)."
+
+	| kind |
+	self @env0:___isBuiltinTypeMethod___ ifFalse: [^ self @env0:class].
+	kind := selector == #'__new__'
+		ifTrue: ['builtin_function_or_method']
+		ifFalse: [self @env0:___isSlotWrapper___
+			ifTrue: ['wrapper_descriptor']
+			ifFalse: ['method_descriptor']].
+	^ (BoundMethod ___callableTypeNamed___: kind) ifNil: [self @env0:class]
 
 ]
 
@@ -1876,17 +1912,19 @@ UnboundMethod >> __repr__ [
 	Both used to print ``<function object at 0x...>'' here -- the right English
 	word for the first, but with no name on it, and simply wrong for the second.
 
-	The built-in test is the same one __module__ uses, so the two agree about
-	which classes are builtins rather than keeping separate lists."
+	A built-in is a method of one of CPython's built-in types
+	(___isBuiltinTypeMethod___) -- Grail's own set and tuple as much as a
+	kernel-backed int -- and a slot of one is a SLOT WRAPPER, ``<slot wrapper
+	'__repr__' of 'object' objects>''.  The kernel-type test this used named
+	set.add a function."
 
-	| q bt |
+	| q |
 	q := [(self __qualname__) @env0:asString]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: (self __name__) @env0:asString].
-	bt := [definingClass ___pythonBuiltinTypeName___]
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	bt @env0:notNil ifTrue: [
-		^ ('<method ''' @env0:, (self __name__) @env0:asString
-			@env0:, ''' of ''' @env0:, bt @env0:asString @env0:, ''' objects>')
+	self @env0:___isBuiltinTypeMethod___ ifTrue: [
+		^ ((self @env0:___isSlotWrapper___ ifTrue: ['<slot wrapper '''] ifFalse: ['<method '''])
+			@env0:, (self __name__) @env0:asString
+			@env0:, ''' of ''' @env0:, self @env0:___descriptorTypeName___ @env0:, ''' objects>')
 			@env0:asUnicodeString].
 	^ ('<function ' @env0:, q @env0:, ' at 0x'
 		@env0:, (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase

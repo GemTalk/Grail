@@ -43,6 +43,20 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Python Names' }
+BoundMethod class >> ___callableTypeAttributeFor___: aTypeName [
+	"The types-module name of the class CPython calls aTypeName, for
+	___callableTypeNamed___:.  Anything else Grail implements natively is a
+	builtin_function_or_method."
+
+	#( #('function' #FunctionType) #('method' #MethodType)
+		#('method-wrapper' #MethodWrapperType) #('method_descriptor' #MethodDescriptorType)
+		#('wrapper_descriptor' #WrapperDescriptorType) )
+			do: [:pair | (pair at: 1) = aTypeName ifTrue: [^ pair at: 2]].
+	^ #BuiltinFunctionType
+
+]
+
 { #category : 'Grail-Attribute Access' }
 BoundMethod class >> ___checkFunctionAttrWritable___: attrName writing: aValue [
 	"CPython's func_set_* guards, which Grail had none of: EVERY write to a
@@ -196,6 +210,38 @@ BoundMethod class >> ___requireNoneOr___: aValue kind: aClassOrNil message: aMes
 	(aValue isNil or: [aValue == None]) ifTrue: [^ self].
 	(aValue isKindOf: aClassOrNil) ifTrue: [^ self].
 	^ TypeError @env1:___signal___: aMessage
+
+]
+
+{ #category : 'Grail-Python Names' }
+BoundMethod >> ___instanceCallableTypeName___ [
+	"CPython's type for a method bound to an INSTANCE: ``method'' for a def
+	compiled from Python, which has a code object, and otherwise a native
+	method -- ``method-wrapper'' for a slot, a bound slot wrapper, and
+	``builtin_function_or_method'' for the rest.
+
+	Decided by the METHOD -- whether the class implementing it is one of
+	CPython's built-in types (UnboundMethod >> ___isBuiltinTypeMethod___) --
+	and not by whether the receiver's class backs a kernel type: ``set().add''
+	is set's native method although no kernel class stands behind Grail's set,
+	and it was reported as a bound Python method."
+
+	((UnboundMethod @env1:definingClass: receiver class selector: selector)
+		___isBuiltinTypeMethod___) ifFalse: [^ 'method'].
+	^ self ___isSlotWrapper___
+		ifTrue: ['method-wrapper']
+		ifFalse: ['builtin_function_or_method']
+
+]
+
+{ #category : 'Grail-Python Names' }
+BoundMethod >> ___isSlotWrapper___ [
+	"A native slot method: one of UnboundMethod class >> ___slotWrapperNames___
+	that the receiver's type does not define as an ordinary method instead."
+
+	^ (UnboundMethod ___slotWrapperNames___ includes: selector)
+		and: [(UnboundMethod ___methodDescriptorOverrides___ includes:
+			((receiver @env1:__class__) @env1:__name__) asString , '.' , selector) not]
 
 ]
 

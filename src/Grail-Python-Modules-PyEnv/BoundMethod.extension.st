@@ -2,19 +2,16 @@ Extension { #name : 'BoundMethod' }
 
 { #category : 'Grail-Attribute Access' }
 BoundMethod class >> ___callableTypeNamed___: aTypeName [
-	"types.FunctionType, types.MethodType or types.BuiltinFunctionType for
-	CPython's type name, or nil when the types module cannot supply it (see
+	"The types-module class for CPython's type name (FunctionType, MethodType,
+	BuiltinFunctionType and the descriptor types -- see
+	___callableTypeAttributeFor___:), or nil when the types module cannot supply it (see
 	BoundMethod >> __class__).  The module is imported if this session has not:
 	type() must not depend on whether something imported types first.  An
 	import already in progress -- this asked from inside types' own body --
 	answers nil rather than recursing."
 
 	| attr mod temps |
-	attr := (aTypeName @env0:= 'function')
-		ifTrue: [#FunctionType]
-		ifFalse: [(aTypeName @env0:= 'method')
-			ifTrue: [#MethodType]
-			ifFalse: [#BuiltinFunctionType]].
+	attr := self @env0:___callableTypeAttributeFor___: aTypeName.
 	mod := importlib lookupModule: 'types'.
 	mod == nil ifTrue: [
 		temps := SessionTemps @env0:current.
@@ -938,10 +935,7 @@ BoundMethod >> ___pyTypeNameForError___ [
 		^ ((self ___methodCodeForClass___: receiver name: selector @env0:asString) == nil)
 			ifTrue: ['builtin_function_or_method']
 			ifFalse: ['method']].
-	^ ([receiver @env0:class ___pythonBuiltinTypeName___]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil]) @env0:notNil
-		ifTrue: ['builtin_function_or_method']
-		ifFalse: ['method']
+	^ self @env0:___instanceCallableTypeName___
 
 ]
 
@@ -1916,12 +1910,18 @@ BoundMethod >> __repr__ [
 			ifTrue: [
 				^ ('<function ' @env0:, q @env0:, ' at 0x' @env0:, addr @env0:, '>')
 					@env0:asUnicodeString]].
-	(receiver @env0:isKindOf: Class) @env0:not ifTrue: [ | bt |
-		bt := [receiver @env0:class ___pythonBuiltinTypeName___]
-			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-		bt @env0:notNil ifTrue: [
-			^ ('<built-in method ' @env0:, (self __name__) @env0:asString
-				@env0:, ' of ' @env0:, bt @env0:asString @env0:, ' object at 0x'
+	"A NATIVE method bound to an instance, by the method rather than by the
+	receiver's class (___instanceCallableTypeName___): CPython's ``<built-in
+	method add of set object at 0x...>'', or for a slot ``<method-wrapper
+	'__lt__' of int object at 0x...>''."
+	(receiver @env0:isKindOf: Class) @env0:not ifTrue: [ | kind |
+		kind := self @env0:___instanceCallableTypeName___.
+		kind @env0:= 'method' ifFalse: [
+			^ ((kind @env0:= 'method-wrapper'
+					ifTrue: ['<method-wrapper ''' @env0:, (self __name__) @env0:asString @env0:, '''']
+					ifFalse: ['<built-in method ' @env0:, (self __name__) @env0:asString])
+				@env0:, ' of ' @env0:, ((receiver @env1:__class__) @env1:__name__) @env0:asString
+				@env0:, ' object at 0x'
 				@env0:, (receiver @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
 				@env0:, '>') @env0:asUnicodeString]].
 	^ ('<bound method ' @env0:, q @env0:, ' of ' @env0:,
