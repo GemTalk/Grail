@@ -20,6 +20,16 @@ import enum
 import fractions
 import typing
 
+# werkzeug.routing builds dataclasses with field(default_factory=...) at import
+# (matcher.State): its rebuild, by an install's redeploy, failed with
+# ``cannot specify both default and default_factory'' (GemTalk/Grail#1884).
+import werkzeug.routing
+
+# The app's own modules: one that sorts after this one (upgrade_wire.py), and
+# one that sorts before dataclasses (app_fields.py).
+import upgrade_wire
+import app_fields
+
 
 class Account:
     def __init__(self, name, balance):
@@ -59,6 +69,15 @@ class Point:
 
     def norm1(self):
         return abs(self.x) + abs(self.y)
+
+
+@dataclasses.dataclass
+class Bag:
+    """A field(default_factory=...): a rebuild of this module, or of dataclasses,
+    must leave field() able to tell a default_factory from a default
+    (GemTalk/Grail#1884, werkzeug.routing.matcher's State)."""
+    items: list = dataclasses.field(default_factory=list)
+    label: str = 'bag'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -189,6 +208,7 @@ def build():
         'error': AppError('boom', 17),
         'registry': Registry(a=1, b=2),
         'point': Point(3, -4),
+        'bag': Bag([1, 2]),
         'tagged': Tagged('v'),
         'color': Color.GREEN,
         'mode': Mode.WRITE,
@@ -248,7 +268,7 @@ def expected_types():
         'timedelta': datetime.timedelta, 'ordereddict': collections.OrderedDict,
         'counter': collections.Counter, 'deque': collections.deque,
         'account': Account, 'slotted': Slotted, 'error': AppError,
-        'registry': Registry, 'point': Point, 'tagged': Tagged, 'color': Color,
+        'registry': Registry, 'point': Point, 'bag': Bag, 'tagged': Tagged, 'color': Color,
         'mode': Mode, 'level': Level,
         'pair': Pair, 'span': Span, 'typed_pair_obj': TypedPair, 'built': Built,
     }
@@ -286,6 +306,9 @@ def describe(stored):
         'error': [str(s['error']), s['error'].code, list(s['error'].args)],
         'registry': [sorted(s['registry'].items()), s['registry'].total()],
         'point': [s['point'].x, s['point'].y, s['point'].norm1()],
+        'bag': [s['bag'].items, s['bag'].label, Bag().items, Bag().label],
+        'wired': upgrade_wire.wired(3),
+        'app_fields': app_fields.note_tags(),
         'tagged': [s['tagged'].value, s['tagged'].tag],
         'color': [s['color'].name, s['color'].value],
         'mode': [s['mode'].name, s['mode'].value, str(s['mode']), len(s['mode'])],

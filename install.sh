@@ -374,16 +374,22 @@ fi
 # GRAIL_NO_REDEPLOY=1 skips just this step (the upgrade test's control).
 if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ] && [ "${GRAIL_NO_REDEPLOY:-0}" != "1" ]; then
     DEPLOY_T0=$SECONDS
-    if LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+    # Every ``redeployModules:'' line is kept, in redeployModules-report.out as well as
+    # here: which module failed, and why, is only knowable from THIS run -- a
+    # re-run finds the failed modules rebuilt by whatever imported them since,
+    # or nothing stale at all.
+    LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
          -S "$GRAIL_DIR/scripts/redeployModules.gs" < /dev/null \
-         | grep -E 'redeployModules: [0-9]+ rebuilt, [0-9]+ skipped, 0 failed'; then
+         | grep -a '^redeployModules: ' > "$GRAIL_DIR/redeployModules-report.out"
+    if grep -qE '^redeployModules: [0-9]+ rebuilt, [0-9]+ skipped, 0 failed' "$GRAIL_DIR/redeployModules-report.out"; then
+        cat "$GRAIL_DIR/redeployModules-report.out"
         printf 'TIMING | %-26s | %4ds\n' "redeploy-modules" "$((SECONDS - DEPLOY_T0))"
     else
+        cat "$GRAIL_DIR/redeployModules-report.out"
         echo ""
-        echo "Warning: rebuilding the deployed modules failed for some of them."
+        echo "Warning: rebuilding the deployed modules failed for some of them (above)."
         echo "  Grail is installed; each of those rebuilds on its next import, and"
         echo "  leaves that session with something to commit."
-        echo "  Re-run ./scripts/redeployModules.gs to see which, and why."
     fi
 fi
 

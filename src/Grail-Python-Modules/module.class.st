@@ -959,15 +959,33 @@ module >> ___setFunctionDefaults___: aName keys: anEntry block: aBlock [
 	under: ``#( #( posKey ... ) #( 'kwName' kwKey ... ) )'', the shape a
 	method's ___methodDefaultKeysTable___ entry has.  They are what lets
 	``f.__defaults__ = t'' write through to what a call binds
-	(___writeFunctionDefaults___:value:kw:)."
+	(___writeFunctionDefaults___:value:kw:).
 
-	| tbl inner |
+	THIS SEND IS THE DEF STATEMENT, so it also FORGETS the values memoised
+	under those keys (___moduleDefaultAt:compute:): CPython re-executing a def
+	evaluates its defaults again, and the next call here does.  The memo is
+	keyed by the module INSTANCE, and a canonical (deployed) module is rebuilt
+	INTO its instance -- an install's redeploy, a lazy bind, a reload -- while
+	its globals are created anew.  So dataclasses.py's ``def field(*,
+	default=MISSING, default_factory=MISSING, ...)'', once called before
+	dataclasses was rebuilt in the same session, kept the FIRST MISSING while
+	the global became a new one, and every ``field(default_factory=list)''
+	raised ``cannot specify both default and default_factory'': werkzeug.routing
+	in GemDB's redeploy (GemTalk/Grail#1884).  ___grailClassDefault___ had the
+	same defect for class-body defaults and overwrites for the same reason."
+
+	| tbl inner memo |
 	tbl := module ___functionDefaultKeysTable___.
 	inner := tbl at: self otherwise: nil.
 	inner isNil ifTrue: [
 		inner := KeyValueDictionary new.
 		tbl at: self put: inner].
 	inner at: aName asString put: anEntry.
+	memo := module ___moduleDefaultsTable___ at: self otherwise: nil.
+	memo isNil ifFalse: [
+		(anEntry at: 1) do: [:key | memo removeKey: key ifAbsent: [nil]].
+		2 to: (anEntry at: 2) size by: 2 do: [:i |
+			memo removeKey: ((anEntry at: 2) at: i) ifAbsent: [nil]]].
 	self ___recordFunctionMeta___: #defaultKeys name: aName value: anEntry.
 	^ self ___setFunctionDefaults___: aName block: aBlock
 
