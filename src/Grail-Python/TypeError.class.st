@@ -31,3 +31,31 @@ TypeError class >> ___grailCheckMultipleValues___: names pos: positional kw: key
 	^ nil
 
 ]
+
+{ #category : 'Grail-Arity Checks' }
+TypeError class >> ___refuseKeywordsIn___: keywords for: aFunctionName [
+	"The refusal of a built-in that takes no keyword at all, whatever its name:
+	CPython's vectorcall for a METH_FASTCALL function without METH_KEYWORDS
+	(Objects/methodobject.c:407-419, cfunction_check_kwargs)."
+
+	(keywords isNil or: [keywords isEmpty]) ifTrue: [^ self].
+	^ self @env1:___signal___: aFunctionName , '() takes no keyword arguments'
+
+]
+
+{ #category : 'Grail-Arity Checks' }
+TypeError class >> ___refuseKeywordsIn___: keywords otherThan: acceptedNames for: aFunctionName [
+	"The refusal of a keyword the built-in's signature does not name, by its
+	name: Python/getargs.c:1492-1540, error_unexpected_keyword_arg.  The varargs
+	entries read the keywords they know, and every other keyword used to be
+	DROPPED -- ``sum([], x=1)'' answered 0 and ``print(x=1)'' printed an empty
+	line -- so a misspelt keyword was a silently ignored argument."
+
+	(keywords isNil or: [keywords isEmpty]) ifTrue: [^ self].
+	keywords keysDo: [:each |
+		(acceptedNames includes: each asString) ifFalse: [
+			^ self @env1:___signal___: aFunctionName
+				, '() got an unexpected keyword argument ''' , each asString , '''']].
+	^ self
+
+]
