@@ -36,6 +36,34 @@ WeakReference class >> _collect [
 
 ]
 
+{ #category : 'Grail-String Representation' }
+WeakReference >> ___hexAddress___: anObject [
+	"anObject's address as reprs print it, as object.__repr__ does."
+
+	^ (anObject @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+
+]
+
+{ #category : 'Grail-String Representation' }
+WeakReference >> ___referentName___: aReferent [
+	"The name weakref_repr shows after the referent, or nil.  CPython looks
+	__name__ up on the referent's TYPE, which only a class, a function or a
+	module answers -- an instance's own ``__name__'' attribute is not seen --
+	so only those are asked here."
+
+	| name |
+	((aReferent @env0:isBehavior)
+		or: [(aReferent @env0:isKindOf: ExecBlock)
+		or: [(aReferent @env0:isKindOf: BoundMethod)
+		or: [aReferent @env0:isKindOf: module]]]) ifFalse: [^ nil].
+	name := [aReferent @env1:___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ (name @env0:isKindOf: CharacterCollection)
+		ifTrue: [name @env0:asString]
+		ifFalse: [nil]
+
+]
+
 { #category : 'Grail-Weak-Python' }
 WeakReference >> __call__ [
 	"r() — return the referent or None."
@@ -73,6 +101,25 @@ WeakReference >> __hash__ [
 { #category : 'Grail-Weak-Python' }
 WeakReference >> __ne__: other [
 	^(self @env0:= other) @env0:not
+
+]
+
+{ #category : 'Grail-String Representation' }
+WeakReference >> __repr__ [
+	"CPython's weakref_repr (Objects/weakrefobject.c): ``<weakref at 0x...; to
+	'Target' at 0x...>'', with the referent's own name after it when it has
+	one -- a class, a function -- or ``<weakref at 0x...; dead>''.  Grail had
+	none, so a weakref printed as an object of its own type."
+
+	| referent repr name |
+	referent := self @env0:value.
+	repr := '<weakref at 0x' @env0:, (self ___hexAddress___: self).
+	referent == nil ifTrue: [^ repr @env0:, '; dead>'].
+	repr := repr @env0:, '; to ''' @env0:, (referent ___pyTypeNameForError___) @env0:asString
+		@env0:, ''' at 0x' @env0:, (self ___hexAddress___: referent).
+	name := self ___referentName___: referent.
+	name == nil ifFalse: [repr := repr @env0:, ' (' @env0:, name @env0:, ')'].
+	^ repr @env0:, '>'
 
 ]
 
