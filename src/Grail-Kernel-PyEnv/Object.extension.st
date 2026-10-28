@@ -4834,6 +4834,11 @@ Object class >> ___moduleAttrIdentityTable___ [
 		half too, so ``type(c).__module__'' is 'builtins' rather than the Python
 		dictionary it happens to live in."
 		t @env0:at: #'PyCell' put: #('cell' 'builtins').
+		"weakref.ref.  CPython's type is spelled ``ReferenceType'' in module
+		``weakref'' (``<class 'weakref.ReferenceType'>''), and ``weakref.ref[int]''
+		reprs from those two -- Grail's ``WeakReference'' leaked into both, with no
+		__module__ at all."
+		t @env0:at: #'WeakReference' put: #('ReferenceType' 'weakref').
 
 		"os / string / time."
 		t @env0:at: #'os_PathLike' put: #('PathLike' 'os').
