@@ -38,6 +38,22 @@ Class {
 }
 
 { #category : 'Grail-IR Codegen' }
+TryAst >> ___emitIRExceptElement___: aNode on: aBuilder [
+	"One class of an ``except (A, B)'' tuple, validated before it joins the
+	ExceptionSet, as the text path validates it: GemStone's #, refuses a
+	non-class with an uncatchable ArgumentTypeError, where CPython raises the
+	TypeError ___pyExceptType___: does."
+
+	| value |
+	value := aNode ___emitIRValueOn___: aBuilder.
+	^ aBuilder
+		send: #'___pyExceptType___:'
+		to: (aBuilder globalNamed: #BaseException)
+		with: { value }
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 TryAst >> ___emitIRExceptStarBodyOn___: aBuilder ex: exLeaf rest: restLeaf norm: normLeaf reraised: rrLeaf answersFalse: answersFalse [
 	"The statements inside the single ``except*'' handler block -- see
 	___emitIRExceptStarPartOn___: for the shape and for what it deliberately
@@ -190,10 +206,10 @@ TryAst >> ___emitIRExceptType___: aTypeNode on: aBuilder [
 	| v |
 	(aTypeNode isKindOf: TupleAst) ifFalse: [
 		^ aTypeNode ___emitIRValueOn___: aBuilder].
-	v := aTypeNode elts first ___emitIRValueOn___: aBuilder.
+	v := self ___emitIRExceptElement___: aTypeNode elts first on: aBuilder.
 	2 to: aTypeNode elts size do: [:i |
 		| next |
-		next := (aTypeNode elts at: i) ___emitIRValueOn___: aBuilder.
+		next := self ___emitIRExceptElement___: (aTypeNode elts at: i) on: aBuilder.
 		aBuilder atNode: aTypeNode.
 		v := aBuilder send: #, to: v with: { next } env: 0].
 	^ v
@@ -1305,11 +1321,18 @@ TryAst >> printSmalltalkOn: aStream [
 						"``except (A, B):`` — emit a GemStone ExceptionSet
 						(classes joined with #,) rather than a Python tuple;
 						``on:do:`` dispatches ``handles:`` on its argument,
-						which a tuple/Array doesn't implement."
+						which a tuple/Array doesn't implement.  Each class is
+						validated BEFORE it joins: #, refuses a non-class with an
+						uncatchable ArgumentTypeError, where CPython raises the
+						TypeError ___pyExceptType___: does
+						(``except (ValueError, 42):'', test_exceptions
+						test_except_star_invalid_exception_type)."
 						aStream nextPut: $(.
 						handler type elts doWithIndex: [:each :i |
 							i > 1 ifTrue: [aStream nextPutAll: ' @env0:, '].
-							each printSmalltalkWithParenthesisOn: aStream].
+							aStream nextPutAll: '(BaseException @env1:___pyExceptType___: '.
+							each printSmalltalkWithParenthesisOn: aStream.
+							aStream nextPut: $)].
 						aStream nextPut: $)]
 					ifFalse: [
 						"Parenthesize — a dotted class expression

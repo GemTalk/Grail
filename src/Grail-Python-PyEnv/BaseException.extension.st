@@ -1632,6 +1632,11 @@ BaseException >> __setstate__: state [
 
 	| pairs |
 	(state == None or: [state == nil]) ifTrue: [^ None].
+	"A dict or nothing (Objects/exceptions.c:249-252): ``__setstate__(42)'' was
+	sent keysAndValuesDo: and died uncatchably (test_exceptions
+	test_invalid_setstate)."
+	((state @env0:isKindOf: KeyValueDictionary) or: [state @env0:isKindOf: PyInstanceDict])
+		ifFalse: [^ TypeError ___signal___: 'state is not a dictionary'].
 	pairs := OrderedCollection @env0:new.
 	state @env0:keysAndValuesDo: [:k :v |
 		pairs @env0:add: (Array @env0:with: k with: v)].
@@ -1718,16 +1723,24 @@ BaseException >> add_note: note [
 	___pyAttrDelete___ so the next read falls through to the __notes__ method
 	below and AttributeErrors again -- CPython's ``absent until add_note''
 	state, restored.  Under a private name both of those were invisible: the
-	accessor kept answering the old list."
+	accessor kept answering the old list.
+
+	CPython's refusals (Objects/exceptions.c:295-325): a note that is not a
+	str, named by its Python type, and a __notes__ that is no longer a list --
+	``e.__notes__ = 42'' -- which used to be sent append: and die uncatchably
+	(test_exceptions test_notes)."
 
 	| notes |
-	(note isKindOf: CharacterCollection) ifFalse: [
-		^ TypeError ___signal___: 'add_note() argument must be a str, not '
-			@env0:, note @env0:class @env0:name @env0:asString].
+	((note isKindOf: CharacterCollection) or: [note isKindOf: AbstractPyStr]) ifFalse: [
+		"None by name, as _PyArg_BadArgument names it."
+		^ TypeError ___signal___: 'add_note() argument must be str, not '
+			@env0:, (note == None ifTrue: ['None'] ifFalse: [note ___pyTypeNameForError___])].
 	notes := self @env0:dynamicInstVarAt: #'__notes__'.
 	notes isNil ifTrue: [
 		notes := list ___new___.
 		self @env0:dynamicInstVarAt: #'__notes__' put: notes].
+	(notes @env0:isKindOf: list) ifFalse: [
+		^ TypeError ___signal___: 'Cannot add note: __notes__ is not a list'].
 	notes append: note.
 	^ None
 
