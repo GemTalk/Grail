@@ -506,6 +506,36 @@ type class >> _new: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-Class Attrs' }
+type class >> mro [
+	"``type.mro'' -- the UNBOUND spelling of C.mro(), for the reason
+	__subclasses__ above gives: read off the ``type'' class object, Behavior's
+	mro bound the receiver to ``type'', so ``type.mro(C)'' -- which a metaclass
+	overriding mro() calls to get the default order (test_descr test_altmro,
+	test_pytype_long_ready) -- was a surplus argument, and ``type.mro()''
+	answered type's own order where CPython needs an argument.
+
+	Inherited by a metaclass, as CPython's ``M.mro'' is the same unbound
+	descriptor: ``M.mro(C)'' is C's order -- unless the metaclass defines its
+	own mro, which this class-side read would otherwise shadow: ``M.mro'' is
+	then M's function, as M.__dict__ holds it.
+
+	PERFORMED ON AN ORDINARY CLASS, it is the CALL, not the read.  That is how
+	``super().mro()'' in a metaclass's mro hook reaches it: Super's walk finds
+	this method on type's side and runs it with the class being created as
+	receiver, where the hook needs that class's default order -- the list --
+	and not a descriptor (MetaclassMroHookTestCase)."
+
+	| owner |
+	(self == (Python @env0:at: #type) or: [self @env0:inheritsFrom: (Python @env0:at: #type)])
+		ifFalse: [^ self mro].
+	owner := self @env0:whichClassIncludesSelector: #mro environmentId: 1.
+	(owner @env0:notNil and: [owner @env0:inheritsFrom: (Python @env0:at: #type)]) ifTrue: [
+		^ UnboundMethod ___forClassRead___: self selector: #mro].
+	^ UnboundMethod definingClass: Behavior selector: #mro
+
+]
+
 { #category : 'Grail-Class-Call Fast Path' }
 type class >> value: positional value: kwargs [
 	"``type(...)'' reaching the class through the legacy call dispatch.
