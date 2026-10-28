@@ -6263,6 +6263,15 @@ Object >> ___allocateInstance___: positional kw: keywords [
 		and nothing else, whether or not the subclass has an __init__."
 		(self @env0:inheritsFrom: WeakReference) ifTrue: [
 			^ self ___grailWeakrefSubclassNew___: positional kw: keywords].
+		"An exception subclass the same way: BaseException's __new__ forms are
+		class-side, so the probe above never finds them, and plain #new kept no
+		args.  CPython's BaseException_new keeps the positional arguments as
+		``args'' whatever the subclass's __init__ then does, so
+		``class E(Exception): def __init__(self, x): self.x = x'' still has
+		``E('foo').args == ('foo',)'' -- Grail had (), which str(), repr() and
+		unpickling all read (test_exceptions testAttributes)."
+		(self @env0:inheritsFrom: BaseException) ifTrue: [
+			^ self ___allocateForNew: positional kw: keywords].
 		"CPython's object_new: with neither __new__ nor __init__ of its own
 		anywhere in the class's lineage, nothing can consume an argument, so
 		any argument is an error -- ``A() takes no arguments''.  Grail allocated
