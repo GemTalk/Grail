@@ -923,8 +923,28 @@ sys >> excepthook [
 
 { #category : 'Grail-Built-in Functions' }
 sys >> excepthook: excType _: excValue _: excTb [
-	"excepthook(type, value, traceback) - print exception to stderr."
-	GsFile @env0:gciLogServer: 'Exception: ', excValue printString.
+	"sys.excepthook(type, value, traceback), and sys.__excepthook__, which is
+	the same function: the exception and its traceback printed to sys.stderr,
+	as CPython's PyErr_Display prints them through the traceback module
+	(Python/pythonrun.c:1132-1218).  A traceback handed in goes onto an
+	exception that has none, which is what makes it print (bpo-18776), and a
+	None sys.stderr prints nothing.
+
+	It logged ``'Exception: ', excValue printString'' to the GCI server log
+	instead: nothing reached sys.stderr, and that printString is env 1, which
+	no exception understands, so every call was an uncatchable
+	MessageNotUnderstood (test_exceptions test_unhandled, test_issue45826)."
+
+	| file printException |
+	file := self ___pyAttrLoad___: #stderr.
+	file == None ifTrue: [^ None].
+	((excValue @env0:isKindOf: BaseException) and: [excTb ~~ None
+		and: [excValue __traceback__ == None]]) ifTrue: [excValue with_traceback: excTb].
+	printException := (((Python @env0:at: #builtins) @env1:instance)
+		@env1:___import__: { 'traceback' } kw: nil) ___pyAttrLoad___: #print_exception.
+	printException
+		value: { excValue }
+		value: ((PyDict @env0:new) @env0:at: 'file' put: file; yourself).
 	^ None
 
 ]
