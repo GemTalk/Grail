@@ -11,7 +11,13 @@ PyClassMethod class >> ___pyCallValue___: positional kw: kwargs [
 
 { #category : 'Grail-Reflection' }
 PyClassMethod class >> __name__ [
-	^ 'classmethod'
+	"Object class's, which answers 'classmethod' for this class from the
+	module-attribute identity table and a Python subclass's own name for the
+	subclass.  Answering 'classmethod' outright named every subclass so too
+	(``class Sub(classmethod): pass'' had __name__ 'classmethod').  Kept, rather than
+	removed, only because an env-1 method cannot be (#1727)."
+
+	^ super __name__
 
 ]
 
@@ -28,7 +34,13 @@ PyClassMethod class >> __new__: fn [
 
 { #category : 'Grail-Reflection' }
 PyClassMethod class >> __qualname__ [
-	^ 'classmethod'
+	"Object class's, which answers 'classmethod' for this class from the
+	module-attribute identity table and a Python subclass's own name for the
+	subclass.  Answering 'classmethod' outright named every subclass so too
+	(``class Sub(classmethod): pass'' had __name__ 'classmethod').  Kept, rather than
+	removed, only because an env-1 method cannot be (#1727)."
+
+	^ super __qualname__
 
 ]
 
