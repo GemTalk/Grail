@@ -181,6 +181,7 @@ set >> __repr__ [
 set >> _difference_update: positional kw: kwargs [
 	"Variadic set.difference_update(*others)."
 
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:___methodTypeName___ @env0:, '.difference_update'.
 	positional @env0:do: [:each | self difference_update: each].
 	^ None
 
@@ -190,6 +191,7 @@ set >> _difference_update: positional kw: kwargs [
 set >> _intersection_update: positional kw: kwargs [
 	"Variadic set.intersection_update(*others)."
 
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:___methodTypeName___ @env0:, '.intersection_update'.
 	positional @env0:do: [:each | self intersection_update: each].
 	^ None
 
@@ -200,6 +202,7 @@ set >> _update: positional kw: kwargs [
 	"Variadic set.update(*others): apply update for each argument (0 args is
 	a no-op).  BoundMethod routes a multi-/zero-arg call here."
 
+	TypeError @env0:___refuseKeywordsIn___: kwargs for: self @env0:___methodTypeName___ @env0:, '.update'.
 	positional @env0:do: [:each | self update: each].
 	^ None
 
