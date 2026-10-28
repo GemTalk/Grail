@@ -43,3 +43,15 @@ OSError class >> ___pythonValueAttrs___ [
 		yourself
 
 ]
+
+{ #category : 'Grail-Initialization' }
+OSError >> ___newArgs___: anArray [
+	"OSError_new parses its arguments itself (Objects/exceptions.c:2133-2193),
+	so errno, strerror and the filenames are set before any __init__ runs, and
+	OSError_init is then a no-op.  A subclass that parses in its __init__
+	instead never gets here: OSError class >> ___allocateForNew:kw: answers it
+	with empty args."
+
+	self @env1:___args___: anArray
+
+]

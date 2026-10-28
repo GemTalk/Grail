@@ -5,11 +5,16 @@ BaseException class >> ___allocateForNew: args kw: kwargs [
 	"CPython's BaseException_new: an instance of the receiver holding args.
 	Keywords are ignored here -- BaseException_init is what refuses them -- and
 	___classForArgs___: still decides the class, so OSError.__new__(OSError,
-	2, 'x') is a FileNotFoundError and a bare group narrows, as in CPython."
+	2, 'x') is a FileNotFoundError and a bare group narrows, as in CPython.
+
+	The args are stored as __new__ stores them (BaseException >>
+	___newArgs___:), not parsed as __init__ parses them: a SyntaxError
+	subclass whose __init__ takes (msg, code) must not have its code read as a
+	location here."
 
 	| inst |
 	inst := (self ___classForArgs___: args) ___new___.
-	inst ___args___: args.
+	inst @env0:___newArgs___: args.
 	^ inst
 
 ]

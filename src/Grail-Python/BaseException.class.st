@@ -6244,6 +6244,25 @@ BaseException >> ___materialisePythonTraceback___: wasReraised [
 
 ]
 
+{ #category : 'Grail-Initialization' }
+BaseException >> ___newArgs___: anArray [
+	"What CPython's BaseException_new stores (Objects/exceptions.c:60-85): the
+	positional arguments as ``args'', whatever the class's __init__ goes on to
+	do with them.  Parsing them into fields is __init__'s work
+	(SyntaxError_init, ImportError_init, UnicodeError's), so an instance whose
+	__init__ does not reach the inherited one keeps its fields unset -- which
+	CPython reads as None, as a construction without arguments leaves them --
+	and its args as given.
+
+	Grail allocated such an instance with no args at all, so a subclass whose
+	__init__ skips super().__init__ -- test_exceptions' NaiveException -- had
+	``args == ()'', printed as '' and could not be unpickled (testAttributes)."
+
+	self @env1:___args___: #().
+	args := tuple withAll: anArray
+
+]
+
 { #category : 'Grail-Traceback Building' }
 BaseException >> ___pushCatchingFrame___: aCode pos: posArray [
 	"___pushCatchingFrameWork___:pos:, which does the work, with StopIteration let
