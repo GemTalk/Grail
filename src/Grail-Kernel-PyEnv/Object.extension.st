@@ -5908,8 +5908,14 @@ Object class >> __new__: cls [
 	._from_namespace uses this to materialize a Template object
 	whose attributes get filled by the exec'd namespace.
 	Sealed kernel classes refuse #new UNCATCHABLY -- resignal as
-	CPython's TypeError (see ___allocateInstance___:kw:)."
+	CPython's TypeError (see ___allocateInstance___:kw:).  So would anything
+	that is not a class, which CPython refuses first
+	(Objects/typeobject.c:9822-9828)."
 
+	(cls @env0:isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___: self __name__ @env0:asString
+			@env0:, '.__new__(X): X is not a type object ('
+			@env0:, cls ___pyTypeNameForError___ @env0:asString @env0:, ')'].
 	^ [cls @env0:new]
 		@env0:on: Error
 		do: [:ex |
@@ -6009,6 +6015,13 @@ Object class >> value: positional value: kwargs [
 			withArguments: { positional. kwargs }]
 				@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: nil].
 		^ instance].
+	"A class that takes no arguments refuses any, in CPython's words: object's
+	is Objects/typeobject.c's object_new, the singletons' their own tp_new.
+	Its ``__new__:'' is object's allocation form, which read ``object(5)'' as
+	``5 new''."
+	(self @env0:___grailTakesNoArguments___
+		and: [positional @env0:notEmpty or: [kwargs ~~ nil and: [kwargs @env0:notEmpty]]])
+			ifTrue: [^ self ___grailTakesNoArgumentsError___].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		"ONLY IF IT IS IMPLEMENTED, which the dispatch order above has always
 		said and this branch did not do.  A built-in class with no ``_new:kw:''
