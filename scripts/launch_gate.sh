@@ -52,7 +52,7 @@
 # arithmetic only -- the load average is compared with awk.
 
 # Grail test gems are linked topaz processes running one of these drivers.
-LAUNCH_GATE_PATTERN='topaz.*(runTestsShard|run_one_cpython_module)'
+LAUNCH_GATE_PATTERN='topaz.*(runTestsShard|run_one_cpython_module|runTestClassIsolated)'
 
 _launch_gate_cpus() {
   getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4
