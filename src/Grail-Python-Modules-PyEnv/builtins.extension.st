@@ -8101,6 +8101,11 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 			and: [(b ___grailMroEntriesMethod___) ~~ nil]) ifTrue: [
 				^ TypeError ___signal___:
 					'type() doesn''t support MRO entry resolution; use types.new_class()']].
+	"The same class twice among the bases is refused as type.__new__ and a
+	class statement refuse it (importlib class >> ___refuseDuplicateBases___:):
+	``type('X', (A, A), {})'' built a class over A once (test_descr
+	test_mro_disagreement)."
+	il @env0:___refuseDuplicateBases___: baseArray.
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.
 	"THE SMALLTALK NAME AND THE PYTHON NAME ARE NOW TWO THINGS.
