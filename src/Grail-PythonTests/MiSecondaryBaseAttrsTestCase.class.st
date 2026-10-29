@@ -43,6 +43,21 @@ MiSecondaryBaseAttrsTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests' }
+MiSecondaryBaseAttrsTestCase >> testALeftBaseClassAttributeBeatsThePrimaryChain [
+
+	"A class-body attribute on a base written left of the primary chain is the
+	one the MRO finds -- test_email's TestGenerator read TestEmailBase's policy
+	instead of TestGeneratorBase's -- and the class's own still beats it."
+
+	self assertAll: #('a_left_base_class_attribute_beats_the_primary_chain'
+		'a_left_base_class_attribute_beats_it_through_an_instance'
+		'a_left_base_class_attribute_reaches_a_further_subclass'
+		'the_class_own_attribute_still_wins'
+		'a_left_base_only_attribute_is_still_found')
+
+]
+
+{ #category : 'Grail-Tests' }
 MiSecondaryBaseAttrsTestCase >> testAnAttributeSetOnASecondaryBaseIsInherited [
 
 	self assertAll: #('set_before_the_subclass_is_seen_on_the_class'

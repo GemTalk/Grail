@@ -46,6 +46,31 @@ class Own(Mixin, Deep):
         return 'own method'
 
 
+# A CLASS-BODY attribute on a base written left of the primary chain beats the
+# chain's own: test_email's ``class TestGenerator(TestGeneratorBase,
+# TestEmailBase)'' read ``policy'' from TestEmailBase (compat32) instead of
+# TestGeneratorBase (policy.default).  A nearer class on the MRO still wins.
+class LeftMixin:
+    policy = 'left'
+    left_only = 'left only'
+
+
+class PrimaryWithPolicy(Primary):
+    policy = 'primary'
+
+
+class LeftFirst(LeftMixin, PrimaryWithPolicy):
+    pass
+
+
+class OwnPolicy(LeftMixin, PrimaryWithPolicy):
+    policy = 'own'
+
+
+class InheritsLeftFirst(LeftFirst):
+    pass
+
+
 RESULTS = {}
 EXPECTED = {
     'set_before_the_subclass_is_seen_on_the_class': True,
@@ -55,6 +80,11 @@ EXPECTED = {
     'the_subclass_own_method_still_wins': 'own method',
     'the_primary_chain_still_works': 'primary',
     'the_mixin_method_still_works': 'helper',
+    'a_left_base_class_attribute_beats_the_primary_chain': 'left',
+    'a_left_base_class_attribute_beats_it_through_an_instance': 'left',
+    'a_left_base_class_attribute_reaches_a_further_subclass': 'left',
+    'the_class_own_attribute_still_wins': 'own',
+    'a_left_base_only_attribute_is_still_found': 'left only',
 }
 _GOT = {
     'set_before_the_subclass_is_seen_on_the_class': lambda: hasattr(Sub, 'test_generated'),
@@ -64,6 +94,11 @@ _GOT = {
     'the_subclass_own_method_still_wins': lambda: Own().test_generated(),
     'the_primary_chain_still_works': lambda: Sub().primary_method(),
     'the_mixin_method_still_works': lambda: Sub().helper(),
+    'a_left_base_class_attribute_beats_the_primary_chain': lambda: LeftFirst.policy,
+    'a_left_base_class_attribute_beats_it_through_an_instance': lambda: LeftFirst().policy,
+    'a_left_base_class_attribute_reaches_a_further_subclass': lambda: InheritsLeftFirst.policy,
+    'the_class_own_attribute_still_wins': lambda: OwnPolicy.policy,
+    'a_left_base_only_attribute_is_still_found': lambda: LeftFirst.left_only,
 }
 for _name, _fn in _GOT.items():
     try:

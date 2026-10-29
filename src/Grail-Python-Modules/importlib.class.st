@@ -5774,6 +5774,43 @@ importlib class >> ___lazyBindIsStale___: aName [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___leftBaseClassAttrOverrides___: aSelector forClass: aClass from: aWalker [
+	"In OVERRIDE mode -- aWalker is a base written LEFT of the storage base,
+	or one of its ancestors -- does aWalker's class-body attribute aSelector
+	beat the one the primary chain supplies?  It does when nothing nearer in
+	aClass's MRO defines the name, as CPython reads the first class on the MRO
+	whose __dict__ holds it.
+
+	The value pass used to give way to ANY class-side accessor the primary
+	chain had, which is gap-fill, not override: ``class
+	TestGenerator(TestGeneratorBase, TestEmailBase)'' read ``policy'' from
+	TestEmailBase (compat32) instead of TestGeneratorBase (policy.default), so
+	every test_email generator test ran under the wrong policy.  The method
+	pass already honoured override mode; this is its class-attribute twin.
+
+	Not for aClass's own attributes, which always win, nor for a DUNDER: a
+	class's store carries per-class bookkeeping under those names (see Object
+	>> ___secondaryBaseAttr___:name:), which the gap-fill rule keeps as it was."
+
+	| mro walkerIdx |
+	(aSelector size > 1 and: [(aSelector at: 1) = $_ and: [(aSelector at: 2) = $_]])
+		ifTrue: [^ false].
+	(aClass class includesSelector: aSelector environmentId: 1) ifTrue: [^ false].
+	(self ___mroDefinerOf___: aSelector forClass: aClass precedes: aWalker) ifTrue: [^ false].
+	mro := [self ___mroOf___: aClass] on: Error do: [:e | e return: #()].
+	walkerIdx := mro indexOf: aWalker.
+	walkerIdx <= 1 ifTrue: [^ false].
+	2 to: walkerIdx - 1 do: [:i | | c |
+		c := mro at: i.
+		((c isKindOf: Behavior)
+			and: [(c class includesSelector: aSelector environmentId: 1)
+			and: [(c class categoryOfSelector: aSelector environmentId: 1) = #'Grail-Class Attrs']])
+			ifTrue: [^ false]].
+	^ true
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	"Load a module from a file path and register it.
 	Returns the module instance.
@@ -6454,7 +6491,9 @@ importlib class >> ___mergeSecondaryBases___: aClass bases: secondaryBases resol
 						and: [(kernelSlots includes: sel) not
 						and: [sel ~~ #'__module__'
 						and: [sel ~~ #'___dynInstVars___'
-						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil]]]]]) ifTrue: [
+						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
+							or: [overrideMode
+								and: [(self ___leftBaseClassAttrOverrides___: sel forClass: aClass from: walker)]]]]]]]) ifTrue: [
 						| v holder |
 						"Read the value AS SEEN FROM ``base'' -- the class actually
 						named in the class header -- not from ``walker'', which is

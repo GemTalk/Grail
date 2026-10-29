@@ -775,6 +775,19 @@ ByteArray >> ___checkByteValue___: n [
 
 ]
 
+{ #category : 'Grail-Encoding/Decoding' }
+ByteArray >> ___checkCodecName___: encoding [
+	"A codec name holding a lone surrogate is refused as CPython refuses it:
+	the name is converted to UTF-8 before the lookup, so the answer is
+	UnicodeEncodeError.  Normalising it here sent #asLowercase to the
+	PyStrSurrogate instead, an uncatchable MessageNotUnderstood -- and
+	email._encoded_words decodes a header's charset exactly this way, catching
+	UnicodeEncodeError to record a CharsetError defect."
+	(encoding @env0:isKindOf: PyStrSurrogate) ifTrue: [
+		encoding @env1:encode: 'utf-8' _: 'strict']
+
+]
+
 { #category : 'Grail-Search Methods' }
 ByteArray >> ___checkReplaceResultLen___: resultLen [
 	"CPython raises OverflowError (``replace bytes is too long'') when the
@@ -2058,7 +2071,14 @@ ByteArray >> __eq__: other [
 	otherClass := other @env0:class.
 
 	"Equal only to a bytes-like object (bytes / bytearray / subclasses); CPython
-	compares bytes and bytearray by value across the two types."
+	compares bytes and bytearray by value across the two types.
+
+	A memoryview is bytes-like too.  CPython's bytes.__eq__ answers
+	NotImplemented for one and the reflected memoryview.__eq__ compares the
+	bytes, so ``b'x' == memoryview(b'x')'' is True; answering false here made
+	it False while the reflected spelling was True (email's
+	get_payload(decode=True) hands a memoryview payload back as-is)."
+	(other isKindOf: memoryview) ifTrue: [^ other __eq__: self].
 	(other isKindOf: bytes) ifFalse: [
 		^ false
 	].
@@ -2715,6 +2735,7 @@ ByteArray >> decode: encoding [
 	or .mo Content-Type header -- raised LookupError while 'utf-8' worked.
 	Lowercase plus underscore-to-hyphen also subsumes the alias spellings
 	('utf_8', 'unicode_escape') without enumerating them per branch."
+	self ___checkCodecName___: encoding.
 	encodingStr := (encoding @env0:asLowercase)
 		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 
@@ -2889,6 +2910,7 @@ ByteArray >> decode: encoding _: errors [
 	input."
 
 	| enc info |
+	self ___checkCodecName___: encoding.
 	enc := (encoding @env0:asLowercase)
 		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])

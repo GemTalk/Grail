@@ -8,8 +8,9 @@
 #     MagicMock: ``new_callable'' was not a patch keyword.
 #   * ``io.StringIO(initial_value=...)'' -- how patch passes its keywords on --
 #     took no keywords at all, and ``StringIO(5)'' / ``StringIO(None)'' held
-#     '5' / 'None'.  (newline=None, '\r' and '\r\n' translate newlines in
-#     CPython; Grail's StringIO refuses them, so they are not compared.)
+#     '5' / 'None'.  newline=None, '\r' and '\r\n' used to be refused, as
+#     Grail's StringIO did not translate newlines; it does now, and they are
+#     compared like the rest.
 #
 # Only platform-independent stat values are compared: _stat, where present,
 # supplies some bits (S_IFWHT, the UF_ flags) from the host's headers.
@@ -110,19 +111,10 @@ r['new_callable_refusals'] = repr([
     _err(lambda: patch('sys.stdout', new_callable=io.StringIO, autospec=True)),
 ])
 
-# --- newline translation (Grail-only: recorded, not compared) -----------------
+# --- newline translation --------------------------------------------------------
 
-def _kind(f):
-    try:
-        f()
-        return 'no error'
-    except Exception as e:
-        return type(e).__name__
-
-
-grail_only = {}
-grail_only['stringio_newline_translation'] = repr([
-    _kind(lambda: io.StringIO(newline=v)) for v in (None, '\r', '\r\n')])
+r['stringio_newline_translation'] = repr([
+    io.StringIO('a\nb\rc\r\n', newline=v).getvalue() for v in (None, '\r', '\r\n')])
 
 EXPECTED = {
     'new_callable_decorator': "'Interpreter: <none>\\n'",
@@ -135,6 +127,7 @@ EXPECTED = {
     'stat_ifmt_constants': "['0o40000', '0o20000', '0o60000', '0o100000', '0o10000', '0o120000', '0o140000']",
     'stat_ifmt_is_a_function': "['0o100000', '0o755', True, True, True]",
     'stat_st_indices': '[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]',
+    'stringio_newline_translation': "['a\\nb\\nc\\n', 'a\\rb\\rc\\r\\r', 'a\\r\\nb\\rc\\r\\r\\n']",
     'stringio_constructor': '["\'\'", "\'x\'", "\'seed\'", "\'a\'", "\'\'", "\'\'", "TypeError: StringIO() got an unexpected keyword argument \'foo\'", \'TypeError: StringIO() takes at most 2 arguments (3 given)\', "ValueError: illegal newline value: \'x\'", \'TypeError: initial_value must be str or None, not int\', "TypeError: argument for StringIO() given by name (\'initial_value\') and position (1)", \'TypeError: newline must be str or None, not int\']',
 }
 
