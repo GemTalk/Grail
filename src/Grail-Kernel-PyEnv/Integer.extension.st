@@ -1574,9 +1574,12 @@ Integer >> __pow__: other [
 
 { #category : 'Grail-Arithmetic' }
 Integer >> __pow__: other _: mod [
-	"Raise to power with modulo."
+	"Raise to power with modulo.  A None modulus is the 2-argument form
+	(Objects/longobject.c:4906), where ``\\ None'' was an uncatchable
+	MessageNotUnderstood."
 
 	| result |
+	mod == None ifTrue: [^ self __pow__: other].
 	"A bool or an int subclass's instance is an int here too: ``pow(2, True,
 	5)'' is 2.  The kernel's raisedTo: and \\ take neither."
 	((other @env0:isKindOf: Integer) not and: [self ___isPyIntOperand___: other])
