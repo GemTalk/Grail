@@ -21,12 +21,23 @@ ModuleAttrDeleteTestCase >> assertMatchesCPythonAt: key [
 
 { #category : 'Grail-Setup' }
 ModuleAttrDeleteTestCase >> setUp [
-	| mods |
+	"The fixture deletes and reassigns the SESSION's sys.argv.  Python reads
+	it back fine, but the reassignment does not land in the dictionary entry
+	the delete removed, and Smalltalk's ``sys argv'' reads only that entry --
+	so a later class in the same session (SysTestCase>>testArgv) found no
+	argv at all.  Put the entry back."
+
+	| mods sysInst savedArgv |
 	mods := importlib @env1:modules.
 	mods removeKey: #'module_attr_delete' ifAbsent: [].
-	testModule := importlib
+	sysInst := sys @env1:instance.
+	savedArgv := sysInst at: #argv otherwise: nil.
+	[testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/module_attr_delete.py')
-		name: 'module_attr_delete'.
+		name: 'module_attr_delete']
+		ensure: [
+			(savedArgv notNil and: [(sysInst at: #argv otherwise: nil) isNil])
+				ifTrue: [sysInst at: #argv put: savedArgv]].
 
 ]
 
