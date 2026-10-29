@@ -148,9 +148,28 @@ above.
 - A declaration inside the internal subset reaches the default handler whole;
   expat splits it into tokens as it does the DOCTYPE head.
 
-## OPEN: a failed package import evicts the submodules that DID import
+## OPEN: re-executing a module that defines a `slots=True` dataclass leaves its instances without the slots
 
 *(measured 2026-10-27, Darwin arm64, `gs40`)*
+
+Found through the entry below, which is now FIXED: a retry no longer re-runs
+a module that finished loading, so the logfire path no longer reaches this.
+Any other re-execution still does.  Measured 2026-10-28 on 4.0.0.a8: take the
+five files below without `import no_such_module_xyz`, `import pk`, `del` every
+`pk*` key from `sys.modules`, and `import pk` again.  CPython reads
+`params.PARAMS['a'].env_vars` both times; Grail's second import raises
+`AttributeError: 'P' object has no attribute 'env_vars'`.
+
+## FIXED: a failed package import evicts the submodules that DID import
+
+*(measured 2026-10-27, Darwin arm64, `gs40`; fixed 2026-10-28)*
+
+The failed-body handler in `importlib >> loadModuleFromPath:name:` unloaded
+through `removeModule:`, which sweeps the whole `name.*` subtree.  It now calls
+`removeModule:withSubmodules: false`, which removes the failed module and
+nothing else, as CPython's `_load_unlocked` does.
+`tests/python/failed_package_import.py` (`FailedPackageImportTestCase`) checks
+the case below and a package whose own `__init__` fails.
 
 ```
 pk/__init__.py       from ._int import cli

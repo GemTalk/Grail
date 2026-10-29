@@ -1708,7 +1708,7 @@ test_telemetry test missing).  What is left:
 | tests | why |
 |---|---|
 | 35 | they run a subprocess with `sys.executable`, which Grail answers `''`.  Pointing it at the `grail` launcher is the next step; each subprocess then pays a cold FastAPI import (~80s on this machine) against tests written for a 15s budget |
-| 3 | trio: Grail's `select` has neither `epoll` nor `kqueue`, so `trio._core._run` raises "unsupported platform"; the two `Can't freeze a class with a custom __setattr__` failures are the retry of that failed import (docs/Issues.md, "a failed package import evicts the submodules that DID import") |
+| 3 | trio: Grail's `select` has neither `epoll` nor `kqueue`, so `trio._core._run` raises "unsupported platform"; the `Can't freeze a class with a custom __setattr__` failure is the retry of that failed import.  The raise is at module level, so `_run.py` fails to import and the next test re-runs it, as CPython would; re-defining its attrs classes then finds a `__setattr__` already on them.  Run alone, that test fails with "unsupported platform" like the first.  Not the eviction fixed on 2026-10-28, which left it unchanged; most likely the re-execution defect in docs/Issues.md, "re-executing a module that defines a `slots=True` dataclass" |
 | 1 | `test_environment_export_initializes_after_fork`: skipped, no `os.fork` |
 | 1 | `test_retained_context_does_not_keep_failed_request_alive`: a weakref to the request is still live after `gc.collect()` |
 | 1 | `test_request_objects_are_not_exported`: a private value reaches the exported OTLP payload; not yet traced |

@@ -2903,6 +2903,16 @@ importlib class >> ___forgetHashStateFor___: aName [
 
 	Returns the number of verdicts forgotten."
 
+	^ self ___forgetHashStateFor___: aName withSubmodules: true
+
+]
+
+{ #category : 'Grail-Module Registry' }
+importlib class >> ___forgetHashStateFor___: aName withSubmodules: withSubmodules [
+	"___forgetHashStateFor___:, sweeping aName.* only when withSubmodules is
+	true -- in step with removeModule:withSubmodules:, so a submodule that
+	stays in sys.modules keeps its verdict."
+
 	| map prefix toRemove |
 	map := self _stateMap.
 	prefix := aName , '.'.
@@ -2910,7 +2920,8 @@ importlib class >> ___forgetHashStateFor___: aName [
 	map keysDo: [:k |
 		| kStr |
 		kStr := k asString.
-		((kStr = aName) or: [kStr beginsWith: prefix]) ifTrue: [toRemove add: k]].
+		((kStr = aName) or: [withSubmodules and: [kStr beginsWith: prefix]])
+			ifTrue: [toRemove add: k]].
 	toRemove do: [:k | map removeKey: k ifAbsent: []].
 	^ toRemove size
 
@@ -6064,8 +6075,9 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	would otherwise leave a half-built module stuck in sys.modules — its
 	top-level globals (e.g. re's ``RegexFlag'') never got assigned.  A later
 	``import'' would then no-op and hand back that corrupt instance.  Unload
-	it (whole subtree + session caches) on failure so the next import
-	rebuilds cleanly from source, then re-signal."
+	it (with its session caches) on failure so the next import rebuilds
+	cleanly from source, then re-signal.  Only it: as in CPython, a submodule
+	that finished loading stays (removeModule:withSubmodules:)."
 	self ___resetMintedThisLoad___: moduleName.
 	"___recursionGuard___ turns a runaway recursion in the module body into a
 	catchable Python RecursionError instead of an AlmostOutOfStack notification
@@ -6098,7 +6110,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 			resumes where it was.  BaseException is not a Notification, so every
 			Python raise still takes the unload path below."
 			(ex isKindOf: Notification) ifTrue: [ex pass].
-			self removeModule: moduleName.
+			self removeModule: moduleName withSubmodules: false.
 			self ___restoreParentBinding___: parentBinding of: moduleInstance.
 			earlyEntry ifTrue: [
 				previousEntry isNil
@@ -10497,6 +10509,25 @@ importlib class >> removeModule: aName [
 
 	Returns the number of registry entries removed."
 
+	^ self removeModule: aName withSubmodules: true
+
+]
+
+{ #category : 'Grail-Module Registry' }
+importlib class >> removeModule: aName withSubmodules: withSubmodules [
+	"removeModule:, sweeping the ``aName.*'' subtree only when withSubmodules
+	is true.
+
+	False is for a module whose BODY failed.  CPython's _load_unlocked then
+	deletes sys.modules[name] and nothing else: a submodule that finished
+	loading on the way to the failure stays cached, and a retry reuses it
+	rather than running it again.  Sweeping the subtree there re-ran modules
+	CPython does not, and a re-run is not always harmless -- one defining a
+	slots=True dataclass left its instances without their slots, so the retry
+	raised an AttributeError in place of the original error (FastAPI's
+	test_telemetry, through logfire's CLI).  The failed module's own session
+	caches and hash-state verdict go either way."
+
 	| mods prefix toRemove |
 	mods := self @env1:modules.
 	prefix := aName , '.'.
@@ -10505,13 +10536,14 @@ importlib class >> removeModule: aName [
 		| k |
 		k := key asString.
 		((k = aName)
-			or: [(k size > prefix size)
-				and: [(k copyFrom: 1 to: prefix size) = prefix]])
+			or: [withSubmodules
+				and: [(k size > prefix size)
+				and: [(k copyFrom: 1 to: prefix size) = prefix]]])
 			ifTrue: [toRemove add: key]].
 	toRemove do: [:key |
 		mods removeKey: key ifAbsent: [].
 		self ___clearSessionCachesFor___: key asString].
-	self ___forgetHashStateFor___: aName.
+	self ___forgetHashStateFor___: aName withSubmodules: withSubmodules.
 	"Something wants a rebuild from source: files may have changed since the
 	per-session staleness verdicts and source hashes were taken."
 	SessionTemps current removeKey: #'GrailModuleCurrency' ifAbsent: [].
