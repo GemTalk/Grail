@@ -352,13 +352,18 @@ PythonParser class >> parse: aString evalInput: isEvalInput [
 	A TabError the tokenizer noted (PythonTokenizer >> handleIndentation:) is
 	raised HERE, in the order CPython's lazy tokenizer would meet it: an error
 	the parser finds before that line stands, and anything else -- an error at
-	or after it, or a parse that succeeds -- is the TabError."
+	or after it, or a parse that succeeds -- is the TabError.
 
-	| parser |
+	The source is read with universal newlines, as the tokenizer reads it, so
+	that an error is located in the text its tokens' positions count
+	(PythonParser >> source:)."
+
+	| parser text |
+	text := PythonTokenizer translateNewlines: aString.
 	parser := self basicNew.
 	parser ___evalInput___: isEvalInput.
 	^ [ | module |
-		module := parser source: aString; parseModule.
+		module := parser source: text; parseModule.
 		parser ___signalPendingTabError___.
 		parser ___checkFutureImportsIn___: module.
 		module]
@@ -366,7 +371,7 @@ PythonParser class >> parse: aString evalInput: isEvalInput [
 		do: [:ex |
 			(parser ___tabErrorPrecedes___: ex) ifTrue: [parser ___signalPendingTabError___].
 			self ___fillSyntaxErrorLocation___: ex
-				source: aString
+				source: text
 				at: parser ___currentSourcePosition___.
 			ex pass]
 
@@ -7976,10 +7981,15 @@ PythonParser >> skipTypeParams [
 
 { #category : 'Grail-initialization' }
 PythonParser >> source: aString [
+	"Universal newlines, as the tokenizer reads them: its tokens' positions
+	count the translated text, so the errors located with them have to be
+	located in it too.  Kept raw, every error after a CRLF was one column early
+	per CR before it -- ``x=1\r\ny=1 +'' at column 5 -- and after a lone CR on
+	the wrong line."
 
 	| tokenizer |
-	source := aString.
-	tokenizer := PythonTokenizer on: aString.
+	source := PythonTokenizer translateNewlines: aString.
+	tokenizer := PythonTokenizer on: source.
 	"An error the TOKENIZER raises comes after any TabError it noted, which is
 	on an earlier line, so CPython's lexer would have stopped at the TabError."
 	tokens := [tokenizer tokenize]

@@ -1118,15 +1118,16 @@ ModuleAst class >> parseSource: sourceString [
 	the same refusals, inside the callers' existing on: SyntaxError
 	rescue."
 
-	| module |
-	module := PythonParser parse: sourceString.
+	| text module |
+	text := PythonTokenizer translateNewlines: sourceString.
+	module := PythonParser parse: text.
 	"THE MODULE REMEMBERS ITS SOURCE.  A def's body text is not recoverable
 	from the tree -- Grail has no unparse -- and exec() of a def's code object
 	with a substituted closure has to run that text.  Recording it here, on the
 	root, is the one place every entry (import, exec, eval, compile) passes
 	through, and it costs a reference rather than a copy."
-	module source isNil ifTrue: [module source: sourceString].
-	AbstractNode ___currentModuleSource___: sourceString.
+	module source isNil ifTrue: [module source: text].
+	AbstractNode ___currentModuleSource___: text.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #module.
 	self ___validatePatternsIn___: module.
@@ -1170,12 +1171,13 @@ ModuleAst class >> parseSource: sourceString allowTopLevelAwait: allowAwait eval
 	the one parser instance that parses this source, it reaches neither a
 	nested parse nor one made from a handler."
 
-	| module |
+	| text module |
+	text := PythonTokenizer translateNewlines: sourceString.
 	module := isEvalInput
-		ifTrue: [PythonParser parseEvalInput: sourceString]
-		ifFalse: [PythonParser parse: sourceString].
-	module source isNil ifTrue: [module source: sourceString].
-	AbstractNode ___currentModuleSource___: sourceString.
+		ifTrue: [PythonParser parseEvalInput: text]
+		ifFalse: [PythonParser parse: text].
+	module source isNil ifTrue: [module source: text].
+	AbstractNode ___currentModuleSource___: text.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: (allowAwait ifTrue: [#async] ifFalse: [#module]).
 	self ___validatePatternsIn___: module.
