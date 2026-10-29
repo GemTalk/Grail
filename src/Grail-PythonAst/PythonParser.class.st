@@ -583,6 +583,30 @@ PythonParser >> ___checkDeclarationLegal___: aName kind: aKind at: aToken [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___checkedFStringConversionIn___: aFieldText at: anIndex token: aTok fieldAt: aFieldStart [
+	"The conversion the ``!'' at anIndex opens, checked as CPython checks it
+	(Parser/action_helpers.c:966-987): a NAME written right after the ``!'',
+	which is one of s, r and a, and then the field's ``:'' or ``}''.  Answer
+	the index past that NAME.  Grail took the first letter alone, so
+	``f'{3!ss}''' formatted with !s (test_fstring test_conversions)."
+
+	| nameEnd next |
+	nameEnd := PythonTokenizer ___identifierEndIn___: aFieldText from: anIndex + 1.
+	nameEnd = (anIndex + 1) ifTrue: [
+		^ self ___signalNoFStringConversionIn___: aFieldText at: anIndex token: aTok fieldAt: aFieldStart].
+	(nameEnd = (anIndex + 2) and: ['sra' includesValue: (aFieldText at: anIndex + 1)]) ifFalse: [
+		^ self
+			___fstringError___: 'invalid conversion character ''' , (aFieldText copyFrom: anIndex + 1 to: nameEnd - 1)
+				, ''': expected ''s'', ''r'', or ''a'''
+			token: aTok fieldAt: aFieldStart from: anIndex + 1 to: nameEnd].
+	next := PythonTokenizer ___indexAfterWhitespaceIn___: aFieldText from: nameEnd.
+	(next > aFieldText size or: [':}' includesValue: (aFieldText at: next)]) ifFalse: [
+		^ self ___fstringError___: 'expecting '':'' or ''}''' token: aTok fieldAt: aFieldStart index: next].
+	^ nameEnd
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___checkFeaturesOf___: aFutureImport [
 	"future_check_features (Python/future.c:8-62): each name a future
@@ -1280,20 +1304,31 @@ PythonParser >> ___fstringDebugEqualsIn___: text [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser >> ___fstringError___: aMessage token: aTok fieldAt: aFieldStart from: aStartIndex to: anEndIndex [
+	"An f-string (or t-string) field error over the field's text from
+	aStartIndex to the EXCLUSIVE anEndIndex, mapped to the source as a single
+	index is."
+
+	| prefixedMessage anchor offset |
+	prefixedMessage := (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage.
+	anchor := aTok fieldStarts ifNil: [nil] ifNotNil: [:fs |
+		fs detect: [:a | (a at: 1) = aFieldStart] ifNone: [nil]].
+	anchor isNil ifTrue: [^ SyntaxError signal: prefixedMessage].
+	offset := (anchor at: 2) - (anchor at: 1).
+	^ PythonParser ___signal___: SyntaxError
+		message: prefixedMessage
+		in: source from: aStartIndex + offset to: anEndIndex + offset
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser >> ___fstringError___: aMessage token: aTok fieldAt: aFieldStart index: anIndex [
 	"An f-string (or t-string) field error, at the character CPython names:
 	the field's text is verbatim source, so an index into it maps to the
 	source through the field's recorded start."
 
-	| anchor at |
-	anchor := aTok fieldStarts ifNil: [nil] ifNotNil: [:fs |
-		fs detect: [:a | (a at: 1) = aFieldStart] ifNone: [nil]].
-	anchor isNil ifTrue: [
-		^ SyntaxError signal: (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage].
-	at := (anchor at: 2) + anIndex - (anchor at: 1).
-	^ PythonParser ___signal___: SyntaxError
-		message: (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage
-		in: source from: at to: at + 1
+	^ self ___fstringError___: aMessage token: aTok fieldAt: aFieldStart
+		from: anIndex to: anIndex + 1
 
 ]
 
@@ -2715,6 +2750,25 @@ PythonParser >> ___signalDeclarationSyntaxError___: aMessage at: aToken [
 		or: [((tokens at: j + 1) isOp: ';') or: [(tokens at: j + 1) type == #ENDMARKER]]) not]]
 			whileTrue: [j := j + 1].
 	^ self ___syntaxError___: aMessage from: aToken to: (tokens at: j)
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___signalNoFStringConversionIn___: aFieldText at: anIndex token: aTok fieldAt: aFieldStart [
+	"CPython's errors for a ``!'' with no NAME right after it, each located at
+	what follows the ``!'' (Grammar/python.gram:1528-1530 and
+	Parser/action_helpers.c:968-974): nothing before the ``:'' or ``}'', a
+	NAME separated from the ``!'', or something that is not a NAME."
+
+	| next nameEnd |
+	next := PythonTokenizer ___indexAfterWhitespaceIn___: aFieldText from: anIndex + 1.
+	(next <= aFieldText size and: [':}' includesValue: (aFieldText at: next)]) ifTrue: [
+		^ self ___fstringError___: 'missing conversion character' token: aTok fieldAt: aFieldStart index: next].
+	nameEnd := PythonTokenizer ___identifierEndIn___: aFieldText from: next.
+	nameEnd > next ifTrue: [
+		^ self ___fstringError___: 'conversion type must come right after the exclamation mark'
+			token: aTok fieldAt: aFieldStart from: anIndex to: nameEnd].
+	^ self ___fstringError___: 'invalid conversion character' token: aTok fieldAt: aFieldStart index: next
 
 ]
 
@@ -5012,33 +5066,17 @@ PythonParser >> parseFStringLiteral [
 							exprEnd isNil ifTrue: [
 								inSpec ifTrue: [specBuf nextPut: ch. pos := pos + 1] ifFalse: [
 									"Conversion flag: ``!r`` / ``!s`` / ``!a``
-									(only at depth 0, after the expression)."
-									"A ``!'' that is not ``!='' opens a conversion, which
-									must be one of s, r and a."
+									(only at depth 0, after the expression).  A
+									``!'' that is not ``!='' opens a conversion,
+									checked as CPython checks it
+									(___checkedFStringConversionIn___:...)."
 									(ch == $! and: [bracketDepth == 0 and: [pos < len
-										and: [(value at: pos + 1) ~~ $=
-										and: [('rsa' includesValue: (value at: pos + 1)) not]]]])
-										ifTrue: [
-											| c2 k |
-											c2 := value at: pos + 1.
-											(c2 == $} or: [c2 == $:]) ifTrue: [
-												^ self ___fstringError___: 'missing conversion character'
-													token: tok fieldAt: exprStart index: pos + 1].
-											c2 isLetter ifTrue: [
-												k := pos + 1.
-												[k <= len and: [(value at: k) isLetter]] whileTrue: [k := k + 1].
-												^ self ___fstringError___: 'invalid conversion character '''
-														, (value copyFrom: pos + 1 to: k - 1) , ''': expected ''s'', ''r'', or ''a'''
-													token: tok fieldAt: exprStart index: pos + 1]].
-									(ch == $! and: [bracketDepth == 0
-										and: [(pos < len) and: [
-											| c2 |
-											c2 := value at: pos + 1.
-											c2 == $r or: [c2 == $s or: [c2 == $a]]]]])
+										and: [(value at: pos + 1) ~~ $=]]])
 										ifTrue: [
 											exprStop := pos - 1.
 											conversion := value at: pos + 1.
-											pos := pos + 2.
+											pos := self ___checkedFStringConversionIn___: value
+												at: pos token: tok fieldAt: exprStart.
 									] ifFalse: [
 										"Format spec opener: ``:`` at depth 0."
 										(ch == $: and: [bracketDepth == 0]) ifTrue: [
