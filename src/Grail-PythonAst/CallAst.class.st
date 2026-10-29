@@ -2595,7 +2595,8 @@ CallAst >> ___emitIRSuperExplicitOn___: aBuilder [
 			aBuilder atNode: first.
 			self ___emitIRDefiningClassReadOn___: aBuilder
 				cellSelector: #'___classCell___:']
-		ifFalse: [(first isModuleVariableName: first id asSymbol)
+		ifFalse: [((first isModuleVariableName: first id asSymbol)
+				and: [(first ___localBindingShadows___: first id asSymbol) not])
 			ifTrue: [
 				aBuilder atNode: first.
 				aBuilder send: first id asSymbol to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1]
@@ -3221,8 +3222,15 @@ CallAst >> ___emitSmalltalkOn___: aStream [
 			The accessor is kept only for a name the module really does bind,
 			which is the case the comment above is about: inside a class's own
 			compiled method a bare reference to that class is not reliably in
-			scope."
-			((arguments at: 1) isModuleVariableName: (arguments at: 1) id asSymbol)
+			scope.
+
+			A name a LOCAL binds is that local, even when the module binds it too
+			-- including when a ``global D'' in some other function is all that
+			makes the module know the name, which is enough for
+			isModuleVariableName: (test_descr's test_pickle_slots declares one,
+			and test_classmethods' ``super(D, D)'' read the module's unbound D)."
+			(((arguments at: 1) isModuleVariableName: (arguments at: 1) id asSymbol)
+				and: [((arguments at: 1) ___localBindingShadows___: (arguments at: 1) id asSymbol) not])
 				ifTrue: [
 					aStream
 						nextPutAll: '(Super @env1:checkedCls: ((';
@@ -4824,6 +4832,11 @@ CallAst >> bareCallClassNewSelector [
 	Boolean class>>value:value: makes the same split for the indirect
 	``f = bool; f(x)'' form."
 	(cls == Boolean and: [arguments size = 1]) ifTrue: [^ #'___truthOf___:'].
+	"The same split for a class that takes no arguments at all: its
+	``__new__:'' is object's allocation form, so ``object(5)'' would send it
+	with 5 as the class.  The generic form refuses (Object class >>
+	___grailTakesNoArguments___)."
+	(arguments notEmpty and: [cls ___grailTakesNoArguments___]) ifTrue: [^ nil].
 	candidate := self class classNewSelectorForArity: arguments size.
 	"Walk the metaclass chain so inherited __new__ methods are found
 	(e.g. `set` inherits __new__ from frozenset). Direct method-dict
@@ -5096,6 +5109,9 @@ CallAst >> knownClassName [
 	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
+	"A class that takes no arguments has no arity to mismatch: the generic
+	form says so in CPython's words (Object class >> ___grailTakesNoArguments___)."
+	cls ___grailTakesNoArguments___ ifTrue: [^nil].
 	metacls := cls class.
 	keywords isEmpty ifFalse: [
 		((metacls whichClassIncludesSelector: #'_new:kw:' environmentId: 1) notNil

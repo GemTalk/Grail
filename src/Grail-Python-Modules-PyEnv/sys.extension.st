@@ -127,7 +127,10 @@ sys class >> ___setArgv___: aCollection [
 	av := list ___new___.
 	aCollection == nil ifFalse: [
 		aCollection @env0:do: [:each | av @env0:add: (each @env0:asString)]].
-	inst @env0:at: #argv put: av.
+	"Through ___dataGlobalAt___:put:, not the entry alone: a program that ran
+	before may have ASSIGNED sys.argv, and that assignment shadows the entry
+	from Python's read (issue #1933)."
+	inst ___dataGlobalAt___: #argv put: av.
 	^ av
 
 ]
@@ -144,7 +147,9 @@ sys class >> ___setArgv0___: aString [
 	| inst av |
 	aString == nil ifTrue: [^ nil].
 	inst := self instance.
-	av := inst @env0:at: #argv otherwise: nil.
+	"The list PYTHON reads, which a program's own ``sys.argv = ...'' may have
+	made a different one from the entry (issue #1933)."
+	av := inst ___dataGlobalAt___: #argv otherwise: [nil].
 	av == nil ifTrue: [^ nil].
 	(av @env0:size @env0:> 0)
 		ifTrue: [av @env0:at: 1 put: (aString @env0:asString)]
@@ -473,19 +478,19 @@ sys >> ___pyAttrStore___: aName put: aValue [
 
 { #category : 'Grail-Accessors' }
 sys >> __breakpointhook__ [
-	^ self @env0:at: #__breakpointhook__
+	^ self ___dataGlobalAt___: #__breakpointhook__
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> __displayhook__ [
-	^ self @env0:at: #__displayhook__
+	^ self ___dataGlobalAt___: #__displayhook__
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> __excepthook__ [
-	^ self @env0:at: #__excepthook__
+	^ self ___dataGlobalAt___: #__excepthook__
 
 ]
 
@@ -521,7 +526,7 @@ sys >> __stdout__ [
 
 { #category : 'Grail-Accessors' }
 sys >> __unraisablehook__ [
-	^ self @env0:at: #__unraisablehook__
+	^ self ___dataGlobalAt___: #__unraisablehook__
 
 ]
 
@@ -792,31 +797,31 @@ sys >> addaudithook [
 
 { #category : 'Grail-Accessors' }
 sys >> api_version [
-	^ self @env0:at: #api_version
+	^ self ___dataGlobalAt___: #api_version
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> argv [
-	^ self @env0:at: #argv
+	^ self ___dataGlobalAt___: #argv
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> audit [
-	^ self @env0:at: #audit
+	^ self ___dataGlobalAt___: #audit
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> base_exec_prefix [
-	^ self @env0:at: #base_exec_prefix
+	^ self ___dataGlobalAt___: #base_exec_prefix
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> base_prefix [
-	^ self @env0:at: #base_prefix
+	^ self ___dataGlobalAt___: #base_prefix
 
 ]
 
@@ -843,19 +848,19 @@ sys >> breakpoint [
 
 { #category : 'Grail-Accessors' }
 sys >> builtin_module_names [
-	^ self @env0:at: #builtin_module_names
+	^ self ___dataGlobalAt___: #builtin_module_names
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> byteorder [
-	^ self @env0:at: #byteorder
+	^ self ___dataGlobalAt___: #byteorder
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> call_tracing [
-	^ self @env0:at: #call_tracing
+	^ self ___dataGlobalAt___: #call_tracing
 
 ]
 
@@ -868,7 +873,7 @@ sys >> call_tracing: func _: args [
 
 { #category : 'Grail-Accessors' }
 sys >> copyright [
-	^ self @env0:at: #copyright
+	^ self ___dataGlobalAt___: #copyright
 
 ]
 
@@ -895,7 +900,7 @@ sys >> displayhook: value [
 
 { #category : 'Grail-Accessors' }
 sys >> dont_write_bytecode [
-	^ self @env0:at: #dont_write_bytecode
+	^ self ___dataGlobalAt___: #dont_write_bytecode
 
 ]
 
@@ -917,14 +922,34 @@ sys >> exc_info [
 
 { #category : 'Grail-Accessors' }
 sys >> excepthook [
-	^ self @env0:at: #excepthook
+	^ self ___dataGlobalAt___: #excepthook
 
 ]
 
 { #category : 'Grail-Built-in Functions' }
 sys >> excepthook: excType _: excValue _: excTb [
-	"excepthook(type, value, traceback) - print exception to stderr."
-	GsFile @env0:gciLogServer: 'Exception: ', excValue printString.
+	"sys.excepthook(type, value, traceback), and sys.__excepthook__, which is
+	the same function: the exception and its traceback printed to sys.stderr,
+	as CPython's PyErr_Display prints them through the traceback module
+	(Python/pythonrun.c:1132-1218).  A traceback handed in goes onto an
+	exception that has none, which is what makes it print (bpo-18776), and a
+	None sys.stderr prints nothing.
+
+	It logged ``'Exception: ', excValue printString'' to the GCI server log
+	instead: nothing reached sys.stderr, and that printString is env 1, which
+	no exception understands, so every call was an uncatchable
+	MessageNotUnderstood (test_exceptions test_unhandled, test_issue45826)."
+
+	| file printException |
+	file := self ___pyAttrLoad___: #stderr.
+	file == None ifTrue: [^ None].
+	((excValue @env0:isKindOf: BaseException) and: [excTb ~~ None
+		and: [excValue __traceback__ == None]]) ifTrue: [excValue with_traceback: excTb].
+	printException := (((Python @env0:at: #builtins) @env1:instance)
+		@env1:___import__: { 'traceback' } kw: nil) ___pyAttrLoad___: #print_exception.
+	printException
+		value: { excValue }
+		value: ((PyDict @env0:new) @env0:at: 'file' put: file; yourself).
 	^ None
 
 ]
@@ -940,13 +965,13 @@ sys >> exception [
 
 { #category : 'Grail-Accessors' }
 sys >> exec_prefix [
-	^ self @env0:at: #exec_prefix
+	^ self ___dataGlobalAt___: #exec_prefix
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> executable [
-	^ self @env0:at: #executable
+	^ self ___dataGlobalAt___: #executable
 
 ]
 
@@ -980,19 +1005,19 @@ sys >> exit: code [
 
 { #category : 'Grail-Accessors' }
 sys >> flags [
-	^ self @env0:at: #flags
+	^ self ___dataGlobalAt___: #flags
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> float_info [
-	^ self @env0:at: #float_info
+	^ self ___dataGlobalAt___: #float_info
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> float_repr_style [
-	^ self @env0:at: #float_repr_style
+	^ self ___dataGlobalAt___: #float_repr_style
 
 ]
 
@@ -1069,7 +1094,7 @@ sys >> getrecursionlimit [
 
 { #category : 'Grail-Accessors' }
 sys >> getrefcount [
-	^ self @env0:at: #getrefcount
+	^ self ___dataGlobalAt___: #getrefcount
 
 ]
 
@@ -1082,7 +1107,7 @@ sys >> getrefcount: obj [
 
 { #category : 'Grail-Accessors' }
 sys >> getsizeof [
-	^ self @env0:at: #getsizeof
+	^ self ___dataGlobalAt___: #getsizeof
 
 ]
 
@@ -1120,19 +1145,19 @@ sys >> gettrace [
 
 { #category : 'Grail-Accessors' }
 sys >> hash_info [
-	^ self @env0:at: #hash_info
+	^ self ___dataGlobalAt___: #hash_info
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> hexversion [
-	^ self @env0:at: #hexversion
+	^ self ___dataGlobalAt___: #hexversion
 
 ]
 
 { #category : 'Grail-Accessors' }
 sys >> implementation [
-	^ self @env0:at: #implementation
+	^ self ___dataGlobalAt___: #implementation
 
 ]
 
@@ -1330,10 +1355,10 @@ sys >> initialize_runtime_info [
 	nil for every other topaz session, whose argv is left exactly as it was."
 	argvArgs := sys ___argvFromCommandLine___: cmdArgs.
 	argvArgs == nil ifTrue: [argvArgs := cmdArgs].
-	self @env0:at: #argv put: (list ___new___).
+	self ___dataGlobalAt___: #argv put: (list ___new___).
 	self @env0:at: #orig_argv put: (list ___new___).
 	argvArgs @env0:do: [:arg |
-		(self @env0:at: #argv) append: arg.
+		(self ___dataGlobalAt___: #argv) append: arg.
 	].
 	cmdArgs @env0:do: [:arg |
 		(self @env0:at: #orig_argv) append: arg.
@@ -1458,7 +1483,7 @@ sys >> initialize_version_info [
 
 { #category : 'Grail-Accessors' }
 sys >> int_info [
-	^ self @env0:at: #int_info
+	^ self ___dataGlobalAt___: #int_info
 
 ]
 

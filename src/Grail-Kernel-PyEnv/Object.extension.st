@@ -1168,7 +1168,8 @@ Object class >> ___grailDispatchMetaclass___ [
 		fn := [meta ___pyAttrLoad___: #'__init__']
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		fn @env0:notNil ifTrue: [
-			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: hdrKw]].
+			(fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: hdrKw)
+				@env0:___checkInitResult___]].
 	^ result
 	] @env0:ensure: [
 		"SAFETY NET for a deferred enum member build (Enum class
@@ -5908,8 +5909,14 @@ Object class >> __new__: cls [
 	._from_namespace uses this to materialize a Template object
 	whose attributes get filled by the exec'd namespace.
 	Sealed kernel classes refuse #new UNCATCHABLY -- resignal as
-	CPython's TypeError (see ___allocateInstance___:kw:)."
+	CPython's TypeError (see ___allocateInstance___:kw:).  So would anything
+	that is not a class, which CPython refuses first
+	(Objects/typeobject.c:9822-9828)."
 
+	(cls @env0:isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___: self __name__ @env0:asString
+			@env0:, '.__new__(X): X is not a type object ('
+			@env0:, cls ___pyTypeNameForError___ @env0:asString @env0:, ')'].
 	^ [cls @env0:new]
 		@env0:on: Error
 		do: [:ex |
@@ -6003,12 +6010,21 @@ Object class >> value: positional value: kwargs [
 		instance ___pyBuiltinSubclassInit___: positional kw: kwargs new: false.
 		dynInit := self ___dynamicClassAttr___: #'__init__'.
 		dynInit == nil ifFalse: [
-			dynInit ___pyCallValue___: ({ instance } @env0:, positional) kw: kwargs.
+			(dynInit ___pyCallValue___: ({ instance } @env0:, positional) kw: kwargs)
+				@env0:___checkInitResult___.
 			^ instance].
-		[instance @env0:perform: #'___init__:kw:' env: 1
+		([instance @env0:perform: #'___init__:kw:' env: 1
 			withArguments: { positional. kwargs }]
-				@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: nil].
+				@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: nil])
+					@env0:___checkInitResult___.
 		^ instance].
+	"A class that takes no arguments refuses any, in CPython's words: object's
+	is Objects/typeobject.c's object_new, the singletons' their own tp_new.
+	Its ``__new__:'' is object's allocation form, which read ``object(5)'' as
+	``5 new''."
+	(self @env0:___grailTakesNoArguments___
+		and: [positional @env0:notEmpty or: [kwargs ~~ nil and: [kwargs @env0:notEmpty]]])
+			ifTrue: [^ self ___grailTakesNoArgumentsError___].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		"ONLY IF IT IS IMPLEMENTED, which the dispatch order above has always
 		said and this branch did not do.  A built-in class with no ``_new:kw:''
@@ -6263,6 +6279,15 @@ Object >> ___allocateInstance___: positional kw: keywords [
 		and nothing else, whether or not the subclass has an __init__."
 		(self @env0:inheritsFrom: WeakReference) ifTrue: [
 			^ self ___grailWeakrefSubclassNew___: positional kw: keywords].
+		"An exception subclass the same way: BaseException's __new__ forms are
+		class-side, so the probe above never finds them, and plain #new kept no
+		args.  CPython's BaseException_new keeps the positional arguments as
+		``args'' whatever the subclass's __init__ then does, so
+		``class E(Exception): def __init__(self, x): self.x = x'' still has
+		``E('foo').args == ('foo',)'' -- Grail had (), which str(), repr() and
+		unpickling all read (test_exceptions testAttributes)."
+		(self @env0:inheritsFrom: BaseException) ifTrue: [
+			^ self ___allocateForNew: positional kw: keywords].
 		"CPython's object_new: with neither __new__ nor __init__ of its own
 		anywhere in the class's lineage, nothing can consume an argument, so
 		any argument is an error -- ``A() takes no arguments''.  Grail allocated
@@ -9914,7 +9939,7 @@ Object >> ___grailInitBuiltClass___: aClass pos: positional kw: keywords [
 	hit this, because ___grailDispatchMetaclass___ runs the metaclass over the
 	class in this same way -- reading __init__ off the metaclass and calling it
 	with the class first.  So does this, and the answer is the class, since
-	__init__'s result is discarded."
+	__init__'s result is only checked (Object >> ___checkInitResult___)."
 
 	| meta fn |
 	meta := aClass ___grailMetaclass___.
@@ -9923,7 +9948,8 @@ Object >> ___grailInitBuiltClass___: aClass pos: positional kw: keywords [
 	fn := [meta ___pyAttrLoad___: #'__init__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	fn @env0:notNil ifTrue: [
-		fn @env1:___pyCallValue___: ({ aClass } @env0:, positional) kw: keywords].
+		(fn @env1:___pyCallValue___: ({ aClass } @env0:, positional) kw: keywords)
+			@env0:___checkInitResult___].
 	^ aClass
 
 ]
@@ -13792,6 +13818,8 @@ Object >> ___pyAttrDelete___: aName [
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 	].
+	"A type's read-only attributes refuse a delete as they refuse a store."
+	self @env0:___refuseReadonlyAttribute___: aName.
 	"Enum MEMBERS are immutable: ``del member.name`` / ``del member.value``
 	raises AttributeError (CPython -- members are read-only).  A member is
 	an INSTANCE of an enum class (one carrying a registry record); deletion
@@ -15612,6 +15640,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 	1-arg setter METHODS) and the call form (a PropertyDescriptor bound as a
 	class attribute).  Returns false when no property claims aName, leaving the
 	ordinary instance-dict store below untouched (AttributeStoreTestCase)."
+	self @env0:___refuseReadonlyAttribute___: aName.
 	(self ___pyInstanceDescriptorStore___: aName put: aValue) ifTrue: [^ aValue].
 	"Python __slots__ → GemStone named instance variables.  For a
 	PythonInstance receiver: a name declared in __slots__ (i.e. a named

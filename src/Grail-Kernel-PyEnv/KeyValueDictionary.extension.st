@@ -10,9 +10,9 @@ KeyValueDictionary class >> ___updateSeqPairAt___: idx from: element [
 	positional context (test_update_type_error).  Require exactly two elements.
 	Answers a 2-element Array {key. value}.
 
-	A NON-iterable element gets CPython's dict-update wording ``<type> is not
-	iterable'' (bare Python type name, no ``'...' object'' wrapper -- distinct
-	from the generic iter() message list() would raise).  An element that IS
+	A NON-iterable element gets CPython's dict-update wording, ``object is not
+	iterable'' (Objects/dictobject.c:3823), distinct from the generic iter()
+	message list() would raise.  An element that IS
 	iterable but errors mid-iteration keeps its OWN error message (the badgen
 	``oops'' case).  Both then carry the note (attached by the shared handler)."
 
@@ -21,17 +21,18 @@ KeyValueDictionary class >> ___updateSeqPairAt___: idx from: element [
 		"Get-iterator phase (CPython's PySequence_Fast -> PyObject_GetIter): a
 		genuinely non-iterable element fails HERE.  `element __iter__` raising
 		with no `__getitem__` old-style sequence fallback means not iterable;
-		re-signal with CPython's dict-update wording ``<type> is not iterable''
-		(bare Python type name, no ``'...' object'' wrapper), distinct from the
-		iter() message list() would raise.  A working __iter__ (or a
+		re-signal with CPython's dict-update wording ``object is not iterable'',
+		distinct from the iter() message list() would raise.  A working __iter__ (or a
 		__getitem__ sequence) falls through to materialization, where a
 		mid-iteration error keeps its OWN message (the badgen ``oops'' case)."
 		([ element @env1:__iter__. true ]
 			@env0:on: TypeError
 			do: [:iterEx |
-				(element @env0:class @env0:whichClassIncludesSelector: #'__getitem__:' environmentId: 1) @env0:isNil
-					ifTrue: [TypeError ___signal___: (element @env0:class @env1:__name__) @env0:, ' is not iterable']
-					ifFalse: [true]]).
+				"___hasOwnGetitem___, not a selector probe: int's __getitem__ is a
+				refusal (<grailProtocolRefusal>), and it read as a sequence."
+				element ___hasOwnGetitem___
+					ifTrue: [true]
+					ifFalse: [TypeError ___signal___: 'object is not iterable']]).
 		list @env1:__new__: element ]
 		@env0:on: BaseException
 		do: [:ex | | ___target |
@@ -138,12 +139,20 @@ KeyValueDictionary class >> __new__: source [
 	ChainMap, OrderedDict subclasses, and any user mapping that
 	exposes ``keys`` + ``__getitem__`` (jinja2's render path passes
 	a ChainMap through ``dict(globals, **{})``)."
-	"AttributeError too: under GRAIL_DIRECT_CALLS a bare ``keys'' miss on a
-	Python object is reported by the DNU hook's recovery as the loader's
-	AttributeError rather than as MessageNotUnderstood."
-	keysMethod := [source keys] @env0:on: (MessageNotUnderstood @env0:, AttributeError) do: [:ex | ex @env0:return: #__noKeys__].
+	"An ATTRIBUTE READ, then a call, as CPython's dict_update_arg does
+	(Objects/dictobject.c:3735-3748): a ``keys'' set on the class at run time
+	-- ``Mapping.keys = lambda self: ...'' -- is no method a send can find, and
+	with GRAIL_DIRECT_CALLS off a bare ``keys'' send fell to the class side
+	and missed, so the source was read as an iterable of pairs (test_descr
+	test_dict_constructors).  Read as hasattr reads it, through the PROBING
+	load: an iterable of pairs is the common source, and a miss the caller
+	catches must not pay for the frame snapshot a raised AttributeError
+	takes (builtins >> ___probingAttr___:named:)."
+	keysMethod := [(builtins @env1:instance) ___probingAttr___: source named: 'keys']
+		@env0:on: (MessageNotUnderstood @env0:, AttributeError)
+		do: [:ex | ex @env0:return: #__noKeys__].
 	keysMethod == #__noKeys__ ifFalse: [
-		keysIter := keysMethod __iter__.
+		keysIter := (keysMethod ___pyCallValue___: #() kw: nil) __iter__.
 		done := false.
 		[done] @env0:whileFalse: [
 			[
@@ -187,7 +196,8 @@ KeyValueDictionary class >> _new: positional kw: keywords [
 
 	| result |
 	(positional @env0:size @env0:> 1) ifTrue: [
-		TypeError ___signal___: 'dict expected at most 1 positional argument'
+		TypeError ___signal___: 'dict expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString
 	].
 	result := positional @env0:isEmpty
 		ifTrue: [self ___new___]
@@ -300,9 +310,13 @@ KeyValueDictionary >> ___init__: positional kw: keywords [
 	the 0-arg ``__init__'' and super().__init__(source) to the 1-arg
 	``__init__:'' (both preferred over this varargs form when kwOk is
 	true), so flask.config.Config's ``super().__init__(defaults)''
-	keeps its existing dispatch."
+	keeps its existing dispatch.
 
-	^ self ___initFrom___: positional kw: keywords
+	Answers None, as dict.__init__ does: a subclass's ``return
+	super().__init__(**kw)'' hands it on as its own __init__'s result."
+
+	self ___initFrom___: positional kw: keywords.
+	^ None
 
 ]
 
@@ -318,7 +332,8 @@ KeyValueDictionary >> ___initFrom___: positional kw: keywords [
 	the keyword overrides with str keys (the dict() boundary rule)."
 
 	(positional @env0:size @env0:> 1) ifTrue: [
-		TypeError ___signal___: 'dict expected at most 1 positional argument'].
+		TypeError ___signal___: 'dict expected at most 1 argument, got '
+			@env0:, positional @env0:size @env0:printString].
 	positional @env0:isEmpty ifFalse: [
 		(dict __new__: (positional @env0:at: 1)) @env0:keysAndValuesDo: [:k :v |
 			self @env0:at: k put: v]].

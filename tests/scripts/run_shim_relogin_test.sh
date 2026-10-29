@@ -77,7 +77,14 @@ logout
 exit 0
 EOF
 
-(cd "$PROJECT_ROOT" && LC_ALL=C topaz -lq -S "$WORK/relogin.gs" < /dev/null) > "$WORK/out" 2>&1
+# The sizes run_tests.sh gives its other phases.  This session imports re,
+# which scripts/deployFrameworks.gs deliberately leaves undeployed, so it
+# compiles the re package cold -- measured at 52-55 MB of temporary objects,
+# over this machine's 50 MB default (the same margin as install.sh's
+# unicodedata deploy).  The test is about the shim across a relogin, not
+# about memory.
+(cd "$PROJECT_ROOT" && LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+    -S "$WORK/relogin.gs" < /dev/null) > "$WORK/out" 2>&1
 STATUS=$?
 
 fail=0

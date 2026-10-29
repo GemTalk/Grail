@@ -108,6 +108,32 @@ ModuleAst class >> ___doitScopeFor: aMethod [
 
 ]
 
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___firstDirectiveIn___: node naming: names [
+	"The first global or nonlocal statement under node, in source order, that
+	declares one of names -- in node's own scope, so not inside a def, a
+	lambda or a class -- or nil."
+
+	node isNil ifTrue: [^ nil].
+	node isString ifTrue: [^ nil].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each |
+			(self ___firstDirectiveIn___: each naming: names) ifNotNil: [:found | ^ found]].
+		^ nil].
+	(node isKindOf: AbstractNode) ifFalse: [^ nil].
+	((node isKindOf: GlobalAst) or: [node isKindOf: NonlocalAst]) ifTrue: [
+		^ (node names detect: [:each | names includes: each] ifNone: [nil]) isNil
+			ifTrue: [nil] ifFalse: [node]].
+	((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst) or: [node isKindOf: ClassDefAst]])
+		ifTrue: [^ nil].
+	node class allInstVarNames doWithIndex: [:instVarName :i |
+		instVarName == #parent ifFalse: [
+			(self ___firstDirectiveIn___: (node instVarAt: i) naming: names)
+				ifNotNil: [:found | ^ found]]].
+	^ nil
+
+]
+
 { #category : 'Grail-evaluation' }
 ModuleAst class >> ___isDoitMethod___: aMethod [
 	"True when aMethod IS a compiled doit's own method -- the body of an exec(),
@@ -573,6 +599,7 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		self ___validateContext___: node args fn: fnSym loop: inLoop scopes: scopes.
 		self ___validateAnnotation___: node returns.
 		self ___validateContext___: node returns fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateDirectivesOf___: node body.
 		self ___validateContext___: node body fn: #function loop: false
 			scopes: (scopes isNil ifTrue: [nil] ifFalse: [
 				scopes copyWith: (self ___scopeNamesOf___: node)]).
@@ -582,6 +609,7 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		self ___validateContext___: node body fn: #function loop: false scopes: scopes.
 		^ self].
 	(node isKindOf: ClassDefAst) ifTrue: [
+		self ___validateDirectivesOf___: node body.
 		node class allInstVarNames doWithIndex: [:n :i |
 			n == #parent ifFalse: [
 				n == #body
@@ -677,9 +705,45 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		self ___validateContext___: node body fn: fnSym loop: true scopes: scopes.
 		self ___validateContext___: node orelse fn: fnSym loop: inLoop scopes: scopes.
 		^ self].
+	"A bare ``except:'' has to be the last handler -- ``default 'except:' must
+	be last'', over that handler -- checked where CPython's code generator
+	checks it, after the try's body and else and before each handler's own
+	(Python/codegen.c:2436-2463).  Grail compiled it, so the later handlers
+	could never run (test_exceptions testSyntaxErrorOffset)."
+	(node isKindOf: TryAst) ifTrue: [
+		self ___validateContext___: node body fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node orelse fn: fnSym loop: inLoop scopes: scopes.
+		node handlers doWithIndex: [:handler :index |
+			(handler type isNil and: [index < node handlers size]) ifTrue: [
+				^ self ___syntaxError___: 'default ''except:'' must be last' node: handler].
+			self ___validateContext___: handler fn: fnSym loop: inLoop scopes: scopes].
+		self ___validateContext___: node finalbody fn: fnSym loop: inLoop scopes: scopes.
+		^ self].
 	node class allInstVarNames doWithIndex: [:n :i |
 		n == #parent ifFalse: [
 			self ___validateContext___: (node instVarAt: i) fn: fnSym loop: inLoop scopes: scopes]]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___validateDirectivesOf___: aBody [
+	"CPython's analyze_name: a name one scope declares both global and
+	nonlocal is ``name 'x' is nonlocal and global'', over the first statement
+	declaring it, and before the nonlocal's binding is looked for
+	(Python/symtable.c:671-677, error_at_directive).  Grail let the nonlocal
+	win (test_exceptions testSyntaxErrorOffset)."
+
+	| both directive |
+	(aBody isKindOf: BlockAst) ifFalse: [^ self].
+	(aBody globalNames isNil or: [aBody nonlocalNames isNil]) ifTrue: [^ self].
+	both := aBody globalNames select: [:name | aBody nonlocalNames includes: name].
+	both isEmpty ifTrue: [^ self].
+	directive := self ___firstDirectiveIn___: aBody naming: both.
+	directive isNil ifTrue: [^ self].
+	^ self ___syntaxError___: 'name '''
+			, (directive names detect: [:name | both includes: name]) asString
+			, ''' is nonlocal and global'
+		node: directive
 
 ]
 
@@ -1118,15 +1182,16 @@ ModuleAst class >> parseSource: sourceString [
 	the same refusals, inside the callers' existing on: SyntaxError
 	rescue."
 
-	| module |
-	module := PythonParser parse: sourceString.
+	| text module |
+	text := PythonTokenizer translateNewlines: sourceString.
+	module := PythonParser parse: text.
 	"THE MODULE REMEMBERS ITS SOURCE.  A def's body text is not recoverable
 	from the tree -- Grail has no unparse -- and exec() of a def's code object
 	with a substituted closure has to run that text.  Recording it here, on the
 	root, is the one place every entry (import, exec, eval, compile) passes
 	through, and it costs a reference rather than a copy."
-	module source isNil ifTrue: [module source: sourceString].
-	AbstractNode ___currentModuleSource___: sourceString.
+	module source isNil ifTrue: [module source: text].
+	AbstractNode ___currentModuleSource___: text.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: #module.
 	self ___validatePatternsIn___: module.
@@ -1170,12 +1235,13 @@ ModuleAst class >> parseSource: sourceString allowTopLevelAwait: allowAwait eval
 	the one parser instance that parses this source, it reaches neither a
 	nested parse nor one made from a handler."
 
-	| module |
+	| text module |
+	text := PythonTokenizer translateNewlines: sourceString.
 	module := isEvalInput
-		ifTrue: [PythonParser parseEvalInput: sourceString]
-		ifFalse: [PythonParser parse: sourceString].
-	module source isNil ifTrue: [module source: sourceString].
-	AbstractNode ___currentModuleSource___: sourceString.
+		ifTrue: [PythonParser parseEvalInput: text]
+		ifFalse: [PythonParser parse: text].
+	module source isNil ifTrue: [module source: text].
+	AbstractNode ___currentModuleSource___: text.
 	self ___validateContext___: module.
 	self ___validateAsyncPlacement___: module scope: (allowAwait ifTrue: [#async] ifFalse: [#module]).
 	self ___validatePatternsIn___: module.
@@ -1459,6 +1525,24 @@ ModuleAst >> ___hasFutureAnnotations___ [
 ModuleAst >> ___isLineMapped___ [
 
 	^ ([self dynamicInstVarAt: #'___lineMapped___'] on: Error do: [:ex | ex return: nil]) == true
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___leadingFutureImports___ [
+	"The module's future statements (Python/future.c:64-106, future_parse):
+	after an optional docstring, each ``from __future__ import'' up to the
+	first statement that is anything else."
+
+	| statements leading |
+	leading := OrderedCollection new.
+	body isNil ifTrue: [^ leading].
+	statements := body body ifNil: [#()].
+	self ___docString___ ifNotNil: [:docstring | statements := statements allButFirst].
+	statements do: [:statement |
+		statement ___isFutureImport___ ifFalse: [^ leading].
+		leading add: statement].
+	^ leading
 
 ]
 

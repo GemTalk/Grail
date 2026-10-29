@@ -99,6 +99,12 @@ jobs:
       - name: cpython-suite shard plan + report self-test
         run: tests/scripts/test_cpython_suite_shards.sh
 
+      # The isolated-classes nightly (isolated-classes.yml) is not on the PR
+      # path, but its verdict is: a report that read an incomplete run as a
+      # pass would make that nightly a vacuous green.
+      - name: isolated-classes report self-test
+        run: tests/scripts/test_isolated_classes_report.sh
+
       # The fixture gate runs tests/python's self-running fixtures under real
       # CPython, so it needs the version the fixtures were written against --
       # the runner's system python3 is 3.10 and predates ExceptionGroup.  This
@@ -177,6 +183,16 @@ jobs:
         # after the shards; the other fifteen stop at the shards
         # (GRAIL_TEST_SHARDS_ONLY=1), since those suites need one run per arm.
         #
+        # WHICH CLASSES a shard runs is GrailShardPlan's call: whole classes,
+        # longest first, by the measured times in
+        # tests/scripts/shard_timings.txt (#1911).  Partitioned by a class-name
+        # hash, the shard jobs ranged 3.8-13.5 minutes.  Shard 0's job does
+        # about 170s of other work after its shard (the suites above), so
+        # GRAIL_TEST_SHARD0_RESERVE_S plans that much less shard work for it;
+        # every leg sets the same value, so all 32 compute the same plan.
+        # Refresh the timings from a green run's logs with
+        # scripts/refresh_shard_timings.py.
+        #
         # TWO ARMS, BOTH GATED.  Since #1087 the IR codegen path is the
         # DEFAULT, so the `ir` arm leaves GRAIL_IR_CODEGEN empty -- which reads
         # as ON, deliberately (importlib>>___irCodegenFlagFor___:) -- and the
@@ -239,6 +255,7 @@ jobs:
             GRAIL_TEST_WORKERS=16 \
             GRAIL_TEST_SHARDS="${{ matrix.shard }}" \
             GRAIL_TEST_SHARDS_ONLY="${{ matrix.shard == 0 && '0' || '1' }}" \
+            GRAIL_TEST_SHARD0_RESERVE_S=170 \
             GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"

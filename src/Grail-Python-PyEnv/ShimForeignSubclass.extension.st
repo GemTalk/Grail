@@ -34,7 +34,8 @@ ShimForeignSubclass class >> ___grailMetaclassCall___: positional kw: kwargs [
 	newFn := self ___pyAttrLoad___: #'__new__'.
 	obj := newFn value: ((Array @env0:with: self) @env0:, positional) value: kwargs.
 	((obj @env0:isKindOf: self) and: [self ___grailDefinesBelowForeignBase___: '__init__'])
-		ifTrue: [(obj ___pyAttrLoad___: #'__init__') value: positional value: kwargs].
+		ifTrue: [((obj ___pyAttrLoad___: #'__init__') value: positional value: kwargs)
+			@env0:___checkInitResult___].
 	^ obj
 
 ]

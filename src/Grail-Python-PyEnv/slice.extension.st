@@ -119,6 +119,20 @@ slice >> __hash__ [
 
 ]
 
+{ #category : 'Grail-Pickling' }
+slice >> __reduce__ [
+	"``(type(self), (start, stop, step))'', as CPython's slice_reduce answers
+	(Objects/sliceobject.c:563-567), so copy and pickle rebuild a slice from
+	its bounds.  Grail's answered NotImplemented, and copy fell back to
+	setting the bounds one by one -- which a slice refuses, since they are
+	read-only members."
+
+	^ tuple @env0:withAll: {
+		self ___pyMetaclass___.
+		tuple @env0:withAll: { self start. self stop. self step } }
+
+]
+
 { #category : 'Python-Conversion' }
 slice >> __repr__ [
 	"Mirror CPython's slice repr: slice(<start>, <stop>, <step>)."

@@ -1,5 +1,13 @@
 Extension { #name : 'NotImplementedType' }
 
+{ #category : 'Grail-Instantiation' }
+NotImplementedType class >> ___grailTakesNoArgumentsError___ [
+	"CPython's own wording for the singleton's type (Objects/object.c:2345)."
+
+	^ TypeError ___signal___: 'NotImplementedType takes no arguments'
+
+]
+
 { #category : 'Grail-Singleton' }
 NotImplementedType class >> __new__ [
 	"The selector the generic instantiation path reaches for ``cls()''; see

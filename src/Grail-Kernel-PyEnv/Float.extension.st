@@ -1175,9 +1175,11 @@ Float >> __pow__: other [
 { #category : 'Grail-Arithmetic' }
 Float >> __pow__: other _: modulo [
 	"Raise self to the power of other, modulo modulo.
-	Not supported for floats."
+	Not supported for floats, and refused in CPython's words; a None modulus
+	is the 2-argument form (Objects/floatobject.c:702-706)."
 
-	TypeError @env0:signal: 'pow() 3rd argument not allowed for float'
+	modulo == None ifTrue: [^ self __pow__: other].
+	^ TypeError ___signal___: 'pow() 3rd argument not allowed unless all arguments are integers'
 
 ]
 

@@ -1,5 +1,20 @@
 Extension { #name : 'Integer' }
 
+{ #category : 'Grail-Attribute Access' }
+Integer class >> ___grailUnwritableAttributes___ [
+	"int's getters -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('real' 'imag' 'numerator' 'denominator')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Integer class >> ___grailUnwritableOwnerName___ [
+
+	^ 'int'
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 Integer class >> ___pythonValueAttrs___ [
 	"Unary methods exposed to Python as VALUE attributes rather than

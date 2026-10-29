@@ -4,10 +4,10 @@
 !   GRAIL_TEST_WORKERS  total number of shards N (default 1)
 !   GRAIL_TEST_SHARD    this worker's index, 0..N-1 (default 0)
 !
-! Builds the full PythonTestCase suite, then runs only the test instances
-! whose (className>>selector) falls in this shard, selected by a STABLE hash
-! (character sum mod N) so every worker computes the identical partition --
-! no test is run twice or skipped across workers.  scripts/run_tests.sh
+! Builds the full PythonTestCase suite, then runs only the test classes
+! GrailShardPlan places on this shard -- a deterministic assignment by measured
+! class time (tests/scripts/shard_timings.txt), so every worker computes the
+! identical partition and no test is run twice or skipped across workers.  scripts/run_tests.sh
 ! launches N of these concurrently (a genuine multi-session concurrency
 ! exercise, since GemStone runs them against one stone) and aggregates.
 !
@@ -44,8 +44,8 @@ escape hatch: it simply skips the deploy."
 %
 level 1
 run
-| out numWorkers idx full shard result leaves flatten overrides oFile
-  groups order timeClasses shardT0 shardOf |
+| out numWorkers idx full shard result leaves plan
+  groups order shardT0 shardOf |
 out := GsFile stdout.
 out nextPutAll:'topaz -l  processId = ' , System gemProcessId asString ; lf .
 numWorkers := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
@@ -66,58 +66,38 @@ same session (e.g. numbers.Integral registration) -- preserving order keeps
 WORKERS=1 identical to runTests.gs.  (True cross-test dependencies that span
 shards are surfaced by WORKERS>1 and fixed at the test level.)"
 full := PythonTestCase suite.
-leaves := OrderedCollection new.
-flatten := nil.
-flatten := [:node |
-  (node isKindOf: TestSuite)
-    ifTrue: [node tests do: [:c | flatten value: c]]
-    ifFalse: [leaves add: node]].
-flatten value: full.
+leaves := GrailShardPlan leavesOf: full.
 "Partition by CLASS (not per test): all of a class's tests go to the same
 shard.  This (a) preserves within-class order + any within-class state
 dependencies, and (b) keeps each framework's tests on a single shard so
 werkzeug / flask / django compile ONCE (on their owner shard) rather than
-once per shard -- the import-compile is the dominant cost, so avoiding its
-duplication is what makes parallelism pay (class-level ~2.6x vs test-level
-~1.35x measured).  Stable char-sum hash so every worker agrees on the
-partition.
+once per shard.
 
-The hash balances test COUNTS, which is not even loosely a proxy for cost --
-one shard held 934 tests and finished in 3s while another held 775 and took
-35s -- so tests/scripts/shard_overrides.txt places the few heaviest classes
-explicitly on top of it.  See that file for why the whole suite is NOT
-cost-balanced instead (it was tried; per-class costs are not additive, because
-classes share framework imports).  Every worker reads the same file and applies
-it the same way, so they still agree without communicating; a missing file just
-leaves the hash in charge."
-overrides := Dictionary new.
-oFile := GsFile openReadOnServer:
-  (System gemEnvironmentVariable: 'GRAIL_DIR'), '/tests/scripts/shard_overrides.txt'.
-oFile ifNotNil: [
-  | line |
-  [(line := oFile nextLine) isNil] whileFalse: [
-    | parts want |
-    line := line trimSeparators.
-    (line isEmpty or: [(line at: 1) == $#]) ifFalse: [
-      parts := line subStrings: ' '.
-      parts size >= 2 ifTrue: [
-        want := (parts at: 2) asNumber.
-        "Ignore an index this run has no worker for, so the gate can be run
-        with fewer workers than the file was written for."
-        (want notNil and: [want >= 0 and: [want < numWorkers]])
-          ifTrue: [overrides at: (parts at: 1) asString put: want]]]].
-  oFile close].
+WHICH shard is GrailShardPlan's call: a longest-processing-time assignment by
+the measured per-class times in tests/scripts/shard_timings.txt, with classes
+the file does not know costed by their test count (see the class comment, and
+scripts/refresh_shard_timings.sh to re-measure).  Every worker builds the same
+plan from the same suite, file and GRAIL_TEST_SHARD0_RESERVE_S, so they agree
+without communicating; the GRAIL_SHARD_PLAN line's digest lets run_tests.sh
+check that they did, and its suiteTests that the shards ran the whole suite."
+plan := GrailShardPlan
+  workers: numWorkers
+  leaves: leaves
+  timings: (GrailShardPlan readTimings: GrailShardPlan defaultTimingsPath)
+  reserveMs: GrailShardPlan reserveMsFromEnvironment.
+out nextPutAll: 'GRAIL_SHARD_PLAN|idx='; nextPutAll: idx printString;
+  nextPutAll: '|digest='; nextPutAll: plan digest printString;
+  nextPutAll: '|timed='; nextPutAll: plan isTimed printString;
+  nextPutAll: '|classes='; nextPutAll: (plan classesOn: idx) size printString;
+  nextPutAll: '|tests='; nextPutAll: (plan testCountOn: idx) printString;
+  nextPutAll: '|plannedMs='; nextPutAll: (plan plannedMsOn: idx) printString;
+  nextPutAll: '|suiteTests='; nextPutAll: plan suiteSize printString; lf.
 "Collect this shard's tests twice over: once into the shard suite (whose
 `resources' the reset contract below needs), and once into a per-CLASS suite
 kept in first-appearance order, so each class can be timed separately.  Running
 the per-class suites in that order visits exactly the tests the shard suite
 holds, in exactly the same order."
-shardOf := [:key |
-  overrides at: key ifAbsent: [
-    | sum |
-    sum := 0.
-    key do: [:ch | sum := sum + ch asInteger].
-    sum \\ numWorkers]].
+shardOf := [:key | plan shardOf: key].
 shard := TestSuite new.
 groups := Dictionary new.
 order := OrderedCollection new.
@@ -150,18 +130,18 @@ ALL skipped has no leaves, which is why this walks the classes, not the leaves."
     (cls skippedTests keys asSortedCollection: [:a :b | a <= b]) do: [:sel |
       out nextPutAll: 'GRAIL_SKIP|'; nextPutAll: cls name; nextPutAll: '>>';
         nextPutAll: sel; nextPutAll: '|'; nextPutAll: (cls skippedTests at: sel); lf]]].
-timeClasses := (System gemEnvironmentVariable: 'GRAIL_TEST_TIME_CLASSES').
-timeClasses := timeClasses notNil and: [timeClasses asString isEmpty not].
+"One GRAIL_CLASS_TIME|<shard>|<class>|<ms>|<tests> line per class, always:
+it is what scripts/refresh_shard_timings.sh reads, from CI's uploaded logs, to
+rewrite tests/scripts/shard_timings.txt."
 result := GrailTestResult new.
 shardT0 := System _timeMs.
 [order do: [:key | | t0 |
   t0 := System _timeMs.
   (groups at: key) run: result.
-  timeClasses ifTrue: [
-    out nextPutAll: 'GRAIL_CLASS_TIME|'; nextPutAll: idx printString;
-      nextPutAll: '|'; nextPutAll: key;
-      nextPutAll: '|'; nextPutAll: (System _timeMs - t0) printString;
-      nextPutAll: '|'; nextPutAll: (groups at: key) tests size printString; cr]]]
+  out nextPutAll: 'GRAIL_CLASS_TIME|'; nextPutAll: idx printString;
+    nextPutAll: '|'; nextPutAll: key;
+    nextPutAll: '|'; nextPutAll: (System _timeMs - t0) printString;
+    nextPutAll: '|'; nextPutAll: (groups at: key) tests size printString; cr]]
   ensure: [TestResource resetResources: shard resources].
 "ms= is UNCONDITIONAL.  Without it the gate reports only its slowest JOB, and a
 job is two shards run concurrently -- so a skew shows up as a number nothing in

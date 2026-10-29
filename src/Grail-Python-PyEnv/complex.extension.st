@@ -1027,11 +1027,15 @@ complex >> __format__: formatSpec [
 	b := builtins instance.
 	spec := b ___formatSpecArgument___: formatSpec.
 	spec @env0:isEmpty ifTrue: [^ self __str__].
-	p := b ___parseFormatSpec___: spec typeName: 'complex'.
+	p := b ___parseFormatSpec___: spec typeName: (b ___pyTypeNameOf___: self).
 	fill := p @env0:at: 1.
 	align := p @env0:at: 2.
 	width := p @env0:at: 5.
 	type := p @env0:at: 8.
+	"CPython's order: the separator, then the presentation type -- a complex
+	has no '%' -- and only then the refusals of its own below."
+	b ___checkGrouping___: (p @env0:at: 6) with: type.
+	b ___checkPresentationType___: p in: 'eEfFgGn'.
 	"Two spec features CPython refuses OUTRIGHT for complex, because both
 	assume a single signed number to pad around and a complex is a pair.
 	Grail accepted them silently -- ``(1.5+0.5j).__format__('010f')'' answered

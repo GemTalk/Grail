@@ -52,6 +52,29 @@ repr((d.capi(''call_inline'', lambda: [1, ''a'', (2, 3)]), d.capi(''call_inline'
 
 ]
 
+{ #category : 'Grail-Tests - Shim Memory' }
+CPythonShimTestCase >> testACallReleasesTheCopiesOfItsArguments [
+	"Once a call into a C extension returns, the shim releases the copies it
+made of its list and tuple arguments in CPython's layout: its count of
+released objects goes up by one for each.  They were never released
+(docs/Shim_Memory.md, Step 1).  A copy C hands back to Grail during the
+call is kept, because its Grail copy records it as its origin and that
+record holds a reference until Step 2; capi('count') does not hand it back.
+With GRAIL_SHIM_DEALLOC=off nothing is released."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def released(arg):
+    before = d.capi("shim_memory")[1]
+    d.capi("count", arg)
+    return d.capi("shim_memory")[1] - before
+repr((released([1, 2]), released((1, 2))))')
+		equals: (CPythonShim current shimFreesCObjects ifTrue: ['(1, 1)'] ifFalse: ['(0, 0)'])
+
+]
+
 { #category : 'Grail-Tests - NumPy Census Gaps' }
 CPythonShimTestCase >> testACFunctionObjectReprsPicklesAndRoundTrips [
 	"A function object C made answers repr, __reduce__ and a __module__ store as
@@ -3432,6 +3455,25 @@ CPythonShimTestCase >> testIsTrueEmptyContainersAreFalsy [
 
 ]
 
+{ #category : 'Grail-Tests - Shim Memory' }
+CPythonShimTestCase >> testIterNextAnswersANewReference [
+	"PyIter_Next answers a new reference, as CPython's does, when a Grail
+iterator yields a C object.  It answered the object's address and added
+nothing, so a Cython loop that DECREFs each item -- numpy.random's
+SeedSequence.generate_state, over itertools.cycle(self.pool) -- took one
+reference per item from whoever owned it, and the pool's scalars were
+released while the cycle still handed them out (found in quarantine mode,
+docs/Shim_Memory.md, Step 1).  The value is CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.Buf()
+repr(d.capi("iter_next_ref", iter([b, b])))') equals: '1'
+
+]
+
 { #category : 'Grail-Tests - Iteration' }
 CPythonShimTestCase >> testIterSum [
 	"PyObject_GetIter + PyIter_Next traverse a Python list."
@@ -3881,6 +3923,37 @@ CPythonShimTestCase >> testNewExceptionRaisesByName [
 
 ]
 
+{ #category : 'Grail-Tests - Shim Memory' }
+CPythonShimTestCase >> testNewReferencesAddOneToTheCObjectTheyAnswer [
+	"Each API whose CPython contract answers a new reference adds one to the
+count of the C object it answers: an attribute, an item, a call's result,
+a + and an == through a Grail object; PyTuple_Pack's and Py_BuildValue's
+(O, N and a list) hold on to their item; PyContextVar_Get's value; and
+PySequence_Fast's list holds what an iterator gave it once.  They
+answered the object's address and added nothing.  Harmless while the shim
+freed nothing; once it frees, the caller's release of what it was given
+took a reference someone else owned (found in quarantine mode on the numpy
+census -- a ufunc's result -- docs/Shim_Memory.md, Step 1).  Values are
+CPython's but one: Py_BuildValue's dict is a Grail dict, which holds the
+object through its proxy and adds nothing (CPython's adds 1).  It added 1
+and never gave it back."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+b = d.Buf()
+class Holder:
+    def __add__(self, other):
+        return b
+    def __eq__(self, other):
+        return b
+h = Holder()
+h.b = b
+repr(d.capi("new_refs", (b, h, {"b": b}, lambda: b, iter([b]))))') equals: '[1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1]'
+
+]
+
 { #category : 'Grail-Tests - Py_None Wrapping' }
 CPythonShimTestCase >> testNoneWrapperEmbedsSingletonOop [
 	"None crosses into C as the shim's own static Py_None (_Py_NoneStruct),
@@ -4150,6 +4223,27 @@ CPythonShimTestCase >> testParseTupleFormats [
 
 ]
 
+{ #category : 'Grail-Tests - Shim Memory' }
+CPythonShimTestCase >> testQuarantineKeepsWhatItReleases [
+	"In quarantine mode (GRAIL_SHIM_DEALLOC=quarantine) the shim keeps and
+poisons each object it releases, so a stale use is reported by name rather
+than reading whatever malloc put there next.  It kept only what reached the
+shim's own PyObject_Free, and object's tp_free -- which numpy's ndarray and
+this module's Buf inherit -- was libc's free: cpython.h defines
+PyObject_Free as free, and cpython.cc took the macro.  An array released
+early went back to malloc, the next array took its address, and the stale
+proxy read garbage or corrupted malloc's free list, which hung the numpy
+census (docs/Shim_Memory.md, Step 1).  The answer is what one release moves
+the counts by: (released, quarantined)."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.capi("quarantine_keeps"))') equals: '(1, 1)'
+
+]
+
 { #category : 'Grail-Tests - Error Handling' }
 CPythonShimTestCase >> testRealLayoutListAppendTakesAReference [
 	"PyList_Append must INCREF what it stores.
@@ -4411,6 +4505,23 @@ CPythonShimTestCase >> testSequenceFastAnswersARealLayoutSequence [
 	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
 	self assert: (self eval: 'import _grail_demo as d
 repr((d.seq_fast_len([7, 8]), d.seq_fast_len((9,)), d.seq_fast_len(range(4)), d.seq_fast_len({''a'': 1, ''b'': 2}.keys())))') equals: '((2, 7), (1, 9), (4, 0), (2, ''a''))'
+
+]
+
+{ #category : 'Grail-Tests - Shim Memory' }
+CPythonShimTestCase >> testSequenceGetItemAnswersANewReference [
+	"PySequence_GetItem answers a new reference from a list or a tuple, as
+CPython's does.  It answered PyList_GetItem's and PyTuple_GetItem's
+borrowed one, so numpy's concatenate, which DECREFs each item it gets, took
+the list's own reference to each array: releasing the list after the call
+released arrays Grail still held (found in quarantine mode,
+docs/Shim_Memory.md, Step 1).  Values are CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr(d.capi("sequence_getitem_ref"))') equals: '(1, 1)'
 
 ]
 
@@ -4900,7 +5011,11 @@ CPythonShimTestCase >> testSweepDeferredWhileCallInFlight [
 { #category : 'Grail-Tests - Wrapper lifetime' }
 CPythonShimTestCase >> testSweepReapsIdleZeroRefcountWrappers [
 	"sweep still reclaims wrappers whose refcount is <= 0 when no call is
-	in flight: a re-wrap after the sweep builds a FRESH wrapper."
+	in flight: a re-wrap after the sweep builds a FRESH wrapper.  Only with
+	GRAIL_SHIM_DEALLOC=off: while the shim frees C objects, the default, a
+	freed container releases its items, and a wrapper's count is not yet
+	honest, so the sweep leaves every wrapper alone until
+	docs/Shim_Memory.md, Step 3."
 
 	| shim v w w2 |
 	shim := CPythonShim current.
@@ -4909,6 +5024,7 @@ CPythonShimTestCase >> testSweepReapsIdleZeroRefcountWrappers [
 	w int64At: 0 put: 0.
 	shim sweep.
 	w2 := shim wrap: v.
+	shim shimFreesCObjects ifTrue: [^ self assert: w == w2].
 	self deny: w == w2.
 	self assert: (w2 int64At: 0) equals: 1
 

@@ -239,6 +239,25 @@ UnboundMethod >> ___descriptorTypeName___ [
 ]
 
 { #category : 'Grail-Python Names' }
+UnboundMethod >> ___isBuiltinTypeMethod___ [
+	"Is this a method of one of CPython's BUILT-IN types -- str.join, set.add,
+	object.__init__, type.mro -- which CPython makes a descriptor?  Its owner
+	is a Smalltalk class the builtins module names, or Behavior, which holds
+	what CPython keeps in type's own dict.
+
+	Not a Python class's def, and not a method of a Smalltalk class standing
+	in for one of CPython's Python classes: numbers.Real is implemented here
+	and is 'numbers', and its methods are functions there."
+
+	| owner |
+	owner := self @env1:___pyOwnerClass___.
+	owner == Behavior ifTrue: [^ true].
+	(self @env1:___isPythonClass___: owner) ifTrue: [^ false].
+	^ (self @env1:___pyModuleStringOf___: owner) = 'builtins'
+
+]
+
+{ #category : 'Grail-Python Names' }
 UnboundMethod >> ___isSlotWrapper___ [
 
 	^ (self class ___slotWrapperNames___ includes: selector)

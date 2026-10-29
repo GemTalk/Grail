@@ -32,3 +32,13 @@ BaseExceptionGroup class >> ___pythonValueAttrs___ [
 		yourself
 
 ]
+
+{ #category : 'Grail-Initialization' }
+BaseExceptionGroup >> ___newArgs___: anArray [
+	"BaseExceptionGroup_new takes the message and the exceptions itself
+	(Objects/exceptions.c:886-1011), so a group is complete, and its arguments
+	checked, before any __init__ runs."
+
+	self @env1:___args___: anArray
+
+]

@@ -242,20 +242,58 @@ BuiltinFunctionType.__module__ = 'builtins'
 BuiltinMethodType = BuiltinFunctionType
 
 
-class WrapperDescriptorType:
-    pass
+# The descriptor types CPython gives a built-in type's methods, as Grail
+# reports them: UnboundMethod >> __class__ answers WrapperDescriptorType for a
+# slot read off its type (``object.__init__'') and MethodDescriptorType for any
+# other method (``str.join''), and BoundMethod >> __class__ answers
+# MethodWrapperType for a slot bound to an instance (``(42).__lt__'').
+# Membership is by that report, as for BuiltinFunctionType.
+#
+# Each keeps the base it always had: a class whose bases change is refused on
+# the next import over a database that holds the old one (importlib's
+# base-change refusal), which every existing install would meet.  So the
+# protocol is spelled out in each rather than inherited from a shared base.
+# None of the methods is ever invoked -- every real instance is a Grail
+# callable reporting the type -- they are what reads them off the TYPE needs:
+# Callable's __subclasshook__ wants __call__, and inspect.ismethoddescriptor()
+# wants __get__.
+
+class WrapperDescriptorType(metaclass=_BuiltinFunctionTypeMeta):
+    def __call__(self, /, *args, **kwargs):
+        raise TypeError("'wrapper_descriptor' object is not callable")
+
+    def __get__(self, instance, owner=None):
+        raise TypeError("'wrapper_descriptor' object is not a descriptor")
 
 
-class MethodWrapperType:
-    pass
+class MethodWrapperType(metaclass=_BuiltinFunctionTypeMeta):
+    def __call__(self, /, *args, **kwargs):
+        raise TypeError("'method-wrapper' object is not callable")
 
 
-class MethodDescriptorType:
-    pass
+class MethodDescriptorType(metaclass=_BuiltinFunctionTypeMeta):
+    def __call__(self, /, *args, **kwargs):
+        raise TypeError("'method_descriptor' object is not callable")
+
+    def __get__(self, instance, owner=None):
+        raise TypeError("'method_descriptor' object is not a descriptor")
 
 
-class ClassMethodDescriptorType:
-    pass
+class ClassMethodDescriptorType(metaclass=_BuiltinFunctionTypeMeta):
+    def __call__(self, /, *args, **kwargs):
+        raise TypeError("'classmethod_descriptor' object is not callable")
+
+    def __get__(self, instance, owner=None):
+        raise TypeError("'classmethod_descriptor' object is not a descriptor")
+
+
+for _cls, _name in ((WrapperDescriptorType, 'wrapper_descriptor'),
+                    (MethodWrapperType, 'method-wrapper'),
+                    (MethodDescriptorType, 'method_descriptor'),
+                    (ClassMethodDescriptorType, 'classmethod_descriptor')):
+    _cls.__name__ = _cls.__qualname__ = _name
+    _cls.__module__ = 'builtins'
+del _cls, _name
 
 
 def _derive_module_type():

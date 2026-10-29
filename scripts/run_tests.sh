@@ -188,9 +188,10 @@ fi
 # the difference between a suite with headroom and one that fails whenever
 # anything is added to it.
 # Each worker runs a disjoint, complete slice of the PythonTestCase classes
-# (partitioned by a stable class-name hash in runTestsShard.gs), so the
-# framework-heavy classes (Flask, Django, ...) compile their imports on ONE
-# shard rather than once per shard.  Besides the wall-clock win this is a
+# (GrailShardPlan: whole classes, longest first, by the measured times in
+# tests/scripts/shard_timings.txt -- refresh them with
+# scripts/refresh_shard_timings.py), so the framework-heavy classes (Flask,
+# Django, ...) compile their imports on ONE shard rather than once per shard.  Besides the wall-clock win this is a
 # genuine multi-session concurrency exercise against a single stone.  The
 # suite does not commit, so the shards share the committed image read-only.
 WORKERS="${GRAIL_TEST_WORKERS:-8}"
@@ -277,6 +278,9 @@ launch_gate_summary
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
 SHARD_MS=""
+PLAN_MS=""
+DIGESTS=""
+SUITE_TESTS=""
 SKIPS=""
 for i in $SHARDS; do
   f="$PROJECT_ROOT/out/shard_$i.out"
@@ -297,6 +301,17 @@ for i in $SHARDS; do
   # numbers a skewed phase gives no clue which shard to move work off.
   ms=$(echo "$line" | sed -n -E 's/.*\|ms=([0-9]+)\|.*/\1/p')
   [ -n "$ms" ] && SHARD_MS="$SHARD_MS $i=$((ms / 1000))s"
+  # The partition each shard ran (GrailShardPlan): its digest, its planned
+  # seconds and the size of the WHOLE suite as that shard saw it.  Checked
+  # below: every shard must have run the same partition, and when all of them
+  # ran here, their counts must add up to the whole suite.
+  plan=$(grep '^GRAIL_SHARD_PLAN|' "$f" 2>/dev/null | head -1)
+  if [ -n "$plan" ]; then
+    DIGESTS="$DIGESTS $(echo "$plan" | sed -n -E 's/.*\|digest=([0-9]+)\|.*/\1/p')"
+    SUITE_TESTS="$SUITE_TESTS $(echo "$plan" | sed -n -E 's/.*\|suiteTests=([0-9]+).*/\1/p')"
+    pms=$(echo "$plan" | sed -n -E 's/.*\|plannedMs=([0-9]+)\|.*/\1/p')
+    [ -n "$pms" ] && PLAN_MS="$PLAN_MS $i=$((pms / 1000))s"
+  fi
   # runTestsShard.gs tags EVERY line of its defect report (header, message,
   # stack, repro) with this marker precisely so one line-oriented grep recovers
   # the whole multi-line block -- a Python traceback or a stack report would
@@ -328,6 +343,31 @@ fi
 printf '%s' "$SKIPS" | grep -v '^$' || true
 printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"
 [ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
+[ -n "$PLAN_MS" ] && printf 'TIMING | %-26s |%s\n' "  planned (shard_timings)" "$PLAN_MS"
+# EVERY TEST EXACTLY ONCE.  The shards never talk to each other: each builds
+# the same GrailShardPlan and runs its own part, so the only way a test can run
+# twice or not at all is for two shards to have built DIFFERENT plans (a
+# different timings file, reserve or suite).  Their digests say whether they
+# did.  When every partition ran here (not CI, where each runner hosts one),
+# the counts must also add up to the suite every shard saw.
+N_DIGESTS=$(printf '%s\n' $DIGESTS | sort -u | grep -c . || true)
+if [ "$N_DIGESTS" -gt 1 ]; then
+  echo "ERROR: the shards ran $N_DIGESTS different partitions (digests:$DIGESTS); some tests may have run twice or not at all" >&2
+  EXIT=1
+fi
+N_SUITE=$(printf '%s\n' $SUITE_TESTS | sort -u | grep -c . || true)
+if [ "$N_SUITE" -gt 1 ]; then
+  echo "ERROR: the shards saw suites of different sizes:$SUITE_TESTS" >&2
+  EXIT=1
+elif [ "$N_SUITE" -eq 1 ] && [ "$S_SEEN" -eq "$WORKERS" ]; then
+  SUITE_N=$(printf '%s\n' $SUITE_TESTS | head -1)
+  if [ "$S_RUN" -ne "$SUITE_N" ]; then
+    echo "ERROR: the $WORKERS shards ran $S_RUN tests but the suite holds $SUITE_N" >&2
+    EXIT=1
+  else
+    echo "coverage: the $WORKERS shards ran all $SUITE_N tests of the suite, each once (one partition, digest$(printf '%s\n' $DIGESTS | head -1 | sed 's/^/ /'))"
+  fi
+fi
 if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 
 # GRAIL_TEST_SHARDS_ONLY=1 stops here: CI runs each shard on a runner of its own,

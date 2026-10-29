@@ -285,9 +285,10 @@ IntEnum class >> value: positional value: keywords [
 IntEnum >> __format__: aSpec [
 	"IntEnum / IntFlag members format as their int value (ReprEnum), so a
 	numeric spec (format(Size.BIG, 'd')) works and an empty spec yields the
-	int str -- delegate to the int value's __format__."
+	int str -- int.__format__ for a subclass's instance, which also names
+	the member's class in an error, as CPython does."
 
-	^ (self @env0:value) __format__: aSpec
+	^ super __format__: aSpec
 
 ]
 

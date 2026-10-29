@@ -21,16 +21,30 @@ ShimForeignObjectTestCase >> testDottedNameStripsModule [
 { #category : 'Grail-Tests' }
 ShimForeignObjectTestCase >> testProxyDedup [
 	"The server's pointer->proxy map returns the same proxy for the same
-	foreign pointer, and distinct proxies for distinct pointers."
+	foreign pointer, and distinct proxies for distinct pointers.  A new proxy
+	takes one reference to its C object (___retainForeignPointer:), so the
+	pointers are readable blocks standing in for PyObject*s, and finding the
+	proxy again takes no second one.  Their entries are removed after: the
+	blocks are freed with their CByteArrays, and a real C object at the same
+	address must not find a test's proxy."
 
-	| shim a b c |
+	| shim bufA bufC a b c |
 	shim := CPythonShim current.
-	a := shim foreignProxyForPointer: 16r4242 typeName: 'pkg.A'.
-	b := shim foreignProxyForPointer: 16r4242 typeName: 'pkg.A'.
-	c := shim foreignProxyForPointer: 16r9999 typeName: 'pkg.C'.
+	bufA := CByteArray gcMalloc: 32.
+	bufC := CByteArray gcMalloc: 32.
+	bufA int64At: 0 put: 1.
+	bufC int64At: 0 put: 1.
+	[a := shim foreignProxyForPointer: bufA memoryAddress typeName: 'pkg.A'.
+	b := shim foreignProxyForPointer: bufA memoryAddress typeName: 'pkg.A'.
+	c := shim foreignProxyForPointer: bufC memoryAddress typeName: 'pkg.C'.
 	self assert: a == b.
 	self deny: a == c.
-	self assert: (a @env1:___pyAttrLoad___: #'__name__') equals: 'A'
+	self assert: (bufA int64At: 0) equals: 2.
+	self assert: (a @env1:___pyAttrLoad___: #'__name__') equals: 'A']
+		ensure: [
+			(SessionTemps current at: #'GrailForeignProxies' otherwise: nil) ifNotNil: [:map |
+				map removeKey: bufA memoryAddress ifAbsent: [nil].
+				map removeKey: bufC memoryAddress ifAbsent: [nil]]]
 
 ]
 

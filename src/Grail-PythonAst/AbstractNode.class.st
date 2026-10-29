@@ -2550,6 +2550,15 @@ AbstractNode >> ___isAstLocationName___: aName [
 
 ]
 
+{ #category : 'Grail-testing' }
+AbstractNode >> ___isFutureImport___ [
+	"Whether this is a ``from __future__ import'' statement.  Only an
+	ImportFromAst can be."
+
+	^ false
+
+]
+
 { #category : 'Grail-compile warnings' }
 AbstractNode >> ___isIdentityLiteral___ [
 	"Whether this is a literal ``is'' should not be used with: a constant

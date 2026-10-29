@@ -163,6 +163,17 @@ ImportFromAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 
 ]
 
+{ #category : 'Grail-testing' }
+ImportFromAst >> ___isFutureImport___ [
+	"An absolute ``from __future__ import'': a RELATIVE one names some other
+	module called __future__, so it is not a future statement and ends the
+	leading block of them like any other import (test_future
+	test_future_dotted_import)."
+
+	^ level = 0 and: [module notNil and: [module asString = '__future__']]
+
+]
+
 { #category : 'Grail-code generation' }
 ImportFromAst >> ___isRelativeInDoit___ [
 	"A relative import (``from .. import util'') compiled as a DOIT -- exec'd

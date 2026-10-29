@@ -16,7 +16,9 @@ Class {
 		'position',
 		'endPosition',
 		'endLine',
-		'fieldStarts'
+		'fieldStarts',
+		'openFieldAt',
+		'openFieldInSpec'
 	],
 	#category : 'Grail-Parser'
 }
@@ -101,6 +103,16 @@ PythonToken >> fieldStarts: aCollection [
 ]
 
 { #category : 'Grail-testing' }
+PythonToken >> isAnyString [
+	"Whether this is a string literal of any kind -- str, bytes, f-string or
+	t-string -- all of which CPython's grammar reads as one run when they are
+	adjacent."
+
+	^ #(#STRING #BYTES #FSTRING #TSTRING) includes: type
+
+]
+
+{ #category : 'Grail-testing' }
 PythonToken >> isBytes [
 
 	^type == #BYTES
@@ -157,6 +169,14 @@ PythonToken >> isOp: aString [
 ]
 
 { #category : 'Grail-testing' }
+PythonToken >> isOpenInFormatSpec [
+	"Whether this f-string ended inside its last field's format spec."
+
+	^ openFieldInSpec == true
+
+]
+
+{ #category : 'Grail-testing' }
 PythonToken >> isString [
 
 	^type == #STRING
@@ -174,6 +194,25 @@ PythonToken >> isTString [
 { #category : 'Grail-accessors' }
 PythonToken >> line [
 	^ line
+
+]
+
+{ #category : 'Grail-accessors' }
+PythonToken >> openFieldAt [
+	"Where CPython locates the error of this f-string's open last field, or
+	nil when every field closed."
+
+	^ openFieldAt
+
+]
+
+{ #category : 'Grail-accessors' }
+PythonToken >> openFieldAt: aPosition inSpec: aBoolean [
+	"This f-string ended with its last replacement field open, in its format
+	spec when aBoolean: CPython's error for it is located at aPosition."
+
+	openFieldAt := aPosition.
+	openFieldInSpec := aBoolean
 
 ]
 

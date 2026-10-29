@@ -116,6 +116,15 @@ PyClassMethod >> ___pyCallValue___: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PyClassMethod >> ___pyHiddenStateNames___ [
+	"The callable is Grail's implementation, kept under #__func__, not an
+	attribute of the instance dict: CPython's __func__ is a member."
+
+	^ #( #'__func__' )
+
+]
+
 { #category : 'Grail-Reflection' }
 PyClassMethod >> __annotate__ [
 	"PEP 649, forwarded for the same reason: functools.update_wrapper copies
@@ -147,6 +156,21 @@ PyClassMethod >> __class_getitem__: item [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PyClassMethod >> __dict__ [
+	"The instance dict, holding what CPython copies from the callable when the
+	wrapper is made (Object >> ___copyWrappedAttributesOf___:).  Copied when
+	the dict is first READ instead: Grail settles a function's __qualname__
+	only once the class body defining it has run, so a copy made in the body
+	kept a short one and shadowed the real one -- functools'
+	singledispatchmethod over a classmethod read 'A.cls_func' (test_functools
+	test_method_wrapping_attributes)."
+
+	self @env0:___copyWrappedAttributesOf___: (self @env0:dynamicInstVarAt: #'__func__').
+	^ super __dict__
+
+]
+
 { #category : 'Grail-Attribute Access' }
 PyClassMethod >> __doc__ [
 	^ self ___wrappedMeta___: #'__doc__'
@@ -163,17 +187,21 @@ PyClassMethod >> __get__: obj [
 PyClassMethod >> __get__: obj _: cls [
 	"Binds the CLASS, whether reached through the class (obj is None, cls is
 	the class) or through an instance (both supplied).  MethodBinding is what
-	prepends a receiver to the call arguments."
+	prepends a receiver to the call arguments.
+
+	With no class, the class is type(obj) (Objects/funcobject.c:1468-1469),
+	the PYTHON type: ``classmethod(f).__get__(0)'' binds int, where the
+	Smalltalk class would have been SmallInteger.  With neither, CPython's
+	wrapper refuses (Objects/typeobject.c:9693-9701)."
 
 	| owner |
 	owner := (cls == nil or: [cls == None])
 		ifTrue: [(obj == nil or: [obj == None])
 			ifTrue: [nil]
-			ifFalse: [obj @env0:class]]
+			ifFalse: [obj ___pyMetaclass___]]
 		ifFalse: [cls].
 	owner == nil ifTrue: [
-		TypeError ___signal___:
-			'classmethod descriptor needs an owner class to bind'].
+		TypeError ___signal___: '__get__(None, None) is invalid'].
 	^ MethodBinding instance: owner
 		callable: (self @env0:dynamicInstVarAt: #'__func__')
 

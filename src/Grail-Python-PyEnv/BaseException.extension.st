@@ -5,11 +5,16 @@ BaseException class >> ___allocateForNew: args kw: kwargs [
 	"CPython's BaseException_new: an instance of the receiver holding args.
 	Keywords are ignored here -- BaseException_init is what refuses them -- and
 	___classForArgs___: still decides the class, so OSError.__new__(OSError,
-	2, 'x') is a FileNotFoundError and a bare group narrows, as in CPython."
+	2, 'x') is a FileNotFoundError and a bare group narrows, as in CPython.
+
+	The args are stored as __new__ stores them (BaseException >>
+	___newArgs___:), not parsed as __init__ parses them: a SyntaxError
+	subclass whose __init__ takes (msg, code) must not have its code read as a
+	location here."
 
 	| inst |
 	inst := (self ___classForArgs___: args) ___new___.
-	inst ___args___: args.
+	inst @env0:___newArgs___: args.
 	^ inst
 
 ]
@@ -623,7 +628,8 @@ BaseException class >> ___signalNew___: positional kw: kwargs cause: aCause [
 	instance := cls ___new___.
 	instance ___args___: positional.
 	(cls @env0:___hasUserInit___) ifTrue: [
-		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
+		((instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs)
+			@env0:___checkInitResult___
 	].
 	"Implicit context BEFORE the explicit cause: ``raise X from Y'' records both,
 	and ___applyCause___ must not find the slot already occupied by its own Y."
@@ -1582,6 +1588,26 @@ BaseException >> __notes__ [
 
 ]
 
+{ #category : 'Grail-Pickling' }
+BaseException >> __reduce__ [
+	"CPython's BaseException.__reduce__ (Objects/exceptions.c, and the
+	ImportError and OSError shapes at :1885-1930 and OSError_reduce):
+	``(type, args)'', with the instance __dict__ as state when there is one.
+	pickle.py computes exactly that for its own use, knowing which attributes
+	CPython keeps in C slots rather than in __dict__ (_reduce_exception), so
+	this answers what it does rather than keeping a second copy of that list.
+
+	Object's answered NotImplemented, which copy.copy and copy.deepcopy then
+	rebuilt without the arguments: every copied exception came back with
+	``args == ()'' and an empty str (test_exceptions ImportErrorTests
+	test_copy_pickle)."
+
+	| pickle |
+	pickle := ((Python @env0:at: #builtins) @env1:instance) @env1:___import__: { 'pickle' } kw: nil.
+	^ (pickle ___pyAttrLoad___: #'_reduce_exception') value: { self. 2 } value: nil
+
+]
+
 { #category : 'Grail-String Representation' }
 BaseException >> __repr__ [
 	"Return a detailed string representation of the exception."
@@ -1632,6 +1658,11 @@ BaseException >> __setstate__: state [
 
 	| pairs |
 	(state == None or: [state == nil]) ifTrue: [^ None].
+	"A dict or nothing (Objects/exceptions.c:249-252): ``__setstate__(42)'' was
+	sent keysAndValuesDo: and died uncatchably (test_exceptions
+	test_invalid_setstate)."
+	((state @env0:isKindOf: KeyValueDictionary) or: [state @env0:isKindOf: PyInstanceDict])
+		ifFalse: [^ TypeError ___signal___: 'state is not a dictionary'].
 	pairs := OrderedCollection @env0:new.
 	state @env0:keysAndValuesDo: [:k :v |
 		pairs @env0:add: (Array @env0:with: k with: v)].
@@ -1718,16 +1749,24 @@ BaseException >> add_note: note [
 	___pyAttrDelete___ so the next read falls through to the __notes__ method
 	below and AttributeErrors again -- CPython's ``absent until add_note''
 	state, restored.  Under a private name both of those were invisible: the
-	accessor kept answering the old list."
+	accessor kept answering the old list.
+
+	CPython's refusals (Objects/exceptions.c:295-325): a note that is not a
+	str, named by its Python type, and a __notes__ that is no longer a list --
+	``e.__notes__ = 42'' -- which used to be sent append: and die uncatchably
+	(test_exceptions test_notes)."
 
 	| notes |
-	(note isKindOf: CharacterCollection) ifFalse: [
-		^ TypeError ___signal___: 'add_note() argument must be a str, not '
-			@env0:, note @env0:class @env0:name @env0:asString].
+	((note isKindOf: CharacterCollection) or: [note isKindOf: AbstractPyStr]) ifFalse: [
+		"None by name, as _PyArg_BadArgument names it."
+		^ TypeError ___signal___: 'add_note() argument must be str, not '
+			@env0:, (note == None ifTrue: ['None'] ifFalse: [note ___pyTypeNameForError___])].
 	notes := self @env0:dynamicInstVarAt: #'__notes__'.
 	notes isNil ifTrue: [
 		notes := list ___new___.
 		self @env0:dynamicInstVarAt: #'__notes__' put: notes].
+	(notes @env0:isKindOf: list) ifFalse: [
+		^ TypeError ___signal___: 'Cannot add note: __notes__ is not a list'].
 	notes append: note.
 	^ None
 

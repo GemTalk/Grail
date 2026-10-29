@@ -295,6 +295,7 @@ static PyObject *gcm_vectorcall(PyObject *callable, PyObject *const *args,
 }
 
 extern "C" PyObject *_grail_real_layout(PyObject *o);   /* cpython.cc */
+extern "C" void _grail_release(PyObject *o);           /* cpython.cc */
 
 /* tp_call: a tuple and a dict, flattened into the vector convention.  The
    keyword values come out of a Grail dict as Grail objects, so a list or
@@ -934,13 +935,19 @@ PyObject *PyMapping_Items(PyObject *o) {
     PyObject *view = PyObject_CallMethod(o, "items", NULL);
     if (view == NULL) return NULL;
     PyObject *it = PyObject_GetIter(view);
+    _grail_release(view);
     if (it == NULL) return NULL;
     PyObject *list = PyList_New(0);
-    if (list == NULL) return NULL;
+    if (list == NULL) { _grail_release(it); return NULL; }
     PyObject *x;
-    while ((x = PyIter_Next(it)) != NULL)
-        if (PyList_Append(list, x) < 0) return NULL;
-    return PyErr_Occurred() ? NULL : list;
+    while ((x = PyIter_Next(it)) != NULL) {
+        int rc = PyList_Append(list, x);
+        _grail_release(x);
+        if (rc < 0) break;
+    }
+    _grail_release(it);
+    if (PyErr_Occurred()) { Py_DECREF(list); return NULL; }
+    return list;
 }
 
 int PyObject_DelItem(PyObject *o, PyObject *key) {
