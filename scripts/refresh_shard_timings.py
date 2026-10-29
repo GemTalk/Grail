@@ -10,13 +10,21 @@ from this file; every shard prints one line per class it ran,
 and this script collects them.  The numbers that matter are CI's -- the
 gate's wall-clock is CI's -- so by default it downloads the logs of a CI run:
 
-    scripts/refresh_shard_timings.py                 # latest green merge-queue run
-    scripts/refresh_shard_timings.py 40562863481     # that run (several: averaged)
+    scripts/refresh_shard_timings.py                 # latest 3 green merge-queue runs
+    scripts/refresh_shard_timings.py 40562863481 ... # those runs
     scripts/refresh_shard_timings.py --local         # out/shard_*.out of a local run
     scripts/refresh_shard_timings.py --logs DIR...   # any directory of shard logs
 
-A class seen more than once (both arms of a CI run, or several runs) gets the
-mean.  Classes that no longer exist simply drop out; new classes are absent
+Within one run a class's samples (one per arm) are averaged.  Across several
+runs a class gets its LARGEST per-run figure, because per-class costs are not
+additive: the first class in a session to import a shared module (flask,
+pickle, ...) pays for compiling it and the classes after it ride free, so one
+class measured 49s on one run and 116s on the next, and another 20s and 0.3s,
+purely by what ran before them.  The largest figure is roughly the class's cost
+when nothing before it shared its imports -- which is what it costs on a shard
+of its own -- and over-costing a class that does share only makes its shard
+finish early.  So refresh from two or three runs, ideally of different
+partitions.  Classes that no longer exist simply drop out; new classes are absent
 until the next refresh, and GrailShardPlan costs them by test count meanwhile,
 so nothing is ever dropped from a run.
 
@@ -52,12 +60,12 @@ def ci_reserve_default():
         return CI_RESERVE_S
 
 
-def latest_run():
+def latest_runs(n=3):
     out = subprocess.run(
         ["gh", "run", "list", "--repo", REPO, "--workflow", "ci.yml",
-         "--event", "merge_group", "--status", "success", "--limit", "1",
-         "--json", "databaseId", "-q", ".[0].databaseId"],
-        check=True, capture_output=True, text=True).stdout.strip()
+         "--event", "merge_group", "--status", "success", "--limit", str(n),
+         "--json", "databaseId", "-q", ".[].databaseId"],
+        check=True, capture_output=True, text=True).stdout.split()
     if not out:
         sys.exit("no successful merge-queue CI run found; pass a run id")
     return out
@@ -73,10 +81,12 @@ def download(run_id, dest):
 
 
 def collect(dirs):
-    samples = defaultdict(list)
+    """Per class: the largest, over the given runs, of its mean within a run."""
+    best = {}
     tests = {}
     files = 0
     for d in dirs:
+        samples = defaultdict(list)
         for path in glob.glob(os.path.join(d, "**", "shard_*.out"), recursive=True):
             files += 1
             with open(path, errors="replace") as f:
@@ -85,7 +95,9 @@ def collect(dirs):
                     if m:
                         samples[m.group(2)].append(int(m.group(3)))
                         tests[m.group(2)] = int(m.group(4))
-    return samples, tests, files
+        for name, v in samples.items():
+            best[name] = max(best.get(name, 0), round(sum(v) / len(v)))
+    return best, tests, files
 
 
 def plan(costs, workers, reserve_ms):
@@ -101,9 +113,9 @@ def plan(costs, workers, reserve_ms):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("runs", nargs="*", help="CI run id(s); default the latest green merge-queue run")
+    ap.add_argument("runs", nargs="*", help="CI run id(s); default the latest 3 green merge-queue runs")
     ap.add_argument("--local", action="store_true", help="read out/shard_*.out of a local run")
-    ap.add_argument("--logs", nargs="+", metavar="DIR", help="read shard logs under these directories")
+    ap.add_argument("--logs", nargs="+", metavar="DIR", help="read shard logs under these directories, one run each")
     ap.add_argument("--workers", type=int, default=16, help="preview the plan for this many shards")
     ap.add_argument("--reserve", type=int, default=None, help="preview reserve on shard 0, seconds")
     ap.add_argument("--dry-run", action="store_true", help="print the preview, do not write the file")
@@ -115,14 +127,13 @@ def main():
         elif args.logs:
             dirs, source = args.logs, "shard logs in " + " ".join(args.logs)
         else:
-            runs = args.runs or [latest_run()]
+            runs = args.runs or latest_runs()
             dirs = [download(r, tmp) for r in runs]
             source = "CI run(s) " + " ".join(runs)
-        samples, tests, files = collect(dirs)
+        costs, tests, files = collect(dirs)
 
-    if not samples:
+    if not costs:
         sys.exit(f"no GRAIL_CLASS_TIME lines in {files} shard log(s) from {source}")
-    costs = {n: round(sum(v) / len(v)) for n, v in samples.items()}
     total = sum(costs.values())
 
     if not args.dry_run:
@@ -136,7 +147,8 @@ def main():
                 "# GENERATED -- do not edit by hand.  Refresh with\n"
                 "#     scripts/refresh_shard_timings.py [CI run id ...]\n"
                 f"# Source: {source}; {len(costs)} classes, {total / 1000:.0f}s in all\n"
-                "# (the mean of every sample, so both arms of a CI run count).\n")
+                "# (per run, the mean of a class's samples, so both arms count; across\n"
+                "# runs, the largest -- see the script for why).\n")
             for name in sorted(costs):
                 f.write(f"{name} {costs[name]}\n")
         print(f"wrote {os.path.relpath(TIMINGS, ROOT)}: {len(costs)} classes, "
