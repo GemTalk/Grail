@@ -101,9 +101,16 @@ check('type.enum_member_identity.float_mixin',
 check('type.enum_member_identity.int_mixin',
       lambda: (stored['rank'] is upgrade_app.Rank.HIGH,
                'stored Rank.HIGH is not the current Rank.HIGH'))
+check('type.enum_member_identity.functional',
+      lambda: (stored['shape'] is upgrade_app.Shape.SQUARE,
+               'stored Shape.SQUARE is not the current Shape.SQUARE'))
+check('type.enum_member_identity.functional_int_mixin',
+      lambda: (stored['weight'] is upgrade_app.Weight.HEAVY,
+               'stored Weight.HEAVY is not the current Weight.HEAVY'))
 for _cls, _name, _tag in (('Color', 'GREEN', 'color'), ('Mode', 'WRITE', 'mode'),
                           ('Level', 'HIGH', 'level'), ('Size', 'LARGE', 'size'),
-                          ('Rank', 'HIGH', 'rank')):
+                          ('Rank', 'HIGH', 'rank'), ('Shape', 'SQUARE', 'shape'),
+                          ('Weight', 'HEAVY', 'weight')):
     check('lookup.enum_member.dict.' + _tag,
           lambda c=_cls, n=_name, t=_tag: expect_equal(
               stored['enum_keyed_dict'].get(getattr(getattr(upgrade_app, c), n), '<missing>'), t))

@@ -138,6 +138,13 @@ class Rank(int, enum.Enum):
     HIGH = 2
 
 
+# Enums built by the FUNCTIONAL API, not a class statement (#1950): one plain,
+# one with an int mixin given by ``type=''.  Weight's values are not Rank's: an
+# int-mixin member equals its value, so equal values would be one dict key.
+Shape = enum.Enum('Shape', 'CIRCLE SQUARE')
+Weight = enum.Enum('Weight', [('LIGHT', 10), ('HEAVY', 20)], type=int)
+
+
 Pair = collections.namedtuple('Pair', 'left right')
 
 
@@ -241,9 +248,13 @@ def build():
         'count': Count(7),
         'size': Size.LARGE,
         'rank': Rank.HIGH,
+        'shape': Shape.SQUARE,
+        'weight': Weight.HEAVY,
         'enum_keyed_dict': {Color.GREEN: 'color', Mode.WRITE: 'mode', Level.HIGH: 'level',
-                            Size.LARGE: 'size', Rank.HIGH: 'rank'},
-        'enum_keyed_set': {Color.GREEN, Mode.WRITE, Level.HIGH, Size.LARGE, Rank.HIGH},
+                            Size.LARGE: 'size', Rank.HIGH: 'rank', Shape.SQUARE: 'shape',
+                            Weight.HEAVY: 'weight'},
+        'enum_keyed_set': {Color.GREEN, Mode.WRITE, Level.HIGH, Size.LARGE, Rank.HIGH,
+                           Shape.SQUARE, Weight.HEAVY},
         'pair': Pair(1, 2),
         'span': Span(3, 8),
         'typed_pair_obj': TypedPair(5, 'x'),
@@ -300,6 +311,7 @@ def expected_types():
         'registry': Registry, 'point': Point, 'bag': Bag, 'tagged': Tagged, 'color': Color,
         'mode': Mode, 'level': Level,
         'price': Price, 'count': Count, 'size': Size, 'rank': Rank,
+        'shape': Shape, 'weight': Weight,
         'pair': Pair, 'span': Span, 'typed_pair_obj': TypedPair, 'built': Built,
     }
 
@@ -347,8 +359,11 @@ def describe(stored):
         'count': [int(s['count']), s['count'].doubled()],
         'size': [s['size'].name, s['size'].value, float(s['size'])],
         'rank': [s['rank'].name, s['rank'].value, int(s['rank'])],
+        'shape': [s['shape'].name, s['shape'].value],
+        'weight': [s['weight'].name, s['weight'].value, int(s['weight'])],
         'enum_members': [[m.name for m in Color], [m.name for m in Mode], [m.name for m in Level],
-                         [m.name for m in Size], [m.name for m in Rank]],
+                         [m.name for m in Size], [m.name for m in Rank],
+                         [m.name for m in Shape], [m.name for m in Weight]],
         'pair': [s['pair'].left, s['pair'].right],
         'span': [s['span'].lo, s['span'].hi, s['span'].width()],
         'typed_pair_obj': [s['typed_pair_obj'].first, s['typed_pair_obj'].second],
