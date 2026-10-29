@@ -219,6 +219,57 @@ module >> ___clearWrappedGlobal___: aSym [
 ]
 
 { #category : 'Grail-Attribute Access' }
+module >> ___dataGlobalAt___: aSym [
+	"The value Python reads for a data attribute this module keeps as a
+	DICTIONARY ENTRY, for a Smalltalk accessor to answer -- raising the entry's
+	own KeyNotFound when Python would find nothing either.  See
+	___dataGlobalAt___:otherwise:."
+
+	^ self ___dataGlobalAt___: aSym otherwise: [self @env0:at: aSym]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+module >> ___dataGlobalAt___: aSym otherwise: aBlock [
+	"A module written in Smalltalk (sys above all) keeps its data attributes as
+	dictionary entries behind one-line accessors, but a PYTHON assignment
+	``sys.argv = new'' stores a dynamic instVar, which Python's read probes
+	first (___globalAt___:otherwise:) and which therefore SHADOWS the entry.
+	An accessor that read the entry alone answered the value Python had
+	replaced -- or, after ``del sys.argv'' (which removes the entry), raised
+	KeyNotFound while Python read the new list back fine (issue #1933).
+
+	So read what Python reads: the instVar when there is one, else the entry.
+	A tombstone needs no check here: ``del'' removes both stores, and an
+	assignment, which is the only way back, clears it.
+
+	None is nil, so an instVar holding None reads as absent and the entry
+	answers -- as it does for Python's own read, which makes the same probe."
+
+	| val |
+	val := self @env0:dynamicInstVarAt: aSym.
+	val == nil ifFalse: [^ val].
+	^ self @env0:at: aSym ifAbsent: aBlock
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+module >> ___dataGlobalAt___: aSym put: aValue [
+	"Store a data attribute from SMALLTALK so that Python reads it too: into the
+	entry, dropping any instVar a Python assignment left SHADOWING it.  Writing
+	the entry alone was invisible to Python under such a shadow, so a program
+	that had assigned sys.argv kept its own argv when importlib installed the
+	next program's (sys class >> ___setArgv___:).  Like a Python store, it
+	revives a name ``del'' removed.  See ___dataGlobalAt___:otherwise:."
+
+	self ___unmarkGlobalDeleted___: aSym.
+	(self @env0:dynamicInstVarAt: aSym) == nil
+		ifFalse: [self @env0:removeDynamicInstVar: aSym].
+	^ self @env0:at: aSym put: aValue
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 module >> ___deletedGlobals___ [
 	"The names ``del m.x'' has removed from this module although a class
 	METHOD still answers them -- a set, or nil when nothing was deleted.
