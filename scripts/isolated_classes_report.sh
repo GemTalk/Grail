@@ -4,11 +4,14 @@
 # ===========================================================================
 # Usage:
 #   scripts/isolated_classes_report.sh [--partitions N] DIR [DIR ...]
+#   scripts/isolated_classes_report.sh --one-partition DIR
 #
 # Each DIR is one runner's output directory: plan.txt (the classes it was
 # given, from tests/scripts/listIsolatedClasses.gs), and per class <C>.out and
 # <C>.rc.  Several DIRs are the partitions of one CI run; --partitions says how
-# many there must be.  Needs no stone.
+# many there must be.  --one-partition judges a single partition of a larger
+# run on its own -- its classes, not the run's coverage, which only the run's
+# summary can see.  Needs no stone.
 #
 # A class is
 #   PASSED      its session printed a GRAIL_CLASS_RESULT with no defects;
@@ -33,12 +36,16 @@
 set -u
 
 EXPECT_PARTITIONS=''
+ONE_PARTITION=0
 if [ "${1:-}" = --partitions ]; then
     EXPECT_PARTITIONS="${2:?--partitions needs a number}"
     shift 2
+elif [ "${1:-}" = --one-partition ]; then
+    ONE_PARTITION=1
+    shift
 fi
 if [ "$#" -eq 0 ]; then
-    echo "usage: $0 [--partitions N] DIR [DIR ...]" >&2
+    echo "usage: $0 [--partitions N | --one-partition] DIR [DIR ...]" >&2
     exit 2
 fi
 
@@ -71,6 +78,10 @@ for dir in "$@"; do
     partition_counts="$partition_counts $(field "$pl" partitions)"
     partitions_seen="$partitions_seen $(field "$pl" partition)"
     suite_classes="$suite_classes $(field "$pl" suiteClasses)"
+    planned=$(field "$pl" classes)
+    listed=$(grep -c '^GRAIL_ISOLATED_CLASS|' "$plan" || true)
+    [ "$planned" = "$listed" ] || problems="${problems}$plan plans $planned classes but lists $listed
+"
 
     for cls in $(sed -n 's/^GRAIL_ISOLATED_CLASS|\([^|]*\)|.*/\1/p' "$plan"); do
         n_expected=$((n_expected + 1))
@@ -129,7 +140,7 @@ if [ "$(printf '%s\n' "$pc" | grep -c . || true)" -gt 1 ]; then
 "
 fi
 want="${EXPECT_PARTITIONS:-$(printf '%s\n' "$pc" | head -1)}"
-if [ -n "$want" ]; then
+if [ -n "$want" ] && [ "$ONE_PARTITION" -eq 0 ]; then
     i=0
     while [ "$i" -lt "$want" ]; do
         hits=$(printf '%s\n' $partitions_seen | grep -cx "$i" || true)
@@ -143,7 +154,7 @@ sc=$(uniq_words "$suite_classes" | head -1)
 if [ "$(uniq_words "$suite_classes" | grep -c . || true)" -gt 1 ]; then
     problems="${problems}the partitions saw suites of different sizes:$suite_classes
 "
-elif [ -n "$sc" ] && [ "$n_expected" -ne "$sc" ]; then
+elif [ -n "$sc" ] && [ "$n_expected" -ne "$sc" ] && [ "$ONE_PARTITION" -eq 0 ]; then
     problems="${problems}the partitions listed $n_expected classes but the suite holds $sc
 "
 fi

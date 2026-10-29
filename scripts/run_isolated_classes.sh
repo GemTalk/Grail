@@ -152,4 +152,10 @@ export GRAIL_DIR="$PROJECT_ROOT"
 tr '\n' '\0' < "$OUT/classes.txt" | xargs -0 -n 1 -P "$JOBS" "$PROJECT_ROOT/scripts/run_isolated_classes.sh" --one
 
 echo "TIMING | isolated classes           | $((SECONDS - T0))s"
-"$PROJECT_ROOT/scripts/isolated_classes_report.sh" "$OUT"
+# One partition of several is judged on its own classes here; whether the
+# partitions together covered the suite is the CI summary job's question.
+if [ "$#" -eq 0 ] && [ "${GRAIL_ISOLATED_PARTITIONS:-1}" -gt 1 ]; then
+    "$PROJECT_ROOT/scripts/isolated_classes_report.sh" --one-partition "$OUT"
+else
+    "$PROJECT_ROOT/scripts/isolated_classes_report.sh" "$OUT"
+fi

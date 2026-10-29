@@ -100,6 +100,23 @@ run_report missing --partitions 2 "$d/p0"
 printf '%s\n' "$OUTPUT" | grep -q 'partition 1 reported 0 time' && ok || bad "the missing partition is not named: $OUTPUT"
 printf '%s\n' "$OUTPUT" | grep -q '^isolated classes INCOMPLETE' && ok || bad "a missing partition is not INCOMPLETE: $OUTPUT"
 
+# --- one partition judged alone: its classes, not the run's coverage ---------
+d="$TMP/alone"; partition "$d/p3" 3 16 1102 A B; passed "$d/p3" A; passed "$d/p3" B
+run_report alone --one-partition "$d/p3"
+[ "$RC" -eq 0 ] && ok || bad "a green partition judged alone exits $RC: $OUTPUT"
+failed "$d/p3" B
+run_report alone-red --one-partition "$d/p3"
+[ "$RC" -ne 0 ] && ok || bad "a red partition judged alone exits 0: $OUTPUT"
+rm "$d/p3/B.out"
+run_report alone-short --one-partition "$d/p3"
+[ "$RC" -ne 0 ] && printf '%s\n' "$OUTPUT" | grep -q 'INCOMPLETE  *B' && ok || bad "a partition judged alone misses a class: $OUTPUT"
+
+# --- a plan.txt cut short (its class list does not match its own count) ------
+d="$TMP/cut"; partition "$d/p0" 0 1 2 A B; passed "$d/p0" A; passed "$d/p0" B
+sed -i.bak '$d' "$d/p0/plan.txt"; sed -i.bak 's/suiteClasses=2/suiteClasses=1/' "$d/p0/plan.txt"
+run_report cut "$d/p0"
+[ "$RC" -ne 0 ] && printf '%s\n' "$OUTPUT" | grep -q 'plans 2 classes but lists 1' && ok || bad "a truncated plan: $OUTPUT"
+
 # --- a partition whose runner never got as far as a plan ---------------------
 d="$TMP/noplan"; partition "$d/p0" 0 2 1 A; passed "$d/p0" A; mkdir -p "$d/p1"
 run_report noplan --partitions 2 "$d/p0" "$d/p1"
