@@ -101,6 +101,16 @@ PythonToken >> fieldStarts: aCollection [
 ]
 
 { #category : 'Grail-testing' }
+PythonToken >> isAnyString [
+	"Whether this is a string literal of any kind -- str, bytes, f-string or
+	t-string -- all of which CPython's grammar reads as one run when they are
+	adjacent."
+
+	^ #(#STRING #BYTES #FSTRING #TSTRING) includes: type
+
+]
+
+{ #category : 'Grail-testing' }
 PythonToken >> isBytes [
 
 	^type == #BYTES
