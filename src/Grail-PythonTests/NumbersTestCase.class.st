@@ -4,6 +4,22 @@ Class {
 	#category : 'Grail-SUnit'
 }
 
+{ #category : 'Grail-Setup' }
+NumbersTestCase >> setUp [
+	"Import numbers first.  The ABCs' registrations (int with Integral, float
+	with Real, ...) are SESSION-LOCAL and made by ``import numbers''
+	(numbers >> registerBuiltinTypes), but these tests send __instancecheck__:
+	to the ABC classes directly and never imported it.  They passed only when
+	an earlier class in the same session happened to import numbers, so the
+	time-based shard plan (#1912) that put this class in a session with no
+	such neighbour failed all 12 isinstance checks -- in any PR that moved
+	the partition.  Run alone in a fresh session they failed the same way."
+
+	super setUp.
+	(builtins @env1:instance) @env1:___import__: { 'numbers' } kw: nil
+
+]
+
 { #category : 'Grail-Tests - isinstance Integral' }
 NumbersTestCase >> testBoolIsInstanceOfIntegral [
 	"Test isinstance(True, numbers.Integral) returns True (bool is subclass of int)"
