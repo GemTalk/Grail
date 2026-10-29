@@ -1463,6 +1463,24 @@ ModuleAst >> ___isLineMapped___ [
 ]
 
 { #category : 'Grail-code generation' }
+ModuleAst >> ___leadingFutureImports___ [
+	"The module's future statements (Python/future.c:64-106, future_parse):
+	after an optional docstring, each ``from __future__ import'' up to the
+	first statement that is anything else."
+
+	| statements leading |
+	leading := OrderedCollection new.
+	body isNil ifTrue: [^ leading].
+	statements := body body ifNil: [#()].
+	self ___docString___ ifNotNil: [:docstring | statements := statements allButFirst].
+	statements do: [:statement |
+		statement ___isFutureImport___ ifFalse: [^ leading].
+		leading add: statement].
+	^ leading
+
+]
+
+{ #category : 'Grail-code generation' }
 ModuleAst >> ___leadsWithUseNamespace___ [
 	"True when the module's first statement, after an optional docstring and
 	any imports, is a bare call of ``use_namespace'' -- ``gemdb.use_namespace(
