@@ -2150,6 +2150,37 @@ importlib class >> ___compilationSymbolList___ [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___compilingFile___: pathString do: aBlock [
+	"Answer what aBlock answers -- the reading or compiling of the module at
+	pathString -- with that file named wherever the compile names one, as
+	CPython's loader hands compile() the module's path
+	(Lib/importlib/_bootstrap_external.py:822-827, 896-897).  Grail's parser
+	and source decoding locate an error knowing only the text, so an imported
+	module's SyntaxError said ``<string>'', and so did its tokenizer warnings
+	(PythonTokenizer >> ___compileFilename___, which compile() sets the same
+	way).
+
+	Only an error naming no file of its own is restamped: a star import parses
+	the module it names (expandStarImports:), whose errors its own
+	astForPath: has named already.  The previous filename is back before any
+	handler of the error runs, because a Python ``except'' body runs before
+	the ensure: does."
+
+	| previousFilename |
+	previousFilename := SessionTemps current at: #'GrailCompileFilename' ifAbsent: [nil].
+	SessionTemps current at: #'GrailCompileFilename' put: pathString.
+	^ [aBlock
+		on: SyntaxError
+		do: [:ex |
+			self ___restoreCompileFilename___: previousFilename.
+			(self ___namesNoFile___: ex) ifFalse: [ex pass].
+			ex dynamicInstVarAt: #'filename' put: pathString.
+			ModuleAst ___resignalSyntaxError___: ex]]
+		ensure: [self ___restoreCompileFilename___: previousFilename]
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___copyDecoratorRebinding___: aSelector from: aBase to: aClass [
 	"Copy the class-body decorator rebinding for aSelector, if the base has
 	one, alongside the compiled method ___mergeSecondaryBases___ just copied.
@@ -5948,7 +5979,9 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	rerun ifFalse: [stateMap at: moduleName asSymbol put: #'stale'].
 
 	moduleClass isNil ifTrue: [
-		moduleAst := (ModuleAst parseSource: srcString) path: pathString; yourself.
+		moduleAst := (self ___compilingFile___: pathString do: [ModuleAst parseSource: srcString])
+			path: pathString;
+			yourself.
 		moduleAst name: moduleName.
 		moduleAst useTempsForBlock: false.
 
@@ -5970,7 +6003,8 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 		below (and therefore in the generated class's inst vars)."
 		self expandStarImports: moduleAst.
 
-		moduleClass := self ___buildModuleClass: moduleAst name: moduleName.
+		moduleClass := self ___compilingFile___: pathString do: [
+			self ___buildModuleClass: moduleAst name: moduleName].
 		hashes at: moduleName put: srcHash].
 
 	"Phase A: no per-variable accessor methods are generated.  Module
@@ -7071,6 +7105,21 @@ importlib class >> ___mroOverrideRegistry___ [
 		reg := IdentityKeyValueDictionary new.
 		SessionTemps current at: #GrailMroOverrideRegistry put: reg].
 	^ reg
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___namesNoFile___: aSyntaxError [
+	"Whether aSyntaxError is located in its source but names the parser's
+	``<string>'' for the file.  One with no line is left alone: re-signalling
+	it keeps its message only (ModuleAst class >> ___resignalSyntaxError___:)."
+
+	| lineno |
+	lineno := [aSyntaxError dynamicInstVarAt: #'lineno']
+		on: AbstractException do: [:ex | ex return: nil].
+	lineno isNil ifTrue: [^ false].
+	^ ([aSyntaxError dynamicInstVarAt: #'filename']
+		on: AbstractException do: [:ex | ex return: nil]) = '<string>'
 
 ]
 
@@ -8662,6 +8711,16 @@ importlib class >> ___restoreCanonicalMiRecords___ [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___restoreCompileFilename___: aFilenameOrNil [
+	"Put back the filename the tokenizer's warnings name, or none."
+
+	aFilenameOrNil isNil
+		ifTrue: [SessionTemps current removeKey: #'GrailCompileFilename' ifAbsent: [nil]]
+		ifFalse: [SessionTemps current at: #'GrailCompileFilename' put: aFilenameOrNil]
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___restoreParentBinding___: aBinding of: aModule [
 	"Undo, after aModule's body FAILED, the binding that registering it made on
 	its parent (aBinding, from ___parentBindingOf___:).
@@ -8976,7 +9035,8 @@ importlib class >> ___sourceStringForPath___: pathString [
 	(builtinsModule ___needsSourceDecoding___: contents) ifFalse: [
 		text := [contents decodeToUnicode] on: Error do: [:ex | ex return: nil].
 		text isNil ifFalse: [^ text]].
-	^ builtinsModule ___decodedSource___: contents asByteArray
+	^ self ___compilingFile___: pathString do: [
+		builtinsModule ___decodedSource___: contents asByteArray]
 
 ]
 
@@ -9838,14 +9898,15 @@ importlib class >> astForPath: pathString [
 	"Create a ModuleAst from a Python file path.
 
 	importlib astForPath: '/path/to/file.py'.
-	"
-		| file sourceString module |
-		file := self ___openServerFile___: pathString mode: 'rb'.
-		sourceString := file contentsAsUtf8 decodeToUnicode.
-		file close.
-		module := ModuleAst parseSource: sourceString.
-		module path: pathString.
-		^module
+
+	Read as the loader reads a module, so a star import of a module declaring
+	its encoding parses it, and an error in it names its file."
+
+	| module |
+	module := self ___compilingFile___: pathString do: [
+		ModuleAst parseSource: (self ___sourceStringForPath___: pathString)].
+	module path: pathString.
+	^ module
 
 ]
 
