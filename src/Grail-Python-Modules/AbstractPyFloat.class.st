@@ -33,6 +33,21 @@ AbstractPyFloat class >> ___builtinValueClass___ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+AbstractPyFloat class >> ___grailUnwritableAttributes___ [
+	"float's getters, which a subclass of float inherits -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('real' 'imag')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+AbstractPyFloat class >> ___grailUnwritableOwnerName___ [
+
+	^ 'float'
+
+]
+
 { #category : 'Grail-Introspection' }
 AbstractPyFloat class >> ___pythonValueAttrs___ [
 	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."

@@ -10,10 +10,12 @@ PropertyDescriptor >> ___pyAttrStore___: aName put: aValue [
 	mark lands nowhere (test_typing OverrideDecoratorTests.test_property).
 
 	Only the builtin itself: a Python subclass of property has a __dict__, as
-	it does upstream.  Grail's internal ``___'' names pass, as they do on the
+	it does upstream -- but fget, fset and fdel are read-only in both
+	(Object >> ___refuseReadonlyAttribute___:).  Grail's internal ``___'' names pass, as they do on the
 	other attribute-less objects (see NoneType >> ___pyAttrStore___:put:)."
 
 	| s |
+	self @env0:___refuseReadonlyAttribute___: aName.
 	self @env0:class == PropertyDescriptor
 		ifFalse: [^ super ___pyAttrStore___: aName put: aValue].
 	s := aName @env0:asString.

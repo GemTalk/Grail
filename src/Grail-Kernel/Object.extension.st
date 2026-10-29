@@ -761,6 +761,17 @@ Object class >> ___grailPerformClassAttrSetter___: setterSym on: aClass with: aV
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailReadonlyAttributes___ [
+	"The attributes of this type that cannot be set or deleted, which CPython
+	declares as READONLY members: either is ``readonly attribute''
+	(Python/structmember.c:159-163, PyMember_SetOne).  See Object >>
+	___refuseReadonlyAttribute___:."
+
+	^ #()
+
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailRecordSelfSendOverride___: aSymbol [
 	"Note that this class needed a dispatcher for aSymbol (see
@@ -1033,6 +1044,26 @@ Object class >> ___grailTakesNoArguments___ [
 	^ self == Object
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailUnwritableAttributes___ [
+	"The attributes of this type that cannot be set or deleted, which CPython
+	declares as getters with no setter: either is ``attribute 'x' of 'T'
+	objects is not writable'', T naming the type that declares it
+	(Objects/descrobject.c:248-258, getset_set), which
+	___grailUnwritableOwnerName___ answers."
+
+	^ #()
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailUnwritableOwnerName___ [
+	"The Python name of the type that declares ___grailUnwritableAttributes___."
+
+	^ 'object'
+
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailWriteSelfSendOverride___: aSymbol [
 	"Add this class and aSymbol to the committed record, creating it on first
@@ -1085,6 +1116,25 @@ Object >> ___checkInitResult___ [
 
 	^ TypeError @env1:___signal___:
 		'__init__() should return None, not ''' , self ___pyDnuTypeName___ , ''''
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___copyWrappedAttributesOf___: aCallable [
+	"CPython's functools_wraps, which classmethod and staticmethod run on the
+	callable they are made with (Objects/funcobject.c:1393-1423): its
+	__module__, __name__, __qualname__ and __doc__, each one it has, become
+	the receiver's own attributes, so they are in its __dict__.  One the
+	receiver already holds is kept: Grail copies when the __dict__ is first
+	read (PyClassMethod >> __dict__), and a store since then wins."
+
+	#(#'__module__' #'__name__' #'__qualname__' #'__doc__') do: [:name |
+		| value |
+		(self dynamicInstVarAt: name) isNil ifTrue: [
+			value := [aCallable @env1:___pyAttrLoad___: name]
+				on: AttributeError
+				do: [:ex | ex return: #'___absent___'].
+			value == #'___absent___' ifFalse: [self dynamicInstVarAt: name put: value]]]
 
 ]
 
@@ -1627,6 +1677,27 @@ Object >> ___pyStarToArray___ [
 			^ TypeError @env1:___signal___: 'Value after * must be an iterable, not '
 				, (self @env1:___pyTypeNameForError___) asString].
 	^ (list @env1:__new__: self) asArray
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___refuseReadonlyAttribute___: aName [
+	"Refuse a store or a delete of one of the receiver's read-only attributes,
+	in CPython's words for it, or answer the receiver.
+
+	Grail keeps the state of several builtins in attributes of the same names
+	-- a complex's real and imag, a slice's start, stop and step, a
+	classmethod's __func__ -- so an ordinary store rewrote the value itself:
+	after ``c = 1j; c.imag = 5'', c was 5j (test_descr test_properties)."
+
+	| name |
+	name := aName @env0:asString.
+	(self @env0:class ___grailReadonlyAttributes___ includes: name)
+		ifTrue: [^ AttributeError @env1:___signal___: 'readonly attribute'].
+	(self @env0:class ___grailUnwritableAttributes___ includes: name) ifTrue: [
+		^ AttributeError @env1:___signal___: 'attribute ''' , name , ''' of '''
+			, self @env0:class ___grailUnwritableOwnerName___ , ''' objects is not writable'].
+	^ self
 
 ]
 

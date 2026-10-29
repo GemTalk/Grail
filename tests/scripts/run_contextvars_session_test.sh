@@ -55,7 +55,12 @@ System commitTransaction ifFalse: [
 logout
 exit 0
 EOF
-(cd "$PROJECT_ROOT" && LC_ALL=C topaz -lq -S "$SYNC/deploy.gs" < /dev/null) || exit 1
+# The sizes run_tests.sh gives its other phases: deploying what the two RPC
+# sessions import compiles it cold when it is not committed yet, and that ran
+# out of this machine's 50 MB default ("old space overflow") when the test
+# was run on its own.
+(cd "$PROJECT_ROOT" && LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+    -S "$SYNC/deploy.gs" < /dev/null) || exit 1
 
 # The RPC gem is spawned by NetLDI and does NOT inherit topaz's
 # environment, so the checkout path is substituted in as a literal.

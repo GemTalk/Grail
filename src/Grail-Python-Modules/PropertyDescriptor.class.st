@@ -20,3 +20,29 @@ PropertyDescriptor class >> ___checkConstructorArguments___: positional keywords
 		for: 'property'
 
 ]
+
+{ #category : 'Grail-Attribute Access' }
+PropertyDescriptor class >> ___grailReadonlyAttributes___ [
+	"property's members -- not DynamicClassAttribute's, which shares this
+	implementation but whose attributes are ordinary ones in CPython.  See
+	Object class >> ___grailReadonlyAttributes___."
+
+	^ #('fget' 'fset' 'fdel')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+PropertyDescriptor class >> ___grailUnwritableAttributes___ [
+	"property's __isabstractmethod__ getter, not DynamicClassAttribute's -- see
+	PropertyDescriptor class >> ___grailReadonlyAttributes___."
+
+	^ #('__isabstractmethod__')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+PropertyDescriptor class >> ___grailUnwritableOwnerName___ [
+
+	^ 'property'
+
+]

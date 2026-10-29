@@ -1,0 +1,166 @@
+name: Isolated test classes
+
+# Every SUnit class in a session of its own (#1940), to catch a test that only
+# passes because of what ran before it in the same session.
+#
+# The gate (ci.yml, test-main) runs a shard's classes one after another in ONE
+# session, so a class that needs, say, an import some earlier class happened to
+# make passes there -- until a partition change puts it first.  NumbersTestCase
+# was exactly that (#1937, fixed by #1938): it relied on an earlier class having
+# imported `numbers', and #1912's time-based partition exposed it by failing
+# unrelated PRs.  Here scripts/run_isolated_classes.sh starts a new topaz -- a
+# new gem process, so a new, empty session -- for every class, so such a class
+# fails every night instead of on somebody else's PR.
+#
+# NOT on pull requests and NOT a required check: it is a guard on main, read as
+# a notification, like the conformance nightly.  The classes are split over
+# PARTITIONS runners by GrailShardPlan's measured class times (the gate's own
+# partition, tests/scripts/shard_timings.txt), and each runner keeps four class
+# sessions going at once.  The summary job checks that the partitions together
+# ran every class exactly once; a partition or a class that never reported
+# makes the run INCOMPLETE and red, never green.
+
+on:
+  schedule:
+    - cron: '47 5 * * *'   # 05:47 UTC, an hour clear of the 06:47 CI nightly
+  workflow_dispatch:
+    inputs:
+      classes:
+        description: "Space-separated test classes to run INSTEAD of all of them (e.g. 'NumbersTestCase'), on one runner"
+        type: string
+        default: ""
+
+concurrency:
+  group: isolated-classes-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PARTITIONS: 16
+
+jobs:
+  # The matrix: PARTITIONS runners, or one for a named-class run.  No stone.
+  plan:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      partitions: ${{ steps.plan.outputs.partitions }}
+    steps:
+      - id: plan
+        env:
+          CLASSES: ${{ inputs.classes }}
+        run: |
+          if [ -n "$CLASSES" ]; then n=1; else n="$PARTITIONS"; fi
+          echo "partitions=$n" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(seq 0 $((n - 1)) | jq -s -c '{partition: .}')" >> "$GITHUB_OUTPUT"
+
+  isolated:
+    name: isolated classes (partition ${{ matrix.partition }})
+    needs: plan
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    strategy:
+      # Every partition's classes are needed for the summary.
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # Same image as ci.yml's test-main: GemTalk's GemStone 4.0 container.
+    container:
+      image: container.gemtalksystems.com/gemstone/gemstone/main:grail
+      options: --shm-size=1g
+      credentials:
+        username: ${{ secrets.GEMSTONE_CONTAINER_USER }}
+        password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same non-root 'ci' pattern as ci.yml.  The step's own exit status is
+      # not what decides the run -- the summary job's is -- so a red class
+      # does not stop the upload below.
+      - name: install + run this partition's classes, each in its own session (as non-root 'ci')
+        env:
+          CLASSES: ${{ inputs.classes }}
+          N_PARTITIONS: ${{ needs.plan.outputs.partitions }}
+        run: |
+          chown -R ci:ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
+            HOME=/home/ci \
+            GEMSTONE=/opt/gemstone/product \
+            GEMSTONE_NAME=gs64stone \
+            GRAIL_NETLDI=gs64ldi \
+            GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
+            GRAIL_ISOLATED_PARTITIONS="$N_PARTITIONS" \
+            GRAIL_ISOLATED_PARTITION="${{ matrix.partition }}" \
+            GRAIL_ISOLATED_JOBS=4 \
+            CLASSES="$CLASSES" \
+            bash -ex -c '
+              export PATH="$GEMSTONE/bin:$PATH"
+              export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
+              tests/github/setup-testing-env.sh
+              cd "$GEMSTONE_GLOBAL_DIR"
+              startstone -e stone.conf gs64stone
+              waitstone gs64stone 60
+              startnetldi -g gs64ldi
+              cd "$GITHUB_WORKSPACE"
+              ./install_base.sh
+              ./install.sh
+              ./scripts/run_isolated_classes.sh $CLASSES
+            '
+
+      - name: Upload this partition's results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-results-${{ matrix.partition }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            out/isolated/
+            testing/*.log
+            testing/log/**
+
+  # The verdict: every partition's classes, with the coverage checks.  Runs
+  # after a red partition too -- the report is how one reads what went wrong --
+  # and a partition whose artifact never arrived is INCOMPLETE, not absent.
+  summary:
+    needs: [plan, isolated]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: isolated-results-*
+          path: results
+
+      - name: report
+        env:
+          N_PARTITIONS: ${{ needs.plan.outputs.partitions }}
+        run: |
+          dirs=""
+          for i in $(seq 0 $((N_PARTITIONS - 1))); do
+            dirs="$dirs results/isolated-results-$i/out/isolated"
+          done
+          set +e
+          # shellcheck disable=SC2086 -- a list of directories
+          scripts/isolated_classes_report.sh --partitions "$N_PARTITIONS" $dirs > report.txt 2>&1
+          rc=$?
+          set -e
+          cat report.txt
+          { echo "### Isolated test classes"
+            echo
+            echo '```'
+            tail -1 report.txt | grep -q '^  NOT A RESULT' && tail -2 report.txt || tail -1 report.txt
+            echo '```'
+            if grep -qE '^(FAILED|INCOMPLETE) ' report.txt; then
+              echo
+              echo '```'
+              grep -vE '^isolated classes|^  NOT A RESULT' report.txt | head -300
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $rc

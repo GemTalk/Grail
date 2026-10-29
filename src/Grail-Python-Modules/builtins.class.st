@@ -235,17 +235,22 @@ builtins >> ___encodingNameIn___: aLine after: anIndex [
 { #category : 'Grail-Source Encoding' }
 builtins >> ___firstTwoLinesOf___: bytes [
 	"A source's first two lines, or its only one, read byte for byte: a
-	declaration is ASCII, and Latin-1 gives every byte a character."
+	declaration is ASCII, and Latin-1 gives every byte a character.  The
+	bytes after them are never read, since the import path asks this of
+	every module it loads."
 
-	| text first rest second |
-	text := (bytes @env1:decode: 'iso-8859-1') asString.
-	first := text indexOf: Character lf.
-	first = 0 ifTrue: [^ Array with: text].
-	rest := text copyFrom: first + 1 to: text size.
-	second := rest indexOf: Character lf.
-	^ Array
-		with: (text copyFrom: 1 to: first - 1)
-		with: (second = 0 ifTrue: [rest] ifFalse: [rest copyFrom: 1 to: second - 1])
+	| lines line |
+	lines := OrderedCollection new.
+	line := WriteStream on: String new.
+	bytes do: [:each |
+		each = 10
+			ifTrue: [
+				lines add: line contents.
+				lines size = 2 ifTrue: [^ lines asArray].
+				line := WriteStream on: String new]
+			ifFalse: [line nextPut: (Character codePoint: each)]].
+	lines add: line contents.
+	^ lines asArray
 
 ]
 
@@ -268,6 +273,20 @@ builtins >> ___isEncodingNameCharacter___: aCharacter [
 
 	^ (aCharacter codePoint < 128 and: [aCharacter isAlphaNumeric])
 		or: ['-_.' includes: aCharacter]
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___needsSourceDecoding___: someBytes [
+	"Whether a source needs more than plain UTF-8 decoding: it opens with a
+	UTF-8 BOM, or its PEP 263 declaration names another encoding.  Asked by
+	the import path before every module's decode, so a ``# -*- coding: utf-8
+	-*-'' line, common in the standard library, keeps the plain decode."
+
+	| encoding |
+	(self ___startsWithUtf8Bom___: someBytes) ifTrue: [^ true].
+	encoding := self ___codingDeclarationIn___: someBytes.
+	^ encoding notNil and: [encoding ~= 'utf-8']
 
 ]
 
