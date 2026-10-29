@@ -12100,9 +12100,20 @@ Object >> ___hasProtocolForCall___: aName [
 	(individual members) are not -- ___hasProtocol___: would wrongly say
 	no; this says yes, matching iter(MainEnum) in real CPython.  Used by
 	itertools._iter / builtins>>___pyIter___: (test_enum's TestXxxClass
-	suites iterate the enum class directly, e.g. `list(MainEnum)`)."
+	suites iterate the enum class directly, e.g. `list(MainEnum)`).
 
-	^ self ___protocolOwnedBy___: self @env0:class name: aName
+	A CLASS ATTRIBUTE under a dunder is the protocol too -- ``__getitem__ =
+	property(...)'', or a callable stored on the class -- because CPython's
+	type slots follow the type's attributes (Objects/typeobject.c:11308
+	update_one_slot, for a class body through fixup_slot_dispatchers and for
+	a later store through update_slot).  Only compiled defs were seen, so
+	iter() refused an
+	object whose __getitem__ is a property, which subscripting it honoured
+	(test_descr test_properties)."
+
+	^ (self ___protocolOwnedBy___: self @env0:class name: aName)
+		or: [(aName @env0:asString @env0:beginsWith: '__')
+			and: [(self ___typeDunder___: aName @env0:asSymbol) ~~ nil]]
 
 ]
 
