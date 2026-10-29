@@ -21,6 +21,17 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Python Attribute Hook' }
+SuperBoundMethod class >> ___pythonValueAttrs___ [
+	"``__self__'' is the bound object, a VALUE, as on BoundMethod -- not a
+	callable wrapper around the reader (see SuperBoundMethod >> __self__)."
+
+	^ IdentitySet new
+		add: #'__self__';
+		yourself
+
+]
+
 { #category : 'Grail-Private' }
 SuperBoundMethod >> _obj [
 	"env-0, like _setObj:resolver:selector: above -- __eq__ reaches these with
