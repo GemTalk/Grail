@@ -12728,6 +12728,10 @@ Object >> ___isValueDescriptor___: aValue [
 	value rather than hand it back.  Answered here so the shared descriptor-get
 	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
 	(aValue @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ true].
+	"So is a super object (Objects/typeobject.c super_descr_get): an unbound
+	``super(C)'' stored on a class binds to the instance it is read through
+	(Super >> __get__:_:)."
+	(aValue @env0:isKindOf: Super) ifTrue: [^ true].
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
 	"ASK the marker, do not merely detect it.  Whether one of these binds self
 	can depend on what it wraps: functools.partialmethod answers false over a

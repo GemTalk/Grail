@@ -371,8 +371,9 @@ Super >> ___pyAttrLoad___: aSym [
 	CPython answers the class: ``super(C, E)'' has __self__ E and
 	__self_class__ E, so the two coincide for the unbound-ish form."
 	(aSym @env0:asSymbol == #'__thisclass__') @env0:ifTrue: [^ cls].
-	(aSym @env0:asSymbol == #'__self__') @env0:ifTrue: [^ obj].
+	(aSym @env0:asSymbol == #'__self__') @env0:ifTrue: [^ obj == nil ifTrue: [None] ifFalse: [obj]].
 	(aSym @env0:asSymbol == #'__self_class__') @env0:ifTrue: [
+		obj == nil ifTrue: [^ None].
 		^ (obj @env0:isKindOf: Behavior)
 			@env0:ifTrue: [obj]
 			@env0:ifFalse: [obj @env0:class]].
@@ -406,6 +407,18 @@ Super >> ___pyAttrLoad___: aSym [
 		^ AttributeError ___signal___:
 			('''super'' object has no attribute ''' @env0:, aSym @env0:asString
 				@env0:, '''')].
+	"An UNBOUND super -- ``super(C)'' -- has no instance whose MRO to search,
+	so CPython reads the super object's own attributes instead
+	(Objects/typeobject.c:11889-11937 do_super_lookup), above all the __get__
+	that binds it (Super >> __get__:_:).  The parent walk below answered
+	``'super' object has no attribute '__get__'''."
+	obj == nil ifTrue: [^ super ___pyAttrLoad___: aSym].
+	"A BOUND one searches the MRO first, and only a miss there reads the super
+	object's own attributes -- for __get__, the one name nothing on object
+	defines, which answers the proxy itself."
+	(aSym @env0:asSymbol == #'__get__'
+		and: [(self @env0:_superDefinesAnyFormOf: '__get__') not])
+			ifTrue: [^ super ___pyAttrLoad___: aSym].
 	"IN MRO ORDER, the receiver's C3 linearization after cls -- the order
 	_lookupMethodAndSideFirstOf:metaSelectors: already searches -- and not the
 	Smalltalk superclass chain, which under multiple inheritance runs through
@@ -663,6 +676,49 @@ Super >> ___superValueMethodFor___: aSym [
 		ifFalse: [^ nil].
 	(obj ___grailValueImplements___: aSym) ifFalse: [^ nil].
 	^ BoundMethod @env1:receiver: obj @env0:value selector: aSym
+
+]
+
+{ #category : 'Grail-Descriptor' }
+Super >> __get__: anObject [
+	"``su.__get__(obj)'', the owner left out."
+
+	^ self __get__: anObject _: None
+
+]
+
+{ #category : 'Grail-Descriptor' }
+Super >> __get__: anObject _: aType [
+	"CPython's super_descr_get (Objects/typeobject.c:12033-12064): an UNBOUND
+	super read through an instance binds to it, so after ``C._C__super =
+	super(C)'' a method's ``self.__super'' is super(C, self) for whatever
+	subclass self is, and continues along self's MRO.  One already bound, or
+	read with no instance, answers itself.  An instance of a super SUBCLASS is
+	built again by calling its type, ``type(su)(su.__thisclass__, obj)'', so
+	that subclass's own __init__ runs.  Grail's super had no __get__, so the
+	unbound proxy came back unbound and searched from C's own parents
+	(test_descr test_supers: D(4)C(4)A(4) for D(4)C(4)B(4)A(4))."
+
+	(obj ~~ nil or: [anObject == nil or: [anObject == None]]) ifTrue: [^ self].
+	self @env0:class == Super ifFalse: [
+		^ self @env0:class ___pyCallValue___: { cls. anObject } kw: nil].
+	^ Super checkedCls: cls obj: anObject
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+Super >> __init__: aClass [
+	"``super(C)'' built through a super SUBCLASS's own __init__ --
+	``super(mysuper, self).__init__(C)'' -- is the UNBOUND form, a class and no
+	instance, as CPython's super_init_impl sets it (Objects/typeobject.c:12166).
+	Without this the call reached object's __init__ and was dropped, and the
+	proxy had no class at all (test_descr test_supers)."
+
+	(aClass @env0:isKindOf: Behavior) ifFalse: [
+		^ TypeError ___signal___: 'super() argument 1 must be a type, not '
+			@env0:, aClass ___pyTypeNameForError___ @env0:asString].
+	self @env0:_setCls: aClass obj: nil.
+	^ None
 
 ]
 
