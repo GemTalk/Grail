@@ -151,3 +151,176 @@ builtins class >> stdinProvider: anObjectOrNil [
 			SessionTemps current at: #GrailStdinProvider put: (Array with: anObjectOrNil)]
 
 ]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___codingDeclarationIn___: bytes [
+	"The encoding the PEP 263 declaration of a source names, or nil.  It is a
+	comment on the first line, or on the second when the first holds no code
+	(Parser/tokenizer/string_tokenizer.c:86-99)."
+
+	| lines declared |
+	lines := self ___firstTwoLinesOf___: bytes.
+	declared := self ___codingSpecIn___: lines first.
+	(declared isNil and: [lines size > 1 and: [self ___holdsNoCode___: lines first]])
+		ifTrue: [declared := self ___codingSpecIn___: lines last].
+	^ declared
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___codingSpecIn___: aLine [
+	"CPython's get_coding_spec (Parser/tokenizer/helpers.c:336-386): in a line
+	that is a comment and nothing else, the first ``coding'' followed by ``:''
+	or ``='', blanks, and a name -- normalized as get_normal_name does -- or
+	nil."
+
+	| hash index name |
+	hash := aLine indexOf: $#.
+	(hash = 0 or: [(self ___holdsNoCode___: (aLine copyFrom: 1 to: hash - 1)) not])
+		ifTrue: [^ nil].
+	index := hash.
+	[index := aLine indexOfSubCollection: 'coding' startingAt: index + 1 ifAbsent: [0].
+	index > 0] whileTrue: [
+		name := self ___encodingNameIn___: aLine after: index + 6.
+		name notNil ifTrue: [^ self ___normalEncodingName___: name]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___decodedSource___: bytes [
+	"The text of a bytes source, decoded as CPython's tokenizer decodes it
+	(Parser/tokenizer/string_tokenizer.c:54-117): a UTF-8 BOM is dropped, and
+	the rest is read in the encoding its PEP 263 declaration names, or as
+	UTF-8 when it names none or UTF-8.  Grail read every bytes source as
+	UTF-8, so a declared cp1251 was the ``Non-UTF-8 code'' error
+	(test_exceptions testSyntaxErrorOffset)."
+
+	| body encoding text |
+	body := (self ___startsWithUtf8Bom___: bytes)
+		ifTrue: [bytes copyFrom: 4 to: bytes size]
+		ifFalse: [bytes].
+	encoding := self ___codingDeclarationIn___: body.
+	(body ~~ bytes and: [encoding notNil and: [encoding ~= 'utf-8']])
+		ifTrue: [^ self ___signalEncoding___: encoding withBomIn: body].
+	(encoding isNil or: [encoding = 'utf-8']) ifFalse: [
+		^ [body @env1:decode: encoding]
+			on: AbstractException
+			do: [:ex | self ___signalUndecodableSource___: ex]].
+	text := [body @env1:decode] on: AbstractException do: [:ex | ex return: nil].
+	text isNil ifTrue: [^ self @env1:___signalNonUtf8Source___: body].
+	^ text
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___encodingNameIn___: aLine after: anIndex [
+	"The name a declaration gives after ``coding'' at anIndex: a ``:'' or
+	``='', then blanks, then ASCII letters, digits, ``-'', ``_'' and ``.'' --
+	or nil when there is no such name there."
+
+	| start stop |
+	(anIndex <= aLine size and: [':=' includes: (aLine at: anIndex)]) ifFalse: [^ nil].
+	start := anIndex + 1.
+	[start <= aLine size and: [(aLine at: start) = $  or: [(aLine at: start) = Character tab]]]
+		whileTrue: [start := start + 1].
+	stop := start.
+	[stop <= aLine size and: [self ___isEncodingNameCharacter___: (aLine at: stop)]]
+		whileTrue: [stop := stop + 1].
+	stop = start ifTrue: [^ nil].
+	^ aLine copyFrom: start to: stop - 1
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___firstTwoLinesOf___: bytes [
+	"A source's first two lines, or its only one, read byte for byte: a
+	declaration is ASCII, and Latin-1 gives every byte a character."
+
+	| text first rest second |
+	text := (bytes @env1:decode: 'iso-8859-1') asString.
+	first := text indexOf: Character lf.
+	first = 0 ifTrue: [^ Array with: text].
+	rest := text copyFrom: first + 1 to: text size.
+	second := rest indexOf: Character lf.
+	^ Array
+		with: (text copyFrom: 1 to: first - 1)
+		with: (second = 0 ifTrue: [rest] ifFalse: [rest copyFrom: 1 to: second - 1])
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___holdsNoCode___: aLine [
+	"Whether aLine has nothing but blanks before a comment or its end -- the
+	test after which CPython stops looking for a declaration
+	(Parser/tokenizer/helpers.c:399-411)."
+
+	aLine do: [:each |
+		(each = $# or: [each = Character cr]) ifTrue: [^ true].
+		(each = $  or: [each = Character tab or: [each codePoint = 12]]) ifFalse: [^ false]].
+	^ true
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___isEncodingNameCharacter___: aCharacter [
+	"Py_ISALNUM, which is ASCII only, or one of ``-'', ``_'' and ``.''."
+
+	^ (aCharacter codePoint < 128 and: [aCharacter isAlphaNumeric])
+		or: ['-_.' includes: aCharacter]
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___normalEncodingName___: aName [
+	"CPython's get_normal_name (Parser/tokenizer/helpers.c:306-333): UTF-8
+	and Latin-1 under any of their spellings answer one name each -- the
+	first 12 characters compared in lower case with ``_'' as ``-'' -- and
+	every other name answers itself."
+
+	| key |
+	key := (aName copyFrom: 1 to: (aName size min: 12)) asLowercase copyReplaceAll: '_' with: '-'.
+	(key = 'utf-8' or: [key beginsWith: 'utf-8-']) ifTrue: [^ 'utf-8'].
+	(#('latin-1' 'iso-8859-1' 'iso-latin-1') includes: key) ifTrue: [^ 'iso-8859-1'].
+	(#('latin-1-' 'iso-8859-1-' 'iso-latin-1-') detect: [:prefix | key beginsWith: prefix] ifNone: [nil])
+		isNil ifFalse: [^ 'iso-8859-1'].
+	^ aName
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___signalEncoding___: anEncoding withBomIn: bytes [
+	"CPython's refusal of a UTF-8 BOM beside a declaration of any other
+	encoding, over the first line (Parser/tokenizer/helpers.c:425-435)."
+
+	| line |
+	line := (self ___firstTwoLinesOf___: bytes) first.
+	^ SyntaxError @env1:___signalNew___: (Array
+			with: 'encoding problem: ' , anEncoding , ' with BOM'
+			with: (tuple withAll: { '<string>'. 1. 0. line. 1. line size }))
+		kw: nil
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___signalUndecodableSource___: anException [
+	"A source its declared encoding cannot read -- an encoding that does not
+	exist, one that is not a text encoding, a byte it cannot decode -- is a
+	SyntaxError carrying the codec's own message, at line 0 and offset -1,
+	where CPython reports a failure it names no line for."
+
+	^ SyntaxError @env1:___signalNew___: (Array
+			with: (anException @env1:__str__) asString
+			with: (tuple withAll: { '<string>'. 0. -1. None. None. None }))
+		kw: nil
+
+]
+
+{ #category : 'Grail-Source Encoding' }
+builtins >> ___startsWithUtf8Bom___: bytes [
+	"Whether bytes open with a COMPLETE UTF-8 byte order mark."
+
+	^ bytes size >= 3
+		and: [(bytes at: 1) = 239 and: [(bytes at: 2) = 187 and: [(bytes at: 3) = 191]]]
+
+]

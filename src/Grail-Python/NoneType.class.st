@@ -17,6 +17,15 @@ Class {
 	#category : 'Grail-Singleton'
 }
 
+{ #category : 'Grail-Instantiation' }
+NoneType class >> ___grailTakesNoArguments___ [
+	"The singleton's type takes no arguments -- see Object class >>
+	___grailTakesNoArguments___."
+
+	^ true
+
+]
+
 { #category : 'Grail-Singleton' }
 NoneType class >> ___instance___ [
 	"env-0 entry point for the singleton accessor (callable from C/GciPerform)."
@@ -30,6 +39,14 @@ NoneType class >> new [
 	raises TypeError. Allocation of the sole instance still goes through
 	``basicNew`` from inside ``instance``."
 	^ self @env1:new
+
+]
+
+{ #category : 'Grail-Instantiation' }
+NoneType >> ___checkInitResult___ [
+	"See Object >> ___checkInitResult___."
+
+	^ self
 
 ]
 

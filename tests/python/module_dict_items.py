@@ -103,10 +103,18 @@ def del_statement_missing_key():
 
 
 def set_non_string_key():
-    """Must be a CATCHABLE TypeError -- an MNU here escapes Python entirely."""
+    """Must be a CATCHABLE TypeError -- an MNU here escapes Python entirely.
+
+    The key EQUALS "iter", so the store rebinds builtins.iter for the whole
+    session; put it back, or every later test in the session that reaches
+    iter -- pickling an iterator reduces through it -- finds the int 1."""
 
     def go():
-        builtins.__dict__[CustomStr("iter")] = 1
+        orig = builtins.iter
+        try:
+            builtins.__dict__[CustomStr("iter")] = 1
+        finally:
+            builtins.__dict__["iter"] = orig
         return "no raise"
 
     return _caught(go)

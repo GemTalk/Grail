@@ -197,8 +197,9 @@ many `wrap:` calls happened earlier in the same topaz session** — which is dec
 *which other test classes shared that session*.
 
 `run_tests.sh` shards the suite across `GRAIL_TEST_WORKERS` sessions, partitioning **by
-class** via a stable char-sum hash plus `tests/scripts/shard_overrides.txt`. Both
-depend on the worker count, so:
+class** (when this was written, via a char-sum hash plus a file of overrides; since
+#1911, by `GrailShardPlan` over the measured times in `tests/scripts/shard_timings.txt`).
+Either way the placement depends on the worker count, so:
 
 * changing `GRAIL_TEST_WORKERS` gives `DunderNewTestCase` different session-mates, a
   different wrap count before it runs, and a different sweep phase;

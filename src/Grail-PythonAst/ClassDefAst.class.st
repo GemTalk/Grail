@@ -4032,12 +4032,15 @@ ClassDefAst >> emitInstantiationMethodFor: classVarName initSelector: initSelect
 	effect.  When found, prepend the instance to ___pos___ args and
 	forward via ___pyCallValue___ — matches CPython''s descriptor
 	read.  When absent (the common case), fall through to the
-	statically-compiled dispatch below."
+	statically-compiled dispatch below.
+
+	Whichever __init__ runs, what it answers is checked: CPython refuses
+	one that returns anything but None (Object >> ___checkInitResult___)."
 	src
 		nextPutAll: 'dynInit := self @env1:___dynamicClassAttr___: #''__init__''.';
 		nextPutAll: lf;
 		nextPutAll: 'dynInit == nil ifFalse: [';
-		nextPutAll: 'dynInit @env1:___pyCallValue___: ({ instance } @env0:, ___pos___) kw: ___kw___.';
+		nextPutAll: '(dynInit @env1:___pyCallValue___: ({ instance } @env0:, ___pos___) kw: ___kw___) @env0:___checkInitResult___.';
 		nextPutAll: '^ instance].';
 		nextPutAll: lf.
 	initSelector ifNotNil: [
@@ -4048,15 +4051,15 @@ ClassDefAst >> emitInstantiationMethodFor: classVarName initSelector: initSelect
 		(initSelector asString endsWith: ':kw:')
 			ifTrue: [
 				src
-					nextPutAll: 'instance perform: #''';
+					nextPutAll: '(instance perform: #''';
 					nextPutAll: initSelector asString;
-					nextPutAll: ''' env: 1 withArguments: (Array @env0:with: ___pos___ @env0:with: ___kw___).';
+					nextPutAll: ''' env: 1 withArguments: (Array @env0:with: ___pos___ @env0:with: ___kw___)) @env0:___checkInitResult___.';
 					nextPutAll: lf.
 			] ifFalse: [
 				src
-					nextPutAll: 'instance perform: #''';
+					nextPutAll: '(instance perform: #''';
 					nextPutAll: initSelector asString;
-					nextPutAll: ''' env: 1 withArguments: ___pos___.';
+					nextPutAll: ''' env: 1 withArguments: ___pos___) @env0:___checkInitResult___.';
 					nextPutAll: lf.
 			].
 	] ifNil: [
@@ -4067,8 +4070,8 @@ ClassDefAst >> emitInstantiationMethodFor: classVarName initSelector: initSelect
 		classes without any __init__ in the hierarchy keep their
 		zero-arg ``new`` semantics."
 		src
-			nextPutAll: '[instance perform: #''___init__:kw:'' env: 1 withArguments:';
-			nextPutAll: ' (Array @env0:with: ___pos___ @env0:with: ___kw___)] @env0:on: MessageNotUnderstood do: [:___ex | nil].';
+			nextPutAll: '([instance perform: #''___init__:kw:'' env: 1 withArguments:';
+			nextPutAll: ' (Array @env0:with: ___pos___ @env0:with: ___kw___)] @env0:on: MessageNotUnderstood do: [:___ex | nil]) @env0:___checkInitResult___.';
 			nextPutAll: lf.
 	].
 	src nextPutAll: '^ instance'.

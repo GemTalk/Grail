@@ -163,17 +163,21 @@ PyClassMethod >> __get__: obj [
 PyClassMethod >> __get__: obj _: cls [
 	"Binds the CLASS, whether reached through the class (obj is None, cls is
 	the class) or through an instance (both supplied).  MethodBinding is what
-	prepends a receiver to the call arguments."
+	prepends a receiver to the call arguments.
+
+	With no class, the class is type(obj) (Objects/funcobject.c:1468-1469),
+	the PYTHON type: ``classmethod(f).__get__(0)'' binds int, where the
+	Smalltalk class would have been SmallInteger.  With neither, CPython's
+	wrapper refuses (Objects/typeobject.c:9693-9701)."
 
 	| owner |
 	owner := (cls == nil or: [cls == None])
 		ifTrue: [(obj == nil or: [obj == None])
 			ifTrue: [nil]
-			ifFalse: [obj @env0:class]]
+			ifFalse: [obj ___pyMetaclass___]]
 		ifFalse: [cls].
 	owner == nil ifTrue: [
-		TypeError ___signal___:
-			'classmethod descriptor needs an owner class to bind'].
+		TypeError ___signal___: '__get__(None, None) is invalid'].
 	^ MethodBinding instance: owner
 		callable: (self @env0:dynamicInstVarAt: #'__func__')
 

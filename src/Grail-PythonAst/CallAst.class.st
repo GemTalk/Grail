@@ -4824,6 +4824,11 @@ CallAst >> bareCallClassNewSelector [
 	Boolean class>>value:value: makes the same split for the indirect
 	``f = bool; f(x)'' form."
 	(cls == Boolean and: [arguments size = 1]) ifTrue: [^ #'___truthOf___:'].
+	"The same split for a class that takes no arguments at all: its
+	``__new__:'' is object's allocation form, so ``object(5)'' would send it
+	with 5 as the class.  The generic form refuses (Object class >>
+	___grailTakesNoArguments___)."
+	(arguments notEmpty and: [cls ___grailTakesNoArguments___]) ifTrue: [^ nil].
 	candidate := self class classNewSelectorForArity: arguments size.
 	"Walk the metaclass chain so inherited __new__ methods are found
 	(e.g. `set` inherits __new__ from frozenset). Direct method-dict
@@ -5096,6 +5101,9 @@ CallAst >> knownClassName [
 	(function ___pythonBindingShadows___: funcName) ifTrue: [^nil].
 	cls := self class resolveClassForName: funcName.
 	cls ifNil: [^nil].
+	"A class that takes no arguments has no arity to mismatch: the generic
+	form says so in CPython's words (Object class >> ___grailTakesNoArguments___)."
+	cls ___grailTakesNoArguments___ ifTrue: [^nil].
 	metacls := cls class.
 	keywords isEmpty ifFalse: [
 		((metacls whichClassIncludesSelector: #'_new:kw:' environmentId: 1) notNil

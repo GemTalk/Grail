@@ -660,12 +660,22 @@ Behavior >> ___grailSuperImplements___: aSelector [
 	codegen cannot see it.
 
 	Starts at ``superclass'' deliberately.  The receiver's own ``_m:kw:'' is
-	already compiled by this point, and a class does not override itself."
+	already compiled by this point, and a class does not override itself.
 
-	| s |
+	A subclass of int or float is rooted at AbstractPyInt or AbstractPyFloat,
+	which implement almost none of the builtin's methods: their
+	doesNotUnderstand:args:envId: forwards to the wrapped value.  What that
+	value's class implements is implemented here too, so ``def __pow__(self,
+	other, mod=None)'' in ``class I(int)'' gets its ``__pow__:'' and ``I(2) **
+	I(3)'' runs it (test_descr test_binary_operator_override)."
+
+	| s valueClass |
 	s := self @env0:superclass.
 	s == nil ifTrue: [^ false].
-	^ (s @env0:whichClassIncludesSelector: aSelector environmentId: 1) ~~ nil
+	(s @env0:whichClassIncludesSelector: aSelector environmentId: 1) ~~ nil ifTrue: [^ true].
+	valueClass := s @env0:___builtinValueClass___.
+	^ valueClass ~~ nil
+		and: [(valueClass @env0:whichClassIncludesSelector: aSelector environmentId: 1) ~~ nil]
 
 ]
 

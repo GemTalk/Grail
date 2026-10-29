@@ -18,6 +18,15 @@ Class {
 	#category : 'Grail-Singleton'
 }
 
+{ #category : 'Grail-Instantiation' }
+ellipsis class >> ___grailTakesNoArguments___ [
+	"The singleton's type takes no arguments -- see Object class >>
+	___grailTakesNoArguments___."
+
+	^ true
+
+]
+
 { #category : 'Grail-Singleton' }
 ellipsis class >> ___instance___ [
 	"env-0 entry point for the singleton accessor (callable from C/GciPerform)."

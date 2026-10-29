@@ -300,9 +300,13 @@ KeyValueDictionary >> ___init__: positional kw: keywords [
 	the 0-arg ``__init__'' and super().__init__(source) to the 1-arg
 	``__init__:'' (both preferred over this varargs form when kwOk is
 	true), so flask.config.Config's ``super().__init__(defaults)''
-	keeps its existing dispatch."
+	keeps its existing dispatch.
 
-	^ self ___initFrom___: positional kw: keywords
+	Answers None, as dict.__init__ does: a subclass's ``return
+	super().__init__(**kw)'' hands it on as its own __init__'s result."
+
+	self ___initFrom___: positional kw: keywords.
+	^ None
 
 ]
 

@@ -1020,6 +1020,19 @@ Object class >> ___grailString___: aString startsWith: aPrefix [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+Object class >> ___grailTakesNoArguments___ [
+	"True for a class whose constructor takes no arguments: object itself --
+	not a subclass, which has a constructor of its own -- and the singletons'
+	types, which say so themselves.  Their one-argument ``__new__:'' is
+	object's, which is ``object.__new__(cls)'': its argument is the class to
+	make, so ``object(5)'' sent new to 5, an uncatchable MessageNotUnderstood.
+	CallAst declines its call-site fast path for such a class, and Object
+	class >> value:value: refuses."
+
+	^ self == Object
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailWriteSelfSendOverride___: aSymbol [
 	"Add this class and aSymbol to the committed record, creating it on first
@@ -1059,6 +1072,19 @@ Object class >> ___new___: arg1 _: arg2 [
 Object class >> ___new___: arg1 _: arg2 _: arg3 [
 	"Convenience method: self perform: #__new__:_:_: env: 1 withArguments: {arg1. arg2. arg3}"
 	^ self @env1:__new__: arg1 _: arg2 _: arg3
+
+]
+
+{ #category : 'Grail-Instantiation' }
+Object >> ___checkInitResult___ [
+	"Sent to what an __init__ answered, by every path that instantiates a
+	Python class.  CPython's slot_tp_init refuses anything but None, naming
+	the type of what came back (Objects/typeobject.c:10552-10566), and so
+	``return self'' is refused too.  None answers itself (NoneType), as does
+	the nil of a dispatch that found no __init__ (UndefinedObject)."
+
+	^ TypeError @env1:___signal___:
+		'__init__() should return None, not ''' , self ___pyDnuTypeName___ , ''''
 
 ]
 

@@ -1,5 +1,13 @@
 Extension { #name : 'ellipsis' }
 
+{ #category : 'Grail-Instantiation' }
+ellipsis class >> ___grailTakesNoArgumentsError___ [
+	"CPython's own wording for the singleton's type (Objects/sliceobject.c:31)."
+
+	^ TypeError ___signal___: 'EllipsisType takes no arguments'
+
+]
+
 { #category : 'Grail-Singleton' }
 ellipsis class >> __new__ [
 	"The selector the generic instantiation path actually reaches for ``cls()''.
