@@ -344,9 +344,16 @@ fi
 # A failure here is a WARNING, not an install failure: Grail works without
 # it, only slower on first use.  tests/scripts/run_unicodedata_deploy_test.sh
 # runs the same script, so the defect behind a failure still fails the suite.
+#
+# The build imports -- compiles -- the generated table modules, ~0.5 MB of
+# source each, and needs more temporary object space than a default gem
+# config gives: measured on Darwin arm64 it fails at 50 MB, the default there,
+# and succeeds at 55 MB.  So it gets the redeploy step's sizes below rather
+# than whatever the machine's gem.conf says.
 if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ]; then
     DEPLOY_T0=$SECONDS
-    if LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/deployUnicodedata.gs" < /dev/null \
+    if LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+         -S "$GRAIL_DIR/scripts/deployUnicodedata.gs" < /dev/null \
          | grep -E 'deployUnicodedata: both databases built'; then
         printf 'TIMING | %-26s | %4ds\n' "deploy-unicodedata" "$((SECONDS - DEPLOY_T0))"
     else

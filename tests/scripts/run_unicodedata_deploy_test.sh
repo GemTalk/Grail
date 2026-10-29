@@ -19,7 +19,10 @@ mkdir -p "$PROJECT_ROOT/out"
 
 EXIT=0
 {
-  DEPLOY_OUT=$(cd "$PROJECT_ROOT" && LC_ALL=C topaz -lq -S scripts/deployUnicodedata.gs < /dev/null 2>&1)
+  # The temporary object space install.sh gives the same step (see there).
+  DEPLOY_OUT=$(cd "$PROJECT_ROOT" && LC_ALL=C topaz -lq \
+    -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+    -S scripts/deployUnicodedata.gs < /dev/null 2>&1)
   if grep -q 'deployUnicodedata: both databases built' <<<"$DEPLOY_OUT"; then
     grep 'deployUnicodedata:' <<<"$DEPLOY_OUT"
   else
