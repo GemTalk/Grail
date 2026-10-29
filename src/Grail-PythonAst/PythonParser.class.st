@@ -697,6 +697,32 @@ PythonParser >> ___checkStrayEquals___: anExpr [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___checkStringRunFrom___: anIndex [
+	"CPython's refusals of adjacent string literals whose kinds cannot be
+	concatenated, in its order.  Bytes beside a str or an f-string is refused
+	where CPython's parser stands when it notices -- the token after them
+	(Parser/action_helpers.c:1894-1899) -- and a t-string beside any other
+	literal, over the two that meet (Grammar/python.gram:1554-1558).  Grail
+	ended the literal at the first change of kind, so the next one was
+	``invalid syntax'' (test_fstring test_compile_time_concat_errors)."
+
+	| first boundary next |
+	first := tokens at: anIndex.
+	boundary := anIndex.
+	[boundary <= tokens size
+		and: [(tokens at: boundary) isAnyString
+		and: [(tokens at: boundary) isTString = first isTString]]]
+			whileTrue: [boundary := boundary + 1].
+	next := boundary <= tokens size ifTrue: [tokens at: boundary] ifFalse: [tokens last].
+	(first isTString not and: [self ___stringsMixBytesFrom___: anIndex to: boundary - 1]) ifTrue: [
+		^ self ___signalBytesMixAt___: next].
+	(boundary <= tokens size and: [next isAnyString]) ifTrue: [
+		^ self ___syntaxError___: 'cannot mix t-string literals with string or bytes literals'
+			from: (tokens at: boundary - 1) to: next]
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___checkTypeParamsAt___: lb [
 	"A type parameter list: CPython refuses an empty one, the same name twice,
@@ -2609,6 +2635,25 @@ PythonParser >> ___segmentsFrom: first to: last [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___signalBytesMixAt___: aToken [
+	"CPython's ``cannot mix bytes and nonbytes literals'', at the token its
+	parser fetched last: the one after the run -- of which only the opening,
+	prefix and quotes, when it is an f-string or a t-string, because CPython's
+	lexer hands that over as a token of its own."
+
+	| openingEnd |
+	(aToken isFString or: [aToken isTString]) ifFalse: [
+		^ self ___syntaxError___: 'cannot mix bytes and nonbytes literals' at: aToken].
+	openingEnd := aToken position.
+	[(source at: openingEnd) isLetter] whileTrue: [openingEnd := openingEnd + 1].
+	openingEnd := openingEnd + ((self ___isTripleQuoteIn: source at: openingEnd) ifTrue: [3] ifFalse: [1]).
+	^ PythonParser ___signal___: SyntaxError
+		message: 'cannot mix bytes and nonbytes literals'
+		in: source from: aToken position to: openingEnd
+
+]
+
 { #category : 'Grail-parsing - simple statements' }
 PythonParser >> ___signalDeclarationSyntaxError___: aMessage at: aToken [
 	"A declaration CPython's symbol table refuses (``name 'x' is parameter and
@@ -2718,6 +2763,18 @@ PythonParser >> ___startsWithExcludedAtom___: aNode [
 	^ (self ___segmentsFrom: i + 1 to: close - 1) size > 1
 		or: [((tokens at: close - 1) isOp: ',')
 		or: [(i + 1 to: close - 1) anySatisfy: [:k | (tokens at: k) isKeyword: 'for']]]
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___stringsMixBytesFrom___: aStartIndex to: anEndIndex [
+	"Whether the string literals from aStartIndex to anEndIndex hold both bytes
+	and something else."
+
+	| strings |
+	strings := (aStartIndex to: anEndIndex) collect: [:index | tokens at: index].
+	^ (strings anySatisfy: [:each | each isBytes])
+		and: [strings anySatisfy: [:each | each isBytes not]]
 
 ]
 
@@ -3653,6 +3710,10 @@ PythonParser >> parseAtom [
 			kind: nil;
 			token: tok ; yourself
 	].
+
+	"Adjacent string literals are one run whatever their kinds; a run whose
+	kinds cannot be concatenated is refused first."
+	tok isAnyString ifTrue: [self ___checkStringRunFrom___: position].
 
 	"String literals (may be multiple concatenated).  When any
 	adjacent token is an FSTRING, drop into the f-string parser
@@ -4788,15 +4849,14 @@ PythonParser >> parseFStringLiteral [
 	| startTok tok value parts pos len ch result converted
 	  innerParser exprAst exprText conversion formatSpec exprStart
 	  specBuf inSpec aTok innerSource debugEq rawExpr lead leadNewlines
-	  wrapped anchor sawT sawNonT sawF uncommented hadComment |
+	  wrapped anchor sawT sawF uncommented hadComment |
 	startTok := self peek.
 	parts := OrderedCollection new.
 	sawT := false.
-	sawNonT := false.
 	sawF := false.
 	[(aTok := self peek) notNil and: [aTok isString or: [aTok isFString or: [aTok isTString]]]] whileTrue: [
 		tok := self advance.
-		tok isTString ifTrue: [sawT := true] ifFalse: [sawNonT := true].
+		tok isTString ifTrue: [sawT := true].
 		tok isFString ifTrue: [sawF := true].
 		value := tok value.
 		len := value size.
@@ -5099,10 +5159,7 @@ PythonParser >> parseFStringLiteral [
 	].
 	].
 	].
-	sawT ifTrue: [
-		sawNonT ifTrue: [
-			SyntaxError signal: 'cannot mix t-string literals with string or bytes literals'].
-		^ self ___templateFromParts___: parts from: startTok].
+	sawT ifTrue: [^ self ___templateFromParts___: parts from: startTok].
 	(sawF and: [self ___parsingForAst___]) ifTrue: [
 		^ self ___joinedStrFromParts___: parts from: startTok].
 	"Empty f-string → empty literal."
