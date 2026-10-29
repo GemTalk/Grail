@@ -1062,6 +1062,19 @@ Object class >> ___new___: arg1 _: arg2 _: arg3 [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+Object >> ___checkInitResult___ [
+	"Sent to what an __init__ answered, by every path that instantiates a
+	Python class.  CPython's slot_tp_init refuses anything but None, naming
+	the type of what came back (Objects/typeobject.c:10552-10566), and so
+	``return self'' is refused too.  None answers itself (NoneType), as does
+	the nil of a dispatch that found no __init__ (UndefinedObject)."
+
+	^ TypeError @env1:___signal___:
+		'__init__() should return None, not ''' , self ___pyDnuTypeName___ , ''''
+
+]
+
 { #category : 'Grail-Attribute Access' }
 Object >> ___directCallRecover___: aSelector args: anArray [
 	"GRAIL_DIRECT_CALLS: finish a Python attribute CALL whose direct keyword send

@@ -33,6 +33,14 @@ NoneType class >> new [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+NoneType >> ___checkInitResult___ [
+	"See Object >> ___checkInitResult___."
+
+	^ self
+
+]
+
 { #category : 'Grail-Python protocol' }
 NoneType >> < other [
 	"Smalltalk sort blocks send env-0 #< directly; route to the

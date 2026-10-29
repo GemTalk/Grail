@@ -1168,7 +1168,8 @@ Object class >> ___grailDispatchMetaclass___ [
 		fn := [meta ___pyAttrLoad___: #'__init__']
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		fn @env0:notNil ifTrue: [
-			fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: hdrKw]].
+			(fn @env1:___pyCallValue___: { result. clsName. clsBases. ns } kw: hdrKw)
+				@env0:___checkInitResult___]].
 	^ result
 	] @env0:ensure: [
 		"SAFETY NET for a deferred enum member build (Enum class
@@ -6003,11 +6004,13 @@ Object class >> value: positional value: kwargs [
 		instance ___pyBuiltinSubclassInit___: positional kw: kwargs new: false.
 		dynInit := self ___dynamicClassAttr___: #'__init__'.
 		dynInit == nil ifFalse: [
-			dynInit ___pyCallValue___: ({ instance } @env0:, positional) kw: kwargs.
+			(dynInit ___pyCallValue___: ({ instance } @env0:, positional) kw: kwargs)
+				@env0:___checkInitResult___.
 			^ instance].
-		[instance @env0:perform: #'___init__:kw:' env: 1
+		([instance @env0:perform: #'___init__:kw:' env: 1
 			withArguments: { positional. kwargs }]
-				@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: nil].
+				@env0:on: MessageNotUnderstood do: [:ex | ex @env0:return: nil])
+					@env0:___checkInitResult___.
 		^ instance].
 	(kwargs == nil or: [kwargs @env0:isEmpty]) ifFalse: [
 		"ONLY IF IT IS IMPLEMENTED, which the dispatch order above has always
@@ -9923,7 +9926,7 @@ Object >> ___grailInitBuiltClass___: aClass pos: positional kw: keywords [
 	hit this, because ___grailDispatchMetaclass___ runs the metaclass over the
 	class in this same way -- reading __init__ off the metaclass and calling it
 	with the class first.  So does this, and the answer is the class, since
-	__init__'s result is discarded."
+	__init__'s result is only checked (Object >> ___checkInitResult___)."
 
 	| meta fn |
 	meta := aClass ___grailMetaclass___.
@@ -9932,7 +9935,8 @@ Object >> ___grailInitBuiltClass___: aClass pos: positional kw: keywords [
 	fn := [meta ___pyAttrLoad___: #'__init__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	fn @env0:notNil ifTrue: [
-		fn @env1:___pyCallValue___: ({ aClass } @env0:, positional) kw: keywords].
+		(fn @env1:___pyCallValue___: ({ aClass } @env0:, positional) kw: keywords)
+			@env0:___checkInitResult___].
 	^ aClass
 
 ]
