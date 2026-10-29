@@ -113,6 +113,15 @@ PyStaticMethod >> ___pyCallValue___: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+PyStaticMethod >> ___pyHiddenStateNames___ [
+	"The callable is Grail's implementation, kept under #__func__, not an
+	attribute of the instance dict: CPython's __func__ is a member."
+
+	^ #( #'__func__' )
+
+]
+
 { #category : 'Grail-Reflection' }
 PyStaticMethod >> __annotate__ [
 	"PEP 649, forwarded for the same reason: functools.update_wrapper copies
@@ -141,6 +150,21 @@ PyStaticMethod >> __class_getitem__: item [
 	___grailClassGetitemDispatch___:, as set's is."
 
 	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
+{ #category : 'Grail-Introspection' }
+PyStaticMethod >> __dict__ [
+	"The instance dict, holding what CPython copies from the callable when the
+	wrapper is made (Object >> ___copyWrappedAttributesOf___:).  Copied when
+	the dict is first READ instead: Grail settles a function's __qualname__
+	only once the class body defining it has run, so a copy made in the body
+	kept a short one and shadowed the real one -- functools'
+	singledispatchmethod over a classmethod read 'A.cls_func' (test_functools
+	test_method_wrapping_attributes)."
+
+	self @env0:___copyWrappedAttributesOf___: (self @env0:dynamicInstVarAt: #'__func__').
+	^ super __dict__
 
 ]
 

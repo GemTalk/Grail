@@ -1089,6 +1089,25 @@ Object >> ___checkInitResult___ [
 ]
 
 { #category : 'Grail-Attribute Access' }
+Object >> ___copyWrappedAttributesOf___: aCallable [
+	"CPython's functools_wraps, which classmethod and staticmethod run on the
+	callable they are made with (Objects/funcobject.c:1393-1423): its
+	__module__, __name__, __qualname__ and __doc__, each one it has, become
+	the receiver's own attributes, so they are in its __dict__.  One the
+	receiver already holds is kept: Grail copies when the __dict__ is first
+	read (PyClassMethod >> __dict__), and a store since then wins."
+
+	#(#'__module__' #'__name__' #'__qualname__' #'__doc__') do: [:name |
+		| value |
+		(self dynamicInstVarAt: name) isNil ifTrue: [
+			value := [aCallable @env1:___pyAttrLoad___: name]
+				on: AttributeError
+				do: [:ex | ex return: #'___absent___'].
+			value == #'___absent___' ifFalse: [self dynamicInstVarAt: name put: value]]]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 Object >> ___directCallRecover___: aSelector args: anArray [
 	"GRAIL_DIRECT_CALLS: finish a Python attribute CALL whose direct keyword send
 	missed.  Under the flag CallAst compiles ``recv.foo(a, b)'' to the plain
