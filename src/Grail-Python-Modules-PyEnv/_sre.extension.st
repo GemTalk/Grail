@@ -16,7 +16,7 @@ _sre >> ascii_tolower: character [
 
 { #category : 'Grail-Accessors' }
 _sre >> CODESIZE [
-	^ self @env0:at: #CODESIZE
+	^ self ___dataGlobalAt___: #CODESIZE
 
 ]
 
@@ -53,19 +53,19 @@ _sre >> initialize [
 
 { #category : 'Grail-Accessors' }
 _sre >> MAGIC [
-	^ self @env0:at: #MAGIC
+	^ self ___dataGlobalAt___: #MAGIC
 
 ]
 
 { #category : 'Grail-Accessors' }
 _sre >> MAXGROUPS [
-	^ self @env0:at: #MAXGROUPS
+	^ self ___dataGlobalAt___: #MAXGROUPS
 
 ]
 
 { #category : 'Grail-Accessors' }
 _sre >> MAXREPEAT [
-	^ self @env0:at: #MAXREPEAT
+	^ self ___dataGlobalAt___: #MAXREPEAT
 
 ]
 
