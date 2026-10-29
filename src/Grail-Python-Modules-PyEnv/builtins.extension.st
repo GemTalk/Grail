@@ -4588,11 +4588,12 @@ builtins >> ___sourceTextFor___: source what: aName [
 
 	THREE THINGS A BYTES SOURCE NEEDS, and each is a separate CPython error:
 
-	  * a UTF-8 BOM is STRIPPED.  Python source may carry one and it is not
-	    part of the program;
-	  * bytes that are not UTF-8 are a SyntaxError about the ENCODING, quoting
-	    the first offending byte -- ``b'\xef\xbb' + b'a''', a truncated BOM,
-	    is the case test_eval pins;
+	  * it is DECODED as Python source is (builtins >> ___decodedSource___:):
+	    a UTF-8 BOM is stripped, and a PEP 263 declaration names the
+	    encoding, UTF-8 when there is none;
+	  * bytes that are not UTF-8, where UTF-8 applies, are a SyntaxError about
+	    the ENCODING, quoting the first offending byte -- ``b'\xef\xbb' +
+	    b'a''', a truncated BOM, is the case test_eval pins;
 	  * a NUL anywhere is a SyntaxError, in a str source as much as a bytes
 	    one.  Grail let it through to the tokenizer, which reported an
 	    ``Unexpected token'' about a character the message could not print."
@@ -4624,17 +4625,7 @@ builtins >> ___sourceTextFor___: source what: aName [
 	(bytes @env0:isKindOf: ByteArray) ifFalse: [
 		^ TypeError ___signal___:
 			aName @env0:, '() arg 1 must be a string, bytes or code object'].
-	"The BOM, and only a COMPLETE one."
-	((bytes @env0:size @env0:>= 3)
-		@env0:and: [((bytes @env0:at: 1) @env0:= 239)
-			@env0:and: [((bytes @env0:at: 2) @env0:= 187)
-				@env0:and: [(bytes @env0:at: 3) @env0:= 191]]]) ifTrue: [
-		bytes := bytes @env0:copyFrom: 4 to: bytes @env0:size].
-	str := [bytes @env1:decode]
-		@env0:on: AbstractException
-		do: [:ex | ex @env0:return: nil].
-	str @env0:isNil ifTrue: [
-		^ self ___signalNonUtf8Source___: bytes].
+	str := self @env0:___decodedSource___: bytes.
 	^ self ___rejectNulBytesIn___: str @env0:asString
 
 ]
