@@ -90,6 +90,28 @@ SuperBoundMethod >> __ne__: other [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+SuperBoundMethod >> __self__ [
+	"The object the method is bound to: the receiver value:value: runs it on.
+	That is super()'s object, or the object's type when the lookup found a
+	CLASS-side method -- a @classmethod -- for an instance, since a classmethod
+	binds the class (Objects/funcobject.c:1468-1469).  The lookup is asked at
+	the arities value:value: can call, for the first that resolves.  Grail had
+	no __self__ here, so ``super(D, D).m.__self__'' raised AttributeError
+	(test_descr test_classmethods)."
+
+	| pair |
+	(obj @env0:isKindOf: Behavior) ifTrue: [^ obj].
+	0 @env0:to: 4 do: [:nargs |
+		pair := resolver @env0:value: nargs value: true.
+		pair @env0:notNil ifTrue: [
+			^ (pair @env0:at: 2) @env0:== true
+				ifTrue: [obj ___pyMetaclass___]
+				ifFalse: [obj]]].
+	^ obj
+
+]
+
 { #category : 'Grail-Descriptor Protocol' }
 SuperBoundMethod >> __set__: anInstance _: aValue [
 	"``super(C, C).prop.__set__(inst, v)'' -- the parent's property SETTER run on
