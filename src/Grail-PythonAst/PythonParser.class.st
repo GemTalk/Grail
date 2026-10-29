@@ -43,7 +43,8 @@ Class {
 		'tabErrorPosition',
 		'futureImports',
 		'expressionHead',
-		'openExpressions'
+		'openExpressions',
+		'specFieldStarts'
 	],
 	#category : 'Grail-Parser'
 }
@@ -1493,11 +1494,16 @@ PythonParser >> ___fstringSpecExprFor: spec at: locTok [
 	blindly and parsed the text bare, so test_fstring could not compile.
 	The child's declared names are propagated, as for any field."
 
-	| innerParser specAst |
+	| innerParser specAst specToken |
 	innerParser := PythonParser basicNew source: ''.
 	innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
-	specAst := innerParser ___parseFStringLiteralToken___:
-		(PythonToken type: #FSTRING value: spec line: locTok line position: locTok position).
+	"The spec's fields, anchored in THIS source as the field scan recorded
+	them, so the child's errors and nodes are located in it -- an error in
+	``f'{10:{ }}''' had no location at all (eval reported ``None'')."
+	innerParser ___sourceText___: source.
+	specToken := PythonToken type: #FSTRING value: spec line: locTok line position: locTok position.
+	(specFieldStarts at: spec otherwise: nil) ifNotNil: [:starts | specToken fieldStarts: starts].
+	specAst := innerParser ___parseFStringLiteralToken___: specToken.
 	innerParser ___variableStack___ do: [:innerScope |
 		innerScope do: [:varName | self declareVariable: varName]].
 	^ specAst
@@ -3235,6 +3241,36 @@ PythonParser >> ___signalTryWithoutHandler___ [
 	^ PythonParser ___signalLocated___: SyntaxError
 		message: 'expected ''except'' or ''finally'' block'
 		in: source at: (tokens at: k) position endOffset: -1
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___sourceText___: aString [
+	"The text this parser locates its errors in, for a parse of one token cut
+	from it rather than of all of it (___fstringSpecExprFor:at:)."
+
+	source := aString
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___specFieldStartFor: anFString field: aFieldStart at: aBraceIndex specSize: aSpecSize [
+	"The anchor of a field nested in a format spec, whose brace is at
+	aBraceIndex of anFString's value and whose spec so far is aSpecSize long:
+	{ its text's index in the spec. its source offset. its line }, the shape
+	PythonToken >> fieldStarts holds -- or nil when the enclosing field has no
+	anchor of its own.  The spec's text may be shorter than the source before
+	it (its escapes are decoded), but a field's text is verbatim, so one anchor
+	per field is enough."
+
+	| anchor sourceOffset location |
+	anchor := anFString fieldStarts ifNil: [nil] ifNotNil: [:fs |
+		fs detect: [:a | (a at: 1) = aFieldStart] ifNone: [nil]].
+	anchor isNil ifTrue: [^ nil].
+	sourceOffset := (anchor at: 2) - (anchor at: 1) + aBraceIndex + 1.
+	location := PythonParser ___sourceLocationIn___: source at: sourceOffset.
+	location isNil ifTrue: [^ nil].
+	^ { aSpecSize + 2. sourceOffset. location at: 1 }
 
 ]
 
@@ -5380,7 +5416,7 @@ PythonParser >> parseFStringLiteral [
 				and tracking string-literal quotes so a right-brace
 				inside an embedded string literal doesn't end the
 				placeholder early."
-				| bracketDepth strQuote strTriple exprEnd exprStop |
+				| bracketDepth strQuote strTriple exprEnd exprStop specStarts |
 				pos := pos + 1.
 				exprStart := pos.
 				"CPython's invalid_fstring_replacement_field: a field whose
@@ -5401,6 +5437,7 @@ PythonParser >> parseFStringLiteral [
 				inSpec := false.
 				exprEnd := nil.
 				specBuf := WriteStream on: Unicode7 new.
+				specStarts := OrderedCollection new.
 				[pos <= len and: [exprEnd isNil]] whileTrue: [
 					ch := value at: pos.
 					strQuote ifNotNil: [
@@ -5447,6 +5484,11 @@ PythonParser >> parseFStringLiteral [
 							inSpec ifTrue: [specBuf nextPut: ch].
 							pos := pos + 1.
 						] ifFalse: [
+							"A field nested in the spec: where its text starts in the
+							spec, and in the source, for the spec's own parse."
+							(ch == ${ and: [inSpec and: [bracketDepth == 0]]) ifTrue: [
+								(self ___specFieldStartFor: tok field: exprStart at: pos specSize: specBuf contents size)
+									ifNotNil: [:start | specStarts add: start]].
 							(ch == ${ or: [(ch == $( or: [ch == $[])
 									and: [inSpec not or: [bracketDepth > 0]]])
 								ifTrue: [bracketDepth := bracketDepth + 1].
@@ -5502,6 +5544,8 @@ PythonParser >> parseFStringLiteral [
 				exprText := value copyFrom: exprStart to: (exprStop ifNil: [
 					exprEnd ifNil: [pos - 1] ifNotNil: [exprEnd - 1]]).
 				formatSpec := inSpec ifTrue: [specBuf contents] ifFalse: [nil].
+				(formatSpec notNil and: [specStarts notEmpty]) ifTrue: [
+					specFieldStarts at: formatSpec put: specStarts asArray].
 				"Comments come out of the field's text before anything reads it:
 				the debug text and a t-string's expression are CPython's
 				comment-free reconstruction, and the child parse below cannot
@@ -8089,6 +8133,7 @@ PythonParser >> source: aString [
 	futureImports := OrderedCollection new.
 	expressionHead := 1 to: 0.
 	openExpressions := OrderedCollection new.
+	specFieldStarts := IdentityKeyValueDictionary new.
 
 ]
 
