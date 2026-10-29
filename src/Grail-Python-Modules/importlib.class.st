@@ -8958,13 +8958,25 @@ importlib class >> ___sourceHashNowOf___: aName [
 importlib class >> ___sourceStringForPath___: pathString [
 	"The decoded source text of a .py file -- the read half of astForPath:,
 	split out so loadModuleFromPath: can hash the source before deciding
-	whether to parse it at all."
+	whether to parse it at all.
 
-	| file sourceString |
+	Decoded as CPython decodes source (builtins >> ___decodedSource___:): by
+	the encoding a PEP 263 declaration names, a UTF-8 BOM dropped, and a file
+	that is not UTF-8 refused with the ``Non-UTF-8 code'' SyntaxError.  Grail
+	read every file as UTF-8, so a module declared Latin-1 failed to import
+	with a Smalltalk ``ill-formed Utf8'' error.  A file with no BOM that
+	declares UTF-8 or nothing -- nearly all of them -- keeps the native
+	decode."
+
+	| file contents builtinsModule text |
 	file := self ___openServerFile___: pathString mode: 'rb'.
-	sourceString := file contentsAsUtf8 decodeToUnicode.
+	contents := file contentsAsUtf8.
 	file close.
-	^ sourceString
+	builtinsModule := builtins ___instance___.
+	(builtinsModule ___needsSourceDecoding___: contents) ifFalse: [
+		text := [contents decodeToUnicode] on: Error do: [:ex | ex return: nil].
+		text isNil ifFalse: [^ text]].
+	^ builtinsModule ___decodedSource___: contents asByteArray
 
 ]
 
