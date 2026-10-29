@@ -628,7 +628,8 @@ BaseException class >> ___signalNew___: positional kw: kwargs cause: aCause [
 	instance := cls ___new___.
 	instance ___args___: positional.
 	(cls @env0:___hasUserInit___) ifTrue: [
-		(instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs
+		((instance ___pyAttrLoad___: #'__init__') value: positional value: kwargs)
+			@env0:___checkInitResult___
 	].
 	"Implicit context BEFORE the explicit cause: ``raise X from Y'' records both,
 	and ___applyCause___ must not find the slot already occupied by its own Y."

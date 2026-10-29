@@ -1,5 +1,13 @@
 Extension { #name : 'UndefinedObject' }
 
+{ #category : 'Grail-Instantiation' }
+UndefinedObject >> ___checkInitResult___ [
+	"See Object >> ___checkInitResult___."
+
+	^ self
+
+]
+
 { #category : 'Grail-Bridge' }
 UndefinedObject >> cantPerform: aSymbol withArguments: anArray env: envId [
 	"Symmetric handler for the perform:env: dispatch path."

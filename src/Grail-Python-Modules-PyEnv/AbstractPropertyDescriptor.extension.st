@@ -150,7 +150,8 @@ AbstractPropertyDescriptor >> ___init__: positional kw: kwargs [
 	the entry a SUBCLASS instantiation reaches (``PropertySub(...)'' allocates
 	then calls this).  The base ``property(...)'' call is served by the
 	class-side constructors below, which route through the same
-	``___pyPropInit___''."
+	``___pyPropInit___''.  Answers None, as property.__init__ does, where
+	``___pyPropInit___'' answers the property for those constructors."
 
 	| nargs fg fs fd dc |
 	self @env0:class @env0:___checkConstructorArguments___: positional keywords: kwargs.
@@ -167,7 +168,8 @@ AbstractPropertyDescriptor >> ___init__: positional kw: kwargs [
 	dc := (nargs @env0:>= 4)
 		ifTrue: [positional @env0:at: 4]
 		ifFalse: [kwargs @env0:ifNil: [nil] ifNotNil: [:k | k @env0:at: 'doc' ifAbsent: [nil]]].
-	^ self ___pyPropInit___: fg _: fs _: fd _: dc
+	self ___pyPropInit___: fg _: fs _: fd _: dc.
+	^ None
 
 ]
 
