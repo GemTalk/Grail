@@ -643,6 +643,34 @@ PythonTokenizer >> ___compileFilename___ [
 
 ]
 
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___continueLine___ [
+	"A backslash outside a string, at the cursor: CPython's line continuation
+	(Parser/lexer/lexer.c:433-452).  It has to end its line -- anything after
+	it is ``unexpected character after line continuation character'' -- and a
+	continuation into the end of the source, with no bracket open, is
+	``unexpected EOF while parsing'' (Parser/pegen_errors.c:85-89, 110-112).
+	Grail skipped a backslash-newline and let any other backslash fall through
+	to whatever came next: ``\'a\''' was an unterminated string literal and
+	``x = 1 \'' compiled (test_fstring
+	test_invalid_backslashes_inside_fstring_context).
+
+	A backslash that ENDS the source continues like one followed by its
+	newline, because CPython's string input always ends in one
+	(Parser/tokenizer/helpers.c:244-246): with a bracket open, it is the
+	bracket that is reported."
+
+	| backslash |
+	backslash := position.
+	(self peekAt: 1) isNil ifFalse: [
+		(self peekAt: 1) == Lf ifFalse: [^ self ___refuseContinuationAt___: backslash].
+		self advance].
+	self advance.
+	(self atEnd and: [openBrackets isEmpty]) ifTrue: [
+		^ self ___refuseContinuationAtEndFrom___: backslash]
+
+]
+
 { #category : 'Grail-private' }
 PythonTokenizer >> ___dotStartsNumberTail___ [
 	"After digits and a dot, decide whether the identifier-looking char that
@@ -885,6 +913,28 @@ PythonTokenizer >> ___numberFollowedBy___: aString [
 		(source at: position + k - 1) == (aString at: k) ifFalse: [^ false]].
 	after := source atOrNil: position + aString size.
 	^ (after notNil and: [after codePoint >= 128 or: [self isIdentifierPart: after]]) not
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___refuseContinuationAt___: aBackslash [
+	"CPython's E_LINECONT for the backslash at aBackslash: at the character
+	after it, end_offset 0 (Parser/pegen_errors.c:110-112, 122-124)."
+
+	^ PythonParser ___signalLocated___: SyntaxError
+		message: 'unexpected character after line continuation character'
+		in: source at: aBackslash + 1 endOffset: 0
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___refuseContinuationAtEndFrom___: aBackslash [
+	"A continuation at aBackslash into the end of the source: CPython's E_EOF,
+	right after the backslash with end_offset -1 (Parser/pegen_errors.c:85-89)."
+
+	^ PythonParser ___signalLocated___: SyntaxError
+		message: 'unexpected EOF while parsing'
+		in: source at: aBackslash + 1 endOffset: -1
 
 ]
 
@@ -1602,14 +1652,8 @@ PythonTokenizer >> tokenizeOne [
 	char := self peek.
 	char == Lf ifTrue: [^self].
 
-	"Line continuation"
-	char == $\ ifTrue: [
-		(self peekAt: 1) == Lf ifTrue: [
-			self advance. "skip \"
-			self advance. "skip newline"
-			^self
-		].
-	].
+	"Line continuation (___continueLine___)."
+	char == $\ ifTrue: [^ self ___continueLine___].
 
 	"Comment"
 	char == $# ifTrue: [
@@ -1852,6 +1896,11 @@ PythonTokenizer >> tokenizeString [
 			nestQuote
 				ifNil: [
 					frame := fields last.
+					"A backslash in a field's EXPRESSION is source, and has to end
+					its line as anywhere else (___refuseContinuationAt___:).  In
+					the spec of a raw f-string it is a character."
+					(char == $\ and: [(frame at: 2) not and: [(self peekAt: 1) ~~ Lf]]) ifTrue: [
+						^ self ___refuseContinuationAt___: position].
 					char == $\
 						ifTrue: [
 							str add: self advance.
@@ -1859,6 +1908,13 @@ PythonTokenizer >> tokenizeString [
 						ifFalse: [
 					(frame at: 2)
 						ifTrue: [
+							"A single-quoted f-string's spec ends at its line: CPython's
+							lexer refuses the newline (Parser/lexer/lexer.c:1467-1480)."
+							(char == Lf and: [triple not]) ifTrue: [
+								^ PythonParser ___signal___: SyntaxError
+									message: (isTString ifTrue: ['t-string: newlines are not allowed in format specifiers for single quoted t-strings']
+										ifFalse: ['f-string: newlines are not allowed in format specifiers for single quoted f-strings'])
+									in: source from: position to: nil].
 							"Format spec.  The f-string's own quote ends the f-string here,
 							as CPython's lexer ends it, and leaves the field open: the
 							parser reports ``expecting '}', or format specs'' at it
