@@ -41,7 +41,9 @@ Class {
 		'barryAsFlufl',
 		'evalInput',
 		'tabErrorPosition',
-		'futureImports'
+		'futureImports',
+		'expressionHead',
+		'openExpressions'
 	],
 	#category : 'Grail-Parser'
 }
@@ -422,6 +424,21 @@ PythonParser >> ___bodyRangeAfterColon___: colon [
 	[end <= tokens size and: [(tokens at: end) isNewline not]] whileTrue: [end := end + 1].
 	end > tokens size ifTrue: [^ nil].
 	^ Array with: colon + 1 with: end with: end
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___bracketLevelAt___: anIndex [
+	"How many brackets are open before token anIndex -- CPython's token level."
+
+	| level |
+	level := 0.
+	1 to: anIndex - 1 do: [:index | | token |
+		token := tokens at: index.
+		token type == #OP ifTrue: [
+			(#('(' '[' '{') includes: token value) ifTrue: [level := level + 1].
+			(#(')' ']' '}') includes: token value) ifTrue: [level := level - 1]]].
+	^ level
 
 ]
 
@@ -1102,6 +1119,22 @@ PythonParser >> ___evalInput___: aBoolean [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___excludesMissingCommaAt___: aHead [
+	"Whether the head disjunction spanning the token indices aHead is one
+	CPython's missing-comma rule leaves alone: one opening with a soft keyword
+	or with a NAME followed by a string, and the bare legacy print or exec
+	(Parser/action_helpers.c, _PyPegen_check_legacy_stmt)."
+
+	| first |
+	first := tokens at: aHead first.
+	first isName ifFalse: [^ false].
+	(#('_' 'match' 'case' 'type') includes: first value) ifTrue: [^ true].
+	(tokens at: aHead first + 1) isAnyString ifTrue: [^ true].
+	^ aHead size = 1 and: [#('print' 'exec') includes: first value]
+
+]
+
 { #category : 'Grail-token access' }
 PythonParser >> ___expectColon___: aHeaderName header: aHeaderTok forced: aBoolean [
 	"Consume the colon ending a compound statement's header, or raise what
@@ -1577,6 +1610,7 @@ PythonParser >> ___invalidSyntaxAt___: aTok [
 			in: source
 			at: ((k - 1) max: lineStart)
 			endOffset: -1].
+	self ___signalMissingCommaBefore___: aTok.
 	^ self ___syntaxError___: 'invalid syntax' at: aTok
 
 ]
@@ -1635,6 +1669,24 @@ PythonParser >> ___isBitwiseOrLevel___: aNode [
 		or: [(aNode isKindOf: LambdaAst) or: [(aNode isKindOf: StarredAst)
 		or: [(aNode isKindOf: NamedExprAst) or: [(aNode isKindOf: YieldAst)
 		or: [aNode isKindOf: YieldFromAst]]]]]]]]) not
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___isInsideStringLedOperands___ [
+	"Whether an expression still being parsed opens with a plain string or
+	bytes literal followed by ``+'' or ``-''.  CPython's invalid_expression
+	first tries ``STRING (!STRING expression_without_invalid)+ STRING''
+	(Grammar/python.gram:1243-1245) there: it parses the operands with its
+	error rules off, and the failures that memoizes keep the missing-comma
+	rule from running inside them.  So ``'a' + (1 2)'' is plain invalid
+	syntax where ``x + (1 2)'' is a missing comma."
+
+	^ openExpressions anySatisfy: [:startIndex | | first next |
+		first := tokens at: startIndex.
+		next := startIndex < tokens size ifTrue: [tokens at: startIndex + 1] ifFalse: [first].
+		(first isString or: [first isBytes])
+			and: [(next isOp: '+') or: [next isOp: '-']]]
 
 ]
 
@@ -1773,6 +1825,20 @@ PythonParser >> ___joinStringParts___: parts [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser >> ___lastTokenOfExpressionFrom___: anIndex [
+	"The last token of the expression that starts at token anIndex, or nil
+	when none does.  A lookahead only: the cursor is restored."
+
+	| saved |
+	saved := position.
+	position := anIndex.
+	^ [[self parseExpression. self lastToken]
+		on: SyntaxError do: [:ex | ex return: nil]]
+		ensure: [position := saved]
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser >> ___lastTokenOfLine___ [
 	"The last token before the NEWLINE that ends the current logical line."
 
@@ -1892,28 +1958,6 @@ PythonParser >> ___matchSequenceOf___: elts from: tok [
 
 ]
 
-{ #category : 'Grail-parsing' }
-PythonParser >> ___missingCommaFrom___: aStartTok [
-	"CPython's invalid_expression: two expressions side by side inside
-	brackets are ``invalid syntax. Perhaps you forgot a comma?'', drawn from
-	the first to the end of the second.  Otherwise the generic error."
-
-	| tok end |
-	tok := self peek.
-	(self ___canStartExpression___: tok) ifTrue: [
-		end := self ___endOfNextExpression___.
-		end == tok
-			ifFalse: [
-				^ self ___syntaxError___: 'invalid syntax. Perhaps you forgot a comma?'
-					from: aStartTok to: end]
-			ifTrue: [
-				(tok type ~~ #KEYWORD) ifTrue: [
-					^ self ___syntaxError___: 'invalid syntax. Perhaps you forgot a comma?'
-						from: aStartTok to: end]]].
-	^ self ___invalidSyntaxAt___: tok
-
-]
-
 { #category : 'Grail-parsing - atoms' }
 PythonParser >> ___parseDictOrSetDisplay___ [
 
@@ -1964,7 +2008,7 @@ PythonParser >> ___parseDictOrSetDisplay___ [
 				(self atOp: '**') ifTrue: [
 					self advance.
 					keys add: nil.
-					values add: self parseExpression.
+					values add: self parseBitwiseOr.
 				] ifFalse: [
 					keys add: self parseExpression.
 					self ___expectDictColonAfter___: keys last.
@@ -2232,6 +2276,50 @@ PythonParser >> ___parseStarExpressionsOrYield___ [
 
 	(self atKeyword: 'yield') ifTrue: [^ self parseYieldExpression].
 	^ self parseStarExpressions
+
+]
+
+{ #category : 'Grail-parsing - expressions' }
+PythonParser >> ___parseTernary___ [
+	"parseTernary's parse."
+
+	| expr startTok startIndex |
+	startTok := self peek.
+	startIndex := position.
+	expr := self parseDisjunction.
+	expressionHead := startIndex to: position - 1.
+	(self atKeyword: 'if') ifTrue: [
+		| test orelse |
+		self advance. "consume 'if'"
+		test := self parseDisjunction.
+		"CPython's invalid_expression: a conditional with no else names
+		itself, from its body to its condition -- and an else with no
+		expression after it says that a statement was given."
+		(self atKeyword: 'else') ifFalse: [
+			(self atOp: ':') ifTrue: [^ self ___invalidSyntaxAt___: self peek].
+			^ self ___syntaxError___: 'expected ''else'' after ''if'' expression'
+				from: startTok to: test].
+		self advance.
+		(self ___canStartExpression___: self peek) ifFalse: [
+			^ self ___syntaxError___:
+				'expected expression after ''else'', but statement is given'
+				at: self peek].
+		"``disjunction 'if' disjunction 'else' expression'' -- the else arm
+		is EXPRESSION, so ``(a if b else c := 1)'' is not a walrus in the
+		arm but a walrus applied to the whole conditional, which CPython
+		refuses by name.  Parsed permitted, the arm swallowed the ``:=''
+		and the construct was accepted."
+		orelse := self
+			___withWalrus___: false
+			refusal: 'cannot use assignment expressions with conditional expression'
+			do: [self parseExpression].
+		^IfExpAst new
+			test: test;
+			body: expr;
+			orelse: orelse;
+			from: startTok to: self lastToken ; yourself
+	].
+	^expr
 
 ]
 
@@ -2750,6 +2838,37 @@ PythonParser >> ___signalDeclarationSyntaxError___: aMessage at: aToken [
 		or: [((tokens at: j + 1) isOp: ';') or: [(tokens at: j + 1) type == #ENDMARKER]]) not]]
 			whileTrue: [j := j + 1].
 	^ self ___syntaxError___: aMessage from: aToken to: (tokens at: j)
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___signalMissingCommaBefore___: aTok [
+	"CPython's invalid_expression (Grammar/python.gram:1248-1250): inside
+	brackets, an expression whose head disjunction is followed directly by
+	another expression is ``invalid syntax. Perhaps you forgot a comma?'',
+	from the head to the end of the other.  Not when the head opens with a soft
+	keyword or is a NAME followed by a string -- the shapes of a misspelt
+	statement or string prefix -- nor when it is the legacy print or exec.
+	Answer self when the rule does not apply.
+
+	The head is the one parseTernary recorded last, which is the one that ends
+	right before aTok when the rule applies: a comprehension's iterable and
+	conditions are parsed as disjunctions, not expressions, and record none, as
+	CPython's grammar has no expression there (``[a for x in y z]'' is plain
+	invalid syntax)."
+
+	| head index last |
+	head := expressionHead.
+	index := tokens indexOf: aTok.
+	(head notEmpty and: [head last + 1 = index]) ifFalse: [^ self].
+	((self ___canStartExpression___: aTok) and: [(self ___bracketLevelAt___: index) > 0])
+		ifFalse: [^ self].
+	(self ___excludesMissingCommaAt___: head) ifTrue: [^ self].
+	self ___isInsideStringLedOperands___ ifTrue: [^ self].
+	last := self ___lastTokenOfExpressionFrom___: index.
+	last isNil ifTrue: [^ self].
+	^ self ___syntaxError___: 'invalid syntax. Perhaps you forgot a comma?'
+		from: (tokens at: head first) to: last
 
 ]
 
@@ -4209,10 +4328,11 @@ PythonParser >> parseCallArgList [
 					].
 				]].
 				"A comma, or the end of the list.  It was optional, so ``f(a b)''
-				compiled; CPython's invalid_expression calls it a missing comma."
+				compiled; CPython's invalid_expression calls it a missing comma
+				(___signalMissingCommaBefore___:)."
 				(self matchOp: ',') ifFalse: [
 					(self peek isNil or: [self atOp: ')']) ifFalse: [
-						^ self ___missingCommaFrom___: argStartTok]].
+						^ self ___invalidSyntaxAt___: self peek]].
 				true
 			]
 		] whileTrue.
@@ -4557,14 +4677,18 @@ PythonParser >> parseDelete [
 
 { #category : 'Grail-parsing - atoms' }
 PythonParser >> parseDictDisplayFromStar: startTok [
-	"Parse dict display starting with **unpack."
+	"Parse dict display starting with **unpack.
+
+	What follows ``**'' is a bitwise_or, not an expression
+	(Grammar/python.gram:1017-1019), here and in ___parseDictOrSetDisplay___:
+	``{**a or b}'' is invalid syntax at the ``or''.  Grail accepted it."
 
 	| keys values starTok |
 	keys := Array new.
 	values := Array new.
 	starTok := self advance. "consume '**'"
 	keys add: nil.
-	values add: self parseExpression.
+	values add: self parseBitwiseOr.
 	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
 		^ self ___syntaxError___: 'dict unpacking cannot be used in dict comprehension'
 			at: starTok].
@@ -4573,7 +4697,7 @@ PythonParser >> parseDictDisplayFromStar: startTok [
 			(self atOp: '**') ifTrue: [
 				self advance.
 				keys add: nil.
-				values add: self parseExpression.
+				values add: self parseBitwiseOr.
 			] ifFalse: [
 				keys add: self parseExpression.
 				self ___expectDictColonAfter___: keys last.
@@ -6942,43 +7066,14 @@ PythonParser >> parseTerm [
 
 { #category : 'Grail-parsing - expressions' }
 PythonParser >> parseTernary [
-	"Parse: expr ['if' condition 'else' expr]"
+	"Parse: expr ['if' condition 'else' expr]
 
-	| expr startTok |
-	startTok := self peek.
-	expr := self parseDisjunction.
-	(self atKeyword: 'if') ifTrue: [
-		| test orelse |
-		self advance. "consume 'if'"
-		test := self parseDisjunction.
-		"CPython's invalid_expression: a conditional with no else names
-		itself, from its body to its condition -- and an else with no
-		expression after it says that a statement was given."
-		(self atKeyword: 'else') ifFalse: [
-			(self atOp: ':') ifTrue: [^ self ___invalidSyntaxAt___: self peek].
-			^ self ___syntaxError___: 'expected ''else'' after ''if'' expression'
-				from: startTok to: test].
-		self advance.
-		(self ___canStartExpression___: self peek) ifFalse: [
-			^ self ___syntaxError___:
-				'expected expression after ''else'', but statement is given'
-				at: self peek].
-		"``disjunction 'if' disjunction 'else' expression'' -- the else arm
-		is EXPRESSION, so ``(a if b else c := 1)'' is not a walrus in the
-		arm but a walrus applied to the whole conditional, which CPython
-		refuses by name.  Parsed permitted, the arm swallowed the ``:=''
-		and the construct was accepted."
-		orelse := self
-			___withWalrus___: false
-			refusal: 'cannot use assignment expressions with conditional expression'
-			do: [self parseExpression].
-		^IfExpAst new
-			test: test;
-			body: expr;
-			orelse: orelse;
-			from: startTok to: self lastToken ; yourself
-	].
-	^expr
+	Where each expression starts is kept while it is parsed, and its head
+	disjunction's tokens once parsed, for CPython's missing-comma error
+	(___signalMissingCommaBefore___:)."
+
+	openExpressions addLast: position.
+	^ [self ___parseTernary___] ensure: [openExpressions removeLast]
 
 ]
 
@@ -7695,6 +7790,8 @@ PythonParser >> source: aString [
 	mangleClassStack := OrderedCollection new.
 	inCompTarget := false.
 	futureImports := OrderedCollection new.
+	expressionHead := 1 to: 0.
+	openExpressions := OrderedCollection new.
 
 ]
 
