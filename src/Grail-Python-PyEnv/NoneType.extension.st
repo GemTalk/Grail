@@ -1,5 +1,13 @@
 Extension { #name : 'NoneType' }
 
+{ #category : 'Grail-Instantiation' }
+NoneType class >> ___grailTakesNoArgumentsError___ [
+	"CPython's own wording for the singleton's type (Objects/object.c:2219)."
+
+	^ TypeError ___signal___: 'NoneType takes no arguments'
+
+]
+
 { #category : 'Grail-Singleton' }
 NoneType class >> __new__ [
 	"The selector the generic instantiation path actually reaches for ``cls()'';

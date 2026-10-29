@@ -1020,6 +1020,19 @@ Object class >> ___grailString___: aString startsWith: aPrefix [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+Object class >> ___grailTakesNoArguments___ [
+	"True for a class whose constructor takes no arguments: object itself --
+	not a subclass, which has a constructor of its own -- and the singletons'
+	types, which say so themselves.  Their one-argument ``__new__:'' is
+	object's, which is ``object.__new__(cls)'': its argument is the class to
+	make, so ``object(5)'' sent new to 5, an uncatchable MessageNotUnderstood.
+	CallAst declines its call-site fast path for such a class, and Object
+	class >> value:value: refuses."
+
+	^ self == Object
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailWriteSelfSendOverride___: aSymbol [
 	"Add this class and aSymbol to the committed record, creating it on first
