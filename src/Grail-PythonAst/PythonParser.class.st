@@ -123,6 +123,21 @@ PythonParser class >> ___futureFeatures___ [
 ]
 
 { #category : 'Grail-parsing' }
+PythonParser class >> ___indexIn___: aSource line: aLine offset: anOffset [
+	"The 1-based character index of 1-based line aLine and offset anOffset in
+	aSource -- the inverse of ___sourceLocationIn___:at:."
+
+	| line lineStart |
+	line := 1.
+	lineStart := 1.
+	[line < aLine and: [lineStart <= aSource size]] whileTrue: [
+		(aSource at: lineStart) == Character lf ifTrue: [line := line + 1].
+		lineStart := lineStart + 1].
+	^ lineStart + anOffset - 1
+
+]
+
+{ #category : 'Grail-parsing' }
 PythonParser class >> ___lineStartPositionIn___: aSource at: aPosition [
 	"The index of the FIRST character of the line containing aPosition.
 
@@ -645,17 +660,20 @@ PythonParser >> ___checkFeaturesOf___: aFutureImport [
 ]
 
 { #category : 'Grail-parsing - atoms' }
-PythonParser >> ___checkFieldExpressionStart___: anExpressionText token: aTok field: aFieldStart index: anIndex [
+PythonParser >> ___checkFieldExpressionStart___: anExpressionText token: aTok field: aFieldStart index: anIndex opensSpec: aBoolean [
 	"CPython's refusals for a replacement field whose expression cannot start
 	the way it does (invalid_replacement_field, Grammar/python.gram), raised
 	before the field is parsed -- Grail parses it wrapped in parentheses, where
 	both would be legal or would fail with the parenthesis's own message:
 	  * a lambda opening the expression or one of its comma-separated items
 	    (``{1, lambda: x}''): its ``:'' ends the expression, so CPython asks
-	    for the parentheses that would keep it whole;
+	    for the parentheses that would keep it whole.  Only when there IS that
+	    ``:'' -- which the scan took for the format spec's, aBoolean -- as in
+	    CPython's ``'lambda' [lambda_params] ':''' (python.gram:1256-1257);
+	    ``f'{lambda}''' is no expression at all;
 	  * ``**'': no expression starts with it."
 
-	(self ___hasTopLevelLambda___: anExpressionText) ifTrue: [
+	(aBoolean and: [self ___hasTopLevelLambda___: anExpressionText]) ifTrue: [
 		^ self ___fstringError___: 'lambda expressions are not allowed without parentheses'
 			token: aTok fieldAt: aFieldStart index: anIndex].
 	(anExpressionText beginsWith: '**') ifTrue: [
@@ -1265,6 +1283,74 @@ PythonParser >> ___exprName___: aNode [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___fieldExpressionStartIn___: aFieldText from: anIndex [
+	"The index of the first character at or after anIndex that is neither
+	whitespace nor part of a comment: where a replacement field's expression
+	starts, if it has one.  CPython names that character when it stands in
+	for a missing expression, so ``f'''{\n# only a comment\n}''''' is ``valid
+	expression required before '}''' on line 3."
+
+	| index |
+	index := anIndex.
+	[index <= aFieldText size and: [(aFieldText at: index) isSeparator or: [(aFieldText at: index) == $#]]]
+		whileTrue: [
+			(aFieldText at: index) == $#
+				ifTrue: [[index <= aFieldText size and: [(aFieldText at: index) ~~ Character lf]]
+					whileTrue: [index := index + 1]]
+				ifFalse: [index := index + 1]].
+	^ index
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___fieldIndexOf___: anError line: aLineName offset: anOffsetName in: aWrappedSource at: anExpressionStart [
+	"The field index of the location anError carries in the fields named
+	aLineName and anOffsetName -- a line and column of aWrappedSource, whose
+	``('' stands one before anExpressionStart -- or nil when it has none."
+
+	| lineNumber offset |
+	lineNumber := anError dynamicInstVarAt: aLineName.
+	offset := anError dynamicInstVarAt: anOffsetName.
+	((lineNumber isKindOf: Integer) and: [offset isKindOf: Integer]) ifFalse: [^ nil].
+	^ anExpressionStart - 2
+		+ (PythonParser ___indexIn___: aWrappedSource line: lineNumber offset: offset)
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___fieldSyntaxError___: aMessage token: aTok fieldAt: aFieldStart from: aStartIndex to: anEndIndex [
+	"A SyntaxError about an f-string (or t-string) field's text from
+	aStartIndex to the EXCLUSIVE anEndIndex, nil for a point.  The text is
+	verbatim source, so an index into it maps to the source through the
+	field's recorded start."
+
+	| anchor offset |
+	anchor := aTok fieldStarts ifNil: [nil] ifNotNil: [:fs |
+		fs detect: [:a | (a at: 1) = aFieldStart] ifNone: [nil]].
+	anchor isNil ifTrue: [^ SyntaxError signal: aMessage].
+	offset := (anchor at: 2) - (anchor at: 1).
+	^ PythonParser ___signal___: SyntaxError
+		message: aMessage
+		in: source from: aStartIndex + offset to: (anEndIndex ifNotNil: [:end | end + offset])
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___fieldTokensIn___: aWrappedSource [
+	"The tokens of a replacement field's expression, tokenized in the
+	parentheses aWrappedSource adds around it -- which are left out."
+
+	| fieldTokens |
+	fieldTokens := (PythonTokenizer on: aWrappedSource) tokenize asOrderedCollection.
+	[fieldTokens notEmpty and: [(fieldTokens last isOp: ')') not]]
+		whileTrue: [fieldTokens removeLast].
+	fieldTokens removeLast.
+	fieldTokens removeFirst.
+	^ fieldTokens
+
+]
+
 { #category : 'Grail-validation' }
 PythonParser >> ___firstNamedExprIn___: node [
 	"The first NamedExprAst under node, or nil."
@@ -1341,21 +1427,26 @@ PythonParser >> ___fstringDebugEqualsIn___: text [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___fstringError___: aMessage token: aTok field: aFieldStart tokenAt: aFieldToken at: anExpressionStart [
+	"An f-string field error over aFieldToken, a token of the field's
+	expression as tokenized in parentheses -- so one before anExpressionStart."
+
+	^ self ___fstringError___: aMessage token: aTok fieldAt: aFieldStart
+		from: anExpressionStart - 2 + aFieldToken position
+		to: anExpressionStart - 1 + aFieldToken endPosition
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___fstringError___: aMessage token: aTok fieldAt: aFieldStart from: aStartIndex to: anEndIndex [
 	"An f-string (or t-string) field error over the field's text from
 	aStartIndex to the EXCLUSIVE anEndIndex, mapped to the source as a single
 	index is."
 
-	| prefixedMessage anchor offset |
-	prefixedMessage := (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage.
-	anchor := aTok fieldStarts ifNil: [nil] ifNotNil: [:fs |
-		fs detect: [:a | (a at: 1) = aFieldStart] ifNone: [nil]].
-	anchor isNil ifTrue: [^ SyntaxError signal: prefixedMessage].
-	offset := (anchor at: 2) - (anchor at: 1).
-	^ PythonParser ___signal___: SyntaxError
-		message: prefixedMessage
-		in: source from: aStartIndex + offset to: anEndIndex + offset
+	^ self
+		___fieldSyntaxError___: (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage
+		token: aTok fieldAt: aFieldStart from: aStartIndex to: anEndIndex
 
 ]
 
@@ -1661,6 +1752,27 @@ PythonParser >> ___inWalrusValue___: aBoolean do: aBlock [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___isBareGenerator___: anExpression in: aWrappedSource [
+	"Whether anExpression, parsed from a replacement field's text in the
+	parentheses aWrappedSource adds, is a generator only those parentheses
+	made: a field is an annotated_rhs, so ``f'{x for x in y}''' is refused at
+	the ``for'' (test_fstring), while ``f'{(x for x in y)}''' is a generator."
+
+	| fieldTokens level |
+	(anExpression isKindOf: GeneratorExpAst) ifFalse: [^ false].
+	fieldTokens := self ___fieldTokensIn___: aWrappedSource.
+	(fieldTokens first isOp: '(') ifFalse: [^ true].
+	level := 0.
+	fieldTokens doWithIndex: [:each :index |
+		each type == #OP ifTrue: [
+			(#('(' '[' '{') includes: each value) ifTrue: [level := level + 1].
+			(#(')' ']' '}') includes: each value) ifTrue: [level := level - 1]].
+		(level = 0 and: [index < fieldTokens size]) ifTrue: [^ true]].
+	^ false
+
+]
+
 { #category : 'Grail-target validation' }
 PythonParser >> ___isBitwiseOrLevel___: aNode [
 	"Would CPython's bitwise_or rule have parsed exactly aNode?  Not when it is
@@ -1674,6 +1786,22 @@ PythonParser >> ___isBitwiseOrLevel___: aNode [
 		or: [(aNode isKindOf: LambdaAst) or: [(aNode isKindOf: StarredAst)
 		or: [(aNode isKindOf: NamedExprAst) or: [(aNode isKindOf: YieldAst)
 		or: [aNode isKindOf: YieldFromAst]]]]]]]]) not
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___isExpression___: aWrappedSource [
+	"Whether aWrappedSource -- part of a replacement field's text, in
+	parentheses -- is an expression as a field takes one: all of it, and not a
+	generator the parentheses made (CPython's annotated_rhs)."
+
+	^ [| parser expression |
+		parser := PythonParser basicNew source: aWrappedSource.
+		parser ___mangleClassStack___: self ___mangleClassStack___ copy.
+		expression := parser parseExpression.
+		(parser peek isNil or: [parser peek isNewline or: [parser peek isEndMarker]])
+			and: [(self ___isBareGenerator___: expression in: aWrappedSource) not]]
+		on: SyntaxError do: [:ex | ex return: false]
 
 ]
 
@@ -1960,6 +2088,19 @@ PythonParser >> ___matchSequenceOf___: elts from: tok [
 	^MatchSequenceAst new
 		patterns: elts;
 		from: tok to: self lastToken ; yourself
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___messageOf___: aSyntaxError [
+	"aSyntaxError's message: its ``msg'' when one was stored, its messageText
+	when it was signalled without Python arguments."
+
+	| message |
+	message := aSyntaxError dynamicInstVarAt: #'msg'.
+	^ (message isKindOf: CharacterCollection)
+		ifTrue: [message]
+		ifFalse: [aSyntaxError messageText]
 
 ]
 
@@ -2475,6 +2616,24 @@ PythonParser >> ___reportForTargetFrom___: aPosition comprehension: aBoolean [
 
 ]
 
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___resignal___: anError message: aMessage in: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart [
+	"Raise aMessage where anError, from the child parse of aWrappedSource,
+	was located -- moved onto the field, whose expression starts at
+	anExpressionStart -- or at the expression's start when it was not."
+
+	| start end |
+	start := self ___fieldIndexOf___: anError line: #'lineno' offset: #'offset'
+		in: aWrappedSource at: anExpressionStart.
+	start isNil ifTrue: [^ self ___fieldSyntaxError___: aMessage token: aTok fieldAt: aFieldStart
+		from: anExpressionStart to: nil].
+	end := self ___fieldIndexOf___: anError line: #'end_lineno' offset: #'end_offset'
+		in: aWrappedSource at: anExpressionStart.
+	^ self ___fieldSyntaxError___: aMessage token: aTok fieldAt: aFieldStart
+		from: start to: ((end notNil and: [end > start]) ifTrue: [end] ifFalse: [nil])
+
+]
+
 { #category : 'Grail-scope tracking' }
 PythonParser >> ___retractTargetRead___: aNameAst [
 	"aNameAst was parsed as a load, and counted as a read of this scope, before
@@ -2843,6 +3002,65 @@ PythonParser >> ___signalDeclarationSyntaxError___: aMessage at: aToken [
 		or: [((tokens at: j + 1) isOp: ';') or: [(tokens at: j + 1) type == #ENDMARKER]]) not]]
 			whileTrue: [j := j + 1].
 	^ self ___syntaxError___: aMessage from: aToken to: (tokens at: j)
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___signalFieldError___: anError in: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart [
+	"anError, raised by the child parse of a replacement field's expression
+	(aWrappedSource, the expression in parentheses, its first character at
+	anExpressionStart of the field), as CPython reports it.  The wrapping is
+	Grail's, so two kinds of error are its artifacts: a plain ``invalid
+	syntax'', and the messages a parenthesized group has and a bare field does
+	not.  CPython's own field rules answer those
+	(___signalFieldStrayIn___:...); a starred field is codegen's error there.
+	Any other error is the expression's own, moved from the child's
+	coordinates to the field's: Grail reported it at the child's, so
+	``f'{a +}''' pointed at column 5 of the source whatever the field's place
+	in it (test_fstring test_invalid_syntax_error_message)."
+
+	| message |
+	message := self ___messageOf___: anError.
+	message = 'cannot use starred expression here' ifTrue: [
+		^ self ___resignal___: anError message: 'can''t use starred expression here'
+			in: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart].
+	(#('invalid syntax' 'invalid syntax. Maybe you meant ''=='' or '':='' instead of ''=''?')
+		includes: message) ifTrue: [
+			^ self ___signalFieldStrayIn___: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart].
+	^ self ___resignal___: anError message: message
+		in: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___signalFieldStrayIn___: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart [
+	"CPython's errors for a replacement field whose expression is not one
+	(Grammar/python.gram:1510-1527, invalid_fstring_replacement_field): the
+	longest leading run of its tokens that is an expression, and the token
+	after it.  None at all: ``expecting a valid expression after '{'''.  Then
+	the debug ``='' and something other than a conversion, spec or end:
+	``expecting '!', or ':', or '}'''.  Otherwise the stray token:
+	``expecting '=', or '!', or ':', or '}'''.  Each is located at the token
+	it names.  Grail reported ``invalid syntax'' (test_fstring
+	test_invalid_syntax_error_message, test_missing_expression)."
+
+	| fieldTokens prefixEnd stray |
+	fieldTokens := self ___fieldTokensIn___: aWrappedSource.
+	fieldTokens isEmpty ifTrue: [
+		^ self ___fstringError___: 'expecting a valid expression after ''{''' token: aTok
+			fieldAt: aFieldStart index: anExpressionStart].
+	prefixEnd := (fieldTokens size to: 1 by: -1)
+		detect: [:k | self ___isExpression___: (aWrappedSource copyFrom: 1 to: (fieldTokens at: k) endPosition) , ')']
+		ifNone: [0].
+	prefixEnd = 0 ifTrue: [
+		^ self ___fstringError___: 'expecting a valid expression after ''{'''
+			token: aTok field: aFieldStart tokenAt: fieldTokens first at: anExpressionStart].
+	stray := fieldTokens at: prefixEnd + 1.
+	((stray isOp: '=') and: [prefixEnd + 2 <= fieldTokens size]) ifTrue: [
+		^ self ___fstringError___: 'expecting ''!'', or '':'', or ''}'''
+			token: aTok field: aFieldStart tokenAt: (fieldTokens at: prefixEnd + 2) at: anExpressionStart].
+	^ self ___fstringError___: 'expecting ''='', or ''!'', or '':'', or ''}'''
+		token: aTok field: aFieldStart tokenAt: stray at: anExpressionStart
 
 ]
 
@@ -5115,8 +5333,7 @@ PythonParser >> parseFStringLiteral [
 				"CPython's invalid_fstring_replacement_field: a field whose
 				expression is missing, named by what stands in its place."
 				[| k c |
-				 k := pos.
-				 [k <= len and: [(value at: k) == $ ]] whileTrue: [k := k + 1].
+				 k := self ___fieldExpressionStartIn___: value from: pos.
 				 k <= len ifTrue: [
 					c := value at: k.
 					('=!:}' includesValue: c) ifTrue: [
@@ -5285,13 +5502,24 @@ PythonParser >> parseFStringLiteral [
 				1 to: lead do: [:k |
 					(rawExpr at: k) == Character lf ifTrue: [
 						leadNewlines := leadNewlines + 1]].
-				self ___checkFieldExpressionStart___: innerSource token: tok field: exprStart index: exprStart + lead.
+				self ___checkFieldExpressionStart___: innerSource token: tok field: exprStart index: exprStart + lead
+					opensSpec: formatSpec notNil.
 				wrapped := innerSource isEmpty not.
 				wrapped ifTrue: [
 					innerSource := '(' , innerSource , ')'].
-				innerParser := PythonParser basicNew source: innerSource.
-				innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
-				exprAst := innerParser parseExpression.
+				"An error in the child parse is reported as CPython reports it,
+				at the field's own position (___signalFieldError___:...); so is
+				a generator that only the wrapping parenthesized."
+				exprAst := [
+					innerParser := PythonParser basicNew source: innerSource.
+					innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
+					innerParser parseExpression]
+						on: SyntaxError
+						do: [:error |
+							self ___signalFieldError___: error in: innerSource
+								token: tok field: exprStart at: exprStart + lead].
+				(wrapped and: [self ___isBareGenerator___: exprAst in: innerSource]) ifTrue: [
+					self ___signalFieldStrayIn___: innerSource token: tok field: exprStart at: exprStart + lead].
 				"Its positions are relative to the FIELD, not the module: the
 				child parse sees ``(expr)'' as a whole source, so every node in
 				it counts from there.  REBASE them onto the module when the
