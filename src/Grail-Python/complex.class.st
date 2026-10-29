@@ -14,6 +14,14 @@ Class {
 	#category : 'Grail-Numbers'
 }
 
+{ #category : 'Grail-Attribute Access' }
+complex class >> ___grailReadonlyAttributes___ [
+	"complex's members -- see Object class >> ___grailReadonlyAttributes___."
+
+	^ #('real' 'imag')
+
+]
+
 { #category : 'Grail-Introspection' }
 complex class >> ___pythonValueAttrs___ [
 	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."

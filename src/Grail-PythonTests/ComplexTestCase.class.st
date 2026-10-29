@@ -691,20 +691,20 @@ ComplexTestCase >> testPythonAttrLoadReturnsValue [
 ]
 
 { #category : 'Grail-Initialization' }
-ComplexTestCase >> testSetattrOverridesRealImag [
-	"Phase B+1: ``setattr(cpx, 'real', 99)'' from outside writes to
-	the same dynamic-instVar storage that __init__ wrote to.  Before
-	the sweep, real was a static instVar with a synthesized setter
-	(``real:''), but setattr's perform: would target ``real:'' (which
-	complex didn't actually define, so setattr fell back to writing
-	a dynamic instVar — but reads still came from the static slot,
-	so the set was invisible)."
+ComplexTestCase >> testSetattrOfRealIsRefusedAndLeavesTheNumber [
+	"``setattr(cpx, 'real', 99)'' is CPython's ``readonly attribute'': a
+	complex's real and imag are READONLY members (Python/structmember.c:159-163).
+	This test used to assert the opposite -- that the store landed where reads
+	find it -- and since a complex keeps its parts in dynamic instVars of the
+	same names, that store rewrote the number itself."
 
-	| c bi |
+	| c bi refusal |
 	c := complex ___new___: 5 _: 12.
 	bi := (Python at: #builtins) ___instance___.
-	bi @env1:setattr: c _: 'real' _: 99.0.
-	self assert: (c @env1:___pyAttrLoad___: #real) equals: 99.0.
-	self assert: (c @env1:real) equals: 99.0.
+	refusal := [bi @env1:setattr: c _: 'real' _: 99.0. nil]
+		on: AttributeError
+		do: [:ex | ex return: (ex @env1:___pyAttrLoad___: #args) first].
+	self assert: refusal equals: 'readonly attribute'.
+	self assert: (c @env1:real) equals: 5
 
 ]

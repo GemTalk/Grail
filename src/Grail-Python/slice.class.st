@@ -22,6 +22,14 @@ Class {
 	#category : 'Numbers'
 }
 
+{ #category : 'Grail-Attribute Access' }
+slice class >> ___grailReadonlyAttributes___ [
+	"slice's members -- see Object class >> ___grailReadonlyAttributes___."
+
+	^ #('start' 'stop' 'step')
+
+]
+
 { #category : 'Instance Creation' }
 slice class >> ___newStart: aStart stop: aStop step: aStep [
 	"env-0 entry point used by codegen for SliceAst when we eventually

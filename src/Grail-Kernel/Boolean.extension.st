@@ -1,5 +1,20 @@
 Extension { #name : 'Boolean' }
 
+{ #category : 'Grail-Attribute Access' }
+Boolean class >> ___grailUnwritableAttributes___ [
+	"int's getters, which bool inherits -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('real' 'imag' 'numerator' 'denominator')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Boolean class >> ___grailUnwritableOwnerName___ [
+
+	^ 'int'
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 Boolean class >> ___pythonValueAttrs___ [
 	"Unary methods exposed to Python as VALUE attributes rather than

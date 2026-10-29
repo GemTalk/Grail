@@ -36,6 +36,21 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Attribute Access' }
+memoryview class >> ___grailUnwritableAttributes___ [
+	"memoryview's getters -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('obj' 'nbytes' 'readonly' 'itemsize' 'format' 'ndim' 'shape' 'strides' 'suboffsets' 'c_contiguous' 'f_contiguous' 'contiguous')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+memoryview class >> ___grailUnwritableOwnerName___ [
+
+	^ 'memoryview'
+
+]
+
 { #category : 'Grail-Converting' }
 memoryview >> asByteArray [
 	"The Smalltalk side of the buffer protocol.

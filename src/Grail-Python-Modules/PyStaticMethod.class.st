@@ -7,6 +7,29 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Attribute Access' }
+PyStaticMethod class >> ___grailReadonlyAttributes___ [
+	"Staticmethod's members and its __isabstractmethod__ getter -- see Object class >> ___grailReadonlyAttributes___."
+
+	^ #('__func__' '__wrapped__')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+PyStaticMethod class >> ___grailUnwritableAttributes___ [
+	"staticmethod's members and its __isabstractmethod__ getter -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('__isabstractmethod__')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+PyStaticMethod class >> ___grailUnwritableOwnerName___ [
+
+	^ 'staticmethod'
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 PyStaticMethod class >> ___pythonValueAttrs___ [
 	"``__isabstractmethod__'' is a value in CPython, and abc consults it with
