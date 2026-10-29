@@ -10,6 +10,7 @@ Class {
 { #category : 'Grail-Python Attribute Hook' }
 PyClassMethod class >> ___pythonValueAttrs___ [
 	^ IdentitySet new
+		add: #'__dict__';
 		add: #'__isabstractmethod__';
 		add: #'__name__';
 		add: #'__qualname__';

@@ -14,6 +14,7 @@ PyStaticMethod class >> ___pythonValueAttrs___ [
 	identity trio is forwarded from the wrapped function and is likewise a value."
 
 	^ IdentitySet new
+		add: #'__dict__';
 		add: #'__isabstractmethod__';
 		add: #'__name__';
 		add: #'__qualname__';

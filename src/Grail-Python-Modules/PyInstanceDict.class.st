@@ -56,12 +56,7 @@ PyInstanceDict >> ___allPairs___ [
 	| raw over result n hidden |
 	raw := source @env0:dynamicInstVarPairs.
 	over := self ___overflow___.
-	"A builtin root's own storage (AbstractPyInt keeps its value in #value) is
-	not an instance attribute -- see ___pyHiddenStateNames___."
-	hidden := ((source @env0:class @env0:whichClassIncludesSelector:
-			#'___pyHiddenStateNames___' environmentId: 1) @env0:notNil)
-		ifTrue: [source @env1:___pyHiddenStateNames___]
-		ifFalse: [#()].
+	hidden := self ___hiddenStateNames___.
 	result := OrderedCollection @env0:new.
 	"INFERRED slots (GRAIL_INFERRED_SLOTS) are ordinary instance attributes
 	that happen to live in named instVars; they come first, in the class's
@@ -83,6 +78,20 @@ PyInstanceDict >> ___allPairs___ [
 	over @env0:ifNotNil: [:d |
 		d @env0:keysAndValuesDo: [:k :v | result @env0:add: k; add: v]].
 	^ result @env0:asArray
+
+]
+
+{ #category : 'Grail-Python-Protocol' }
+PyInstanceDict >> ___hiddenStateNames___ [
+	"The source's dynamic instVars that are Grail's implementation, not
+	instance attributes -- a builtin root's own storage (AbstractPyInt keeps
+	its value in #value), a classmethod's callable -- which the view neither
+	lists nor finds.  See ___pyHiddenStateNames___."
+
+	^ ((source @env0:class @env0:whichClassIncludesSelector:
+			#'___pyHiddenStateNames___' environmentId: 1) @env0:notNil)
+		ifTrue: [source @env1:___pyHiddenStateNames___]
+		ifFalse: [#()]
 
 ]
 
@@ -219,6 +228,8 @@ PyInstanceDict >> ___slotOrDynamicAt___: sym [
 	(GRAIL_INFERRED_SLOTS; nil when unset), else the dynamic instVar."
 
 	| idx |
+	"Absent, as ___allPairs___ leaves it out: a lookup and the listing agree."
+	(self ___hiddenStateNames___ @env0:includes: sym) ifTrue: [^ nil].
 	idx := source @env1:___pyInferredSlotIndexFor___: sym.
 	"An UNSET slot falls through to a per-object value of the same name (a
 	promotion leftover), as the attribute read does."
