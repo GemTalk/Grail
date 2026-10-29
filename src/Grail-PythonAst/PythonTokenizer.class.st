@@ -614,6 +614,26 @@ PythonTokenizer >> ___bodyOffsetOf: anIndex literal: lit [
 
 ]
 
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___closeBracket___: aChar at: aPosition of: anOpening [
+	"Close anOpening -- { char. position. line } of the bracket it opened --
+	with the closer aChar at aPosition, or refuse a closer of the wrong kind as
+	CPython's lexer does, naming both, at the closer: in a replacement field as
+	anywhere else (``f'{a(4}''', test_fstring test_mismatched_parens)."
+
+	((anOpening at: 1) == $( and: [aChar == $)]) ifTrue: [^ self].
+	((anOpening at: 1) == $[ and: [aChar == $]]) ifTrue: [^ self].
+	((anOpening at: 1) == ${ and: [aChar == $}]) ifTrue: [^ self].
+	^ PythonParser ___signal___: SyntaxError
+		message: 'closing parenthesis ''' , aChar asString
+			, ''' does not match opening parenthesis ''' , (anOpening at: 1) asString , ''''
+			, ((anOpening at: 3) = line
+				ifTrue: ['']
+				ifFalse: [' on line ' , (anOpening at: 3) printString])
+		in: source from: aPosition to: nil
+
+]
+
 { #category : 'Grail-private' }
 PythonTokenizer >> ___compileFilename___ [
 	"The file a warning of this tokenizer names: compile()'s filename while
@@ -655,6 +675,18 @@ PythonTokenizer >> ___dotStartsNumberTail___ [
 ]
 
 { #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___endFString___: aTokenType value: aValue fieldStarts: someFieldStarts line: aLine position: aPosition openAt: anOpenPosition inSpec: aBoolean [
+	"Add the f-string (or t-string) token that ended with its last replacement
+	field still open -- in its format spec when aBoolean, else in its
+	expression -- for the parser to report as CPython does, at anOpenPosition."
+
+	self addToken: aTokenType value: aValue line: aLine position: aPosition.
+	someFieldStarts ifNotNil: [:fs | tokens last fieldStarts: fs].
+	tokens last openFieldAt: anOpenPosition inSpec: aBoolean
+
+]
+
+{ #category : 'Grail-tokenizing' }
 PythonTokenizer >> ___escapeError___: aReason from: aBackslash to: aLast literal: lit [
 	"CPython's error for an escape it cannot decode, located at the literal:
 
@@ -676,6 +708,16 @@ PythonTokenizer >> ___escapeError___: aReason from: aBackslash to: aLast literal
 			, ((self ___bodyOffsetOf: aLast + 1 literal: lit) - 1) printString
 			, ': ' , aReason
 		literal: lit
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___fieldFrameAt___: aPosition [
+	"A replacement field whose brace is at aPosition, as the string scan
+	tracks it: the brackets open in it, whether its format spec has begun, and
+	where its brace is."
+
+	^ Array with: OrderedCollection new with: false with: aPosition
 
 ]
 
@@ -843,6 +885,48 @@ PythonTokenizer >> ___numberFollowedBy___: aString [
 		(source at: position + k - 1) == (aString at: k) ifFalse: [^ false]].
 	after := source atOrNil: position + aString size.
 	^ (after notNil and: [after codePoint >= 128 or: [self isIdentifierPart: after]]) not
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___signalUnclosedField___: aFrame [
+	"The source ran out inside the replacement field aFrame: CPython's
+	``'(' was never closed'' for the innermost bracket open in it, or for its
+	brace -- ``f'{1#}''', whose comment took the brace that would have closed
+	it (test_fstring test_comments)."
+
+	| opening |
+	(aFrame at: 1) isEmpty ifTrue: [
+		^ PythonParser ___signalUnclosedBracket___: ${ in: source at: (aFrame at: 3)].
+	opening := (aFrame at: 1) last.
+	^ PythonParser ___signalUnclosedBracket___: (opening at: 1) in: source at: (opening at: 2)
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___skipRestOfSource___ [
+	"Scan no further.  CPython's lexer stops at the error the token just added
+	stands for, so nothing after it is reported -- not even a bracket still
+	open around it."
+
+	position := sourceSize + 1.
+	openBrackets := OrderedCollection new.
+	parenDepth := 0
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___stringPrefixStartBefore___: aPosition [
+	"Where the string literal whose quote is at aPosition starts: at its
+	prefix, when the letters before the quote are one -- ``r'' in
+	``f'{x!r''' -- and not the end of a longer name."
+
+	| start |
+	start := aPosition.
+	[start > 1 and: [aPosition - start < 2 and: ['rRbBfFuUtT' includesValue: (source at: start - 1)]]]
+		whileTrue: [start := start - 1].
+	(start > 1 and: [PythonTokenizer ___isIdentifierPart___: (source at: start - 1)]) ifTrue: [^ aPosition].
+	^ start
 
 ]
 
@@ -1637,15 +1721,7 @@ PythonTokenizer >> tokenizeOperator [
 				message: 'unmatched ''' , char asString , ''''
 				in: source from: startPos to: nil].
 		opening := openBrackets removeLast.
-		((opening at: 1) == $( and: [char == $)]) | ((opening at: 1) == $[ and: [char == $]])
-			| ((opening at: 1) == ${ and: [char == $}]) ifFalse: [
-				^ PythonParser ___signal___: SyntaxError
-					message: 'closing parenthesis ''' , char asString
-						, ''' does not match opening parenthesis ''' , (opening at: 1) asString , ''''
-						, ((opening at: 3) = startLine
-							ifTrue: ['']
-							ifFalse: [' on line ' , (opening at: 3) printString])
-					in: source from: startPos to: nil].
+		self ___closeBracket___: char at: startPos of: opening.
 		parenDepth := parenDepth - 1.
 		parenDepth < 0 ifTrue: [parenDepth := 0].
 	].
@@ -1660,7 +1736,7 @@ PythonTokenizer >> tokenizeString [
 	"Tokenize a string literal (handles prefixes, single/double/triple quotes, escapes)."
 
 	| startLine startPos prefix quoteChar triple str isFString isRaw isBytes tokenType char
-	  fields nestQuote nestTriple fieldStarts isTString frame bodyStart lit specEscape |
+	  fields nestQuote nestTriple nestStart nestValueSize fieldStarts isTString frame bodyStart lit specEscape |
 	startLine := line.
 	startPos := position.
 	prefix := Unicode7 new.
@@ -1711,7 +1787,24 @@ PythonTokenizer >> tokenizeString [
 	nestTriple := false.
 	[
 		char := self peek.
-		char ifNil:[ ^ self ___unterminatedString___: triple from: startPos ].
+		"Running out inside a replacement field is the field's error, not the
+		literal's: a bracket never closed, or a string inside the field that
+		ran out (below)."
+		char ifNil: [
+			(isFString and: [fields notEmpty and: [nestQuote isNil]]) ifTrue: [
+				^ self ___signalUnclosedField___: fields last].
+			(isFString and: [nestQuote notNil]) ifFalse: [
+				^ self ___unterminatedString___: triple from: startPos].
+			"A string inside a field that runs out (Parser/lexer/lexer.c:1170-1192):
+			one opening with the f-string's own quote is where the f-string really
+			ended, leaving the field open -- CPython's ``f-string: expecting
+			'}''', once the parser has had the field's tokens before it; any other
+			is its own unterminated error."
+			(nestQuote == quoteChar and: [nestTriple == triple]) ifFalse: [
+				^ self ___unterminatedString___: nestTriple from: nestStart].
+			self ___endFString___: tokenType value: (str copyFrom: 1 to: nestValueSize)
+				fieldStarts: fieldStarts line: startLine position: startPos openAt: nestStart inSpec: false.
+			^ self ___skipRestOfSource___].
 		"PEP 701: inside an f-string's {...} replacement field the text is
 		SOURCE for the inner parser, not string data.  Two consequences, and
 		together they are why this is a separate branch rather than a guard on
@@ -1766,8 +1859,17 @@ PythonTokenizer >> tokenizeString [
 						ifFalse: [
 					(frame at: 2)
 						ifTrue: [
-							"Format spec."
-							char == ${ ifTrue: [fields add: (Array with: 0 with: false)].
+							"Format spec.  The f-string's own quote ends the f-string here,
+							as CPython's lexer ends it, and leaves the field open: the
+							parser reports ``expecting '}', or format specs'' at it
+							(f'{3:' -- test_fstring test_mismatched_braces)."
+							(char == quoteChar and: [triple not or: [self ___atTripleQuote___]]) ifTrue: [
+								self ___endFString___: tokenType value: str fieldStarts: fieldStarts
+									line: startLine position: startPos openAt: position inSpec: true.
+								triple ifTrue: [self advance; advance].
+								self advance.
+								^ self].
+							char == ${ ifTrue: [fields add: (self ___fieldFrameAt___: position)].
 							char == $} ifTrue: [fields removeLast].
 							str add: self advance]
 						ifFalse: [
@@ -1775,6 +1877,8 @@ PythonTokenizer >> tokenizeString [
 							(char == $' or: [char == $"])
 								ifTrue: [
 									nestQuote := char.
+									nestStart := self ___stringPrefixStartBefore___: position.
+									nestValueSize := str size - (position - nestStart).
 									nestTriple := self ___atTripleQuote___.
 									nestTriple ifTrue: [str add: self advance. str add: self advance].
 									str add: self advance]
@@ -1785,12 +1889,12 @@ PythonTokenizer >> tokenizeString [
 										whileTrue: [str add: self advance]]
 								ifFalse: [
 							(char == $( or: [char == $[ or: [char == ${]])
-								ifTrue: [frame at: 1 put: (frame at: 1) + 1]
+								ifTrue: [(frame at: 1) add: (Array with: char with: position with: line)]
 								ifFalse: [
 							(char == $) or: [char == $] or: [char == $}]])
 								ifTrue: [
-									(frame at: 1) > 0
-										ifTrue: [frame at: 1 put: (frame at: 1) - 1]
+									(frame at: 1) notEmpty
+										ifTrue: [self ___closeBracket___: char at: position of: (frame at: 1) removeLast]
 										ifFalse: [
 											"A ``)'' or ``]'' with nothing open in the field is
 											CPython's ``f-string: unmatched ')'''; only ``}'' closes the
@@ -1803,7 +1907,7 @@ PythonTokenizer >> tokenizeString [
 															, 'unmatched ''' , char asString , ''''
 														in: source from: position to: nil]]]
 								ifFalse: [
-							(char == $: and: [(frame at: 1) = 0])
+							(char == $: and: [(frame at: 1) isEmpty])
 								ifTrue: [frame at: 2 put: true]]].
 								str add: self advance]]]]]
 				ifNotNil: [
@@ -1812,6 +1916,15 @@ PythonTokenizer >> tokenizeString [
 							str add: self advance.
 							self atEnd ifFalse: [str add: self advance]]
 						ifFalse: [
+							"A single-quoted string ends with its line, inside a field
+							too: the same as running out of source, above."
+							(char == Lf and: [nestTriple not]) ifTrue: [
+								(nestQuote == quoteChar and: [nestTriple == triple]) ifFalse: [
+									^ self ___unterminatedString___: nestTriple from: nestStart].
+								self ___endFString___: tokenType value: (str copyFrom: 1 to: nestValueSize)
+									fieldStarts: fieldStarts line: startLine position: startPos
+									openAt: nestStart inSpec: false.
+								^ self ___skipRestOfSource___].
 							(char == nestQuote and: [nestTriple not or: [self ___atTripleQuote___]])
 								ifTrue: [
 									nestTriple ifTrue: [str add: self advance. str add: self advance].
@@ -2013,7 +2126,7 @@ PythonTokenizer >> tokenizeString [
 							 whose text is kept verbatim, do the two differ by a constant."
 							fieldStarts isNil ifTrue: [fieldStarts := OrderedCollection new].
 							fieldStarts add: { str size + 2. position + 1. line }.
-							fields add: (Array with: 0 with: false)]].
+							fields add: (self ___fieldFrameAt___: position)]].
 				str add: self advance.
 			]]].
 		].

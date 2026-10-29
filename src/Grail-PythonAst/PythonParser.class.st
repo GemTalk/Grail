@@ -1291,9 +1291,12 @@ PythonParser >> ___fieldExpressionStartIn___: aFieldText from: anIndex [
 	for a missing expression, so ``f'''{\n# only a comment\n}''''' is ``valid
 	expression required before '}''' on line 3."
 
-	| index |
+	| index whitespace |
+	"Python's whitespace, not every separator: a no-break space is an error of
+	its own (``invalid non-printable character U+00A0'')."
+	whitespace := String withAll: { Character space. Character tab. Character newPage. Character cr. Character lf }.
 	index := anIndex.
-	[index <= aFieldText size and: [(aFieldText at: index) isSeparator or: [(aFieldText at: index) == $#]]]
+	[index <= aFieldText size and: [(whitespace includesValue: (aFieldText at: index)) or: [(aFieldText at: index) == $#]]]
 		whileTrue: [
 			(aFieldText at: index) == $#
 				ifTrue: [[index <= aFieldText size and: [(aFieldText at: index) ~~ Character lf]]
@@ -1342,6 +1345,7 @@ PythonParser >> ___fieldTokensIn___: aWrappedSource [
 	parentheses aWrappedSource adds around it -- which are left out."
 
 	| fieldTokens |
+	aWrappedSource isEmpty ifTrue: [^ OrderedCollection new].
 	fieldTokens := (PythonTokenizer on: aWrappedSource) tokenize asOrderedCollection.
 	[fieldTokens notEmpty and: [(fieldTokens last isOp: ')') not]]
 		whileTrue: [fieldTokens removeLast].
@@ -1832,6 +1836,17 @@ PythonParser >> ___isKeywordArgument___: aSegment [
 	t := tokens at: aSegment first.
 	(t isOp: '**') ifTrue: [^ true].
 	^ aSegment size > 1 and: [t isName and: [(tokens at: (aSegment at: 2)) isOp: '=']]
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___isOpenField___: aFieldStart of: anFString [
+	"Whether the replacement field starting at aFieldStart is the one
+	anFString ended inside of: its last."
+
+	^ anFString openFieldAt notNil
+		and: [anFString fieldStarts notNil
+		and: [(anFString fieldStarts last at: 1) = aFieldStart]]
 
 ]
 
@@ -3021,6 +3036,11 @@ PythonParser >> ___signalFieldError___: anError in: aWrappedSource token: aTok f
 
 	| message |
 	message := self ___messageOf___: anError.
+	"A bracket the field leaves open, in a field the f-string ended inside of:
+	CPython's parser asks for the token after it and meets its lexer's error
+	first (``f'{a(''')."
+	((self ___isOpenField___: aFieldStart of: aTok) and: [message endsWith: 'was never closed'])
+		ifTrue: [^ self ___signalOpenFieldOf___: aTok].
 	message = 'cannot use starred expression here' ifTrue: [
 		^ self ___resignal___: anError message: 'can''t use starred expression here'
 			in: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart].
@@ -3046,16 +3066,24 @@ PythonParser >> ___signalFieldStrayIn___: aWrappedSource token: aTok field: aFie
 
 	| fieldTokens prefixEnd stray |
 	fieldTokens := self ___fieldTokensIn___: aWrappedSource.
-	fieldTokens isEmpty ifTrue: [
-		^ self ___fstringError___: 'expecting a valid expression after ''{''' token: aTok
-			fieldAt: aFieldStart index: anExpressionStart].
 	prefixEnd := (fieldTokens size to: 1 by: -1)
 		detect: [:k | self ___isExpression___: (aWrappedSource copyFrom: 1 to: (fieldTokens at: k) endPosition) , ')']
 		ifNone: [0].
+	stray := prefixEnd < fieldTokens size ifTrue: [fieldTokens at: prefixEnd + 1] ifFalse: [nil].
+	"A field the f-string ended inside of: CPython's lexer error, whenever the
+	parser would have asked for the token that was not there -- nothing after
+	the ``{'', or nothing that ends the expression, or a string (whose next
+	token the parser fetches first)."
+	((self ___isOpenField___: aFieldStart of: aTok)
+		and: [fieldTokens isEmpty or: [aTok isOpenInFormatSpec not
+			and: [stray isNil or: [stray isAnyString]]]])
+				ifTrue: [^ self ___signalOpenFieldOf___: aTok].
+	fieldTokens isEmpty ifTrue: [
+		^ self ___fstringError___: 'expecting a valid expression after ''{''' token: aTok
+			fieldAt: aFieldStart index: anExpressionStart].
 	prefixEnd = 0 ifTrue: [
 		^ self ___fstringError___: 'expecting a valid expression after ''{'''
 			token: aTok field: aFieldStart tokenAt: fieldTokens first at: anExpressionStart].
-	stray := fieldTokens at: prefixEnd + 1.
 	((stray isOp: '=') and: [prefixEnd + 2 <= fieldTokens size]) ifTrue: [
 		^ self ___fstringError___: 'expecting ''!'', or '':'', or ''}'''
 			token: aTok field: aFieldStart tokenAt: (fieldTokens at: prefixEnd + 2) at: anExpressionStart].
@@ -3104,6 +3132,10 @@ PythonParser >> ___signalNoFStringConversionIn___: aFieldText at: anIndex token:
 
 	| next nameEnd |
 	next := PythonTokenizer ___indexAfterWhitespaceIn___: aFieldText from: anIndex + 1.
+	"The f-string ended before a conversion could follow: CPython's lexer
+	error, met as the parser asked for the NAME (``f'{3!''')."
+	(next > aFieldText size and: [aTok openFieldAt notNil]) ifTrue: [
+		^ self ___signalOpenFieldOf___: aTok].
 	(next <= aFieldText size and: [':}' includesValue: (aFieldText at: next)]) ifTrue: [
 		^ self ___fstringError___: 'missing conversion character' token: aTok fieldAt: aFieldStart index: next].
 	nameEnd := PythonTokenizer ___identifierEndIn___: aFieldText from: next.
@@ -3111,6 +3143,27 @@ PythonParser >> ___signalNoFStringConversionIn___: aFieldText at: anIndex token:
 		^ self ___fstringError___: 'conversion type must come right after the exclamation mark'
 			token: aTok fieldAt: aFieldStart from: anIndex to: nameEnd].
 	^ self ___fstringError___: 'invalid conversion character' token: aTok fieldAt: aFieldStart index: next
+
+]
+
+{ #category : 'Grail-parsing - atoms' }
+PythonParser >> ___signalOpenFieldOf___: anFString [
+	"The error of anFString, a token that ended with its last replacement field
+	open, once nothing in the field is wrong before its end: CPython's
+	``expecting '}', or format specs'' at the quote that ended it inside the
+	format spec, or its lexer's ``expecting '}''' -- a point, at the string
+	inside the field that took the f-string's quote
+	(Parser/lexer/lexer.c:1180-1192; test_fstring test_mismatched_braces)."
+
+	| prefix |
+	prefix := anFString isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '].
+	anFString isOpenInFormatSpec ifTrue: [
+		^ PythonParser ___signal___: SyntaxError
+			message: prefix , 'expecting ''}'', or format specs'
+			in: source from: anFString openFieldAt to: anFString openFieldAt + 1].
+	^ PythonParser ___signal___: SyntaxError
+		message: prefix , 'expecting ''}'''
+		in: source from: anFString openFieldAt to: nil
 
 ]
 
@@ -5416,13 +5469,14 @@ PythonParser >> parseFStringLiteral [
 									``!'' that is not ``!='' opens a conversion,
 									checked as CPython checks it
 									(___checkedFStringConversionIn___:...)."
-									(ch == $! and: [bracketDepth == 0 and: [pos < len
-										and: [(value at: pos + 1) ~~ $=]]])
+									(ch == $! and: [bracketDepth == 0 and: [(pos < len
+										and: [(value at: pos + 1) ~~ $=])
+											or: [pos = len and: [tok openFieldAt notNil]]]])
 										ifTrue: [
 											exprStop := pos - 1.
-											conversion := value at: pos + 1.
 											pos := self ___checkedFStringConversionIn___: value
 												at: pos token: tok fieldAt: exprStart.
+											conversion := value at: pos - 1.
 									] ifFalse: [
 										"Format spec opener: ``:`` at depth 0."
 										(ch == $: and: [bracketDepth == 0]) ifTrue: [
@@ -5445,8 +5499,8 @@ PythonParser >> parseFStringLiteral [
 				recorded when the scan met the ``!'' or ``:''.  Counting back from
 				the brace instead missed whitespace after a conversion, which is
 				legal: f'{3!s  }' read ``3!s'' as the expression (test_fstring)."
-				exprText := value copyFrom: exprStart to: (exprEnd ifNil: [pos - 1] ifNotNil: [
-					exprStop ifNil: [exprEnd - 1]]).
+				exprText := value copyFrom: exprStart to: (exprStop ifNil: [
+					exprEnd ifNil: [pos - 1] ifNotNil: [exprEnd - 1]]).
 				formatSpec := inSpec ifTrue: [specBuf contents] ifFalse: [nil].
 				"Comments come out of the field's text before anything reads it:
 				the debug text and a t-string's expression are CPython's
@@ -5509,7 +5563,11 @@ PythonParser >> parseFStringLiteral [
 					innerSource := '(' , innerSource , ')'].
 				"An error in the child parse is reported as CPython reports it,
 				at the field's own position (___signalFieldError___:...); so is
-				a generator that only the wrapping parenthesized."
+				a generator that only the wrapping parenthesized.  A field the
+				f-string ended inside of is refused once its expression is known
+				to be one (___signalOpenFieldOf___:)."
+				(exprEnd isNil and: [innerSource isEmpty]) ifTrue: [
+					^ self ___signalOpenFieldOf___: tok].
 				exprAst := [
 					innerParser := PythonParser basicNew source: innerSource.
 					innerParser ___mangleClassStack___: self ___mangleClassStack___ copy.
@@ -5520,6 +5578,7 @@ PythonParser >> parseFStringLiteral [
 								token: tok field: exprStart at: exprStart + lead].
 				(wrapped and: [self ___isBareGenerator___: exprAst in: innerSource]) ifTrue: [
 					self ___signalFieldStrayIn___: innerSource token: tok field: exprStart at: exprStart + lead].
+				exprEnd isNil ifTrue: [^ self ___signalOpenFieldOf___: tok].
 				"Its positions are relative to the FIELD, not the module: the
 				child parse sees ``(expr)'' as a whole source, so every node in
 				it counts from there.  REBASE them onto the module when the
