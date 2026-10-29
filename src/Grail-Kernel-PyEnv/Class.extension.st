@@ -46,6 +46,18 @@ Class >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: clas
 	so the generated code reduces to a single send."
 
 	| filteredIvars filteredClassIvars newCls claim |
+	"``class C(base)'' with ``base = object'': the same root as ``class C(object)'',
+	which ClassDefAst maps to PythonInstance, and as type(name, (object,), ns),
+	which importlib class >> ___selectStorageBase___: maps there.  A base known
+	only at run time came here as the kernel Object, so the class was not a
+	PythonInstance, and every test for one missed it: ``1 < C(2)'' never tried
+	C's reflected __gt__ (test_descr test_classic_comparisons, whose loop runs
+	``for base in (classic, int, object): class C(base)'')."
+	self == Object ifTrue: [
+		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #PythonInstance)
+			___subclass___: aSymbol
+			instVarNames: ivarNames
+			classInstVarNames: classIvarNames].
 	"A CLASS BUILT BY A CALL claims the next class creation -- this one --
 	under its module and name, so a rebuild of that module can hand back the
 	class it built before (importlib class >> ___claimBuiltClass___: and
