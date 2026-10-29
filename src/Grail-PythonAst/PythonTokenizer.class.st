@@ -35,6 +35,35 @@ Class {
 }
 
 { #category : 'Grail-Identifiers' }
+PythonTokenizer class >> ___identifierEndIn___: aString from: anIndex [
+	"The index past the identifier that starts at anIndex in aString, or
+	anIndex when none starts there."
+
+	| index |
+	(anIndex <= aString size and: [self ___isIdentifierStart___: (aString at: anIndex)])
+		ifFalse: [^ anIndex].
+	index := anIndex + 1.
+	[index <= aString size and: [self ___isIdentifierPart___: (aString at: index)]]
+		whileTrue: [index := index + 1].
+	^ index
+
+]
+
+{ #category : 'Grail-Identifiers' }
+PythonTokenizer class >> ___indexAfterWhitespaceIn___: aString from: anIndex [
+	"The index of the first character at or after anIndex in aString that is
+	not whitespace, newlines included -- they separate tokens inside an
+	f-string's replacement field as inside brackets."
+
+	| index |
+	index := anIndex.
+	[index <= aString size and: [(aString at: index) isSeparator]]
+		whileTrue: [index := index + 1].
+	^ index
+
+]
+
+{ #category : 'Grail-Identifiers' }
 PythonTokenizer class >> ___isIdentifierPart___: aChar [
 	"May aChar continue a Python identifier: XID_Continue.
 
