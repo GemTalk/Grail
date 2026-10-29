@@ -165,6 +165,24 @@ AbstractPyFloat >> __float__ [
 ]
 
 { #category : 'Grail-Python Protocol' }
+AbstractPyFloat >> __format__: aSpec [
+	"float.__format__ for a subclass's instance: its value formatted, its own
+	class named in an error (``Unknown format code 'q' for object of type
+	'I'''), and an empty spec answered with str() of the instance, so an
+	overridden __str__ applies (Python/formatter_unicode.c:1540-1551,
+	format_obj).  This class is rooted at Number rather
+	than at float, so formatting reached object.__format__ and every non-empty
+	spec was ``TypeError: unsupported format string passed to I.__format__''."
+
+	| b |
+	b := builtins instance.
+	(b ___formatSpecArgument___: aSpec) @env0:isEmpty ifTrue: [^ self __str__].
+	^ b ___formatValue___: (self @env0:dynamicInstVarAt: #value) spec: aSpec
+		typeName: (b ___pyTypeNameOf___: self)
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 AbstractPyFloat >> __ge__: other [
 	(other isKindOf: AbstractPyFloat) ifTrue: [
 		^ self @env0:value __ge__: (other @env0:value)

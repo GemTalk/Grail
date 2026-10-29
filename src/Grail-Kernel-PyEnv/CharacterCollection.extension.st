@@ -2108,9 +2108,20 @@ CharacterCollection >> __eq__: other [
 CharacterCollection >> __format__: formatSpec [
 	"Python str.__format__: full fill/align/width plus .precision
 	truncation and the 's' type — see the shared engine in builtins
-	___formatValue___:spec:."
+	___formatValue___:spec:.
 
-	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ __format__: formatSpec].
+	A subclass's instance is formatted as its exact str and named by its own
+	class in an error, and an empty spec is str() of the instance itself, so
+	an overridden __str__ applies (Python/formatter_unicode.c:1540-1551,
+	format_obj).  Formatting the exact str named it ``str'' and dropped the
+	override."
+
+	| b |
+	self @env0:___isExactPyStr___ ifFalse: [
+		b := builtins instance.
+		(b ___formatSpecArgument___: formatSpec) @env0:isEmpty ifTrue: [^ self __str__].
+		^ b ___formatValue___: self ___asExactStr___ spec: formatSpec
+			typeName: (b ___pyTypeNameOf___: self)].
 	(formatSpec @env0:isNil or: [formatSpec @env0:= '']) ifTrue: [^ self].
 	^ (builtins instance) ___formatValue___: self spec: formatSpec
 
