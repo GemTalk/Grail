@@ -99,6 +99,12 @@ jobs:
       - name: cpython-suite shard plan + report self-test
         run: tests/scripts/test_cpython_suite_shards.sh
 
+      # The isolated-classes nightly (isolated-classes.yml) is not on the PR
+      # path, but its verdict is: a report that read an incomplete run as a
+      # pass would make that nightly a vacuous green.
+      - name: isolated-classes report self-test
+        run: tests/scripts/test_isolated_classes_report.sh
+
       # The fixture gate runs tests/python's self-running fixtures under real
       # CPython, so it needs the version the fixtures were written against --
       # the runner's system python3 is 3.10 and predates ExceptionGroup.  This
