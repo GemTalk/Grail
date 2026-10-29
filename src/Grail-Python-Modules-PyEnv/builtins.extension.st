@@ -1861,11 +1861,20 @@ builtins >> ___formatValue___: value spec: spec [
 	"Shared entry point behind int/float/str __format__.  Empty spec
 	is str(value); otherwise parse once and dispatch by type."
 
+	^ self ___formatValue___: value spec: spec typeName: (self ___pyTypeNameOf___: value)
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
+builtins >> ___formatValue___: value spec: spec typeName: aTypeName [
+	"___formatValue___:spec:, with the type its errors name given: a
+	subclass's instance is formatted by its builtin VALUE, and named by its
+	own class, as CPython's tp_name names it."
+
 	| text p |
 	text := self ___formatSpecArgument___: spec.
 	text @env0:isEmpty ifTrue: [^ value __str__].
-	p := self ___parseFormatSpec___: text
-		typeName: (self ___pyTypeNameOf___: value).
+	p := self ___parseFormatSpec___: text typeName: aTypeName.
 	(value isKindOf: Float) ifTrue: [
 		^ self ___formatFloatValue___: value parsed: p].
 	(value isKindOf: Integer) ifTrue: [

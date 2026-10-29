@@ -66,7 +66,16 @@ AbstractPyStr >> __eq__: other [
 
 { #category : 'Grail-Python Protocol' }
 AbstractPyStr >> __format__: aSpec [
-	^ self @env0:___strValue___ __format__: aSpec
+	"str.__format__ for a subclass's instance: its value formatted, its own
+	class named in an error, and an empty spec answered with str() of the
+	instance (Python/formatter_unicode.c:1540-1551, format_obj).  Formatting
+	the value named it ``str''."
+
+	| b |
+	b := builtins instance.
+	(b ___formatSpecArgument___: aSpec) @env0:isEmpty ifTrue: [^ self __str__].
+	^ b ___formatValue___: self @env0:___strValue___ spec: aSpec
+		typeName: (b ___pyTypeNameOf___: self)
 
 ]
 
