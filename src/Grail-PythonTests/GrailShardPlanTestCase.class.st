@@ -33,6 +33,20 @@ GrailShardPlanTestCase >> nameOf: anObject [
 ]
 
 { #category : 'tests' }
+GrailShardPlanTestCase >> testCommittedTimingsFileParses [
+	"The gate reads this file; an unreadable one would silently fall back to
+	balancing counts."
+
+	| timings |
+	timings := GrailShardPlan readTimings: GrailShardPlan defaultTimingsPath.
+	self deny: timings isEmpty.
+	timings keysAndValuesDo: [:name :ms |
+		self assert: (ms isKindOf: Integer).
+		self assert: ms >= 0]
+
+]
+
+{ #category : 'tests' }
 GrailShardPlanTestCase >> testDigestIsDeterministic [
 
 	| leaves timings a b |

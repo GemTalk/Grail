@@ -33,18 +33,24 @@ InputBuiltinTestCase >> testInstallAcceptsARealClientForwarder [
 { #category : 'Grail-Tests-input' }
 InputBuiltinTestCase >> testPromptWrittenToRedirectedStdout [
 	"With sys.stdin assigned, the prompt goes to sys.stdout — the pairing
-	CPython uses, and what captured_stdout()-style fixtures expect."
+	CPython uses, and what captured_stdout()-style fixtures expect.
+
+	The streams are put back as they WERE, not set to None: a None left in
+	sys.stdout outlives the test, and a later class in the same session
+	(SysStreamSessionResolutionTestCase) then finds sys.stdout is not
+	sys.__stdout__."
 
 	| result |
 	result := self eval: 'import sys, io
+saved_in, saved_out = sys.stdin, sys.stdout
 sys.stdin = io.StringIO("x\n")
 sys.stdout = io.StringIO()
 try:
     input("PROMPT? ")
     captured = sys.stdout.getvalue()
 finally:
-    sys.stdin = None
-    sys.stdout = None
+    sys.stdin = saved_in
+    sys.stdout = saved_out
 captured'.
 	self assert: result equals: 'PROMPT? '
 

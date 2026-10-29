@@ -438,6 +438,25 @@ contention: re-run just that module on its own rather than reading it as a
 regression. Running SUnit and the CPython suite concurrently in one worktree
 is still fine; under load the gate simply serializes part of it.
 
+### Which classes a shard runs: measured time, refreshed by one command
+
+Shards get whole test classes, longest first, from the per-class times in
+`tests/scripts/shard_timings.txt` (`GrailShardPlan`, #1911); a class the file
+does not name is costed by its test count, so a new class always runs. Every
+shard prints `GRAIL_CLASS_TIME` lines, and CI uploads them, so refreshing the
+file is
+
+```bash
+scripts/refresh_shard_timings.py            # latest green merge-queue run
+scripts/refresh_shard_timings.py <run-id>   # or a given CI run
+```
+
+Use CI's numbers, not a local run's (`--local` exists, but the gate's
+wall-clock is CI's). The script prints the 16-shard plan the new file gives;
+commit the file when that beats the current one. Each shard also prints a
+`GRAIL_SHARD_PLAN` line; `run_tests.sh` fails if shards ran different
+partitions, or if all of them ran here and did not run the whole suite.
+
 ### The limit counts the stone's OWN gems
 
 Whatever the key allows, `reclaimgcgem` and `symbolgem` hold two slots from the
