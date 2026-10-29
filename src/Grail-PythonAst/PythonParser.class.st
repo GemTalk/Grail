@@ -40,7 +40,8 @@ Class {
 		'blockHeader',
 		'barryAsFlufl',
 		'evalInput',
-		'tabErrorPosition'
+		'tabErrorPosition',
+		'futureImports'
 	],
 	#category : 'Grail-Parser'
 }
@@ -106,6 +107,16 @@ PythonParser class >> ___fillSyntaxErrorLocation___: anError source: aSource at:
 	 anError @env0:dynamicInstVarAt: #'end_offset' put: ((loc @env0:at: 2) + 1)]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ anError
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> ___futureFeatures___ [
+	"The names a future statement may import (Include/cpython/compile.h:37-46)."
+
+	^ #(#'nested_scopes' #'generators' #'division' #'absolute_import'
+		#'with_statement' #'print_function' #'unicode_literals'
+		#'barry_as_FLUFL' #'generator_stop' #'annotations')
 
 ]
 
@@ -332,6 +343,7 @@ PythonParser class >> parse: aString evalInput: isEvalInput [
 	^ [ | module |
 		module := parser source: aString; parseModule.
 		parser ___signalPendingTabError___.
+		parser ___checkFutureImportsIn___: module.
 		module]
 		on: SyntaxError
 		do: [:ex |
@@ -571,6 +583,21 @@ PythonParser >> ___checkDeclarationLegal___: aName kind: aKind at: aToken [
 
 ]
 
+{ #category : 'Grail-parsing' }
+PythonParser >> ___checkFeaturesOf___: aFutureImport [
+	"future_check_features (Python/future.c:8-62): each name a future
+	statement imports has to be a feature, and ``braces'' has an answer of its
+	own.  Located at the name, ``as'' clause included."
+
+	aFutureImport names do: [:alias |
+		alias name == #'braces' ifTrue: [
+			^ self ___syntaxError___: 'not a chance' node: alias].
+		(PythonParser ___futureFeatures___ includes: alias name) ifFalse: [
+			^ self ___syntaxError___: 'future feature ' , alias name , ' is not defined'
+				node: alias]]
+
+]
+
 { #category : 'Grail-parsing - atoms' }
 PythonParser >> ___checkFieldExpressionStart___: anExpressionText token: aTok field: aFieldStart index: anIndex [
 	"CPython's refusals for a replacement field whose expression cannot start
@@ -625,6 +652,26 @@ PythonParser >> ___checkFirstAssignTarget___: first [
 	bad isNil ifFalse: [
 		^ self ___syntaxError___: 'cannot assign to ' , (self ___exprName___: bad)
 			node: bad]
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser >> ___checkFutureImportsIn___: aModule [
+	"CPython's two checks of future statements, made once the whole module has
+	parsed, so that a syntax error anywhere in it is reported first.  The
+	leading future statements' features come first (Python/future.c), then any
+	``from __future__ import'' outside that block, at any depth, is misplaced
+	(Python/symtable.c:1813-1829, check_import_from).  Grail compiled every one
+	of them: an unknown feature, ``braces'' and a late import alike
+	(test_exceptions testSyntaxErrorOffset, test_future)."
+
+	| leading |
+	leading := aModule ___leadingFutureImports___.
+	leading do: [:statement | self ___checkFeaturesOf___: statement].
+	futureImports do: [:statement |
+		(leading includesIdentical: statement) ifFalse: [
+			^ self ___syntaxError___: 'from __future__ imports must occur at the beginning of the file'
+				node: statement]]
 
 ]
 
@@ -5511,7 +5558,7 @@ PythonParser >> parseImport [
 PythonParser >> parseImportFrom [
 	"Parse: from [dots] [module] import names"
 
-	| tok level moduleStr names |
+	| tok level moduleStr names statement |
 	tok := self advance. "consume 'from'"
 	level := 0.
 	"Dots in any mix: the tokenizer reads ``...'' as one Ellipsis token, so
@@ -5577,14 +5624,16 @@ PythonParser >> parseImportFrom [
 			self declareWrite: (alias asName ifNil: [alias name]).
 		].
 	].
-	(moduleStr = '__future__' and: [level = 0]) ifTrue: [
-		(names anySatisfy: [:alias | alias name == #'barry_as_FLUFL'])
-			ifTrue: [barryAsFlufl := true]].
-	^ImportFromAst new
+	statement := ImportFromAst new
 		module: moduleStr;
 		names: names;
 		level: level;
-		from: tok to: self lastToken ; yourself
+		from: tok to: self lastToken ; yourself.
+	statement ___isFutureImport___ ifTrue: [
+		(names anySatisfy: [:alias | alias name == #'barry_as_FLUFL'])
+			ifTrue: [barryAsFlufl := true].
+		futureImports add: statement].
+	^ statement
 
 ]
 
@@ -7550,6 +7599,7 @@ PythonParser >> source: aString [
 	classNesting := 0.
 	mangleClassStack := OrderedCollection new.
 	inCompTarget := false.
+	futureImports := OrderedCollection new.
 
 ]
 
