@@ -316,7 +316,12 @@ if [ "${GRAIL_NO_DEPLOY:-0}" = "1" ]; then
     echo "  'import gemdb' will dirty its transaction."
 else
     DEPLOY_T0=$SECONDS
-    if LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/deployGemdb.gs" < /dev/null \
+    # The sizes the unicodedata deploy below runs with: after an install the
+    # gemdb modules are rebuilt cold, which measured between 50 and 55 MB of
+    # temporary objects -- over this machine's 50 MB default, where it failed
+    # with "Error during index maintenance" (InternalError 2727).
+    if LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+         -S "$GRAIL_DIR/scripts/deployGemdb.gs" < /dev/null \
          | grep -E 'deployGemdb'; then
         printf 'TIMING | %-26s | %4ds\n' "deploy-gemdb" "$((SECONDS - DEPLOY_T0))"
     else
