@@ -45,7 +45,7 @@ Class >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: clas
 	arguments to ``subclass:...''.  This helper hides the boilerplate
 	so the generated code reduces to a single send."
 
-	| filteredIvars filteredClassIvars newCls claim |
+	| filteredIvars filteredClassIvars newCls claim root |
 	"``class C(base)'' with ``base = object'': the same root as ``class C(object)'',
 	which ClassDefAst maps to PythonInstance, and as type(name, (object,), ns),
 	which importlib class >> ___selectStorageBase___: maps there.  A base known
@@ -110,19 +110,16 @@ Class >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames: clas
 			^ pyio ___subclass___: aSymbol
 				instVarNames: ivarNames
 				classInstVarNames: classIvarNames]].
-	((self == Integer)
-		or: [self == SmallInteger or: [self == LargeInteger]]) ifTrue: [
-		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyInt)
-			___subclass___: aSymbol
-			instVarNames: ivarNames
-			classInstVarNames: classIvarNames].
 	"``class MyFloat(float)``: same story for the sealed float kernel --
 	substitute the AbstractPyFloat Number-sibling (generality 80 strips
-	the wrapper in mixed arithmetic; see AbstractPyFloat.gs)."
-	((self == Float)
-		or: [self == SmallDouble or: [self == BinaryFloat]]) ifTrue: [
-		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #AbstractPyFloat)
-			___subclass___: aSymbol
+	the wrapper in mixed arithmetic; see AbstractPyFloat.gs).
+
+	Both substitutions are importlib ___subclassRootOf___:, which is also what
+	a rebuild compares a reused class's superclass with: the class this
+	answers has the substitute as its superclass, not the receiver (#1863)."
+	root := (Python @env0:at: #importlib) @env0:___subclassRootOf___: self.
+	root == self ifFalse: [
+		^ root ___subclass___: aSymbol
 			instVarNames: ivarNames
 			classInstVarNames: classIvarNames].
 	"NOTE: we deliberately do NOT substitute AbstractPyStr for a plain

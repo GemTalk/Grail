@@ -114,6 +114,30 @@ class Level(enum.StrEnum):
     HIGH = 'high'
 
 
+class Price(float):
+    """A float subclass: Grail roots it at a storage class, not at float (#1863)."""
+    def cents(self):
+        return round(self * 100)
+
+
+class Count(int):
+    """An int subclass, rooted at a storage class as Price is (#1863)."""
+    def doubled(self):
+        return self * 2
+
+
+class Size(float, enum.Enum):
+    """A float mixin: its members are instances of a float subclass (#1863)."""
+    SMALL = 1.5
+    LARGE = 3.0
+
+
+class Rank(int, enum.Enum):
+    """An int mixin (#1863)."""
+    LOW = 1
+    HIGH = 2
+
+
 Pair = collections.namedtuple('Pair', 'left right')
 
 
@@ -213,8 +237,13 @@ def build():
         'color': Color.GREEN,
         'mode': Mode.WRITE,
         'level': Level.HIGH,
-        'enum_keyed_dict': {Color.GREEN: 'color', Mode.WRITE: 'mode', Level.HIGH: 'level'},
-        'enum_keyed_set': {Color.GREEN, Mode.WRITE, Level.HIGH},
+        'price': Price(2.5),
+        'count': Count(7),
+        'size': Size.LARGE,
+        'rank': Rank.HIGH,
+        'enum_keyed_dict': {Color.GREEN: 'color', Mode.WRITE: 'mode', Level.HIGH: 'level',
+                            Size.LARGE: 'size', Rank.HIGH: 'rank'},
+        'enum_keyed_set': {Color.GREEN, Mode.WRITE, Level.HIGH, Size.LARGE, Rank.HIGH},
         'pair': Pair(1, 2),
         'span': Span(3, 8),
         'typed_pair_obj': TypedPair(5, 'x'),
@@ -270,6 +299,7 @@ def expected_types():
         'account': Account, 'slotted': Slotted, 'error': AppError,
         'registry': Registry, 'point': Point, 'bag': Bag, 'tagged': Tagged, 'color': Color,
         'mode': Mode, 'level': Level,
+        'price': Price, 'count': Count, 'size': Size, 'rank': Rank,
         'pair': Pair, 'span': Span, 'typed_pair_obj': TypedPair, 'built': Built,
     }
 
@@ -313,7 +343,12 @@ def describe(stored):
         'color': [s['color'].name, s['color'].value],
         'mode': [s['mode'].name, s['mode'].value, str(s['mode']), len(s['mode'])],
         'level': [s['level'].name, s['level'].value, str(s['level']), len(s['level'])],
-        'enum_members': [[m.name for m in Color], [m.name for m in Mode], [m.name for m in Level]],
+        'price': [float(s['price']), s['price'].cents()],
+        'count': [int(s['count']), s['count'].doubled()],
+        'size': [s['size'].name, s['size'].value, float(s['size'])],
+        'rank': [s['rank'].name, s['rank'].value, int(s['rank'])],
+        'enum_members': [[m.name for m in Color], [m.name for m in Mode], [m.name for m in Level],
+                         [m.name for m in Size], [m.name for m in Rank]],
         'pair': [s['pair'].left, s['pair'].right],
         'span': [s['span'].lo, s['span'].hi, s['span'].width()],
         'typed_pair_obj': [s['typed_pair_obj'].first, s['typed_pair_obj'].second],

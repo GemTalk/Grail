@@ -95,8 +95,15 @@ check('type.enum_member_identity.str_mixin',
 check('type.enum_member_identity.strenum',
       lambda: (stored['level'] is upgrade_app.Level.HIGH,
                'stored Level.HIGH is not the current Level.HIGH'))
+check('type.enum_member_identity.float_mixin',
+      lambda: (stored['size'] is upgrade_app.Size.LARGE,
+               'stored Size.LARGE is not the current Size.LARGE'))
+check('type.enum_member_identity.int_mixin',
+      lambda: (stored['rank'] is upgrade_app.Rank.HIGH,
+               'stored Rank.HIGH is not the current Rank.HIGH'))
 for _cls, _name, _tag in (('Color', 'GREEN', 'color'), ('Mode', 'WRITE', 'mode'),
-                          ('Level', 'HIGH', 'level')):
+                          ('Level', 'HIGH', 'level'), ('Size', 'LARGE', 'size'),
+                          ('Rank', 'HIGH', 'rank')):
     check('lookup.enum_member.dict.' + _tag,
           lambda c=_cls, n=_name, t=_tag: expect_equal(
               stored['enum_keyed_dict'].get(getattr(getattr(upgrade_app, c), n), '<missing>'), t))

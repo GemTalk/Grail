@@ -970,7 +970,7 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 	set: a store on it after the build commits with it, as it always has (D3
 	makes runtime stores session-local only for a class statement's class)."
 
-	| key reg existing claimed rebuilding reuse built |
+	| key reg existing claimed rebuilding reuse built root |
 	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
 		^ self ___grailInNamespaceOf___: aModuleName do: [self ___builtSubclassOf: aParent name: aSymbol pyName: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames]].
 	"A session-local module (``__main__'') records nothing: see
@@ -982,14 +982,17 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 	existing := reg at: key otherwise: nil.
 	built := self ___builtThisLoad___: aModuleName.
 	claimed := (built at: 1) includes: key.
+	"Rooted where Class >> ___subclass___: roots it: a float or int base is
+	replaced by its storage class (see ___canonicalSubclassOf:..., #1863)."
+	root := self ___subclassRootOf___: aParent.
 	"No key yet, but a previous build of this module may still hold the class:
 	a module deployed by a Grail before #1802, which recorded none."
 	(existing isNil and: [claimed not]) ifTrue: [
-		existing := self ___previousBuiltClass___: aName module: aModuleName parent: aParent].
+		existing := self ___previousBuiltClass___: aName module: aModuleName parent: root].
 	rebuilding := SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil.
 	reuse := (existing isKindOf: Behavior)
 		and: [claimed not
-		and: [existing superclass == aParent
+		and: [existing superclass == root
 		and: [(rebuilding notNil and: [rebuilding includes: existing]) not
 		and: [(ivNames allSatisfy: [:n |
 				(existing allInstVarNames detect: [:m | m asString = n asString] ifNone: [nil]) notNil])
@@ -1009,7 +1012,7 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 			add: existing.
 		"The subclass link, which ___subclass___ records for a new class and the
 		body re-run has just dropped (see ___canonicalSubclassOf:...)."
-		self ___registerSubclass___: existing of: aParent.
+		self ___registerSubclass___: existing of: root.
 		^ existing].
 	existing := aParent @env1:___subclass___: aSymbol instVarNames: ivNames classInstVarNames: civNames.
 	claimed ifFalse: [
@@ -1622,7 +1625,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	    reuses the identity like a dropped one
 	    (docs/Class_Attribute_Single_Home.md)."
 
-	| key reg existing minted supersedesLive |
+	| key reg existing minted supersedesLive root |
 	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
 		^ self ___grailInNamespaceOf___: aModuleName do: [self ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames]].
 	"A session-local module's class (``__main__'') mints fresh every run, as
@@ -1640,6 +1643,13 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	CPython does (each statement is a fresh type).  ___mintedThisLoad___:
 	is reset by loadModuleFromPath:/reload: right before the body runs."
 	minted := self ___mintedThisLoad___: aModuleName.
+	"The parent the class is ROOTED at, which is not always the one the
+	statement names: ``class PF(float)'' and ``class PI(int)'' are rooted at a
+	storage class, AbstractPyFloat or AbstractPyInt (Class >> ___subclass___:).
+	Compared with the named parent, a float or int subclass -- and an enum
+	mixed with either -- was a base change on every rebuild, minted afresh,
+	and left its stored instances and members on the old class (#1863)."
+	root := self ___subclassRootOf___: aParent.
 	"...and never a class something else in this session is rebuilding right
 	now: a class built by a call reused this run (___builtSubclassOf:...) can
 	also be what a class statement registered -- the class a metaclass or a
@@ -1647,7 +1657,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	namespace in the middle of the other build."
 	((existing isKindOf: Behavior)
 		and: [(minted includes: key) not
-		and: [existing superclass == aParent
+		and: [existing superclass == root
 		and: [((SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil)
 			ifNil: [false] ifNotNil: [:r | r includes: existing]) not]]])
 			ifTrue: [
@@ -1676,7 +1686,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 				(___forgetSubclassesFromModule___:) -- so without this a reused
 				class would vanish from its base's __subclasses__() on the second
 				import.  Idempotent, like the registration itself."
-				self ___registerSubclass___: existing of: aParent.
+				self ___registerSubclass___: existing of: root.
 				^ existing].
 	"A DECLARED BASE CHANGE is refused (docs/Schema_Evolution_Design.md cut 4).
 	Re-minting strands every persisted instance on the old class, silently:
@@ -1703,7 +1713,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	is unchanged binds warm and never enters the build path. The refusal
 	therefore fires on an EDIT, in the session of the developer who made it."
 	(((existing isKindOf: Behavior) and: [(minted includes: key) not])
-		and: [existing superclass ~~ aParent
+		and: [existing superclass ~~ root
 		and: [(self ___canonicalClassKnown___: aParent)
 		and: [(self ___remintedThisSession___ includes: aParent) not
 		and: [(self ___baseChangeAllowed___: key) not
@@ -9224,6 +9234,28 @@ importlib class >> ___subclassRegistry___ [
 		reg := IdentityKeyValueDictionary new.
 		SessionTemps current at: #GrailSubclassRegistry put: reg].
 	^ reg
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___subclassRootOf___: aParent [
+	"The class a ``class X(aParent)'' is rooted at -- its Smalltalk superclass.
+	aParent itself, except for a sealed kernel number: Integer and Float (and
+	their concrete classes) cannot be subclassed with storage of their own, so
+	Class >> ___subclass___: substitutes the Number-sibling that boxes the
+	value, AbstractPyInt or AbstractPyFloat.
+
+	One answer for both sides of a rebuild: the class build that substitutes,
+	and the reuse tests (___canonicalSubclassOf:..., ___builtSubclassOf:...)
+	that ask whether a registered class still descends from what the
+	statement names.  They compared with aParent, so a float or int subclass
+	never matched and was minted afresh on every rebuild (#1863)."
+
+	((aParent == Integer)
+		or: [aParent == SmallInteger or: [aParent == LargeInteger]]) ifTrue: [^ AbstractPyInt].
+	((aParent == Float)
+		or: [aParent == SmallDouble or: [aParent == BinaryFloat]]) ifTrue: [^ AbstractPyFloat].
+	^ aParent
 
 ]
 

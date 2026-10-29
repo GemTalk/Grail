@@ -453,6 +453,18 @@ followed a source edit:
   any class built during `importlib.reload`, which does not mark a module body
   as running.
 
+- **a float or int subclass** — `class PF(float)`, `class PI(int)`, and an
+  enum mixed with either (`class Size(float, Enum)`). Float and Integer are
+  sealed, so `Class >> ___subclass___:` roots such a class at a storage class,
+  `AbstractPyFloat` or `AbstractPyInt`. Both reuse tests — the class
+  statement's and the built class's — compared the registered class's
+  superclass with the parent the statement *named*, so the two never matched
+  and every rebuild minted a new class, stranding stored instances and enum
+  members (#1863). Both sides now ask `importlib ___subclassRootOf___:` where
+  a parent's subclasses are rooted. Every other built-in base (`str`,
+  `complex`, `bytes`, `tuple`, `frozenset`, ...) is rooted where it is named
+  and always kept its class.
+
 Details and the failure table are in the history log, §B.
 
 ### D3. Runtime class-attribute mutation is session-local
