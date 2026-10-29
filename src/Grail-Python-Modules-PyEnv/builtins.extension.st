@@ -878,6 +878,22 @@ builtins >> ___checkMinMaxKeywords___: kwargs positional: positional lessThan: p
 ]
 
 { #category : 'Grail-Format Spec Engine' }
+builtins >> ___checkPresentationType___: aParsedSpec in: someCodes [
+	"Refuse a presentation type the value's formatter does not have --
+	someCodes are the ones it has -- as each of CPython's formatters does right
+	after the parse (Objects/longobject.c, floatobject.c, unicodeobject.c,
+	complexobject.c, through Python/formatter_unicode.c's
+	unknown_presentation_type), naming the value's type: ``bool'', or a
+	subclass's own name, where Grail named the formatter's."
+
+	| type |
+	type := aParsedSpec @env0:at: 8.
+	(type == nil or: [someCodes @env0:includesValue: type]) ifTrue: [^ self].
+	^ ValueError ___signal___: (self ___unknownFormatCode___: type typeName: (aParsedSpec @env0:at: 13))
+
+]
+
+{ #category : 'Grail-Format Spec Engine' }
 builtins >> ___checkStringPresentation___: aParsedSpec [
 	"What CPython's format_string_internal refuses, in its order
 	(Python/formatter_unicode.c:874-901): a sign -- a space has its own
@@ -1563,9 +1579,8 @@ builtins >> ___formatFloatValue___: value parsed: p [
 	digit format is the same (test_enum _MinimalOutputTests.test_format_specs
 	formats a float ReprEnum member with '{:n}')."
 	self ___checkGrouping___: grouping with: type.
+	self ___checkPresentationType___: p in: 'eEfFgGn%'.
 	type @env0:= $n ifTrue: [type := $g].
-	(#($b $o $x $X $c $d $s) @env0:includes: type) ifTrue: [
-		ValueError ___signal___: (self ___unknownFormatCode___: type typeName: 'float')].
 	"Non-finite values format as their str with sign/width only."
 	(value @env0:= value) ifFalse: [
 		digits := 'nan'. neg := false]
@@ -1720,10 +1735,9 @@ builtins >> ___formatIntValue___: value parsed: p [
 	alt := p @env0:at: 4. width := p @env0:at: 5. grouping := p @env0:at: 6.
 	type := p @env0:at: 8.
 	self ___checkGrouping___: grouping with: type.
+	self ___checkPresentationType___: p in: 'bcdoxXneEfFgG%'.
 	(#($e $E $f $F $g $G $%) @env0:includes: type) ifTrue: [
 		^ self ___formatFloatValue___: value @env0:asFloat parsed: p].
-	type @env0:= $s ifTrue: [
-		ValueError ___signal___: 'Unknown format code ''s'' for object of type ''int'''].
 	self ___checkIntegerPresentation___: p.
 	type @env0:= $c ifTrue: [
 		body := String @env0:with: (Character @env0:codePoint: value).
@@ -1824,8 +1838,7 @@ builtins >> ___formatStrValue___: value parsed: p [
 	fill := p @env0:at: 1. align := p @env0:at: 2. width := p @env0:at: 5.
 	precision := p @env0:at: 7. type := p @env0:at: 8.
 	self ___checkGrouping___: (p @env0:at: 6) with: (type @env0:ifNil: [$s]).
-	(type == nil or: [type @env0:= $s]) ifFalse: [
-		ValueError ___signal___: (self ___unknownFormatCode___: type typeName: 'str')].
+	self ___checkPresentationType___: p in: 's'.
 	self ___checkStringPresentation___: p.
 	body := value.
 	((precision == nil) @env0:not and: [body @env0:size @env0:> precision]) ifTrue: [
@@ -3429,14 +3442,14 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 			"The fraction-grouping position needs the SAME diagnosis as the
 			integer one: ``{:.,_f}'' is a mixed pair, not trailing junk."
 			self ___checkDuplicateGrouping___: spec at: i first: fracGrouping]].
-	i @env0:<= n ifTrue: [
-		c := spec @env0:at: i.
-		(#($b $c $d $e $E $f $F $g $G $n $o $s $x $X $%) @env0:includes: c) ifFalse: [
-			^ self ___badFormatSpec___: spec typeName: typeName].
-		type := c.
-		i := i @env0:+ 1].
-	i @env0:<= n ifTrue: [
+	"CPython's last step (Python/formatter_unicode.c:303-325): more than one
+	character left is an invalid specifier, and exactly one is the
+	presentation type, whatever it is.  Each type's formatter refuses a code it
+	does not have (___checkPresentationType___:in:), so ``format(3, 'q')'' is
+	``Unknown format code 'q' ...''; Grail called it an invalid specifier."
+	(n @env0:- i) @env0:>= 1 ifTrue: [
 		^ self ___badFormatSpec___: spec typeName: typeName].
+	i @env0:= n ifTrue: [type := spec @env0:at: i].
 	(type @env0:= $n and: [grouping @env0:notNil or: [fracGrouping @env0:notNil]]) ifTrue: [
 		ValueError ___signal___: ('Cannot specify ''' @env0:,
 			(String @env0:with: (grouping @env0:ifNil: [fracGrouping])) @env0:, ''' with ''n''.')].
@@ -3445,9 +3458,10 @@ builtins >> ___parseFormatSpec___: spec typeName: typeName [
 	the sign in slot 3 was WRITTEN, not the '-' default; CPython refuses an
 	explicit one, '-' included, for a str and for an int's 'c'.  A ``z'' is
 	refused by the int and str formatters, where CPython refuses it, by
-	presentation type including the absent one: ``format(3, 'z')'' raises."
+	presentation type including the absent one: ``format(3, 'z')'' raises.
+	Slot 13: the value's type name, for the formatters' own messages."
 	^ { fill. align. sign. alt. width. grouping. precision. type. fracGrouping.
-		noNegZero. zeroAlign. signGiven }
+		noNegZero. zeroAlign. signGiven. typeName }
 
 ]
 
@@ -4886,11 +4900,16 @@ builtins >> ___typeNamespaceValue___: aValue named: aKey [
 { #category : 'Grail-Format Spec Engine' }
 builtins >> ___unknownFormatCode___: aType typeName: aTypeName [
 	"CPython's message for a presentation type the value does not have,
-	naming the code (Python/formatter_unicode.c unknown_presentation_type):
-	``Unknown format code 'x' for object of type 'float'''.  Grail's left the
-	code out."
+	naming the code (Python/formatter_unicode.c:13-29,
+	unknown_presentation_type): ``Unknown format code 'x' for object of type
+	'float'''.  A code outside the printable ASCII range is written in hex,
+	``'\x20ac'''.  Grail's left the code out."
 
-	^ 'Unknown format code ''' @env0:, (String @env0:with: aType)
+	| code |
+	code := (aType @env0:codePoint @env0:> 32 and: [aType @env0:codePoint @env0:< 128])
+		ifTrue: [String @env0:with: aType]
+		ifFalse: ['\x' @env0:, (aType @env0:codePoint @env0:printStringRadix: 16) @env0:asLowercase].
+	^ 'Unknown format code ''' @env0:, code
 		@env0:, ''' for object of type ''' @env0:, aTypeName @env0:, ''''
 
 ]
