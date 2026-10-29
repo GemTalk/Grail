@@ -677,6 +677,20 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 		self ___validateContext___: node body fn: fnSym loop: true scopes: scopes.
 		self ___validateContext___: node orelse fn: fnSym loop: inLoop scopes: scopes.
 		^ self].
+	"A bare ``except:'' has to be the last handler -- ``default 'except:' must
+	be last'', over that handler -- checked where CPython's code generator
+	checks it, after the try's body and else and before each handler's own
+	(Python/codegen.c:2436-2463).  Grail compiled it, so the later handlers
+	could never run (test_exceptions testSyntaxErrorOffset)."
+	(node isKindOf: TryAst) ifTrue: [
+		self ___validateContext___: node body fn: fnSym loop: inLoop scopes: scopes.
+		self ___validateContext___: node orelse fn: fnSym loop: inLoop scopes: scopes.
+		node handlers doWithIndex: [:handler :index |
+			(handler type isNil and: [index < node handlers size]) ifTrue: [
+				^ self ___syntaxError___: 'default ''except:'' must be last' node: handler].
+			self ___validateContext___: handler fn: fnSym loop: inLoop scopes: scopes].
+		self ___validateContext___: node finalbody fn: fnSym loop: inLoop scopes: scopes.
+		^ self].
 	node class allInstVarNames doWithIndex: [:n :i |
 		n == #parent ifFalse: [
 			self ___validateContext___: (node instVarAt: i) fn: fnSym loop: inLoop scopes: scopes]]
