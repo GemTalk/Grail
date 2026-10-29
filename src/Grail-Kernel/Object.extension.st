@@ -761,6 +761,17 @@ Object class >> ___grailPerformClassAttrSetter___: setterSym on: aClass with: aV
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailReadonlyAttributes___ [
+	"The attributes of this type that cannot be set or deleted, which CPython
+	declares as READONLY members: either is ``readonly attribute''
+	(Python/structmember.c:159-163, PyMember_SetOne).  See Object >>
+	___refuseReadonlyAttribute___:."
+
+	^ #()
+
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailRecordSelfSendOverride___: aSymbol [
 	"Note that this class needed a dispatcher for aSymbol (see
@@ -1031,6 +1042,26 @@ Object class >> ___grailTakesNoArguments___ [
 	class >> value:value: refuses."
 
 	^ self == Object
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailUnwritableAttributes___ [
+	"The attributes of this type that cannot be set or deleted, which CPython
+	declares as getters with no setter: either is ``attribute 'x' of 'T'
+	objects is not writable'', T naming the type that declares it
+	(Objects/descrobject.c:248-258, getset_set), which
+	___grailUnwritableOwnerName___ answers."
+
+	^ #()
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailUnwritableOwnerName___ [
+	"The Python name of the type that declares ___grailUnwritableAttributes___."
+
+	^ 'object'
+
 ]
 
 { #category : 'Grail-Self-Send Overrides' }
@@ -1646,6 +1677,27 @@ Object >> ___pyStarToArray___ [
 			^ TypeError @env1:___signal___: 'Value after * must be an iterable, not '
 				, (self @env1:___pyTypeNameForError___) asString].
 	^ (list @env1:__new__: self) asArray
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___refuseReadonlyAttribute___: aName [
+	"Refuse a store or a delete of one of the receiver's read-only attributes,
+	in CPython's words for it, or answer the receiver.
+
+	Grail keeps the state of several builtins in attributes of the same names
+	-- a complex's real and imag, a slice's start, stop and step, a
+	classmethod's __func__ -- so an ordinary store rewrote the value itself:
+	after ``c = 1j; c.imag = 5'', c was 5j (test_descr test_properties)."
+
+	| name |
+	name := aName @env0:asString.
+	(self @env0:class ___grailReadonlyAttributes___ includes: name)
+		ifTrue: [^ AttributeError @env1:___signal___: 'readonly attribute'].
+	(self @env0:class ___grailUnwritableAttributes___ includes: name) ifTrue: [
+		^ AttributeError @env1:___signal___: 'attribute ''' , name , ''' of '''
+			, self @env0:class ___grailUnwritableOwnerName___ , ''' objects is not writable'].
+	^ self
 
 ]
 

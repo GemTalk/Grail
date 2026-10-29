@@ -13818,6 +13818,8 @@ Object >> ___pyAttrDelete___: aName [
 			'type object ''' @env0:, self @env0:name @env0:asString @env0:,
 				''' has no attribute ''' @env0:, aName @env0:asString @env0:, ''''
 	].
+	"A type's read-only attributes refuse a delete as they refuse a store."
+	self @env0:___refuseReadonlyAttribute___: aName.
 	"Enum MEMBERS are immutable: ``del member.name`` / ``del member.value``
 	raises AttributeError (CPython -- members are read-only).  A member is
 	an INSTANCE of an enum class (one carrying a registry record); deletion
@@ -15638,6 +15640,7 @@ Object >> ___pyAttrStore___: aName put: aValue [
 	1-arg setter METHODS) and the call form (a PropertyDescriptor bound as a
 	class attribute).  Returns false when no property claims aName, leaving the
 	ordinary instance-dict store below untouched (AttributeStoreTestCase)."
+	self @env0:___refuseReadonlyAttribute___: aName.
 	(self ___pyInstanceDescriptorStore___: aName put: aValue) ifTrue: [^ aValue].
 	"Python __slots__ → GemStone named instance variables.  For a
 	PythonInstance receiver: a name declared in __slots__ (i.e. a named

@@ -44,6 +44,21 @@ AbstractPyInt class >> ___builtinValueClass___ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+AbstractPyInt class >> ___grailUnwritableAttributes___ [
+	"int's getters, which a subclass of int inherits -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('real' 'imag' 'numerator' 'denominator')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+AbstractPyInt class >> ___grailUnwritableOwnerName___ [
+
+	^ 'int'
+
+]
+
 { #category : 'Grail-Introspection' }
 AbstractPyInt class >> ___pythonValueAttrs___ [
 	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__ --

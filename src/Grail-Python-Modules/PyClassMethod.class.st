@@ -7,6 +7,29 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Attribute Access' }
+PyClassMethod class >> ___grailReadonlyAttributes___ [
+	"Classmethod's members and its __isabstractmethod__ getter -- see Object class >> ___grailReadonlyAttributes___."
+
+	^ #('__func__' '__wrapped__')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+PyClassMethod class >> ___grailUnwritableAttributes___ [
+	"classmethod's members and its __isabstractmethod__ getter -- see Object class >> ___grailUnwritableAttributes___."
+
+	^ #('__isabstractmethod__')
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+PyClassMethod class >> ___grailUnwritableOwnerName___ [
+
+	^ 'classmethod'
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 PyClassMethod class >> ___pythonValueAttrs___ [
 	^ IdentitySet new
