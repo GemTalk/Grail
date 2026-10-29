@@ -770,6 +770,21 @@ PythonTokenizer >> ___literalError___: aMessage literal: lit [
 ]
 
 { #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___literalKindAt___: aStart [
+	"What CPython's messages call the literal whose prefix starts at aStart: an
+	f-string, a t-string, or a string, bytes included."
+
+	| index prefixCharacter |
+	index := aStart.
+	[(prefixCharacter := source at: index) isLetter] whileTrue: [
+		('fF' includesValue: prefixCharacter) ifTrue: [^ 'f-string'].
+		('tT' includesValue: prefixCharacter) ifTrue: [^ 't-string'].
+		index := index + 1].
+	^ 'string'
+
+]
+
+{ #category : 'Grail-tokenizing' }
 PythonTokenizer >> ___noteTabError___ [
 	"Remember where the FIRST inconsistent indentation is -- the start of its
 	line, where CPython puts a TabError -- and go on by the real column."
@@ -826,13 +841,14 @@ PythonTokenizer >> ___unicodeNameToCodePoint___: aName [
 { #category : 'Grail-tokenizing' }
 PythonTokenizer >> ___unterminatedString___: isTriple from: aStart [
 	"CPython's unterminated-string errors: at the start of the literal, its
-	prefix included, naming the line where the lexer found the end missing."
+	prefix included, naming the line where the lexer found the end missing.
+	An f-string or a t-string is named as one (Parser/lexer/lexer.c:1499-1513):
+	Grail called ``f'abc'' an unterminated string literal (test_fstring
+	test_not_closing_quotes)."
 
 	^ PythonParser ___signal___: SyntaxError
-		message: (isTriple
-			ifTrue: ['unterminated triple-quoted string literal (detected at line ']
-			ifFalse: ['unterminated string literal (detected at line '])
-			, line printString , ')'
+		message: 'unterminated ' , (isTriple ifTrue: ['triple-quoted '] ifFalse: ['']) ,
+			(self ___literalKindAt___: aStart) , ' literal (detected at line ' , line printString , ')'
 		in: source from: aStart to: nil
 
 ]
