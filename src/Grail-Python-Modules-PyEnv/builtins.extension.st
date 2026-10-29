@@ -6272,13 +6272,16 @@ builtins >> _pow: positional kw: kwargs [
 	(nargs == 2) ifTrue: [
 		x := args @env0:at: 1.
 		y := args @env0:at: 2.
-		^ x __pow__: y
+		^ x ___binOpPow___: y
 	].
 	(nargs == 3) ifTrue: [
-		| tn ni r unwrap |
+		| tn ni r unwrap modulus |
 		x := args @env0:at: 1.
 		y := args @env0:at: 2.
 		z := args @env0:at: 3.
+		"A None modulus is the 2-argument form, for a class's __pow__
+		(Objects/typeobject.c:10134-10135) as for int's (Objects/longobject.c:4906)."
+		z == None ifTrue: [^ x ___binOpPow___: y].
 		"A bool or an int subclass's instance is an int: ``pow(2, True, 5)'' is
 		2 and ``pow(2, IntEnum.X, 5)'' uses X's value.  Both reached the
 		TypeError below, because the fast path takes Integers only.  An operand
@@ -6295,25 +6298,32 @@ builtins >> _pow: positional kw: kwargs [
 		x := unwrap @env0:value: x.
 		y := unwrap @env0:value: y.
 		z := unwrap @env0:value: z.
+		"The MODULUS of int's own pow may be an int subclass's instance whatever
+		that class overrides (Objects/longobject.c:4903-4904): no __pow__ of the
+		modulus's is asked, so ``pow(2, 3, I(5))'' is 3 for ``class I(int)''
+		with a __pow__ of its own."
+		modulus := ((z @env0:isKindOf: Integer) @env0:not
+			@env0:and: [self ___isPyIntOperand___: z])
+				ifTrue: [z __index__] ifFalse: [z].
 		"3-arg pow is modular exponentiation, defined only for integers.  Any
 		non-int operand raises CPython's TypeError naming all three types
 		(test_fractions test_three_argument_pow), rather than silently doing
 		(x**y) % z."
 		((x @env0:isKindOf: Integer) and: [(y @env0:isKindOf: Integer)
-			and: [z @env0:isKindOf: Integer]]) ifTrue: [
-			(z @env0:= 0) ifTrue: [
+			and: [modulus @env0:isKindOf: Integer]]) ifTrue: [
+			(modulus @env0:= 0) ifTrue: [
 				ValueError ___signal___: 'pow() 3rd argument cannot be 0'].
 			"Negative exponent: CPython (3.8+) defines pow(x, -k, z) as the
 			modular inverse of x**k modulo z — an integer — rather than the
 			float x**-k.  Raises ValueError when x is not invertible mod z."
 			(y @env0:< 0) ifTrue: [
 				| inv |
-				inv := self ___modInverse___: x mod: z.
-				^ self ___modPow___: inv exp: (y @env0:negated) mod: z].
+				inv := self ___modInverse___: x mod: modulus.
+				^ self ___modPow___: inv exp: (y @env0:negated) mod: modulus].
 			"Positive exponent: modular exponentiation (square-and-multiply)
 			so a huge exponent never materializes x**y -- test_pow
 			test_big_exp does pow(a, b, prime) with b up to 2**50000."
-			^ self ___modPow___: x exp: y mod: z].
+			^ self ___modPow___: x exp: y mod: modulus].
 		"A COMPLEX operand is a ValueError, not the TypeError below: CPython
 		reaches complex's power slot, which rejects a modulus outright --
 		``pow(1+1j, 1+1j, 1+1j)'' is ValueError('complex modulo') (test_pow).
@@ -7729,9 +7739,13 @@ builtins >> ord: aString [
 { #category : 'Grail-Built-in Functions' }
 builtins >> pow: x _: y [
 	"Python builtin pow(x, y) — fixed-arity fast path (2-arg form).
-	The 3-arg form `pow(x, y, z)` lives at `_pow:kw:`."
+	The 3-arg form `pow(x, y, z)` lives at `_pow:kw:`.
 
-	^ x __pow__: y
+	``x ** y'', reflected __rpow__ included: CPython's builtin is
+	PyNumber_Power (Python/bltinmodule.c:2197-2202), the operator's own
+	dispatch, so ``pow(2, I(3))'' runs ``class I(int)'''s __rpow__."
+
+	^ x ___binOpPow___: y
 
 ]
 
