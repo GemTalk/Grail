@@ -550,17 +550,18 @@ PythonParser >> ___checkComprehension___: node generators: gens [
 	than by the inner node's own rules."
 	gens do: [:gen |
 		(self ___firstNamedExprIn___: gen iter) ifNotNil: [:ne |
-			SyntaxError signal:
-				'assignment expression cannot be used in a comprehension iterable expression']].
+			^ self ___syntaxError___:
+				'assignment expression cannot be used in a comprehension iterable expression'
+				node: ne]].
 
 	"Rules 2 and 3 differ only by WHICH for-clause binds the name, so build
 	the two name sets once per position.  boundUpTo/boundAfter are computed
 	per generator index i: names bound at or before i, and names bound after."
 	1 to: gens size do: [:i |
-		boundUpTo := Set new.
-		boundAfter := Set new.
+		boundUpTo := OrderedCollection new.
+		boundAfter := OrderedCollection new.
 		1 to: gens size do: [:j |
-			self ___collectStoreNamesIn___: (gens at: j) target
+			self ___collectBoundNamesIn___: (gens at: j) target
 				into: (j <= i ifTrue: [boundUpTo] ifFalse: [boundAfter])].
 		(gens at: i) ifs do: [:cond |
 			self ___checkNamedExprsIn___: cond
@@ -569,11 +570,11 @@ PythonParser >> ___checkComprehension___: node generators: gens [
 	"The element expression comes last, so EVERY for-clause is 'earlier' for
 	it -- ``{(j := 0) for i in range(5) for j in range(5)}'' is a rebound
 	iteration variable, not an inner-loop rebind."
-	boundUpTo := Set new.
-	gens do: [:gen | self ___collectStoreNamesIn___: gen target into: boundUpTo].
+	boundUpTo := OrderedCollection new.
+	gens do: [:gen | self ___collectBoundNamesIn___: gen target into: boundUpTo].
 	(self ___comprehensionElementsOf___: node) do: [:elt |
 		self ___checkNamedExprsIn___: elt
-			boundUpTo: boundUpTo boundAfter: Set new]
+			boundUpTo: boundUpTo boundAfter: OrderedCollection new]
 
 ]
 
@@ -762,29 +763,33 @@ PythonParser >> ___checkImportTarget___ [
 { #category : 'Grail-validation' }
 PythonParser >> ___checkNamedExprsIn___: node boundUpTo: earlier boundAfter: later [
 	"Raise for any assignment expression under node whose target collides with
-	a comprehension for-clause target.  A name bound by an EARLIER (or the
-	same) clause is a rebound iteration variable; one bound by a LATER clause
-	is the inner-loop case, which CPython words the other way round -- the
-	inner loop rebinds the walrus target, not the reverse."
+	a comprehension for-clause target; earlier and later are the names those
+	targets bind, as their NameAsts.  A name bound by an EARLIER (or the same)
+	clause is a rebound iteration variable, over the walrus target; one bound
+	by a LATER clause is the inner-loop case, which CPython words the other
+	way round -- the inner loop rebinds the walrus target, not the reverse --
+	and places over that loop's target."
 
 	| found |
 	found := OrderedCollection new.
 	self ___collectNamedExprsIn___: node into: found.
 	found do: [:ne |
-		| target name |
+		| target rebinder |
 		target := ne target.
 		(target isKindOf: NameAst) ifTrue: [
 			"Detected on the MANGLED id (what CPython binds), reported with the
 			 WRITTEN spelling (what CPython quotes) -- see NameAst >> writtenId."
-			name := target id asString.
-			(earlier includes: name) ifTrue: [
-				SyntaxError signal:
+			(earlier detect: [:each | each id = target id] ifNone: [nil]) isNil ifFalse: [
+				^ self ___syntaxError___:
 					'assignment expression cannot rebind comprehension iteration variable ''' ,
-					target writtenId asString , ''''].
-			(later includes: name) ifTrue: [
-				SyntaxError signal:
+					target writtenId asString , ''''
+					node: target].
+			rebinder := later detect: [:each | each id = target id] ifNone: [nil].
+			rebinder isNil ifFalse: [
+				^ self ___syntaxError___:
 					'comprehension inner loop cannot rebind assignment expression target ''' ,
-					target writtenId asString , '''']]]
+					target writtenId asString , ''''
+					node: rebinder]]]
 
 ]
 
@@ -939,6 +944,31 @@ PythonParser >> ___checkUnparenthesizedComprehension___: aMessage elements: anAr
 ]
 
 { #category : 'Grail-validation' }
+PythonParser >> ___collectBoundNamesIn___: node into: aCollection [
+	"Names BOUND by a for-clause target, as their NameAsts, in source order.
+
+	Only NameAsts in STORE context count, which is what distinguishes the
+	names a target binds from the ones it merely reads: in
+	``for a, (*b, c[d+e::f(g)], h.i) in j'' the target binds a and b, while c,
+	d, e, f, g and h are loads inside a subscript or attribute and bind
+	nothing.  setStoreCtx: marks exactly the bound ones, recursing through
+	tuples, lists and starred targets and no further."
+
+	node isNil ifTrue: [^ self].
+	node isString ifTrue: [^ self].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		node do: [:each | self ___collectBoundNamesIn___: each into: aCollection].
+		^ self].
+	(node isKindOf: AbstractNode) ifFalse: [^ self].
+	((node isKindOf: NameAst) and: [node ctx isKindOf: StoreAst]) ifTrue: [
+		aCollection add: node].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			self ___collectBoundNamesIn___: (node instVarAt: i) into: aCollection]]
+
+]
+
+{ #category : 'Grail-validation' }
 PythonParser >> ___collectNamedExprsIn___: node into: aColl [
 	"Every NamedExprAst under node, including inside lambdas and nested
 	comprehensions -- both are positions CPython still rejects."
@@ -953,31 +983,6 @@ PythonParser >> ___collectNamedExprsIn___: node into: aColl [
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self ___collectNamedExprsIn___: (node instVarAt: i) into: aColl]]
-
-]
-
-{ #category : 'Grail-validation' }
-PythonParser >> ___collectStoreNamesIn___: node into: aSet [
-	"Names BOUND by a for-clause target, as Strings.
-
-	Only NameAsts in STORE context count, which is what distinguishes the
-	names a target binds from the ones it merely reads: in
-	``for a, (*b, c[d+e::f(g)], h.i) in j'' the target binds a and b, while c,
-	d, e, f, g and h are loads inside a subscript or attribute and bind
-	nothing.  setStoreCtx: marks exactly the bound ones, recursing through
-	tuples, lists and starred targets and no further."
-
-	node isNil ifTrue: [^ self].
-	node isString ifTrue: [^ self].
-	(node isKindOf: SequenceableCollection) ifTrue: [
-		node do: [:each | self ___collectStoreNamesIn___: each into: aSet].
-		^ self].
-	(node isKindOf: AbstractNode) ifFalse: [^ self].
-	((node isKindOf: NameAst) and: [node ctx isKindOf: StoreAst]) ifTrue: [
-		aSet add: node id asString].
-	node class allInstVarNames doWithIndex: [:nameSym :i |
-		nameSym == #parent ifFalse: [
-			self ___collectStoreNamesIn___: (node instVarAt: i) into: aSet]]
 
 ]
 
