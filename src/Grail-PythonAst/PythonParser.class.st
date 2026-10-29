@@ -2146,6 +2146,7 @@ PythonParser >> ___parseDictOrSetDisplay___ [
 	].
 
 	first := self parseStarExpression.
+	self ___checkStrayEquals___: first.
 
 	"Dict: key : value"
 	(self matchOp: ':') ifTrue: [
@@ -2211,6 +2212,7 @@ PythonParser >> ___parseDictOrSetDisplay___ [
 	[self matchOp: ','] whileTrue: [
 		(self atOp: '}') ifFalse: [
 			elts add: self parseStarExpression.
+			self ___checkStrayEquals___: elts last.
 		].
 	].
 	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'
@@ -2328,6 +2330,7 @@ PythonParser >> ___parseListDisplay___ [
 	].
 
 	expr := self parseStarExpression.
+	self ___checkStrayEquals___: expr.
 
 	"List comprehension — either ``for`` or ``async for`` opens the clause"
 	((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
@@ -2349,6 +2352,7 @@ PythonParser >> ___parseListDisplay___ [
 	[self matchOp: ','] whileTrue: [
 		(self atOp: ']') ifFalse: [
 			elts add: self parseStarExpression.
+			self ___checkStrayEquals___: elts last.
 		].
 	].
 	self ___checkUnparenthesizedComprehension___: 'did you forget parentheses around the comprehension target?'
