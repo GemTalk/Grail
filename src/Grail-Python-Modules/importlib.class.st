@@ -2159,6 +2159,43 @@ importlib class >> ___compilationSymbolList___ [
 
 ]
 
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___compileUnstamped___: aSource on: aClass category: aCategory [
+	"Compile aSource into aClass's own environment-0 method dictionary, as
+	Behavior >> compileMethod:dictionaries:category:environmentId: does for a
+	method that is not a session method -- WITHOUT the change stamp it records
+	beside it.
+
+	With a GsPackagePolicy enabled, as it is for every Grail user (the kernel
+	extensions are session methods), that compile also stamps the method in the
+	user's session-method package: GsPackage >> setStamp:forBehavior:forMethod:
+	adds aClass to a COMMITTED dictionary.  So compiling a module's
+	``__transient__'' readers (___installTransientGlobals___:on:) wrote to the
+	repository: a session-local ``__main__'' that declared any made its script
+	start dirty, and a script that then committed made its throwaway class
+	persistent through the stamp.  A top file choosing its app with
+	gemdb.use_namespace() is built session-local first, so it never re-ran clean
+	(#1861).  Nothing reads the stamp of a method no package holds.
+
+	The kernel's own unpackaged path, minus the stamp: under the class's
+	security policy, into the class's persistent dictionary."
+
+	| meth |
+	GsObjectSecurityPolicy
+		setCurrent: aClass objectSecurityPolicy
+		while: [
+			meth := aClass
+				compileMethod: aSource
+				dictionaries: System myUserProfile symbolList
+				category: aCategory asSymbol
+				intoMethodDict: nil
+				intoCategories: nil
+				environmentId: 0
+				methodDictEnvId: 0].
+	^ meth
+
+]
+
 { #category : 'Grail-Module Loading' }
 importlib class >> ___compilingFile___: pathString do: aBlock [
 	"Answer what aBlock answers -- the reading or compiling of the module at
@@ -4777,33 +4814,27 @@ importlib class >> ___installTransientGlobals___: aNames on: aModuleClass [
 	lit := String new.
 	aNames do: [:n | lit := lit , ' #''' , n asString , ''''].
 	lit := '#(' , lit , ' )'.
-	aModuleClass
-		compileMethod: 'dynamicInstVarAt: aSymbol
+	self ___compileUnstamped___: 'dynamicInstVarAt: aSymbol
 	| v |
 	(' , lit , ' includesIdentical: aSymbol) ifTrue: [^ self ___transientGlobals___ at: aSymbol otherwise: nil].
 	v := super dynamicInstVarAt: aSymbol.
 	v == nil ifFalse: [^ v].
 	^ self ___spilledGlobalAt___: aSymbol'
-			dictionaries: System myUserProfile symbolList
-			category: 'Grail-Transient Globals'
-			environmentId: 0.
-	aModuleClass
-		compileMethod: 'dynamicInstVarAt: aSymbol put: aValue
+		on: aModuleClass
+		category: 'Grail-Transient Globals'.
+	self ___compileUnstamped___: 'dynamicInstVarAt: aSymbol put: aValue
 	(' , lit , ' includesIdentical: aSymbol) ifTrue: [
 		(aValue == nil or: [aValue == _remoteNil])
 			ifTrue: [self ___transientGlobals___ removeKey: aSymbol ifAbsent: []]
 			ifFalse: [self ___transientGlobals___ at: aSymbol put: aValue].
 		^ aValue].
 	^ super dynamicInstVarAt: aSymbol put: aValue'
-			dictionaries: System myUserProfile symbolList
-			category: 'Grail-Transient Globals'
-			environmentId: 0.
-	aModuleClass
-		compileMethod: 'dynamicInstanceVariables
+		on: aModuleClass
+		category: 'Grail-Transient Globals'.
+	self ___compileUnstamped___: 'dynamicInstanceVariables
 	^ self ___storedGlobalNames___ , self ___transientGlobals___ keys asArray'
-			dictionaries: System myUserProfile symbolList
-			category: 'Grail-Transient Globals'
-			environmentId: 0
+		on: aModuleClass
+		category: 'Grail-Transient Globals'
 
 ]
 
