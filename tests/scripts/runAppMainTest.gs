@@ -20,11 +20,14 @@ output pushnew runAppMainTest.out
 ! its class, which gained the new attribute's code; a different top file in the
 ! same app is refused.  Session 3 cleans up.
 !
-! Sessions 1c-2d hold the same no-write rule to two more top files, each in its
-! own session (a session chooses one app): leads.py, which chooses its app with
-! a leading gemdb.use_namespace() and declares __transient__ globals (#1861),
-! and local.py, a session-local script with __transient__ globals, which must
-! not write at all.
+! Sessions 1b-2d hold the same no-write rule to three more top files, each in
+! its own session (a session chooses one app): funcs.py, whose functions take
+! parameters, annotations and defaults and whose body stores a class attribute
+! and deletes a def -- each leaves a committed record a re-run must not rewrite
+! (#1862); leads.py, which chooses its app with a leading
+! gemdb.use_namespace() and declares __transient__ globals (#1861); and
+! local.py, a session-local script with __transient__ globals, which must not
+! write at all.  Session 3 also edits funcs.py and checks the record follows.
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
@@ -58,6 +61,7 @@ root := '/tmp/' , app.
 apps := UserGlobals at: #'GrailApps' otherwise: nil.
 apps ifNotNil: [
   apps removeKey: app ifAbsent: [].
+  apps removeKey: app , '_funcs' ifAbsent: [].
   apps removeKey: app , '_leads' ifAbsent: []].
 System commitTransaction ifFalse: [self error: 'the self-heal commit failed'].
 [GsFile createServerDirectory: root] on: Error do: [:e | e return: nil].
@@ -130,6 +134,73 @@ b2 = B()
 '.
 write value: root , '/other.py' value: 'print("a different top file")
 '.
+"#1862: every kind of committed function and body record a top file's body
+leaves -- a parameter list, annotations, defaults (and an assignment to them),
+a class attribute stored from the body, a def the body deletes."
+write value: root , '/funcs.py' value: 'import gemdb
+import gemstone
+import inspect
+
+__transient__ = ["nc"]
+nc = gemstone.needs_commit
+
+def plain(x, y):
+    return x + y
+
+def typed(x: int) -> int:
+    return x
+
+def defaulted(x=3, *, y=4):
+    return x + y
+
+def adjusted(x=1):
+    return x
+adjusted.__defaults__ = (2,)
+
+def gone(z):
+    return z
+del gone
+
+class K:
+    def m(self, x):
+        return x
+K.tag = "k"
+
+def call(f):
+    return f()
+made = call(lambda: 1)
+'.
+"Session 3's edit of it: plain goes, typed takes another parameter."
+write value: root , '/funcs_v2.py' value: 'import gemdb
+import gemstone
+import inspect
+
+__transient__ = ["nc"]
+nc = gemstone.needs_commit
+
+def typed(x: int, y: str) -> int:
+    return x
+
+def defaulted(x=3, *, y=4):
+    return x + y
+
+def adjusted(x=1):
+    return x
+adjusted.__defaults__ = (2,)
+
+def gone(z):
+    return z
+del gone
+
+class K:
+    def m(self, x):
+        return x
+K.tag = "k"
+
+def call(f):
+    return f()
+made = call(lambda: 1)
+'.
 "#1861: the app chosen by the top file''s first statement, with transients."
 write value: root , '/leads.py' value: 'import gemdb
 gemdb.use_namespace("' , app , '_leads")
@@ -162,6 +233,43 @@ failures isEmpty ifFalse: [
   out nextPutAll: 'Session 1 failures:'; cr.
   failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
 UserGlobals at: #'Grail_appmain_failures' put: failures size.
+System commit
+%
+logout
+
+! ===========================================================================
+! Session 1b -- funcs.py's first run, in its own app.
+! ===========================================================================
+login
+run
+| dir |
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
+%
+level 0
+run
+| out failures check root app main |
+out := GsFile stdout.
+failures := OrderedCollection new.
+check := [:label :ok |
+  ok
+    ifTrue: [out nextPutAll: '  PASS  ', label; cr]
+    ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
+root := UserGlobals at: #'Grail_appmain_root'.
+app := UserGlobals at: #'Grail_appmain_app'.
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app , '_funcs'.
+main := importlib runPath: root , '/funcs.py'.
+check value: 'funcs.py runs as its app''s __main__'
+  value: (((importlib ___grailNamespace___ at: #'GrailCanonicalModules') at: '__main__' otherwise: nil) == main).
+check value: 'its first run commits' value: System commitTransaction.
+failures isEmpty ifFalse: [
+  out nextPutAll: 'Session 1b failures:'; cr.
+  failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
+System abortTransaction.
+UserGlobals at: #'Grail_appmain_failures'
+  put: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1) + failures size.
 System commit
 %
 logout
@@ -285,6 +393,72 @@ check value: 'abort leaves a transient global alone' value: (r @env1:__getitem__
 
 failures isEmpty ifFalse: [
   out nextPutAll: 'Session 2 failures:'; cr.
+  failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
+System abortTransaction.
+UserGlobals at: #'Grail_appmain_failures'
+  put: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1) + failures size.
+System commit
+%
+logout
+
+! ===========================================================================
+! Session 2b -- funcs.py re-run unchanged writes nothing (#1862).
+! ===========================================================================
+login
+run
+| dir |
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
+%
+level 0
+run
+| out failures check root app ns committed main rec r evalPython |
+out := GsFile stdout.
+failures := OrderedCollection new.
+check := [:label :ok |
+  ok
+    ifTrue: [out nextPutAll: '  PASS  ', label; cr]
+    ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
+root := UserGlobals at: #'Grail_appmain_root'.
+app := UserGlobals at: #'Grail_appmain_app'.
+evalPython := [:src |
+  | moduleScope scope module |
+  moduleScope := SymbolDictionary new.
+  scope := System myUserProfile symbolList copy.
+  scope insertObject: moduleScope at: 1.
+  module := ModuleAst parseSource: src.
+  module useTempsForBlock: false.
+  module ensureModuleScope: moduleScope.
+  module evaluateWithScope: scope].
+ns := importlib ___grailAppNamed___: app , '_funcs' create: false.
+committed := (ns at: #'GrailCanonicalModules') at: '__main__'.
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app , '_funcs'.
+main := importlib runPath: root , '/funcs.py'.
+check value: 'funcs.py re-runs over its committed globals' value: main == committed.
+check value: 'its body starts clean (gemstone.needs_commit)'
+  value: (main dynamicInstVarAt: #'nc') == false.
+check value: 'an unchanged re-run of parameterised functions writes nothing'
+  value: System needsCommit not.
+rec := (ns at: #'GrailCanonicalFunctionMeta' otherwise: nil)
+  ifNotNil: [:reg | reg at: '__main__' otherwise: nil].
+check value: 'the committed signature record still names its functions'
+  value: (rec notNil and: [(rec at: #signatures otherwise: nil)
+    ifNil: [false]
+    ifNotNil: [:d | #('plain' 'typed' 'defaulted') allSatisfy: [:k | d includesKey: k]]]).
+r := evalPython value: 'import inspect, __main__ as m
+(str(inspect.signature(m.plain)), str(inspect.signature(m.typed)), m.defaulted(), m.adjusted(), m.K.tag, hasattr(m, "gone"))'.
+check value: 'and the re-run functions keep their signatures, defaults and body stores'
+  value: ((r @env1:__getitem__: 0) = '(x, y)'
+    and: [(r @env1:__getitem__: 1) = '(x: int) -> int'
+    and: [(r @env1:__getitem__: 2) = 7
+    and: [(r @env1:__getitem__: 3) = 2
+    and: [(r @env1:__getitem__: 4) = 'k'
+    and: [(r @env1:__getitem__: 5) == false]]]]]).
+check value: 'reading them back writes nothing either' value: System needsCommit not.
+failures isEmpty ifFalse: [
+  out nextPutAll: 'Session 2b failures:'; cr.
   failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
 System abortTransaction.
 UserGlobals at: #'Grail_appmain_failures'
@@ -442,10 +616,66 @@ __b2 = gemdb.root["b2"]
   System abortTransaction.
   importlib ___grailUseApp___: nil.
   apps := UserGlobals at: #'GrailApps' otherwise: nil.
+  apps ifNotNil: [apps removeKey: app ifAbsent: []].
+  #('/main.py' '/main_v2.py' '/other.py') do: [:f |
+    [GsFile removeServerFile: root , f] on: Error do: [:e | e return: nil]].
+  failures isEmpty ifFalse: [
+    out nextPutAll: 'Session 3 failures:'; cr.
+    failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
+  UserGlobals at: #'Grail_appmain_failures'
+    put: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1) + failures size.
+  System commit].
+%
+logout
+
+! ===========================================================================
+! Session 3b -- an edited funcs.py: its function record follows the edit.
+! ===========================================================================
+login
+run
+| dir |
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
+%
+level 0
+run
+| out failures check root app ns main rec sigs apps |
+out := GsFile stdout.
+failures := OrderedCollection new.
+check := [:label :ok |
+  ok
+    ifTrue: [out nextPutAll: '  PASS  ', label; cr]
+    ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
+root := UserGlobals at: #'Grail_appmain_root'.
+app := UserGlobals at: #'Grail_appmain_app'.
+[
+  (GsFile openWriteOnServer: root , '/funcs.py')
+    nextPutAll: (GsFile openReadOnServer: root , '/funcs_v2.py') contents;
+    close.
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app , '_funcs'.
+  main := importlib runPath: root , '/funcs.py'.
+  ns := importlib ___grailNamespace___.
+  rec := (ns at: #'GrailCanonicalFunctionMeta' otherwise: nil)
+    ifNotNil: [:reg | reg at: '__main__' otherwise: nil].
+  sigs := rec ifNotNil: [:x | x at: #signatures otherwise: nil].
+  check value: 'an edit drops the record of a function it no longer defines'
+    value: (sigs notNil and: [(sigs includesKey: 'plain') not]).
+  check value: 'and records the new signature of one it changed'
+    value: (sigs notNil and: [(sigs at: 'typed' otherwise: nil) ~= nil
+      and: [(main ___functionSignatureFor___: 'typed') = (sigs at: 'typed')]]).
+  check value: 'the edited run commits' value: System commitTransaction.
+] ensure: [
+  System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
+  System abortTransaction.
+  importlib ___grailUseApp___: nil.
+  apps := UserGlobals at: #'GrailApps' otherwise: nil.
   apps ifNotNil: [
     apps removeKey: app ifAbsent: [].
+    apps removeKey: app , '_funcs' ifAbsent: [].
     apps removeKey: app , '_leads' ifAbsent: []].
-  #('/main.py' '/main_v2.py' '/other.py' '/leads.py' '/local.py') do: [:f |
+  #('/main.py' '/main_v2.py' '/other.py' '/funcs.py' '/funcs_v2.py' '/leads.py' '/local.py') do: [:f |
     [GsFile removeServerFile: root , f] on: Error do: [:e | e return: nil]].
   [GsFile removeServerDirectory: root] on: Error do: [:e | e return: nil].
   failures addAll: ((1 to: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1)) collect: [:i | 'an earlier session''s check']).

@@ -248,6 +248,39 @@ importlib class >> ___baseChangeAllowed___: aKey [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___beginBodyRecordsOf___: aModuleName [
+	"aModuleName's body is about to run (___pushInitializingModule___:), so the
+	committed records its PREVIOUS run left -- function signatures, annotations
+	and defaults (module >> ___recordFunctionMeta___:name:value:), body class
+	attribute stores, deleted defs, direct metaclasses (___bodyRecordKeys___) --
+	are about to be superseded.  This run records into a FRESH, session-local
+	set instead; ___endBodyRecordsOf___: writes it over the committed one when
+	the body is done, and only where it differs.
+
+	They used to be dropped here and written again as the body ran.  Each of
+	those is a write even when the record comes out the same, and an app's
+	``__main__'' runs its body on every run, so a top file with one function
+	taking parameters never re-ran clean -- and ``with gemdb.transaction():''
+	refuses a dirty session (#1862).  A deployed module rebuilt in place took
+	the same two writes for nothing.
+
+	A session-local module (``__main__'' outside an app) records nothing, so it
+	gets no set; a body run again before it finished (a re-entrant import)
+	starts the set afresh, as dropping the record did."
+
+	| pend |
+	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
+	(self ___isSessionLocalModule___: aModuleName) ifTrue: [
+		pend isNil ifFalse: [pend removeKey: aModuleName asString ifAbsent: []].
+		^ self].
+	pend isNil ifTrue: [
+		pend := KeyValueDictionary new.
+		SessionTemps current at: #'GrailPendingBodyRecords' put: pend].
+	pend at: aModuleName asString put: { self ___grailNamespace___ . KeyValueDictionary new }
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___beginDepCollection___: aName [
 	"A Set: a body that runs a long loop -- a reloader serving an app from
 	module level -- imports the same modules over and over, and every one of
@@ -373,6 +406,74 @@ importlib class >> ___bindBodySubmodulesOf___: aName [
 			path isNil
 				ifTrue: [self @env1:___loadNamespacePackageIfAny___: n]
 				ifFalse: [self loadModuleFromPath: path name: n]]]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___bodyRecord___: aRegistryKey of: aModuleName [
+	"aModuleName's record in the registry aRegistryKey names (one of
+	___bodyRecordKeys___), or nil: while its body runs in this session, the
+	record that run is building (___beginBodyRecordsOf___:), otherwise the
+	committed one.  PEEKS."
+
+	| recs reg |
+	recs := self ___pendingBodyRecordsOf___: aModuleName.
+	recs isNil ifFalse: [^ recs at: aRegistryKey otherwise: nil].
+	reg := self ___grailNamespace___ at: aRegistryKey otherwise: nil.
+	reg isNil ifTrue: [^ nil].
+	^ reg at: aModuleName asString otherwise: nil
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___bodyRecord___: aRegistryKey of: aModuleName put: aRecord [
+	"Make aRecord aModuleName's record in the registry aRegistryKey names: the
+	running body's own set when there is one (___beginBodyRecordsOf___:),
+	committed by ___endBodyRecordsOf___: if it changed anything, otherwise the
+	committed registry itself."
+
+	| recs reg |
+	recs := self ___pendingBodyRecordsOf___: aModuleName.
+	recs isNil ifFalse: [^ recs at: aRegistryKey put: aRecord].
+	reg := self ___grailNamespace___ at: aRegistryKey otherwise: nil.
+	reg isNil ifTrue: [
+		reg := RcKeyValueDictionary new.
+		self ___grailNamespace___ at: aRegistryKey put: reg].
+	^ reg at: aModuleName asString put: aRecord
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___bodyRecordKeys___ [
+	"The registries a module body's run records into, each an
+	RcKeyValueDictionary in the module's namespace keyed by the module's name:
+	what a session that binds the deployed module, and so never runs its body,
+	needs from it (docs/Persistent_Modules_and_Classes.md par.4.3)."
+
+	^ #(#'GrailCanonicalFunctionMeta' #'GrailCanonicalBodyClassAttrs'
+		#'GrailCanonicalBodyDeletedDefs' #'GrailCanonicalDirectMetaclasses')
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___bodyRecordsIn___: ns key: aRegistryKey do: aBlock [
+	"Evaluate aBlock with each module name and its record in ns's registry
+	aRegistryKey, as ___bodyRecord___:of: reads them: a module whose body is
+	running in this session contributes the record that run is building, not
+	its superseded committed one."
+
+	| reg pend |
+	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
+	reg := ns at: aRegistryKey otherwise: nil.
+	reg isNil ifFalse: [
+		reg keysAndValuesDo: [:modName :rec | | entry |
+			entry := pend isNil ifTrue: [nil] ifFalse: [pend at: modName asString otherwise: nil].
+			(entry notNil and: [(entry at: 1) == ns]) ifFalse: [aBlock value: modName value: rec]]].
+	pend isNil ifFalse: [
+		pend keysAndValuesDo: [:modName :entry |
+			(entry at: 1) == ns ifTrue: [
+				((entry at: 2) at: aRegistryKey otherwise: nil)
+					ifNotNil: [:rec | aBlock value: modName value: rec]]]]
 
 ]
 
@@ -2584,6 +2685,37 @@ importlib class >> ___dropUnbuiltClasses___: aModuleName [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___endBodyRecordsOf___: aModuleName [
+	"aModuleName's body has finished (___popInitializingModule___): write what it
+	recorded (___beginBodyRecordsOf___:) over its committed records, registry by
+	registry, and only where the two differ (___sameBodyRecord___:as:), so a run
+	that recorded what the last one did writes nothing.  A record the run did
+	not make again is dropped, as dropping it before the run did."
+
+	| pend entry ns recs |
+	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
+	pend isNil ifTrue: [^ self].
+	entry := pend removeKey: aModuleName asString ifAbsent: [nil].
+	entry isNil ifTrue: [^ self].
+	ns := entry at: 1.
+	recs := entry at: 2.
+	self ___bodyRecordKeys___ do: [:key |
+		| reg old new |
+		new := recs at: key otherwise: nil.
+		reg := ns at: key otherwise: nil.
+		old := reg isNil ifTrue: [nil] ifFalse: [reg at: aModuleName asString otherwise: nil].
+		(self ___sameBodyRecord___: old as: new) ifFalse: [
+			new isNil
+				ifTrue: [reg removeKey: aModuleName asString ifAbsent: []]
+				ifFalse: [
+					reg isNil ifTrue: [
+						reg := RcKeyValueDictionary new.
+						ns at: key put: reg].
+					reg at: aModuleName asString put: new]]]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___endDepCollection___: aName [
 	"Pop aName's collector and answer the names its body imported (nil when
 	the top is not aName's, which only an unbalanced begin/end would cause)."
@@ -2851,8 +2983,10 @@ importlib class >> ___flushPersistentState___ [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___forgetBodyClassAttrsOf___: aModuleName [
-	"Drop aModuleName's recorded body stores before its body runs again --
-	see ___recordBodyClassAttr___:name:value:.  PEEKS the registry."
+	"Drop aModuleName's committed record of its body's class-attribute stores
+	-- see ___recordBodyClassAttr___:name:value:.  A body that runs again
+	supersedes it through ___beginBodyRecordsOf___: instead.  PEEKS the
+	registry."
 
 	| reg |
 	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
@@ -2863,8 +2997,10 @@ importlib class >> ___forgetBodyClassAttrsOf___: aModuleName [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___forgetBodyDeletedDefsOf___: aModuleName [
-	"Drop aModuleName's recorded deletions before its body runs again -- see
-	___recordBodyDeletedDef___:of:.  PEEKS the registry."
+	"Drop aModuleName's committed record of the defs its body deleted -- see
+	___recordBodyDeletedDef___:of:.  For an un-deploy
+	(___forgetCanonicalModule___:); a body that runs again supersedes it
+	through ___beginBodyRecordsOf___: instead.  PEEKS the registry."
 
 	| reg |
 	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyDeletedDefs' otherwise: nil.
@@ -2940,9 +3076,10 @@ importlib class >> ___forgetCanonicalModule___: aModuleName [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___forgetDirectMetaclassesOf___: aModuleName [
-	"Drop aModuleName's direct-metaclass records before its body runs again --
-	see ___recordDirectMetaclass___:meta:.  PEEKS the registry: a module that
-	recorded none leaves nothing to write."
+	"Drop aModuleName's committed direct-metaclass records -- see
+	___recordDirectMetaclass___:meta:.  A body that runs again supersedes them
+	through ___beginBodyRecordsOf___: instead.  PEEKS the registry: a module
+	that recorded none leaves nothing to write."
 
 	| reg |
 	reg := self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
@@ -2953,10 +3090,11 @@ importlib class >> ___forgetDirectMetaclassesOf___: aModuleName [
 
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___forgetFunctionMetaOf___: aModuleName [
-	"Drop aModuleName's committed signature and annotation record before its
-	body runs again (module >> ___recordFunctionMeta___:name:value:), so a
-	function the new source no longer defines leaves nothing behind.  PEEKS
-	the registry."
+	"Drop aModuleName's committed signature and annotation record (module >>
+	___recordFunctionMeta___:name:value:).  A body that runs again supersedes
+	it through ___beginBodyRecordsOf___: instead, which drops a function the
+	new source no longer defines without rewriting the rest.  PEEKS the
+	registry."
 
 	| reg |
 	reg := self ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
@@ -7306,6 +7444,21 @@ importlib class >> ___parentBindingOf___: aDottedName [
 
 ]
 
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___pendingBodyRecordsOf___: aModuleName [
+	"The records aModuleName's running body is building
+	(___beginBodyRecordsOf___:), registry key -> record, or nil when its body
+	is not running in this session."
+
+	| pend entry |
+	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
+	pend isNil ifTrue: [^ nil].
+	entry := pend at: aModuleName asString otherwise: nil.
+	entry isNil ifTrue: [^ nil].
+	^ entry at: 2
+
+]
+
 { #category : 'Grail-Persistent State' }
 importlib class >> ___persistentModuleState___ [
 	"Committed (module dotted-name -> (global-name -> value)) store backing
@@ -7329,9 +7482,16 @@ importlib class >> ___persistentModuleState___ [
 
 { #category : 'Grail-Module Loading' }
 importlib class >> ___popInitializingModule___ [
-	| stack |
+	"The body on top of the stack has finished.  Once it is no longer running at
+	all -- a re-entrant import of a module can push it twice -- what it recorded
+	is committed (___endBodyRecordsOf___:)."
+
+	| stack finished |
 	stack := self ___initializingModuleStack___.
-	stack @env0:isEmpty ifFalse: [stack @env0:removeLast]
+	stack @env0:isEmpty ifTrue: [^ self].
+	finished := stack @env0:removeLast.
+	(stack @env0:anySatisfy: [:each | each @env0:= finished])
+		ifFalse: [self @env0:___endBodyRecordsOf___: finished]
 
 ]
 
@@ -7486,10 +7646,7 @@ importlib class >> ___pushInitializingModule___: aName [
 	only runs when canonical classes are enabled and this must run always."
 
 	self @env0:___forgetSubclassesFromModule___: aName @env0:asString.
-	self @env0:___forgetDirectMetaclassesOf___: aName @env0:asString.
-	self @env0:___forgetBodyClassAttrsOf___: aName @env0:asString.
-	self @env0:___forgetBodyDeletedDefsOf___: aName @env0:asString.
-	self @env0:___forgetFunctionMetaOf___: aName @env0:asString.
+	self @env0:___beginBodyRecordsOf___: aName @env0:asString.
 	self @env0:___markBodyClassAttrsReplayed___: aName @env0:asString.
 	module @env0:___forgetSessionGlobalsOf___: aName @env0:asString.
 	self ___initializingModuleStack___ @env0:addLast: aName @env0:asString
@@ -7730,11 +7887,11 @@ importlib class >> ___recordBodyClassAttr___: aClass name: aSym value: aValue [
 	that must not be swept into a commit.
 	Anything else stays exactly as before: session-local, gone on bind.
 
-	Keyed by the module whose body made the store, and dropped when that body
-	runs again (___forgetBodyClassAttrsOf___:), as the direct-metaclass record
+	Keyed by the module whose body made the store, and superseded when that
+	body runs again (___beginBodyRecordsOf___:), as the direct-metaclass record
 	is."
 
-	| origin reg inner attrs |
+	| origin inner attrs |
 	origin := self ___initializingModuleName___.
 	origin isNil ifTrue: [^ self].
 	(self ___isSessionLocalModule___: origin) ifTrue: [^ self].
@@ -7745,14 +7902,10 @@ importlib class >> ___recordBodyClassAttr___: aClass name: aSym value: aValue [
 	cache this session never built."
 	((aSym asString size >= 5) and: [(aSym asString copyFrom: 1 to: 5) = '_abc_'])
 		ifTrue: [^ self].
-	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
-	reg isNil ifTrue: [
-		reg := RcKeyValueDictionary new.
-		self ___grailNamespace___ at: #'GrailCanonicalBodyClassAttrs' put: reg].
-	inner := reg at: origin asString otherwise: nil.
+	inner := self ___bodyRecord___: #'GrailCanonicalBodyClassAttrs' of: origin.
 	inner isNil ifTrue: [
 		inner := IdentityKeyValueDictionary new.
-		reg at: origin asString put: inner].
+		self ___bodyRecord___: #'GrailCanonicalBodyClassAttrs' of: origin put: inner].
 	attrs := inner at: aClass otherwise: nil.
 	attrs isNil ifTrue: [
 		attrs := KeyValueDictionary new.
@@ -7771,24 +7924,20 @@ importlib class >> ___recordBodyDeletedDef___: aSym of: aModule [
 	session's pickletools still had it (test_pickletools test__all__).
 
 	The same shape as ___recordBodyClassAttr___:name:value:: an RcKeyValueDictionary
-	in the module's namespace, keyed by the module's name, dropped when that body
-	runs again (___forgetBodyDeletedDefsOf___:), and never for a session-local
+	in the module's namespace, keyed by the module's name, superseded when that
+	body runs again (___beginBodyRecordsOf___:), and never for a session-local
 	module (``__main__''), which nothing binds.  The value is the module and the
 	names it deleted: the module is the committed instance a bind adopts, and the
 	session tombstone is keyed by that identity."
 
-	| origin reg rec |
+	| origin rec |
 	origin := self ___initializingModuleName___.
 	origin isNil ifTrue: [^ self].
 	(self ___isSessionLocalModule___: origin) ifTrue: [^ self].
-	reg := self ___grailNamespace___ at: #'GrailCanonicalBodyDeletedDefs' otherwise: nil.
-	reg isNil ifTrue: [
-		reg := RcKeyValueDictionary new.
-		self ___grailNamespace___ at: #'GrailCanonicalBodyDeletedDefs' put: reg].
-	rec := reg at: origin asString otherwise: nil.
+	rec := self ___bodyRecord___: #'GrailCanonicalBodyDeletedDefs' of: origin.
 	(rec isNil or: [(rec at: 1) ~~ aModule]) ifTrue: [
 		rec := Array with: aModule with: IdentitySet new.
-		reg at: origin asString put: rec].
+		self ___bodyRecord___: #'GrailCanonicalBodyDeletedDefs' of: origin put: rec].
 	(rec at: 2) add: aSym asSymbol
 
 ]
@@ -7867,22 +8016,18 @@ importlib class >> ___recordDirectMetaclass___: aClass meta: aMetaclass [
 	ran _TypedDictMeta, ``total=False'' reached __init_subclass__ as a stray
 	keyword, and every jinja2 Token -- a NamedTuple -- lost its fields.
 
-	Keyed by the module whose body made the call, and dropped when that body
-	runs again (___forgetDirectMetaclassesOf___:), so a rebuild re-records what
+	Keyed by the module whose body made the call, and superseded when that
+	body runs again (___beginBodyRecordsOf___:), so a rebuild re-records what
 	it mints rather than accumulating the classes it superseded."
 
-	| origin reg inner |
+	| origin inner |
 	origin := self ___initializingModuleName___.
 	origin isNil ifTrue: [^ self].
 	((aClass isKindOf: Behavior) and: [aMetaclass isKindOf: Behavior]) ifFalse: [^ self].
-	reg := self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' otherwise: nil.
-	reg isNil ifTrue: [
-		reg := RcKeyValueDictionary new.
-		self ___grailNamespace___ at: #'GrailCanonicalDirectMetaclasses' put: reg].
-	inner := reg at: origin asString otherwise: nil.
+	inner := self ___bodyRecord___: #'GrailCanonicalDirectMetaclasses' of: origin.
 	inner isNil ifTrue: [
 		inner := IdentityKeyValueDictionary new.
-		reg at: origin asString put: inner].
+		self ___bodyRecord___: #'GrailCanonicalDirectMetaclasses' of: origin put: inner].
 	inner at: aClass put: aMetaclass
 
 ]
@@ -8492,15 +8637,13 @@ importlib class >> ___restoreAllBodyClassAttrs___ [
 importlib class >> ___restoreAllBodyClassAttrsIn___: ns [
 	"___restoreAllBodyClassAttrs___ for one namespace."
 
-	| reg st done ov |
-	reg := ns at: #'GrailCanonicalBodyClassAttrs' otherwise: nil.
-	reg isNil ifTrue: [^ self].
+	| st done ov |
 	st := SessionTemps current.
 	done := st at: #'GrailBodyClassAttrsReplayed' otherwise: nil.
 	done isNil ifTrue: [
 		done := Set new.
 		st at: #'GrailBodyClassAttrsReplayed' put: done].
-	reg keysAndValuesDo: [:modName :inner |
+	self ___bodyRecordsIn___: ns key: #'GrailCanonicalBodyClassAttrs' do: [:modName :inner |
 		(done includes: modName asString) ifFalse: [
 			done add: modName asString.
 			inner keysAndValuesDo: [:cls :attrs |
@@ -8528,15 +8671,13 @@ importlib class >> ___restoreAllBodyDeletedDefsIn___: ns [
 	reason; a module whose body ran in this session tombstoned its names first
 	hand, and marking them again changes nothing.  PEEKS the registry."
 
-	| reg st done |
-	reg := ns at: #'GrailCanonicalBodyDeletedDefs' otherwise: nil.
-	reg isNil ifTrue: [^ self].
+	| st done |
 	st := SessionTemps current.
 	done := st at: #'GrailBodyDeletedDefsReplayed' otherwise: nil.
 	done isNil ifTrue: [
 		done := Set new.
 		st at: #'GrailBodyDeletedDefsReplayed' put: done].
-	reg keysAndValuesDo: [:modName :rec |
+	self ___bodyRecordsIn___: ns key: #'GrailCanonicalBodyDeletedDefs' do: [:modName :rec |
 		(done includes: modName asString) ifFalse: [
 			done add: modName asString.
 			(rec at: 2) do: [:sym | (rec at: 1) @env1:___markGlobalDeleted___: sym]]].
@@ -8598,12 +8739,11 @@ importlib class >> ___restoreAllCanonicalMetaclassesIn___: ns [
 	"And the classes a module body minted by calling a metaclass directly --
 	see ___recordDirectMetaclass___:meta:.  Keyed by the class itself, since
 	such a class has no registry name."
-	(ns at: #'GrailCanonicalDirectMetaclasses' otherwise: nil) ifNotNil: [:direct |
-		direct keysAndValuesDo: [:modName :inner |
-			inner keysAndValuesDo: [:cls :meta |
-				((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
-					and: [(cls @env1:___grailOwnMetaclass___) isNil]])
-						ifTrue: [cls @env1:___grailSetMetaclass___: meta]]]].
+	self ___bodyRecordsIn___: ns key: #'GrailCanonicalDirectMetaclasses' do: [:modName :inner |
+		inner keysAndValuesDo: [:cls :meta |
+			((cls isKindOf: Behavior) and: [(meta isKindOf: Behavior)
+				and: [(cls @env1:___grailOwnMetaclass___) isNil]])
+					ifTrue: [cls @env1:___grailSetMetaclass___: meta]]].
 	^ self
 
 ]
@@ -8871,6 +9011,70 @@ importlib class >> ___runTopFile___: pathString [
 		ifNotNil: [:key | self ___sessionModuleClasses___ removeKey: key].
 	self ___grailSetApp___: restart appName.
 	^ self loadModuleFromPath: pathString name: '__main__'
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___sameBlockContext___: aBlockOrContext as: otherBlockOrContext [
+	"Do two blocks, or two of the contexts they close over, capture the same
+	objects?  Slot by slot and by identity, up the chain of enclosing contexts
+	-- for a module function's defaults block that is one context, holding the
+	module itself."
+
+	| a b parentIndex |
+	a := aBlockOrContext.
+	b := otherBlockOrContext.
+	a == b ifTrue: [^ true].
+	(a isNil or: [b isNil]) ifTrue: [^ false].
+	a class == b class ifFalse: [^ false].
+	a _basicSize = b _basicSize ifFalse: [^ false].
+	1 to: a _basicSize do: [:i | (a _at: i) == (b _at: i) ifFalse: [^ false]].
+	(a isKindOf: ExecBlock) ifTrue: [
+		^ self ___sameBlockContext___: a staticLink as: b staticLink].
+	parentIndex := a class allInstVarNames indexOf: #'parent'.
+	parentIndex = 0 ifTrue: [^ false].
+	^ self ___sameBlockContext___: (a instVarAt: parentIndex) as: (b instVarAt: parentIndex)
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___sameBodyRecord___: aRecord as: otherRecord [
+	"Would committing otherRecord over aRecord change what a later session reads
+	from it?  Structural over the shapes ___bodyRecordKeys___'s records take --
+	dictionaries, arrays and sets of plain data, classes, modules and blocks --
+	so that a body run again recording the same things compares equal.
+
+	A block (an ``__annotate__'' or defaults block) is made afresh each time
+	its body runs, so it compares by what it would do: the same compiled code
+	over the same receiver and the same captured values
+	(___sameBlockContext___:as:)."
+
+	| a b |
+	a := aRecord.
+	b := otherRecord.
+	a == b ifTrue: [^ true].
+	(a isNil or: [b isNil]) ifTrue: [^ false].
+	a class == b class ifFalse: [^ false].
+	(a isKindOf: AbstractDictionary) ifTrue: [
+		a size = b size ifFalse: [^ false].
+		a keysAndValuesDo: [:k :v | | w |
+			w := b at: k otherwise: nil.
+			(self ___sameBodyRecord___: v as: w) ifFalse: [^ false]].
+		^ true].
+	(a isKindOf: ExecBlock) ifTrue: [
+		^ a method == b method
+			and: [a selfValue == b selfValue
+			and: [self ___sameBlockContext___: a as: b]]].
+	(a isKindOf: CharacterCollection) ifTrue: [^ a = b].
+	(a isKindOf: SequenceableCollection) ifTrue: [
+		a size = b size ifFalse: [^ false].
+		1 to: a size do: [:i |
+			(self ___sameBodyRecord___: (a at: i) as: (b at: i)) ifFalse: [^ false]].
+		^ true].
+	(a isKindOf: IdentitySet) ifTrue: [
+		^ a size = b size and: [a allSatisfy: [:each | b includes: each]]].
+	(a isKindOf: Behavior) ifTrue: [^ false].
+	^ a = b
 
 ]
 
