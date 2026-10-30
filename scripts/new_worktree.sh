@@ -49,14 +49,24 @@ CLAUDE_PASSWORD='swordfish'
 # with "'Python.h' file not found".  Find it once, bake it into the worktree's
 # .setenv.  Empty is tolerated: the worktree still works for everything except
 # the dynmods target.
+#
+# The first python3-config on PATH is not taken on trust: a version manager's
+# shim (mise, pyenv, asdf) answers to the name but fails when no version is
+# selected, and baking its directory in broke every worktree's first install.
+# A candidate counts only if `--includes` succeeds and names an include dir.
 detect_python_bin_dir() {
-    if command -v python3-config >/dev/null 2>&1; then
-        dirname "$(command -v python3-config)"; return
-    fi
+    local d IFS=:
+    for d in $PATH; do
+        python3_config_works "$d" && { echo "$d"; return; }
+    done
     for d in /opt/homebrew/opt/python@3.*/libexec/bin /usr/local/opt/python@3.*/libexec/bin; do
-        [ -x "$d/python3-config" ] && { echo "$d"; return; }
+        python3_config_works "$d" && { echo "$d"; return; }
     done
     echo ''
+}
+python3_config_works() {
+    [ -n "$1" ] && [ -x "$1/python3-config" ] &&
+        "$1/python3-config" --includes 2>/dev/null | grep -q -- '-I'
 }
 PYTHON_BIN_DIR=$(detect_python_bin_dir)
 

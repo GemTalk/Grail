@@ -406,19 +406,22 @@ grep -l 'Login failed' out/shard_*.out               # must be empty
 
 ### The CPU is the shared resource now: the launch gate
 
-Sessions stopped being scarce; the CPU did not. This machine has 18 cores of
-which 6 are performance cores, one suite already saturates those, and four
-worktrees each starting a suite drove the load high enough for tests to fail
-on TIMEOUT. Neither runner could see it, because each counts only its own
-sessions.
+Sessions stopped being scarce; the CPU did not. This machine has 8 cores
+(`hw.ncpu`), 4 of them performance cores. One suite already saturates those,
+and four worktrees each starting a suite drove the load high enough for tests
+to fail on TIMEOUT. Neither runner could see it, because each counts only its
+own sessions.
 
 So both runners pass a machine-wide **launch gate** (`scripts/launch_gate.sh`)
 before each SUnit shard and each CPython-suite module. A launch is held while
 the 1-minute load average is over `GRAIL_MAX_LOAD` (default: two thirds of the
-CPUs, **12** here) **or** the Grail test gems running on the machine, from
-every worktree, number `GRAIL_MAX_TEST_GEMS` or more (default CPUs − 2,
-**16** here). Both signals, because the load average lags by a minute (four
-suites started together all read a quiet machine) while the gem count is
+CPUs) **or** the Grail test gems running on the machine, from every worktree,
+number `GRAIL_MAX_TEST_GEMS` or more (default CPUs − 2). Neither default falls
+below what the runner itself runs at once, so on 8 cores the limits a run
+prints are load 10 / gems 8 for `run_tests.sh` (8 shards) and load 6 / gems 6
+for the CPython suite (4 workers): one suite alone fills the machine. Both
+signals, because the load average lags by a minute (four suites started
+together all read a quiet machine) while the gem count is
 instant but blind to everything that is not Grail. A hold lasts at most
 `GRAIL_LAUNCH_WAIT_MAX` (600s), then launches anyway; a run alone on the
 machine is never held back by its own limits.
@@ -481,8 +484,8 @@ cache at or above 1 GiB makes the stone **fail to start** until that limit is
 raised — on this machine by the `shared-memory` LaunchDaemons in
 `/Library/LaunchDaemons`, which re-apply at boot. Note also that a bigger cache
 is not free speed: raising it from 98 MB to 4 GiB moved the suite 373s → 403s,
-because the suite is CPU-bound (8 shards draw 620–760% CPU on 6 performance
-cores), not page-cache-bound.
+because the suite is CPU-bound (8 shards drew 620–760% CPU when measured),
+not page-cache-bound.
 
 Read the suite line for what it now says. It reports the shards that ANSWERED,
 not the ones requested, and an incomplete run says `main suite INCOMPLETE` in

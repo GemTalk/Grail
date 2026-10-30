@@ -36,11 +36,10 @@
 #
 # Settings (all optional):
 #   GRAIL_MAX_LOAD        load-average limit; 0 turns the whole gate off.
-#                         Default: two thirds of the online CPUs (12 on an
-#                         18-CPU machine), never less than the runner's own
+#                         Default: two thirds of the online CPUs, never less than the runner's own
 #                         concurrency + 2.  Unset under CI (CI=true), where
 #                         the runner is not shared, the gate is OFF.
-#   GRAIL_MAX_TEST_GEMS   test-gem limit.  Default: CPUs - 2 (16 here), never
+#   GRAIL_MAX_TEST_GEMS   test-gem limit.  Default: CPUs - 2, never
 #                         less than the runner's own concurrency, so a run
 #                         cannot hold itself back.
 #   GRAIL_LAUNCH_SPACING  seconds between launches while other runs are

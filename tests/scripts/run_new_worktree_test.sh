@@ -91,6 +91,23 @@ check "a missing product directory is refused" \
   '[ "$STATUS" -ne 0 ] && grep -q "does not exist: $SCRATCH/no-such-product" "$SCRATCH/out"'
 check "before anything is created" '[ ! -e "$WORKTREES/wt/seven" ]'
 
+# --- 6. a python3-config that is on PATH but does not work -------------------
+# A version manager's shim (mise, pyenv, asdf) answers to python3-config but
+# fails when no version is selected, so the first one on PATH is not
+# necessarily one that can name Python.h.  Every worktree made here baked the
+# shim's directory into .setenv and its first install.sh died on dynmods.
+SHIMS="$SCRATCH/shims"; GOOD="$SCRATCH/python/bin"
+mkdir -p "$SHIMS" "$GOOD"
+printf '#!/bin/sh\necho "No version is set for shim: python3-config" >&2\nexit 126\n' \
+  > "$SHIMS/python3-config"
+printf '#!/bin/sh\necho "-I%s/include"\n' "$SCRATCH/python" > "$GOOD/python3-config"
+chmod +x "$SHIMS/python3-config" "$GOOD/python3-config"
+PATH="$SHIMS:$GOOD:$PATH" new_worktree "$REPO" wt/eight --user Claude5
+check "the worktree's PATH leads with the python3-config that works" \
+  'case "$(setenv_of wt/eight PATH)" in "$GOOD":*) true;; *) false;; esac'
+check "and not with the shim that fails" \
+  '! grep -q "$SHIMS" "$WORKTREES/wt/eight/.setenv"'
+
 if [ "$FAILED" = 0 ]; then
   echo "new-worktree: all checks passed"
 else
