@@ -19,6 +19,12 @@ output pushnew runAppMainTest.out
 ! transient alone.  Session 3 runs an EDITED top file: the stored instance keeps
 ! its class, which gained the new attribute's code; a different top file in the
 ! same app is refused.  Session 3 cleans up.
+!
+! Sessions 1c-2d hold the same no-write rule to two more top files, each in its
+! own session (a session chooses one app): leads.py, which chooses its app with
+! a leading gemdb.use_namespace() and declares __transient__ globals (#1861),
+! and local.py, a session-local script with __transient__ globals, which must
+! not write at all.
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
@@ -50,7 +56,9 @@ app := 'grail_appmain_' , user.
 root := '/tmp/' , app.
 "Self-heal: dropping the app drops everything a killed run left in it."
 apps := UserGlobals at: #'GrailApps' otherwise: nil.
-apps ifNotNil: [apps removeKey: app ifAbsent: []].
+apps ifNotNil: [
+  apps removeKey: app ifAbsent: [].
+  apps removeKey: app , '_leads' ifAbsent: []].
 System commitTransaction ifFalse: [self error: 'the self-heal commit failed'].
 [GsFile createServerDirectory: root] on: Error do: [:e | e return: nil].
 UserGlobals at: #'Grail_appmain_root' put: root.
@@ -122,6 +130,23 @@ b2 = B()
 '.
 write value: root , '/other.py' value: 'print("a different top file")
 '.
+"#1861: the app chosen by the top file''s first statement, with transients."
+write value: root , '/leads.py' value: 'import gemdb
+gemdb.use_namespace("' , app , '_leads")
+import gemstone
+
+__transient__ = ["nc", "scratch"]
+nc = gemstone.needs_commit
+scratch = "session"
+greeting = "hello"
+'.
+"No app at all: a session-local __main__ with transients."
+write value: root , '/local.py' value: 'import gemstone
+
+__transient__ = ["scratch"]
+scratch = "session"
+greeting = "hello"
+'.
 
 System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
 main := importlib runPath: root , '/main.py'.
@@ -137,6 +162,45 @@ failures isEmpty ifFalse: [
   out nextPutAll: 'Session 1 failures:'; cr.
   failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
 UserGlobals at: #'Grail_appmain_failures' put: failures size.
+System commit
+%
+logout
+
+! ===========================================================================
+! Session 1c -- leads.py's first run: use_namespace chooses the app.
+! ===========================================================================
+login
+run
+| dir |
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
+%
+level 0
+run
+| out failures check root app main |
+out := GsFile stdout.
+failures := OrderedCollection new.
+check := [:label :ok |
+  ok
+    ifTrue: [out nextPutAll: '  PASS  ', label; cr]
+    ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
+root := UserGlobals at: #'Grail_appmain_root'.
+app := UserGlobals at: #'Grail_appmain_app'.
+"No app from the environment: linked topaz keeps one gem for every login."
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
+main := importlib runPath: root , '/leads.py'.
+check value: 'use_namespace restarts leads.py in its app'
+  value: (importlib ___grailCurrentAppName___ = (app , '_leads')
+    and: [((importlib ___grailNamespace___ at: #'GrailCanonicalModules') at: '__main__' otherwise: nil) == main]).
+check value: 'its first run commits' value: System commitTransaction.
+failures isEmpty ifFalse: [
+  out nextPutAll: 'Session 1c failures:'; cr.
+  failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
+System abortTransaction.
+UserGlobals at: #'Grail_appmain_failures'
+  put: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1) + failures size.
 System commit
 %
 logout
@@ -230,6 +294,89 @@ System commit
 logout
 
 ! ===========================================================================
+! Session 2c -- leads.py re-run unchanged writes nothing (#1861).
+! ===========================================================================
+login
+run
+| dir |
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
+%
+level 0
+run
+| out failures check root app ns committed main |
+out := GsFile stdout.
+failures := OrderedCollection new.
+check := [:label :ok |
+  ok
+    ifTrue: [out nextPutAll: '  PASS  ', label; cr]
+    ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
+root := UserGlobals at: #'Grail_appmain_root'.
+app := UserGlobals at: #'Grail_appmain_app'.
+ns := importlib ___grailAppNamed___: app , '_leads' create: false.
+committed := (ns at: #'GrailCanonicalModules') at: '__main__'.
+"No app from the environment: linked topaz keeps one gem for every login."
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
+main := importlib runPath: root , '/leads.py'.
+check value: 'leads.py re-runs over its app''s committed globals' value: main == committed.
+check value: 'its body starts clean (gemstone.needs_commit)'
+  value: (main dynamicInstVarAt: #'nc') == false.
+check value: 'a use_namespace top file''s unchanged re-run writes nothing'
+  value: System needsCommit not.
+check value: 'its transient global was rebound by this run'
+  value: (main dynamicInstVarAt: #'scratch') = 'session'.
+failures isEmpty ifFalse: [
+  out nextPutAll: 'Session 2c failures:'; cr.
+  failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
+System abortTransaction.
+UserGlobals at: #'Grail_appmain_failures'
+  put: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1) + failures size.
+System commit
+%
+logout
+
+! ===========================================================================
+! Session 2d -- a session-local script's __transient__ writes nothing.
+! ===========================================================================
+login
+run
+| dir |
+dir := importlib grailDir.
+dir ifNotNil: [
+  (System gemEnvironmentVariable: 'GRAIL_DIR') = dir ifFalse: [
+    System gemEnvironmentVariable: 'GRAIL_DIR' put: dir]]
+%
+level 0
+run
+| out failures check root app main |
+out := GsFile stdout.
+failures := OrderedCollection new.
+check := [:label :ok |
+  ok
+    ifTrue: [out nextPutAll: '  PASS  ', label; cr]
+    ifFalse: [failures add: label. out nextPutAll: '  FAIL  ', label; cr]].
+root := UserGlobals at: #'Grail_appmain_root'.
+app := UserGlobals at: #'Grail_appmain_app'.
+"No app from the environment: linked topaz keeps one gem for every login."
+System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: ''.
+main := importlib runPath: root , '/local.py'.
+check value: 'local.py runs session-local' value: main isCommitted not.
+check value: 'its transient global reads back' value: (main dynamicInstVarAt: #'scratch') = 'session'.
+check value: 'declaring __transient__ in a session-local script writes nothing'
+  value: System needsCommit not.
+failures isEmpty ifFalse: [
+  out nextPutAll: 'Session 2d failures:'; cr.
+  failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
+System abortTransaction.
+UserGlobals at: #'Grail_appmain_failures'
+  put: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1) + failures size.
+System commit
+%
+logout
+
+! ===========================================================================
 ! Session 3 -- an edited top file keeps its classes; another file is refused.
 ! ===========================================================================
 login
@@ -295,8 +442,10 @@ __b2 = gemdb.root["b2"]
   System abortTransaction.
   importlib ___grailUseApp___: nil.
   apps := UserGlobals at: #'GrailApps' otherwise: nil.
-  apps ifNotNil: [apps removeKey: app ifAbsent: []].
-  #('/main.py' '/main_v2.py' '/other.py') do: [:f |
+  apps ifNotNil: [
+    apps removeKey: app ifAbsent: [].
+    apps removeKey: app , '_leads' ifAbsent: []].
+  #('/main.py' '/main_v2.py' '/other.py' '/leads.py' '/local.py') do: [:f |
     [GsFile removeServerFile: root , f] on: Error do: [:e | e return: nil]].
   [GsFile removeServerDirectory: root] on: Error do: [:e | e return: nil].
   failures addAll: ((1 to: (UserGlobals at: #'Grail_appmain_failures' otherwise: 1)) collect: [:i | 'an earlier session''s check']).
