@@ -34,6 +34,14 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+WhileAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection.
+	orelse ifNotNil: [:suite | suite ___addScopeAnnotationsTo___: aCollection]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 WhileAst >> ___emitIRStatementOn___: aBuilder [
 	"The text path's exception-based loop, shape for shape:

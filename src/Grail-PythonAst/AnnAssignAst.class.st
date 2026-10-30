@@ -37,6 +37,14 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+AnnAssignAst >> ___addScopeAnnotationsTo___: aCollection [
+	"Only a simple annotation is one of its scope's annotated names."
+
+	self ___isSimpleAnnotation___ ifTrue: [aCollection add: self]
+
+]
+
 { #category : 'Grail-Class Body' }
 AnnAssignAst >> ___boundTargetNames___ [
 	"Symbol bound by this annotated assignment (Name target only)."
@@ -44,6 +52,30 @@ AnnAssignAst >> ___boundTargetNames___ [
 	(target isKindOf: NameAst) ifTrue: [
 		^ OrderedCollection with: target ___mangledId___ asSymbol].
 	^ OrderedCollection new
+
+]
+
+{ #category : 'Grail-Annotations' }
+AnnAssignAst >> ___emitAnnotateEntryOn___: aStream [
+	"This name's entry in its scope's annotate function, evaluated in the format
+	the function was called with (PyAnnotate >> ___annotationValue___:source:format:)."
+
+	aStream
+		nextPutAll: '___annotations___ @env0:at: ''';
+		nextPutAll: target id asString;
+		nextPutAll: ''' put: (PyAnnotate @env1:___annotationValue___: ['.
+	annotation printSmalltalkOn: aStream.
+	aStream nextPutAll: '] source: '.
+	self emitStringLiteral: annotation ___annotationSourceString___ on: aStream.
+	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1)).'
+
+]
+
+{ #category : 'Grail-Annotations' }
+AnnAssignAst >> ___emitExecutionRecordOn___: aStream [
+	"Record that this annotation ran, where its scope keeps that record."
+
+	self ___isSimpleAnnotation___ ifTrue: [self ___emitExecutionRecordOf___: self on: aStream]
 
 ]
 
@@ -263,13 +295,25 @@ AnnAssignAst >> printSmalltalkOn: aStream [
 	Target shapes are the same three AssignAst handles: NameAst
 	(plain `x := expr.`), AttributeAst (`obj.attr = expr`) and
 	SubscriptAst (`xs[i] = expr` → __setitem__).  An attribute or
-	subscript target IS an AssignAst -- see ___plainAssign___."
+	subscript target IS an AssignAst -- see ___plainAssign___.
 
-	value isNil ifTrue: [^ self].
+	A simple annotation then records that it ran, where its module or class
+	keeps that record (___emitExecutionRecordOn___:) -- after the store, which
+	is CPython's order too (Python/codegen.c:5481-5523)."
+
+	value isNil ifTrue: [^ self ___emitExecutionRecordOn___: aStream].
 	(target isKindOf: AttributeAst) ifTrue: [
 		^ self ___plainAssign___ printSmalltalkOn: aStream].
 	(target isKindOf: SubscriptAst) ifTrue: [
 		^ self ___plainAssign___ printSmalltalkOn: aStream].
+	"A name bound by a class-body for / while / try / with / match, which
+	ClassDefAst emits verbatim: a class attribute, which AssignAst stores
+	through the class (isClassBodyRuntimeStoreTarget:).  The bare ``x := 1''
+	below named an undeclared variable there, so the whole module failed to
+	compile (test_type_annotations TestSetupAnnotations)."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		self ___plainAssign___ printSmalltalkOn: aStream.
+		^ self ___emitExecutionRecordOn___: aStream].
 	"Phase A: module-scope plain NameAst target writes through the
 	module instance's dynamic-instVar storage rather than a bare
 	assignment (no static instVar slot exists for the name)."
@@ -297,12 +341,13 @@ AnnAssignAst >> printSmalltalkOn: aStream [
 			value printSmalltalkWithParenthesisOn: aStream.
 			self ___isModuleLevelFinal___ ifTrue: [aStream nextPut: $]].
 			aStream nextPut: $..
-			^ self
+			^ self ___emitExecutionRecordOn___: aStream
 		].
 	target printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '.
 	value printSmalltalkOn: aStream.
 	aStream nextPut: $..
+	self ___emitExecutionRecordOn___: aStream
 
 ]
 

@@ -691,6 +691,15 @@ FunctionDefAst >> ___docString___ [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+FunctionDefAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+	"Nothing records a def's own annotations: an annotation on a local
+	variable is never evaluated."
+
+	^ self
+
+]
+
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___emitIRAnnotateBlockOn___: aBuilder [
 	"emitAnnotateBlockOn:'s PEP 649 ``__annotate__'' block, send for send:

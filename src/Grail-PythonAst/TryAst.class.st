@@ -37,6 +37,16 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+TryAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection.
+	handlers do: [:handler | handler ___addScopeAnnotationsTo___: aCollection].
+	orelse ifNotNil: [:suite | suite ___addScopeAnnotationsTo___: aCollection].
+	finalbody ifNotNil: [:suite | suite ___addScopeAnnotationsTo___: aCollection]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 TryAst >> ___emitIRExceptElement___: aNode on: aBuilder [
 	"One class of an ``except (A, B)'' tuple, validated before it joins the

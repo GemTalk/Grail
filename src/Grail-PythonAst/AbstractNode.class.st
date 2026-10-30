@@ -232,6 +232,16 @@ AbstractNode >> ___addCompTargetLeafNames___: aTarget into: aCollection [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___addScopeAnnotationsTo___: aCollection [
+	"Add to aCollection, in source order, the annotated names this node gives
+	its module or class: none, unless it is one, or a statement holding more
+	statements of that same scope (___scopeAnnotations___)."
+
+	^ self
+
+]
+
 { #category : 'Grail-validation' }
 AbstractNode >> ___annotationScopeOffender___ [
 	"The first node of this subtree an annotation scope refuses -- a yield, an
@@ -889,6 +899,33 @@ AbstractNode >> ___descendantsDo___: aBlock [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitAnnotateBlockOn___: aStream [
+	"The PEP 649 annotate function of this module or class: a block taking
+	(positional-array, kwargs-dict) -- Grail's shape for a block used as a
+	Python callable -- and answering an ORDERED PyDict of the scope's annotated
+	names in source order.  Each value goes through PyAnnotate >>
+	___annotationValue___:source:format: as FunctionDefAst >>
+	emitOneAnnotation:on: sends it, so a module or class answers the three
+	formats exactly as a function does: VALUE evaluates, STRING is the source
+	text, FORWARDREF evaluates per key.
+
+	An annotation whose execution the scope records is in the dict only if it
+	ran, as CPython's annotate function tests __conditional_annotations__
+	(Python/codegen.c:769-785).  Grail used to list only the annotations at the
+	top of the body, so one inside an if, a loop, a try, a with or a match was
+	never in the dict at all, executed or not."
+
+	aStream nextPutAll: '[:___annArgs___ :___annKw___ | | ___annotations___ | ___annotations___ := PyDict @env0:new.'.
+	self ___scopeAnnotations___ do: [:annotation |
+		aStream space.
+		(self ___recordsExecutionOf___: annotation)
+			ifTrue: [self ___emitRecordedAnnotateEntryOf___: annotation on: aStream]
+			ifFalse: [annotation ___emitAnnotateEntryOn___: aStream]].
+	aStream nextPutAll: ' ___annotations___]'
+
+]
+
 { #category : 'Grail-compile warnings' }
 AbstractNode >> ___emitCompileWarningsIn___: aSource filename: aFilename [
 	"Emit the SyntaxWarnings CPython's code generator emits while compiling
@@ -995,6 +1032,16 @@ AbstractNode >> ___emitCurPosStore___: aLiteralString on: aStream [
 	aStream nextPutAll: '___curPos___ := '; nextPutAll: aLiteralString;
 		nextPutAll: '.'; lf.
 	CallAst curPosLiteralInEffect: aLiteralString
+
+]
+
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+	"Emit what records that anAnnotation, an annotated name below this node,
+	ran.  The scope does that, so a node that is not one asks its parent: the
+	scope is the nearest module, class or def above."
+
+	parent ifNotNil: [:enclosing | enclosing ___emitExecutionRecordOf___: anAnnotation on: aStream]
 
 ]
 
@@ -1417,6 +1464,46 @@ AbstractNode >> ___emitPythonPragmaOn___: aStream [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitRecordedAnnotateEntryOf___: anAnnotation on: aStream [
+	"anAnnotation's entry in this scope's annotate function, made only if its
+	execution was recorded."
+
+	aStream
+		nextPutAll: '(';
+		nextPutAll: self ___executionRecordExpression___;
+		nextPutAll: ' @env0:includes: ';
+		nextPutAll: (self ___executionIndexOf___: anAnnotation) printString;
+		nextPutAll: ') ifTrue: ['.
+	anAnnotation ___emitAnnotateEntryOn___: aStream.
+	aStream nextPutAll: '].'
+
+]
+
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitRecordingExecutionOf___: anAnnotation on: aStream [
+	"Add anAnnotation's number to this scope's execution record -- after
+	testing for it, so a run that finds it recorded already writes nothing.
+	That is an app's re-run over committed globals, where the record outlives
+	the run (module >> ___storeAnnotate___:, docs/App_Namespaces_Design.md
+	§5.2)."
+
+	| record index |
+	record := self ___executionRecordExpression___.
+	index := (self ___executionIndexOf___: anAnnotation) printString.
+	aStream
+		nextPutAll: ' (';
+		nextPutAll: record;
+		nextPutAll: ' @env0:includes: ';
+		nextPutAll: index;
+		nextPutAll: ') ifFalse: [';
+		nextPutAll: record;
+		nextPutAll: ' @env0:add: ';
+		nextPutAll: index;
+		nextPutAll: '].'
+
+]
+
 { #category : 'Grail-codegen helpers' }
 AbstractNode >> ___emitTargetStore___: aTarget from: sourceExpr on: aStream [
 	"Store the raw Smalltalk expression fragment ``sourceExpr'' into an
@@ -1551,6 +1638,15 @@ AbstractNode >> ___evaluationIsRepeatable___ [
 	(AugAssignAst >> ___targetOperandsAreRepeatable___)."
 
 	^ self ___evaluationIsInert___
+
+]
+
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___executionIndexOf___: anAnnotation [
+	"The number anAnnotation's execution is recorded under: its place among
+	this scope's annotated names, counted from 0 as CPython counts them."
+
+	^ (self ___scopeAnnotations___ indexOfIdentical: anAnnotation) - 1
 
 ]
 

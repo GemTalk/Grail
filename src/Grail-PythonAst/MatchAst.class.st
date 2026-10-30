@@ -34,6 +34,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+MatchAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	cases do: [:matchCase | matchCase ___addScopeAnnotationsTo___: aCollection]
+
+]
+
 { #category : 'Grail-match' }
 MatchAst >> ___capturedIds___ [
 	"The distinct ids the cases capture, in order of first appearance."
