@@ -1652,18 +1652,6 @@ BaseException class >> ___irSoleNestedNameIn___: pythonSource [
 ]
 
 { #category : 'Grail-Traceback Building' }
-BaseException class >> ___irSourceLooksLikeDef___: src [
-	"src, ignoring leading whitespace, begins with ``def ''/``async def ''."
-
-	| trimmed |
-	src isNil ifTrue: [^ false].
-	trimmed := src trimSeparators.
-	^ ((trimmed size >= 4) and: [(trimmed copyFrom: 1 to: 4) = 'def '])
-		or: [(trimmed size >= 10) and: [(trimmed copyFrom: 1 to: 10) = 'async def ']]
-
-]
-
-{ #category : 'Grail-Traceback Building' }
 BaseException class >> ___isCaretLine___: aLine [
 	"Is this line _sourceAtIp:'s IP MARKER, rather than source that merely looks
 	like one?
@@ -1872,19 +1860,21 @@ BaseException class >> ___isGeneratedPythonMethod___: aMethod [
 
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___isIRPythonMethod___: aMethod [
-	"True iff aMethod is a direct-to-IR compiled Python method: its attached
-	source is the def's PYTHON source, so with leading whitespace trimmed it
-	begins with ``def ''/``async def ''.  Its Python line then comes from the
-	native source-offset mechanism, not a ___curPos___ scan.  The prefix test
-	is decisive on its own: a text-compiled method's source begins with its
-	Smalltalk selector pattern, and no Python identifier is ``def''.  It USED to
-	be paired with ``source contains no ___curPos___'', on the reasoning that
-	only generated text carries the marker -- but an IR method's source is the
-	user's Python, COMMENTS INCLUDED, and general_traceback.py's comments
-	discuss ___curPos___ by name: under the flag its defs were classed as text,
-	the marker scan found no ``___curPos___ :='' store, and both catching
-	frames vanished from their tracebacks.  Cached per method in SessionTemps,
-	like the ip->line cache; the answer is fixed for the method."
+	"True iff aMethod is a direct-to-IR compiled Python method, or a block of
+	one: its Python line comes from the native source-offset mechanism, not a
+	___curPos___ scan.  Every IR method declares the ___grailPython___ marker
+	temp (PyMethodIRBuilder ___emitPythonIdentityMarker___), and a block asks
+	its home method, which is where that temp lives.
+
+	It used to test the attached source instead: an IR method's source is its
+	Python, so it begins ``def ''/``async def'' where a text method's begins
+	with its selector pattern.  That holds only while every IR method is a
+	def, and it already did not: the parser's PEP 695 wrappers
+	(___generic_parameters_of_<name>___) attach source beginning ``class'' or
+	``def'' plus a line comment, and were classed as text.  A module body or a
+	doit built through IR attaches Python that begins with anything at all.
+	Cached per method in SessionTemps, like the ip->line cache; the answer is
+	fixed for the method."
 
 	| cache |
 	cache := SessionTemps current at: #'GrailIRMethodCache' otherwise: nil.
@@ -1892,9 +1882,12 @@ BaseException class >> ___isIRPythonMethod___: aMethod [
 		cache := KeyValueDictionary new.
 		SessionTemps current at: #'GrailIRMethodCache' put: cache].
 	^ cache at: aMethod ifAbsent: [
-		| verdict src |
-		verdict := [src := aMethod sourceString.
-			src notNil and: [self ___irSourceLooksLikeDef___: src]]
+		| verdict |
+		verdict := [ | home |
+			home := aMethod isMethodForBlock
+				ifTrue: [aMethod homeMethod]
+				ifFalse: [aMethod].
+			home notNil and: [(home argsAndTemps ifNil: [#()]) includes: #'___grailPython___']]
 			on: Error do: [:ex | false].
 		cache at: aMethod put: verdict.
 		verdict]
