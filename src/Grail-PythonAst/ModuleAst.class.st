@@ -1813,6 +1813,8 @@ ModuleAst >> executeWithScope: aSymbolList as: aKind [
 	the whole process ended (#1683).  Raised as SystemError instead --
 	CPython's exception for a failure inside the interpreter -- and from
 	outside the handler, which only records the message."
+	importlib ___irCensusOn___ ifTrue: [
+		importlib ___irCensusText: code kind: 'doit'].
 	compiledMethod := [code
 		_compileInContext: nil
 		symbolList: aSymbolList

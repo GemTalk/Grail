@@ -719,6 +719,8 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 				stmt generateModuleMethodSourceOn: methodStream.
 				methodStream writeMapAsComment.
 				methodSource2 := methodStream contents.
+				self ___irCensusOn___ ifTrue: [
+					self ___irCensusText: methodSource2 kind: 'topLevelDef'].
 				traceDir ifNotNil: [
 					debugStream
 						nextPutAll: 'category: ''Grail-Methods'''; lf;
@@ -740,6 +742,8 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 			stmt needsVarargsForwarder ifTrue: [
 				| fwdSource |
 				fwdSource := stmt generateModuleMethodVarargsForwarderSource.
+				self ___irCensusOn___ ifTrue: [
+					self ___irCensusText: fwdSource kind: 'support:moduleForwarder'].
 				traceDir ifNotNil: [
 					debugStream
 						nextPutAll: 'category: ''Grail-Methods'''; lf;
@@ -774,6 +778,8 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 				stmt emitPyCodeExprOn: codeTblSrc qualname: stmt name asString.
 				codeTblSrc nextPut: $;].
 			codeTblSrc nextPutAll: ' @env0:yourself)'.
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusText: codeTblSrc contents kind: 'support:moduleTables'].
 			traceDir ifNotNil: [
 				debugStream
 					nextPutAll: 'category: ''Grail-Tracebacks'''; lf;
@@ -805,6 +811,8 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 					tpSrc nextPut: $'; nextPutAll: n asString; nextPutAll: ''' '].
 				tpSrc nextPutAll: ');'].
 			tpSrc nextPutAll: ' @env0:yourself)'.
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusText: tpSrc contents kind: 'support:moduleTables'].
 			traceDir ifNotNil: [
 				debugStream
 					nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
@@ -842,6 +850,8 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 			docSrc nextPutAll: '___pyModuleDoc___'; nextPutAll: lf.
 			docSrc nextPutAll: '	^ '.
 			moduleAst emitStringLiteral: docNode value on: docSrc.
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusText: docSrc contents kind: 'support:moduleTables'].
 			traceDir ifNotNil: [
 				debugStream
 					nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
@@ -878,6 +888,8 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 					moduleAst emitStringLiteral: def ___docString___ on: tblSrc.
 					tblSrc nextPut: $;].
 				tblSrc nextPutAll: ' @env0:yourself)'.
+				self ___irCensusOn___ ifTrue: [
+					self ___irCensusText: tblSrc contents kind: 'support:moduleTables'].
 				traceDir ifNotNil: [
 					debugStream
 						nextPutAll: 'category: ''Grail-Python Metadata'''; lf;
@@ -921,6 +933,9 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 		in the body's map moves right by that much."
 		methodSource := 'initialize' , lf , stream contents
 			, (stream mapCommentShiftedBy: 'initialize' size + lf size).
+		self ___irCensusOn___ ifTrue: [
+			self ___irCensusStatements: moduleAst body body prefix: 'ms:' def: '<module>'.
+			self ___irCensusText: methodSource kind: 'moduleBody'].
 		traceDir ifNotNil: [
 			debugStream
 				nextPutAll: 'category: ''Grail-Module Body'''; lf;
@@ -4985,7 +5000,20 @@ importlib class >> ___irCensus___ [
 	eligible def whose IR build raised), #classMethod (a def in a class body --
 	not routed through the seam at all) and #nestedDef (a def or lambda inside a
 	top-level def).  Meaningful only with the flag FORCED on
-	(___irCodegenForce___:), so that #compiled means what it says."
+	(___irCodegenForce___:), so that #compiled means what it says.
+
+	What is still TEXT is recorded beside them under prefixed keys, so the
+	plan's text-retiring phases have rows to drive to zero:
+	  ms:<Kind>  a module-body statement (all text: the body is one
+	             ``initialize'')
+	  cs:<Kind>  a class-body statement (all text)
+	  th:helper  a method-local class built as a compiled-text helper
+	             (cut 76) though its enclosing def is IR
+	  in:IR+literal / in:<category>  a class-build install statement: an IR
+	             build carrying its text twin as a literal, or a text compile
+	  lit:IR / lit:text  the characters of those literals
+	  tx:<kind> / by:<kind>  compiles of generated Smalltalk and their size
+	             (___irCensusText:kind:)"
 
 	^ SessionTemps current at: #'___grailIRCensus___' ifAbsent: [
 		| d |
@@ -5012,6 +5040,31 @@ importlib class >> ___irCensusClassMethodsOf___: moduleAst name: aModuleName [
 					(inner isKindOf: FunctionDefAst) ifTrue: [
 						self ___irCensusNote___: #classMethod module: aModuleName
 							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusKindOf___: aNode [
+	"A statement's census kind: its AST class name without the ``Ast''
+	suffix (``Assign'', ``ClassDef'', ``Expr'')."
+
+	| n |
+	n := aNode class name asString.
+	^ (n size > 3 and: [(n copyFrom: n size - 2 to: n size) = 'Ast'])
+		ifTrue: [n copyFrom: 1 to: n size - 3]
+		ifFalse: [n]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusModuleName___ [
+	"The module a census row belongs to: the one being compiled, else the one
+	whose body is running -- a class build, a runtime compile or a doit happens
+	while its importer's initialize runs, after the compile context has been
+	cleared -- else '?'."
+
+	^ CallAst moduleNameBeingCompiled
+		ifNil: [self ___initializingModuleName___ ifNil: ['?']]
 
 ]
 
@@ -5058,6 +5111,43 @@ importlib class >> ___irCensusOn: aBoolean [
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irCensusReset___ [
 	SessionTemps current removeKey: #'___grailIRCensus___' ifAbsent: []
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusStatements: aCollection prefix: aPrefix def: aName [
+	"One row per statement of aCollection, keyed aPrefix , its kind: ``ms:''
+	for a module body's statements, ``cs:'' for a class body's.  Every one of
+	them is emitted as Smalltalk text today -- a module body is one text
+	``initialize'', a class body is text inside it or inside a method-local
+	class helper -- so these rows are what P4 and P3 move to IR."
+
+	| m |
+	m := self ___irCensusModuleName___.
+	aCollection do: [:stmt |
+		self ___irCensusNote___: (aPrefix , (self ___irCensusKindOf___: stmt)) asSymbol
+			module: m def: aName count: 1]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusText: aSource kind: aKind [
+	"Tally one compile of GENERATED SMALLTALK: ``tx:<kind>'' counts the
+	compiles and ``by:<kind>'' adds the characters of source handed to the
+	compiler (bytes, for the ASCII this codegen writes; a non-ASCII literal
+	counts one per character).  The by: rows are the headline metric of what
+	is still text: census_report.py splits the kinds into translated Python,
+	which the IR migration retires, and templated support code, which stays.
+
+	Called only under ___irCensusOn___, at the few places that hand source to
+	the compiler (see the senders), so a census that is off costs one
+	SessionTemps read per compile there and nothing else."
+
+	| m |
+	aSource isNil ifTrue: [^ self].
+	m := self ___irCensusModuleName___.
+	self ___irCensusNote___: ('tx:' , aKind) asSymbol module: m def: aKind count: 1.
+	self ___irCensusNote___: ('by:' , aKind) asSymbol module: m def: aKind count: aSource size
 
 ]
 
