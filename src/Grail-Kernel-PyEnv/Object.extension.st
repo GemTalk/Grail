@@ -5696,9 +5696,10 @@ Object class >> ___setattr__: instance _: attrName _: attrValue [
 	"Fixed-arity form of the same unbound-method dispatch — handles
 	codegen paths that emit the ``_:_:_:'' positional selector
 	instead of the ``:kw:'' varargs form.  Matches the dispatch in
-	``___setattr__:kw:''."
+	``___setattr__:kw:'', and answers None as it does."
 
-	^ instance ___pyAttrStore___: attrName put: attrValue
+	instance ___pyAttrStore___: attrName put: attrValue.
+	^ None
 
 ]
 
@@ -5718,7 +5719,10 @@ Object class >> ___setattr__: args kw: kwargs [
 	instance := args @env0:at: 1.
 	attrName := args @env0:at: 2.
 	attrValue := args @env0:at: 3.
-	^ instance ___pyAttrStore___: attrName put: attrValue
+	"None, as CPython's object.__setattr__ answers (Objects/typeobject.c:
+	9592-9607, wrap_setattr); it answered the value."
+	instance ___pyAttrStore___: attrName put: attrValue.
+	^ None
 
 ]
 
@@ -18014,9 +18018,13 @@ Object >> __delattr__: name [
 	which removes the dynamic-instVar slot (or raises AttributeError
 	if it was never bound).  Subclasses may override to intercept
 	deletion (validation, audit, etc.); to bypass the override and
-	hit the default behavior, call ``super().__delattr__(name)''."
+	hit the default behavior, call ``super().__delattr__(name)''.
 
-	^ self ___pyAttrDelete___: name
+	It answers None, as CPython's slot wrapper does (Objects/typeobject.c:
+	9609-9625, wrap_delattr); it answered the object."
+
+	self ___pyAttrDelete___: name.
+	^ None
 
 ]
 
@@ -18974,7 +18982,8 @@ Object >> __setattr__: name _: value [
 	have __dict__ handling of their own (function_attr_writes.py pins
 	``f.__dict__ = {...}'' on a function)."
 	(sym == #'__dict__' and: [self isKindOf: PythonInstance]) ifTrue: [
-		^ self ___grailReplaceInstanceDict___: value].
+		self ___grailReplaceInstanceDict___: value.
+		^ None].
 	"A CANONICAL CLASS IS NOT SHORT-CIRCUITED to its accessor setter.  Every
 	name a class body declares leaves behind the 'Grail-Class Attrs'
 	getter/setter pair the test below looks for, so ``Cls.x = v'' dispatched
@@ -19017,12 +19026,16 @@ Object >> __setattr__: name _: value [
 					through: (self @env0:class @env0:whichClassIncludesSelector: setterSym
 						environmentId: 1)
 					name: sym) ~~ nil])
-				ifTrue: [^ self ___pyAttrStore___: name put: value].
+				ifTrue: [self ___pyAttrStore___: name put: value. ^ None].
 			"Through the marked helper: on a CLASS receiver the setter is a
 			'Grail-Class Attrs' accessor that, under GRAIL_DIRECT_CALLS, reads an
 			unmarked send as a Python call (___grailClassAttrSetterDiverts___)."
-			^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value].
-	^ self ___pyAttrStore___: name put: value
+			object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value.
+			^ None].
+	"Every path answers None, as CPython's slot wrapper does
+	(Objects/typeobject.c:9592-9607, wrap_setattr); it answered the value."
+	self ___pyAttrStore___: name put: value.
+	^ None
 
 ]
 
