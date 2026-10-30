@@ -12100,9 +12100,20 @@ Object >> ___hasProtocolForCall___: aName [
 	(individual members) are not -- ___hasProtocol___: would wrongly say
 	no; this says yes, matching iter(MainEnum) in real CPython.  Used by
 	itertools._iter / builtins>>___pyIter___: (test_enum's TestXxxClass
-	suites iterate the enum class directly, e.g. `list(MainEnum)`)."
+	suites iterate the enum class directly, e.g. `list(MainEnum)`).
 
-	^ self ___protocolOwnedBy___: self @env0:class name: aName
+	A CLASS ATTRIBUTE under a dunder is the protocol too -- ``__getitem__ =
+	property(...)'', or a callable stored on the class -- because CPython's
+	type slots follow the type's attributes (Objects/typeobject.c:11308
+	update_one_slot, for a class body through fixup_slot_dispatchers and for
+	a later store through update_slot).  Only compiled defs were seen, so
+	iter() refused an
+	object whose __getitem__ is a property, which subscripting it honoured
+	(test_descr test_properties)."
+
+	^ (self ___protocolOwnedBy___: self @env0:class name: aName)
+		or: [(aName @env0:asString @env0:beginsWith: '__')
+			and: [(self ___typeDunder___: aName @env0:asSymbol) ~~ nil]]
 
 ]
 
@@ -12717,6 +12728,10 @@ Object >> ___isValueDescriptor___: aValue [
 	value rather than hand it back.  Answered here so the shared descriptor-get
 	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
 	(aValue @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ true].
+	"So is a super object (Objects/typeobject.c super_descr_get): an unbound
+	``super(C)'' stored on a class binds to the instance it is read through
+	(Super >> __get__:_:)."
+	(aValue @env0:isKindOf: Super) ifTrue: [^ true].
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
 	"ASK the marker, do not merely detect it.  Whether one of these binds self
 	can depend on what it wraps: functools.partialmethod answers false over a
