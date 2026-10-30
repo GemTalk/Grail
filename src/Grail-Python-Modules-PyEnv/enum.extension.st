@@ -383,13 +383,13 @@ enum >> auto [
 
 { #category : 'Grail-Accessors' }
 enum >> Enum [
-	^ self @env0:at: #Enum
+	^ self ___dataGlobalAt___: #Enum
 
 ]
 
 { #category : 'Grail-Accessors' }
 enum >> Flag [
-	^ self @env0:at: #Flag
+	^ self ___dataGlobalAt___: #Flag
 
 ]
 
@@ -586,19 +586,19 @@ enum >> initialize [
 
 { #category : 'Grail-Accessors' }
 enum >> IntEnum [
-	^ self @env0:at: #IntEnum
+	^ self ___dataGlobalAt___: #IntEnum
 
 ]
 
 { #category : 'Grail-Accessors' }
 enum >> IntFlag [
-	^ self @env0:at: #IntFlag
+	^ self ___dataGlobalAt___: #IntFlag
 
 ]
 
 { #category : 'Grail-Accessors' }
 enum >> KEEP [
-	^ self @env0:at: #KEEP
+	^ self ___dataGlobalAt___: #KEEP
 
 ]
 
@@ -656,7 +656,7 @@ enum >> show_flag_values: aValue [
 
 { #category : 'Grail-Accessors' }
 enum >> StrEnum [
-	^ self @env0:at: #StrEnum
+	^ self ___dataGlobalAt___: #StrEnum
 
 ]
 

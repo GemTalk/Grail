@@ -1841,6 +1841,16 @@ Object class >> ___grailInitSubclassSearchBase___ [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+Object class >> ___grailInitTakesNoArgumentsError___ [
+	"CPython's object_init for a class with neither __init__ nor __new__ of
+	its own, named by the class's __name__."
+
+	^ TypeError ___signal___: self ___pyNameOrEmpty___
+		@env0:, '.__init__() takes exactly one argument (the instance to initialize)'
+
+]
+
 { #category : 'Grail-Class Namespace' }
 Object class >> ___grailInjectClassCell___ [
 	"Put ``__classcell__'' into the class namespace, as CPython's compiler does
@@ -5686,9 +5696,10 @@ Object class >> ___setattr__: instance _: attrName _: attrValue [
 	"Fixed-arity form of the same unbound-method dispatch — handles
 	codegen paths that emit the ``_:_:_:'' positional selector
 	instead of the ``:kw:'' varargs form.  Matches the dispatch in
-	``___setattr__:kw:''."
+	``___setattr__:kw:'', and answers None as it does."
 
-	^ instance ___pyAttrStore___: attrName put: attrValue
+	instance ___pyAttrStore___: attrName put: attrValue.
+	^ None
 
 ]
 
@@ -5708,7 +5719,10 @@ Object class >> ___setattr__: args kw: kwargs [
 	instance := args @env0:at: 1.
 	attrName := args @env0:at: 2.
 	attrValue := args @env0:at: 3.
-	^ instance ___pyAttrStore___: attrName put: attrValue
+	"None, as CPython's object.__setattr__ answers (Objects/typeobject.c:
+	9592-9607, wrap_setattr); it answered the value."
+	instance ___pyAttrStore___: attrName put: attrValue.
+	^ None
 
 ]
 
@@ -8454,7 +8468,14 @@ Object >> ___cmpFallback___: other op: opString reflected: refSelector [
 	refOwner := other @env0:class
 		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 	(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-		(other isKindOf: PythonInstance)
+		"So is a Python class over a kernel CONTAINER -- ``class C(list)''
+		with its own __gt__ -- which is not a PythonInstance: CPython calls
+		the reflected dunder of whatever type it finds it on
+		(Objects/object.c:1046 do_richcompare), so ``1 < C()'' ran no C.__gt__ and
+		raised (test_descr test_rich_comparisons).  A Number keeps the guarded
+		path below."
+		((other isKindOf: PythonInstance)
+				or: [(other isKindOf: Number) not and: [refOwner ___grailIsPythonClass___]])
 			ifTrue: [
 				rr := other @env0:perform: refSelector env: 1 withArguments: { self }.
 				(rr @env0:== NotImplemented) ifFalse: [^ rr]]
@@ -12100,9 +12121,20 @@ Object >> ___hasProtocolForCall___: aName [
 	(individual members) are not -- ___hasProtocol___: would wrongly say
 	no; this says yes, matching iter(MainEnum) in real CPython.  Used by
 	itertools._iter / builtins>>___pyIter___: (test_enum's TestXxxClass
-	suites iterate the enum class directly, e.g. `list(MainEnum)`)."
+	suites iterate the enum class directly, e.g. `list(MainEnum)`).
 
-	^ self ___protocolOwnedBy___: self @env0:class name: aName
+	A CLASS ATTRIBUTE under a dunder is the protocol too -- ``__getitem__ =
+	property(...)'', or a callable stored on the class -- because CPython's
+	type slots follow the type's attributes (Objects/typeobject.c:11308
+	update_one_slot, for a class body through fixup_slot_dispatchers and for
+	a later store through update_slot).  Only compiled defs were seen, so
+	iter() refused an
+	object whose __getitem__ is a property, which subscripting it honoured
+	(test_descr test_properties)."
+
+	^ (self ___protocolOwnedBy___: self @env0:class name: aName)
+		or: [(aName @env0:asString @env0:beginsWith: '__')
+			and: [(self ___typeDunder___: aName @env0:asSymbol) ~~ nil]]
 
 ]
 
@@ -12177,30 +12209,34 @@ Object >> ___init__: positional kw: kwargs [
 	Fraction maps to a kernel number) died with an UNCATCHABLE
 	MessageNotUnderstood instead of being ignored."
 
-	"...except for excess arguments CPython's object_init refuses, which
-	Grail judges only for a class written entirely in Python
-	(___grailPurePythonChain___).  With no __init__ and no __new__ of its
-	own anywhere below object, ``C(42)'' is ``C() takes no arguments''.  An
-	ASSIGNED __init__ -- typing.Protocol installs one on every subclass --
-	makes tp_init not object_init, so the excess arguments it forwards here
-	are ``object.__init__() takes exactly one argument''.
+	"...except for excess arguments CPython's object_init refuses
+	(Objects/typeobject.c:6832-6849), which Grail judges only for a class
+	written entirely in Python (___grailPurePythonChain___).  A class with an
+	__init__ of its own -- a def, or an ASSIGNED one, which typing.Protocol
+	installs on every subclass -- forwards them here only by mistake:
+	``object.__init__() takes exactly one argument''.  One with neither
+	__init__ nor __new__ is named: ``C.__init__() takes exactly one argument'';
+	``C(42)'' itself is refused before this, at allocation, as ``C() takes no
+	arguments''.
 
-	A class that DEFS __init__ and passes arguments on to object is refused
-	by CPython as well, but not here: Grail's multiple inheritance merges a
-	second base's methods rather than linearising, so a mixin's cooperative
-	``super().__init__(*args)'' can reach object where CPython's MRO reaches
-	the next base."
+	A DEF'd __init__ used to be let through, because Grail's multiple
+	inheritance merged a second base's methods rather than linearising, so a
+	mixin's cooperative ``super().__init__(*args)'' could reach object where
+	CPython's MRO reaches the next base.  super() walks the C3 MRO after its
+	class now (Super >> ___classesAfterCls___), and ``object.__init__(self,
+	5)'' passed silently (test_descr test_object_new)."
 	| cls |
 	(positional @env0:isEmpty and: [kwargs == nil or: [kwargs @env0:isEmpty]])
 		ifTrue: [^ None].
 	cls := self @env0:class.
 	((cls @env0:inheritsFrom: PythonInstance) and: [cls ___grailPurePythonChain___])
 		ifFalse: [^ None].
-	(cls @env1:___dynamicClassAttr___: #'__init__') == nil ifFalse: [
-		^ TypeError ___signal___:
-			'object.__init__() takes exactly one argument (the instance to initialize)'].
-	(cls ___grailOwnsInit___ or: [cls ___grailOwnsNew___]) ifTrue: [^ None].
-	^ cls ___grailTakesNoArgumentsError___
+	((cls @env1:___dynamicClassAttr___: #'__init__') ~~ nil or: [cls ___grailOwnsInit___])
+		ifTrue: [
+			^ TypeError ___signal___:
+				'object.__init__() takes exactly one argument (the instance to initialize)'].
+	cls ___grailOwnsNew___ ifTrue: [^ None].
+	^ cls ___grailInitTakesNoArgumentsError___
 
 ]
 
@@ -12717,6 +12753,10 @@ Object >> ___isValueDescriptor___: aValue [
 	value rather than hand it back.  Answered here so the shared descriptor-get
 	paths (___classChainAttrLookup___, the overlay lookups) treat it uniformly."
 	(aValue @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ true].
+	"So is a super object (Objects/typeobject.c super_descr_get): an unbound
+	``super(C)'' stored on a class binds to the instance it is read through
+	(Super >> __get__:_:)."
+	(aValue @env0:isKindOf: Super) ifTrue: [^ true].
 	(aValue isKindOf: PythonInstance) ifFalse: [^ false].
 	"ASK the marker, do not merely detect it.  Whether one of these binds self
 	can depend on what it wraps: functools.partialmethod answers false over a
@@ -13275,6 +13315,24 @@ Object >> ___methodDefinedFrom___: startClass upTo: attrClass name: aSym [
 	walker := startClass.
 	[walker == nil or: [walker == attrClass]] whileFalse: [
 		(self ___definesPythonMethod___: walker name: aSym) ifTrue: [^ true].
+		walker := walker @env0:superClass].
+	^ false
+
+]
+
+{ #category : 'Grail-Attribute Protocol' }
+Object >> ___nearerClassHolds___: aName before: aSelector [
+	"Does a class between the receiver's own and the one that compiles
+	aSelector hold a value of its own under aName -- ``foo =
+	C.foo.deleter(f)'', the store a subclass's @C.foo.deleter makes -- which
+	CPython's MRO reaches first?"
+
+	| owner sym walker |
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	sym := aName @env0:asString @env0:asSymbol.
+	walker := self @env0:class.
+	[walker ~~ nil and: [walker ~~ owner]] whileTrue: [
+		(walker ___grailNsHolderValueFor___: sym) ~~ nil ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
 
@@ -13867,7 +13925,8 @@ Object >> ___pyAttrDelete___: aName [
 		attributes inline (Objects/dictobject.c:6998) -- and a strictly slotted
 		object has no dict to miss in.  Grail raised the bare quoted name, a
 		KeyError's wording."
-		^ ((self ___respondsTo___: #'___pySlotsStrict___') and: [self ___pySlotsStrict___])
+		^ (((self ___respondsTo___: #'___pySlotsStrict___') and: [self ___pySlotsStrict___])
+				or: [self @env0:class @env0:___grailInstancesHaveNoDict___])
 			ifTrue: [self ___refuseAttrWithoutDict___: aName]
 			ifFalse: [
 				AttributeError ___signal___: '''' @env0:, self @env0:___pyDnuTypeName___ @env0:asString
@@ -15687,6 +15746,17 @@ Object >> ___pyAttrStore___: aName put: aValue [
 			]
 		].
 	].
+	"A BUILT-IN instance with no __dict__ -- object(), a list, a dict, a set,
+	a range -- refuses a name nothing on its type claimed, as CPython's
+	generic setattr does (Objects/object.c:1991-2004).  Asked only here, after
+	every descriptor and slot has had its say."
+	(self @env0:class @env0:___grailInstancesHaveNoDict___) ifTrue: [
+		"Its __class__ cannot be reassigned either: object_set_class refuses a
+		type that is not a heap type (Objects/typeobject.c:7178-7186)."
+		(aName @env0:asString @env0:= '__class__') ifTrue: [
+			^ TypeError ___signal___:
+				'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+		^ self ___refuseAttrWithoutDict___: aName].
 	self ___pyStoreDynamic___: aName @env0:asSymbol put: aValue.
 	"AN INSTANCE ATTRIBUTE THAT SHADOWS A METHOD has to be visible to that
 	object's own ``self.<name>(...)'' calls, and a self-send is a plain
@@ -16011,10 +16081,21 @@ Object >> ___pyInstanceDescriptorDelete___: aName [
 	``___propDeleter_x'' is a private selector only ClassDefAst ever emits, so
 	responding to it IS the marker, whatever built-in the class is rooted at."
 
-	| delSym descr |
+	| delSym varargsDelSym descr |
 	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
-	(self ___respondsTo___: delSym)
+	"...unless a nearer class binds the name itself: a subclass's
+	``@C.foo.deleter def foo'' holds its own property, whose deleter is the
+	one CPython runs.  The inherited selector ran C's (test_descr
+	test_properties_plus)."
+	((self ___respondsTo___: delSym)
+			and: [(self ___nearerClassHolds___: aName before: delSym) not])
 		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
+	"A deleter with a default compiles in the varargs form (ClassDefAst >>
+	___redirectUnarySelectorIn:from:to:), called with no arguments."
+	varargsDelSym := ('_' @env0:, delSym @env0:asString @env0:, ':kw:') @env0:asSymbol.
+	((self ___respondsTo___: varargsDelSym)
+			and: [(self ___nearerClassHolds___: aName before: varargsDelSym) not])
+		ifTrue: [self @env0:perform: varargsDelSym env: 1 withArguments: { #(). nil }. ^ true].
 	"A decorator @property with NO deleter refuses, as CPython's does: it is a
 	data descriptor, so ``del obj.x'' reaches it rather than the instance dict
 	(#1660).  cached_property is not in ___grailOwnPropertyNames___, so its
@@ -16434,10 +16515,11 @@ Object >> ___pyStoreDynamic___: aSym put: aValue [
 
 					This converts a failure; it does not create one.  A store
 					that GemStone accepts still lands, so nothing that works
-					today changes -- including the mutable built-ins (list,
-					dict, a computed str) which still accept an attribute where
-					CPython refuses.  Closing THAT gap needs a type-level
-					``this type has no __dict__'' notion and is a separate cut."
+					today changes.  The mutable built-ins that GemStone would
+					accept an attribute on -- object(), list, dict, set, range,
+					slice, bytearray -- are refused before the store, by the
+					type-level ___grailInstancesHaveNoDict___ that
+					___pyAttrStore___:put: asks; a computed str still accepts one."
 					((why @env0:indexOfSubCollection: 'dynamic instVars not supported') @env0:> 0
 						@env0:or: [(why @env0:indexOfSubCollection: 'Attempt to modify invariant object') @env0:> 0])
 						ifTrue: [
@@ -17936,9 +18018,13 @@ Object >> __delattr__: name [
 	which removes the dynamic-instVar slot (or raises AttributeError
 	if it was never bound).  Subclasses may override to intercept
 	deletion (validation, audit, etc.); to bypass the override and
-	hit the default behavior, call ``super().__delattr__(name)''."
+	hit the default behavior, call ``super().__delattr__(name)''.
 
-	^ self ___pyAttrDelete___: name
+	It answers None, as CPython's slot wrapper does (Objects/typeobject.c:
+	9609-9625, wrap_delattr); it answered the object."
+
+	self ___pyAttrDelete___: name.
+	^ None
 
 ]
 
@@ -18896,7 +18982,8 @@ Object >> __setattr__: name _: value [
 	have __dict__ handling of their own (function_attr_writes.py pins
 	``f.__dict__ = {...}'' on a function)."
 	(sym == #'__dict__' and: [self isKindOf: PythonInstance]) ifTrue: [
-		^ self ___grailReplaceInstanceDict___: value].
+		self ___grailReplaceInstanceDict___: value.
+		^ None].
 	"A CANONICAL CLASS IS NOT SHORT-CIRCUITED to its accessor setter.  Every
 	name a class body declares leaves behind the 'Grail-Class Attrs'
 	getter/setter pair the test below looks for, so ``Cls.x = v'' dispatched
@@ -18939,12 +19026,16 @@ Object >> __setattr__: name _: value [
 					through: (self @env0:class @env0:whichClassIncludesSelector: setterSym
 						environmentId: 1)
 					name: sym) ~~ nil])
-				ifTrue: [^ self ___pyAttrStore___: name put: value].
+				ifTrue: [self ___pyAttrStore___: name put: value. ^ None].
 			"Through the marked helper: on a CLASS receiver the setter is a
 			'Grail-Class Attrs' accessor that, under GRAIL_DIRECT_CALLS, reads an
 			unmarked send as a Python call (___grailClassAttrSetterDiverts___)."
-			^ object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value].
-	^ self ___pyAttrStore___: name put: value
+			object @env0:___grailPerformClassAttrSetter___: setterSym on: self with: value.
+			^ None].
+	"Every path answers None, as CPython's slot wrapper does
+	(Objects/typeobject.c:9592-9607, wrap_setattr); it answered the value."
+	self ___pyAttrStore___: name put: value.
+	^ None
 
 ]
 

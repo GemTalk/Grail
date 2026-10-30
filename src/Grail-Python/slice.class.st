@@ -23,6 +23,14 @@ Class {
 }
 
 { #category : 'Grail-Attribute Access' }
+slice class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == slice
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 slice class >> ___grailReadonlyAttributes___ [
 	"slice's members -- see Object class >> ___grailReadonlyAttributes___."
 

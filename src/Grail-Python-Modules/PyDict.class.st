@@ -22,6 +22,14 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Attribute Access' }
+PyDict class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == PyDict
+
+]
+
 { #category : 'Grail-Mutation' }
 PyDict >> ___appendToOrder___: aKey [
 	"Add a new key's entry.  First drop the deleted entries when they

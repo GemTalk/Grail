@@ -118,7 +118,7 @@ html >> _escape: positional kw: kwargs [
 html >> entities [
 	"Return the html.entities submodule (stored attribute, populated by
 	`initialize`)."
-	^ self @env0:at: #entities
+	^ self ___dataGlobalAt___: #entities
 
 ]
 

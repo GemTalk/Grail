@@ -453,6 +453,28 @@ followed a source edit:
   any class built during `importlib.reload`, which does not mark a module body
   as running.
 
+- **a float or int subclass** — `class PF(float)`, `class PI(int)`, and an
+  enum mixed with either (`class Size(float, Enum)`). Float and Integer are
+  sealed, so `Class >> ___subclass___:` roots such a class at a storage class,
+  `AbstractPyFloat` or `AbstractPyInt`. Both reuse tests — the class
+  statement's and the built class's — compared the registered class's
+  superclass with the parent the statement *named*, so the two never matched
+  and every rebuild minted a new class, stranding stored instances and enum
+  members (#1863). Both sides now ask `importlib ___subclassRootOf___:` where
+  a parent's subclasses are rooted. Every other built-in base (`str`,
+  `complex`, `bytes`, `tuple`, `frozenset`, ...) is rooted where it is named
+  and always kept its class.
+
+- **an enum built by the functional API** — `Enum('Color', 'RED GREEN')`,
+  `IntEnum('Level', ...)`, `Enum('Rank', ..., type=int)`, a call on a mixin
+  base. `Enum class >> ___grailFunctional:...` created its class with a bare
+  `___subclass___:`, so every rebuild minted a new class and new members,
+  stranding stored members (#1950). It now claims the creation as `type()`
+  does, so the class is reused under the key `module.Name()`, and keeps the
+  previous build's member objects by name as the class-syntax builder does
+  (`___grailKeepPreviousMember:named:in:`). A StrEnum's members are strings,
+  which cannot take another's state, and stay new; its class is kept.
+
 Details and the failure table are in the history log, §B.
 
 ### D3. Runtime class-attribute mutation is session-local

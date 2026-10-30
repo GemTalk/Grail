@@ -1071,7 +1071,7 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 	set: a store on it after the build commits with it, as it always has (D3
 	makes runtime stores session-local only for a class statement's class)."
 
-	| key reg existing claimed rebuilding reuse built |
+	| key reg existing claimed rebuilding reuse built root |
 	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
 		^ self ___grailInNamespaceOf___: aModuleName do: [self ___builtSubclassOf: aParent name: aSymbol pyName: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames]].
 	"A session-local module (``__main__'') records nothing: see
@@ -1083,14 +1083,17 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 	existing := reg at: key otherwise: nil.
 	built := self ___builtThisLoad___: aModuleName.
 	claimed := (built at: 1) includes: key.
+	"Rooted where Class >> ___subclass___: roots it: a float or int base is
+	replaced by its storage class (see ___canonicalSubclassOf:..., #1863)."
+	root := self ___subclassRootOf___: aParent.
 	"No key yet, but a previous build of this module may still hold the class:
 	a module deployed by a Grail before #1802, which recorded none."
 	(existing isNil and: [claimed not]) ifTrue: [
-		existing := self ___previousBuiltClass___: aName module: aModuleName parent: aParent].
+		existing := self ___previousBuiltClass___: aName module: aModuleName parent: root].
 	rebuilding := SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil.
 	reuse := (existing isKindOf: Behavior)
 		and: [claimed not
-		and: [existing superclass == aParent
+		and: [existing superclass == root
 		and: [(rebuilding notNil and: [rebuilding includes: existing]) not
 		and: [(ivNames allSatisfy: [:n |
 				(existing allInstVarNames detect: [:m | m asString = n asString] ifNone: [nil]) notNil])
@@ -1110,7 +1113,7 @@ importlib class >> ___builtSubclassOf: aParent name: aSymbol pyName: aName modul
 			add: existing.
 		"The subclass link, which ___subclass___ records for a new class and the
 		body re-run has just dropped (see ___canonicalSubclassOf:...)."
-		self ___registerSubclass___: existing of: aParent.
+		self ___registerSubclass___: existing of: root.
 		^ existing].
 	existing := aParent @env1:___subclass___: aSymbol instVarNames: ivNames classInstVarNames: civNames.
 	claimed ifFalse: [
@@ -1723,7 +1726,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	    reuses the identity like a dropped one
 	    (docs/Class_Attribute_Single_Home.md)."
 
-	| key reg existing minted supersedesLive |
+	| key reg existing minted supersedesLive root |
 	(self ___grailNeedsNamespaceOf___: aModuleName) ifTrue: [
 		^ self ___grailInNamespaceOf___: aModuleName do: [self ___canonicalSubclassOf: aParent name: aName module: aModuleName instVarNames: ivNames classInstVarNames: civNames]].
 	"A session-local module's class (``__main__'') mints fresh every run, as
@@ -1741,6 +1744,13 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	CPython does (each statement is a fresh type).  ___mintedThisLoad___:
 	is reset by loadModuleFromPath:/reload: right before the body runs."
 	minted := self ___mintedThisLoad___: aModuleName.
+	"The parent the class is ROOTED at, which is not always the one the
+	statement names: ``class PF(float)'' and ``class PI(int)'' are rooted at a
+	storage class, AbstractPyFloat or AbstractPyInt (Class >> ___subclass___:).
+	Compared with the named parent, a float or int subclass -- and an enum
+	mixed with either -- was a base change on every rebuild, minted afresh,
+	and left its stored instances and members on the old class (#1863)."
+	root := self ___subclassRootOf___: aParent.
 	"...and never a class something else in this session is rebuilding right
 	now: a class built by a call reused this run (___builtSubclassOf:...) can
 	also be what a class statement registered -- the class a metaclass or a
@@ -1748,7 +1758,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	namespace in the middle of the other build."
 	((existing isKindOf: Behavior)
 		and: [(minted includes: key) not
-		and: [existing superclass == aParent
+		and: [existing superclass == root
 		and: [((SessionTemps current at: #'GrailRebuildingClasses' otherwise: nil)
 			ifNil: [false] ifNotNil: [:r | r includes: existing]) not]]])
 			ifTrue: [
@@ -1777,7 +1787,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 				(___forgetSubclassesFromModule___:) -- so without this a reused
 				class would vanish from its base's __subclasses__() on the second
 				import.  Idempotent, like the registration itself."
-				self ___registerSubclass___: existing of: aParent.
+				self ___registerSubclass___: existing of: root.
 				^ existing].
 	"A DECLARED BASE CHANGE is refused (docs/Schema_Evolution_Design.md cut 4).
 	Re-minting strands every persisted instance on the old class, silently:
@@ -1804,7 +1814,7 @@ importlib class >> ___canonicalSubclassOf: aParent name: aName module: aModuleNa
 	is unchanged binds warm and never enters the build path. The refusal
 	therefore fires on an EDIT, in the session of the developer who made it."
 	(((existing isKindOf: Behavior) and: [(minted includes: key) not])
-		and: [existing superclass ~~ aParent
+		and: [existing superclass ~~ root
 		and: [(self ___canonicalClassKnown___: aParent)
 		and: [(self ___remintedThisSession___ includes: aParent) not
 		and: [(self ___baseChangeAllowed___: key) not
@@ -2284,6 +2294,37 @@ importlib class >> ___compileUnstamped___: aSource on: aClass category: aCategor
 				environmentId: 0
 				methodDictEnvId: 0].
 	^ meth
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___compilingFile___: pathString do: aBlock [
+	"Answer what aBlock answers -- the reading or compiling of the module at
+	pathString -- with that file named wherever the compile names one, as
+	CPython's loader hands compile() the module's path
+	(Lib/importlib/_bootstrap_external.py:822-827, 896-897).  Grail's parser
+	and source decoding locate an error knowing only the text, so an imported
+	module's SyntaxError said ``<string>'', and so did its tokenizer warnings
+	(PythonTokenizer >> ___compileFilename___, which compile() sets the same
+	way).
+
+	Only an error naming no file of its own is restamped: a star import parses
+	the module it names (expandStarImports:), whose errors its own
+	astForPath: has named already.  The previous filename is back before any
+	handler of the error runs, because a Python ``except'' body runs before
+	the ensure: does."
+
+	| previousFilename |
+	previousFilename := SessionTemps current at: #'GrailCompileFilename' ifAbsent: [nil].
+	SessionTemps current at: #'GrailCompileFilename' put: pathString.
+	^ [aBlock
+		on: SyntaxError
+		do: [:ex |
+			self ___restoreCompileFilename___: previousFilename.
+			(self ___namesNoFile___: ex) ifFalse: [ex pass].
+			ex dynamicInstVarAt: #'filename' put: pathString.
+			ModuleAst ___resignalSyntaxError___: ex]]
+		ensure: [self ___restoreCompileFilename___: previousFilename]
 
 ]
 
@@ -5961,7 +6002,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 
 	| moduleAst moduleClass moduleInstance
 	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local rerun
-	  earlyEntry previousEntry parentBinding |
+	  earlyEntry previousEntry parentBinding unload unloaded |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -6117,7 +6158,18 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	rerun ifFalse: [stateMap at: moduleName asSymbol put: #'stale'].
 
 	moduleClass isNil ifTrue: [
-		moduleAst := (ModuleAst parseSource: srcString) path: pathString; yourself.
+		"THE CODE GENERATOR'S WARNINGS, which CPython emits while compiling a
+		module as compile() does here (builtins >> _compile:kw:): an
+		always-true assert, ``x is 1'', a literal called where a comma was
+		meant.  A cold build compiles; a warm bind, like CPython's cached
+		bytecode, does not.  Inside the filename wrap, so a warning a filter
+		turns into an error names the module's file."
+		moduleAst := (self ___compilingFile___: pathString do: [
+				(ModuleAst parseSource: srcString)
+					___emitCompileWarningsIn___: srcString filename: pathString;
+					yourself])
+			path: pathString;
+			yourself.
 		moduleAst name: moduleName.
 		moduleAst useTempsForBlock: false.
 
@@ -6139,7 +6191,8 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 		below (and therefore in the generated class's inst vars)."
 		self expandStarImports: moduleAst.
 
-		moduleClass := self ___buildModuleClass: moduleAst name: moduleName.
+		moduleClass := self ___compilingFile___: pathString do: [
+			self ___buildModuleClass: moduleAst name: moduleName].
 		hashes at: moduleName put: srcHash].
 
 	"Phase A: no per-variable accessor methods are generated.  Module
@@ -6248,10 +6301,37 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	this.  A STACK, not a variable, because a module body imports other
 	modules and the innermost one is the answer.  ensure:, so a body that
 	raises still pops."
+	"A BODY UNWOUND WITHOUT AN EXCEPTION is unloaded too.  The handler below
+	sees an exception that passes through it, and lets a Notification go on
+	so that the body can resume; a handler further out that RETURNS from
+	that notification instead, or a terminated process, unwinds the body
+	past this method without ever reaching it.  The module then stayed in
+	sys.modules with none of the globals its body had not reached, and the
+	next import answered it: encodings.utf_16_le without even ``codecs'',
+	which made pyexpat's next UTF-16 decode a NameError in a later test.
+	CPython removes a module whose load did not finish
+	(Lib/importlib/_bootstrap.py:938-944, in _load_unlocked)."
+	unloaded := false.
+	unload := [
+		unloaded := true.
+		self removeModule: moduleName.
+		self ___restoreParentBinding___: parentBinding of: moduleInstance.
+		earlyEntry ifTrue: [
+			previousEntry isNil
+				ifTrue: [self ___canonicalModules___ removeKey: moduleName ifAbsent: []]
+				ifFalse: [self ___canonicalModules___ at: moduleName put: previousEntry]].
+		"A failed rebuild leaves the committed instance half re-executed
+		(in this transaction only).  Put the old hash back so the next
+		import sees the module as stale and retries, instead of finding a
+		matching hash and binding the half-built instance."
+		(rebuiltInPlace and: [rerun not]) ifTrue: [
+			previousHash isNil
+				ifTrue: [hashes removeKey: moduleName ifAbsent: []]
+				ifFalse: [hashes at: moduleName put: previousHash]]].
 	self ___pushInitializingModule___: moduleName.
 	self ___claimModuleInit___: moduleName.
 	self ___beginDepCollection___: moduleName.
-	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
+	[[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
 			"A NOTIFICATION IS NOT A FAILURE.  AlmostOutOfMemory (6013) arrives
 			asynchronously whenever temporary object memory runs low, and it is
@@ -6267,21 +6347,9 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 			resumes where it was.  BaseException is not a Notification, so every
 			Python raise still takes the unload path below."
 			(ex isKindOf: Notification) ifTrue: [ex pass].
-			self removeModule: moduleName.
-			self ___restoreParentBinding___: parentBinding of: moduleInstance.
-			earlyEntry ifTrue: [
-				previousEntry isNil
-					ifTrue: [self ___canonicalModules___ removeKey: moduleName ifAbsent: []]
-					ifFalse: [self ___canonicalModules___ at: moduleName put: previousEntry]].
-			"A failed rebuild leaves the committed instance half re-executed
-			(in this transaction only).  Put the old hash back so the next
-			import sees the module as stale and retries, instead of finding a
-			matching hash and binding the half-built instance."
-			(rebuiltInPlace and: [rerun not]) ifTrue: [
-				previousHash isNil
-					ifTrue: [hashes removeKey: moduleName ifAbsent: []]
-					ifFalse: [hashes at: moduleName put: previousHash]].
+			unload value.
 			ex outer]]
+				ifCurtailed: [unloaded ifFalse: [unload value]]]
 		ensure: [
 			imported := self ___endDepCollection___: moduleName.
 			self ___finishBuiltClasses___: moduleName.
@@ -7240,6 +7308,21 @@ importlib class >> ___mroOverrideRegistry___ [
 		reg := IdentityKeyValueDictionary new.
 		SessionTemps current at: #GrailMroOverrideRegistry put: reg].
 	^ reg
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___namesNoFile___: aSyntaxError [
+	"Whether aSyntaxError is located in its source but names the parser's
+	``<string>'' for the file.  One with no line is left alone: re-signalling
+	it keeps its message only (ModuleAst class >> ___resignalSyntaxError___:)."
+
+	| lineno |
+	lineno := [aSyntaxError dynamicInstVarAt: #'lineno']
+		on: AbstractException do: [:ex | ex return: nil].
+	lineno isNil ifTrue: [^ false].
+	^ ([aSyntaxError dynamicInstVarAt: #'filename']
+		on: AbstractException do: [:ex | ex return: nil]) = '<string>'
 
 ]
 
@@ -8833,6 +8916,16 @@ importlib class >> ___restoreCanonicalMiRecords___ [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___restoreCompileFilename___: aFilenameOrNil [
+	"Put back the filename the tokenizer's warnings name, or none."
+
+	aFilenameOrNil isNil
+		ifTrue: [SessionTemps current removeKey: #'GrailCompileFilename' ifAbsent: [nil]]
+		ifFalse: [SessionTemps current at: #'GrailCompileFilename' put: aFilenameOrNil]
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___restoreParentBinding___: aBinding of: aModule [
 	"Undo, after aModule's body FAILED, the binding that registering it made on
 	its parent (aBinding, from ___parentBindingOf___:).
@@ -9211,7 +9304,8 @@ importlib class >> ___sourceStringForPath___: pathString [
 	(builtinsModule ___needsSourceDecoding___: contents) ifFalse: [
 		text := [contents decodeToUnicode] on: Error do: [:ex | ex return: nil].
 		text isNil ifFalse: [^ text]].
-	^ builtinsModule ___decodedSource___: contents asByteArray
+	^ self ___compilingFile___: pathString do: [
+		builtinsModule ___decodedSource___: contents asByteArray]
 
 ]
 
@@ -9459,6 +9553,28 @@ importlib class >> ___subclassRegistry___ [
 		reg := IdentityKeyValueDictionary new.
 		SessionTemps current at: #GrailSubclassRegistry put: reg].
 	^ reg
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___subclassRootOf___: aParent [
+	"The class a ``class X(aParent)'' is rooted at -- its Smalltalk superclass.
+	aParent itself, except for a sealed kernel number: Integer and Float (and
+	their concrete classes) cannot be subclassed with storage of their own, so
+	Class >> ___subclass___: substitutes the Number-sibling that boxes the
+	value, AbstractPyInt or AbstractPyFloat.
+
+	One answer for both sides of a rebuild: the class build that substitutes,
+	and the reuse tests (___canonicalSubclassOf:..., ___builtSubclassOf:...)
+	that ask whether a registered class still descends from what the
+	statement names.  They compared with aParent, so a float or int subclass
+	never matched and was minted afresh on every rebuild (#1863)."
+
+	((aParent == Integer)
+		or: [aParent == SmallInteger or: [aParent == LargeInteger]]) ifTrue: [^ AbstractPyInt].
+	((aParent == Float)
+		or: [aParent == SmallDouble or: [aParent == BinaryFloat]]) ifTrue: [^ AbstractPyFloat].
+	^ aParent
 
 ]
 
@@ -10073,14 +10189,15 @@ importlib class >> astForPath: pathString [
 	"Create a ModuleAst from a Python file path.
 
 	importlib astForPath: '/path/to/file.py'.
-	"
-		| file sourceString module |
-		file := self ___openServerFile___: pathString mode: 'rb'.
-		sourceString := file contentsAsUtf8 decodeToUnicode.
-		file close.
-		module := ModuleAst parseSource: sourceString.
-		module path: pathString.
-		^module
+
+	Read as the loader reads a module, so a star import of a module declaring
+	its encoding parses it, and an error in it names its file."
+
+	| module |
+	module := self ___compilingFile___: pathString do: [
+		ModuleAst parseSource: (self ___sourceStringForPath___: pathString)].
+	module path: pathString.
+	^ module
 
 ]
 

@@ -1,5 +1,13 @@
 Extension { #name : 'OrderedCollection' }
 
+{ #category : 'Grail-Attribute Access' }
+OrderedCollection class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == OrderedCollection
+
+]
+
 { #category : 'Grail-Introspection' }
 OrderedCollection class >> ___pythonValueAttrs___ [
 	"Selectors ___pyAttrLoad___ must treat as VALUE attribute reads rather

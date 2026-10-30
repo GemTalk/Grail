@@ -1159,10 +1159,14 @@ Integer >> __eq__: other [
 	compares via CPython's reflected ==: defer to it rather than answering
 	false, so ``2 == Fraction(4, 2)`` is True (mirrors Float>>__eq__).  A plain
 	object with only the inherited identity __eq__ keeps the false answer."
-	(other isKindOf: PythonInstance) ifTrue: [
+	"...and so does a Python class over a kernel container, ``class C(list)''
+	with its own __eq__, which is not a PythonInstance (test_descr
+	test_rich_comparisons)."
+	(other isKindOf: Number) ifFalse: [
 		refOwner := other @env0:class @env0:whichClassIncludesSelector: #'__eq__:' environmentId: 1.
-		(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-			^ other @env0:perform: #'__eq__:' env: 1 withArguments: { self }]].
+		(refOwner ~~ nil and: [refOwner ~~ object
+			and: [(other isKindOf: PythonInstance) or: [refOwner ___grailIsPythonClass___]]])
+				ifTrue: [^ other @env0:perform: #'__eq__:' env: 1 withArguments: { self }]].
 	^ false
 
 ]
