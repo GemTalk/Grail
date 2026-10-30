@@ -2660,6 +2660,31 @@ importlib class >> ___directCallsInvalidate___ [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___discardBodyRecordsOf___: aModuleName [
+	"aModuleName's body FAILED, and the load is unloading it: drop the records
+	the run was building (___beginBodyRecordsOf___:), so that when the body's
+	stack unwinds ___endBodyRecordsOf___: finds nothing to write.  The
+	module's committed records stand, as they did before the run.
+
+	A failed body's records describe a module that is not there, and writing
+	them is not only wasted: the write lands WHEN the stack unwinds, which can
+	be after the caller has aborted.  scripts/redeployModules.gs aborts inside
+	its handler and then asks for a clean transaction, to count the instances
+	stored against a class whose base change was refused
+	(___grailUninhabitedBaseChanges___:); the late write left it dirty, the
+	count answered nothing, and every such refusal stood.  On GemDB's upgrade
+	that was email.message and the 56 modules importing it, each a failed
+	build of flask's import closure, until the redeploy ran out of temporary
+	object memory (GemTalk/Grail#1985)."
+
+	| pend |
+	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
+	pend isNil ifTrue: [^ self].
+	pend removeKey: aModuleName asString ifAbsent: []
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___dropUnbuiltClasses___: aModuleName [
 	"After a body run that completed: forget the built-class keys
 	(``module.Name()'', ___builtSubclassOf:...) of aModuleName that this run did
@@ -6314,6 +6339,9 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	unloaded := false.
 	unload := [
 		unloaded := true.
+		"Before the stack unwinds: what the failed run recorded is not written
+		when it pops (___discardBodyRecordsOf___:)."
+		self ___discardBodyRecordsOf___: moduleName.
 		self removeModule: moduleName.
 		self ___restoreParentBinding___: parentBinding of: moduleInstance.
 		earlyEntry ifTrue: [
