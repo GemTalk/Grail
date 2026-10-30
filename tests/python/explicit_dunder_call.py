@@ -101,15 +101,13 @@ def bound_setattr_stores():
     return outcome(lambda: (p.__setattr__("x", 1), p.x)[1])
 
 
+@check("bound_setattr_returns_none", "value None")
 def bound_setattr_returns_none():
-    """The RETURN of the bound call.  Deliberately NOT in CHECKS: CPython
-    answers None and Grail answers the stored value, because
-    ___pyAttrStore___ returns aValue so codegen can use a store as an
-    expression (chained assignment, tuple unpack).  A CPython-graded check
-    cannot carry a Grail-only expectation -- the harness's XFAIL marker is
-    for the other direction -- so the Smalltalk test asserts Grail's answer
-    with the divergence written down beside it.  Pre-existing, and not
-    introduced by making this call work."""
+    """The RETURN of the bound call: None, as CPython's slot wrapper answers.
+    Grail answered the stored value and this check stood outside CHECKS with
+    the divergence written down; object >> __setattr__:_: now answers None,
+    while ___pyAttrStore___, which codegen uses as an expression, still
+    answers the value (tests/python/setattr_delattr_answer_none.py)."""
     p = Plain()
     return outcome(lambda: p.__setattr__("x", 1))
 
