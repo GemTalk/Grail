@@ -5989,7 +5989,16 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	rerun ifFalse: [stateMap at: moduleName asSymbol put: #'stale'].
 
 	moduleClass isNil ifTrue: [
-		moduleAst := (self ___compilingFile___: pathString do: [ModuleAst parseSource: srcString])
+		"THE CODE GENERATOR'S WARNINGS, which CPython emits while compiling a
+		module as compile() does here (builtins >> _compile:kw:): an
+		always-true assert, ``x is 1'', a literal called where a comma was
+		meant.  A cold build compiles; a warm bind, like CPython's cached
+		bytecode, does not.  Inside the filename wrap, so a warning a filter
+		turns into an error names the module's file."
+		moduleAst := (self ___compilingFile___: pathString do: [
+				(ModuleAst parseSource: srcString)
+					___emitCompileWarningsIn___: srcString filename: pathString;
+					yourself])
 			path: pathString;
 			yourself.
 		moduleAst name: moduleName.
