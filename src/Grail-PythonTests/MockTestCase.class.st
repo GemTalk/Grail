@@ -238,3 +238,36 @@ m(21) == 42 and raised'.
 	self assert: result
 
 ]
+
+{ #category : 'Grail-Tests - mock' }
+MockTestCase >> testUnittestMockFileIsTheMockModule [
+	"``import unittest.mock'' with no sys.modules entry for it loads
+	src/python/stdlib/unittest/mock.py, and that has to answer the mock module
+	ITSELF, not a module re-exporting it.  The re-export made
+	testSentinelAndUnittestMockAlias depend on order: mock.py aliases the name
+	only when its body runs, and after IRTextSourcesChunkedTestCase restored the
+	canonical registry, ``from unittest import mock'' loaded the file instead --
+	two modules, and the alias check failed in whichever shard ran the pair."
+
+	| result |
+	result := self eval: 'import sys
+import mock
+import unittest
+saved = sys.modules.pop("unittest.mock", None)
+had_attr = "mock" in vars(unittest)
+if had_attr:
+    saved_attr = vars(unittest)["mock"]
+    delattr(unittest, "mock")
+try:
+    import unittest.mock
+    from unittest import mock as from_imported
+    ok = (sys.modules["unittest.mock"] is mock
+          and unittest.mock is mock
+          and from_imported is mock)
+finally:
+    sys.modules["unittest.mock"] = mock
+    unittest.mock = mock
+ok'.
+	self assert: result
+
+]
