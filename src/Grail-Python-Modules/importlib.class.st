@@ -5833,7 +5833,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 
 	| moduleAst moduleClass moduleInstance
 	  srcString srcHash hashes hashState stateMap previousHash rebuiltInPlace imported buildChanged local rerun
-	  earlyEntry previousEntry parentBinding |
+	  earlyEntry previousEntry parentBinding unload unloaded |
 	"Both entry points must set the stack-error flavour: this is the path fixtures
 	 and the test harnesses take, and ___canonicalGenerationCheck___ is the path an
 	 ordinary import takes.  See ___ensureStackErrorFlavour___."
@@ -6123,10 +6123,37 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	this.  A STACK, not a variable, because a module body imports other
 	modules and the innermost one is the answer.  ensure:, so a body that
 	raises still pops."
+	"A BODY UNWOUND WITHOUT AN EXCEPTION is unloaded too.  The handler below
+	sees an exception that passes through it, and lets a Notification go on
+	so that the body can resume; a handler further out that RETURNS from
+	that notification instead, or a terminated process, unwinds the body
+	past this method without ever reaching it.  The module then stayed in
+	sys.modules with none of the globals its body had not reached, and the
+	next import answered it: encodings.utf_16_le without even ``codecs'',
+	which made pyexpat's next UTF-16 decode a NameError in a later test.
+	CPython removes a module whose load did not finish
+	(Lib/importlib/_bootstrap.py:938-944, in _load_unlocked)."
+	unloaded := false.
+	unload := [
+		unloaded := true.
+		self removeModule: moduleName.
+		self ___restoreParentBinding___: parentBinding of: moduleInstance.
+		earlyEntry ifTrue: [
+			previousEntry isNil
+				ifTrue: [self ___canonicalModules___ removeKey: moduleName ifAbsent: []]
+				ifFalse: [self ___canonicalModules___ at: moduleName put: previousEntry]].
+		"A failed rebuild leaves the committed instance half re-executed
+		(in this transaction only).  Put the old hash back so the next
+		import sees the module as stale and retries, instead of finding a
+		matching hash and binding the half-built instance."
+		(rebuiltInPlace and: [rerun not]) ifTrue: [
+			previousHash isNil
+				ifTrue: [hashes removeKey: moduleName ifAbsent: []]
+				ifFalse: [hashes at: moduleName put: previousHash]]].
 	self ___pushInitializingModule___: moduleName.
 	self ___claimModuleInit___: moduleName.
 	self ___beginDepCollection___: moduleName.
-	[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
+	[[[BaseException @env1:___recursionGuard___: [moduleInstance @env1:initialize]]
 		on: AbstractException do: [:ex |
 			"A NOTIFICATION IS NOT A FAILURE.  AlmostOutOfMemory (6013) arrives
 			asynchronously whenever temporary object memory runs low, and it is
@@ -6142,21 +6169,9 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 			resumes where it was.  BaseException is not a Notification, so every
 			Python raise still takes the unload path below."
 			(ex isKindOf: Notification) ifTrue: [ex pass].
-			self removeModule: moduleName.
-			self ___restoreParentBinding___: parentBinding of: moduleInstance.
-			earlyEntry ifTrue: [
-				previousEntry isNil
-					ifTrue: [self ___canonicalModules___ removeKey: moduleName ifAbsent: []]
-					ifFalse: [self ___canonicalModules___ at: moduleName put: previousEntry]].
-			"A failed rebuild leaves the committed instance half re-executed
-			(in this transaction only).  Put the old hash back so the next
-			import sees the module as stale and retries, instead of finding a
-			matching hash and binding the half-built instance."
-			(rebuiltInPlace and: [rerun not]) ifTrue: [
-				previousHash isNil
-					ifTrue: [hashes removeKey: moduleName ifAbsent: []]
-					ifFalse: [hashes at: moduleName put: previousHash]].
+			unload value.
 			ex outer]]
+				ifCurtailed: [unloaded ifFalse: [unload value]]]
 		ensure: [
 			imported := self ___endDepCollection___: moduleName.
 			self ___finishBuiltClasses___: moduleName.
