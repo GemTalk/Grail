@@ -13903,7 +13903,8 @@ Object >> ___pyAttrDelete___: aName [
 		attributes inline (Objects/dictobject.c:6998) -- and a strictly slotted
 		object has no dict to miss in.  Grail raised the bare quoted name, a
 		KeyError's wording."
-		^ ((self ___respondsTo___: #'___pySlotsStrict___') and: [self ___pySlotsStrict___])
+		^ (((self ___respondsTo___: #'___pySlotsStrict___') and: [self ___pySlotsStrict___])
+				or: [self @env0:class @env0:___grailInstancesHaveNoDict___])
 			ifTrue: [self ___refuseAttrWithoutDict___: aName]
 			ifFalse: [
 				AttributeError ___signal___: '''' @env0:, self @env0:___pyDnuTypeName___ @env0:asString
@@ -15723,6 +15724,17 @@ Object >> ___pyAttrStore___: aName put: aValue [
 			]
 		].
 	].
+	"A BUILT-IN instance with no __dict__ -- object(), a list, a dict, a set,
+	a range -- refuses a name nothing on its type claimed, as CPython's
+	generic setattr does (Objects/object.c:1991-2004).  Asked only here, after
+	every descriptor and slot has had its say."
+	(self @env0:class @env0:___grailInstancesHaveNoDict___) ifTrue: [
+		"Its __class__ cannot be reassigned either: object_set_class refuses a
+		type that is not a heap type (Objects/typeobject.c:7178-7186)."
+		(aName @env0:asString @env0:= '__class__') ifTrue: [
+			^ TypeError ___signal___:
+				'__class__ assignment only supported for mutable types or ModuleType subclasses'].
+		^ self ___refuseAttrWithoutDict___: aName].
 	self ___pyStoreDynamic___: aName @env0:asSymbol put: aValue.
 	"AN INSTANCE ATTRIBUTE THAT SHADOWS A METHOD has to be visible to that
 	object's own ``self.<name>(...)'' calls, and a self-send is a plain
@@ -16470,10 +16482,11 @@ Object >> ___pyStoreDynamic___: aSym put: aValue [
 
 					This converts a failure; it does not create one.  A store
 					that GemStone accepts still lands, so nothing that works
-					today changes -- including the mutable built-ins (list,
-					dict, a computed str) which still accept an attribute where
-					CPython refuses.  Closing THAT gap needs a type-level
-					``this type has no __dict__'' notion and is a separate cut."
+					today changes.  The mutable built-ins that GemStone would
+					accept an attribute on -- object(), list, dict, set, range,
+					slice, bytearray -- are refused before the store, by the
+					type-level ___grailInstancesHaveNoDict___ that
+					___pyAttrStore___:put: asks; a computed str still accepts one."
 					((why @env0:indexOfSubCollection: 'dynamic instVars not supported') @env0:> 0
 						@env0:or: [(why @env0:indexOfSubCollection: 'Attempt to modify invariant object') @env0:> 0])
 						ifTrue: [

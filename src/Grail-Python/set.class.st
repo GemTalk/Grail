@@ -17,6 +17,14 @@ Class {
 	#category : 'Grail-Collections-Unordered'
 }
 
+{ #category : 'Grail-Attribute Access' }
+set class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == set
+
+]
+
 { #category : 'Grail-Introspection' }
 set class >> ___pythonValueAttrs___ [
 	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."

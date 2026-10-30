@@ -549,6 +549,20 @@ Object class >> ___grailInstallSelfSendDispatchers___: aSymbol [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailInstancesHaveNoDict___ [
+	"True for a built-in type whose instances CPython gives no __dict__, so an
+	attribute nothing on the type claims cannot be stored on one: object
+	itself, and the containers that say so themselves.  Only the exact class
+	answers: a Python subclass of one has a __dict__.  GemStone hangs a
+	dynamic instVar on any object that is not special or invariant, which is
+	how ``object().foo = 12'' and ``[].foo = 1'' were stored (test_descr
+	test_object_class)."
+
+	^ self == Object
+
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailIsBindingDescriptor___: aValue [
 	"A Python-level descriptor: not a function / block / method wrapper / class,
