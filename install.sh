@@ -135,8 +135,8 @@ echo "Installing as: ${TOPAZINI_USER#GRAIL_TOPAZINI_USER=}"
 # throwaway method now.  GRAIL_IR_CODEGEN=0 (or false/no/off, as importlib reads
 # it) turns the IR path off, so such a product can still install on the text path.
 echo "Checking IR codegen..."
-IR_PROBE=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_ir_codegen.gs" 2>/dev/null \
-    | grep -E '^GRAIL_IR=' | head -1)
+IR_PROBE_OUT=$(LC_ALL=C topaz -lq -S "$GRAIL_DIR/scripts/check_ir_codegen.gs" 2>&1)
+IR_PROBE=$(printf '%s\n' "$IR_PROBE_OUT" | grep -E '^GRAIL_IR=' | head -1)
 case "$(printf '%s' "${GRAIL_IR_CODEGEN-}" | tr '[:upper:]' '[:lower:]')" in
     0|false|no|off) IR_OFF=1 ;;
     *)              IR_OFF= ;;
@@ -153,6 +153,14 @@ case "$IR_PROBE" in
             echo ""
             echo "Error: GemStone $GS_VERSION (build ${GS_BUILD_DATE:-unknown}) cannot build methods through IR."
             echo "  ${REASON:-scripts/check_ir_codegen.gs gave no answer}"
+            if [ -z "$IR_PROBE" ]; then
+                # No answer means topaz itself failed (a compile error, a lost
+                # login): its own output is the only diagnosis there is.  A
+                # compile error names the culprit by a caret near the TOP and
+                # lists the errors at the end, so show it whole (it is short).
+                echo "  Its topaz output:"
+                printf '%s\n' "$IR_PROBE_OUT" | head -60 | sed 's/^/    /'
+            fi
             echo ""
             echo "  Grail's codegen uses IR by default.  Use a newer product, or install"
             echo "  and run with the text path:  GRAIL_IR_CODEGEN=0 ./install.sh"

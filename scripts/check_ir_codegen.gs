@@ -29,15 +29,23 @@ iferr 2 stk
 login
 
 run
-| result |
+"The GsCom* classes live only in GsCompilerClasses, which a fresh user's
+symbol list does not hold: Grail's own preload adds it, and this probe runs
+before that.  Naming them directly compiled here, where Grail was already
+installed, and failed to compile on CI's fresh extent, so the probe printed
+nothing.  So reach them through GsCompilerClasses, which is in Globals, and
+leave the symbol list alone."
+| result comp |
+comp := GsCompilerClasses.
 result := [ | m ret meth answer |
-	m := GsComMethNode newSmalltalk.
+	m := (comp at: #GsComMethNode) newSmalltalk.
 	m selector: #grailIRCodegenProbe;
 		bodyEnv: 1 selectorEnv: 1;
 		class: Object.
 	m source: ''.
 	m fileName: 'check_ir_codegen'.
-	ret := GsComReturnNode new return: (GsComLiteralNode newInteger: 4242).
+	ret := (comp at: #GsComReturnNode) new
+		return: ((comp at: #GsComLiteralNode) newInteger: 4242).
 	ret lineNumber: 1.
 	m appendStatement: ret.
 	meth := GsNMethod generateFromIR: m.
