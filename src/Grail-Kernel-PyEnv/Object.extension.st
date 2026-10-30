@@ -8464,7 +8464,14 @@ Object >> ___cmpFallback___: other op: opString reflected: refSelector [
 	refOwner := other @env0:class
 		@env0:whichClassIncludesSelector: refSelector environmentId: 1.
 	(refOwner ~~ nil and: [refOwner ~~ object]) ifTrue: [
-		(other isKindOf: PythonInstance)
+		"So is a Python class over a kernel CONTAINER -- ``class C(list)''
+		with its own __gt__ -- which is not a PythonInstance: CPython calls
+		the reflected dunder of whatever type it finds it on
+		(Objects/object.c:1046 do_richcompare), so ``1 < C()'' ran no C.__gt__ and
+		raised (test_descr test_rich_comparisons).  A Number keeps the guarded
+		path below."
+		((other isKindOf: PythonInstance)
+				or: [(other isKindOf: Number) not and: [refOwner ___grailIsPythonClass___]])
 			ifTrue: [
 				rr := other @env0:perform: refSelector env: 1 withArguments: { self }.
 				(rr @env0:== NotImplemented) ifFalse: [^ rr]]
