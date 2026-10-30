@@ -760,16 +760,15 @@ module >> ___recordedFunctionMeta___: aKind name: aName [
 
 { #category : 'Grail-Signatures' }
 module >> ___recordedFunctionMetaOfKind___: aKind [
-	"The committed record of ___recordFunctionMeta___:name:value: for aKind, as
-	function name -> value: the dictionary itself, or an empty one when there
-	is none."
+	"The record of ___recordFunctionMeta___:name:value: for aKind, as function
+	name -> value: the dictionary itself, or an empty one when there is none.
+	Committed, or while this module's body runs the one that run is building
+	(importlib >> ___bodyRecord___:of:)."
 
-	| nm reg rec |
-	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
-	reg isNil ifTrue: [^ KeyValueDictionary new].
+	| nm rec |
 	nm := self at: #'__name__' otherwise: nil.
 	nm isNil ifTrue: [^ KeyValueDictionary new].
-	rec := reg at: nm asString otherwise: nil.
+	rec := importlib ___bodyRecord___: #'GrailCanonicalFunctionMeta' of: nm asString.
 	rec isNil ifTrue: [^ KeyValueDictionary new].
 	^ (rec at: aKind otherwise: nil) ifNil: [KeyValueDictionary new]
 
@@ -790,8 +789,10 @@ module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 	rule: what the build writes and is not on the class needs a committed
 	record.  Same shape as importlib >> ___recordBodyClassAttr___:name:value:
 	-- an RcKeyValueDictionary keyed by the module's name, in the module's
-	namespace, dropped when the body runs again
-	(importlib >> ___forgetFunctionMetaOf___:).
+	namespace, superseded when the body runs again
+	(importlib >> ___beginBodyRecordsOf___:): the run records into a fresh
+	set, committed when the body is done only if it differs, so an unchanged
+	re-run writes nothing (#1862).
 
 	Only from the module's own body, and never for a session-local module
 	(``__main__''), which nothing binds.  A spec is strings and integers --
@@ -799,20 +800,16 @@ module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 	or defaults block is code over the module, so all commit with the
 	deployment."
 
-	| nm reg rec kind |
+	| nm rec kind |
 	self ___bodyIsRunning___ ifFalse: [^ self].
 	nm := self at: #'__name__' otherwise: nil.
 	nm isNil ifTrue: [^ self].
 	nm := nm asString.
 	(importlib ___isSessionLocalModule___: nm) ifTrue: [^ self].
-	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
-	reg isNil ifTrue: [
-		reg := RcKeyValueDictionary new.
-		importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' put: reg].
-	rec := reg at: nm otherwise: nil.
+	rec := importlib ___bodyRecord___: #'GrailCanonicalFunctionMeta' of: nm.
 	rec isNil ifTrue: [
 		rec := KeyValueDictionary new.
-		reg at: nm put: rec].
+		importlib ___bodyRecord___: #'GrailCanonicalFunctionMeta' of: nm put: rec].
 	kind := rec at: aKind otherwise: nil.
 	kind isNil ifTrue: [
 		kind := KeyValueDictionary new.
