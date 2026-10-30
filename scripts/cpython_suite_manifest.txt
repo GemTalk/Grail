@@ -675,6 +675,30 @@ test.test_zlib
 # test methods to a mixin base after the class exists):
 #
 #   message 310t 1F/29E    generator 73t 24F/18E
+#
+# Re-vendored from 3.14.8 (2026-10-28), which brings upstream fixes and 23 more
+# tests.  Most of what was left fell to five Grail gaps:
+#
+# * a class-body attribute on a base written LEFT of the primary chain lost to
+#   the chain's own (importlib ___leftBaseClassAttrOverrides___).  TestGenerator
+#   and TestEmailMessage read compat32 from TestEmailBase instead of their
+#   mixin's policy.default -- nearly all of the generator and message errors;
+# * io.StringIO ignored newline='' and refused None/'\r'/'\r\n', so feedparser
+#   never ended a line at a bare CR.  Fixing that let test_long_lines run all
+#   four of its 20MB parses, which met StringIO.write copying its whole buffer
+#   on every append: 352s for that one test, and test_email TIMEOUT in a full
+#   run.  The buffer now grows in place (54s);
+# * bytes == memoryview was False;
+# * a codec name holding a surrogate escaped as a Smalltalk error, ending
+#   test__encoded_words;
+# * datetime.astimezone() named the zone from today's time.tzname, not the tz
+#   database's abbreviation at that instant (Kyiv 1984 is MSK).
+#
+# Measured on Darwin arm64: 1810 tests, 12E, ten modules OK.  All twelve are
+# one gap: a str SUBCLASS cannot hold a lone surrogate (it is a QuadByteString
+# underneath), and email's header parser makes every token one --
+#   _header_value_parser 390t 8E   headerregistry 194t 2E
+#   generator 77t 1E               parser 8t 1E
 test.test_email.test__encoded_words
 test.test_email.test__header_value_parser
 test.test_email.test_asian_codecs

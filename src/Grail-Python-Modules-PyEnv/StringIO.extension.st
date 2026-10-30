@@ -6,10 +6,13 @@ StringIO class >> ___construct___: initialValue newline: newlineArg [
 	anything else is CPython's TypeError, where it used to be printString'd
 	into the buffer (``StringIO(5)'' held '5').
 
-	newline: CPython translates newlines on write for None, '\r' and '\r\n'.
-	This StringIO never translates, which is exactly the behaviour of '\n'
-	(the default) and '' -- so those two are accepted and the others refused
-	rather than silently ignored."
+	newline is CPython's, all five values.  None translates '\r\n' and '\r'
+	to '\n' as it is written; '\r' and '\r\n' translate '\n' to themselves;
+	'\n' and '' store the text as given.  readline ends a line at the stored
+	terminator -- or, for '', at any of '\r', '\n' and '\r\n'.  This used to
+	refuse all but '\n' and '', and treated '' as '\n', so a bare '\r' ended
+	no line: email's feedparser reads its input through StringIO(newline='')
+	and joined a CR-terminated line to the next (test_email test_newlines)."
 
 	| inst initial lf cr |
 	(initialValue == None @env0:or: [initialValue == nil])
@@ -30,12 +33,12 @@ StringIO class >> ___construct___: initialValue newline: newlineArg [
 			((newlineArg @env0:= cr) @env0:or: [newlineArg @env0:= (cr @env0:, lf)]) ifFalse: [
 				ValueError ___signal___: 'illegal newline value: '
 					@env0:, (newlineArg @env1:__repr__) @env0:asString]]].
-	(newlineArg == None @env0:or: [(newlineArg @env0:= '') @env0:not
-			@env0:and: [(newlineArg @env0:= lf) @env0:not]]) ifTrue: [
-		NotImplementedError ___signal___:
-			'Grail''s StringIO does not translate newlines; newline must be ''\n'' or '''''].
 	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #_buffer put: (inst ___carried___: initial) @env0:copy.
+	"#_newline holds the argument as given: nil for None, else the string."
+	inst @env0:dynamicInstVarAt: #_newline
+		put: (newlineArg == None ifTrue: [nil] ifFalse: [newlineArg @env0:asString]).
+	inst @env0:dynamicInstVarAt: #_buffer
+		put: (inst ___translatedOnWrite___: (inst ___carried___: initial)) @env0:copy.
 	inst @env0:dynamicInstVarAt: #_pos put: 0.
 	inst @env0:dynamicInstVarAt: #_closed put: false.
 	^ inst
@@ -167,23 +170,44 @@ StringIO >> ___ioRead___: n [
 
 { #category : 'Grail-Private' }
 StringIO >> ___ioReadline___: limit [
-	"readline(size=-1) - read up to and including the next \\n, or
-	up to `size` chars (whichever first), or to EOF."
+	"readline(size=-1) - read up to and including the next line terminator,
+	or up to `size` chars (whichever first), or to EOF.  The terminator is
+	the newline mode's (see ___construct___:newline:): '\n' unless newline
+	is '\r' or '\r\n', and for '' any of '\r', '\n' and '\r\n'."
 
-	| n start max |
+	| buf n start max pos nl cr lf |
 	self _checkOpen.
-	n := (self @env0:dynamicInstVarAt: #_buffer) @env0:size.
-	(self @env0:dynamicInstVarAt: #_pos) @env0:>= n ifTrue: [^ ''].
-	start := (self @env0:dynamicInstVarAt: #_pos).
+	buf := self @env0:dynamicInstVarAt: #_buffer.
+	n := buf @env0:size.
+	start := self @env0:dynamicInstVarAt: #_pos.
+	start @env0:>= n ifTrue: [^ ''].
 	max := (limit == nil @env0:or: [limit == None @env0:or: [limit @env0:< 0]])
 		ifTrue: [n]
 		ifFalse: [(start @env0:+ limit) @env0:min: n].
-	[(self @env0:dynamicInstVarAt: #_pos) @env0:< max @env0:and: [((self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ 1) @env0:~= Character @env0:lf]]
-		@env0:whileTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ 1)].
-	"Include the \\n itself when present."
-	((self @env0:dynamicInstVarAt: #_pos) @env0:< max @env0:and: [((self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ 1) @env0:= Character @env0:lf]) ifTrue: [
-		self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ 1)].
-	^ self ___restored___: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: start @env0:+ 1 to: (self @env0:dynamicInstVarAt: #_pos))
+	nl := self @env0:dynamicInstVarAt: #_newline.
+	cr := Character @env0:cr.
+	lf := Character @env0:lf.
+	pos := start.
+	[pos @env0:< max] @env0:whileTrue: [ | ch |
+		ch := buf @env0:at: pos @env0:+ 1.
+		pos := pos @env0:+ 1.
+		(nl @env0:notNil @env0:and: [nl @env0:isEmpty])
+			ifTrue: [
+				ch @env0:= lf ifTrue: [^ self ___readlineTo___: pos from: start].
+				ch @env0:= cr ifTrue: [
+					(pos @env0:< max @env0:and: [(buf @env0:at: pos @env0:+ 1) @env0:= lf])
+						ifTrue: [pos := pos @env0:+ 1].
+					^ self ___readlineTo___: pos from: start]]
+			ifFalse: [
+				(nl @env0:notNil @env0:and: [(nl @env0:at: 1) @env0:= cr])
+					ifTrue: [
+						(ch @env0:= cr @env0:and: [nl @env0:size @env0:= 1])
+							ifTrue: [^ self ___readlineTo___: pos from: start].
+						(ch @env0:= lf @env0:and: [nl @env0:size @env0:= 2
+							@env0:and: [pos @env0:>= 2 @env0:and: [(buf @env0:at: pos @env0:- 1) @env0:= cr]]])
+							ifTrue: [^ self ___readlineTo___: pos from: start]]
+					ifFalse: [ch @env0:= lf ifTrue: [^ self ___readlineTo___: pos from: start]]]].
+	^ self ___readlineTo___: pos from: start
 
 ]
 
@@ -209,6 +233,17 @@ StringIO >> ___ioTruncate___: size [
 	size @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
 		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: size)].
 	^ size
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___readlineTo___: pos from: start [
+	"The line from 0-based ``start'' up to ``pos'', leaving the stream at
+	``pos'' -- ___ioReadline___:'s answer."
+
+	self @env0:dynamicInstVarAt: #_pos put: pos.
+	^ self ___restored___: ((self @env0:dynamicInstVarAt: #_buffer)
+		@env0:copyFrom: start @env0:+ 1 to: pos)
 
 ]
 
@@ -243,6 +278,44 @@ StringIO >> ___surrogatePlaceholders___ [
 
 	^ (self @env0:dynamicInstVarAt: #_surrogates)
 		@env0:ifNil: [self @env0:dynamicInstVarAt: #_surrogates put: Dictionary @env0:new]
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___translatedOnWrite___: aString [
+	"aString as the newline mode stores it (see ___construct___:newline:).
+	Each write is translated on its own, as CPython's is: its decoder is
+	always told the input is final, so a '\r' ending one write and a '\n'
+	starting the next are two line ends under newline=None, not one."
+
+	| nl cr lf out i n |
+	nl := self @env0:dynamicInstVarAt: #_newline.
+	cr := Character @env0:cr.
+	lf := Character @env0:lf.
+	(nl @env0:notNil @env0:and: [nl @env0:isEmpty @env0:or: [nl @env0:= (String @env0:with: lf)]])
+		ifTrue: [^ aString].
+	nl @env0:isNil
+		ifTrue: [(aString @env0:includes: cr) ifFalse: [^ aString]]
+		ifFalse: [(aString @env0:includes: lf) ifFalse: [^ aString]].
+	out := Unicode7 @env0:new.
+	n := aString @env0:size.
+	i := 1.
+	[i @env0:<= n] @env0:whileTrue: [ | ch |
+		ch := aString @env0:at: i.
+		nl @env0:isNil
+			ifTrue: [
+				ch @env0:= cr
+					ifTrue: [
+						out @env0:addCodePoint: 10.
+						(i @env0:< n @env0:and: [(aString @env0:at: i @env0:+ 1) @env0:= lf])
+							ifTrue: [i := i @env0:+ 1]]
+					ifFalse: [out @env0:addCodePoint: ch @env0:codePoint]]
+			ifFalse: [
+				ch @env0:= lf
+					ifTrue: [nl @env0:do: [:c | out @env0:addCodePoint: c @env0:codePoint]]
+					ifFalse: [out @env0:addCodePoint: ch @env0:codePoint]].
+		i := i @env0:+ 1].
+	^ out
 
 ]
 
@@ -451,25 +524,39 @@ StringIO >> write: data [
 	it asks whether the stream is closed (Modules/_io/stringio.c:554).  Grail
 	wrote the argument's Smalltalk print string -- ``aByteArray'' for b'x',
 	``aNoneType'' for None -- so base64.encode into a StringIO succeeded with
-	garbage where test_base64 expects the TypeError."
+	garbage where test_base64 expects the TypeError.
 
-	| s n endPos |
+	The buffer grows in place.  It used to be replaced by ``buffer ,
+	padding'' on every append, a copy of the whole buffer, so a stream built
+	from many small writes cost the square of its size: email's feedparser
+	writes each chunk it is fed into one, and test_email's test_long_lines
+	(20000 writes of 1000) spent minutes there.  The answer is the length of
+	the str given, as CPython's is, not of the newline-translated text."
+
+	| carried s n buf pos keep |
 	((data @env0:isKindOf: CharacterCollection) or: [data @env0:isKindOf: AbstractPyStr]) ifFalse: [
 		^ TypeError ___signal___: 'string argument expected, got '''
 			@env0:, data ___pyTypeNameForError___ @env0:, ''''].
 	self _checkOpen.
-	s := self ___carried___: data.
+	carried := self ___carried___: data.
+	s := self ___translatedOnWrite___: carried.
 	n := s @env0:size.
-	endPos := (self @env0:dynamicInstVarAt: #_pos) @env0:+ n.
-	endPos @env0:> (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
-		"Extend buffer with the suffix from `s`."
-		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:, (Unicode7 @env0:new: (endPos @env0:- (self @env0:dynamicInstVarAt: #_buffer) @env0:size))).
-	].
-	1 @env0:to: n do: [:i |
-		(self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ i put: (s @env0:at: i)
-	].
-	self @env0:dynamicInstVarAt: #_pos put: (endPos).
-	^ n
+	buf := self @env0:dynamicInstVarAt: #_buffer.
+	pos := self @env0:dynamicInstVarAt: #_pos.
+	"A write after a seek past the end fills the gap with NULs."
+	pos @env0:> buf @env0:size ifTrue: [
+		buf @env0:addAll: (Unicode7 @env0:new: pos @env0:- buf @env0:size)].
+	"Overwrite what the write covers, then append the rest."
+	keep := (buf @env0:size @env0:- pos) @env0:min: n.
+	keep @env0:> 0 ifTrue: [
+		buf @env0:replaceFrom: pos @env0:+ 1 to: pos @env0:+ keep with: s startingAt: 1].
+	keep @env0:< n ifTrue: [
+		buf @env0:addAll: (keep @env0:= 0
+			ifTrue: [s]
+			ifFalse: [s @env0:copyFrom: keep @env0:+ 1 to: n])].
+	self @env0:dynamicInstVarAt: #_buffer put: buf.
+	self @env0:dynamicInstVarAt: #_pos put: pos @env0:+ n.
+	^ carried @env0:size
 
 ]
 

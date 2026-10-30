@@ -1195,6 +1195,16 @@ PyDateTime >> ___localTimezone___ [
 		nm := off @env0:= stdOff
 			ifTrue: [names __getitem__: 0]
 			ifFalse: [names __getitem__: 1]].
+	"The tz DATABASE's abbreviation for this instant, when it has one for the
+	offset in force: what CPython reads from tm_zone.  time.tzname names the
+	zone only as it is TODAY, so Kyiv in 1984 -- Moscow time, +03:00 -- came
+	out as today's summer name 'EEST' rather than 'MSK' (test_email's
+	test_variable_tzname)."
+	[ | entry |
+		entry := time instance ___tzEntryAt___: ts.
+		(entry @env0:notNil @env0:and: [(entry @env0:at: 1) @env0:= off])
+			ifTrue: [nm := entry @env0:at: 3]]
+		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	^ PyTimezone
 		__new__: (PyTimedelta @env0:___fromTotalMicros___: off @env0:* 1000000)
 		_: nm

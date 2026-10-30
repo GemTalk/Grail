@@ -538,7 +538,13 @@ memoryview >> __eq__: other [
 		ifFalse: [(other isKindOf: ByteArray)
 			ifTrue: [other]
 			ifFalse: [^ ExecBlock @env0:___pyNotImplemented___]].
-	^ mine @env0:= theirs
+	"By VALUE, whatever the two classes: Smalltalk ``='' on a ByteArray also
+	compares classes, and bytearray is a subclass of it, so a memoryview never
+	equalled a bytearray holding the same bytes."
+	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
+	1 @env0:to: mine @env0:size do: [:i |
+		(mine @env0:at: i) @env0:= (theirs @env0:at: i) ifFalse: [^ false]].
+	^ true
 
 ]
 
