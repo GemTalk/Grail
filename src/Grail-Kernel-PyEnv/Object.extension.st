@@ -13316,6 +13316,24 @@ Object >> ___methodDefinedFrom___: startClass upTo: attrClass name: aSym [
 
 ]
 
+{ #category : 'Grail-Attribute Protocol' }
+Object >> ___nearerClassHolds___: aName before: aSelector [
+	"Does a class between the receiver's own and the one that compiles
+	aSelector hold a value of its own under aName -- ``foo =
+	C.foo.deleter(f)'', the store a subclass's @C.foo.deleter makes -- which
+	CPython's MRO reaches first?"
+
+	| owner sym walker |
+	owner := self @env0:class @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	sym := aName @env0:asString @env0:asSymbol.
+	walker := self @env0:class.
+	[walker ~~ nil and: [walker ~~ owner]] whileTrue: [
+		(walker ___grailNsHolderValueFor___: sym) ~~ nil ifTrue: [^ true].
+		walker := walker @env0:superClass].
+	^ false
+
+]
+
 { #category : 'Grail-Attribute Access' }
 Object >> ___nearestStoredClassAttrFrom___: startClass through: lastClass name: aSym [
 	"The value STORED as a class attribute aSym on the nearest class from
@@ -16059,10 +16077,21 @@ Object >> ___pyInstanceDescriptorDelete___: aName [
 	``___propDeleter_x'' is a private selector only ClassDefAst ever emits, so
 	responding to it IS the marker, whatever built-in the class is rooted at."
 
-	| delSym descr |
+	| delSym varargsDelSym descr |
 	delSym := ('___propDeleter_' @env0:, aName @env0:asString) @env0:asSymbol.
-	(self ___respondsTo___: delSym)
+	"...unless a nearer class binds the name itself: a subclass's
+	``@C.foo.deleter def foo'' holds its own property, whose deleter is the
+	one CPython runs.  The inherited selector ran C's (test_descr
+	test_properties_plus)."
+	((self ___respondsTo___: delSym)
+			and: [(self ___nearerClassHolds___: aName before: delSym) not])
 		ifTrue: [self @env0:perform: delSym env: 1. ^ true].
+	"A deleter with a default compiles in the varargs form (ClassDefAst >>
+	___redirectUnarySelectorIn:from:to:), called with no arguments."
+	varargsDelSym := ('_' @env0:, delSym @env0:asString @env0:, ':kw:') @env0:asSymbol.
+	((self ___respondsTo___: varargsDelSym)
+			and: [(self ___nearerClassHolds___: aName before: varargsDelSym) not])
+		ifTrue: [self @env0:perform: varargsDelSym env: 1 withArguments: { #(). nil }. ^ true].
 	"A decorator @property with NO deleter refuses, as CPython's does: it is a
 	data descriptor, so ``del obj.x'' reaches it rather than the instance dict
 	(#1660).  cached_property is not in ___grailOwnPropertyNames___, so its
