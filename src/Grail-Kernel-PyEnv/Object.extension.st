@@ -1841,6 +1841,16 @@ Object class >> ___grailInitSubclassSearchBase___ [
 
 ]
 
+{ #category : 'Grail-Instantiation' }
+Object class >> ___grailInitTakesNoArgumentsError___ [
+	"CPython's object_init for a class with neither __init__ nor __new__ of
+	its own, named by the class's __name__."
+
+	^ TypeError ___signal___: self ___pyNameOrEmpty___
+		@env0:, '.__init__() takes exactly one argument (the instance to initialize)'
+
+]
+
 { #category : 'Grail-Class Namespace' }
 Object class >> ___grailInjectClassCell___ [
 	"Put ``__classcell__'' into the class namespace, as CPython's compiler does
@@ -12188,30 +12198,34 @@ Object >> ___init__: positional kw: kwargs [
 	Fraction maps to a kernel number) died with an UNCATCHABLE
 	MessageNotUnderstood instead of being ignored."
 
-	"...except for excess arguments CPython's object_init refuses, which
-	Grail judges only for a class written entirely in Python
-	(___grailPurePythonChain___).  With no __init__ and no __new__ of its
-	own anywhere below object, ``C(42)'' is ``C() takes no arguments''.  An
-	ASSIGNED __init__ -- typing.Protocol installs one on every subclass --
-	makes tp_init not object_init, so the excess arguments it forwards here
-	are ``object.__init__() takes exactly one argument''.
+	"...except for excess arguments CPython's object_init refuses
+	(Objects/typeobject.c:6832-6849), which Grail judges only for a class
+	written entirely in Python (___grailPurePythonChain___).  A class with an
+	__init__ of its own -- a def, or an ASSIGNED one, which typing.Protocol
+	installs on every subclass -- forwards them here only by mistake:
+	``object.__init__() takes exactly one argument''.  One with neither
+	__init__ nor __new__ is named: ``C.__init__() takes exactly one argument'';
+	``C(42)'' itself is refused before this, at allocation, as ``C() takes no
+	arguments''.
 
-	A class that DEFS __init__ and passes arguments on to object is refused
-	by CPython as well, but not here: Grail's multiple inheritance merges a
-	second base's methods rather than linearising, so a mixin's cooperative
-	``super().__init__(*args)'' can reach object where CPython's MRO reaches
-	the next base."
+	A DEF'd __init__ used to be let through, because Grail's multiple
+	inheritance merged a second base's methods rather than linearising, so a
+	mixin's cooperative ``super().__init__(*args)'' could reach object where
+	CPython's MRO reaches the next base.  super() walks the C3 MRO after its
+	class now (Super >> ___classesAfterCls___), and ``object.__init__(self,
+	5)'' passed silently (test_descr test_object_new)."
 	| cls |
 	(positional @env0:isEmpty and: [kwargs == nil or: [kwargs @env0:isEmpty]])
 		ifTrue: [^ None].
 	cls := self @env0:class.
 	((cls @env0:inheritsFrom: PythonInstance) and: [cls ___grailPurePythonChain___])
 		ifFalse: [^ None].
-	(cls @env1:___dynamicClassAttr___: #'__init__') == nil ifFalse: [
-		^ TypeError ___signal___:
-			'object.__init__() takes exactly one argument (the instance to initialize)'].
-	(cls ___grailOwnsInit___ or: [cls ___grailOwnsNew___]) ifTrue: [^ None].
-	^ cls ___grailTakesNoArgumentsError___
+	((cls @env1:___dynamicClassAttr___: #'__init__') ~~ nil or: [cls ___grailOwnsInit___])
+		ifTrue: [
+			^ TypeError ___signal___:
+				'object.__init__() takes exactly one argument (the instance to initialize)'].
+	cls ___grailOwnsNew___ ifTrue: [^ None].
+	^ cls ___grailInitTakesNoArgumentsError___
 
 ]
 
