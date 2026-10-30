@@ -28,6 +28,14 @@ frozenset class >> ___frozenInstance: inst [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+frozenset class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == frozenset
+
+]
+
 { #category : 'Grail-Introspection' }
 frozenset class >> ___pythonValueAttrs___ [
 	"``obj.__dict__'' is a VALUE read, not a callable wrapper -- see __dict__."

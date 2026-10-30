@@ -21,6 +21,14 @@ bytearray class >> ___constructorName___ [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+bytearray class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == bytearray
+
+]
+
 { #category : 'Grail-Buffer Protocol' }
 bytearray >> add: aByte [
 	"Append one byte, refusing while a buffer export is live.
