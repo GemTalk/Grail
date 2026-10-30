@@ -1167,6 +1167,20 @@ ClassDefAst >> ___compileClassSide___: aSource on: classVarName onStream: aStrea
 ]
 
 { #category : 'Grail-code generation' }
+ClassDefAst >> ___declaresPropertyGetter___: aName before: aDef [
+	"Is there a top-level ``@property def <aName>'' in this body before aDef?"
+
+	body isNil ifTrue: [^ false].
+	body body do: [:each |
+		each == aDef ifTrue: [^ false].
+		((each isKindOf: FunctionDefAst)
+			and: [each name asSymbol == aName
+			and: [each ___propertyAccessorKind___ == #getter]]) ifTrue: [^ true]].
+	^ false
+
+]
+
+{ #category : 'Grail-code generation' }
 ClassDefAst >> ___decoratedPropertyNames___ [
 	"The names of this body's DECORATED properties: a @property whose getter,
 	setter or deleter carries a decorator that replaces the function --
@@ -1276,13 +1290,11 @@ ClassDefAst >> ___decoratorStoresOver___: aDef decoratedProps: decoratedProps [
 	not one accessor of a decorated property, it does not merely mark a
 	property accessor, and no later statement rebinds its name."
 
-	| decos kind |
+	| decos |
 	decos := aDef applicableMethodDecorators.
 	decos isEmpty ifTrue: [^ false].
 	(decoratedProps includes: aDef name asSymbol) ifTrue: [^ false].
-	kind := aDef ___propertyAccessorKind___.
-	((kind == #getter or: [kind == #setter or: [kind == #deleter]])
-		and: [aDef ___wrapsPropertyAccessor___ not]) ifTrue: [^ false].
+	(self ___isMarkedByCompiledAccessor___: aDef) ifTrue: [^ false].
 	^ (self ___isRebindLaterInBody___: aDef) not
 
 ]
@@ -2887,6 +2899,29 @@ ClassDefAst >> ___isClassBodySubscriptAssign___: stmt [
 
 ]
 
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___isMarkedByCompiledAccessor___: aDef [
+	"Does aDef's property form only MARK an accessor this class compiles
+	itself -- a @property getter, or the plain @x.setter / @x.deleter of a
+	@property def this body declares before it?  Such a def is served by its
+	compiled method, and its decorators store nothing over it.
+
+	An @x.getter, @x.setter or @x.deleter over a property that came from
+	anywhere else -- ``x = property(doc='hello')'' in the body -- is an
+	ordinary decorator: CPython evaluates ``x.setter(f)'' at the def, and the
+	class holds the property it answers.  Taken for a marker, it stored
+	nothing, and the class kept the bare ``property(doc='hello')'' with no
+	accessors (test_descr test_properties_plus)."
+
+	| kind |
+	kind := aDef ___propertyAccessorKind___.
+	((kind == #getter or: [kind == #setter or: [kind == #deleter]])
+		and: [aDef ___wrapsPropertyAccessor___ not]) ifFalse: [^ false].
+	kind == #getter ifTrue: [^ true].
+	^ self ___declaresPropertyGetter___: aDef name asSymbol before: aDef
+
+]
+
 { #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___isProtocolDunderAttr___: aName [
 	"See the class-side method, which NameAst asks too."
@@ -3173,9 +3208,10 @@ ClassDefAst >> ___propertyNamesForSlots___ [
 					or: [(deco isKindOf: NameAst)
 						and: [deco id asString = 'property']])
 					ifTrue: [names add: def ___mangledName___ asSymbol].
-				((deco isKindOf: AttributeAst)
-					and: [(#('setter' 'deleter' 'getter') includes: deco attr asString)
-					and: [deco value isKindOf: NameAst]])
+				"Only an accessor of a property the class declares: one over an
+				ASSIGNED property is an ordinary decorator, whose result the class
+				holds (FunctionDefAst >> ___classBodyNamesAProperty___:)."
+				(def isPropertyAccessorDecorator: deco)
 					ifTrue: [names add: (deco value ___manglePrivate___: deco value id) asSymbol]]]].
 	^ (IdentitySet withAll: names) asOrderedCollection
 
@@ -3232,12 +3268,24 @@ ClassDefAst >> ___redirectUnarySelectorIn: sourceString from: oldName to: newNam
 	``___propDeleter_x'' selector.  A method compiled from ``def x(self)'' has
 	no parameters after the stripped self, so its source begins with the bare
 	selector token followed by whitespace/newline -- only that leading token is
-	replaced."
+	replaced.
 
+	A deleter with a default -- ``def x(self, value=None)'' -- compiles in the
+	VARARGS form, whose source begins ``_x: ...'' for the selector ``_x:kw:''.
+	That keyword is renamed the same way, to ``____propDeleter_x:kw:''; left
+	alone, the deleter compiled as the plain name's varargs form and ``del
+	obj.x'' found no deleter (test_descr test_properties_plus)."
+
+	| varargsOld |
 	((sourceString size >= oldName size)
 		and: [(sourceString copyFrom: 1 to: oldName size) = oldName])
 		ifTrue: [
 			^ newName , (sourceString copyFrom: oldName size + 1 to: sourceString size)].
+	varargsOld := '_' , oldName , ':'.
+	((sourceString size >= varargsOld size)
+		and: [(sourceString copyFrom: 1 to: varargsOld size) = varargsOld])
+		ifTrue: [
+			^ '_' , newName , ':' , (sourceString copyFrom: varargsOld size + 1 to: sourceString size)].
 	^ sourceString
 
 ]
@@ -7570,7 +7618,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	plain @classmethod / @staticmethod / @property def emits nothing here
 	exactly as before."
 	self ___allFunctionDefs___ do: [:def |
-		| decos kind marking |
+		| decos marking |
 		decos := def applicableMethodDecorators.
 		"A property accessor whose remaining decorators only MARK it
 		(___wrapsPropertyAccessor___ false) is served by the compiled
@@ -7580,9 +7628,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		def's STORE cannot land over a later one: a getter and its @x.setter
 		share the name, and skipping the getter left its @abstractmethod
 		unapplied (test_abc test_descriptors_with_abstractmethod)."
-		kind := decos isEmpty ifTrue: [nil] ifFalse: [def ___propertyAccessorKind___].
-		marking := (kind == #getter or: [kind == #setter or: [kind == #deleter]])
-			and: [def ___wrapsPropertyAccessor___ not].
+		marking := decos isEmpty not and: [self ___isMarkedByCompiledAccessor___: def].
 		(decos isEmpty not
 			and: [(decoratedProps includes: def name asSymbol) not
 			and: [(earlyDecorated includes: def) not
