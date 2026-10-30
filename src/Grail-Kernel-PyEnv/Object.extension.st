@@ -114,6 +114,20 @@ Object class >> ___displayNameOf___: aClass [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+Object class >> ___dropAnnotateFunctions___ [
+	"Take the class's annotate functions out of its dict -- the generated one,
+	``__annotate_func__'', and its own ``__annotate__'', assigned or defined by
+	the body -- as type_set_annotations does whenever __annotations__ is set or
+	deleted (Objects/typeobject.c), so ``Cls.__annotate__'' answers None after.
+	The own one goes through the class's ordinary delete, which knows each of
+	the forms a class-dict entry takes."
+
+	self ___removeOwnHolderEntry___: #'__annotate_func__'.
+	self ___hasOwnAnnotate___ ifTrue: [self ___pyAttrDelete___: '__annotate__']
+
+]
+
 { #category : 'Grail-Metaclass' }
 Object class >> ___grailAbcMetaclassInChain___ [
 	"True when this class's metaclass is abc.ABCMeta or a subclass of it --
@@ -4683,6 +4697,17 @@ Object class >> ___grailValidateStatementSlots___: boundNames [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+Object class >> ___hasOwnAnnotate___ [
+	"Does the class's own dict hold an ``__annotate__'' -- one its body assigned,
+	or a ``def __annotate__(format)'', which has no self and compiles unary?"
+
+	^ (self ___classBodyDynamicRead___: #'__annotate__') ~~ nil
+		or: [(self @env0:compiledMethodAt: #'__annotate__' environmentId: 1 otherwise: nil) ~~ nil
+		or: [(self @env0:compiledMethodAt: #'__annotate__:' environmentId: 1 otherwise: nil) ~~ nil]]
+
+]
+
 { #category : 'Grail-Instantiation' }
 Object class >> ___hasUserInit___ [
 	"True if this class defines its OWN Python __init__ (any arity), as
@@ -4783,6 +4808,20 @@ Object class >> ___invokeSetNameHooks___: attrNames [
 			(attrNames == nil or: [(attrNames @env0:includes: sym) not]) ifTrue: [
 				self ___setNameOn___: (holder @env0:dynamicInstVarAt: sym) named: sym]]].
 	^ self
+
+]
+
+{ #category : 'Grail-Annotations' }
+Object class >> ___metaclassDefines___: aSymbol [
+	"Does this class's Python metaclass define aSymbol itself?  type(cls)'s MRO
+	finds a metaclass's own attribute before type's, so a property or method
+	there wins over type's __annotate__ and __annotations__ getsets, as in
+	CPython (test_type_annotations test_descriptor_still_works)."
+
+	| metaclass |
+	metaclass := self ___grailMetaclass___.
+	metaclass == nil ifTrue: [^ false].
+	^ (metaclass @env0:whichClassIncludesSelector: aSymbol environmentId: 1) ~~ nil
 
 ]
 
@@ -5140,33 +5179,35 @@ Object class >> ___pyClassAnnotate___ [
 
 	EVERY Python class answers it -- None when it has no annotations of its
 	own (measured: ``class D: pass; D.__annotate__ is None'').  A class
-	inherits none from its bases; this reads the receiver's OWN holder only,
-	under CPython's class-dict key ``__annotate_func__''.  A class Grail did
-	not generate -- int, str, a kernel class -- has no holder and answers
-	AttributeError, as ``int.__annotate__'' does in CPython.
-
-	Class-side because an INSTANCE must not see it: ``A().__annotate__'' is an
-	AttributeError in CPython too."
+	inherits none from its bases; this reads the receiver's OWN holder only.
+	An ``__annotate__'' the class body assigned comes first, then the one
+	Grail generated under CPython's class-dict key ``__annotate_func__'', as
+	type_get_annotate has them (Objects/typeobject.c).  A body that DEFINES
+	``def __annotate__(format)'' never gets here: the load answers its def.  A
+	class Grail did not generate -- int, str, a kernel class -- has no holder
+	and answers AttributeError, as ``int.__annotate__'' does in CPython."
 
 	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
 		^ AttributeError @env0:___signalMissing___: '__annotate__' on: self].
-	^ (self ___classBodyDynamicRead___: #'__annotate_func__') @env0:ifNil: [None]
+	^ (self ___classBodyDynamicRead___: #'__annotate__') @env0:ifNil: [
+		(self ___classBodyDynamicRead___: #'__annotate_func__') @env0:ifNil: [None]]
 
 ]
 
 { #category : 'Grail-Annotations' }
 Object class >> ___pyClassAnnotate___: aValue [
 	"``C.__annotate__ = f'' -- replaces the annotate function and INVALIDATES the
-	cached __annotations__, so the next read recomputes from the new function
-	(measured: after the assignment, __annotations__ answers the new dict).
-	CPython refuses a value that is neither callable nor None."
+	cached __annotations__, so the next read recomputes from the new function.
+	None does not invalidate it: CPython keeps the cache then (type_set_annotate,
+	Objects/typeobject.c).  CPython refuses a value that is neither callable nor
+	None."
 
 	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
 		^ AttributeError @env0:___signalMissing___: '__annotate__' on: self].
 	((aValue == None) or: [(builtins @env1:instance) @env1:callable: aValue]) ifFalse: [
 		^ TypeError ___signal___: '__annotate__ must be callable or None'].
 	self ___classHolderAttrStore___: #'__annotate_func__' put: aValue.
-	self ___classHolderAttrStore___: #'__annotations_cache__' put: nil.
+	aValue == None ifFalse: [self ___removeOwnHolderEntry___: #'__annotations_cache__'].
 	^ None
 
 ]
@@ -5179,17 +5220,17 @@ Object class >> ___pyClassAnnotations___ [
 	they are read, not when the class statement runs, so ``class Late: x:
 	Undefined'' defines cleanly and raises NameError only at the read.
 	Evaluating at class creation would break every forward reference CPython
-	accepts.  Grail used to store PEP 563 SOURCE STRINGS here instead, so
-	``A.__annotations__'' answered {'a': 'int'} where CPython answers
-	{'a': <class 'int'>} -- and in an unordered dictionary, so the keys came back
-	in the wrong order as well.
+	accepts.
 
-	Resolution order: an EXPLICIT ``__annotations__'' the class body or a
-	caller stored; then the cache; then the annotate function called with
-	Format.VALUE, whose result is cached.  The cache is the object returned, so
-	mutating it persists, as it does in CPython.  A class with no annotate
-	function answers an empty dict, and a class Grail did not generate answers
-	AttributeError."
+	Resolution order, type_get_annotations' (Objects/typeobject.c): an EXPLICIT
+	``__annotations__'' the class body stored; then the cache,
+	``__annotations_cache__''; then what ``Cls.__annotate__'' answers, called
+	with Format.VALUE, whose result is cached.  That is an attribute READ, as
+	CPython's is, so a body's own ``def __annotate__(format)'' is the one
+	called -- Grail called the generated function past it.  The cache is the
+	object returned, so mutating it persists, as it does in CPython.  A class
+	whose __annotate__ is not callable answers an empty dict, and a class Grail
+	did not generate answers AttributeError."
 
 	| explicit cached annotate ann |
 	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
@@ -5198,14 +5239,14 @@ Object class >> ___pyClassAnnotations___ [
 	explicit @env0:notNil ifTrue: [^ explicit].
 	cached := self ___classBodyDynamicRead___: #'__annotations_cache__'.
 	cached @env0:notNil ifTrue: [^ cached].
-	annotate := self ___classBodyDynamicRead___: #'__annotate_func__'.
-	((annotate @env0:isNil) or: [annotate == None])
-		ifTrue: [ann := PyDict @env0:new]
-		ifFalse: [
+	annotate := self @env1:___pyAttrLoad___: #'__annotate__'.
+	((builtins @env1:instance) @env1:callable: annotate)
+		ifTrue: [
 			ann := annotate @env1:___pyCallValue___: { 1 } kw: nil.
 			(ann @env0:isKindOf: KeyValueDictionary) ifFalse: [
 				^ TypeError ___signal___: ('__annotate__ returned non-dict of type '''
-					@env0:, (bytes ___pyTypeNameOf___: ann) @env0:, '''')]].
+					@env0:, (bytes ___pyTypeNameOf___: ann) @env0:, '''')]]
+		ifFalse: [ann := PyDict @env0:new].
 	self ___classHolderAttrStore___: #'__annotations_cache__' put: ann.
 	^ ann
 
@@ -5213,12 +5254,20 @@ Object class >> ___pyClassAnnotations___ [
 
 { #category : 'Grail-Annotations' }
 Object class >> ___pyClassAnnotations___: aValue [
-	"``C.__annotations__ = d'' -- an explicit dict, which the getter answers
-	ahead of any computed one."
+	"``C.__annotations__ = d'', as type_set_annotations has it (Objects/
+	typeobject.c): into the explicit ``__annotations__'' when the class dict
+	holds one -- a class body that assigned it -- dropping the cache; otherwise
+	into the cache, so ``'__annotations_cache__' in C.__dict__'' then holds.
+	Either way the annotate functions go, and ``C.__annotate__'' answers None."
 
 	(self ___respondsTo___: #___dynInstVars___) ifFalse: [
 		^ AttributeError @env0:___signalMissing___: '__annotations__' on: self].
-	self ___classHolderAttrStore___: #'__annotations__' put: aValue.
+	(self ___classBodyDynamicRead___: #'__annotations__') == nil
+		ifTrue: [self ___classHolderAttrStore___: #'__annotations_cache__' put: aValue]
+		ifFalse: [
+			self ___classHolderAttrStore___: #'__annotations__' put: aValue.
+			self ___removeOwnHolderEntry___: #'__annotations_cache__'].
+	self ___dropAnnotateFunctions___.
 	^ None
 
 ]
@@ -5244,6 +5293,28 @@ Object class >> ___pyClassDefined___: attrNames [
 	self ___grailInstallAttrMethodShadows___: attrNames.
 	self ___grailInstallAssignedProtocolForwarders___: attrNames.
 	^ self ___invokeSetNameHooks___: attrNames
+
+]
+
+{ #category : 'Grail-Annotations' }
+Object class >> ___pyClassDeleteAnnotations___ [
+	"``del C.__annotations__'', as type_set_annotations has it for a delete:
+	the explicit ``__annotations__'' when the class dict holds one, otherwise the
+	cache -- and an AttributeError when that is not there either, so a second
+	``del'' raises.  The annotate functions go too, so the next read answers an
+	empty dict without calling anything (gh-132285).  Grail had no delete for
+	it, so ``del C.__annotations__'' raised AttributeError whatever the class
+	held."
+
+	| explicit |
+	explicit := (self ___classBodyDynamicRead___: #'__annotations__') ~~ nil.
+	(self ___removeOwnHolderEntry___: (explicit
+		ifTrue: [#'__annotations__']
+		ifFalse: [#'__annotations_cache__'])) ifFalse: [
+			^ AttributeError ___signal___: '__annotations__'].
+	self ___removeOwnHolderEntry___: #'__annotations_cache__'.
+	self ___dropAnnotateFunctions___.
+	^ None
 
 ]
 
@@ -5660,6 +5731,18 @@ Object class >> ___pythonModuleAttrIdentity___ [
 		n := Symbol @env0:_existingWithAll: n @env0:asString.
 		n == nil ifTrue: [^ nil]].
 	^ object ___moduleAttrIdentityTable___ @env0:at: n otherwise: nil
+
+]
+
+{ #category : 'Grail-Annotations' }
+Object class >> ___removeOwnHolderEntry___: aSymbol [
+	"Remove aSymbol from this class's own attribute holder, answering whether it
+	was there.  Removed rather than stored as nil, so it is gone from
+	``Cls.__dict__'' as well."
+
+	(self ___classBodyDynamicRead___: aSymbol) == nil ifTrue: [^ false].
+	(self @env0:perform: #___dynInstVars___ env: 1) @env0:removeDynamicInstVar: aSymbol.
+	^ true
 
 ]
 
@@ -10534,6 +10617,24 @@ Object >> ___grailMetaclassOwnedCategory___: aSym [
 ]
 
 { #category : 'Grail-Class Namespace' }
+Object >> ___grailMetaclassPropertyDeleter___: aSym [
+	"The compiled DELETER of a @property this class's recorded metaclass chain
+	holds under aSym -- the ``___propDeleter_<name>'' selector ClassDefAst
+	compiles it as -- or nil.  The delete's counterpart of
+	___grailMetaclassPropertyOwner___:, which the store follows to the setter."
+
+	| meta deleterSym owner |
+	(self @env0:isKindOf: Behavior) ifFalse: [^ nil].
+	meta := self ___grailMetaclass___.
+	(meta @env0:notNil and: [meta @env0:isKindOf: Behavior]) ifFalse: [^ nil].
+	deleterSym := ('___propDeleter_' @env0:, aSym @env0:asString) @env0:asSymbol.
+	owner := meta @env0:whichClassIncludesSelector: deleterSym environmentId: 1.
+	owner @env0:isNil ifTrue: [^ nil].
+	^ owner @env0:compiledMethodAt: deleterSym environmentId: 1
+
+]
+
+{ #category : 'Grail-Class Namespace' }
 Object >> ___grailMetaclassPropertyObject___: aSym [
 	"The ``property'' object standing for the receiver metaclass's aSym, minted
 	once per (metaclass, selector) so that ``EnumType.__members__'' and
@@ -13740,6 +13841,19 @@ Object >> ___pyAttrDelete___: aName [
 		(sym @env0:== #'__dict__' and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
 			^ AttributeError ___signal___:
 				'attribute ''__dict__'' of ''type'' objects is not writable'].
+		"``del Cls.x'' through a metaclass @property's deleter, as ``Cls.x = v''
+		goes through its setter (___pyAttrStore___:put:).  Grail had no such
+		branch, so the delete fell to the class's own dict and missed."
+		(self ___grailMetaclassPropertyDeleter___: sym) @env0:ifNotNil: [:deleter |
+			self @env0:performMethod: deleter.
+			^ self].
+		"``del Cls.__annotations__'' is the deleter of type's getset, as loads and
+		stores of it are its getter and setter (see object class >>
+		___pyClassAnnotate___) -- unless a metaclass defines the name itself."
+		(sym @env0:== #'__annotations__'
+			and: [(self ___respondsTo___: #___dynInstVars___)
+			and: [(self ___metaclassDefines___: sym) @env0:not]]) ifTrue: [
+				^ self @env1:___pyClassDeleteAnnotations___].
 		"A BUILT-IN class takes no deletes, as it takes no stores: CPython's
 		refusal is the same immutable-type TypeError for both (``del int.foo'',
 		``del int.__dict__'').  Grail answered an AttributeError that named the
@@ -14473,9 +14587,12 @@ Object >> ___pyAttrLoad___: aSym [
 			 has the def, and the ordinary lookup below finds it."
 			"Both selector shapes: ``def __annotate__(format)'' has no ``self'', so
 			 its one parameter is the receiver and it compiles UNARY."
-			and: [(s @env0:= '__annotate__') @env0:not
+			and: [((s @env0:= '__annotate__') @env0:not
 				or: [((self @env0:compiledMethodAt: #'__annotate__:' environmentId: 1 otherwise: nil) == nil)
-					and: [(self @env0:compiledMethodAt: #'__annotate__' environmentId: 1 otherwise: nil) == nil]]])
+					and: [(self @env0:compiledMethodAt: #'__annotate__' environmentId: 1 otherwise: nil) == nil]])
+			"...and so does it for a metaclass that defines the name itself, which
+			 the ordinary lookup below reaches (___metaclassDefines___:)."
+			and: [(self ___metaclassDefines___: aSym) @env0:not]])
 			ifTrue: [
 			(self ___respondsTo___: #___dynInstVars___) ifFalse: [
 				"The PYTHON name, read through __name__ -- the error helper answers
@@ -15548,7 +15665,8 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		class-only PEP 649 pair; see object class >> ___pyClassAnnotate___."
 		(((aName @env0:asString @env0:= '__annotate__')
 			or: [aName @env0:asString @env0:= '__annotations__'])
-			and: [self ___respondsTo___: #___dynInstVars___]) ifTrue: [
+			and: [(self ___respondsTo___: #___dynInstVars___)
+			and: [(self ___metaclassDefines___: aName @env0:asSymbol) @env0:not]]) ifTrue: [
 				(aName @env0:asString @env0:= '__annotate__')
 					ifTrue: [self @env1:___pyClassAnnotate___: aValue]
 					ifFalse: [self @env1:___pyClassAnnotations___: aValue].
