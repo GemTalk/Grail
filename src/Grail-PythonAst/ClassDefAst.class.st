@@ -317,7 +317,8 @@ ClassDefAst >> ___classBlockNeedsTemps___ [
 	module, and the two used to be separate tests."
 
 	^ self ___classBodyHelperTemps___ notEmpty
-		or: [self ___classHeaderTemps___ notEmpty]
+		or: [self ___classHeaderTemps___ notEmpty
+		or: [self ___keepsExecutionRecord___]]
 
 ]
 
@@ -1537,6 +1538,14 @@ ClassDefAst >> ___emitDefaultStoresFor___: def on: aStream className: aClassName
 
 ]
 
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+
+	(self ___recordsExecutionOf___: anAnnotation) ifTrue: [
+		self ___emitRecordingExecutionOf___: anAnnotation on: aStream]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 	"``<C> := self ___irClassDef_<n>_<C>___'' -- see
@@ -1795,6 +1804,17 @@ ClassDefAst >> ___enclosingScopeIdentifierFor___: aSymbol [
 	^ (probe ___enclosingFuncDeclaresReservedParam___: aSymbol)
 		ifTrue: [NameAst ___transportIdentifierFor___: aSymbol]
 		ifFalse: [aSymbol asString]
+
+]
+
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___executionRecordExpression___ [
+	"The set of the numbers of the annotations that ran: a temp of the block
+	the class is built in, which the annotate function closes over -- CPython's
+	``__conditional_annotations__'' cell, which is not in the class __dict__
+	either."
+
+	^ '___executedAnnotations___'
 
 ]
 
@@ -2995,6 +3015,14 @@ ClassDefAst >> ___isTypeCheckingTest___: aTest [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___keepsExecutionRecord___ [
+	"Does this class body record which of its annotations ran?"
+
+	^ self ___scopeAnnotations___ anySatisfy: [:each | self ___recordsExecutionOf___: each]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___literalChunks___: entries spelledBy: aBlock [
 	"entries split, in order, into runs whose accessor literal stays inside
@@ -3248,6 +3276,20 @@ ClassDefAst >> ___readsRebindableModuleName___ [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___recordsExecutionOf___: anAnnotation [
+	"An annotation inside one of the body's if, for, while, try, with or match
+	statements, which CPython calls conditional (Python/symtable.c:2798-2806).
+	One at the top of the body has always run by the time anything can read
+	the class's annotations, since a class whose body raised does not exist.
+	Not under ``from __future__ import annotations'', which gives the class an
+	eager dict instead of an annotate function."
+
+	^ CallAst futureAnnotations not
+		and: [(body body includesIdentical: anAnnotation) not]
+
+]
+
 { #category : 'Grail-code generation' }
 ClassDefAst >> ___redirectedAccessorNameFor___: aDef [
 	"The private selector base a property accessor that must not claim the
@@ -3287,6 +3329,19 @@ ClassDefAst >> ___redirectUnarySelectorIn: sourceString from: oldName to: newNam
 		ifTrue: [
 			^ '_' , newName , ':' , (sourceString copyFrom: varargsOld size + 1 to: sourceString size)].
 	^ sourceString
+
+]
+
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___scopeAnnotations___ [
+	"Every annotated name of this class, in source order: at the top of the
+	body and inside its if, for, while, try, with and match statements, but not
+	in a def or class, which have annotations of their own."
+
+	| annotations |
+	annotations := OrderedCollection new.
+	body ___addScopeAnnotationsTo___: annotations.
+	^ annotations
 
 ]
 
@@ -3673,30 +3728,6 @@ ClassDefAst >> definesOwnNew [
 ]
 
 { #category : 'Grail-code generation' }
-ClassDefAst >> emitClassAnnotateBlockOn: aStream [
-	"The class's PEP 649 annotate function: a block taking (positional-array,
-	kwargs-dict) -- Grail's shape for a block used as a Python callable -- and
-	answering an ORDERED PyDict of name -> annotation, in declaration order.
-	Each annotation goes through PyAnnotate >> ___annotationValue___:source:format:
-	as FunctionDefAst >> emitOneAnnotation:on: sends it, so a class answers the
-	three formats exactly as a function does: VALUE evaluates, STRING is the
-	source text, FORWARDREF evaluates per key."
-
-	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
-	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]) ifTrue: [
-			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
-			aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
-			stmt annotation printSmalltalkOn: aStream.
-			aStream nextPutAll: '] source: '.
-			self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
-			aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
-			aStream nextPut: $;]].
-	aStream nextPutAll: ' @env0:yourself)]'
-
-]
-
-{ #category : 'Grail-code generation' }
 ClassDefAst >> emitClassAnnotationsDictOn: aStream [
 	"Emit the ``{ name -> annotation-source-string, ... }'' dict expression
 	for this class's class-body annotations — same shape as
@@ -3815,14 +3846,18 @@ ClassDefAst >> emitClassBodyIfBranch: aSuite on: aStream [
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
-		((stmt isKindOf: AnnAssignAst)
-			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
-			aStream nextPutAll: self ___stVarName___;
-				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
-				nextPutAll: stmt target id asString;
-				nextPutAll: ''' put: '.
-			stmt value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: '.'; lf]]
+		"An annotated name in a branch also records that it ran, bare or not: the
+		class's annotate function lists it only if it did."
+		(stmt isKindOf: AnnAssignAst) ifTrue: [
+			((stmt target isKindOf: NameAst) and: [stmt value notNil]) ifTrue: [
+				aStream nextPutAll: self ___stVarName___;
+					nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+					nextPutAll: stmt target id asString;
+					nextPutAll: ''' put: '.
+				stmt value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '.'; lf].
+			stmt ___emitExecutionRecordOn___: aStream.
+			aStream lf]]
 
 ]
 
@@ -5755,6 +5790,8 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 			aStream nextPutAll: each asString; nextPutAll: ' '].
 		self ___classHeaderTemps___ do: [:each |
 			aStream nextPutAll: each; nextPutAll: ' '].
+		self ___keepsExecutionRecord___ ifTrue: [
+			aStream nextPutAll: self ___executionRecordExpression___; nextPutAll: ' '].
 		aStream nextPutAll: '| '.
 	].
 	(self isModuleScopeClassDef) ifTrue: [
@@ -6635,6 +6672,11 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"The record of which annotations ran starts empty with the body, as CPython's
+	__conditional_annotations__ cell does (Python/codegen.c:1566-1569)."
+	self ___keepsExecutionRecord___ ifTrue: [
+		aStream nextPutAll: self ___executionRecordExpression___;
+			nextPutAll: ' := ___set___ perform: #new env: 0.'; lf].
 	"CLOSURE CELLS, EARLIEST EMIT -- before the body runs.  A def in the class
 	body that the body itself CALLS (``def mk(): return A'' then ``f = mk()'')
 	reads the enclosing function's locals through these cells, as any method
@@ -7123,7 +7165,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		so a forward reference in a class annotation no longer has to resolve at
 		class creation.  An explicit ``__annotations__'' in the class body keeps
 		its own store and suppresses this, as before."
-		((self classAnnotationPairs notEmpty)
+		((self ___scopeAnnotations___ notEmpty)
 			and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
 				ifTrue: [
 			"Under ``from __future__ import annotations'' a class keeps PEP 563: an
@@ -7144,7 +7186,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 				ifFalse: [
 					aStream nextPutAll: self ___stVarName___;
 						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotate_func__'' put: (('.
-					self emitClassAnnotateBlockOn: aStream.
+					self ___emitAnnotateBlockOn___: aStream.
 					"With a __code__, as every function in a class __dict__ has in
 					 CPython: dataclasses' slots=True walks the dict reading
 					 ``f.__code__.co_freevars'' for each one, and this was the only

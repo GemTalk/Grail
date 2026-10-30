@@ -25,6 +25,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+ExceptHandlerAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection
+
+]
+
 { #category : 'Grail-other' }
 ExceptHandlerAst >> body [
 

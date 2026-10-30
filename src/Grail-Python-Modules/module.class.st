@@ -664,6 +664,25 @@ module >> ___globalStoreIsSessionLocal___ [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+module >> ___isInitializing___ [
+	"Is this module still being imported, its body running -- CPython's
+	_PyModuleSpec_IsInitializing?  An import cycle reads a module that way,
+	mid-body.  Only an IMPORT sets that flag (importlib._bootstrap's
+	_load_unlocked), so a __main__ is never initializing: CPython runs it with no
+	spec, or through runpy, which leaves the flag alone.  Grail's __main__ has a
+	spec and is on the stack ___bodyIsRunning___ reads, which is why the name is
+	asked.  A module with no spec -- one made by types.ModuleType -- is not
+	initializing either, whatever a module of its name is doing."
+
+	| spec |
+	(self at: #'__name__' otherwise: '') asString = '__main__' ifTrue: [^ false].
+	spec := self dynamicInstVarAt: #'__spec__'.
+	(spec isNil or: [spec == ExecBlock ___pyNone___]) ifTrue: [^ false].
+	^ self ___bodyIsRunning___
+
+]
+
 { #category : 'Grail-Phase A Dynamic InstVars' }
 module >> ___isSameImmutable___: a as: b [
 	"Are a and b equal values of an IMMUTABLE Python type -- str, an int, or
@@ -695,6 +714,21 @@ module >> ___isSameImmutable___: a as: b [
 			(x == y or: [self ___isSameImmutable___: x as: y]) ifFalse: [^ false]].
 		^ true].
 	^ false
+
+]
+
+{ #category : 'Grail-Annotations' }
+module >> ___keepsAnnotationRecord___ [
+	"Does a re-run of the same body over this module keep the record of which
+	annotations ran?  Only over committed globals, where starting it afresh is
+	a write on every run even when the run executes the same annotations; the
+	body adds only an annotation the record lacks, so such a re-run writes
+	nothing (AbstractNode >> ___emitRecordingExecutionOf___:on:).  The record
+	then also holds one that ran in an earlier run but not in this one, which
+	is how every global of an earlier run stays bound there too."
+
+	^ self isCommitted
+		and: [(self dynamicInstVarAt: #'__conditional_annotations__') notNil]
 
 ]
 
@@ -1065,13 +1099,20 @@ module >> ___storeAnnotate___: aBlock [
 	compute the same annotations; but each run makes a new one, which on an
 	app's re-run over committed globals is a write that changes nothing
 	(docs/App_Namespaces_Design.md §5.2).  After an edit the module body is
-	recompiled, the block's method differs, and the store goes through."
+	recompiled, the block's method differs, and the store goes through.
 
-	| current |
+	The record of which annotations ran, ``__conditional_annotations__'', which
+	the block reads, starts empty with the run, as CPython's does -- except
+	where the committed closure is kept (___keepsAnnotationRecord___)."
+
+	| current keepsCurrent |
 	current := super dynamicInstVarAt: #'__annotate__'.
-	((current isKindOf: ExecBlock)
+	keepsCurrent := (current isKindOf: ExecBlock)
 		and: [current method == aBlock method
-		and: [current selfValue == aBlock selfValue]]) ifTrue: [^ current].
+		and: [current selfValue == aBlock selfValue]].
+	(keepsCurrent and: [self ___keepsAnnotationRecord___]) ifFalse: [
+		self dynamicInstVarAt: #'__conditional_annotations__' put: set new].
+	keepsCurrent ifTrue: [^ current].
 	^ self dynamicInstVarAt: #'__annotate__' put: aBlock
 
 ]

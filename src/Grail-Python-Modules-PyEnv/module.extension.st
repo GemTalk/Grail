@@ -1230,6 +1230,11 @@ module >> __annotations__ [
 	dict is stored yet: ModuleAst stores one eagerly under the future import, and
 	the cache below is itself a dynamic instVar, which loads probe first.
 
+	NOT cached while the module is still being imported, as CPython does not
+	(Objects/moduleobject.c:1288-1350): an import cycle that reads it mid-body
+	gets the annotations that ran so far, and the rest of the body has more to
+	add (test_type_annotations test_partially_executed_module).
+
 	Grail used to have no module __annotations__ at all, so
 	get_annotations(module) raised ``does not have annotations''."
 
@@ -1242,7 +1247,8 @@ module >> __annotations__ [
 			ann := annotate @env1:___pyCallValue___: { 1 } kw: nil.
 			(ann @env0:isKindOf: KeyValueDictionary) ifFalse: [
 				^ TypeError ___signal___: '__annotate__ returned a non-dict']].
-	self @env0:dynamicInstVarAt: #'__annotations__' put: ann.
+	self @env0:___isInitializing___ ifFalse: [
+		self @env0:dynamicInstVarAt: #'__annotations__' put: ann].
 	^ ann
 
 ]
