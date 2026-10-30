@@ -9434,8 +9434,10 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 	where ClassDefAst stores it, so it misses when the receiver is not an
 	instance of the class whose method is reading it -- ``Holder.f(x)'' with
 	any x, and every receiverless call (UnboundMethod >> ___noReceiver___).
-	The frame that IS that method knows its class (GsNMethod >> inClass); the
-	capture is the one ___grailClassCellFromFrames___: takes, for the same
+	The frame that IS that method knows its class (___grailDefiningClassOf___:,
+	its inClass -- or, for a recompile against a special receiver such as the
+	1 in ``Holder.f(1)'', the class it was recompiled from); the capture is the
+	one ___grailClassCellFromFrames___: takes, for the same
 	reason and at the same price, paid only on the miss.
 
 	The innermost frame whose receiver is this very object and whose class
@@ -9472,7 +9474,7 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 			and: [| captured |
 				captured := slot @env0:selfValue.
 				captured == self or: [captured == nil]]]) ifTrue: [
-			cls := [(st @env0:at: i) @env0:inClass]
+			cls := [self ___grailDefiningClassOf___: (st @env0:at: i)]
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 			cls == nil ifFalse: [
 				(cls @env0:isMeta) ifTrue: [cls := cls @env0:thisClass].
@@ -9534,7 +9536,7 @@ Object >> ___grailClassCellFromFrames___: aSym [
 	i := 2.
 	[i @env0:<= st @env0:size] @env0:whileTrue: [
 		meth := st @env0:at: i.
-		cls := [meth @env0:inClass] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		cls := [self ___grailDefiningClassOf___: meth] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 		cls == nil ifFalse: [
 			"A class-side method (@staticmethod / @classmethod) is compiled on the
 			METACLASS, whose name is ``X class''; the cell belongs to X."
@@ -9733,6 +9735,27 @@ Object >> ___grailDeclaredMetaclassOrNil___ [
 	(self @env0:class @env0:whichClassIncludesSelector: #'___grailDeclaredMetaclass___'
 		environmentId: 1) == nil ifTrue: [^ nil].
 	^ self ___grailDeclaredMetaclass___
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailDefiningClassOf___: aMethod [
+	"The class aMethod -- a frame's method, or a block of one -- was compiled for,
+	which is where a closure cell of its class body is stored: its home method's
+	inClass, unless that is a recompile against a SPECIAL receiver's class
+	(UnboundMethod >> ___methodForSpecialReceiver___:class:).  Such a method is
+	in SmallInteger, Character, Boolean, UndefinedObject or SmallDouble, which no
+	cell is stored on, so the Python class it was recompiled from answers.  That
+	is what ``Cls.f(1)'' needs to reach a cell when f reads or writes a variable
+	of the function the class is defined in -- ``def __annotate__(format)'' in a
+	class body, called by annotationlib with 1."
+
+	| home homes |
+	home := aMethod @env0:homeMethod.
+	homes := SessionTemps @env0:current @env0:at: #'GrailSpecialReceiverHomes' otherwise: nil.
+	homes == nil ifFalse: [
+		(homes @env0:at: home otherwise: nil) @env0:ifNotNil: [:pythonClass | ^ pythonClass]].
+	^ home @env0:inClass
 
 ]
 

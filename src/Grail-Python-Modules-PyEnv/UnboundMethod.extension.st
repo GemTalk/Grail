@@ -911,6 +911,7 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 	result is class-checked instead of trusted."
 	(compiled @env0:isKindOf: GsNMethod) ifFalse: [compiled := nil].
 	per @env0:at: aClass put: compiled.
+	compiled == nil ifFalse: [self ___recordHome___: home ofRecompile: compiled].
 	^ compiled
 
 ]
@@ -1236,6 +1237,20 @@ UnboundMethod >> ___receiverNameForClass___: aClass [
 	(and for any class compiled before the table existed)."
 
 	^ self ___tableEntryFor___: aClass table: #'___methodReceiverTable___'
+
+]
+
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___recordHome___: aClass ofRecompile: aMethod [
+	"Remember that aMethod, a recompile against a special receiver's class, is
+	aClass's method: its own inClass is that special class, where no closure
+	cell of aClass's body is stored (Object >> ___grailDefiningClassOf___:).
+	Session-local, as the recompile cache beside it is."
+
+	(SessionTemps @env0:current
+		@env0:at: #'GrailSpecialReceiverHomes'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+			@env0:at: aMethod put: aClass
 
 ]
 
