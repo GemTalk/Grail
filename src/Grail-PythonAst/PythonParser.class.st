@@ -391,6 +391,19 @@ PythonParser class >> parseEvalInput: aString [
 
 ]
 
+{ #category : 'Grail-parsing - type params' }
+PythonParser >> ___addToken: anIndex renaming: aDictionary into: out [
+	"Append the token at anIndex -- or, for a NAME aDictionary renames, its new
+	spelling, placed where the token was."
+
+	| token |
+	token := tokens at: anIndex.
+	(token isName and: [aDictionary includesKey: token value asString])
+		ifTrue: [self ___synth: (aDictionary at: token value asString) like: token into: out]
+		ifFalse: [out add: token]
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___atEvalInputEnd___ [
 	"Whether eval input has nothing left but newlines and its end marker.  A
@@ -1075,13 +1088,19 @@ PythonParser >> ___emitParameters: segments withDefaultsAs: aPrefix like: ref in
 ]
 
 { #category : 'Grail-parsing - type params' }
-PythonParser >> ___emitTypeParam: p like: ref into: out [
+PythonParser >> ___emitTypeParam: p like: ref into: out renaming: aDictionary [
 	"``T = ___typing___._grail_type_param(kind, 'T', bound, constraints,
 	default)'', each of the last three a lambda over its tokens or None.  A
-	TypeVarTuple default written ``= *X'' is CPython's ``next(iter(X))''."
+	TypeVarTuple default written ``= *X'' is CPython's ``next(iter(X))''.
 
-	self ___synth: (p at: 2) , ' = ___typing___._grail_type_param(' , (p at: 1) printString
-		, ', ''' , (p at: 2) , ''''
+	aDictionary maps a parameter's name to the spelling its scope binds, and
+	every NAME the bound and default tokens hold is read through it: a generic
+	class's private parameter is bound mangled (___rewriteTypeParamStatement___)
+	while the TypeVar keeps the name as written."
+
+	self ___synth: (aDictionary at: (p at: 2) ifAbsent: [p at: 2])
+			, ' = ___typing___._grail_type_param(' , (p at: 1) printString
+			, ', ''' , (p at: 2) , ''''
 		like: ref into: out.
 	3 to: 5 do: [:n |
 		| range |
@@ -1093,11 +1112,12 @@ PythonParser >> ___emitTypeParam: p like: ref into: out [
 				(n = 5 and: [(tokens at: range first) isOp: '*'])
 					ifTrue: [
 						self ___synth: 'lambda: next(iter(' like: ref into: out.
-						range allButFirst do: [:k | out add: (tokens at: k)].
+						range allButFirst do: [:k |
+							self ___addToken: k renaming: aDictionary into: out].
 						self ___synth: '))' like: ref into: out]
 					ifFalse: [
 						self ___synth: 'lambda:' like: ref into: out.
-						range do: [:k | out add: (tokens at: k)]]]].
+						range do: [:k | self ___addToken: k renaming: aDictionary into: out]]]].
 	self ___synth: ')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out
 
@@ -2759,7 +2779,7 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 		self ___synthType: #NEWLINE like: ref into: out].
 	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
-	params do: [:p | self ___emitTypeParam: p like: ref into: out].
+	params do: [:p | self ___emitTypeParam: p like: ref into: out renaming: Dictionary new].
 	i to: defAt do: [:k | out add: (tokens at: k)].
 	out add: nameTok.
 	out add: (tokens at: pOpen).
@@ -2853,7 +2873,7 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	statement."
 
 	| i decoRanges kwTok nameTok isClass lb rb params w ref out names c indent
-	  bodyStart bodyEnd end name segs valueEnd inClassBody |
+	  bodyStart bodyEnd end name segs valueEnd inClassBody bindings |
 	i := position.
 	decoRanges := OrderedCollection new.
 	[i <= tokens size and: [(tokens at: i) isOp: '@']] whileTrue: [
@@ -2884,8 +2904,20 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	name := nameTok value asString.
 	w := '___generic_parameters_of_' , name , '___'.
 	ref := kwTok.
+	"A CLASS's private parameters are bound MANGLED by the class's own name --
+	 ``class Foo[__T]'' binds _Foo__T, which is what ``__T'' in the body reads --
+	 and only they are: CPython's type-parameter scope for a class mangles its
+	 parameter names and nothing else (Python/symtable.c:1926-1936, 3209-3222),
+	 while each TypeVar keeps its written name.  The bounds, bases and keywords
+	 are rewritten to the mangled spelling here because the parser reads them
+	 outside the class body, where it mangles nothing.  An alias's parameters
+	 take whatever the parser gives every name in its scope function."
+	bindings := Dictionary new.
+	isClass ifTrue: [
+		params do: [:p |
+			bindings at: (p at: 2) put: (AbstractNode ___mangle___: (p at: 2) forClass: name) asString]].
 	names := String new.
-	params do: [:p | names := names , (p at: 2) , ','].
+	params do: [:p | names := names , (bindings at: (p at: 2) ifAbsent: [p at: 2]) , ','].
 	out := OrderedCollection new.
 	inClassBody := classNesting > 0.
 	inClassBody ifTrue: [
@@ -2897,7 +2929,7 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	self ___synthType: #INDENT like: ref into: out.
 	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
-	params do: [:p | self ___emitTypeParam: p like: ref into: out].
+	params do: [:p | self ___emitTypeParam: p like: ref into: out renaming: bindings].
 	isClass
 		ifTrue: [
 			c := rb + 1.
@@ -2911,12 +2943,12 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 			((tokens at: c) isOp: ':') ifFalse: [^ false].
 			self ___synth: 'class ' , name , '(' like: ref into: out.
 			(segs reject: [:s | self ___isKeywordArgument___: s]) do: [:s |
-				s do: [:k | out add: (tokens at: k)].
+				s do: [:k | self ___addToken: k renaming: bindings into: out].
 				self ___synth: ',' like: ref into: out].
 			self ___synth: '___typing___._grail_generic_base((' , names , '))' like: ref into: out.
 			(segs select: [:s | self ___isKeywordArgument___: s]) do: [:s |
 				self ___synth: ',' like: ref into: out.
-				s do: [:k | out add: (tokens at: k)]].
+				s do: [:k | self ___addToken: k renaming: bindings into: out]].
 			self ___synth: '):' like: ref into: out.
 			self ___synthType: #NEWLINE like: ref into: out.
 			self ___synthType: #INDENT like: ref into: out.
