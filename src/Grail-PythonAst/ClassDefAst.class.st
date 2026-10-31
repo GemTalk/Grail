@@ -79,7 +79,7 @@ ClassDefAst >> ___allFunctionDefs___ [
 ]
 
 { #category : 'Grail-code generation' }
-ClassDefAst >> ___annotateScopeBoundNames___: firstBinding [
+ClassDefAst >> ___annotateScopeBoundNames___ [
 	"The class-body names the annotate block may read from the class: every
 	name the body binds anywhere -- it runs after the whole body -- and NOT one
 	that only a bare annotation mentions (``bytes: int'' with no value and no
@@ -91,17 +91,47 @@ ClassDefAst >> ___annotateScopeBoundNames___: firstBinding [
 	every name NameAst's class-body branches consult, so nothing else that
 	resolved through the class before stops doing so."
 
-	| names bareOnly |
-	names := IdentitySet new.
+	| bound names bareOnly |
+	bound := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil])
+			ifFalse: [bound addAll: stmt ___boundTargetNames___]].
+	names := IdentitySet withAll: bound.
 	{ CallAst classAttrNames. CallAst classFunctionNames. CallAst classStaticFunctionNames.
-	  CallAst classNestedClassNames. CallAst classBodyConditionalNames. firstBinding keys }
+	  CallAst classNestedClassNames. CallAst classBodyConditionalNames }
 		do: [:each | each isNil ifFalse: [names addAll: each]].
 	bareOnly := IdentitySet new.
 	body body do: [:stmt |
 		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifTrue: [
 			stmt ___boundTargetNames___ do: [:nm |
-				(firstBinding includesKey: nm) ifFalse: [bareOnly add: nm]]]].
+				(bound includes: nm) ifFalse: [bareOnly add: nm]]]].
 	bareOnly do: [:nm | names remove: nm ifAbsent: []].
+	^ names
+
+]
+
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___annotationScopeNames___ [
+	"The names an annotation scope in this class body reads from the class
+	namespace before anything else -- a method's annotations, a type
+	parameter's scope, a bound, an alias's value: every name the body binds,
+	conditionally or not, except one a bare annotation alone mentions and one
+	the body declares ``nonlocal''.  CPython leaves that last one free, read
+	through the enclosing function's cell, where a name the class binds is an
+	implicit global of the scope (Python/symtable.c:731-751).
+
+	Taken from the body alone, not from CallAst's class context: a nested
+	generic class's bases are emitted while that class's context is current,
+	not this one's."
+
+	| names |
+	names := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil])
+			ifFalse: [names addAll: stmt ___boundTargetNames___]].
+	names addAll: self ___classBodyConditionalNames___.
+	(body nonlocalNames ifNil: [#()])
+		do: [:each | names remove: each asSymbol ifAbsent: []].
 	^ names
 
 ]
@@ -1471,7 +1501,18 @@ ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: sav
 				cap asString = name asString
 					ifTrue: [aStream nextPutAll: clsName]
 					ifFalse: [
-				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+				"Asked as a HEADER asks it (AbstractNode >>
+				 ___headerLocalBeyondClass___:): the store runs where the class
+				 statement stands, so only a METHOD between here and the binding
+				 hides the temp.  A class body, and a def in one of its compound
+				 statements, are emitted inline, where the temp is in reach -- the
+				 plain walk counted a class body as crossed, and a class nested in a
+				 class-body ``if'' forwarded through the cell of whatever ``self''
+				 is in the enclosing function, which is not that class: its methods
+				 read NameError.
+				 The scope function of a PEP 695 class in a class body stands in
+				 such an ``if'' (PythonParser >> ___rewriteTypeParamStatement___)."
+				((self ___headerLocalBeyondClass___: cap asSymbol)
 					and: [savedCapturedNames notNil])
 					ifTrue: [
 						aStream
@@ -1498,7 +1539,7 @@ ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: sav
 					nextPutAll: ' @env1:___pyAttrStore___: #''___cellSetter_';
 					nextPutAll: cap asString;
 					nextPutAll: '___'' put: [:___cellSetVal___ | '.
-				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+				((self ___headerLocalBeyondClass___: cap asSymbol)
 					and: [savedCapturedWriteNames notNil])
 					ifTrue: [
 						aStream
@@ -2089,6 +2130,17 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 		raw do: [:n |
 			((boundInside includes: n asString) or: [n asString = recv])
 				ifFalse: [free add: n asString]]].
+	"A METHOD's annotations read an enclosing local through the class's cell,
+	and neither pass sees all of them: the first drops a name the class body
+	binds too, and the second never walks an annotation (FunctionDefAst's read
+	walk covers its defaults, decorators and body).  An annotation itself
+	reads such a name from the class and the module, but a lambda inside one
+	is a scope that does not see the class, so it reaches the enclosing
+	binding: ``def f(): T = 1; class C: T = 2; def m(self, a: (lambda: T)())''
+	stored a cell over a ``T'' the helper did not carry, an undefined symbol
+	in its text, and the class did not compile."
+	(self ___irMethodAnnotationLocalReads___: localNames) do: [:n |
+		n asString = recv ifFalse: [free add: n asString]].
 	^ free
 
 ]
@@ -2434,6 +2486,24 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stBindName___.
 	stream ifNotNil: [out nextPutAll: (stream mapCommentShiftedBy: shift)].
 	^ out contents
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irMethodAnnotationLocalReads___: localNames [
+	"The enclosing def's locals that an annotation of one of the body's defs
+	names -- the defs emitMethodAnnotationsTableOn:className: builds annotate
+	blocks for."
+
+	| out |
+	out := Set new.
+	body isNil ifTrue: [^ out].
+	self ___allFunctionDefs___ do: [:def |
+		def ___annotatedArgs___ do: [:arg |
+			arg annotation ___irReadLocalNamesInto___: out locals: localNames].
+		def returns ifNotNil: [:returned |
+			returned ___irReadLocalNamesInto___: out locals: localNames]].
+	^ out
 
 ]
 
@@ -4279,19 +4349,28 @@ ClassDefAst >> emitMethodAnnotationsTableOn: aStream className: aClassName [
 	annotation holding a comprehension or a generator expression emits its
 	loop with indentation protocol (#increaseIndent), and on an AppendStream
 	that was a Smalltalk MessageNotUnderstood no Python handler could catch,
-	raised while compiling the class."
+	raised while compiling the class.
 
-	| annotated entries |
+	The blocks see the class namespace, as CPython's annotation scope for a
+	method does: a name the body binds is read from the class first (CallAst
+	>> methodAnnotationClassScope).  The class is the table's receiver, which
+	is why every walk over this table sends it to the class that compiled it
+	rather than to a subclass that inherits the method."
+
+	| annotated entries savedScope |
 	annotated := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasAnnotations]].
 	annotated isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
-	annotated do: [:def | | src |
+	savedScope := CallAst methodAnnotationClassScope.
+	CallAst methodAnnotationClassScope: self ___annotationScopeNames___.
+	[annotated do: [:def | | src |
 		src := PrettyWriteStream on: Unicode7 new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
 		src nextPut: $;.
-		entries add: src contents].
+		entries add: src contents]]
+		ensure: [CallAst methodAnnotationClassScope: savedScope].
 	self ___emitTable___: '___methodAnnotationsTable___' entries: entries category: 'Grail-Annotations' onStream: aStream
 
 ]
@@ -7149,8 +7228,8 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		 set, but an annotation is evaluated lazily, after the whole body ran --
 		 class namespace first, then the enclosing scope.  EVERY name except one
 		 that only a bare annotation mentions, which is not in the namespace at
-		 all (___annotateScopeBoundNames___:)."
-		CallAst classBodyBoundNames: (self ___annotateScopeBoundNames___: firstBinding).
+		 all (___annotateScopeBoundNames___)."
+		CallAst classBodyBoundNames: self ___annotateScopeBoundNames___.
 		"PEP 649 ``__annotate__'' for a class with class-body annotations: ONE
 		annotate block, stored in the class's own holder under CPython's class-dict
 		key ``__annotate_func__''.  The generic class-side accessors on object

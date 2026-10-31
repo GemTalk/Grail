@@ -43,6 +43,43 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___annotationsComputedBy___: anAnnotate [
+	"anAnnotate called with Format.VALUE, which must answer a dict -- CPython's
+	TypeError names what it answered instead."
+
+	| annotations |
+	annotations := anAnnotate @env1:___pyCallValue___: { 1 } kw: nil.
+	(annotations isKindOf: KeyValueDictionary) ifFalse: [
+		TypeError @env1:___signal___: ('__annotate__ returned non-dict of type '''
+			, ((Python at: #bytes) @env1:___pyTypeNameOf___: annotations) , '''')].
+	^ annotations
+
+]
+
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___annotationsOf___: aFunction ifNotAssigned: aBlock [
+	"What ``f.__annotations__'' answers for aFunction, a function that keeps its
+	attributes in dynamic instVars: the dict an assignment cached, or what an
+	ASSIGNED __annotate__ computes -- None answers an empty dict, a callable is
+	called with Format.VALUE and must answer a dict (function___annotations___
+	get, Objects/funcobject.c) -- cached as CPython caches it.  With nothing
+	assigned, aBlock answers the compiled annotations, uncached: a module
+	function can sit in committed globals, and a read that cached would be a
+	write on every first read there."
+
+	| annotate annotations |
+	(aFunction dynamicInstVarAt: #'__annotations__') ifNotNil: [:cached | ^ cached].
+	annotate := aFunction dynamicInstVarAt: #'__annotate__'.
+	annotate isNil ifTrue: [^ aBlock value].
+	annotations := annotate == None
+		ifTrue: [(Python at: #'PyDict') new]
+		ifFalse: [self ___annotationsComputedBy___: annotate].
+	aFunction dynamicInstVarAt: #'__annotations__' put: annotations.
+	^ annotations
+
+]
+
 { #category : 'Grail-Python Names' }
 BoundMethod class >> ___callableTypeAttributeFor___: aTypeName [
 	"The types-module name of the class CPython calls aTypeName, for
@@ -54,6 +91,23 @@ BoundMethod class >> ___callableTypeAttributeFor___: aTypeName [
 		#('wrapper_descriptor' #WrapperDescriptorType) )
 			do: [:pair | (pair at: 1) = aTypeName ifTrue: [^ pair at: 2]].
 	^ #BuiltinFunctionType
+
+]
+
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___checkAnnotationWrite___: aSymbol value: aValue [
+	"The setters' refusals for the two PEP 649 names, which every kind of
+	function shares (function___annotate___set_impl and
+	function___annotations___set_impl, Objects/funcobject.c): __annotate__ takes
+	None or a callable, __annotations__ None or a dict.  Grail took anything, so
+	``f.__annotate__ = 42'' was stored and called later."
+
+	aSymbol == #'__annotate__' ifTrue: [
+		(aValue == None or: [((Python at: #builtins) ___instance___) @env1:callable: aValue])
+			ifFalse: [TypeError @env1:___signal___: '__annotate__ must be callable or None']].
+	aSymbol == #'__annotations__' ifTrue: [
+		(aValue == None or: [aValue isKindOf: KeyValueDictionary])
+			ifFalse: [TypeError @env1:___signal___: '__annotations__ must be set to a dict object']]
 
 ]
 
@@ -127,7 +181,28 @@ BoundMethod class >> ___checkFunctionAttrWritable___: attrName writing: aValue [
 		c := pyClass value: #'PyCode'.
 		(c notNil and: [(aValue isKindOf: c) not]) ifTrue: [
 			TypeError @env1:___signal___: '__code__ must be set to a code object']].
+	self ___checkAnnotationWrite___: sym value: aValue.
 	^ self
+
+]
+
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___deleteAnnotationsOf___: aFunction [
+	"``del f.__annotations__'': the dict goes and so does __annotate__, which then
+	reads None -- never an error, as CPython's setter takes a NULL like a None."
+
+	self ___dropAnnotationsOf___: aFunction.
+	aFunction dynamicInstVarAt: #'__annotate__' put: None
+
+]
+
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___dropAnnotationsOf___: aFunction [
+	"Forget the dict aFunction's __annotations__ cached, so the next read
+	computes it again."
+
+	(aFunction dynamicInstVarAt: #'__annotations__') isNil ifFalse: [
+		aFunction removeDynamicInstVar: #'__annotations__']
 
 ]
 
@@ -210,6 +285,28 @@ BoundMethod class >> ___requireNoneOr___: aValue kind: aClassOrNil message: aMes
 	(aValue isNil or: [aValue == None]) ifTrue: [^ self].
 	(aValue isKindOf: aClassOrNil) ifTrue: [^ self].
 	^ TypeError @env1:___signal___: aMessage
+
+]
+
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___setAnnotate___: aValue of: aFunction [
+	"``f.__annotate__ = v'', after the write check: a callable drops the cached
+	__annotations__, so the next read calls it; None keeps the cache, as
+	CPython's setter does."
+
+	aFunction dynamicInstVarAt: #'__annotate__' put: aValue.
+	aValue == None ifFalse: [self ___dropAnnotationsOf___: aFunction]
+
+]
+
+{ #category : 'Grail-Annotations' }
+BoundMethod class >> ___setAnnotations___: aValue of: aFunction [
+	"``f.__annotations__ = d'', after the write check: d is the dict from now on
+	and __annotate__ reads None.  None is a delete, as in CPython."
+
+	aValue == None ifTrue: [^ self ___deleteAnnotationsOf___: aFunction].
+	aFunction dynamicInstVarAt: #'__annotations__' put: aValue.
+	aFunction dynamicInstVarAt: #'__annotate__' put: None
 
 ]
 

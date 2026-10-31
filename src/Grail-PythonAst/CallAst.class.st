@@ -142,6 +142,27 @@ CallAst class >> ___emitFreeVariableRead___: aSymbol parent: aNode on: aStream [
 
 ]
 
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> ___emitsInlineInClassBuild___ [
+	"Is the code being emitted part of a def the class build emits INLINE -- one
+	in a class-body compound statement (classBodyValueDefNode), or a def nested
+	in it with no class between -- rather than of a method string-compiled onto
+	the class?  There Smalltalk ``self'' is the receiver of the function the
+	class is built in, not an instance of the class, and the variable the class
+	is built in is in reach (___classBeingCompiledVar___)."
+
+	| valueDef node |
+	valueDef := self classBodyValueDefNode.
+	valueDef isNil ifTrue: [^ false].
+	node := self functionBeingCompiled.
+	[node notNil] whileTrue: [
+		node == valueDef ifTrue: [^ true].
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		node := node parent].
+	^ false
+
+]
+
 { #category : 'Grail-other' }
 CallAst class >> ___fixedAritySelectorFits___: aName arity: nargs [
 	"Whether the fixed-arity selector for ``aName'' with nargs arguments --
@@ -484,8 +505,18 @@ CallAst class >> ___printClassObjectOn___: aStream cellSelector: aCellSelector [
 	error.  The delete targets the container, not the contents.
 
 	A class an exec'd source defines takes the cell route too: a doit has no
-	module class to read it from."
+	module class to read it from.
 
+	Neither route is right in a def the class build emits INLINE -- one in a
+	class-body ``if'', and the method a PEP 695 scope function there returns
+	(PythonParser >> ___rewriteGenericFunctionAt___:decorators:).  The cell read
+	went to Smalltalk ``self'', which there is the receiver of the function the
+	class is built in, so zero-argument super() in a class defined in a
+	function saw None (test_type_params test_super).  The class's own build
+	variable is in reach there, and holds the class once it exists."
+
+	self ___emitsInlineInClassBuild___ ifTrue: [
+		^ aStream nextPutAll: self ___classBeingCompiledVar___].
 	(self classDefIsModuleScope == false or: [self moduleClassBeingCompiled isNil])
 		ifTrue: [
 			self addCapturedClassName: self classBeingCompiled.
@@ -714,6 +745,22 @@ CallAst class >> annotationOwnerDefNode [
 { #category : 'Grail-Class Compile Context' }
 CallAst class >> annotationOwnerDefNode: aNodeOrNil [
 	self ___compileContext___ at: #'annotationOwnerDefNode' put: aNodeOrNil
+
+]
+
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> annotationScopeReadsSuppressed [
+	"True while NameAst emits a read as it would be OUTSIDE any annotation
+	scope's class namespace -- the fallback a class-namespace read wraps
+	(NameAst >> ___emitOrdinaryReadOn___:)."
+
+	^ self ___compileContext___ at: #'annotationScopeReadsSuppressed' otherwise: nil
+
+]
+
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> annotationScopeReadsSuppressed: aBooleanOrNil [
+	self ___compileContext___ at: #'annotationScopeReadsSuppressed' put: aBooleanOrNil
 
 ]
 
@@ -1476,6 +1523,25 @@ CallAst class >> isSelfReference: aSymbol [
 	^ self classBeingCompiled notNil
 		and: [aSymbol == self selfParameterName
 		and: [self selfParameterRebound ~~ true]]
+
+]
+
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> methodAnnotationClassScope [
+	"The names a class body binds, while ClassDefAst >>
+	emitMethodAnnotationsTableOn:className: emits that class's METHOD
+	annotations, or nil.  CPython's annotation scope for a def in a class body
+	sees the class namespace (Python/symtable.c:2872), so NameAst reads one of
+	these names from the class first -- see NameAst >>
+	___readsMethodAnnotationClassScope___."
+
+	^ self ___compileContext___ at: #'methodAnnotationClassScope' otherwise: nil
+
+]
+
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> methodAnnotationClassScope: aSetOrNil [
+	self ___compileContext___ at: #'methodAnnotationClassScope' put: aSetOrNil
 
 ]
 
@@ -3131,6 +3197,14 @@ CallAst >> ___emitSmalltalkOn___: aStream [
 				modules and conftests through exec, so each test class and
 				conftest class that called super() failed (pygments' 1,508
 				collection errors).  The cell knows the class without a module."
+				"In a def the class build emits INLINE, Smalltalk ``self'' is not
+				 the instance, so the cell read found nothing; the build variable
+				 holds the class (CallAst class >> ___printClassObjectOn___:
+				 cellSelector: says why).  The supercheck rides on the cell read,
+				 so it is not made there."
+				CallAst ___emitsInlineInClassBuild___
+					ifTrue: [aStream nextPutAll: CallAst ___classBeingCompiledVar___]
+					ifFalse: [
 				(CallAst classDefIsModuleScope == false
 						or: [CallAst moduleClassBeingCompiled isNil])
 					ifTrue: [
@@ -3145,7 +3219,7 @@ CallAst >> ___emitSmalltalkOn___: aStream [
 							nextPutAll: CallAst moduleClassBeingCompiled name;
 							nextPutAll: ' @env0:___instance___) @env1:';
 							nextPutAll: (CallAst ___moduleClassReadSelector___: CallAst classBeingCompiled asString);
-							nextPutAll: ')']].
+							nextPutAll: ')']]].
 			aStream nextPutAll: ' obj: ';
 				nextPutAll: (self ___superObjTempName___ ifNil: ['self']);
 				nextPutAll: ')'.
@@ -4654,12 +4728,21 @@ CallAst >> ___superObjTempName___ [
 	``obj (instance of annotated_types) is not an instance or subtype of type
 	(Generic)''.  The first parameter's temp is what CPython binds.
 
-	Only for the value-form def ITSELF.  A def nested inside it keeps the
-	outer-receiver rule the method case has (see printSmalltalkOn:'s
-	precondition-2 comment), which this does not change."
+	Only for the value-form def ITSELF, and for the method a PEP 695 scope
+	function in that position returns, which is the method the class body
+	binds (PythonParser >> ___rewriteGenericFunctionAt___:decorators:).  Any
+	other def nested inside it keeps the outer-receiver rule the method case
+	has (see printSmalltalkOn:'s precondition-2 comment), which this does not
+	change."
 
-	CallAst classBodyValueDefNode == nil ifTrue: [^ nil].
-	CallAst functionBeingCompiled == CallAst classBodyValueDefNode ifFalse: [^ nil].
+	| valueDef compiledDef |
+	valueDef := CallAst classBodyValueDefNode.
+	valueDef == nil ifTrue: [^ nil].
+	compiledDef := CallAst functionBeingCompiled.
+	(compiledDef == valueDef
+		or: [(CallAst ___isTypeParamScope___: valueDef)
+			and: [compiledDef notNil and: [valueDef ___bodyHolds___: compiledDef parent]]])
+				ifFalse: [^ nil].
 	^ self ___superArgZeroGuardName___
 
 ]
