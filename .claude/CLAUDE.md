@@ -28,8 +28,15 @@ is that 2026-08-05 does not, and that GemTalk's container does. The comment in
 `tests/scripts/run_unittest_main_exit_test.sh` reads it as the builder needing a
 server newer than the product, which fits but is not proven by the above.
 
-Consequences on such a machine: Grail itself still installs (only gemdb fails to
-deploy), but **every local run has to spell `GRAIL_IR_CODEGEN=0`**, and the
+**`install.sh` now finds this up front**: `scripts/check_ir_codegen.gs` builds
+and runs one throwaway env-1 method through `generateFromIR:` and the install
+refuses, naming the error, unless `GRAIL_IR_CODEGEN` turns IR off. Do not
+replace that build with a `canUnderstand: #envId` check: on 4.0.0.a8 it answers
+false and `selector:` works anyway. 4.0.0.a8 passes the probe and runs the IR arm
+locally.
+
+Consequences on such a machine: Grail installs only with `GRAIL_IR_CODEGEN=0
+./install.sh`, **every local run has to spell `GRAIL_IR_CODEGEN=0`**, and the
 `...UnderIR` SUnit tests then fail as a block — a full local suite reads
 `3 failed, 146 errors` with the same numbers on a clean checkout, so compare
 against a measured baseline rather than expecting green. CI is unaffected: it
