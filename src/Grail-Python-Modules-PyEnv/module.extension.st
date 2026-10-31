@@ -269,6 +269,20 @@ module >> ___dataGlobalAt___: aSym put: aValue [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+module >> ___deleteAnnotations___ [
+	"``del mod.__annotations__'', as module_set_annotations has it for a delete:
+	the dict goes, and so does __annotate__, which then reads None -- an
+	AttributeError when there was no dict, so a second del raises."
+
+	(self @env0:dynamicInstVarAt: #'__annotations__') == nil ifTrue: [
+		^ AttributeError ___signal___: '__annotations__'].
+	self @env0:removeDynamicInstVar: #'__annotations__'.
+	self ___removeAnnotationGlobal___: #'__annotate__'.
+	^ None
+
+]
+
 { #category : 'Grail-Attribute Access' }
 module >> ___deletedGlobals___ [
 	"The names ``del m.x'' has removed from this module although a class
@@ -706,6 +720,16 @@ module >> ___isAbsentAccessor___: aSym [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+module >> ___isAnnotationAttribute___: aName [
+	"Is aName one of the PEP 649 pair the module type serves through getsets
+	rather than as ordinary namespace entries?"
+
+	^ aName @env0:asString @env0:= '__annotate__'
+		or: [aName @env0:asString @env0:= '__annotations__']
+
+]
+
 { #category : 'Grail-Attribute Access' }
 module >> ___isBuiltinsModule___ [
 	"Whether this module is ``builtins'' -- the one module whose namespace
@@ -1079,6 +1103,10 @@ module >> ___pyAttrDelete___: aName [
 
 	| sym removed |
 	sym := aName @env0:asString @env0:asSymbol.
+	"The PEP 649 pair are the module type's getsets, not namespace entries."
+	sym == #'__annotate__' ifTrue: [
+		^ TypeError ___signal___: 'cannot delete __annotate__ attribute'].
+	sym == #'__annotations__' ifTrue: [^ self ___deleteAnnotations___].
 	removed := false.
 	(self @env0:includesKey: sym) ifTrue: [
 		self @env0:removeKey: sym.
@@ -1129,6 +1157,9 @@ module >> ___pyAttrStore___: aName put: aValue [
 	the only version of this that cannot be wrong."
 
 	self ___unmarkGlobalDeleted___: aName @env0:asString @env0:asSymbol.
+	(self ___isAnnotationAttribute___: aName) ifTrue: [
+		self ___storeAnnotationAttribute___: aName value: aValue.
+		^ aValue].
 	^ super ___pyAttrStore___: aName put: aValue
 
 ]
@@ -1200,6 +1231,38 @@ module >> ___pyTypeNameForError___ [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+module >> ___removeAnnotationGlobal___: aSymbol [
+	"Take aSymbol out of the namespace when it is there."
+
+	(self @env0:dynamicInstVarAt: aSymbol) == nil ifFalse: [
+		self @env0:removeDynamicInstVar: aSymbol]
+
+]
+
+{ #category : 'Grail-Annotations' }
+module >> ___storeAnnotationAttribute___: aName value: aValue [
+	"``mod.__annotate__ = v'' or ``mod.__annotations__ = d'', as
+	module_set_annotate and module_set_annotations have them
+	(Objects/moduleobject.c).  __annotate__ takes None or a callable, and a
+	callable drops the cached __annotations__ so the next read calls it -- Grail
+	stored anything and kept the cache, so the new function was never called.
+	Assigning __annotations__ takes __annotate__ out, so it reads None after.
+	A module BODY's own ``__annotate__ = ...'' is an ordinary global store and
+	never gets here, as in CPython."
+
+	(aName @env0:asString @env0:= '__annotations__') ifTrue: [
+		self @env0:dynamicInstVarAt: #'__annotations__' put: aValue.
+		self ___removeAnnotationGlobal___: #'__annotate__'.
+		^ None].
+	((aValue == None) or: [(builtins @env1:instance) @env1:callable: aValue]) ifFalse: [
+		^ TypeError ___signal___: '__annotate__ must be callable or None'].
+	self @env0:dynamicInstVarAt: #'__annotate__' put: aValue.
+	aValue == None ifFalse: [self ___removeAnnotationGlobal___: #'__annotations__'].
+	^ None
+
+]
+
 { #category : 'Grail-Attribute Access' }
 module >> ___unmarkGlobalDeleted___: aSym [
 	"Storing a name revives it."
@@ -1246,7 +1309,8 @@ module >> __annotations__ [
 		ifFalse: [
 			ann := annotate @env1:___pyCallValue___: { 1 } kw: nil.
 			(ann @env0:isKindOf: KeyValueDictionary) ifFalse: [
-				^ TypeError ___signal___: '__annotate__ returned a non-dict']].
+				^ TypeError ___signal___: ('__annotate__ returned non-dict of type '''
+					@env0:, (bytes ___pyTypeNameOf___: ann) @env0:, '''')]].
 	self @env0:___isInitializing___ ifFalse: [
 		self @env0:dynamicInstVarAt: #'__annotations__' put: ann].
 	^ ann
@@ -1765,6 +1829,8 @@ module >> __setattr__: aName _: aValue [
 	one the language uses."
 
 	self ___unmarkGlobalDeleted___: aName @env0:asString @env0:asSymbol.
+	(self ___isAnnotationAttribute___: aName) ifTrue: [
+		^ self ___storeAnnotationAttribute___: aName value: aValue].
 	^ super __setattr__: aName _: aValue
 
 ]
