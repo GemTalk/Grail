@@ -2824,6 +2824,13 @@ NameAst >> ___readsThroughClassCell___ [
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
 	CallAst classBeingCompiled isNil ifTrue: [^ false].
+	"A comprehension's own iteration variable is a block temp of the
+	 comprehension (PEP 709 inlines it into the method), never a cell -- even
+	 when an enclosing function or a type-parameter scope binds the same name.
+	 The cell read answered that binding for every element: ``[X for X in [1,
+	 2]]'' in a method of ``class C[X]'' was [X, X] (test_type_params
+	 test_name_non_collision_08)."
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
 	"Every INLINE class-body context asks the same header-aware question:
 	attribute values, the sibling-def ``f.attr = v'' and runtime statements
 	(classBodyRuntimeClass), bases, keywords and decorators.  A local of the
