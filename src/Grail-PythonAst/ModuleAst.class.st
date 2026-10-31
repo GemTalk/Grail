@@ -159,6 +159,76 @@ ModuleAst class >> ___isDoitMethod___: aMethod [
 ]
 
 { #category : 'Grail-parsing' }
+ModuleAst class >> ___isTypingHelperCall___: aNode named: aString [
+	"Is aNode a call of ``___typing___.<aString>'', one PythonParser synthesizes
+	for a PEP 695 scope?"
+
+	| function |
+	(aNode isKindOf: CallAst) ifFalse: [^ false].
+	function := aNode function.
+	^ (function isKindOf: AttributeAst)
+		and: [(function value isKindOf: NameAst)
+		and: [function value id asString = '___typing___'
+		and: [function attr asString = aString]]]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___namedExpressionIn___: aValue insideComprehension: aBoolean [
+	"A named expression in aValue that stands inside a comprehension -- past the
+	comprehension's outermost iterable, which runs in the scope around it -- and
+	not inside a lambda, or nil.  PEP 572 binds such a target in the scope that
+	encloses the comprehension, which is what CPython refuses for a PEP 695
+	scope (___validateTypeScope___:within:comprehension:)."
+
+	aValue isNil ifTrue: [^ nil].
+	aValue isString ifTrue: [^ nil].
+	(aValue isKindOf: SequenceableCollection) ifTrue: [
+		aValue do: [:each |
+			(self ___namedExpressionIn___: each insideComprehension: aBoolean)
+				ifNotNil: [:offender | ^ offender]].
+		^ nil].
+	(aValue isKindOf: AbstractNode) ifFalse: [^ nil].
+	(aValue isKindOf: LambdaAst) ifTrue: [^ nil].
+	(aBoolean and: [aValue isKindOf: NamedExprAst]) ifTrue: [^ aValue].
+	aValue ___comprehensionScopeName___ ifNotNil: [:ignored |
+		^ self ___namedExpressionInComprehension___: aValue insideComprehension: aBoolean].
+	^ self ___namedExpressionInChildrenOf___: aValue except: #(#parent) insideComprehension: aBoolean
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___namedExpressionInChildrenOf___: aNode except: someInstVarNames insideComprehension: aBoolean [
+	"___namedExpressionIn___:insideComprehension: over aNode's instance
+	variables, leaving out someInstVarNames."
+
+	| childNames |
+	childNames := aNode class allInstVarNames.
+	1 to: childNames size do: [:i |
+		(someInstVarNames includes: (childNames at: i)) ifFalse: [
+			(self ___namedExpressionIn___: (aNode instVarAt: i) insideComprehension: aBoolean)
+				ifNotNil: [:offender | ^ offender]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___namedExpressionInComprehension___: aComprehension insideComprehension: aBoolean [
+	"The comprehension case: its first clause's iterable runs in the scope
+	around it, everything else inside it."
+
+	aComprehension generators doWithIndex: [:generator :index |
+		(self ___namedExpressionIn___: generator iter
+			insideComprehension: (index = 1 ifTrue: [aBoolean] ifFalse: [true]))
+				ifNotNil: [:offender | ^ offender].
+		(self ___namedExpressionIn___: { generator target. generator ifs } insideComprehension: true)
+			ifNotNil: [:offender | ^ offender]].
+	^ self ___namedExpressionInChildrenOf___: aComprehension except: #(#parent #generators)
+		insideComprehension: true
+
+]
+
+{ #category : 'Grail-parsing' }
 ModuleAst class >> ___nameIsReservedSelector___: aName [
 	"Is aName -- or aName with one argument, ``aName:'' -- a selector the
 	compiler will not let a method have?  Those are the two Grail compiles
@@ -594,6 +664,8 @@ ModuleAst class >> ___validateContext___: node fn: fnSym loop: inLoop scopes: sc
 	before the walk below judges it as part of the enclosing one."
 	(node isKindOf: ArgAst) ifTrue: [self ___validateAnnotation___: node annotation].
 	(node isKindOf: AnnAssignAst) ifTrue: [self ___validateAnnotation___: node annotation].
+	"...and so are the scopes PEP 695 adds."
+	self ___validateTypeScopesOf___: node.
 	(node isKindOf: FunctionDefAst) ifTrue: [
 		self ___validateContext___: node decoratorList fn: fnSym loop: inLoop scopes: scopes.
 		self ___validateContext___: node args fn: fnSym loop: inLoop scopes: scopes.
@@ -800,6 +872,68 @@ ModuleAst class >> ___validateStarredTarget___: aTarget [
 		(each isKindOf: StarredAst)
 			ifTrue: [self ___validateStarredTarget___: each value]
 			ifFalse: [self ___validateStarredTarget___: each]]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___validateTypeScope___: anExpression within: aPhrase comprehension: aComprehensionPhrase [
+	"CPython's refusals in an annotation scope PEP 695 adds -- a type alias's
+	value, a TypeVar's bound, constraints or default, a generic class's bases
+	and keywords: a yield, an await or a named expression there is ``... cannot
+	be used within <aPhrase>'' (Python/symtable.c:3128-3153), and a named
+	expression in a comprehension, which would bind in that scope, is
+	``assignment expression within a comprehension cannot be used
+	<aComprehensionPhrase>'' (Python/symtable.c:2368-2392).  A lambda is a
+	function of its own and is not searched."
+
+	anExpression isNil ifTrue: [^ self].
+	anExpression ___annotationScopeOffender___ ifNotNil: [:offender |
+		^ self ___syntaxError___: offender ___annotationScopeRefusalName___
+				, ' cannot be used within ' , aPhrase
+			node: offender].
+	(self ___namedExpressionIn___: anExpression insideComprehension: false)
+		ifNotNil: [:offender |
+			^ self ___syntaxError___: 'assignment expression within a comprehension cannot be used '
+					, aComprehensionPhrase
+				node: offender]
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___validateTypeScopesOf___: node [
+	"The PEP 695 scopes node opens, each checked as CPython's symbol table
+	checks it (___validateTypeScope___:within:comprehension:).  They are found in
+	the shapes PythonParser >> ___rewriteTypeParamStatement___ and
+	___rewriteGenericFunctionAt___:decorators: leave: a plain alias's value; the
+	lambdas a ``___typing___._grail_type_param'' or ``_grail_type_alias'' call
+	takes for a bound, constraints, default or alias value; and the bases and
+	keywords of a class that carries the synthesized ``_grail_generic_base''.
+	A rewritten bound is a lambda, which may hold a yield, so without this
+	``class X[T: (yield)]'' compiled."
+
+	| kind phrases |
+	(node isKindOf: TypeAliasAst) ifTrue: [
+		^ self ___validateTypeScope___: node value within: 'a type alias'
+			comprehension: 'in a type alias'].
+	(node isKindOf: ClassDefAst) ifTrue: [
+		(node bases anySatisfy: [:base | self ___isTypingHelperCall___: base named: '_grail_generic_base'])
+			ifTrue: [
+				node bases , (node keywords collect: [:keyword | keyword value]) do: [:each |
+					self ___validateTypeScope___: each within: 'the definition of a generic'
+						comprehension: 'within the definition of a generic']].
+		^ self].
+	(self ___isTypingHelperCall___: node named: '_grail_type_alias') ifTrue: [
+		^ self ___validateTypeScope___: (node arguments at: 2) body within: 'a type alias'
+			comprehension: 'in a type alias'].
+	(self ___isTypingHelperCall___: node named: '_grail_type_param') ifFalse: [^ self].
+	kind := (node arguments at: 1) value.
+	phrases := { 'a TypeVar bound'. 'a TypeVar constraint'.
+		#('a TypeVar default' 'a TypeVarTuple default' 'a ParamSpec default') at: kind + 1 }.
+	3 to: 5 do: [:index |
+		((node arguments at: index) isKindOf: LambdaAst) ifTrue: [
+			self ___validateTypeScope___: (node arguments at: index) body
+				within: (phrases at: index - 2)
+				comprehension: 'in a TypeVar bound']]
 
 ]
 
