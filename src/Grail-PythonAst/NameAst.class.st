@@ -2707,9 +2707,12 @@ NameAst >> ___readsDoitLiveMapping___ [
 	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
+		"A type alias's value too: it is evaluated later, in a scope of its own,
+		 where a free name is LOAD_GLOBAL."
 		((node isKindOf: FunctionDefAst)
 			or: [(node isKindOf: LambdaAst)
-			or: [node isKindOf: ClassDefAst]]) ifTrue: [^ false].
+			or: [(node isKindOf: ClassDefAst)
+			or: [node isKindOf: TypeAliasValueAst]]]) ifTrue: [^ false].
 		"A generator expression is its own scope EXCEPT for its first
 		iterable, which CPython evaluates in the enclosing scope and passes
 		in: ``eval('(x for x in [len])', {}, D())'' reads len from D."
@@ -2755,6 +2758,11 @@ NameAst >> ___readsFreeVariable___ [
 	node := parent.
 	[node notNil] whileTrue: [
 		node == CallAst annotationOwnerDefNode ifTrue: [^ true].
+		"So is a type alias's value, evaluated lazily in a scope of its own:
+		 ``type MissingName = list[_My_X]'' with _My_X bound later in the
+		 function is NameError, ``cannot access free variable'' (test_type_aliases
+		 test_raising)."
+		(node isKindOf: TypeAliasValueAst) ifTrue: [^ true].
 		(((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst)
 			or: [node isKindOf: ClassDefAst]]) and: [child == node body])
 				ifTrue: [^ (self ___functionBindsPythonLocal___: node named: id asSymbol) not].

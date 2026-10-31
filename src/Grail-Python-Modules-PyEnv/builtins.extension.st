@@ -1919,6 +1919,24 @@ builtins >> ___forwarderSourceFor___: aSelector name: aString [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+builtins >> ___freshExecScopeOver___: aGlobalsMapping [
+	"A scope of its own for one exec() call -- the three-argument and
+	live-mapping forms -- that still names the globals mapping, as the reused
+	scope of a plain dict does (___execScopeFor___:).  A function or a lazy
+	type alias value the exec defines runs after the exec is over, and reads
+	its globals there (NameError class >> ___resolveDoitGlobal___:scope:): a
+	globals dict whose __missing__ answers every name answered nothing once the
+	exec had returned (test_type_aliases test_exec_with_unusual_globals)."
+
+	| scope |
+	scope := SymbolDictionary @env0:new.
+	[scope @env0:dynamicInstVarAt: #'___grailExecGlobals___' put: aGlobalsMapping]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	^ scope
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 builtins >> ___gatedImport___: positional kw: kwargs [
 	"``__import__'' for code running under a ``__builtins__'' OVERRIDE.
 
@@ -5864,7 +5882,7 @@ builtins >> _exec: positional kw: kwargs [
 	the three-argument and live-mapping forms keep a fresh scope each call."
 	scope := ((liveGlobals @env0:isNil) @env0:and: [localsDict @env0:== globalsDict])
 		ifTrue: [self ___execScopeFor___: globalsDict]
-		ifFalse: [SymbolDictionary @env0:new].
+		ifFalse: [self ___freshExecScopeOver___: globalsDict].
 	seeded := liveGlobals @env0:isNil
 		ifTrue: [self ___seedDoitScope___: scope from: globalsDict]
 		ifFalse: [KeyValueDictionary @env0:new].
