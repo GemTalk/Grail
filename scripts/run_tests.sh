@@ -433,6 +433,10 @@ timed "module-globals" tests/scripts/run_module_globals_test.sh || EXIT=$?
 # deploys first (scripts/deployUnicodedata.gs, idempotent), then a second gem
 # checks, so a shell driver.
 timed "unicodedata-deploy" tests/scripts/run_unicodedata_deploy_test.sh || EXIT=$?
+# An install's redeploy (scripts/redeployModules.gs) rebuilds a deployed module
+# whose class changed its bases when nothing is stored against it (#1985).  It
+# deploys, runs the install's own script, and checks in a third gem.
+timed "redeploy-refusal" tests/scripts/run_redeploy_refusal_test.sh || EXIT=$?
 
 # Functional test for gemdb.schema (layout/report/drop/rename/compact, the
 # public surface for deliberate schema change). Every operation but layout()
