@@ -61,7 +61,7 @@ cmath >> cosh: z [
 
 { #category : 'Grail-Constants' }
 cmath >> e [
-	^ self @env0:at: #e
+	^ self ___dataGlobalAt___: #e
 
 ]
 
@@ -75,13 +75,13 @@ cmath >> exp: z [
 
 { #category : 'Grail-Constants' }
 cmath >> inf [
-	^ self @env0:at: #inf
+	^ self ___dataGlobalAt___: #inf
 
 ]
 
 { #category : 'Grail-Constants' }
 cmath >> infj [
-	^ self @env0:at: #infj
+	^ self ___dataGlobalAt___: #infj
 
 ]
 
@@ -147,13 +147,13 @@ cmath >> log10: z [
 
 { #category : 'Grail-Constants' }
 cmath >> nan [
-	^ self @env0:at: #nan
+	^ self ___dataGlobalAt___: #nan
 
 ]
 
 { #category : 'Grail-Constants' }
 cmath >> nanj [
-	^ self @env0:at: #nanj
+	^ self ___dataGlobalAt___: #nanj
 
 ]
 
@@ -167,7 +167,7 @@ cmath >> phase: z [
 
 { #category : 'Grail-Constants' }
 cmath >> pi [
-	^ self @env0:at: #pi
+	^ self ___dataGlobalAt___: #pi
 
 ]
 
@@ -229,6 +229,6 @@ cmath >> tanh: z [
 
 { #category : 'Grail-Constants' }
 cmath >> tau [
-	^ self @env0:at: #tau
+	^ self ___dataGlobalAt___: #tau
 
 ]

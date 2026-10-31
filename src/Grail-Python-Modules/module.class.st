@@ -664,6 +664,25 @@ module >> ___globalStoreIsSessionLocal___ [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+module >> ___isInitializing___ [
+	"Is this module still being imported, its body running -- CPython's
+	_PyModuleSpec_IsInitializing?  An import cycle reads a module that way,
+	mid-body.  Only an IMPORT sets that flag (importlib._bootstrap's
+	_load_unlocked), so a __main__ is never initializing: CPython runs it with no
+	spec, or through runpy, which leaves the flag alone.  Grail's __main__ has a
+	spec and is on the stack ___bodyIsRunning___ reads, which is why the name is
+	asked.  A module with no spec -- one made by types.ModuleType -- is not
+	initializing either, whatever a module of its name is doing."
+
+	| spec |
+	(self at: #'__name__' otherwise: '') asString = '__main__' ifTrue: [^ false].
+	spec := self dynamicInstVarAt: #'__spec__'.
+	(spec isNil or: [spec == ExecBlock ___pyNone___]) ifTrue: [^ false].
+	^ self ___bodyIsRunning___
+
+]
+
 { #category : 'Grail-Phase A Dynamic InstVars' }
 module >> ___isSameImmutable___: a as: b [
 	"Are a and b equal values of an IMMUTABLE Python type -- str, an int, or
@@ -695,6 +714,21 @@ module >> ___isSameImmutable___: a as: b [
 			(x == y or: [self ___isSameImmutable___: x as: y]) ifFalse: [^ false]].
 		^ true].
 	^ false
+
+]
+
+{ #category : 'Grail-Annotations' }
+module >> ___keepsAnnotationRecord___ [
+	"Does a re-run of the same body over this module keep the record of which
+	annotations ran?  Only over committed globals, where starting it afresh is
+	a write on every run even when the run executes the same annotations; the
+	body adds only an annotation the record lacks, so such a re-run writes
+	nothing (AbstractNode >> ___emitRecordingExecutionOf___:on:).  The record
+	then also holds one that ran in an earlier run but not in this one, which
+	is how every global of an earlier run stays bound there too."
+
+	^ self isCommitted
+		and: [(self dynamicInstVarAt: #'__conditional_annotations__') notNil]
 
 ]
 
@@ -760,16 +794,15 @@ module >> ___recordedFunctionMeta___: aKind name: aName [
 
 { #category : 'Grail-Signatures' }
 module >> ___recordedFunctionMetaOfKind___: aKind [
-	"The committed record of ___recordFunctionMeta___:name:value: for aKind, as
-	function name -> value: the dictionary itself, or an empty one when there
-	is none."
+	"The record of ___recordFunctionMeta___:name:value: for aKind, as function
+	name -> value: the dictionary itself, or an empty one when there is none.
+	Committed, or while this module's body runs the one that run is building
+	(importlib >> ___bodyRecord___:of:)."
 
-	| nm reg rec |
-	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
-	reg isNil ifTrue: [^ KeyValueDictionary new].
+	| nm rec |
 	nm := self at: #'__name__' otherwise: nil.
 	nm isNil ifTrue: [^ KeyValueDictionary new].
-	rec := reg at: nm asString otherwise: nil.
+	rec := importlib ___bodyRecord___: #'GrailCanonicalFunctionMeta' of: nm asString.
 	rec isNil ifTrue: [^ KeyValueDictionary new].
 	^ (rec at: aKind otherwise: nil) ifNil: [KeyValueDictionary new]
 
@@ -790,8 +823,10 @@ module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 	rule: what the build writes and is not on the class needs a committed
 	record.  Same shape as importlib >> ___recordBodyClassAttr___:name:value:
 	-- an RcKeyValueDictionary keyed by the module's name, in the module's
-	namespace, dropped when the body runs again
-	(importlib >> ___forgetFunctionMetaOf___:).
+	namespace, superseded when the body runs again
+	(importlib >> ___beginBodyRecordsOf___:): the run records into a fresh
+	set, committed when the body is done only if it differs, so an unchanged
+	re-run writes nothing (#1862).
 
 	Only from the module's own body, and never for a session-local module
 	(``__main__''), which nothing binds.  A spec is strings and integers --
@@ -799,20 +834,16 @@ module >> ___recordFunctionMeta___: aKind name: aName value: aValue [
 	or defaults block is code over the module, so all commit with the
 	deployment."
 
-	| nm reg rec kind |
+	| nm rec kind |
 	self ___bodyIsRunning___ ifFalse: [^ self].
 	nm := self at: #'__name__' otherwise: nil.
 	nm isNil ifTrue: [^ self].
 	nm := nm asString.
 	(importlib ___isSessionLocalModule___: nm) ifTrue: [^ self].
-	reg := importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' otherwise: nil.
-	reg isNil ifTrue: [
-		reg := RcKeyValueDictionary new.
-		importlib ___grailNamespace___ at: #'GrailCanonicalFunctionMeta' put: reg].
-	rec := reg at: nm otherwise: nil.
+	rec := importlib ___bodyRecord___: #'GrailCanonicalFunctionMeta' of: nm.
 	rec isNil ifTrue: [
 		rec := KeyValueDictionary new.
-		reg at: nm put: rec].
+		importlib ___bodyRecord___: #'GrailCanonicalFunctionMeta' of: nm put: rec].
 	kind := rec at: aKind otherwise: nil.
 	kind isNil ifTrue: [
 		kind := KeyValueDictionary new.
@@ -1065,13 +1096,20 @@ module >> ___storeAnnotate___: aBlock [
 	compute the same annotations; but each run makes a new one, which on an
 	app's re-run over committed globals is a write that changes nothing
 	(docs/App_Namespaces_Design.md §5.2).  After an edit the module body is
-	recompiled, the block's method differs, and the store goes through."
+	recompiled, the block's method differs, and the store goes through.
 
-	| current |
+	The record of which annotations ran, ``__conditional_annotations__'', which
+	the block reads, starts empty with the run, as CPython's does -- except
+	where the committed closure is kept (___keepsAnnotationRecord___)."
+
+	| current keepsCurrent |
 	current := super dynamicInstVarAt: #'__annotate__'.
-	((current isKindOf: ExecBlock)
+	keepsCurrent := (current isKindOf: ExecBlock)
 		and: [current method == aBlock method
-		and: [current selfValue == aBlock selfValue]]) ifTrue: [^ current].
+		and: [current selfValue == aBlock selfValue]].
+	(keepsCurrent and: [self ___keepsAnnotationRecord___]) ifFalse: [
+		self dynamicInstVarAt: #'__conditional_annotations__' put: set new].
+	keepsCurrent ifTrue: [^ current].
 	^ self dynamicInstVarAt: #'__annotate__' put: aBlock
 
 ]

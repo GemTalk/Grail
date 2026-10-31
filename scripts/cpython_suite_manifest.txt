@@ -864,3 +864,19 @@ test.test_dynamicclassattribute
 #                         accepting bytes (2F)
 test.test_binascii
 test.test_base64
+
+# --- Core language (added 2026-10-30): PEP 649/749 annotations ---
+#
+# test_type_annotations is CPython 3.14.4's, vendored verbatim.  An
+# annotation inside a module- or class-level if, for, while, try, with or
+# match was never in __annotations__: Grail listed only the ones at the top
+# of the body.  CPython records which ran, in __conditional_annotations__
+# (every module-level annotation, a class's conditional ones), and the
+# annotate function lists those; Grail now does the same.  A module read
+# mid-import is not cached, and ``x: int = 1'' in a class-body loop
+# compiles.  Measured on Darwin arm64:
+#
+#   type_annotations 46t 9F/3E/1S   class __annotations__ get/set/delete
+#                                   protocol, a user-set __annotate__,
+#                                   names inside class annotations
+test.test_type_annotations

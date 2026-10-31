@@ -2,19 +2,19 @@ Extension { #name : 'html_entities' }
 
 { #category : 'Grail-Accessors' }
 html_entities >> codepoint2name [
-	^ self @env0:at: #codepoint2name
+	^ self ___dataGlobalAt___: #codepoint2name
 
 ]
 
 { #category : 'Grail-Accessors' }
 html_entities >> entitydefs [
-	^ self @env0:at: #entitydefs
+	^ self ___dataGlobalAt___: #entitydefs
 
 ]
 
 { #category : 'Grail-Accessors' }
 html_entities >> html5 [
-	^ self @env0:at: #html5
+	^ self ___dataGlobalAt___: #html5
 
 ]
 
@@ -2599,6 +2599,6 @@ html_entities >> initialize_name2codepoint [
 
 { #category : 'Grail-Accessors' }
 html_entities >> name2codepoint [
-	^ self @env0:at: #name2codepoint
+	^ self ___dataGlobalAt___: #name2codepoint
 
 ]

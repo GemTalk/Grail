@@ -1307,7 +1307,7 @@ os >> ___walkSymlinksAsFiles [
 	"The sentinel os.walk compares its followlinks against; see where it is
 	created for what it asks for."
 
-	^ self @env0:at: #'_walk_symlinks_as_files'
+	^ self ___dataGlobalAt___: #'_walk_symlinks_as_files'
 
 ]
 
@@ -2295,7 +2295,7 @@ os >> isfile: aPath [
 
 { #category : 'Grail-Constants' }
 os >> linesep [
-	^ self @env0:at: #linesep
+	^ self ___dataGlobalAt___: #linesep
 
 ]
 
@@ -2409,13 +2409,13 @@ os >> open: aPath _: flags _: mode [
 
 { #category : 'Grail-Path Module' }
 os >> path [
-	^ self @env0:at: #path
+	^ self ___dataGlobalAt___: #path
 
 ]
 
 { #category : 'Grail-Constants' }
 os >> pathsep [
-	^ self @env0:at: #pathsep
+	^ self ___dataGlobalAt___: #pathsep
 
 ]
 
@@ -2603,7 +2603,7 @@ os >> scandir: aPath [
 
 { #category : 'Grail-Constants' }
 os >> sep [
-	^ self @env0:at: #sep
+	^ self ___dataGlobalAt___: #sep
 
 ]
 

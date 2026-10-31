@@ -114,6 +114,18 @@ FunctionDefAst >> ___arityReceiverOffset___: nPos [
 
 ]
 
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___assignsAPropertyCall___: anAssign [
+	"Is anAssign's value a call of the builtin name ``property''?"
+
+	| value |
+	value := anAssign value.
+	^ (value isKindOf: CallAst)
+		and: [(value function isKindOf: NameAst)
+		and: [value function id asString = 'property']]
+
+]
+
 { #category : 'Grail-Class Method Compilation' }
 FunctionDefAst >> ___bindsOwnParameterNamed___: aSymbol [
 	"True when this def declares aSymbol as one of its OWN parameters that
@@ -167,8 +179,22 @@ FunctionDefAst >> ___classBodyNamesAProperty___: aSymbol [
 	"Whether the binding of aSymbol that this def's decorators see -- the last
 	EARLIER top-level binding in the enclosing class body -- is one Grail
 	compiles as a declarative property.  True whenever that cannot be told (no
-	enclosing class, not a top-level def, no earlier binding, or an assignment
-	such as ``x = property(f)''), which keeps the long-standing reading."
+	enclosing class, not a top-level def, no earlier binding), which keeps the
+	long-standing reading.
+
+	An assignment of a ``property(...)'' CALL -- ``x = property(f)'', ``x =
+	property(doc='hello')'' -- is not: nothing compiles it as a property's
+	accessor pair, so an @x.setter or @x.getter over it is an ordinary
+	decorator, evaluated at the def as CPython evaluates ``x.setter(f)''.  Read
+	as declarative, the accessor was dropped and the class kept the assigned
+	property without it: ``has no setter'' (test_descr test_properties_plus).
+
+	Only a property call, because the decorator reads ``x'' off the class, and
+	a property read off its class answers itself.  Any other descriptor need
+	not: ``spam = Base.__dict__['spam']'' over a DynamicClassAttribute, which
+	raises when read off the class, then found the compiled def instead
+	(``'function' object has no attribute 'getter''', test_dynamicclassattribute
+	at import).  Those keep the long-standing reading."
 
 	| cls stmts idx prior |
 	cls := parent.
@@ -186,8 +212,9 @@ FunctionDefAst >> ___classBodyNamesAProperty___: aSymbol [
 			ifTrue: [prior := st].
 		((st isKindOf: AssignAst)
 				and: [st targets anySatisfy: [:t | (t isKindOf: NameAst) and: [t id asSymbol == aSymbol]]])
-			ifTrue: [prior := #assigned]].
-	(prior isNil or: [prior == #assigned]) ifTrue: [^ true].
+			ifTrue: [prior := st]].
+	prior isNil ifTrue: [^ true].
+	(prior isKindOf: AssignAst) ifTrue: [^ (self ___assignsAPropertyCall___: prior) not].
 	^ prior ___declaresPropertyBinding___
 
 ]
@@ -350,10 +377,15 @@ FunctionDefAst >> ___declaresPropertyBinding___ [
 	"``@Base.spam.getter'' -- an accessor form over an EXPRESSION -- leaves a
 	property bound too, and the @spam.setter / @spam.deleter after it are its
 	halves (test_property test_property_decorator_subclass).  Reading those as
-	foreign compiled the deleter as a plain unary ``spam'' over the getter."
+	foreign compiled the deleter as a plain unary ``spam'' over the getter.
+	Only a GETTER over an expression, though: ``@Base.spam.deleter def spam''
+	is a deleter, and taken for a declared property its unary def became the
+	compiled getter, answering every read of the subclass with the deleter's
+	result (test_descr test_properties_plus).  Over an expression, a setter or
+	deleter is an ordinary decorator."
 	((first isKindOf: AttributeAst)
 		and: [(first value isKindOf: NameAst) not
-		and: [#('getter' 'setter' 'deleter') includes: first attr asString]])
+		and: [first attr asString = 'getter']])
 			ifTrue: [^ true].
 	^ self isPropertyAccessorDecorator: first
 
@@ -656,6 +688,15 @@ FunctionDefAst >> ___docString___ [
 	^ inner ___isDocStringLiteral___
 		ifTrue: [AbstractNode ___cleanDoc___: inner value]
 		ifFalse: [nil]
+
+]
+
+{ #category : 'Grail-Annotations' }
+FunctionDefAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+	"Nothing records a def's own annotations: an annotation on a local
+	variable is never evaluated."
+
+	^ self
 
 ]
 
@@ -7743,14 +7784,22 @@ FunctionDefAst >> isDeleterDecorated [
 	compiling it under the plain name ``x'' would OVERWRITE the getter; the
 	ClassDefAst emit redirects it to a distinct ``___propDeleter_x'' selector
 	that the delete path (object>>___pyAttrDelete___) invokes for ``del
-	obj.x''."
+	obj.x''.
+
+	Over ANY x, a declared @property or not.  An @x.deleter over an assigned
+	property -- ``x = property(doc='hello')'' -- is an ordinary decorator
+	(___isForeignAccessorDecorator___:), but its def still shares the
+	getter's unary selector; compiled under the plain name, it replaced the
+	getter, so the property's fget ran the deleter's body (test_descr
+	test_properties_plus).  The delete path runs the redirected selector
+	unless a nearer class holds a value of its own under x
+	(object >> ___nearerClassHolds___:before:)."
 
 	decorator_list isNil ifTrue: [^ false].
 	^ (decorator_list detect: [:deco |
 		(deco isKindOf: AttributeAst)
 			and: [(deco value isKindOf: NameAst)
-			and: [deco attr asString = 'deleter'
-			and: [(self ___isForeignAccessorDecorator___: deco) not]]]] ifNone: [nil]) notNil
+			and: [deco attr asString = 'deleter']]] ifNone: [nil]) notNil
 
 ]
 

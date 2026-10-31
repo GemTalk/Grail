@@ -134,13 +134,13 @@ hashlib >> _sha512: positional kw: kwargs [
 
 { #category : 'Grail-Module accessors' }
 hashlib >> algorithms_available [
-	^ self @env0:at: #algorithms_available
+	^ self ___dataGlobalAt___: #algorithms_available
 
 ]
 
 { #category : 'Grail-Module accessors' }
 hashlib >> algorithms_guaranteed [
-	^ self @env0:at: #algorithms_guaranteed
+	^ self ___dataGlobalAt___: #algorithms_guaranteed
 
 ]
 
