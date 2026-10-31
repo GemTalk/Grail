@@ -906,12 +906,15 @@ AssignAst >> printSmalltalkOn: aStream [
 			and: [ModuleAst compilingDoitScope notNil
 			and: [tgt ___nearestEnclosingScopeDeclaresGlobal___: tgt id]])
 			ifTrue: [
+				"Through NameError class >> ___storeDoitGlobal___:value:scope:, which
+				 writes the exec's globals dict too: a function the exec defined may
+				 run after the exec is over."
 				aStream
-					nextPutAll: '___pyGlobals___ @env0:at: #''';
-					nextPutAll: (NameAst doitScopeNameFor: tgt id asSymbol) asString;
-					nextPutAll: ''' put: '.
+					nextPutAll: '(NameError @env0:___storeDoitGlobal___: ''';
+					nextPutAll: tgt id asString;
+					nextPutAll: ''' value: '.
 				value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPut: $..
+				aStream nextPutAll: ' scope: ___pyGlobals___).'.
 				^ self
 			].
 		((tgt isKindOf: NameAst) and: [self isModuleScopeStoreTarget: tgt])
