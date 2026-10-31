@@ -266,7 +266,11 @@ importlib class >> ___beginBodyRecordsOf___: aModuleName [
 
 	A session-local module (``__main__'' outside an app) records nothing, so it
 	gets no set; a body run again before it finished (a re-entrant import)
-	starts the set afresh, as dropping the record did."
+	starts the set afresh, as dropping the record did.
+
+	The entry is { namespace. records. discarded }: a body that fails marks it
+	discarded (___discardBodyRecordsOf___:), and its records are then never
+	written."
 
 	| pend |
 	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
@@ -276,7 +280,7 @@ importlib class >> ___beginBodyRecordsOf___: aModuleName [
 	pend isNil ifTrue: [
 		pend := KeyValueDictionary new.
 		SessionTemps current at: #'GrailPendingBodyRecords' put: pend].
-	pend at: aModuleName asString put: { self ___grailNamespace___ . KeyValueDictionary new }
+	pend at: aModuleName asString put: { self ___grailNamespace___ . KeyValueDictionary new . false }
 
 ]
 
@@ -2675,6 +2679,28 @@ importlib class >> ___directCallsInvalidate___ [
 ]
 
 { #category : 'Grail-Canonical Classes' }
+importlib class >> ___discardBodyRecordsOf___: aModuleName [
+	"aModuleName's body failed: what it recorded (___beginBodyRecordsOf___:) is
+	not to be written when it is popped (___endBodyRecordsOf___:).
+
+	The pop is in the load's ensure:, and an ensure: runs when the stack
+	UNWINDS -- after any handler further out has run, not before.  A caller
+	that handles the failure by aborting (scripts/redeployModules.gs does,
+	then asks for a clean transaction to count stored instances) therefore
+	saw the failed run's records written into the committed registries after
+	its abort.  The session was dirty again, so the count answered nothing,
+	and a base change the install had always rebuilt stayed refused:
+	email.message's, upgrading from c8cbc92."
+
+	| pend entry |
+	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
+	pend isNil ifTrue: [^ self].
+	entry := pend at: aModuleName asString otherwise: nil.
+	entry isNil ifFalse: [entry at: 3 put: true]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
 importlib class >> ___dropUnbuiltClasses___: aModuleName [
 	"After a body run that completed: forget the built-class keys
 	(``module.Name()'', ___builtSubclassOf:...) of aModuleName that this run did
@@ -2705,13 +2731,16 @@ importlib class >> ___endBodyRecordsOf___: aModuleName [
 	recorded (___beginBodyRecordsOf___:) over its committed records, registry by
 	registry, and only where the two differ (___sameBodyRecord___:as:), so a run
 	that recorded what the last one did writes nothing.  A record the run did
-	not make again is dropped, as dropping it before the run did."
+	not make again is dropped, as dropping it before the run did.
+
+	A body that failed (___discardBodyRecordsOf___:) writes nothing: its
+	committed records stay as the last completed run left them."
 
 	| pend entry ns recs |
 	pend := SessionTemps current at: #'GrailPendingBodyRecords' otherwise: nil.
 	pend isNil ifTrue: [^ self].
 	entry := pend removeKey: aModuleName asString ifAbsent: [nil].
-	entry isNil ifTrue: [^ self].
+	(entry isNil or: [entry at: 3]) ifTrue: [^ self].
 	ns := entry at: 1.
 	recs := entry at: 2.
 	self ___bodyRecordKeys___ do: [:key |
@@ -6404,6 +6433,7 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	unloaded := false.
 	unload := [
 		unloaded := true.
+		self ___discardBodyRecordsOf___: moduleName.
 		self removeModule: moduleName.
 		self ___restoreParentBinding___: parentBinding of: moduleInstance.
 		earlyEntry ifTrue: [
