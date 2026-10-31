@@ -2697,10 +2697,21 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 	``def f[A](a=list[A]())'' stays a NameError.  The global / nonlocal
 	declaration makes the def bind the function's own name, so a body that
 	calls f reaches the decorated f, as in CPython, not a scope-local copy.
-	A def in a class body -- a method -- is not rewritten here."
+
+	A METHOD -- a def directly in a class body -- is rewritten too, inside a
+	synthesized ``if True:'' and without the declaration: its name is a class
+	attribute, bound by the class body's own assignment.  As for a generic
+	class there (___rewriteTypeParamStatement___), the scope function is then
+	emitted inline in the class build, so its bounds see the class namespace,
+	and the method is the plain function it returns -- which a class attribute
+	binds on an instance read as CPython's does.  It used to keep its parameter
+	NAMES only, its bounds evaluated in the module's globals: T was a NameError
+	in its annotations and body, and a bound naming a class attribute or an
+	enclosing local was lost (test_type_params test_method_access_01,
+	test_bound)."
 
 	| defAt nameTok lb rb pOpen pClose colon range params name w ref out names
-	  segments defaults |
+	  segments defaults inClassBody |
 	defAt := ((tokens at: i) isKeyword: 'async') ifTrue: [i + 1] ifFalse: [i].
 	defAt + 2 > tokens size ifTrue: [^ false].
 	nameTok := tokens at: defAt + 1.
@@ -2730,16 +2741,22 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 		(self ___topLevelEqualsIn___: seg) ifNotNil: [:at |
 			defaults add: (seg copyFrom: at + 1 to: seg size)]].
 	out := OrderedCollection new.
+	inClassBody := classNesting > 0.
+	inClassBody ifTrue: [
+		self ___synth: 'if True:' like: ref into: out.
+		self ___synthType: #NEWLINE like: ref into: out.
+		self ___synthType: #INDENT like: ref into: out].
 	self ___synth: 'def ' , w , '(' like: ref into: out.
 	1 to: defaults size do: [:n |
 		self ___synth: '___tpdefault' , n printString , '___,' like: ref into: out].
 	self ___synth: '):' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #INDENT like: ref into: out.
-	self ___synth: (((variableStack size > 1) and: [((globalStack last) includes: name asSymbol) not])
-			ifTrue: ['nonlocal '] ifFalse: ['global ']) , name
-		like: ref into: out.
-	self ___synthType: #NEWLINE like: ref into: out.
+	inClassBody ifFalse: [
+		self ___synth: (((variableStack size > 1) and: [((globalStack last) includes: name asSymbol) not])
+				ifTrue: ['nonlocal '] ifFalse: ['global ']) , name
+			like: ref into: out.
+		self ___synthType: #NEWLINE like: ref into: out].
 	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	params do: [:p | self ___emitTypeParam: p like: ref into: out].
@@ -2757,6 +2774,7 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 	self ___synth: 'return ' , name like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #DEDENT like: ref into: out.
+	inClassBody ifTrue: [self ___synthType: #DEDENT like: ref into: out].
 	self ___synth: name , ' =' like: ref into: out.
 	decoRanges do: [:r |
 		(r at: 1) to: (r at: 2) do: [:k | out add: (tokens at: k)].
@@ -2849,7 +2867,7 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	"A generic FUNCTION outside a class body has a rewrite of its own."
 	((kwTok isKeyword: 'def') or: [(kwTok isKeyword: 'async')
 		and: [(tokens at: i + 1) isKeyword: 'def']]) ifTrue: [
-			(classNesting > 0 or: [self ___parsingForAst___]) ifTrue: [^ false].
+			self ___parsingForAst___ ifTrue: [^ false].
 			^ self ___rewriteGenericFunctionAt___: i decorators: decoRanges].
 	isClass := kwTok isKeyword: 'class'.
 	(isClass and: [self ___parsingForAst___]) ifTrue: [^ false].
