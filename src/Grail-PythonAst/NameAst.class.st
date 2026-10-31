@@ -2420,7 +2420,7 @@ NameAst >> ___isAnnotationScopeLambda___: aLambda [
 	TypeVar's bound, constraints or default, or a generic alias's value -- and
 	so an argument of ``___typing___._grail_type_param'' or
 	``___typing___._grail_type_alias'' (PythonParser >> ___emitTypeParam:like:
-	into:, ___rewriteTypeParamStatement___)?"
+	into:renaming:, ___rewriteTypeParamStatement___)?"
 
 	| call function |
 	call := aLambda parent.
