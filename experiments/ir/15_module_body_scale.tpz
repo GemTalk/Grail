@@ -1,0 +1,202 @@
+! Spike P0.7 (IR-only codegen plan): ONE method at module-body scale, built
+! through IR and through text, measured side by side.
+!
+! There is no IR module-body emitter yet (that is P4), so the body is the
+! nearest thing that exists in production: a single def whose statements store
+! to MODULE SLOTS through ``global'' -- the #module store/load routing P4.2
+! reuses -- emitted by the def-body statement emitters every IR def already
+! uses.  The def compiles as one method on both arms (an ``if'' inlines), so it
+! concentrates a module body's code in one literal frame, the worst case.
+!
+! Two shapes, chosen by P07_KIND:
+!   payload  N calls  reg('<L-char distinct string>', 'Grail-Class Methods', i)
+!            -- the shape that dominates a real module body today: every class
+!            statement is sends carrying method SOURCE as string literals
+!            (___compileMethod:, ___irInstallDef:...or:, the text-source and
+!            table methods).  P07_N/P07_L size it to a real module's literal
+!            frame and string bytes.
+!   code     N statements cycling assignment arithmetic, a list display with a
+!            distinct string, a conditional call and a call with literals --
+!            executable code with small literals, to find the step/size limits.
+!
+! Needs an installed Grail.  One configuration per process, so peak RSS (wrap
+! the run in /usr/bin/time -l) and temp space belong to that build alone:
+!
+!   P07_KIND=payload P07_N=4000 P07_L=2860 [GRAIL_IR_CODEGEN=0] \
+!     topaz -lq -T 2000000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" \
+!       -S experiments/ir/15_module_body_scale.tpz
+!
+! P07_PARSEONLY=1 stops after the parse, as the baseline the build is measured
+! against.  P07_DIR is where the generated module is written (default /tmp).
+! P07_SHOWTB=1 also prints the far-end traceback.  Prints one ``P07|'' line.
+!
+! P07_MODS='_pydecimal test.test_typing ...' instead measures those REAL
+! modules' text-compiled ``initialize'' (home method plus every block method):
+! source, literal frame, distinct strings and how much of them is translated
+! method source, step points, words, position map.  One ``REAL|'' line each.
+!
+! See README.md, "Module body at scale (P0.7)".
+login
+iferr 1 where
+run
+| env kind n l parseOnly dir arm src path ws pad fieldsFor out mod meth t0 c0 parseMs parseCpu
+  loadMs loadCpu tempBefore tempAfter err stats runMs tb tbCold tbWarm lastLine bodySel |
+env := [:k :d | | v | v := System gemEnvironmentVariable: k. (v isNil or: [v isEmpty]) ifTrue: [d] ifFalse: [v]].
+kind := env value: 'P07_KIND' value: 'payload'.
+n := (env value: 'P07_N' value: '1000') asNumber.
+l := (env value: 'P07_L' value: '1000') asNumber.
+parseOnly := (env value: 'P07_PARSEONLY' value: '0') = '1'.
+dir := env value: 'P07_DIR' value: '/tmp'.
+arm := importlib ___irCodegenFlag___ ifTrue: ['ir'] ifFalse: ['text'].
+out := GsFile stdout.
+
+"0. Real modules, when asked: what the largest module bodies hold today."
+(env value: 'P07_MODS' value: '') isEmpty ifFalse: [ | bi |
+  bi := (Python at: #builtins) @env1:instance.
+  ((env value: 'P07_MODS' value: '') subStrings: ' ') do: [:mn | | m msrc all todo seen dStr dStrB trans maxStr steps words mk |
+    bi @env1:___import__: { mn } kw: nil.
+    m := ((importlib @env1:modules) at: mn) class compiledMethodAt: #initialize environmentId: 1.
+    msrc := m sourceString.
+    all := IdentitySet new. todo := OrderedCollection with: m.
+    [todo notEmpty] whileTrue: [ | x | x := todo removeFirst.
+      (all includes: x) ifFalse: [all add: x. x blockLiterals do: [:bl | todo add: bl method]]].
+    "In 4.0 the home method's literal frame holds its blocks' literals too, so
+    strings are counted once, by identity."
+    seen := IdentitySet new. dStr := 0. dStrB := 0. trans := 0. maxStr := 0. steps := 0. words := 0.
+    all do: [:x |
+      steps := steps + x _numSourceOffsets. words := words + x basicSize.
+      x literals do: [:lit | ((lit isKindOf: CharacterCollection) and: [lit isSymbol not
+          and: [(seen includes: lit) not]]) ifTrue: [
+        seen add: lit. dStr := dStr + 1. dStrB := dStrB + lit size. maxStr := maxStr max: lit size.
+        (lit includesString: '<grailPython>') ifTrue: [trans := trans + lit size]]]].
+    mk := BaseException ___positionMapMarkerIn___: msrc.
+    out nextPutAll: 'REAL|module=' , mn , '|srcB=' , msrc size printString ,
+      '|homeLiterals=' , m literals size printString , '|distinctStrings=' , dStr printString ,
+      '|stringB=' , dStrB printString , '|translatedB=' , trans printString ,
+      '|maxStringB=' , maxStr printString , '|methods=' , all size printString ,
+      '|steps=' , steps printString , '|homeSteps=' , m _numSourceOffsets printString ,
+      '|words=' , words printString , '|homeWords=' , m basicSize printString ,
+      '|mapB=' , (mk isNil ifTrue: [0] ifFalse: [msrc size - mk + 1]) printString , '|'; lf].
+  ^ true].
+
+"1. The module.  body(boom) is LAST, so its last line is the file's last."
+pad := String new: (l max: 1) withAll: $x.
+ws := WriteStream on: String new.
+ws nextPutAll: 'def reg(s, c, k):'; lf; nextPutAll: '    return k'; lf; lf.
+ws nextPutAll: 'def tb():'; lf; nextPutAll: '    import traceback'; lf;
+  nextPutAll: '    try:'; lf; nextPutAll: '        body(True)'; lf;
+  nextPutAll: '    except ZeroDivisionError:'; lf;
+  nextPutAll: '        return traceback.format_exc()'; lf; lf.
+ws nextPutAll: 'def body(boom):'; lf.
+kind = 'code' ifTrue: [
+  "Every name the body writes is a module global."
+  1 to: n by: 200 do: [:i |
+    ws nextPutAll: '    global a0'.
+    i to: (i + 199 min: n) do: [:j | | pre |
+      pre := #('a' 'b' 'c' 'd') at: (j \\ 4) + 1.
+      ws nextPutAll: ', '; nextPutAll: pre; print: j].
+    ws lf].
+  ws nextPutAll: '    a0 = 0'; lf].
+1 to: n do: [:i |
+  kind = 'payload'
+    ifTrue: [ws nextPutAll: '    reg(''P'; print: i; nextPut: $_; nextPutAll: pad;
+      nextPutAll: ''', ''Grail-Class Methods'', '; print: i; nextPut: $); lf]
+    ifFalse: [ | prevA |
+      "The last a<k> written before statement i (a0 for the first four)."
+      prevA := 'a' , ((i - 1) - ((i - 1) \\ 4)) printString.
+      (i \\ 4) = 0 ifTrue: [ws nextPutAll: '    a'; print: i; nextPutAll: ' = '; nextPutAll: prevA; nextPutAll: ' + '; print: i; lf].
+      (i \\ 4) = 1 ifTrue: [ws nextPutAll: '    b'; print: i; nextPutAll: ' = ['; nextPutAll: prevA; nextPutAll: ', '; print: i; nextPutAll: ', ''s'; print: i; nextPutAll: ''']'; lf].
+      (i \\ 4) = 2 ifTrue: [ws nextPutAll: '    if '; nextPutAll: prevA; nextPutAll: ' > 3:'; lf;
+        nextPutAll: '        c'; print: i; nextPutAll: ' = reg(''c'; print: i; nextPutAll: ''', ''k'', '; print: i; nextPut: $); lf].
+      (i \\ 4) = 3 ifTrue: [ws nextPutAll: '    d'; print: i; nextPutAll: ' = reg('; nextPutAll: prevA; nextPutAll: ', ''d'; print: i; nextPutAll: ''', '; print: i; nextPut: $); lf]]].
+ws nextPutAll: '    if boom:'; lf; nextPutAll: '        1/0'; lf; nextPutAll: '    return 7'; lf.
+src := ws contents.
+lastLine := (src occurrencesOf: Character lf) - 1.
+path := dir , '/p07_' , kind , '_' , n printString , '_' , l printString , '.py'.
+(GsFile openWriteOnServer: path) nextPutAll: src; close.
+
+"2. The parse alone: the baseline.  Shared by both arms."
+System _generationScavenge.
+t0 := Time millisecondClockValue. c0 := System _gemCpuTimeMs.
+ModuleAst parseSource: src.
+parseMs := Time millisecondClockValue - t0. parseCpu := System _gemCpuTimeMs - c0.
+
+fieldsFor := [:assocs | | w | w := WriteStream on: String new.
+  w nextPutAll: 'P07|'.
+  assocs do: [:a | w nextPutAll: a key; nextPut: $=; nextPutAll: a value asString; nextPut: $|].
+  w contents].
+
+parseOnly ifTrue: [
+  out nextPutAll: (fieldsFor value: { 'arm'->'parse'. 'kind'->kind. 'n'->n. 'l'->l.
+    'pyB'->src size. 'parseMs'->parseMs. 'parseCpu'->parseCpu.
+    'tempKB'->(System _tempObjSpaceUsed // 1024) }); lf.
+  ^ true].
+
+"3. The build: parse + codegen + compile of the module, body included."
+System _generationScavenge.
+tempBefore := System _tempObjSpaceUsed.
+t0 := Time millisecondClockValue. c0 := System _gemCpuTimeMs.
+err := nil.
+[mod := importlib loadModuleFromPath: path name: 'p07_' , kind , '_' , n printString]
+  on: Error , (Python at: #BaseException) do: [:e |
+    err := e class name , ': ' , (e messageText ifNil: ['']) asString.
+    e return: nil].
+loadMs := Time millisecondClockValue - t0. loadCpu := System _gemCpuTimeMs - c0.
+tempAfter := System _tempObjSpaceUsed.
+err notNil ifTrue: [
+  out nextPutAll: (fieldsFor value: { 'arm'->arm. 'kind'->kind. 'n'->n. 'l'->l.
+    'pyB'->src size. 'parseMs'->parseMs. 'loadMs'->loadMs. 'loadCpu'->loadCpu.
+    'ERROR'->((err copyReplaceAll: (String with: Character lf) with: ' ') copyFrom: 1 to: (err size min: 300)) }); lf.
+  ^ true].
+
+"4. The body's method, home plus any block methods."
+bodySel := (mod class selectorsForEnvironment: 1) detect: [:s | s = #'body:'] ifNone: [nil].
+meth := mod class compiledMethodAt: bodySel environmentId: 1.
+stats := [:m | | all todo steps words strs strB |
+  all := IdentitySet new. todo := OrderedCollection with: m.
+  [todo notEmpty] whileTrue: [ | x | x := todo removeFirst.
+    (all includes: x) ifFalse: [all add: x. x blockLiterals do: [:bl | todo add: bl method]]].
+  steps := 0. words := 0.
+  all do: [:x | steps := steps + x _numSourceOffsets. words := words + x basicSize].
+  strs := 0. strB := 0.
+  m literals do: [:lit | ((lit isKindOf: CharacterCollection) and: [lit isSymbol not])
+    ifTrue: [strs := strs + 1. strB := strB + lit size]].
+  { all size. m literals size. strs. strB. steps. words }] value: meth.
+
+"5. Run it once, then the far-end traceback cold (ip->line cache empty) and warm.
+A one-statement module raises and formats first, so ``import traceback'' and
+the formatter's own first-use costs are paid before the clock starts."
+[ | warm wpath |
+  warm := (src copyFrom: 1 to: (src indexOfSubCollection: 'def body(boom):') - 1) ,
+    'def body(boom):' , (String with: Character lf) , '    if boom:' , (String with: Character lf) ,
+    '        1/0' , (String with: Character lf) , '    return 7' , (String with: Character lf).
+  wpath := dir , '/p07_warm.py'.
+  (GsFile openWriteOnServer: wpath) nextPutAll: warm; close.
+  (importlib loadModuleFromPath: wpath name: 'p07_warm') perform: #tb env: 1] value.
+t0 := Time millisecondClockValue.
+mod perform: #'body:' env: 1 withArguments: { false }.
+runMs := Time millisecondClockValue - t0.
+t0 := Time millisecondClockValue.
+tb := mod perform: #tb env: 1.
+tbCold := Time millisecondClockValue - t0.
+t0 := Time millisecondClockValue.
+mod perform: #tb env: 1.
+tbWarm := Time millisecondClockValue - t0.
+
+out nextPutAll: (fieldsFor value: {
+  'arm'->arm. 'kind'->kind. 'n'->n. 'l'->l. 'pyB'->src size.
+  'isIR'->((meth argsAndTemps ifNil: [#()]) includes: #'___grailPython___').
+  'parseMs'->parseMs. 'parseCpu'->parseCpu. 'loadMs'->loadMs. 'loadCpu'->loadCpu.
+  'tempDeltaKB'->((tempAfter - tempBefore) // 1024).
+  'methods'->(stats at: 1). 'literals'->(stats at: 2). 'strings'->(stats at: 3).
+  'stringB'->(stats at: 4). 'steps'->(stats at: 5). 'words'->(stats at: 6).
+  'homeSteps'->meth _numSourceOffsets. 'homeWords'->meth basicSize.
+  'srcB'->meth sourceString size.
+  'mapB'->([:s | | k | k := BaseException ___positionMapMarkerIn___: s. k isNil ifTrue: [0] ifFalse: [s size - k + 1]] value: meth sourceString).
+  'runMs'->runMs. 'tbColdMs'->tbCold. 'tbWarmMs'->tbWarm.
+  'tbLineOk'->(tb asString includesString: 'line ' , lastLine printString , ', in body') }); lf.
+(env value: 'P07_SHOWTB' value: '0') = '1' ifTrue: [out nextPutAll: tb asString; lf].
+true
+%
+logout
+exit
