@@ -1349,9 +1349,13 @@ UnboundMethod >> ___tableEntryFor___: aClass table: aTableSelector [
 	chain := self ___lookupChainFrom___: aClass.
 	chain @env0:do: [:each |
 		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
-		 would never see them."
-		((each @env0:class @env0:whichClassIncludesSelector: aTableSelector
-			environmentId: 1) ~~ nil) ifTrue: [
+		 would never see them.  Asked of the class that COMPILED the table, not
+		 of one inheriting it: the chain reaches that class anyway, and the
+		 annotations table builds blocks that read their class's namespace
+		 through ``self'' -- run on a subclass they read the subclass's.  No
+		 other table looks at its receiver, so for them nothing changes."
+		(each @env0:class @env0:includesSelector: aTableSelector
+			environmentId: 1) ifTrue: [
 				| tbl v |
 				tbl := [each @env0:perform: aTableSelector env: 1]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].

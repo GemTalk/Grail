@@ -636,6 +636,52 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___emitMethodAnnotationClassScopeReadOn___: aStream [
+	"The read ___readsMethodAnnotationClassScope___ asks for, from the class
+	the annotations table runs on -- Smalltalk ``self'' there, the class that
+	compiled it.
+
+	A def the body binds is always in the namespace, so it reads as what the
+	namespace holds for it (object class >> ___classBodySiblingValue___:).  Any
+	other name is the class's own attribute holder entry, raw as CPython's
+	dict holds it.  Only when the class has none -- a binding the body has not
+	reached yet, or one a ``del'' removed -- does the read go on, and then to
+	the MODULE and builtins, never to an enclosing function: a name the class
+	binds is an implicit global of the annotation scope (Python/symtable.c:731
+	-751), so a binding of it in the function around the class is not
+	consulted (test_type_params test_binding_uses_global).  Without a module
+	being compiled there is nothing to name that read by, and it stays the one
+	the name would have had."
+
+	| names |
+	(CallAst classFunctionNames notNil
+		and: [CallAst classFunctionNames includes: self ___mangledId___ asSymbol])
+			ifTrue: [
+				aStream
+					nextPutAll: '(self @env1:___classBodySiblingValue___: #''';
+					nextPutAll: self ___mangledId___;
+					nextPutAll: ''')'.
+				^ self].
+	aStream
+		nextPutAll: '((self @env1:___grailNsHolderValueFor___: #''';
+		nextPutAll: self ___mangledId___;
+		nextPutAll: ''') @env0:ifNil: ['.
+	CallAst moduleClassBeingCompiled
+		ifNil: [
+			names := CallAst methodAnnotationClassScope.
+			CallAst methodAnnotationClassScope: nil.
+			[self ___emitSmalltalkOn___: aStream]
+				ensure: [CallAst methodAnnotationClassScope: names]]
+		ifNotNil: [:moduleClass |
+			self
+				emitModuleAttrLoad: self ___mangledId___
+				receiverExpr: moduleClass name , ' @env0:___instance___'
+				on: aStream].
+	aStream nextPutAll: '])'
+
+]
+
 { #category : 'other' }
 NameAst >> ___emitSmalltalkOn___: aStream [
 	"Name dispatch — see docs/Rewrite_Dispatch_Model.md.
@@ -679,6 +725,10 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 			nextPutAll: id asString;
 			nextPutAll: ''')'.
 		^ self].
+	"A METHOD annotation's read of a name its class body binds looks in the
+	class namespace first -- see ___readsMethodAnnotationClassScope___."
+	self ___readsMethodAnnotationClassScope___ ifTrue: [
+		^ self ___emitMethodAnnotationClassScopeReadOn___: aStream].
 
 	"Class-body name referenced from a class-body METHOD DECORATOR.
 	``@t.register(int)'' names ``t'', a sibling def -- a local of the class
@@ -2528,13 +2578,23 @@ NameAst >> ___readsFreeVariable___ [
 	the read, or a generator expression.  A def's defaults and decorators, a
 	class's bases and keywords, and a generator's first iterable are evaluated
 	in the scope around them, so the walk goes past those.  A list, set or dict
-	comprehension is no scope at all: PEP 709 inlines it into its function."
+	comprehension is no scope at all: PEP 709 inlines it into its function.
+
+	A def's ANNOTATIONS are not among those any more.  PEP 649 evaluates them
+	in the def's annotation scope, a function of its own that binds nothing,
+	so a name they reach in an enclosing function is free there: ``def
+	outer(): def f(x: format): ...'' with ``format'' bound later is
+	CPython's NameError, where the annotate block said ``cannot access local
+	variable'' (test_type_annotations test_name_clash_with_format).  The owner
+	def is reached only from below its annotations -- see CallAst >>
+	annotationOwnerDefNode."
 
 	| child node |
 	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ false].
 	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
+		node == CallAst annotationOwnerDefNode ifTrue: [^ true].
 		(((node isKindOf: FunctionDefAst) or: [(node isKindOf: LambdaAst)
 			or: [node isKindOf: ClassDefAst]]) and: [child == node body])
 				ifTrue: [^ (self ___functionBindsPythonLocal___: node named: id asSymbol) not].
@@ -2544,6 +2604,39 @@ NameAst >> ___readsFreeVariable___ [
 		child := node.
 		node := node parent].
 	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___readsMethodAnnotationClassScope___ [
+	"Is this a read, in an annotation of one of a class body's defs, of a name
+	that class body binds?
+
+	CPython evaluates such an annotation in an annotation scope that sees the
+	class namespace: the scope gets a ``__classdict__'' free variable
+	(Python/symtable.c:2872), a name the class binds is an implicit global of
+	it (Python/symtable.c:731-751), and that is read from the class namespace
+	FIRST, then from the globals and builtins -- LOAD_FROM_DICT_OR_GLOBALS
+	(Python/codegen.c:3254).  Grail compiled these reads as if the class were
+	not there, so ``def meth(self, x: Nested)'' with ``class Nested'' later in
+	the body was a NameError, and a nested ``class format'' was the builtin
+	(test_type_annotations test_class_scoping and
+	test_name_clash_with_format).
+
+	A name the class declares ``nonlocal'' is not one of these: it stays free,
+	read through the enclosing function's cell as before, and ClassDefAst
+	leaves it out of the set.
+
+	A lambda or a comprehension INSIDE the annotation is a scope of its own,
+	which does not see the class (test_listcomps' rule, and
+	method_annotation_comprehension.py), so those reads stay as they were."
+
+	| names |
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	names := CallAst methodAnnotationClassScope.
+	names isNil ifTrue: [^ false].
+	^ (names includes: self ___mangledId___ asSymbol)
+		and: [self ___inNestedScopeWithinClassBody___ not]
 
 ]
 

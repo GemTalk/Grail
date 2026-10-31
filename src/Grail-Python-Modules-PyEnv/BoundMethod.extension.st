@@ -659,8 +659,12 @@ BoundMethod >> ___methodAnnotationsForClass___: aClass name: aName [
 
 	| tbl v |
 	aClass == nil ifTrue: [^ KeyValueDictionary @env0:new].
+	"Sent to the class that COMPILED the table, never to one inheriting it:
+	 its annotate blocks read that class's namespace through ``self''
+	 (ClassDefAst >> emitMethodAnnotationsTableOn:className:), and the chain
+	 reaches the compiling class anyway."
 	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
-		((c @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+		(c @env0:class @env0:includesSelector: #'___methodAnnotationsTable___' environmentId: 1) ifTrue: [
 			tbl := c ___methodAnnotationsTable___.
 			v := tbl @env0:at: aName otherwise: nil.
 			v == nil ifFalse: [^ v @env0:value: { 1 } value: nil]]].
@@ -974,7 +978,9 @@ BoundMethod >> ___rawAnnotateForClass___: aClass name: aName [
 
 	| tbl v |
 	aClass == nil ifTrue: [^ nil].
-	((aClass @env0:class @env0:whichClassIncludesSelector: #'___methodAnnotationsTable___' environmentId: 1) ~~ nil) ifTrue: [
+	"The class that compiled the table, as ___methodAnnotationsForClass___:name:
+	 asks it; the superclass recursion reaches that class."
+	(aClass @env0:class @env0:includesSelector: #'___methodAnnotationsTable___' environmentId: 1) ifTrue: [
 		tbl := aClass ___methodAnnotationsTable___.
 		v := tbl @env0:at: aName otherwise: nil.
 		v == nil ifFalse: [^ v]].
