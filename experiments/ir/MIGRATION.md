@@ -44,7 +44,8 @@ the env-1 method dictionary already exists — the exact prerequisite
 * **Module body** (`initialize`) and **doits** (exec/eval/REPL,
   ModuleAst>>executeWithScope:as:) are separate, later steps — note the
   anonymous-do-it shape (`_compileInContext:` → `_executeInContext:`) has an
-  IR twin already proven in the experiments.
+  IR twin, shown in `14_doit_anonymous.tpz` (README, "Anonymous IR doit
+  (P0.6)").
 
 ## The eligibility predicate
 

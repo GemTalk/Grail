@@ -44,7 +44,7 @@ committed.
 | `11_nested_loops.tpz` | nested while loops: each break/continue binds to ITS loop's labels, with inner gotos 3–4 inline levels deep (`irNested: 4 -> 14`) | passes on a loop/goto build |
 | `12_builder_demo.tpz` + `PyIRBuilder.gs` | **the builder layer**: `PyIRBuilder` tracks the statement context, lexLevel, and a loop stack (so `break`/`continue` are one-word calls that target the innermost loop), and hides every bit-rot workaround; rebuilds the nested-loop method in ~25 lines of client code vs ~130 raw | passes on a loop/goto build |
 | `13_env1_srcmap_builder.tpz` | `PyIRBuilder` driving the **production shape**: an env-1, source-mapped method whose traceback frame reports `(env 1) @2 line 2` | passes |
-| anonymous do-it (see git history of `scratch_ir/`) | `_executeInContext:` without installing | passes |
+| `14_doit_anonymous.tpz` | an exec/eval **doit built through IR** as an anonymous method (`generateFromIR:` with no selector, `_executeInContext: nil`), side by side with the text doit | passes for the statement kinds below; see [Anonymous IR doit (P0.6)](#anonymous-ir-doit-p06) |
 
 Notes from `05`/`06`:
 
@@ -302,6 +302,94 @@ that always target the innermost loop). All the kernel-builder workarounds
 live inside it. Prototype limits: env 0, `UserGlobals`, line numbers only —
 the production version compiles into env 1 and stamps Python source offsets
 (the `at:`-variant constructors are the natural extension).
+
+## Anonymous IR doit (P0.6)
+
+`14_doit_anonymous.tpz` is the spike the IR-only codegen plan calls P0.6. The
+README used to cite an anonymous do-it "in the git history of `scratch_ir/`",
+but that directory was never committed, so nothing showed the shape until this
+script. It drives Grail's own `PyMethodIRBuilder` and the def-body statement
+emitters, so it needs an installed Grail rather than `00_setup.tpz`. Measured
+on 4.0.0.a8, Darwin arm64, 2026-10-30.
+
+**The method.** `PyMethodIRBuilder class: UndefinedObject selector: nil env: 1`
+builds and generates. The result has selector `nil` and inClass `nil`, the
+same shape `String >> _compileInContext:` gives the text doit, and
+`_executeInContext: nil` runs it. It is installed nowhere:
+`UndefinedObject`'s env-1 method dictionary is empty after the run. What
+retains it is what retains the text doit: the capped
+`ModuleAst ___rememberDoitScope:for:` registry and any closure the doit
+stores. The `___grailPython___` marker and the position map are both present.
+
+**The return value.** A text doit answers its last statement's value
+implicitly. The IR build has to say so: it emits the last `ExprAst` as
+`b return:`, and `returnNone` otherwise. Neither the result nor the scope
+afterwards differed from the text doit in any case below.
+
+**Names.** The doit sees exactly one `SymbolDictionary`. `builtins` copies
+exec/eval's globals and locals into a fresh one, runs the doit against it,
+and reflects the stores back into the locals mapping afterwards. So the
+method never sees the globals/locals split. Inside it:
+
+* A name the scope holds (`ensureModuleScope:` enters every name the doit
+  writes, and seeding enters the caller's) becomes a LITERAL-VARIABLE leaf
+  on that association, registered as a builder local with
+  `withLocals:do:`. The def emitters then store and read it unchanged.
+  Reads are guarded, as the text guards them.
+* A name nothing resolves is, in the text, a runtime lookup:
+  `NameError @env0:___resolveDoitGlobal___: 'zz' scope: ___pyGlobals___`.
+  The leaf for that is the scope's own `___pyGlobals___` association.
+  `NameAst` has no IR load kind for it (`IR codegen: unhandled name load`),
+  so the script hand-emits the send for a top-level expression. The send
+  raises the same `NameError` with the same frame. Making it a real kind is
+  P5.1.
+
+**Results** (IR and text side by side; see the script for the sources):
+
+| doit | IR |
+| --- | --- |
+| assignment, augmented assignment, a read of a seeded global, `import`, `if`/`else`, `lambda`, `del`, `len(...)` | same result and scope as the text |
+| a `def` in the doit, then a call | same: the def is a closure stored in its association |
+| a bare undefined name (the hand-emitted lookup) | same `NameError`, same frame |
+| a builtin read in some positions: `range` as a `for` iterable, `ZeroDivisionError` in an `except` | **build fails**: `unhandled name load` (P5.1) |
+| an undefined name inside an expression | **build fails**: `unhandled name load` (P5.1) |
+| a `class` statement | **fails**: its text helper is compiled with Grail's compile symbol list (no `___pyGlobals___`) onto the builder's target class, `UndefinedObject` (P5.4) |
+
+**Tracebacks** (with P0.5, #1980). A `ZeroDivisionError` raised in a def the
+doit defines, under no filename and under `sums.py`, matches the text path
+frame for frame: file, line, name, and PEP 657 columns. The filename comes
+from the builder's `fileName:`, taken from `CallAst sourcePath`. No
+`___pyFile___` scan or doit registry is needed for it. The source line is
+better than the text's: IR prints `g(b)` where the text prints `g(b`, and
+`zz` where it prints `z`. The text path drops the last character of a final
+line that has no newline.
+
+Without P0.5, `___isIRPythonMethod___:` tests whether the source begins
+`def`, and a doit's does not. The frames then lose their columns and source
+line, and a def in the doit is named `<nested>`, because the nested-def
+namer skips the source's first def as the method's own header. So P0.5 is a
+prerequisite for IR doits, not just future-proofing.
+
+**Cost.** A 400-statement doit (parse, build and run once each way):
+
+| | build + run | literals | step points | attached source |
+| --- | --- | --- | --- | --- |
+| IR | 50–66 ms | 408 | 2005 | 36 KB (Python plus position map) |
+| text | 58–77 ms | 810 | 2406 | 101 KB (generated Smalltalk) |
+
+IR was faster in every alternating run, by 10–15%. A 6-line doit is
+parse-bound: 300 runs took 229–242 ms on both paths.
+
+**What productionising needs** (P5):
+
+* a doit-scope load and store kind in `NameAst` (P5.1): scope
+  associations, the `___resolveDoitGlobal___:scope:` fallback, and builtins
+  through the `__builtins__` override;
+* a class statement that neither compiles a helper onto `UndefinedObject`
+  nor resolves against the Grail symbol list (P5.4);
+* P0.5 merged;
+* the module-statement emitter coverage P4 audits. This script covered
+  only the statements above.
 
 ## Not yet explored
 
