@@ -60,10 +60,14 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 			| cat src |
 			cat := tempClass class categoryOfSelector: sel environmentId: 1.
 			(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
-				src := tempClass class sourceCodeAt: sel environmentId: 1.
-				targetClass class perform: #'___compileMethod:category:'
-					env: 1
-					withArguments: { src. 'Grail-ST-Extension' }
+				"Through the same table as the instance side: an IR-built
+				@classmethod's sourceString is its Python, not Smalltalk."
+				src := importlib ___textSourceFor___: (tempClass class compiledMethodAt: sel environmentId: 1)
+					in: tempClass class selector: sel.
+				src notNil ifTrue: [
+					targetClass class perform: #'___compileMethod:category:'
+						env: 1
+						withArguments: { src. 'Grail-ST-Extension' }]
 			]
 		]
 	]

@@ -12,3 +12,7 @@ class GrailSTestTarget:
 
     def grail_add(self, x, y):
         return x + y
+
+    @classmethod
+    def grail_side(cls):
+        return 'class side'
