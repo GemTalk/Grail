@@ -717,6 +717,22 @@ CallAst class >> annotationOwnerDefNode: aNodeOrNil [
 
 ]
 
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> annotationScopeReadsSuppressed [
+	"True while NameAst emits a read as it would be OUTSIDE any annotation
+	scope's class namespace -- the fallback a class-namespace read wraps
+	(NameAst >> ___emitOrdinaryReadOn___:)."
+
+	^ self ___compileContext___ at: #'annotationScopeReadsSuppressed' otherwise: nil
+
+]
+
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> annotationScopeReadsSuppressed: aBooleanOrNil [
+	self ___compileContext___ at: #'annotationScopeReadsSuppressed' put: aBooleanOrNil
+
+]
+
 { #category : 'Grail-other' }
 CallAst class >> builtinsHasFastPathSelector: aSymbol [
 	"Return true if the builtins class implements aSymbol as an env-1

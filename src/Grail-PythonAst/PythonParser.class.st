@@ -2819,18 +2819,23 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	__qualname__ (CallAst class >> ___isTypeParamScope___:), as CPython's
 	annotation scope is.
 
-	A CLASS directly in a class body (classNesting > 0) is NOT rewritten: it
-	keeps its parameter NAMES only.  An ALIAS there is -- its scope function
-	is a def the class body calls, and its lazy value reads the class's own
-	parameters, which a class-body def sees through the class's closure cells
-	(stored before the body runs; see ClassDefAst >>
-	___emitClosureCellStoresOn:className:saved:savedWrite:).  That is
-	test_type_aliases' ``class Parent[A]: type TA1[B] = dict[A, B]''.
-	Answers whether it rewrote anything; when it did, the tokens at
-	``position'' now start the scope function's ``def''."
+	Directly in a CLASS BODY (classNesting > 0) the scope function goes inside
+	a synthesized ``if True:''.  CPython's annotation scope there sees the
+	class namespace (Python/symtable.c:2872): ``class C: class Base: ...;
+	class Child[T](Base)'' reads C's Base, and ``type A[X] = T'' after ``T =
+	int'' C's T.  A class-body def compiled as a METHOD has no hold on the
+	class it is defined in -- the body calls it with no receiver -- while a def
+	in a class-body ``if'' is emitted inline in the class build, as a closure
+	that sees the class's own variable (FunctionDefAst >>
+	printSmalltalkClassBodyRuntimeDefOn:), which is what NameAst >>
+	___annotationScopeClass___ reads it through.  A generic CLASS there used to
+	keep its parameter names only, so its own T was a NameError in its body
+	and its bases had no Generic[T].  Answers whether it rewrote anything; when
+	it did, the tokens at ``position'' now start the scope function's
+	statement."
 
 	| i decoRanges kwTok nameTok isClass lb rb params w ref out names c indent
-	  bodyStart bodyEnd end name segs valueEnd |
+	  bodyStart bodyEnd end name segs valueEnd inClassBody |
 	i := position.
 	decoRanges := OrderedCollection new.
 	[i <= tokens size and: [(tokens at: i) isOp: '@']] whileTrue: [
@@ -2850,7 +2855,6 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	(isClass and: [self ___parsingForAst___]) ifTrue: [^ false].
 	(isClass or: [decoRanges isEmpty and: [kwTok isName and: [kwTok value = 'type']]])
 		ifFalse: [^ false].
-	(isClass and: [classNesting > 0]) ifTrue: [^ false].
 	nameTok := tokens at: i + 1.
 	(nameTok isName and: [(tokens at: i + 2) isOp: '[']) ifFalse: [^ false].
 	lb := i + 2.
@@ -2865,6 +2869,11 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	names := String new.
 	params do: [:p | names := names , (p at: 2) , ','].
 	out := OrderedCollection new.
+	inClassBody := classNesting > 0.
+	inClassBody ifTrue: [
+		self ___synth: 'if True:' like: ref into: out.
+		self ___synthType: #NEWLINE like: ref into: out.
+		self ___synthType: #INDENT like: ref into: out].
 	self ___synth: 'def ' , w , '():' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #INDENT like: ref into: out.
@@ -2937,6 +2946,7 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 			self ___synth: ', (' , names , '))' like: ref into: out].
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #DEDENT like: ref into: out.
+	inClassBody ifTrue: [self ___synthType: #DEDENT like: ref into: out].
 	self ___synth: name , ' =' like: ref into: out.
 	decoRanges do: [:r |
 		(r at: 1) to: (r at: 2) do: [:k | out add: (tokens at: k)].
