@@ -18,16 +18,17 @@ GrailModuleTestCase >> comparingStringBetween: expected and: actual [
 { #category : 'Grail-Setup' }
 GrailModuleTestCase >> removeExtensionMethods [
 	"Remove all 'Grail-ST-Extension' methods installed on GrailSTestTarget
-	so each test begins with a clean class."
-	| md toRemove |
-	md := GrailSTestTarget methodDictForEnv: 1.
-	md isNil ifTrue: [^ self].
-	toRemove := OrderedCollection new.
-	md keysDo: [:sel |
-		| cat |
-		cat := GrailSTestTarget categoryOfSelector: sel environmentId: 1.
-		(cat notNil and: [cat = 'Grail-ST-Extension']) ifTrue: [toRemove add: sel]].
-	toRemove do: [:sel | GrailSTestTarget removeSelector: sel environmentId: 1].
+	and its metaclass so each test begins with a clean class."
+	{GrailSTestTarget. GrailSTestTarget class} do: [:beh |
+		| md toRemove |
+		md := beh methodDictForEnv: 1.
+		md isNil ifFalse: [
+			toRemove := OrderedCollection new.
+			md keysDo: [:sel |
+				| cat |
+				cat := beh categoryOfSelector: sel environmentId: 1.
+				(cat notNil and: [cat = 'Grail-ST-Extension']) ifTrue: [toRemove add: sel]].
+			toRemove do: [:sel | beh removeSelector: sel environmentId: 1]]].
 
 ]
 
@@ -43,6 +44,15 @@ GrailModuleTestCase >> setUp [
 	testModule := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/grail_smalltalk_class.py')
 		name: 'grail_smalltalk_class'.
+
+]
+
+{ #category : 'Grail-Tests - grail module' }
+GrailModuleTestCase >> testClassMethodInstalled [
+	"A @classmethod in the @smalltalk_class body is installed on the target's
+	metaclass.  Under IR its sourceString is Python, so copying it by
+	recompiling that source used to fail the whole import."
+	self assert: (GrailSTestTarget @env1:grail_side) equals: 'class side'.
 
 ]
 
