@@ -1,0 +1,157 @@
+! Spike P0.6 (IR-only codegen plan): an exec/eval DOIT built through IR as an
+! ANONYMOUS method -- generateFromIR: with no selector, run with
+! _executeInContext: nil -- next to today's text doit on the same source.
+! Unlike 00-13 this drives Grail's own PyMethodIRBuilder and the production
+! statement emitters, so it needs an installed Grail (./install.sh), not
+! 00_setup.tpz.  Run it with the GRAIL code-size setting:
+!
+!     topaz -l -T 400000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" -S experiments/ir/14_doit_anonymous.tpz
+!
+! The build is the whole prototype: register every name the doit scope holds
+! (ensureModuleScope: puts each written name there) as a LITERAL-VARIABLE leaf
+! on that scope's association, emit the statements with the def-body emitters,
+! and return the last expression explicitly.  Nothing is installed and nothing
+! is committed.  See README.md, "Anonymous IR doit (P0.6)", for the results.
+!
+! The traceback rows need P0.5 (#1980): without it ___isIRPythonMethod___:
+! classes a doit whose source does not begin ``def'' as text, so frames lose
+! their columns and source line and a def in the doit is named <nested>.
+login
+iferr 1 where
+run
+| irDoit textDoit run out cases tbSrc big |
+out := WriteStream on: String new.
+irDoit := [:src :d | | sl mod b meth stmts last valueOf |
+  mod := ModuleAst parseSource: src.
+  mod useTempsForBlock: false.
+  mod ensureModuleScope: d.
+  sl := ModuleAst symbolListForModuleScope: d.
+  ModuleAst whileCompilingDoitWithScope: sl do: [
+    "No selector: generateFromIR: answers a method with selector and inClass
+    nil, the shape String >> _compileInContext: gives the text doit."
+    b := PyMethodIRBuilder class: UndefinedObject selector: nil env: 1.
+    b sourceString: src fileName: (CallAst sourcePath ifNil: ['<grail>']) line: 1.
+    "A scope name may be read before any store, so every read is guarded,
+    as the text guards it."
+    b guardLocals: d keys.
+    "A bare name nothing resolves is the text's runtime lookup through the
+    scope's ___pyGlobals___ association.  NameAst has no IR load kind for it
+    (P5.1), so it is hand-emitted here, for a top-level expression only."
+    valueOf := [:node |
+      ((node isKindOf: NameAst) and: [(b leafFor: node id asSymbol) isNil
+          and: [(node ___irNonLocalLoadKind___: Set new) isNil]])
+        ifTrue: [b atNode: node.
+          b send: #'___resolveDoitGlobal___:scope:'
+            to: (b globalNamed: #NameError)
+            with: { b obj: node id asString.
+              b var: (GsComVarLeaf new literalVariable: (d associationAt: #'___pyGlobals___')) }
+            env: 0]
+        ifFalse: [node ___emitIRValueOn___: b]].
+    b withLocals: (d keys asArray collect: [:k |
+        k -> (GsComVarLeaf new literalVariable: (d associationAt: k))])
+      do: [
+        stmts := mod body body.
+        1 to: stmts size - 1 do: [:i | | st |
+          st := stmts at: i.
+          (st isKindOf: ExprAst)
+            ifTrue: [b add: (valueOf value: st value)]
+            ifFalse: [st ___emitIRStatementOn___: b]].
+        last := stmts last.
+        (last isKindOf: ExprAst)
+          ifTrue: [b add: (b return: (valueOf value: last value))]
+          ifFalse: [last ___emitIRStatementOn___: b. b add: b returnNone]].
+    meth := b generatedMethod].
+  ModuleAst ___rememberDoitScope: sl for: meth.
+  meth _executeInContext: nil].
+textDoit := [:src :d | ModuleAst evaluateSource: src usingModuleScope: d].
+run := [:blk :src | | d r |
+  d := SymbolDictionary new.
+  "A name exec()'s globals supplied: builtins seeds it into the scope."
+  d at: #seeded put: 7.
+  r := [ | v | v := blk value: src value: d. 'ok ' , v printString]
+    on: AbstractException do: [:ex | | fr |
+      "A codegen gap raises a Smalltalk Error, which has no Python frames."
+      fr := [ex pythonTracebackFrames] on: AbstractException do: [:e2 |
+        e2 return: '(' , ex messageText asString , ')'].
+      ex return: 'raised ' , ex class name , ' ' , fr printString].
+  r , '  scope=' , ((d keys reject: [:k | k = #'___pyGlobals___'])
+    asSortedCollection: [:x :y | x <= y]) asArray printString].
+
+"1. Behaviour: the same source both ways."
+cases := {
+  'x = 1
+y = x + 2
+y'.
+  'seeded * 3'.
+  'zz'.
+  'import math
+math.floor(2.5)'.
+  'if seeded > 3:
+    r = "big"
+else:
+    r = "small"
+r'.
+  'f = lambda n: n + seeded
+f(1)'.
+  'def g(n):
+    return n * 2
+g(5)'.
+  'x = 1
+x += 1
+x'.
+  'total = 0
+for i in range(4):
+    total += i
+total'.
+  'try:
+    1/0
+except ZeroDivisionError as e:
+    r = type(e).__name__
+r'.
+  'x = 1
+y = undefined_thing + x
+y'.
+  'class K:
+    v = 3
+K.v' }.
+cases do: [:c |
+  out nextPutAll: '### '; nextPutAll: (c copyReplaceAll: (String with: Character lf) with: ' ; '); lf.
+  out nextPutAll: '  IR  : '; nextPutAll: ([run value: irDoit value: c]
+    on: AbstractException do: [:e | e return: 'BUILD FAILED ' , e messageText asString]); lf.
+  out nextPutAll: '  text: '; nextPutAll: (run value: textDoit value: c); lf].
+
+"2. Tracebacks through a def the doit defines, unnamed and under a filename."
+tbSrc := 'a = 1
+
+def g(n):
+    k = n + 1
+    return k / (seeded - 7)
+
+b = a + 1
+g(b)'.
+#( nil 'sums.py' ) do: [:file |
+  out nextPutAll: '### traceback, file='; print: file; lf.
+  out nextPutAll: '  IR  : '; nextPutAll: (ModuleAst whileCompilingWithFilename: file
+    do: [run value: irDoit value: tbSrc]); lf.
+  out nextPutAll: '  text: '; nextPutAll: (ModuleAst whileCompilingWithFilename: file
+    do: [run value: textDoit value: tbSrc]); lf].
+
+"3. Cost: a 400-statement doit, built (parse included) and run once each way."
+big := WriteStream on: String new.
+1 to: 400 do: [:i | big nextPutAll: 'v'; print: i; nextPutAll: ' = '; print: i;
+  nextPutAll: ' * seeded + 1'; lf].
+big nextPutAll: 'v400'.
+big := big contents.
+{ {'IR  '. irDoit}. {'text'. textDoit} } do: [:pair | | d ms |
+  d := SymbolDictionary new. d at: #seeded put: 7.
+  System _generationScavenge.
+  ms := System millisecondsToRun: [(pair at: 2) value: big value: d].
+  out nextPutAll: '### 400 statements, '; nextPutAll: (pair at: 1);
+    nextPutAll: ': '; print: ms; nextPutAll: ' ms, v400 = '; print: (d at: #v400); lf].
+"Nothing was installed: the doit has no class to go on."
+out nextPutAll: '### UndefinedObject env-1 selectors: ';
+  print: (UndefinedObject selectorsForEnvironment: 1) size; lf.
+^ out contents
+%
+logout
+exit
