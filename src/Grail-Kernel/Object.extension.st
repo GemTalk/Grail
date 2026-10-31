@@ -549,6 +549,20 @@ Object class >> ___grailInstallSelfSendDispatchers___: aSymbol [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object class >> ___grailInstancesHaveNoDict___ [
+	"True for a built-in type whose instances CPython gives no __dict__, so an
+	attribute nothing on the type claims cannot be stored on one: object
+	itself, and the containers that say so themselves.  Only the exact class
+	answers: a Python subclass of one has a __dict__.  GemStone hangs a
+	dynamic instVar on any object that is not special or invariant, which is
+	how ``object().foo = 12'' and ``[].foo = 1'' were stored (test_descr
+	test_object_class)."
+
+	^ self == Object
+
+]
+
 { #category : 'Grail-Self-Send Overrides' }
 Object class >> ___grailIsBindingDescriptor___: aValue [
 	"A Python-level descriptor: not a function / block / method wrapper / class,
@@ -562,6 +576,38 @@ Object class >> ___grailIsBindingDescriptor___: aValue [
 	cls := aValue @env0:class.
 	^ ((cls @env0:whichClassIncludesSelector: #'__get__:_:' environmentId: 1) ~~ nil)
 		or: [(cls @env0:whichClassIncludesSelector: #'___get__:kw:' environmentId: 1) ~~ nil]
+
+]
+
+{ #category : 'Grail-Self-Send Overrides' }
+Object class >> ___grailIsModuleDataAccessor___: aSelector on: ownerClass [
+	"Is aSelector a native module's DATA ACCESSOR -- the unary method that
+	answers a value attribute (sys.excepthook, math.pi, enum.Enum) -- rather
+	than one of its functions?
+
+	A store of a FUNCTION over such a name must not put a call dispatcher on
+	the accessor.  The dispatcher answers ``override(*no args*)'', which is
+	right for ``os.getcwd = fake'' and wrong for a value: after ``sys.excepthook
+	= hook'' Smalltalk's ``sys excepthook'' RAN the hook and answered None, and
+	so did every accessor once a function had been assigned to it (issue
+	#1954).  The accessor reads what Python stored itself
+	(module >> ___dataGlobalAt___:), so it needs no dispatcher.
+
+	The call forms of the same name are untouched: ``excepthook:_:_:'' still
+	takes a dispatcher, so ``sys excepthook: t _: v _: tb'' still reaches the
+	assigned hook.
+
+	By CATEGORY, as Object >> ___pyAttrLoad___: tells a module's value from its
+	0-argument function, but as an explicit list of the VALUE categories rather
+	than its ``not a function category'': a unary function filed somewhere
+	unlisted keeps the patching it has today."
+
+	(aSelector @env0:numArgs @env0:= 0) ifFalse: [^ false].
+	^ #('Grail-Accessors' 'Grail-Constants' 'Grail-Mathematical Constants'
+		'Grail-Module accessors' 'Grail-Type Accessors' 'Grail-Path Module'
+		'Grail-Metadata') @env0:includes:
+			((ownerClass @env0:categoryOfSelector: aSelector environmentId: 1)
+				@env0:ifNil: ['']) @env0:asString
 
 ]
 
@@ -716,6 +762,7 @@ Object class >> ___grailModuleFunctionIsPatchable___: aSelector on: ownerClass [
 	case: it has an override mechanism of its own (the pinned builtins
 	forwarders), which this must not stack a dispatcher on."
 	(ownerClass @env0:inheritsFrom: NativeModule) ifTrue: [
+		(self ___grailIsModuleDataAccessor___: aSelector on: ownerClass) ifTrue: [^ false].
 		^ (ownerClass == builtins or: [ownerClass @env0:inheritsFrom: builtins]) @env0:not].
 	((System @env0:__sessionStateAt: 25) @env0:ifNil: [importlib ___directCallsEnabled___]) == true
 		ifFalse: [^ false].

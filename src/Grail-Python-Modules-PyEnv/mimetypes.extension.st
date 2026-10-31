@@ -38,13 +38,13 @@ mimetypes >> add_type: aType _: ext _: strict [
 
 { #category : 'Grail-Accessors' }
 mimetypes >> common_types [
-	^ self @env0:at: #common_types
+	^ self ___dataGlobalAt___: #common_types
 
 ]
 
 { #category : 'Grail-Accessors' }
 mimetypes >> encodings_map [
-	^ self @env0:at: #encodings_map
+	^ self ___dataGlobalAt___: #encodings_map
 
 ]
 
@@ -152,7 +152,7 @@ mimetypes >> init: filenames [
 
 { #category : 'Grail-Accessors' }
 mimetypes >> inited [
-	^ self @env0:at: #inited ifAbsent: [false]
+	^ self ___dataGlobalAt___: #inited otherwise: [false]
 
 ]
 
@@ -234,12 +234,12 @@ mimetypes >> initialize [
 
 { #category : 'Grail-Accessors' }
 mimetypes >> suffix_map [
-	^ self @env0:at: #suffix_map
+	^ self ___dataGlobalAt___: #suffix_map
 
 ]
 
 { #category : 'Grail-Accessors' }
 mimetypes >> types_map [
-	^ self @env0:at: #types_map
+	^ self ___dataGlobalAt___: #types_map
 
 ]

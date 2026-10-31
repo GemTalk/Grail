@@ -1,5 +1,13 @@
 Extension { #name : 'Interval' }
 
+{ #category : 'Grail-Attribute Access' }
+Interval class >> ___grailInstancesHaveNoDict___ [
+	"See Object class >> ___grailInstancesHaveNoDict___."
+
+	^ self == Interval
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 Interval class >> ___pythonValueAttrs___ [
 	"CPython's range carries start/stop/step as read-only ATTRIBUTES, not

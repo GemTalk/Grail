@@ -79,7 +79,7 @@ ClassDefAst >> ___allFunctionDefs___ [
 ]
 
 { #category : 'Grail-code generation' }
-ClassDefAst >> ___annotateScopeBoundNames___: firstBinding [
+ClassDefAst >> ___annotateScopeBoundNames___ [
 	"The class-body names the annotate block may read from the class: every
 	name the body binds anywhere -- it runs after the whole body -- and NOT one
 	that only a bare annotation mentions (``bytes: int'' with no value and no
@@ -91,17 +91,47 @@ ClassDefAst >> ___annotateScopeBoundNames___: firstBinding [
 	every name NameAst's class-body branches consult, so nothing else that
 	resolved through the class before stops doing so."
 
-	| names bareOnly |
-	names := IdentitySet new.
+	| bound names bareOnly |
+	bound := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil])
+			ifFalse: [bound addAll: stmt ___boundTargetNames___]].
+	names := IdentitySet withAll: bound.
 	{ CallAst classAttrNames. CallAst classFunctionNames. CallAst classStaticFunctionNames.
-	  CallAst classNestedClassNames. CallAst classBodyConditionalNames. firstBinding keys }
+	  CallAst classNestedClassNames. CallAst classBodyConditionalNames }
 		do: [:each | each isNil ifFalse: [names addAll: each]].
 	bareOnly := IdentitySet new.
 	body body do: [:stmt |
 		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil]) ifTrue: [
 			stmt ___boundTargetNames___ do: [:nm |
-				(firstBinding includesKey: nm) ifFalse: [bareOnly add: nm]]]].
+				(bound includes: nm) ifFalse: [bareOnly add: nm]]]].
 	bareOnly do: [:nm | names remove: nm ifAbsent: []].
+	^ names
+
+]
+
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___annotationScopeNames___ [
+	"The names an annotation scope in this class body reads from the class
+	namespace before anything else -- a method's annotations, a type
+	parameter's scope, a bound, an alias's value: every name the body binds,
+	conditionally or not, except one a bare annotation alone mentions and one
+	the body declares ``nonlocal''.  CPython leaves that last one free, read
+	through the enclosing function's cell, where a name the class binds is an
+	implicit global of the scope (Python/symtable.c:731-751).
+
+	Taken from the body alone, not from CallAst's class context: a nested
+	generic class's bases are emitted while that class's context is current,
+	not this one's."
+
+	| names |
+	names := IdentitySet new.
+	body body do: [:stmt |
+		((stmt isKindOf: AnnAssignAst) and: [stmt value isNil])
+			ifFalse: [names addAll: stmt ___boundTargetNames___]].
+	names addAll: self ___classBodyConditionalNames___.
+	(body nonlocalNames ifNil: [#()])
+		do: [:each | names remove: each asSymbol ifAbsent: []].
 	^ names
 
 ]
@@ -317,7 +347,8 @@ ClassDefAst >> ___classBlockNeedsTemps___ [
 	module, and the two used to be separate tests."
 
 	^ self ___classBodyHelperTemps___ notEmpty
-		or: [self ___classHeaderTemps___ notEmpty]
+		or: [self ___classHeaderTemps___ notEmpty
+		or: [self ___keepsExecutionRecord___]]
 
 ]
 
@@ -1167,6 +1198,20 @@ ClassDefAst >> ___compileClassSide___: aSource on: classVarName onStream: aStrea
 ]
 
 { #category : 'Grail-code generation' }
+ClassDefAst >> ___declaresPropertyGetter___: aName before: aDef [
+	"Is there a top-level ``@property def <aName>'' in this body before aDef?"
+
+	body isNil ifTrue: [^ false].
+	body body do: [:each |
+		each == aDef ifTrue: [^ false].
+		((each isKindOf: FunctionDefAst)
+			and: [each name asSymbol == aName
+			and: [each ___propertyAccessorKind___ == #getter]]) ifTrue: [^ true]].
+	^ false
+
+]
+
+{ #category : 'Grail-code generation' }
 ClassDefAst >> ___decoratedPropertyNames___ [
 	"The names of this body's DECORATED properties: a @property whose getter,
 	setter or deleter carries a decorator that replaces the function --
@@ -1276,13 +1321,11 @@ ClassDefAst >> ___decoratorStoresOver___: aDef decoratedProps: decoratedProps [
 	not one accessor of a decorated property, it does not merely mark a
 	property accessor, and no later statement rebinds its name."
 
-	| decos kind |
+	| decos |
 	decos := aDef applicableMethodDecorators.
 	decos isEmpty ifTrue: [^ false].
 	(decoratedProps includes: aDef name asSymbol) ifTrue: [^ false].
-	kind := aDef ___propertyAccessorKind___.
-	((kind == #getter or: [kind == #setter or: [kind == #deleter]])
-		and: [aDef ___wrapsPropertyAccessor___ not]) ifTrue: [^ false].
+	(self ___isMarkedByCompiledAccessor___: aDef) ifTrue: [^ false].
 	^ (self ___isRebindLaterInBody___: aDef) not
 
 ]
@@ -1458,7 +1501,18 @@ ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: sav
 				cap asString = name asString
 					ifTrue: [aStream nextPutAll: clsName]
 					ifFalse: [
-				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+				"Asked as a HEADER asks it (AbstractNode >>
+				 ___headerLocalBeyondClass___:): the store runs where the class
+				 statement stands, so only a METHOD between here and the binding
+				 hides the temp.  A class body, and a def in one of its compound
+				 statements, are emitted inline, where the temp is in reach -- the
+				 plain walk counted a class body as crossed, and a class nested in a
+				 class-body ``if'' forwarded through the cell of whatever ``self''
+				 is in the enclosing function, which is not that class: its methods
+				 read NameError.
+				 The scope function of a PEP 695 class in a class body stands in
+				 such an ``if'' (PythonParser >> ___rewriteTypeParamStatement___)."
+				((self ___headerLocalBeyondClass___: cap asSymbol)
 					and: [savedCapturedNames notNil])
 					ifTrue: [
 						aStream
@@ -1485,7 +1539,7 @@ ClassDefAst >> ___emitClosureCellStoresOn: aStream className: clsName saved: sav
 					nextPutAll: ' @env1:___pyAttrStore___: #''___cellSetter_';
 					nextPutAll: cap asString;
 					nextPutAll: '___'' put: [:___cellSetVal___ | '.
-				((self ___enclosingFunctionLocalBeyondClass___: cap asSymbol)
+				((self ___headerLocalBeyondClass___: cap asSymbol)
 					and: [savedCapturedWriteNames notNil])
 					ifTrue: [
 						aStream
@@ -1522,6 +1576,14 @@ ClassDefAst >> ___emitDefaultStoresFor___: def on: aStream className: aClassName
 			nextPutAll: ' compute: ['.
 		(pair at: 2) printSmalltalkOn: aStream.
 		aStream nextPutAll: '].'; lf]
+
+]
+
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+
+	(self ___recordsExecutionOf___: anAnnotation) ifTrue: [
+		self ___emitRecordingExecutionOf___: anAnnotation on: aStream]
 
 ]
 
@@ -1783,6 +1845,17 @@ ClassDefAst >> ___enclosingScopeIdentifierFor___: aSymbol [
 	^ (probe ___enclosingFuncDeclaresReservedParam___: aSymbol)
 		ifTrue: [NameAst ___transportIdentifierFor___: aSymbol]
 		ifFalse: [aSymbol asString]
+
+]
+
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___executionRecordExpression___ [
+	"The set of the numbers of the annotations that ran: a temp of the block
+	the class is built in, which the annotate function closes over -- CPython's
+	``__conditional_annotations__'' cell, which is not in the class __dict__
+	either."
+
+	^ '___executedAnnotations___'
 
 ]
 
@@ -2057,6 +2130,17 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 		raw do: [:n |
 			((boundInside includes: n asString) or: [n asString = recv])
 				ifFalse: [free add: n asString]]].
+	"A METHOD's annotations read an enclosing local through the class's cell,
+	and neither pass sees all of them: the first drops a name the class body
+	binds too, and the second never walks an annotation (FunctionDefAst's read
+	walk covers its defaults, decorators and body).  An annotation itself
+	reads such a name from the class and the module, but a lambda inside one
+	is a scope that does not see the class, so it reaches the enclosing
+	binding: ``def f(): T = 1; class C: T = 2; def m(self, a: (lambda: T)())''
+	stored a cell over a ``T'' the helper did not carry, an undefined symbol
+	in its text, and the class did not compile."
+	(self ___irMethodAnnotationLocalReads___: localNames) do: [:n |
+		n asString = recv ifFalse: [free add: n asString]].
 	^ free
 
 ]
@@ -2402,6 +2486,24 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 	out lf; tab; nextPutAll: '^ '; nextPutAll: self ___stBindName___.
 	stream ifNotNil: [out nextPutAll: (stream mapCommentShiftedBy: shift)].
 	^ out contents
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irMethodAnnotationLocalReads___: localNames [
+	"The enclosing def's locals that an annotation of one of the body's defs
+	names -- the defs emitMethodAnnotationsTableOn:className: builds annotate
+	blocks for."
+
+	| out |
+	out := Set new.
+	body isNil ifTrue: [^ out].
+	self ___allFunctionDefs___ do: [:def |
+		def ___annotatedArgs___ do: [:arg |
+			arg annotation ___irReadLocalNamesInto___: out locals: localNames].
+		def returns ifNotNil: [:returned |
+			returned ___irReadLocalNamesInto___: out locals: localNames]].
+	^ out
 
 ]
 
@@ -2887,6 +2989,29 @@ ClassDefAst >> ___isClassBodySubscriptAssign___: stmt [
 
 ]
 
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___isMarkedByCompiledAccessor___: aDef [
+	"Does aDef's property form only MARK an accessor this class compiles
+	itself -- a @property getter, or the plain @x.setter / @x.deleter of a
+	@property def this body declares before it?  Such a def is served by its
+	compiled method, and its decorators store nothing over it.
+
+	An @x.getter, @x.setter or @x.deleter over a property that came from
+	anywhere else -- ``x = property(doc='hello')'' in the body -- is an
+	ordinary decorator: CPython evaluates ``x.setter(f)'' at the def, and the
+	class holds the property it answers.  Taken for a marker, it stored
+	nothing, and the class kept the bare ``property(doc='hello')'' with no
+	accessors (test_descr test_properties_plus)."
+
+	| kind |
+	kind := aDef ___propertyAccessorKind___.
+	((kind == #getter or: [kind == #setter or: [kind == #deleter]])
+		and: [aDef ___wrapsPropertyAccessor___ not]) ifFalse: [^ false].
+	kind == #getter ifTrue: [^ true].
+	^ self ___declaresPropertyGetter___: aDef name asSymbol before: aDef
+
+]
+
 { #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___isProtocolDunderAttr___: aName [
 	"See the class-side method, which NameAst asks too."
@@ -2957,6 +3082,14 @@ ClassDefAst >> ___isTypeCheckingTest___: aTest [
 			ifFalse: [^ false]].
 	^ nm size >= 13
 		and: [(nm copyFrom: nm size - 12 to: nm size) = 'TYPE_CHECKING']
+
+]
+
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___keepsExecutionRecord___ [
+	"Does this class body record which of its annotations ran?"
+
+	^ self ___scopeAnnotations___ anySatisfy: [:each | self ___recordsExecutionOf___: each]
 
 ]
 
@@ -3173,9 +3306,10 @@ ClassDefAst >> ___propertyNamesForSlots___ [
 					or: [(deco isKindOf: NameAst)
 						and: [deco id asString = 'property']])
 					ifTrue: [names add: def ___mangledName___ asSymbol].
-				((deco isKindOf: AttributeAst)
-					and: [(#('setter' 'deleter' 'getter') includes: deco attr asString)
-					and: [deco value isKindOf: NameAst]])
+				"Only an accessor of a property the class declares: one over an
+				ASSIGNED property is an ordinary decorator, whose result the class
+				holds (FunctionDefAst >> ___classBodyNamesAProperty___:)."
+				(def isPropertyAccessorDecorator: deco)
 					ifTrue: [names add: (deco value ___manglePrivate___: deco value id) asSymbol]]]].
 	^ (IdentitySet withAll: names) asOrderedCollection
 
@@ -3212,6 +3346,20 @@ ClassDefAst >> ___readsRebindableModuleName___ [
 
 ]
 
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___recordsExecutionOf___: anAnnotation [
+	"An annotation inside one of the body's if, for, while, try, with or match
+	statements, which CPython calls conditional (Python/symtable.c:2798-2806).
+	One at the top of the body has always run by the time anything can read
+	the class's annotations, since a class whose body raised does not exist.
+	Not under ``from __future__ import annotations'', which gives the class an
+	eager dict instead of an annotate function."
+
+	^ CallAst futureAnnotations not
+		and: [(body body includesIdentical: anAnnotation) not]
+
+]
+
 { #category : 'Grail-code generation' }
 ClassDefAst >> ___redirectedAccessorNameFor___: aDef [
 	"The private selector base a property accessor that must not claim the
@@ -3232,13 +3380,38 @@ ClassDefAst >> ___redirectUnarySelectorIn: sourceString from: oldName to: newNam
 	``___propDeleter_x'' selector.  A method compiled from ``def x(self)'' has
 	no parameters after the stripped self, so its source begins with the bare
 	selector token followed by whitespace/newline -- only that leading token is
-	replaced."
+	replaced.
 
+	A deleter with a default -- ``def x(self, value=None)'' -- compiles in the
+	VARARGS form, whose source begins ``_x: ...'' for the selector ``_x:kw:''.
+	That keyword is renamed the same way, to ``____propDeleter_x:kw:''; left
+	alone, the deleter compiled as the plain name's varargs form and ``del
+	obj.x'' found no deleter (test_descr test_properties_plus)."
+
+	| varargsOld |
 	((sourceString size >= oldName size)
 		and: [(sourceString copyFrom: 1 to: oldName size) = oldName])
 		ifTrue: [
 			^ newName , (sourceString copyFrom: oldName size + 1 to: sourceString size)].
+	varargsOld := '_' , oldName , ':'.
+	((sourceString size >= varargsOld size)
+		and: [(sourceString copyFrom: 1 to: varargsOld size) = varargsOld])
+		ifTrue: [
+			^ '_' , newName , ':' , (sourceString copyFrom: varargsOld size + 1 to: sourceString size)].
 	^ sourceString
+
+]
+
+{ #category : 'Grail-Annotations' }
+ClassDefAst >> ___scopeAnnotations___ [
+	"Every annotated name of this class, in source order: at the top of the
+	body and inside its if, for, while, try, with and match statements, but not
+	in a def or class, which have annotations of their own."
+
+	| annotations |
+	annotations := OrderedCollection new.
+	body ___addScopeAnnotationsTo___: annotations.
+	^ annotations
 
 ]
 
@@ -3625,30 +3798,6 @@ ClassDefAst >> definesOwnNew [
 ]
 
 { #category : 'Grail-code generation' }
-ClassDefAst >> emitClassAnnotateBlockOn: aStream [
-	"The class's PEP 649 annotate function: a block taking (positional-array,
-	kwargs-dict) -- Grail's shape for a block used as a Python callable -- and
-	answering an ORDERED PyDict of name -> annotation, in declaration order.
-	Each annotation goes through PyAnnotate >> ___annotationValue___:source:format:
-	as FunctionDefAst >> emitOneAnnotation:on: sends it, so a class answers the
-	three formats exactly as a function does: VALUE evaluates, STRING is the
-	source text, FORWARDREF evaluates per key."
-
-	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
-	body body do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]) ifTrue: [
-			aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
-			aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
-			stmt annotation printSmalltalkOn: aStream.
-			aStream nextPutAll: '] source: '.
-			self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
-			aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
-			aStream nextPut: $;]].
-	aStream nextPutAll: ' @env0:yourself)]'
-
-]
-
-{ #category : 'Grail-code generation' }
 ClassDefAst >> emitClassAnnotationsDictOn: aStream [
 	"Emit the ``{ name -> annotation-source-string, ... }'' dict expression
 	for this class's class-body annotations — same shape as
@@ -3767,14 +3916,18 @@ ClassDefAst >> emitClassBodyIfBranch: aSuite on: aStream [
 			[stmt printSmalltalkOn: aStream]
 				ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 			aStream lf].
-		((stmt isKindOf: AnnAssignAst)
-			and: [(stmt target isKindOf: NameAst) and: [stmt value notNil]]) ifTrue: [
-			aStream nextPutAll: self ___stVarName___;
-				nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
-				nextPutAll: stmt target id asString;
-				nextPutAll: ''' put: '.
-			stmt value printSmalltalkWithParenthesisOn: aStream.
-			aStream nextPutAll: '.'; lf]]
+		"An annotated name in a branch also records that it ran, bare or not: the
+		class's annotate function lists it only if it did."
+		(stmt isKindOf: AnnAssignAst) ifTrue: [
+			((stmt target isKindOf: NameAst) and: [stmt value notNil]) ifTrue: [
+				aStream nextPutAll: self ___stVarName___;
+					nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
+					nextPutAll: stmt target id asString;
+					nextPutAll: ''' put: '.
+				stmt value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: '.'; lf].
+			stmt ___emitExecutionRecordOn___: aStream.
+			aStream lf]]
 
 ]
 
@@ -4196,19 +4349,28 @@ ClassDefAst >> emitMethodAnnotationsTableOn: aStream className: aClassName [
 	annotation holding a comprehension or a generator expression emits its
 	loop with indentation protocol (#increaseIndent), and on an AppendStream
 	that was a Smalltalk MessageNotUnderstood no Python handler could catch,
-	raised while compiling the class."
+	raised while compiling the class.
 
-	| annotated entries |
+	The blocks see the class namespace, as CPython's annotation scope for a
+	method does: a name the body binds is read from the class first (CallAst
+	>> methodAnnotationClassScope).  The class is the table's receiver, which
+	is why every walk over this table sends it to the class that compiled it
+	rather than to a subclass that inherits the method."
+
+	| annotated entries savedScope |
 	annotated := self ___allFunctionDefs___ select: [:def |
 		def isOverloadStub not and: [def hasAnnotations]].
 	annotated isEmpty ifTrue: [^ self].
 	entries := OrderedCollection new.
-	annotated do: [:def | | src |
+	savedScope := CallAst methodAnnotationClassScope.
+	CallAst methodAnnotationClassScope: self ___annotationScopeNames___.
+	[annotated do: [:def | | src |
 		src := PrettyWriteStream on: Unicode7 new.
 		src nextPutAll: ' @env0:at: '''; nextPutAll: def ___mangledName___ asString; nextPutAll: ''' put: '.
 		def emitAnnotateBlockOn: src.
 		src nextPut: $;.
-		entries add: src contents].
+		entries add: src contents]]
+		ensure: [CallAst methodAnnotationClassScope: savedScope].
 	self ___emitTable___: '___methodAnnotationsTable___' entries: entries category: 'Grail-Annotations' onStream: aStream
 
 ]
@@ -5707,6 +5869,8 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 			aStream nextPutAll: each asString; nextPutAll: ' '].
 		self ___classHeaderTemps___ do: [:each |
 			aStream nextPutAll: each; nextPutAll: ' '].
+		self ___keepsExecutionRecord___ ifTrue: [
+			aStream nextPutAll: self ___executionRecordExpression___; nextPutAll: ' '].
 		aStream nextPutAll: '| '.
 	].
 	(self isModuleScopeClassDef) ifTrue: [
@@ -6587,6 +6751,11 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	is ever registered there.  So a leak cannot change any behaviour."
 	aStream nextPutAll: self ___stVarName___;
 		nextPutAll: ' @env1:___grailBeginClassBuild___.'; lf.
+	"The record of which annotations ran starts empty with the body, as CPython's
+	__conditional_annotations__ cell does (Python/codegen.c:1566-1569)."
+	self ___keepsExecutionRecord___ ifTrue: [
+		aStream nextPutAll: self ___executionRecordExpression___;
+			nextPutAll: ' := ___set___ perform: #new env: 0.'; lf].
 	"CLOSURE CELLS, EARLIEST EMIT -- before the body runs.  A def in the class
 	body that the body itself CALLS (``def mk(): return A'' then ``f = mk()'')
 	reads the enclosing function's locals through these cells, as any method
@@ -7059,8 +7228,8 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		 set, but an annotation is evaluated lazily, after the whole body ran --
 		 class namespace first, then the enclosing scope.  EVERY name except one
 		 that only a bare annotation mentions, which is not in the namespace at
-		 all (___annotateScopeBoundNames___:)."
-		CallAst classBodyBoundNames: (self ___annotateScopeBoundNames___: firstBinding).
+		 all (___annotateScopeBoundNames___)."
+		CallAst classBodyBoundNames: self ___annotateScopeBoundNames___.
 		"PEP 649 ``__annotate__'' for a class with class-body annotations: ONE
 		annotate block, stored in the class's own holder under CPython's class-dict
 		key ``__annotate_func__''.  The generic class-side accessors on object
@@ -7075,7 +7244,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		so a forward reference in a class annotation no longer has to resolve at
 		class creation.  An explicit ``__annotations__'' in the class body keeps
 		its own store and suppresses this, as before."
-		((self classAnnotationPairs notEmpty)
+		((self ___scopeAnnotations___ notEmpty)
 			and: [(classAttrs anySatisfy: [:p | p key == #'__annotations__']) not])
 				ifTrue: [
 			"Under ``from __future__ import annotations'' a class keeps PEP 563: an
@@ -7096,7 +7265,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 				ifFalse: [
 					aStream nextPutAll: self ___stVarName___;
 						nextPutAll: ' @env1:___classHolderAttrStore___: #''__annotate_func__'' put: (('.
-					self emitClassAnnotateBlockOn: aStream.
+					self ___emitAnnotateBlockOn___: aStream.
 					"With a __code__, as every function in a class __dict__ has in
 					 CPython: dataclasses' slots=True walks the dict reading
 					 ``f.__code__.co_freevars'' for each one, and this was the only
@@ -7570,7 +7739,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	plain @classmethod / @staticmethod / @property def emits nothing here
 	exactly as before."
 	self ___allFunctionDefs___ do: [:def |
-		| decos kind marking |
+		| decos marking |
 		decos := def applicableMethodDecorators.
 		"A property accessor whose remaining decorators only MARK it
 		(___wrapsPropertyAccessor___ false) is served by the compiled
@@ -7580,9 +7749,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		def's STORE cannot land over a later one: a getter and its @x.setter
 		share the name, and skipping the getter left its @abstractmethod
 		unapplied (test_abc test_descriptors_with_abstractmethod)."
-		kind := decos isEmpty ifTrue: [nil] ifFalse: [def ___propertyAccessorKind___].
-		marking := (kind == #getter or: [kind == #setter or: [kind == #deleter]])
-			and: [def ___wrapsPropertyAccessor___ not].
+		marking := decos isEmpty not and: [self ___isMarkedByCompiledAccessor___: def].
 		(decos isEmpty not
 			and: [(decoratedProps includes: def name asSymbol) not
 			and: [(earlyDecorated includes: def) not

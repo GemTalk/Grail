@@ -35,6 +35,14 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+IfAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection.
+	orelse ifNotNil: [:suite | suite ___addScopeAnnotationsTo___: aCollection]
+
+]
+
 { #category : 'Grail-AST export' }
 IfAst >> ___asPythonAst___ [
 	"ast.parse answers the source's tree: a wrapper the source did not write

@@ -1,8 +1,10 @@
 """A class's per-method tables answer the same when they are split.
 
 A class carries class-side tables with an entry per method -- docstrings,
-code objects, signatures, defaults, receivers, annotations, type parameters
--- and each was ONE accessor compiled from ONE string literal.  GemStone caps
+code objects, signatures, defaults, receivers, annotations -- and each was
+ONE accessor compiled from ONE string literal.  (A generic method's type
+parameters were one too; it is now the function its type-parameter scope
+returns, carrying its own.)  GemStone caps
 a literal at 5M bytes of STORAGE, and one character above U+FFFF anywhere in
 the class, escaped or not, stores the whole class-build text at four bytes a
 character, so a class with thousands of methods (idna's generated UTS46Tests
@@ -55,6 +57,9 @@ class Holder:
         """The sixth method \U0001F600."""
         return 6
 
+    def seventh(self, q: float = 1.0) -> float:
+        return q
+
 
 check('docstrings', [Holder.first.__doc__, Holder.second.__doc__, Holder.third.__doc__,
                      Holder.fourth.__doc__, Holder.sixth.__doc__],
@@ -72,7 +77,8 @@ check('defaults', [Holder.first.__defaults__, Holder.first.__kwdefaults__,
 check('calls', [Holder().first(1), Holder().second(1), Holder.third(), Holder.fourth(2),
                 Holder().fifth('t'), Holder().sixth()],
       [6, '1y', None, 8, 't', 6])
-check('annotations', [Holder.second.__annotations__], [{'x': int, 'y': str, 'return': str}])
+check('annotations', [Holder.second.__annotations__, Holder.seventh.__annotations__],
+      [{'x': int, 'y': str, 'return': str}, {'q': float, 'return': float}])
 check('type_params', [[p.__name__ for p in Holder.fifth.__type_params__],
                       [p.__name__ for p in Holder.fifth_b.__type_params__]], [['T'], ['U', 'Ts']])
 

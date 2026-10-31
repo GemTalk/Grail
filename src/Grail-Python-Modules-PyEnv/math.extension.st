@@ -836,7 +836,7 @@ math >> dist: pIter _: qIter [
 
 { #category : 'Grail-Mathematical Constants' }
 math >> e [
-	^ self @env0:at: #e
+	^ self ___dataGlobalAt___: #e
 
 ]
 
@@ -1153,7 +1153,7 @@ math >> gcd: a _: b [
 
 { #category : 'Grail-Mathematical Constants' }
 math >> inf [
-	^ self @env0:at: #inf
+	^ self ___dataGlobalAt___: #inf
 
 ]
 
@@ -1388,7 +1388,7 @@ math >> modf: x [
 
 { #category : 'Grail-Mathematical Constants' }
 math >> nan [
-	^ self @env0:at: #nan
+	^ self ___dataGlobalAt___: #nan
 
 ]
 
@@ -1422,7 +1422,7 @@ math >> perm: n _: k [
 
 { #category : 'Grail-Mathematical Constants' }
 math >> pi [
-	^ self @env0:at: #pi
+	^ self ___dataGlobalAt___: #pi
 
 ]
 
@@ -1634,7 +1634,7 @@ math >> tanh: x [
 
 { #category : 'Grail-Mathematical Constants' }
 math >> tau [
-	^ self @env0:at: #tau
+	^ self ___dataGlobalAt___: #tau
 
 ]
 

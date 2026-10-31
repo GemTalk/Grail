@@ -13,6 +13,14 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+ForAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection.
+	orelse ifNotNil: [:suite | suite ___addScopeAnnotationsTo___: aCollection]
+
+]
+
 { #category : 'Grail-code generation' }
 ForAst >> ___drainGuardedStepFor___: iterTemp [
 	"The per-iteration step with CPython's exhaustion PLACEMENT: only a

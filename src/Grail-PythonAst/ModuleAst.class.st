@@ -1418,37 +1418,41 @@ ModuleAst >> ___docString___ [
 ]
 
 { #category : 'Grail-code generation' }
-ModuleAst >> ___emitAnnotateBlockOf___: stmts on: aStream [
-	"The PEP 649 annotate function for the annotated names in stmts: a block of
-	(format, keywords) answering their dict, each value evaluated when asked."
+ModuleAst >> ___emitDoitAnnotationsIn___: aScope on: aStream [
+	"An exec() body's annotations, bound in its scope: ``__annotate__'' and the
+	record of which annotations ran, which it reads -- or the
+	``__annotations__'' dict of source strings under the annotations future
+	import.  See ___emitModuleAnnotationsOn___:."
 
-	aStream nextPutAll: '[:___annArgs___ :___annKw___ | ((PyDict @env0:new)'.
-	stmts do: [:stmt |
-		aStream nextPutAll: ' @env0:at: '''; nextPutAll: stmt target id asString; nextPutAll: ''' put: '.
-		aStream nextPutAll: '(PyAnnotate @env1:___annotationValue___: ['.
-		stmt annotation printSmalltalkOn: aStream.
-		aStream nextPutAll: '] source: '.
-		self emitStringLiteral: stmt annotation ___annotationSourceString___ on: aStream.
-		aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1))'.
-		aStream nextPut: $;].
-	aStream nextPutAll: ' @env0:yourself)]'
+	CallAst futureAnnotations ifTrue: [
+		^ self ___emitDoitSlot___: #'__annotations__' in: aScope on: aStream with: [
+			self ___emitFutureAnnotationsDictOf___: self ___moduleAnnotationStatements___ on: aStream]].
+	self ___emitDoitSlot___: #'__conditional_annotations__' in: aScope on: aStream with: [
+		aStream nextPutAll: '(___set___ perform: #new env: 0)'].
+	self ___emitDoitSlot___: #'__annotate__' in: aScope on: aStream with: [
+		self ___emitAnnotateBlockOn___: aStream]
 
 ]
 
 { #category : 'Grail-code generation' }
-ModuleAst >> ___emitDoitAnnotations___: stmts scope: aScope on: aStream [
-	"An exec() body's annotations, bound in its scope: ``__annotate__'', or the
-	``__annotations__'' dict of source strings under the annotations future
-	import -- see ___emitModuleAnnotationsOn___:."
+ModuleAst >> ___emitDoitSlot___: aName in: aScope on: aStream with: anEmitBlock [
+	"``aName := <what anEmitBlock emits>.'', with aName declared a slot of the
+	exec() scope as ensureModuleScope: declares the body's own names."
 
 	| slot |
-	slot := CallAst futureAnnotations ifTrue: [#'__annotations__'] ifFalse: [#'__annotate__'].
-	aScope at: (NameAst doitScopeNameFor: slot) ifAbsentPut: [nil].
-	aStream nextPutAll: (NameAst doitScopeNameFor: slot) asString; nextPutAll: ' := '.
-	CallAst futureAnnotations
-		ifTrue: [self ___emitFutureAnnotationsDictOf___: stmts on: aStream]
-		ifFalse: [self ___emitAnnotateBlockOf___: stmts on: aStream].
+	slot := NameAst doitScopeNameFor: aName.
+	aScope at: slot ifAbsentPut: [nil].
+	aStream nextPutAll: slot asString; nextPutAll: ' := '.
+	anEmitBlock value.
 	aStream nextPut: $.; lf
+
+]
+
+{ #category : 'Grail-Annotations' }
+ModuleAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+
+	(self ___recordsExecutionOf___: anAnnotation) ifTrue: [
+		self ___emitRecordingExecutionOf___: anAnnotation on: aStream]
 
 ]
 
@@ -1480,26 +1484,41 @@ ModuleAst >> ___emitModuleAnnotationsOn___: aStream [
 	(test_grammar test_var_annot_simple_exec).  Grail stored nothing there, so
 	annotations made by exec'd code could not be read back at all.  The doit
 	has no module instance for ``self'' to be, so the binding is a slot of its
-	scope, declared here as ensureModuleScope: declares the others."
+	scope, declared here as ensureModuleScope: declares the others.
 
-	| stmts doitScope |
-	stmts := self ___moduleAnnotationStatements___.
-	stmts isEmpty ifTrue: [^ self].
+	Before the body runs, as CPython sets both up first: an import cycle that
+	reads the module mid-body finds its annotate function there, and the record
+	it reads says which annotations ran so far (___recordsExecutionOf___:)."
+
+	| doitScope |
+	self ___scopeAnnotations___ isEmpty ifTrue: [^ self].
 	doitScope := ModuleAst compilingDoitScope.
-	doitScope notNil ifTrue: [
-		^ self ___emitDoitAnnotations___: stmts scope: doitScope first on: aStream].
+	doitScope notNil ifTrue: [^ self ___emitDoitAnnotationsIn___: doitScope first on: aStream].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ self].
 	CallAst futureAnnotations ifTrue: [
 		aStream nextPutAll: 'self @env0:dynamicInstVarAt: #''__annotations__'' put: '.
-		self ___emitFutureAnnotationsDictOf___: stmts on: aStream.
+		self ___emitFutureAnnotationsDictOf___: self ___moduleAnnotationStatements___ on: aStream.
 		aStream nextPut: $.; lf.
 		^ self].
 	"Through ___storeAnnotate___: rather than a plain store: the block is a new
 	closure on every run, and a re-run of an app's top file over its committed
-	globals must not write a new one in place of the same code."
+	globals must not write a new one in place of the same code.  It starts the
+	record of which annotations ran, too."
 	aStream nextPutAll: 'self @env0:___storeAnnotate___: '.
-	self ___emitAnnotateBlockOf___: stmts on: aStream.
+	self ___emitAnnotateBlockOn___: aStream.
 	aStream nextPut: $.; lf
+
+]
+
+{ #category : 'Grail-Annotations' }
+ModuleAst >> ___executionRecordExpression___ [
+	"The set of the numbers of the annotations that ran, where CPython keeps
+	it: the module's global ``__conditional_annotations__'', or the exec()
+	scope's slot of that name."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: [(NameAst doitScopeNameFor: #'__conditional_annotations__') asString]
+		ifFalse: ['(self @env0:dynamicInstVarAt: #''__conditional_annotations__'')']
 
 ]
 
@@ -1576,14 +1595,16 @@ ModuleAst >> ___leadsWithUseNamespace___ [
 
 { #category : 'Grail-code generation' }
 ModuleAst >> ___moduleAnnotationStatements___ [
-	"The module's own annotated NAMES, in order -- ``x: int = 1'' at top level.
+	"The module's annotated NAMES at its top level -- ``x: int = 1'' -- which
+	is what its eager dict of source strings holds under ``from __future__
+	import annotations''.
 
-	TOP-LEVEL ONLY, and that is a deliberate divergence.  CPython also includes
-	an annotation inside a module-level ``if''/``for''/``try'' that EXECUTED,
-	tracked at run time through __conditional_annotations__.  Grail omits those
-	rather than guess: including one whose branch did not run would evaluate an
-	expression over names that may never have been bound, and raise NameError
-	on read where CPython simply leaves the key out."
+	That dict is a deliberate divergence still.  CPython's also gets an
+	annotation inside a module-level ``if''/``for''/``try'' once it executes,
+	since each statement stores into the dict as it runs; Grail builds the dict
+	before the body runs and leaves those out.  Without the future import the
+	annotate function has every annotation and reads which ran
+	(___scopeAnnotations___, ___recordsExecutionOf___:)."
 
 	^ body body select: [:stmt |
 		(stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___]]
@@ -1606,6 +1627,35 @@ ModuleAst >> ___rebindsName___ [
 		(stmt isKindOf: AssignAst) and: [
 			stmt targets anySatisfy: [:target |
 				(target isKindOf: NameAst) and: [target id asString = '__name__']]]]
+
+]
+
+{ #category : 'Grail-Annotations' }
+ModuleAst >> ___recordsExecutionOf___: anAnnotation [
+	"Every annotation, as CPython does: a module can be read while it is
+	partly executed -- an import cycle reads it mid-body -- and its annotations
+	are then the ones that ran so far (Python/symtable.c:2798-2806).
+
+	Only where the module has an annotate function to read the record.  Under
+	``from __future__ import annotations'' it has an eager dict of source
+	strings instead, and a body compiled with neither an exec() scope nor a
+	module class to bind it in has none (___emitModuleAnnotationsOn___:)."
+
+	^ CallAst futureAnnotations not
+		and: [ModuleAst compilingDoitScope notNil or: [CallAst moduleClassBeingCompiled notNil]]
+
+]
+
+{ #category : 'Grail-Annotations' }
+ModuleAst >> ___scopeAnnotations___ [
+	"Every annotated name of this module, in source order: at the top of the
+	body and inside its if, for, while, try, with and match statements, but not
+	in a def or class, which have annotations of their own."
+
+	| annotations |
+	annotations := OrderedCollection new.
+	body ___addScopeAnnotationsTo___: annotations.
+	^ annotations
 
 ]
 
