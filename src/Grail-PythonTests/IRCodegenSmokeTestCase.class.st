@@ -166,6 +166,40 @@ IRCodegenSmokeTestCase >> testIRMethodIsRecognisedAsPython [
 ]
 
 { #category : 'Grail-Tests' }
+IRCodegenSmokeTestCase >> testIRMethodIsRecognisedByMarkerNotSource [
+	"BaseException ___isIRPythonMethod___: answers from the ___grailPython___
+	marker, not from the attached source beginning ``def''.  Every IR method
+	is a def today, but a module body or a doit built through IR attaches
+	Python that begins with anything at all, and its lines must still come
+	from the position map rather than a ___curPos___ scan.  A block asks its
+	home method, which is where the marker temp lives."
+
+	| b m blockMethod |
+	importlib ___irCodegenSupported___ ifFalse: [^ self].
+	b := PyMethodIRBuilder class: Object selector: #grailMarkerProbe env: 1.
+	b fileName: 'marker_probe' source: 'x = 1'.
+	b add: (b return: b trueLit).
+	m := b generatedMethod.
+	self assert: (BaseException ___isIRPythonMethod___: m)
+		description: 'an IR method whose source does not begin ``def'''' was not recognised'.
+	"Any IR def in the fixture that compiles a real block (a keyword-argument
+	entry point does)."
+	(testModule class selectorsForEnvironment: 1) do: [:sel |
+		| home |
+		home := testModule class compiledMethodAt: sel environmentId: 1.
+		(blockMethod isNil
+			and: [home blockLiterals notEmpty
+			and: [(home argsAndTemps ifNil: [#()]) includes: #'___grailPython___']])
+				ifTrue: [blockMethod := home blockLiterals first method]].
+	self deny: blockMethod isNil description: 'the fixture compiled no IR block'.
+	self assert: blockMethod isMethodForBlock.
+	self assert: (BaseException ___isIRPythonMethod___: blockMethod)
+		description: 'a block of an IR method was not recognised'.
+	self deny: (BaseException ___isIRPythonMethod___: (Object compiledMethodAt: #printString))
+
+]
+
+{ #category : 'Grail-Tests' }
 IRCodegenSmokeTestCase >> testIRPathWasActuallyTaken [
 	"On a platform WITH IR support (4.0), the fixture's eligible top-level defs must
 	ALL compile through the IR path with no fallback -- otherwise ``correct
