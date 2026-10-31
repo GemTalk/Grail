@@ -185,10 +185,19 @@ NameError class >> ___resolveDoitGlobal___: aName scope: aScope [
 	(inst notNil and: [(inst @env1:___grailDoitScope___) == aScope]) ifTrue: [
 		v := aScope at: sym ifAbsent: [nil].
 		v == nil ifFalse: [^ v]].
-	d == nil ifFalse: [
-		found := [d @env1:__getitem__: aName asString]
-			on: KeyError do: [:ex | ex return: #'___grailExecGlobalsMiss___'].
-		found == #'___grailExecGlobalsMiss___' ifFalse: [^ found]].
+	"A module's globals() view is asked whether it HOLDS the name first: its
+	 reads go through the module's attribute lookup, which reaches the module
+	 object's own attributes as well -- ``globals()['__class__']'' was the
+	 module's class, while ``'__class__' in globals()'' was False and CPython
+	 raises KeyError -- and ``exec(src, globals(), {})'' then read __class__
+	 from it (test_super test_various___class___pathologies).  Any other
+	 mapping is asked directly, so a dict subclass's __missing__ answers, as
+	 LOAD_GLOBAL's PyMapping_GetOptionalItem lets it."
+	(d ~~ nil and: [(d isKindOf: PyModuleDict) not
+		or: [(d @env1:__contains__: aName asString) == true]]) ifTrue: [
+			found := [d @env1:__getitem__: aName asString]
+				on: KeyError do: [:ex | ex return: #'___grailExecGlobalsMiss___'].
+			found == #'___grailExecGlobalsMiss___' ifFalse: [^ found]].
 	v := aScope at: sym ifAbsent: [nil].
 	v == nil ifFalse: [^ v].
 	^ self ___resolveBuiltinOrSignal___: aName

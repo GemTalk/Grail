@@ -119,7 +119,9 @@ def _cannot_subclass_instance(obj):
 
 class _ImmutableType(type):
     """A C-level type's immutability (Py_TPFLAGS_IMMUTABLETYPE): setting an
-    attribute on the TYPE is a TypeError, as it is on NoneType.
+    attribute on the TYPE is a TypeError, as it is on NoneType.  CPython's
+    typevarobject.c gives the flag to TypeVar, ParamSpec, TypeVarTuple, their
+    args and kwargs, and TypeAliasType -- not to Generic.
 
     The message names the type by its tp_name, which for a C type outside
     builtins carries the module: ``'_typing._ConstEvaluator'``."""
@@ -240,7 +242,7 @@ class _Common:
         return self.__name__
 
 
-class TypeVar(_Common):
+class TypeVar(_Common, metaclass=_ImmutableType):
     """Type variable.
 
     Constructed either the old way, ``T = TypeVar('T')``, or by the PEP 695
@@ -317,7 +319,7 @@ class TypeVar(_Common):
 
 
 
-class ParamSpecArgs:
+class ParamSpecArgs(metaclass=_ImmutableType):
     """The args for a ParamSpec object -- ``P.args``."""
 
     __init_subclass__ = _not_a_base('typing.ParamSpecArgs')
@@ -340,7 +342,7 @@ class ParamSpecArgs:
         return hash(('args', id(self.__origin__)))
 
 
-class ParamSpecKwargs:
+class ParamSpecKwargs(metaclass=_ImmutableType):
     """The kwargs for a ParamSpec object -- ``P.kwargs``."""
 
     __init_subclass__ = _not_a_base('typing.ParamSpecKwargs')
@@ -363,7 +365,7 @@ class ParamSpecKwargs:
         return hash(('kwargs', id(self.__origin__)))
 
 
-class ParamSpec(_Common):
+class ParamSpec(_Common, metaclass=_ImmutableType):
     """Parameter specification variable (PEP 612)."""
 
     __init_subclass__ = _not_a_base('typing.ParamSpec')
@@ -413,7 +415,7 @@ class ParamSpec(_Common):
 
 
 
-class TypeVarTuple(_Common):
+class TypeVarTuple(_Common, metaclass=_ImmutableType):
     """Type variable tuple (PEP 646)."""
 
     __init_subclass__ = _not_a_base('typing.TypeVarTuple')
@@ -439,7 +441,7 @@ class TypeVarTuple(_Common):
         return self.__name__
 
 
-class TypeAliasType:
+class TypeAliasType(metaclass=_ImmutableType):
     """Type alias (PEP 695).
 
     Built either by an explicit call -- which is what ``typing_extensions``
@@ -457,9 +459,16 @@ class TypeAliasType:
                             f"str, not {type(name).__name__}")
         if not isinstance(type_params, tuple):
             raise TypeError("type_params must be a tuple")
+        default_seen = False
         for p in type_params:
             if not isinstance(p, (TypeVar, ParamSpec, TypeVarTuple)):
                 raise TypeError(f"Expected a type param, got {p!r}")
+            # typealias_check_type_params (Objects/typevarobject.c:1957).
+            if p.has_default():
+                default_seen = True
+            elif default_seen:
+                raise TypeError(f"non-default type parameter '{p!r}' "
+                                "follows default type parameter")
         self.__name__ = name
         self.__value__ = value
         self.__type_params__ = type_params
@@ -500,6 +509,11 @@ class TypeAliasType:
 
     def __reduce__(self):
         return self.__name__
+
+    def __iter__(self):
+        # unpack_iter, the alias's tp_iter (Objects/typevarobject.c:2164):
+        # ``*Alias`` is Unpack[Alias].
+        yield _typing_module().Unpack[self]
 
     def __getitem__(self, args):
         if not self.__type_params__:
