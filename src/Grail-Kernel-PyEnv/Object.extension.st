@@ -1,5 +1,38 @@
 Extension { #name : 'Object' }
 
+{ #category : 'Grail-Class Namespace' }
+Object class >> ___annotationScopeValueFor___: aSym [
+	"What a PEP 695 annotation scope in this class's body reads for aSym from
+	the class namespace -- CPython's ``__classdict__'' -- or nil when the
+	namespace has no such key.
+
+	While the body runs under a metaclass's __prepare__ mapping, that mapping
+	is the namespace, asked as LOAD_FROM_DICT_OR_GLOBALS asks it: a KeyError is
+	a miss and anything else it raises propagates (test_type_params
+	test_broken_class_namespace).  A miss there still tries the class, which
+	holds what Grail binds without offering it to the mapping.  The class's own
+	attributes are read raw and live, as CPython's cell becomes the type's own
+	dict once the class exists, so ``X.T = float'' after the class statement is
+	what a later read sees (test_modified_later).  On a class registered
+	canonically that store went to the session overlay, not the holder, so the
+	overlay's entry for this class comes first."
+
+	| namespace keyError value overlay |
+	namespace := self ___grailPendingNamespace___.
+	namespace isNil ifFalse: [
+		keyError := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #KeyError.
+		value := [namespace @env1:__getitem__: aSym @env0:asString]
+			@env0:on: keyError do: [:ex | ex @env0:return: nil].
+		value isNil ifFalse: [^ value]].
+	overlay := SessionTemps @env0:current @env0:at: #'GrailClassAttrOverlay' otherwise: nil.
+	overlay isNil ifFalse: [
+		value := (overlay @env0:at: self otherwise: nil)
+			@env0:ifNotNil: [:own | own @env0:at: aSym otherwise: nil].
+		value isNil ifFalse: [^ value]].
+	^ self ___grailNsHolderValueFor___: aSym
+
+]
+
 { #category : 'Grail-Augmented Assignment' }
 Object class >> ___binaryOpStringFor___: bSel [
 	"The operator a binary dunder selector implements: #'__add__:' -> '+'."
