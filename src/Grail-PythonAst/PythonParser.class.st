@@ -7101,6 +7101,12 @@ PythonParser >> parseSimpleStatement [
 	(tok isKeyword: 'break') ifTrue: [^self parseBreak].
 	(tok isKeyword: 'continue') ifTrue: [^self parseContinue].
 	(tok isKeyword: 'yield') ifTrue: [^self parseYieldStatement].
+	"``type'' is a soft keyword (PEP 695), and a far more heavily used
+	identifier than ``match'' -- it is a BUILTIN.  See atTypeAliasStatement.  A
+	SIMPLE statement in CPython's grammar, so it is recognised here, where a
+	one-line suite and a ``;'' run reach it too: ``def f(): type X = int'' was
+	invalid syntax, the check standing only at the head of a full statement."
+	self atTypeAliasStatement ifTrue: [^self parseTypeAlias].
 
 	"Assignment or expression statement"
 	^self parseExpressionOrAssignment
@@ -7335,11 +7341,7 @@ PythonParser >> parseStatement [
 	here, by lookahead -- see atMatchStatement."
 	self atMatchStatement ifTrue: [^Array with: self parseMatch].
 
-	"``type'' is a soft keyword too (PEP 695), and a far more heavily used
-	identifier than ``match'' -- it is a BUILTIN.  See atTypeAliasStatement."
-	self atTypeAliasStatement ifTrue: [^Array with: self parseTypeAlias].
-
-	"Simple statements"
+	"Simple statements -- a type alias among them (parseSimpleStatement)."
 	^self parseSimpleStatements
 
 ]
