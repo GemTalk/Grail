@@ -391,6 +391,19 @@ PythonParser class >> parseEvalInput: aString [
 
 ]
 
+{ #category : 'Grail-parsing - type params' }
+PythonParser >> ___addToken: anIndex renaming: aDictionary into: out [
+	"Append the token at anIndex -- or, for a NAME aDictionary renames, its new
+	spelling, placed where the token was."
+
+	| token |
+	token := tokens at: anIndex.
+	(token isName and: [aDictionary includesKey: token value asString])
+		ifTrue: [self ___synth: (aDictionary at: token value asString) like: token into: out]
+		ifFalse: [out add: token]
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser >> ___atEvalInputEnd___ [
 	"Whether eval input has nothing left but newlines and its end marker.  A
@@ -1075,13 +1088,19 @@ PythonParser >> ___emitParameters: segments withDefaultsAs: aPrefix like: ref in
 ]
 
 { #category : 'Grail-parsing - type params' }
-PythonParser >> ___emitTypeParam: p like: ref into: out [
+PythonParser >> ___emitTypeParam: p like: ref into: out renaming: aDictionary [
 	"``T = ___typing___._grail_type_param(kind, 'T', bound, constraints,
 	default)'', each of the last three a lambda over its tokens or None.  A
-	TypeVarTuple default written ``= *X'' is CPython's ``next(iter(X))''."
+	TypeVarTuple default written ``= *X'' is CPython's ``next(iter(X))''.
 
-	self ___synth: (p at: 2) , ' = ___typing___._grail_type_param(' , (p at: 1) printString
-		, ', ''' , (p at: 2) , ''''
+	aDictionary maps a parameter's name to the spelling its scope binds, and
+	every NAME the bound and default tokens hold is read through it: a generic
+	class's private parameter is bound mangled (___rewriteTypeParamStatement___)
+	while the TypeVar keeps the name as written."
+
+	self ___synth: (aDictionary at: (p at: 2) ifAbsent: [p at: 2])
+			, ' = ___typing___._grail_type_param(' , (p at: 1) printString
+			, ', ''' , (p at: 2) , ''''
 		like: ref into: out.
 	3 to: 5 do: [:n |
 		| range |
@@ -1093,11 +1112,12 @@ PythonParser >> ___emitTypeParam: p like: ref into: out [
 				(n = 5 and: [(tokens at: range first) isOp: '*'])
 					ifTrue: [
 						self ___synth: 'lambda: next(iter(' like: ref into: out.
-						range allButFirst do: [:k | out add: (tokens at: k)].
+						range allButFirst do: [:k |
+							self ___addToken: k renaming: aDictionary into: out].
 						self ___synth: '))' like: ref into: out]
 					ifFalse: [
 						self ___synth: 'lambda:' like: ref into: out.
-						range do: [:k | out add: (tokens at: k)]]]].
+						range do: [:k | self ___addToken: k renaming: aDictionary into: out]]]].
 	self ___synth: ')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out
 
@@ -2697,10 +2717,21 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 	``def f[A](a=list[A]())'' stays a NameError.  The global / nonlocal
 	declaration makes the def bind the function's own name, so a body that
 	calls f reaches the decorated f, as in CPython, not a scope-local copy.
-	A def in a class body -- a method -- is not rewritten here."
+
+	A METHOD -- a def directly in a class body -- is rewritten too, inside a
+	synthesized ``if True:'' and without the declaration: its name is a class
+	attribute, bound by the class body's own assignment.  As for a generic
+	class there (___rewriteTypeParamStatement___), the scope function is then
+	emitted inline in the class build, so its bounds see the class namespace,
+	and the method is the plain function it returns -- which a class attribute
+	binds on an instance read as CPython's does.  It used to keep its parameter
+	NAMES only, its bounds evaluated in the module's globals: T was a NameError
+	in its annotations and body, and a bound naming a class attribute or an
+	enclosing local was lost (test_type_params test_method_access_01,
+	test_bound)."
 
 	| defAt nameTok lb rb pOpen pClose colon range params name w ref out names
-	  segments defaults |
+	  segments defaults inClassBody |
 	defAt := ((tokens at: i) isKeyword: 'async') ifTrue: [i + 1] ifFalse: [i].
 	defAt + 2 > tokens size ifTrue: [^ false].
 	nameTok := tokens at: defAt + 1.
@@ -2730,19 +2761,25 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 		(self ___topLevelEqualsIn___: seg) ifNotNil: [:at |
 			defaults add: (seg copyFrom: at + 1 to: seg size)]].
 	out := OrderedCollection new.
+	inClassBody := classNesting > 0.
+	inClassBody ifTrue: [
+		self ___synth: 'if True:' like: ref into: out.
+		self ___synthType: #NEWLINE like: ref into: out.
+		self ___synthType: #INDENT like: ref into: out].
 	self ___synth: 'def ' , w , '(' like: ref into: out.
 	1 to: defaults size do: [:n |
 		self ___synth: '___tpdefault' , n printString , '___,' like: ref into: out].
 	self ___synth: '):' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #INDENT like: ref into: out.
-	self ___synth: (((variableStack size > 1) and: [((globalStack last) includes: name asSymbol) not])
-			ifTrue: ['nonlocal '] ifFalse: ['global ']) , name
-		like: ref into: out.
-	self ___synthType: #NEWLINE like: ref into: out.
+	inClassBody ifFalse: [
+		self ___synth: (((variableStack size > 1) and: [((globalStack last) includes: name asSymbol) not])
+				ifTrue: ['nonlocal '] ifFalse: ['global ']) , name
+			like: ref into: out.
+		self ___synthType: #NEWLINE like: ref into: out].
 	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
-	params do: [:p | self ___emitTypeParam: p like: ref into: out].
+	params do: [:p | self ___emitTypeParam: p like: ref into: out renaming: Dictionary new].
 	i to: defAt do: [:k | out add: (tokens at: k)].
 	out add: nameTok.
 	out add: (tokens at: pOpen).
@@ -2757,6 +2794,7 @@ PythonParser >> ___rewriteGenericFunctionAt___: i decorators: decoRanges [
 	self ___synth: 'return ' , name like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #DEDENT like: ref into: out.
+	inClassBody ifTrue: [self ___synthType: #DEDENT like: ref into: out].
 	self ___synth: name , ' =' like: ref into: out.
 	decoRanges do: [:r |
 		(r at: 1) to: (r at: 2) do: [:k | out add: (tokens at: k)].
@@ -2819,18 +2857,23 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	__qualname__ (CallAst class >> ___isTypeParamScope___:), as CPython's
 	annotation scope is.
 
-	A CLASS directly in a class body (classNesting > 0) is NOT rewritten: it
-	keeps its parameter NAMES only.  An ALIAS there is -- its scope function
-	is a def the class body calls, and its lazy value reads the class's own
-	parameters, which a class-body def sees through the class's closure cells
-	(stored before the body runs; see ClassDefAst >>
-	___emitClosureCellStoresOn:className:saved:savedWrite:).  That is
-	test_type_aliases' ``class Parent[A]: type TA1[B] = dict[A, B]''.
-	Answers whether it rewrote anything; when it did, the tokens at
-	``position'' now start the scope function's ``def''."
+	Directly in a CLASS BODY (classNesting > 0) the scope function goes inside
+	a synthesized ``if True:''.  CPython's annotation scope there sees the
+	class namespace (Python/symtable.c:2872): ``class C: class Base: ...;
+	class Child[T](Base)'' reads C's Base, and ``type A[X] = T'' after ``T =
+	int'' C's T.  A class-body def compiled as a METHOD has no hold on the
+	class it is defined in -- the body calls it with no receiver -- while a def
+	in a class-body ``if'' is emitted inline in the class build, as a closure
+	that sees the class's own variable (FunctionDefAst >>
+	printSmalltalkClassBodyRuntimeDefOn:), which is what NameAst >>
+	___annotationScopeClass___ reads it through.  A generic CLASS there used to
+	keep its parameter names only, so its own T was a NameError in its body
+	and its bases had no Generic[T].  Answers whether it rewrote anything; when
+	it did, the tokens at ``position'' now start the scope function's
+	statement."
 
 	| i decoRanges kwTok nameTok isClass lb rb params w ref out names c indent
-	  bodyStart bodyEnd end name segs valueEnd |
+	  bodyStart bodyEnd end name segs valueEnd inClassBody bindings |
 	i := position.
 	decoRanges := OrderedCollection new.
 	[i <= tokens size and: [(tokens at: i) isOp: '@']] whileTrue: [
@@ -2844,13 +2887,12 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	"A generic FUNCTION outside a class body has a rewrite of its own."
 	((kwTok isKeyword: 'def') or: [(kwTok isKeyword: 'async')
 		and: [(tokens at: i + 1) isKeyword: 'def']]) ifTrue: [
-			(classNesting > 0 or: [self ___parsingForAst___]) ifTrue: [^ false].
+			self ___parsingForAst___ ifTrue: [^ false].
 			^ self ___rewriteGenericFunctionAt___: i decorators: decoRanges].
 	isClass := kwTok isKeyword: 'class'.
 	(isClass and: [self ___parsingForAst___]) ifTrue: [^ false].
 	(isClass or: [decoRanges isEmpty and: [kwTok isName and: [kwTok value = 'type']]])
 		ifFalse: [^ false].
-	(isClass and: [classNesting > 0]) ifTrue: [^ false].
 	nameTok := tokens at: i + 1.
 	(nameTok isName and: [(tokens at: i + 2) isOp: '[']) ifFalse: [^ false].
 	lb := i + 2.
@@ -2862,15 +2904,32 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 	name := nameTok value asString.
 	w := '___generic_parameters_of_' , name , '___'.
 	ref := kwTok.
+	"A CLASS's private parameters are bound MANGLED by the class's own name --
+	 ``class Foo[__T]'' binds _Foo__T, which is what ``__T'' in the body reads --
+	 and only they are: CPython's type-parameter scope for a class mangles its
+	 parameter names and nothing else (Python/symtable.c:1926-1936, 3209-3222),
+	 while each TypeVar keeps its written name.  The bounds, bases and keywords
+	 are rewritten to the mangled spelling here because the parser reads them
+	 outside the class body, where it mangles nothing.  An alias's parameters
+	 take whatever the parser gives every name in its scope function."
+	bindings := Dictionary new.
+	isClass ifTrue: [
+		params do: [:p |
+			bindings at: (p at: 2) put: (AbstractNode ___mangle___: (p at: 2) forClass: name) asString]].
 	names := String new.
-	params do: [:p | names := names , (p at: 2) , ','].
+	params do: [:p | names := names , (bindings at: (p at: 2) ifAbsent: [p at: 2]) , ','].
 	out := OrderedCollection new.
+	inClassBody := classNesting > 0.
+	inClassBody ifTrue: [
+		self ___synth: 'if True:' like: ref into: out.
+		self ___synthType: #NEWLINE like: ref into: out.
+		self ___synthType: #INDENT like: ref into: out].
 	self ___synth: 'def ' , w , '():' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #INDENT like: ref into: out.
 	self ___synth: '___typing___ = __import__(''_typing'')' like: ref into: out.
 	self ___synthType: #NEWLINE like: ref into: out.
-	params do: [:p | self ___emitTypeParam: p like: ref into: out].
+	params do: [:p | self ___emitTypeParam: p like: ref into: out renaming: bindings].
 	isClass
 		ifTrue: [
 			c := rb + 1.
@@ -2884,12 +2943,12 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 			((tokens at: c) isOp: ':') ifFalse: [^ false].
 			self ___synth: 'class ' , name , '(' like: ref into: out.
 			(segs reject: [:s | self ___isKeywordArgument___: s]) do: [:s |
-				s do: [:k | out add: (tokens at: k)].
+				s do: [:k | self ___addToken: k renaming: bindings into: out].
 				self ___synth: ',' like: ref into: out].
 			self ___synth: '___typing___._grail_generic_base((' , names , '))' like: ref into: out.
 			(segs select: [:s | self ___isKeywordArgument___: s]) do: [:s |
 				self ___synth: ',' like: ref into: out.
-				s do: [:k | out add: (tokens at: k)]].
+				s do: [:k | self ___addToken: k renaming: bindings into: out]].
 			self ___synth: '):' like: ref into: out.
 			self ___synthType: #NEWLINE like: ref into: out.
 			self ___synthType: #INDENT like: ref into: out.
@@ -2937,6 +2996,7 @@ PythonParser >> ___rewriteTypeParamStatement___ [
 			self ___synth: ', (' , names , '))' like: ref into: out].
 	self ___synthType: #NEWLINE like: ref into: out.
 	self ___synthType: #DEDENT like: ref into: out.
+	inClassBody ifTrue: [self ___synthType: #DEDENT like: ref into: out].
 	self ___synth: name , ' =' like: ref into: out.
 	decoRanges do: [:r |
 		(r at: 1) to: (r at: 2) do: [:k | out add: (tokens at: k)].

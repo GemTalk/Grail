@@ -20,6 +20,14 @@ Class {
 	]
 }
 
+{ #category : 'Grail-Annotations' }
+SuiteAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ifNotNil: [:statements |
+		statements do: [:each | each ___addScopeAnnotationsTo___: aCollection]]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 SuiteAst >> ___emitIRStatementsOn___: aBuilder [
 	"Emit each statement into the current builder context; stop after an

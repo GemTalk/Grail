@@ -2146,7 +2146,7 @@ Enum class >> ___grailFunctional: cls positional: positional keywords: keywords 
 	delegates to the metaclass __getitem__, which both the Enum and
 	IntEnum metaclass chains implement."
 
-	| className names start pairs newCls byValue byName members gnvFnValue |
+	| className names start pairs newCls byValue byName members gnvFnValue il previous |
 	className := (positional @env0:at: 1) @env0:asSymbol.
 	"``names'' may be positional[2] or the ``names='' keyword (Enum('bad',
 	names=0)); read both so a non-iterable value under either form reaches the
@@ -2231,21 +2231,34 @@ Enum class >> ___grailFunctional: cls positional: positional keywords: keywords 
 	AbstractPyInt/Str/Float storage for int/str/float), then merge cls as a
 	secondary base so Enum's protocol + the MI record (which ___grailMemberTypeFor:
 	reads to recover the mix-in) are installed.  A non-class type= value (or none)
-	keeps the plain ``cls ___subclass___:'' path unchanged."
+	keeps the plain ``cls ___subclass___:'' path unchanged.
+
+	A call while a module body runs keeps its class across rebuilds of that
+	module, as a class statement enum does (#1950): each branch CLAIMS the
+	creation just below it (importlib class >> ___claimBuiltClass___:, #1802),
+	so a rebuild hands back the class the previous build made, namespace reset,
+	and the members are rebuilt onto it -- keeping their objects, below.  The
+	claim is cleared after, in case the creation did not take it."
+	il := Python @env0:at: #importlib.
 	newCls := (keywords ~~ nil
 		and: [(keywords @env0:includesKey: 'type')
 		and: [(keywords @env0:at: 'type') isKindOf: Behavior]])
-		ifTrue: [ | typeBase il baseArray sb nc |
+		ifTrue: [ | typeBase baseArray sb nc |
 			typeBase := keywords @env0:at: 'type'.
-			il := Python @env0:at: #importlib.
 			baseArray := Array @env0:with: typeBase with: cls.
 			sb := il @env0:___selectStorageBase___: baseArray.
+			il @env0:___claimBuiltClass___: className.
 			nc := sb ___subclass___: className instVarNames: #()
 				classInstVarNames: #( #'___dynInstVars___' ).
+			il @env0:___claimBuiltClass___: nil.
 			il @env0:___mergeSecondaryBases___: nc bases: baseArray.
 			nc]
-		ifFalse: [cls ___subclass___: className instVarNames: #()
-			classInstVarNames: #( #'___dynInstVars___' )].
+		ifFalse: [ | nc |
+			il @env0:___claimBuiltClass___: className.
+			nc := cls ___subclass___: className instVarNames: #()
+				classInstVarNames: #( #'___dynInstVars___' ).
+			il @env0:___claimBuiltClass___: nil.
+			nc].
 	"CPython's functional API produces an ORDINARY class, so ``setattr(E, ...)''
 	-- and reading E.__module__ -- must work on it.  Grail's per-class attribute
 	store is a ``___dynInstVars___'' classInstVar plus its accessor pair, which
@@ -2317,6 +2330,12 @@ Enum class >> ___grailFunctional: cls positional: positional keywords: keywords 
 				name: pName descriptor: (p @env0:at: 2)]
 			ifFalse: [kept @env0:add: p]].
 	pairs := kept ] @env0:value.
+	"The previous build's members, by name, when newCls is a class a rebuild
+	reused: as in the class-syntax builder (___grailBuildMembers:names:), the
+	committed record first, else what the namespace reset set aside."
+	previous := (Enum ___grailRecordFor: newCls) @env0:ifNotNil: [:rec | rec @env0:at: 2].
+	[:stashed | previous @env0:isNil ifTrue: [previous := stashed]]
+		@env0:value: (Enum ___grailStashedMembersOf: newCls).
 	byValue := KeyValueDictionary @env0:new.
 	"Ordered, as in ___grailBuildMembers:names:."
 	byName := (Python @env0:at: #PyDict) @env0:new.
@@ -2428,6 +2447,8 @@ Enum class >> ___grailFunctional: cls positional: positional keywords: keywords 
 						ifFalse: [newCls @env0:basicNew].
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
+					"A rebuild keeps the member object stored data refers to."
+					member := Enum ___grailKeepPreviousMember: member named: nameStr in: previous.
 					byValue @env0:at: effVal put: member.
 					"A Flag member is canonical (iteration/len/reversed/_member_names_)
 					ONLY when its value is a SINGLE bit.  A zero-valued member and any

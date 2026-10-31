@@ -1,7 +1,7 @@
 iferr 1 stk
 login
 run
-| args dashDashOfs haveDashD status systemExitStatus describeException |
+| args dashDashOfs haveDashD status systemExitStatus describeException reportUncaught |
 " Search for  --  in command line, expect args before that to be topaz config, etc
 
   If -D is on command line after -- and script is interactive, pass errors to topaz for debugging.
@@ -75,6 +75,35 @@ describeException := [:exc |
                     on: Error, BaseException do:[:inner |
                         inner return: (exc messageText ifNil:[ exc description ]) ]]
         ifFalse:[ exc messageText ifNil:[ exc description ]]].
+" How an uncaught exception is reported: through sys.excepthook first, as
+  CPython's _PyErr_PrintEx does (issue #1954).  The launcher used to print
+  every one itself, so a program's own  sys.excepthook = hook  was never
+  called.  sys >> ___reportUncaught___: calls the hook and answers true when it
+  reported the exception, the SystemExit when it called sys.exit(), or the text
+  to print ahead of the exception's own traceback -- empty when the hook is the
+  original one, CPython's preamble when it is missing or raised.  A failure in
+  that machinery prints the traceback exactly as before.
+
+  Called AFTER the handler has unwound, not inside it: inside, the frames that
+  raised are still on the stack beneath the hook, and a hook that raised
+  reported them as its own.  The raise-time capture the traceback is built from
+  is on the exception, so nothing is lost by unwinding first.
+
+  Answers nil when the report is done, or the exit status when the hook exited. "
+reportUncaught := [:exc |
+    | reported |
+    reported := (exc isKindOf: BaseException)
+        ifTrue:[ [ (sys @env1:instance) @env1:___reportUncaught___: exc ]
+                    on: Error, BaseException do:[:inner | inner return: '' ] ]
+        ifFalse:[ '' ].
+    (reported isKindOf: SystemExit)
+        ifTrue:[ systemExitStatus value: reported ]
+        ifFalse:[
+            reported == true ifFalse:[
+                GsFile stdout flush .
+                reported isEmpty ifFalse:[ GsFile stderr nextPutAsUtf8: reported ].
+                GsFile stderr nextPutAsUtf8: (describeException value: exc); lf; flush ].
+            nil ] ].
 " Console output: the #GrailConsole override, NOT  Transcript := GsFile stdout .
 
   Two reasons the override is right and the reassignment was wrong.
@@ -107,7 +136,7 @@ SessionTemps current at: #'GrailConsole'
     haveDashD := false .
     dashDashOfs < args size ifTrue:[
         " after '--'  we expect optional -D, then -V, or -m <module>, or a filename "
-        | anArg path haveDashM moduleName argIdx label argv0 |
+        | anArg path haveDashM moduleName argIdx label argv0 uncaught |
         haveDashM := false .
         argIdx := dashDashOfs + 1 .
         anArg := args at: argIdx .
@@ -228,7 +257,13 @@ SessionTemps current at: #'GrailConsole'
                 ex return: nil .
             ].
 
-            " On STDERR, where CPython puts a traceback. "
+            " Reported once the handler has unwound -- see reportUncaught. "
+            (haveDashD or:[ (System gemConfigurationAt: 'GEM_LISTEN_FOR_DEBUG') == true]) ifFalse:[
+                uncaught := ex .
+                ex return: nil .
+            ].
+
+            " -D: on STDERR, where CPython puts a traceback. "
             msg := describeException value: ex .
             GsFile stdout flush .
             GsFile stderr flush .
@@ -242,10 +277,9 @@ SessionTemps current at: #'GrailConsole'
             status := 1 .
             ex return: nil .
             ].
-            GsFile stderr nextPutAsUtf8: msg; lf ; flush.
-            status := 1 .
-            ex return: nil .
         ].
+        uncaught == nil ifFalse:[
+            status := (reportUncaught value: uncaught) ifNil:[ 1 ] ].
         ].
         ].
     ] ifFalse: [
@@ -263,7 +297,7 @@ SessionTemps current at: #'GrailConsole'
         running := true.
         lfCodepoint := Character lf codePoint .
         [running] whileTrue: [
-            | prompt line |
+            | prompt line uncaught |
             prompt := inContinuation ifTrue: ['... '] ifFalse: ['>>> '].
             line := GsFile stdin
                 nextLineTo: lfCodepoint
@@ -284,6 +318,7 @@ SessionTemps current at: #'GrailConsole'
             line := line trimTrailingSeparators.
             inContinuation := line isEmpty not and: [inContinuation or: [line endsWith: ':']].
             inContinuation ifFalse: [
+                uncaught := nil.
                 [
                     | module result |
                     " Under '<stdin>', which is what CPython's REPL names the
@@ -315,7 +350,6 @@ SessionTemps current at: #'GrailConsole'
                     ].
                     bufferStream := WriteStream on: Unicode16 new.
                 ] on: Error, BaseException do: [:ex |
-                    | msg |
                     (ex isKindOf: ExitClientError) ifTrue: [ex pass].
                     " Kept from the original.  Break is a ControlInterrupt, so it
                       is outside this handler's set and reaches topaz instead --
@@ -330,12 +364,17 @@ SessionTemps current at: #'GrailConsole'
                         running := false.
                         ex return: nil.
                     ].
-                    msg := describeException value: ex .
-                    GsFile stdout flush .
-                    GsFile stderr nextPutAsUtf8: msg; lf; flush.
+                    " Reported once the handler has unwound, as a script's is. "
+                    uncaught := ex .
                     bufferStream := WriteStream on: Unicode16 new.
                     ex return: nil.
                 ].
+                uncaught == nil ifFalse:[
+                    | exitStatus |
+                    exitStatus := reportUncaught value: uncaught .
+                    exitStatus == nil ifFalse:[
+                        status := exitStatus .
+                        running := false ] ].
             ].
             ].
         ].

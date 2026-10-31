@@ -32,7 +32,7 @@ ClassTablesChunkedTestCase >> ___splitTablesOf___: aClass [
 
 	^ #(#'___methodDocTable___' #'___methodCodeTable___' #'___methodSignatureTable___'
 		#'___methodDefaultKeysTable___' #'___methodReceiverTable___'
-		#'___methodAnnotationsTable___' #'___methodTypeParamsTable___')
+		#'___methodAnnotationsTable___')
 			select: [:sel |
 				(aClass class
 					whichClassIncludesSelector: ((sel copyFrom: 1 to: sel size - 3) , '_2___:') asSymbol
@@ -52,12 +52,14 @@ ClassTablesChunkedTestCase >> tearDown [
 ClassTablesChunkedTestCase >> testEveryTableReadsTheSameWhenSplit [
 	"Lose or alter nothing: at a budget small enough to split every table,
 	every method still has its docstring, code object, signature, defaults,
-	receiver, annotations and type parameters, as CPython reports them."
+	receiver, annotations and type parameters, as CPython reports them.  A
+	generic method's type parameters are no longer a table: it is the function
+	its type-parameter scope returns, carrying its own."
 
 	| mod split |
 	mod := self ___load___: 300.
 	split := self ___splitTablesOf___: (self ___holderOf___: mod).
-	self assert: split size = 7
+	self assert: split size = 6
 		description: 'a 300-byte budget split only ' , split printString
 			, ', so the checks below would read single accessors and prove nothing'.
 	self

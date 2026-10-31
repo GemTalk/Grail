@@ -9,6 +9,20 @@ ExecBlock >> ___call__: positional kw: keywords [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+ExecBlock >> ___deleteAnnotations___ [
+	"``del f.__annotations__'' -- or ``f.__annotations__ = None'', the same thing
+	in CPython: the dict goes, __annotate__ reads None, and the next read answers
+	a new empty dict.  Never an error, a second delete included."
+
+	| attrs |
+	attrs := ExecBlock @env0:___pyAttrsClass___.
+	attrs @env0:removeSlotAt: self attr: '__annotations__'.
+	attrs @env0:slotAt: self attr: '__annotate__' put: ExecBlock @env0:___pyNone___.
+	^ ExecBlock @env0:___pyNone___
+
+]
+
 { #category : 'Grail-Callable' }
 ExecBlock >> ___pyCallValue___: positional kw: kwargs [
 	"Polymorphic Python call.  A Smalltalk block stored as a Python
@@ -31,6 +45,43 @@ ExecBlock >> ___pyCallValue___: positional kw: kwargs [
 	^ self @env0:numArgs == 2
 		@env0:ifTrue: [self @env0:value: positional value: kwargs]
 		@env0:ifFalse: [self @env0:valueWithArguments: positional]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+ExecBlock >> ___setAnnotate___: aValue [
+	"``f.__annotate__ = v'': None or a callable (the slot writer refuses anything
+	else).  A callable DROPS the cached __annotations__, so the next read calls
+	it; None keeps the cache, as CPython's setter does.  Grail kept the cache
+	whatever was assigned, so the new annotate function was never called."
+
+	| attrs |
+	attrs := ExecBlock @env0:___pyAttrsClass___.
+	attrs @env0:slotAt: self attr: '__annotate__' put: aValue.
+	aValue == ExecBlock @env0:___pyNone___ ifFalse: [
+		attrs @env0:removeSlotAt: self attr: '__annotations__'].
+	^ ExecBlock @env0:___pyNone___
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+ExecBlock >> ___setAnnotations___: aValue [
+	"``f.__annotations__ = d'': a dict (the slot writer refuses anything else),
+	and __annotate__ RETIRES -- it reads None afterwards, as CPython's setter
+	leaves it.  Otherwise the STRING format, which asks __annotate__ first, kept
+	answering the ORIGINAL annotations.  On the Python assignment and not in the
+	slot writer: the getter memoises through that writer, so retiring there fired
+	on the first READ and broke MUTATING the dict (``f.__annotations__['x'] =
+	str'' must leave __annotate__ alone -- test_modify_annotations).  Stored as
+	None explicitly: a nil per-object entry reads as absent and falls back to the
+	def-time annotate.  None is a delete, as in CPython."
+
+	| attrs |
+	aValue == ExecBlock @env0:___pyNone___ ifTrue: [^ self ___deleteAnnotations___].
+	attrs := ExecBlock @env0:___pyAttrsClass___.
+	attrs @env0:slotAt: self attr: '__annotations__' put: aValue.
+	attrs @env0:slotAt: self attr: '__annotate__' put: ExecBlock @env0:___pyNone___.
+	^ ExecBlock @env0:___pyNone___
 
 ]
 
@@ -117,8 +168,11 @@ ExecBlock >> __annotations__ [
 	(annotate == nil @env0:or: [annotate == ExecBlock @env0:___pyNone___]) ifTrue: [
 		^ attrs @env0:slotAt: self attr: '__annotations__'
 			put: (KeyValueDictionary @env0:new)].
+	"Called as any Python callable is -- an ASSIGNED __annotate__ need not be a
+	def-time block -- and its answer must be a dict, as CPython checks
+	(func_get_annotation_dict, Objects/funcobject.c)."
 	^ attrs @env0:slotAt: self attr: '__annotations__'
-		put: (annotate @env0:value: { 1 } value: nil)
+		put: (attrs @env0:___annotationsComputedBy___: annotate)
 
 ]
 
@@ -197,6 +251,10 @@ ExecBlock >> __delattr__: name [
 
 	(name @env0:asSymbol == #'__kwdefaults__') ifTrue: [
 		^ self @env1:___setKwDefaults___: ExecBlock @env0:___pyNone___].
+	"``del f.__annotations__'' is legal and never raises; ``del f.__annotate__''
+	is refused by the removal below (ExecBlockAttrs class >>
+	___checkFunctionDelete___:)."
+	(name @env0:asSymbol == #'__annotations__') ifTrue: [^ self ___deleteAnnotations___].
 	((ExecBlock @env0:___pyAttrsClass___) @env0:removeAt: self attr: name)
 		ifTrue: [^ ExecBlock @env0:___pyNone___].
 	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError') ___signal___:
@@ -396,19 +454,10 @@ ExecBlock >> __setattr__: name _: value [
 	captures) rather than overwriting the slot -- see ___setKwDefaults___:."
 	(name @env0:asSymbol == #'__kwdefaults__') ifTrue: [
 		^ self @env1:___setKwDefaults___: value].
-	"ASSIGNING __annotations__ RETIRES __annotate__, as CPython's function setter
-	 does (measured: after ``f.__annotations__ = d'', f.__annotate__ is None).
-	 Otherwise the old annotate function survived the assignment, and the
-	 STRING format -- which asks __annotate__ first -- kept answering the
-	 ORIGINAL annotations.  HERE, on the Python assignment, and not in the slot
-	 writer: the __annotations__ GETTER memoises through that same writer, so
-	 retiring there fired on the first READ and broke MUTATING the dict
-	 (``f.__annotations__['x'] = str'' must leave __annotate__ alone --
-	 test_modify_annotations).  Stored as None explicitly: a nil per-object
-	 entry reads as absent and falls back to the def-time annotate."
-	(name @env0:asSymbol == #'__annotations__') ifTrue: [
-		(ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: '__annotate__'
-			put: ExecBlock @env0:___pyNone___].
+	"The PEP 649 pair has the setters' rules, not a plain store -- see
+	___setAnnotations___: and ___setAnnotate___:."
+	(name @env0:asSymbol == #'__annotations__') ifTrue: [^ self ___setAnnotations___: value].
+	(name @env0:asSymbol == #'__annotate__') ifTrue: [^ self ___setAnnotate___: value].
 	^ (ExecBlock @env0:___isSlotName___: name)
 		@env0:ifTrue: [
 			(ExecBlock @env0:___pyAttrsClass___) @env0:slotAt: self attr: name put: value]

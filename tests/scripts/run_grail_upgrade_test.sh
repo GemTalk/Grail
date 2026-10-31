@@ -317,7 +317,8 @@ run_case() {            # run_case <case> -- 0 if every check passed
     fi
 
     log "verify"
-    in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1
+    GRAIL_UPGRADE_CASE=$name in_grail ./grail "$WORK/app/verify_phase.py" "$d/expected.json" \
+        ${probe[@]+"${probe[@]}"} > "$d/verify.log" 2>&1
     in_ns_app verify "$d/expected-ns.json" > "$d/verify-ns.log" 2>&1
     GRAIL_UPGRADE_PROBE=$probe_m in_grail topaz -lq -S "$PROJECT_ROOT/tests/upgrade/check_classes.gs" \
         < /dev/null > "$d/classes.log" 2>&1

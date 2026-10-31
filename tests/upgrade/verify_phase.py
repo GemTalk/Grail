@@ -41,6 +41,27 @@ FAILED = []
 # found and not yet fixed.
 KNOWN = {}
 
+# Gaps of an upgrade FROM A RELEASE alone (the release=<ref> case, which
+# run_grail_upgrade_test.sh names in GRAIL_UPGRADE_CASE): what the older Grail
+# wrote cannot be repaired by this one, and noop and synthetic still gate it.
+#
+# A functional-API enum with a mixin (``Enum('Weight', ..., type=int)'') keeps
+# its members across a rebuild by finding the previous ones in the record
+# committed with its class (#1950).  A Grail before a6bef49c kept a mixin enum's
+# record in the session alone, and the functional builder binds no member as a
+# class attribute, so on the first upgrade from such a Grail nothing names the
+# stored members and the rebuild makes new ones.  They equal the stored ones by
+# value, so lookups still find them (lookup.enum_member.dict/set.weight pass);
+# only identity is lost.
+_FROM_OLD_RELEASE = ('the members were written by a Grail that committed no record '
+                     'for a mixin enum (before a6bef49c)')
+KNOWN_FROM_RELEASE = {
+    'type.enum_member_identity.functional_int_mixin': _FROM_OLD_RELEASE,
+    'lookup.enum_member.stored_key_is_member.weight': _FROM_OLD_RELEASE,
+}
+if os.environ.get('GRAIL_UPGRADE_CASE', '').startswith('release='):
+    KNOWN.update(KNOWN_FROM_RELEASE)
+
 
 def check(name, fn):
     try:
@@ -101,9 +122,16 @@ check('type.enum_member_identity.float_mixin',
 check('type.enum_member_identity.int_mixin',
       lambda: (stored['rank'] is upgrade_app.Rank.HIGH,
                'stored Rank.HIGH is not the current Rank.HIGH'))
+check('type.enum_member_identity.functional',
+      lambda: (stored['shape'] is upgrade_app.Shape.SQUARE,
+               'stored Shape.SQUARE is not the current Shape.SQUARE'))
+check('type.enum_member_identity.functional_int_mixin',
+      lambda: (stored['weight'] is upgrade_app.Weight.HEAVY,
+               'stored Weight.HEAVY is not the current Weight.HEAVY'))
 for _cls, _name, _tag in (('Color', 'GREEN', 'color'), ('Mode', 'WRITE', 'mode'),
                           ('Level', 'HIGH', 'level'), ('Size', 'LARGE', 'size'),
-                          ('Rank', 'HIGH', 'rank')):
+                          ('Rank', 'HIGH', 'rank'), ('Shape', 'SQUARE', 'shape'),
+                          ('Weight', 'HEAVY', 'weight')):
     check('lookup.enum_member.dict.' + _tag,
           lambda c=_cls, n=_name, t=_tag: expect_equal(
               stored['enum_keyed_dict'].get(getattr(getattr(upgrade_app, c), n), '<missing>'), t))

@@ -80,16 +80,13 @@ AttributeStoreTestCase >> testBoundSetattrStoresInsteadOfKillingTheGem [
 	| mod |
 	mod := self loadExplicitDunderFixture.
 	self assert: (mod @env1:bound_setattr_stores) equals: 'value 1'.
-	"THE RETURN VALUE DIVERGES, and it is written down here rather than
-	quietly asserted: CPython's object.__setattr__ answers None, Grail
-	answers the value it stored.  ___pyAttrStore___ returns aValue on
-	purpose, so codegen can use a store as an expression (chained
-	assignment, tuple unpack), and object >> __setattr__:_: hands that
-	straight back.  Pre-existing -- the crash simply hid it -- and changing
-	it means changing a return the assignment codegen reads, which is its
-	own change with its own blast radius.  builtins.setattr already answers
-	None (testSetattrReturnsNone); the dunder does not."
-	self assert: (mod @env1:bound_setattr_returns_none) equals: 'value 1'
+	"The return is CPython's None.  It used to be the stored value, written
+	down here as a divergence: ___pyAttrStore___ returns aValue so codegen
+	can use a store as an expression, and object >> __setattr__:_: handed it
+	straight back.  The dunder now answers None while ___pyAttrStore___ still
+	answers the value, and a chained assignment through a class's own
+	__setattr__ still assigns (tests/python/setattr_delattr_answer_none.py)."
+	self assert: (mod @env1:bound_setattr_returns_none) equals: 'value None'
 
 ]
 
@@ -168,7 +165,7 @@ AttributeStoreTestCase >> testEveryExplicitDunderCallShapeMatchesCPython [
 
 	| mod |
 	mod := self loadExplicitDunderFixture.
-	self assert: (mod @env1:check_count) equals: 17.
+	self assert: (mod @env1:check_count) equals: 18.
 	self assert: (mod @env1:failures) equals: ''
 
 ]

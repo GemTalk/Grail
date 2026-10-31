@@ -3,7 +3,7 @@ Extension { #name : 'numbers' }
 { #category : 'Grail-Type Accessors' }
 numbers >> Complex [
 	"Return the Complex ABC."
-	^ self @env0:at: #Complex
+	^ self ___dataGlobalAt___: #Complex
 
 ]
 
@@ -59,28 +59,28 @@ numbers >> initialize_Real [
 { #category : 'Grail-Type Accessors' }
 numbers >> Integral [
 	"Return the Integral ABC."
-	^ self @env0:at: #Integral
+	^ self ___dataGlobalAt___: #Integral
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 numbers >> Number [
 	"Return the Number ABC."
-	^ self @env0:at: #Number
+	^ self ___dataGlobalAt___: #Number
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 numbers >> Rational [
 	"Return the Rational ABC."
-	^ self @env0:at: #Rational
+	^ self ___dataGlobalAt___: #Rational
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 numbers >> Real [
 	"Return the Real ABC."
-	^ self @env0:at: #Real
+	^ self ___dataGlobalAt___: #Real
 
 ]
 

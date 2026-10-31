@@ -911,6 +911,7 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 	result is class-checked instead of trusted."
 	(compiled @env0:isKindOf: GsNMethod) ifFalse: [compiled := nil].
 	per @env0:at: aClass put: compiled.
+	compiled == nil ifFalse: [self ___recordHome___: home ofRecompile: compiled].
 	^ compiled
 
 ]
@@ -1240,6 +1241,20 @@ UnboundMethod >> ___receiverNameForClass___: aClass [
 ]
 
 { #category : 'Grail-Calling' }
+UnboundMethod >> ___recordHome___: aClass ofRecompile: aMethod [
+	"Remember that aMethod, a recompile against a special receiver's class, is
+	aClass's method: its own inClass is that special class, where no closure
+	cell of aClass's body is stored (Object >> ___grailDefiningClassOf___:).
+	Session-local, as the recompile cache beside it is."
+
+	(SessionTemps @env0:current
+		@env0:at: #'GrailSpecialReceiverHomes'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+			@env0:at: aMethod put: aClass
+
+]
+
+{ #category : 'Grail-Calling' }
 UnboundMethod >> ___run: aBlock withDefaultOwner: aClass [
 	"Run aBlock -- a class-body method performed on a receiver that is NOT an
 	instance of its class -- with aClass as the place its parameter defaults
@@ -1334,9 +1349,13 @@ UnboundMethod >> ___tableEntryFor___: aClass table: aTableSelector [
 	chain := self ___lookupChainFrom___: aClass.
 	chain @env0:do: [:each |
 		"The tables are compiled in environment 1, so an env-0 ``canUnderstand:''
-		 would never see them."
-		((each @env0:class @env0:whichClassIncludesSelector: aTableSelector
-			environmentId: 1) ~~ nil) ifTrue: [
+		 would never see them.  Asked of the class that COMPILED the table, not
+		 of one inheriting it: the chain reaches that class anyway, and the
+		 annotations table builds blocks that read their class's namespace
+		 through ``self'' -- run on a subclass they read the subclass's.  No
+		 other table looks at its receiver, so for them nothing changes."
+		(each @env0:class @env0:includesSelector: aTableSelector
+			environmentId: 1) ifTrue: [
 				| tbl v |
 				tbl := [each @env0:perform: aTableSelector env: 1]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -1439,9 +1458,8 @@ UnboundMethod >> __annotations__ [
 	writes ``nm_tpl.__new__.__annotate__ = annotate'', and get_type_hints of a
 	NamedTuple's __new__ then read the (empty) compiled table instead
 	(test_typing test_get_type_hints_classes)."
-	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:fn |
-		fn ~~ None ifTrue: [^ fn @env1:___pyCallValue___: { 1 } kw: nil]]).
-	^ self ___annotationsForClass___: self ___metadataClass___
+	^ BoundMethod @env0:___annotationsOf___: self
+		ifNotAssigned: [self ___annotationsForClass___: self ___metadataClass___]
 
 ]
 
@@ -1580,6 +1598,13 @@ UnboundMethod >> __delattr__: name [
 	__delattr__: (#1714)."
 	((name @env0:asSymbol == #'__defaults__') or: [name @env0:asSymbol == #'__kwdefaults__'])
 		ifTrue: [^ self __setattr__: name _: ExecBlock @env0:___pyNone___].
+	"``del f.__annotate__'' is refused; ``del f.__annotations__'' is legal and
+	never raises (function___annotate___set_impl and its sibling)."
+	name @env0:asSymbol == #'__annotate__' ifTrue: [
+		TypeError ___signal___: '__annotate__ cannot be deleted'].
+	name @env0:asSymbol == #'__annotations__' ifTrue: [
+		BoundMethod @env0:___deleteAnnotationsOf___: self.
+		^ ExecBlock @env0:___pyNone___].
 	attrDict @env0:isNil ifFalse: [
 		(attrDict @env1:__contains__: name @env0:asString) ifTrue: [
 			attrDict @env1:__delitem__: name @env0:asString.
@@ -1952,6 +1977,14 @@ UnboundMethod >> __setattr__: name _: value [
 	BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
 	(self ___writeDefaultsThrough___: name value: value)
 		ifTrue: [^ ExecBlock @env0:___pyNone___].
+	"The PEP 649 pair: the setters' side effects, not a plain store (see
+	BoundMethod class >> ___setAnnotate___:of:)."
+	(name @env0:asSymbol == #'__annotate__') ifTrue: [
+		BoundMethod @env0:___setAnnotate___: value of: self.
+		^ ExecBlock @env0:___pyNone___].
+	(name @env0:asSymbol == #'__annotations__') ifTrue: [
+		BoundMethod @env0:___setAnnotations___: value of: self.
+		^ ExecBlock @env0:___pyNone___].
 	name @env0:asSymbol == #'__dict__' ifTrue: [
 		"INSTALL it, rather than storing a dynamic instVar that happens to be
 		spelled __dict__ -- which is what happened before, leaving the real

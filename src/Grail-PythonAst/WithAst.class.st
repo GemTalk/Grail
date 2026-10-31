@@ -10,6 +10,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+WithAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection
+
+]
+
 { #category : 'Grail-Code Generation' }
 WithAst >> ___awaitPrefix___ [
 	"How the __enter__/__exit__ call is DRIVEN.  A plain ``with'' awaits

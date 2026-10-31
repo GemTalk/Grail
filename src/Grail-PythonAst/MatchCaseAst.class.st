@@ -16,6 +16,13 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-Annotations' }
+MatchCaseAst >> ___addScopeAnnotationsTo___: aCollection [
+
+	body ___addScopeAnnotationsTo___: aCollection
+
+]
+
 { #category : 'Grail-IR Codegen' }
 MatchCaseAst >> ___emitIRMatchTestOn___: aBuilder subject: subjLeaf [
 	"``(pattern-test) and: [(guard) ___isTruthy___]'' -- the and: so a guard

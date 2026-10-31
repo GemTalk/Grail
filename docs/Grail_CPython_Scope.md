@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 63 | 11 | 16 | 90 |
+| P1 | 63 | 12 | 15 | 90 |
 | P2 | 26 | 3 | 5 | 34 |
 | P3 | 23 | 4 | 29 | 56 |
 | P4 | 23 | 6 | 46 | 75 |
-| **In-scope** | **135** | **24** | **96** | **255** |
+| **In-scope** | **135** | **25** | **95** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **159 are wired into the harness** (P1 74 · P2 29 · P3 27 · P4 29) and **135 of those score OK**.
+Of the 255 in-scope modules, **160 are wired into the harness** (P1 75 · P2 29 · P3 27 · P4 29) and **135 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -263,7 +263,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ❗ | `test_tstring` | Template strings / PEP 750 (language, new in 3.14). |
 | ✅ | `test_tuple` | tuple — core type (in harness). |
 | ❗ | `test_type_aliases` | type X = ... aliases / PEP 695 (language). |
-|  | `test_type_annotations` | Annotation syntax/semantics (language). |
+| ❗ | `test_type_annotations` | Annotation syntax/semantics (language). |
 |  | `test_type_comments` | # type: comments (language/ast). |
 | ❗ | `test_type_params` | PEP 695 type parameters (language). |
 | ✅ | `test_typechecks` | type()/isinstance checks (language). |
@@ -819,6 +819,8 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_string.test_templatelib` FAIL, 13 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_dynamicclassattribute` FAIL, 12 tests: 6 failed, 0 errors, 1 skipped
 - `test.test_base64` ERROR, 41 tests: 0 failed, 16 errors, 6 skipped
+
+Wired, but not on the board until the next nightly measures them: `test_type_annotations`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

@@ -284,3 +284,23 @@ NameError class >> ___signalUndefined___: aName [
 		name: aName
 
 ]
+
+{ #category : 'Grail-Name Errors' }
+NameError class >> ___storeDoitGlobal___: aName value: aValue scope: aScope [
+	"``global x; x = v'' in code an exec() compiled: the exec's scope, as before,
+	and its globals DICT as well.  CPython's STORE_GLOBAL writes the dict the
+	exec was handed, and a function the exec defines can run long after the exec
+	returned -- ``def f(): global X; X = 2'' called then left ``ns['X']'' as it
+	was, the scope reaching the dict only through a later exec's reflect-back
+	(test_type_params test_name_non_collision_13).  While the exec still runs,
+	its own reflect-back carries the same value over, so writing now changes
+	nothing there.  Answers aValue, as an assignment does."
+
+	| globals |
+	aScope at: (NameAst doitScopeNameFor: aName asSymbol) put: aValue.
+	globals := [aScope dynamicInstVarAt: #'___grailExecGlobals___']
+		on: AbstractException do: [:ex | ex return: nil].
+	globals == nil ifFalse: [globals @env1:__setitem__: aName asString _: aValue].
+	^ aValue
+
+]

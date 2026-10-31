@@ -465,6 +465,16 @@ followed a source edit:
   `complex`, `bytes`, `tuple`, `frozenset`, ...) is rooted where it is named
   and always kept its class.
 
+- **an enum built by the functional API** — `Enum('Color', 'RED GREEN')`,
+  `IntEnum('Level', ...)`, `Enum('Rank', ..., type=int)`, a call on a mixin
+  base. `Enum class >> ___grailFunctional:...` created its class with a bare
+  `___subclass___:`, so every rebuild minted a new class and new members,
+  stranding stored members (#1950). It now claims the creation as `type()`
+  does, so the class is reused under the key `module.Name()`, and keeps the
+  previous build's member objects by name as the class-syntax builder does
+  (`___grailKeepPreviousMember:named:in:`). A StrEnum's members are strings,
+  which cannot take another's state, and stay new; its class is kept.
+
 Details and the failure table are in the history log, §B.
 
 ### D3. Runtime class-attribute mutation is session-local
