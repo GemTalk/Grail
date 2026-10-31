@@ -312,3 +312,166 @@ the production version compiles into env 1 and stamps Python source offsets
   `MIGRATION.md` for the per-cut log and what is still deferred (multi-clause
   except, keyword/varargs calls, comprehensions, f-strings, `with`).
 * Performance comparison against the source-text path.
+
+## Module body at scale (P0.7)
+
+`15_module_body_scale.tpz` is the spike the IR-only codegen plan calls P0.7.
+It asks whether ONE IR method can carry a module body as large as the largest
+generated `initialize`, and measures memory, build time and the position map
+against the text path. It needs an installed Grail. Measured on 4.0.0.a8,
+Darwin arm64, 2026-10-30. Each configuration ran in its own process, three
+times, with the 1-minute load average between 1 and 2.
+
+### What the largest module bodies hold today
+
+From `P07_MODS=...`. A module body is one text `initialize` whose class
+statements are blocks, so the code is spread over many methods. Its source is
+mostly STRING LITERALS: the method source each class statement compiles at
+run time (`___compileMethod:`, `___irInstallDef:...or:`, the `___irTextSources___`
+and table methods).
+
+| module | `initialize` source | .py | home literal frame | distinct strings | of which translated method source | largest string | methods | step points (all / home) | words (all / home) | map |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| test.test_typing | 18.55 MB | 398 KB | 12,393 | 2,828 / 17.2 MB | 16.2 MB (94%) | 239 KB | 220 | 12,361 / 886 | 45,857 / 3,172 | 10.9 KB |
+| _pydecimal | 2.50 MB | 230 KB | 3,358 | 954 / 2.22 MB | 1.87 MB (84%) | 242 KB | 141 | 3,449 / 400 | 13,136 / 1,649 | 5.0 KB |
+| argparse | 1.84 MB | 110 KB | 3,204 | 673 / 1.58 MB | 1.37 MB (86%) | 243 KB | 157 | 3,234 / 112 | 11,691 / 373 | 1.0 KB |
+| typing | 1.26 MB | 136 KB | 4,680 | 940 / 0.92 MB | 0.70 MB (76%) | 56 KB | 161 | 5,646 / 1,129 | 19,726 / 4,126 | 10.6 KB |
+
+So the plan's "~900 KB" was too small by 20x in the test corpus. It is also
+the wrong measure. Source bytes are mostly literals that P4.6 removes. What
+limits one method is its CODE (words, step points) and its string-literal
+slots.
+
+### The synthetic body
+
+There is no IR module-body emitter yet, so the body is a single def whose
+statements store to module slots through `global`. That is the `#module`
+routing P4.2 reuses, emitted by the def-body emitters every IR def already
+uses. Both arms compile it as one home method; text also puts each call in a
+block. Two shapes:
+
+* `payload`: N calls `reg('<distinct L-char string>', 'Grail-Class Methods', i)`,
+  the shape of a class statement today. At N=4000, L=2860 that is 8,000
+  string slots and 11.6 MB of strings.
+* `code`: N statements cycling arithmetic assignment, a list display, a
+  conditional call and a call. Executable code with small literals.
+
+### Two limits, both per method
+
+**1. Past about 12k words, a method loses its traceback frame, on BOTH arms.**
+Somewhere between 11k and 12.3k words the generated method grows by 20-25% in
+one step, and the kernel can then no longer read its debug info.
+`GsNMethod >> _debugInfoAccess:at:` fails (`ArgumentError` 2258, arguments
+`(3, 91312)`, from `_previousStepPointForIp:`), so even GemStone's
+`stackReportToLevel:` raises. Grail's traceback walk drops the frame
+silently: the traceback shows the caller and the exception, and nothing for
+the method that raised.
+
+| arm | last size that keeps its frame | first that loses it |
+| --- | --- | --- |
+| IR, `code` | 620 statements, 12,265 words, 3,727 steps | 640, 15,221 words |
+| IR, `payload` | 580 statements, 11,035 words | 590, 14,175 words |
+| text, `code` | 690 statements, 11,078 home words | 700, 13,159 home words |
+
+It is not the literal count: `code` keeps its frame at 1,255 literals, and
+`payload` loses it at 1,189. Today's text bodies stay under it only because
+every class statement and call is its own block method. The largest home
+method above is 4,126 words. A def this size loses its frame today too, on
+either arm.
+
+**2. More than 8,192 string-literal slots in one method fails the IR build.**
+`generateFromIR:` answers error 1057, `emitInstr_s1 operand exceeds short`.
+Nothing falls back to text, so the import raises.
+
+| shape | builds | fails |
+| --- | --- | --- |
+| `payload` | 4,090 statements, 8,180 strings | 4,100, 8,200 strings |
+| `code` | 8,150 statements, 8,151 strings (20,371 literals, 48,908 steps, 197,644 words) | 8,250 |
+
+It is the STRING count (2^13), not literals, steps, words or source size. The
+text compiler has no such limit: it built 48,000 string slots in one frame.
+test.test_typing's home frame holds 5,157 string slots today, so even
+carrying today's literals one IR method would build.
+
+**No limit on literal or source size was reached.** IR built a method with
+11.8 MB of attached source, and one with two 6 MB string literals. Text
+refuses the latter (`ArgumentTypeError` 2094: string literals are capped at
+5,000,000 characters). This answers the literal-size question in P3.1's spike
+note.
+
+### Cost, IR against text, where both build
+
+The build time is the module load minus the parse, which both arms share.
+Temp is `System _tempObjSpaceUsed` after the load, against a scavenged start.
+RSS is the process peak (`/usr/bin/time -l`), with the parse-only run of the
+same source in brackets. Each cell gives the range over three runs.
+
+| body | arm | build ms | temp MB | peak RSS MB | attached source | map | far-end traceback, cold / warm ms |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| payload 1000 x 2860 (2.9 MB strings, about _pydecimal's) | IR | 610-650 | 30.2 | 472 (277) | 2.94 MB | 30.2 KB | frame lost (limit 1) |
+| | text | 1,570-1,610 | 47.3 | 491 (277) | 8.93 MB | 30.6 KB | 4,166-4,191 / 6-7 |
+| payload 4000 x 2860 (11.6 MB, the most IR builds) | IR | 2,940-2,960 | 55.5 | 503 (316) | 11.8 MB | 130 KB | frame lost |
+| | text | 11,820-11,910 | 122.5 | 607 (316) | 35.8 MB | 135 KB | frame lost |
+| code 600 (under limit 1) | IR | 132-135 | 10.3 | 437 (283) | 84 KB | 59 KB | 101 / 7-8 |
+| | text | 129-130 | 9.8 | 420 (283) | 220 KB | 40 KB | 129-132 / 8 |
+| code 4000 | IR | 1,320-1,325 | 38.1 | 483 (308) | 630 KB | 451 KB | frame lost |
+| | text | 1,537-1,543 | 34.8 | 483 (308) | 1.54 MB | 296 KB | frame lost |
+
+* **IR builds 2.5-4x faster when literals dominate**, as they do in real
+  module bodies. It is within 3% of text on code-shaped bodies: 14% faster at
+  `code` 4000 and 3% slower at `code` 600. It carries a third to two-fifths of
+  the attached source, because that source is the Python, not the Smalltalk.
+* **IR needs less temp memory for literal-heavy bodies.** At `-T 400000` both
+  arms build payload 4000. At `-T 200000` IR still builds and text fails with
+  `AlmostOutOfMemoryError`. The memory failure cut 92 recorded on `test_set`
+  was not reproduced (cut 128 traced it to a per-class leak in both arms).
+* **Build time grows faster than linearly with the size of one method, on both
+  arms.** `payload` loads (to the failure, for IR past 4,090): IR 1.1 s at 1k
+  statements, 8.0 s at 6k, 22.6 s at 12k and 73.5 s at 24k; text 2.0, 26.2,
+  87.7 and 320.6 s. That is another reason to keep methods small.
+* **The position map grows linearly**: about 30 bytes per `payload`
+  statement on both arms, and 99-113 bytes per `code` statement on IR against
+  66-74 on text. IR records more spans.
+  Finding it costs the map's length, not the source's
+  (`___positionMapMarkerIn___:`). The text arm's 4.2 s cold far-end lookup at
+  payload 1000 is its `___curPos___` scan through `_sourceAtIp:` on an 8.9 MB
+  source. IR has no such scan.
+
+### What this means for P4
+
+One IR method can be BUILT at the scale of today's largest module body, even
+carrying today's literals. It builds faster and in less memory than the text.
+It cannot be USED at that scale: the largest bodies' code is 13k-46k words
+(the "words, all" column) against a traceback limit of about 12k. The 8,192
+string-slot limit is a second ceiling for any body that still carries
+literals.
+
+So P4 should build several methods, not one. P4.1's statement seam is the end
+state, not a stepping stone:
+
+* `initialize` is a short list of sends.
+* Each class statement gets its own method (the P3.2 helper).
+* Consecutive simple statements are grouped under a budget that is checked on
+  the GENERATED method, where the numbers are cheap to read. For example, at
+  most 8,000 words (`basicSize`), 2,000 step points (`_numSourceOffsets`) and
+  4,000 string slots, splitting a group that exceeds it.
+
+Use methods rather than blocks: in 4.0 a block shares its home method's
+literal frame, so blocks would not lift the string limit.
+
+The budget belongs in the IR builder for defs too. Both limits apply to any
+generated method, and today the first one fails silently. A guard that raises
+when a generated method is past it would turn a lost frame into an error.
+
+### Reproducing
+
+```bash
+# one configuration; a fresh process each, so RSS and temp belong to it
+P07_KIND=payload P07_N=4000 P07_L=2860 [GRAIL_IR_CODEGEN=0] [P07_PARSEONLY=1] \
+  /usr/bin/time -l topaz -lq -T 2000000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" \
+    -S experiments/ir/15_module_body_scale.tpz
+# the real modules
+P07_MODS='_pydecimal argparse typing test.test_typing' \
+  topaz -lq -T 2000000 -C "GEM_TEMPOBJ_CODE_SIZE=300000;" \
+    -S experiments/ir/15_module_body_scale.tpz
+```
