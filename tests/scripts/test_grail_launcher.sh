@@ -193,6 +193,80 @@ if run "uncaught exception exits 1" 1 -- "$TMP/raise.py"; then
     fi
 fi
 
+# --- an uncaught exception is reported through sys.excepthook (#1954) ------
+
+# The launcher printed the traceback itself and never asked sys.excepthook, so
+# a program's own hook was ignored.  Each expectation is python3 3.14's.
+cat > "$TMP/hook.py" <<'EOF'
+import sys
+def hook(t, v, tb):
+    print("hook:", t.__name__, v, tb is v.__traceback__, tb is not None)
+sys.excepthook = hook
+print("out")
+raise ValueError("boom")
+EOF
+if run "excepthook: an assigned hook reports" 1 -- "$TMP/hook.py"; then
+    if [ "$(cat "$OUT_FILE")" != "out
+hook: ValueError boom True True" ]; then
+        bad "excepthook: the hook is called with (type, value, tb)" \
+            "stdout: [$(cat "$OUT_FILE")]" "stderr: [$(cat "$ERR_FILE")]"
+    elif [ -s "$ERR_FILE" ]; then
+        bad "excepthook: nothing else is printed" "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+
+# A hook that raises: both tracebacks, in CPython's frame.
+cat > "$TMP/hook_raises.py" <<'EOF'
+import sys
+def hook(t, v, tb):
+    raise RuntimeError("hook broke")
+sys.excepthook = hook
+raise ValueError("boom")
+EOF
+if run "excepthook: a hook that raises" 1 -- "$TMP/hook_raises.py"; then
+    if [ "$(head -1 "$ERR_FILE")" != "Error in sys.excepthook:" ] \
+            || ! grep -q '^RuntimeError: hook broke$' "$ERR_FILE" \
+            || ! grep -q '^Original exception was:$' "$ERR_FILE" \
+            || [ "$(tail -1 "$ERR_FILE")" != "ValueError: boom" ]; then
+        bad "excepthook: a raising hook reports both exceptions" \
+            "stderr: [$(cat "$ERR_FILE")]"
+    elif sed -n '1,/^Original exception was:$/p' "$ERR_FILE" | grep -q 'in <module>'; then
+        # The hook runs once the launcher's handler has unwound; called from
+        # inside it, the frames that raised were still beneath the hook and
+        # its traceback claimed them.
+        bad "excepthook: the hook's traceback is the hook's alone" \
+            "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+
+# del sys.excepthook: said, then the traceback as usual.
+printf 'import sys\ndel sys.excepthook\nraise ValueError("boom")\n' > "$TMP/hook_missing.py"
+if run "excepthook: a missing hook" 1 -- "$TMP/hook_missing.py"; then
+    if [ "$(head -2 "$ERR_FILE")" != "sys.excepthook is missing
+Traceback (most recent call last):" ] \
+            || [ "$(tail -1 "$ERR_FILE")" != "ValueError: boom" ]; then
+        bad "excepthook: a missing hook is said, then the traceback" \
+            "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+
+# A hook that calls sys.exit(9): the process exits 9, quietly.
+printf 'import sys\ndef hook(*a):\n    sys.exit(9)\nsys.excepthook = hook\nraise ValueError\n' \
+    > "$TMP/hook_exits.py"
+if run "excepthook: a hook that exits" 9 -- "$TMP/hook_exits.py"; then
+    if [ -s "$ERR_FILE" ]; then
+        bad "excepthook: an exiting hook prints nothing" "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+
 # --- the REPL names its frames <stdin>, as CPython's REPL does -------------
 
 # python3 fed the same three lines on stdin writes, on stderr:

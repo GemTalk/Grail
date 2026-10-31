@@ -29,6 +29,18 @@ Class {
 }
 
 { #category : 'Grail-Access' }
+ExecBlockAttrs class >> ___annotationsComputedBy___: anAnnotate [
+	"What a closure's __annotations__ is when anAnnotate computes it -- the rule
+	every kind of function shares (BoundMethod class >>
+	___annotationsComputedBy___:), reached from here because ExecBlock's methods
+	resolve Python classes through this one (ExecBlock class >>
+	___pyAttrsClass___)."
+
+	^ BoundMethod ___annotationsComputedBy___: anAnnotate
+
+]
+
+{ #category : 'Grail-Access' }
 ExecBlockAttrs class >> ___builtinsFor___: aBlock [
 	"``func.__builtins__'' for a nested def, lambda or comprehension block --
 	the builtins namespace it resolves free names against.
@@ -139,6 +151,12 @@ ExecBlockAttrs class >> ___checkFunctionDelete___: aName [
 	sym == #'__type_params__' ifTrue: [
 		^ (System myUserProfile symbolList objectNamed: #'TypeError')
 			@env1:___signal___: '__type_params__ must be set to a tuple'].
+	"``del f.__annotate__'' is refused outright (function___annotate___set_impl);
+	``del f.__annotations__'' is legal and is the caller's (ExecBlock >>
+	__delattr__:)."
+	sym == #'__annotate__' ifTrue: [
+		^ (System myUserProfile symbolList objectNamed: #'TypeError')
+			@env1:___signal___: '__annotate__ cannot be deleted'].
 	^ false
 
 ]
@@ -201,6 +219,9 @@ ExecBlockAttrs class >> ___checkFunctionWrite___: aName value: aValue [
 	Before this branch a write was simply ACCEPTED -- ``f.__type_params__ = 42''
 	stored the integer, so a later read handed a non-iterable to code that
 	unpacks it."
+	"The two PEP 649 names follow the rule every kind of function shares."
+	(sym == #'__annotate__' or: [sym == #'__annotations__']) ifTrue: [
+		^ BoundMethod ___checkAnnotationWrite___: sym value: aValue].
 	sym == #'__type_params__' ifTrue: [
 		| t |
 		t := self ___pyClassNamed___: #'tuple'.
@@ -886,6 +907,19 @@ ExecBlockAttrs class >> removeAt: aBlock attr: aName [
 			put: (System myUserProfile symbolList objectNamed: #'None').
 		^ true].
 	holder := self table at: aBlock ifAbsent: [^ false].
+	(holder includesKey: aName asString) ifFalse: [^ false].
+	holder removeKey: aName asString.
+	^ true
+
+]
+
+{ #category : 'Grail-Access' }
+ExecBlockAttrs class >> removeSlotAt: aBlock attr: aName [
+	"Remove ``aBlock'''s PER-OBJECT slot ``aName'', answering whether there was
+	one.  The def-site stamp, if any, is what a read finds afterwards."
+
+	| holder |
+	holder := self slotTable at: aBlock ifAbsent: [^ false].
 	(holder includesKey: aName asString) ifFalse: [^ false].
 	holder removeKey: aName asString.
 	^ true

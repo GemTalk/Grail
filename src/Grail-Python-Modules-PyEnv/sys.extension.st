@@ -476,6 +476,61 @@ sys >> ___pyAttrStore___: aName put: aValue [
 
 ]
 
+{ #category : 'Grail-Private' }
+sys >> ___reportUncaught___: anException [
+	"Report an exception nothing caught through sys.excepthook, as CPython's
+	_PyErr_PrintEx does (Python/pythonrun.c) -- the launcher's half of issue
+	#1954.  scripts/grail.tpz printed the traceback itself and never asked the
+	hook, so a program's own ``sys.excepthook = hook'' was ignored.
+
+	Answers what the CALLER still has to do:
+	  true        the hook reported it; nothing more to print.
+	  SystemExit  the hook called sys.exit(); exit with its code.
+	  a String    print it, then the exception's own traceback.  Empty when the
+	              hook is still the original, whose report that traceback IS --
+	              left to the caller, so the launcher prints exactly what it
+	              did; CPython's preamble when the hook is missing
+	              (``sys.excepthook is missing'') or raised (``Error in
+	              sys.excepthook:'', the hook's traceback, ``Original exception
+	              was:'').
+	The text is handed back rather than written because the caller owns the
+	stream the traceback goes to, and the two must come out together.
+
+	The hook is read the way Python reads it, so ``del sys.excepthook'' reads as
+	missing, and it is called with (type, value, traceback) -- the traceback the
+	exception carries, which ensurePythonTraceback attaches for an exception a
+	Smalltalk handler caught.  The caller should call this once the handler has
+	unwound, or the frames that raised are still beneath the hook."
+
+	| exc hook tb result lf |
+	lf := String @env0:with: Character @env0:lf.
+	exc := anException @env0:ensurePythonTraceback.
+	hook := [self ___pyAttrLoad___: #excepthook]
+		@env0:on: Error @env0:, BaseException do: [:ex | ex @env0:return: nil].
+	hook == nil ifTrue: [^ 'sys.excepthook is missing' @env0:, lf].
+	((hook @env0:isKindOf: BoundMethod)
+		and: [hook @env0:selector == #excepthook
+		and: [hook @env0:receiver @env0:isKindOf: sys]])
+			ifTrue: [^ String @env0:new].
+	tb := [exc __traceback__] @env0:on: Error @env0:, BaseException do: [:ex | ex @env0:return: None].
+	tb == nil ifTrue: [tb := None].
+	result := true.
+	[hook value: { exc @env0:class. exc. tb } value: nil]
+		@env0:on: Error @env0:, BaseException
+		do: [:ex |
+			result := (ex @env0:isKindOf: SystemExit)
+				ifTrue: [ex]
+				ifFalse: [
+					'Error in sys.excepthook:' @env0:, lf
+						@env0:, ((ex @env0:isKindOf: BaseException)
+							ifTrue: [ex @env0:pythonTracebackString]
+							ifFalse: [(ex @env0:messageText @env0:ifNil: [ex @env0:description]) @env0:, lf])
+						@env0:, lf @env0:, 'Original exception was:' @env0:, lf].
+			ex @env0:return: nil].
+	^ result
+
+]
+
 { #category : 'Grail-Accessors' }
 sys >> __breakpointhook__ [
 	^ self ___dataGlobalAt___: #__breakpointhook__
