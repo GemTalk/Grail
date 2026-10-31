@@ -427,6 +427,33 @@ BoundMethod >> ___classSideArityMessageFor___: aReceiver given: nGiven [
 ]
 
 { #category : 'Grail-Attribute Access' }
+BoundMethod >> ___compiledAnnotations___ [
+	"The annotations the def was compiled with.  Module-level functions store
+	theirs on the module instance keyed by name; methods store theirs on the
+	defining class, so walk the superclass chain to report the annotations from
+	where an inherited method was defined.  An unbound handle (receiver nil) or
+	an unannotated / unknown callable reports an empty dict, matching CPython's
+	``always has one''."
+
+	| cls |
+	"A class-body sibling reference is receiver-less but carries its
+	 definingClass, exactly as __annotate__ resolves it.  Answering {} for it
+	 was wrong only while the class body RUNS -- the one time that handle is
+	 read -- so ``get_annotations(one)'' inside the body saw nothing
+	 (test_annotationlib's GH-143831 test)."
+	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
+		^ self ___methodAnnotationsForClass___: definingClass name: selector @env0:asString].
+	receiver == nil ifTrue: [^ KeyValueDictionary @env0:new].
+	(receiver isKindOf: module)
+		ifTrue: [^ receiver @env0:___functionAnnotationsFor___: selector @env0:asString].
+	cls := (receiver isKindOf: Class)
+		ifTrue: [receiver]
+		ifFalse: [receiver @env0:class].
+	^ self ___methodAnnotationsForClass___: cls name: selector @env0:asString
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 BoundMethod >> ___grailRebindDefaults___: value kw: isKw [
 	"A module-level function's defaults written in a shape its compiled
 	prologue cannot carry: rebind its calls in this session (Behavior >>
@@ -527,10 +554,9 @@ BoundMethod >> ___internedAnnotateForClass___: aClass name: aName [
 	fn := perClass @env0:at: aName otherwise: nil.
 	fn == nil ifFalse: [^ fn].
 	fn := self ___rawAnnotateForClass___: aClass name: aName.
-	fn == nil ifTrue: [
-		"Absent, not None -- see __annotate__ for why answering None breaks
-		update_wrapper."
-		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	"None for a method with nothing annotated, as for a function -- see
+	__annotate__.  A singleton, so it needs no memo entry."
+	fn == nil ifTrue: [^ None].
 	perClass @env0:at: aName put: fn.
 	^ fn
 
@@ -1135,16 +1161,15 @@ BoundMethod >> __annotate__ [
 	function's annotations.  In CPython every annotated function has
 	__annotate__, which is why copying just that name suffices there.
 
-	ABSENT -- an AttributeError -- when nothing is annotated, rather than Python
-	None.  CPython's unannotated function does carry __annotate__ = None, but
-	answering None here means update_wrapper copies that None onto the wrapper as
-	a VALUE, and the wrapper's __annotations__ reader then tries to CALL it:
-	``a NoneType does not understand #value:value:'', four uncatchable errors
-	across TestWraps and TestUpdateWrapper.  Raising instead makes
-	update_wrapper skip the name, which is what it already does for every other
-	absent attribute, and the wrapper keeps its own empty annotate.  The only
-	divergence is hasattr(f, '__annotate__') for an unannotated function, which
-	nothing reads."
+	None when nothing is annotated, as CPython's function.__annotate__ answers.
+	It used to be ABSENT -- an AttributeError -- because update_wrapper copies
+	that None onto the wrapper and the wrapper's __annotations__ reader then
+	CALLED it, four uncatchable errors across TestWraps and TestUpdateWrapper.
+	Every reader now takes None as ``no annotations'' (ExecBlock >>
+	__annotations__, BoundMethod class >> ___annotationsOf___:ifNotAssigned:),
+	so the attribute can be what CPython has: ``f.__annotate__ = 42'' is then
+	refused, not stored, and test_type_annotations test_manual_annotate reads
+	None before it assigns."
 
 	| cls fn |
 	"An assigned __annotate__ wins -- see __annotations__."
@@ -1158,14 +1183,10 @@ BoundMethod >> __annotate__ [
 	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
 		^ self ___internedAnnotateForClass___: definingClass
 			name: selector @env0:asString].
-	receiver == nil ifTrue: [
-		AttributeError ___signal___: 'method has no attribute ''__annotate__'''].
+	receiver == nil ifTrue: [^ None].
 	(receiver isKindOf: module) ifTrue: [
 		fn := receiver @env0:___functionAnnotateFor___: selector @env0:asString.
-		fn == nil ifTrue: [
-			AttributeError ___signal___:
-				'function has no attribute ''__annotate__'''].
-		^ fn].
+		^ fn == nil ifTrue: [None] ifFalse: [fn]].
 	cls := (receiver isKindOf: Class)
 		ifTrue: [receiver]
 		ifFalse: [receiver @env0:class].
@@ -1175,35 +1196,15 @@ BoundMethod >> __annotate__ [
 
 { #category : 'Grail-Attribute Access' }
 BoundMethod >> __annotations__ [
-	"Python's ``func.__annotations__'' — the parameter/return annotation
-	dict (PEP 563 source strings; see FunctionDefAst).  Module-level
-	functions store theirs on the module instance keyed by name; methods
-	store theirs on the defining class, so walk the superclass chain to
-	report the annotations from where an inherited method was defined.
-	An unbound handle (receiver nil) or an unannotated / unknown callable
-	reports an empty dict, matching CPython's ``always has one''."
+	"Python's ``func.__annotations__'' -- the parameter/return annotation dict.
+	What an ASSIGNMENT left answers first -- an assigned __annotations__, or what
+	an assigned __annotate__ computes: typing's _make_nmtuple writes
+	``nm_tpl.__new__.__annotate__ = annotate'' on a class's interned handle, and
+	get_type_hints of a NamedTuple's __new__ reads it (test_typing
+	test_get_type_hints_classes).  Otherwise the compiled annotations
+	(___compiledAnnotations___)."
 
-	| cls |
-	"An ASSIGNED __annotate__ -- typing's _make_nmtuple writes
-	``nm_tpl.__new__.__annotate__ = annotate'' on a class's interned handle --
-	answers for the function, as a function's own assignment does in CPython
-	(test_typing test_get_type_hints_classes reads a NamedTuple's __new__)."
-	((self @env0:dynamicInstVarAt: #'__annotate__') @env0:ifNotNil: [:fn |
-		fn ~~ None ifTrue: [^ fn @env1:___pyCallValue___: { 1 } kw: nil]]).
-	"A class-body sibling reference is receiver-less but carries its
-	 definingClass, exactly as __annotate__ resolves it.  Answering {} for it
-	 was wrong only while the class body RUNS -- the one time that handle is
-	 read -- so ``get_annotations(one)'' inside the body saw nothing
-	 (test_annotationlib's GH-143831 test)."
-	(receiver == nil and: [definingClass @env0:notNil]) ifTrue: [
-		^ self ___methodAnnotationsForClass___: definingClass name: selector @env0:asString].
-	receiver == nil ifTrue: [^ KeyValueDictionary @env0:new].
-	(receiver isKindOf: module)
-		ifTrue: [^ receiver @env0:___functionAnnotationsFor___: selector @env0:asString].
-	cls := (receiver isKindOf: Class)
-		ifTrue: [receiver]
-		ifFalse: [receiver @env0:class].
-	^ self ___methodAnnotationsForClass___: cls name: selector @env0:asString
+	^ BoundMethod @env0:___annotationsOf___: self ifNotAssigned: [self ___compiledAnnotations___]
 
 ]
 
@@ -1374,6 +1375,13 @@ BoundMethod >> __delattr__: name [
 		binding them -- the write a None assignment makes (#1714)."
 		((name @env0:asSymbol == #'__defaults__') or: [name @env0:asSymbol == #'__kwdefaults__'])
 			ifTrue: [^ self __setattr__: name _: ExecBlock @env0:___pyNone___].
+		"``del f.__annotate__'' is refused; ``del f.__annotations__'' is legal and
+		never raises (function___annotate___set_impl and its sibling)."
+		name @env0:asSymbol == #'__annotate__' ifTrue: [
+			TypeError ___signal___: '__annotate__ cannot be deleted'].
+		name @env0:asSymbol == #'__annotations__' ifTrue: [
+			BoundMethod @env0:___deleteAnnotationsOf___: self.
+			^ ExecBlock @env0:___pyNone___].
 		^ super @env1:__delattr__: name].
 	name @env0:asSymbol == #'__class__' ifTrue: [
 		TypeError ___signal___: 'can''t delete __class__ attribute'].
@@ -1971,6 +1979,14 @@ BoundMethod >> __setattr__: name _: value [
 		BoundMethod @env0:___checkFunctionAttrWritable___: name writing: value.
 		(self ___writeDefaultsThrough___: name value: value)
 			ifTrue: [^ ExecBlock @env0:___pyNone___].
+		"The PEP 649 pair: the setters' side effects, not a plain store (see
+		BoundMethod class >> ___setAnnotate___:of:)."
+		(name @env0:asSymbol == #'__annotate__') ifTrue: [
+			BoundMethod @env0:___setAnnotate___: value of: self.
+			^ ExecBlock @env0:___pyNone___].
+		(name @env0:asSymbol == #'__annotations__') ifTrue: [
+			BoundMethod @env0:___setAnnotations___: value of: self.
+			^ ExecBlock @env0:___pyNone___].
 		^ super @env1:__setattr__: name _: value].
 	"``__class__'' is the one name that is a TYPE error rather than an attribute
 	one, and the difference is not cosmetic: CPython's method type defines no
