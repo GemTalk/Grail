@@ -1479,6 +1479,25 @@ CallAst class >> isSelfReference: aSymbol [
 
 ]
 
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> methodAnnotationClassScope [
+	"The names a class body binds, while ClassDefAst >>
+	emitMethodAnnotationsTableOn:className: emits that class's METHOD
+	annotations, or nil.  CPython's annotation scope for a def in a class body
+	sees the class namespace (Python/symtable.c:2872), so NameAst reads one of
+	these names from the class first -- see NameAst >>
+	___readsMethodAnnotationClassScope___."
+
+	^ self ___compileContext___ at: #'methodAnnotationClassScope' otherwise: nil
+
+]
+
+{ #category : 'Grail-Class Compile Context' }
+CallAst class >> methodAnnotationClassScope: aSetOrNil [
+	self ___compileContext___ at: #'methodAnnotationClassScope' put: aSetOrNil
+
+]
+
 { #category : 'Grail-Module Compile Context' }
 CallAst class >> moduleBodyBeingCompiled [
 	"True while the MODULE BODY itself is being emitted, as opposed to a
