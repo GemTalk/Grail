@@ -24,7 +24,7 @@
 ! scripts/cpython_suite_manifest.txt is picked up here with no edit.
 !
 ! Run from the project root with the IR flag forced, in a FRESH session:
-!   topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
+!   topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1800000;" \
 !     -S experiments/ir/census_tests_00.tpz > <dir>/census_tests_00.out
 login
 set compile_env: 0

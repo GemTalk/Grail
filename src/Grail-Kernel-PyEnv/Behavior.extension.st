@@ -86,6 +86,24 @@ Behavior >> ___compileMethod: aSource category: aCategory scope: aScopeOrNil [
 	same value importlib's helper would return."
 
 	| dicts |
+	"The census's runtime rows (importlib ___irCensusText:kind:), keyed by
+	method category: every class build compiles its text methods here.  The
+	flag is read straight from SessionTemps so a census that is off costs one
+	lookup, and importlib is found by name for the reason given above.
+
+	``Grail-Class Methods'' holds two kinds of text: a translated def, which
+	carries the ``<grailPython>'' pragma, and a template Grail fills in (a
+	keyword forwarder, a skip body, an @smalltalk forwarder), which does not.
+	The census needs them apart -- in a test corpus the templates outnumber the
+	defs six hundred to one -- so the pragma names the kind."
+	((SessionTemps @env0:current @env0:at: #'___grailIRCensusOn___' otherwise: false) @env0:== true)
+		@env0:ifTrue: [ | kind |
+			kind := 'rt:' @env0:, aCategory @env0:asString.
+			(aCategory @env0:asString @env0:= 'Grail-Class Methods'
+				@env0:and: [(aSource @env0:includesString: '<grailPython>') @env0:not])
+					@env0:ifTrue: [kind := kind @env0:, ' (template)'].
+			(System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib)
+				@env0:___irCensusText: aSource kind: kind].
 	dicts := self ___grailRuntimeCompileDictionaries___: aScopeOrNil.
 	[[self @env0:compileMethod: aSource
 		dictionaries: dicts
