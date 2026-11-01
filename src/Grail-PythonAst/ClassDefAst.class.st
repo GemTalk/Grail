@@ -2373,6 +2373,11 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 	methods are a later cut, and this way they behave exactly as flag-off."
 
 	| out emitted stream shift |
+	"The census row P3 retires: a class statement whose enclosing def is IR
+	but whose own build is this compiled text."
+	importlib ___irCensusOn___ ifTrue: [
+		importlib ___irCensusNote___: #'th:helper'
+			module: importlib ___irCensusModuleName___ def: name asString count: 1].
 	emitted := self ___irWithCaptureCellMap___: carriedNames do: [
 		self ___irEmitClassBodyAsTextDo___: [ | savedCurPos |
 			"Whether the helper declares ``___curPos___'' (see below): the
@@ -3991,6 +3996,13 @@ ClassDefAst >> emitCompileMethodOn: classVarName source: sourceString category: 
 	non-env-1 compile target ever appears, lift the env into the
 	helper's signature."
 
+	importlib ___irCensusOn___ ifTrue: [
+		| m |
+		m := importlib ___irCensusModuleName___.
+		importlib ___irCensusNote___: ('in:' , categoryString) asSymbol
+			module: m def: name asString count: 1.
+		importlib ___irCensusNote___: #'lit:text'
+			module: m def: name asString count: sourceString size].
 	aStream nextPutAll: classVarName.
 	classSideBool ifTrue: [aStream nextPutAll: ' @env0:class'].
 	aStream nextPutAll: ' ___compileMethod: '.
@@ -4246,6 +4258,16 @@ ClassDefAst >> emitIRInstallOn: classVarName id: anId source: sourceString categ
 	61), where the metaclass is what the IR method is built onto and what the
 	text fallback compiles onto."
 
+	"The census row P4.6 retires: an IR install still carries the method's
+	text twin as a literal, compiled into the class build and kept as the
+	fallback.  A direct install (by id alone) does not exist yet."
+	importlib ___irCensusOn___ ifTrue: [
+		| m |
+		m := importlib ___irCensusModuleName___.
+		importlib ___irCensusNote___: #'in:IR+literal'
+			module: m def: name asString count: 1.
+		importlib ___irCensusNote___: #'lit:IR'
+			module: m def: name asString count: sourceString size].
 	aStream
 		nextPutAll: '___importlib___ @env0:___irInstallDef: ';
 		nextPutAll: anId printString;
@@ -5262,6 +5284,25 @@ ClassDefAst >> printSmalltalkOn: aStream [
 				nextPutAll: '.'; lf;
 				nextPutAll: ' ] @env0:value.'; lf.
 			^ self]].
+	"The census's share of a module body (or doit) that is CLASS BUILD: the
+	characters a module-scope class statement adds to the one text method, so
+	the report can split ``initialize'' into class statements and the rest.
+	A class nested in a class or a def is inside its outer statement's span."
+	(importlib ___irCensusOn___
+		and: [CallAst moduleBodyBeingCompiled == true
+		and: [CallAst classBeingCompiled isNil
+		and: [CallAst functionBeingCompiled isNil]]]) ifTrue: [
+			| start |
+			start := aStream position.
+			self printSmalltalkRuntimeOn: aStream.
+			importlib
+				___irCensusNote___: (ModuleAst compilingDoitScope isNil
+					ifTrue: [#'by:moduleBody:classBuild']
+					ifFalse: [#'by:doit:classBuild'])
+				module: importlib ___irCensusModuleName___
+				def: name asString
+				count: aStream position - start.
+			^ self].
 	^ self printSmalltalkRuntimeOn: aStream
 
 ]
@@ -5290,6 +5331,11 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	  savedCellRebindable
 	  savedEnclosingClassCtx savedScopeForMethods savedScopeForBody
 	  savedMethodBodyEmit savedMethodDynamicLocals readInOrder earlyDecorated |
+	"Every class-body statement is emitted as text, wherever the class is:
+	inline in a module body or doit, inside a method's text, or in a
+	method-local class's compiled-text helper."
+	importlib ___irCensusOn___ ifTrue: [
+		importlib ___irCensusStatements: body body prefix: 'cs:' def: name asString].
 	methodDefs := self instanceMethodDefs.
 	earlyDecorated := IdentitySet new.
 	classMethodDefs := self classMethodDefs.

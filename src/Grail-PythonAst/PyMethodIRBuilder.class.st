@@ -66,6 +66,8 @@ PyMethodIRBuilder >> ___compileClassHelper___: aSelector source: aString on: aCl
 	it into a fallback to the whole method's text, and the alternative is a
 	method whose class statement sends a selector nothing implements."
 
+	importlib ___irCensusOn___ ifTrue: [
+		importlib ___irCensusText: aString kind: 'classHelper'].
 	[aClass compileMethod: aString
 		dictionaries: importlib ___grailCompileSymbolList___
 		category: 'Grail-IR Class Helpers'

@@ -171,8 +171,12 @@ topaz -lq -C "$CFG" -S experiments/ir/census_tests_02.tpz > $D/census_tests_02.o
 python3 experiments/ir/census_report.py $D                # WRITES CENSUS.md itself
 ```
 
-with `CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;"`. The
-whole thing is about two minutes.
+with `CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=1800000;"` (the
+200-module manifest no longer fits a 900000 KB shard). The whole thing is several
+minutes. Since P0.2 of the IR-only codegen plan the board also measures what is
+still Smalltalk text -- module and class-body statements, text-helper class
+builds, install literals, and the bytes of generated Smalltalk compiled per
+kind -- under "What is still text".
 
 Three things about it are easy to get wrong, and each produces a plausible wrong
 board rather than an error:
