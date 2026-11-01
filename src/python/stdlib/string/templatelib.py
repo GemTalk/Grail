@@ -12,10 +12,24 @@ __all__ = ["Template", "Interpolation", "convert"]
 _CONVERSIONS = (None, "s", "r", "a")
 
 
+def _not_a_base(name):
+    """GRAIL: ``__init_subclass__`` for a type CPython implements in C without
+    Py_TPFLAGS_BASETYPE (Objects/templateobject.c, interpolationobject.c):
+    ``class S(Template)`` is refused there with ``type
+    'string.templatelib.Template' is not an acceptable base type``.  These are
+    Python classes here, so the refusal is spelled out, as _typing.py spells
+    TypeVar's; PEP 487 runs it on the parent as the subclass is created."""
+    def __init_subclass__(cls, *args, **kwargs):
+        raise TypeError(f"type '{name}' is not an acceptable base type")
+    return classmethod(__init_subclass__)
+
+
 class Interpolation:
     """Interpolation object"""
 
     __match_args__ = ("value", "expression", "conversion", "format_spec")
+    __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+    __init_subclass__ = _not_a_base("string.templatelib.Interpolation")
 
     def __init__(self, value, expression="", conversion=None, format_spec=""):
         if not isinstance(expression, str):
@@ -69,6 +83,7 @@ class Interpolation:
 class Template:
     """Template object"""
     __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
+    __init_subclass__ = _not_a_base("string.templatelib.Template")
 
     def __init__(self, *args, **kwargs):
         if kwargs:
@@ -123,7 +138,7 @@ class Template:
                 parts.append(string)
             if index < len(interpolations):
                 parts.append(interpolations[index])
-        return iter(parts)
+        return TemplateIter._over(parts)
 
     def __add__(self, other):
         if isinstance(other, Template):
@@ -147,6 +162,31 @@ class Template:
 
     def __reduce__(self):
         return (_template_unpickle, (self._strings, self._interpolations))
+
+
+class TemplateIter:
+    """GRAIL: what ``iter(template)`` answers -- CPython's C TemplateIter
+    (Objects/templateobject.c), which the module does not export.  It yields
+    the non-empty strings and the interpolations in order.  Like CPython's, it
+    cannot be created from Python or subclassed; it was a list_iterator,
+    which reported the wrong type."""
+
+    __init_subclass__ = _not_a_base("string.templatelib.TemplateIter")
+
+    def __new__(cls, *args, **kwargs):
+        raise TypeError("cannot create 'string.templatelib.TemplateIter' instances")
+
+    @classmethod
+    def _over(cls, parts):
+        iterator = object.__new__(cls)
+        iterator._parts = iter(parts)
+        return iterator
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return next(self._parts)
 
 
 def convert(obj, /, conversion):
@@ -188,4 +228,4 @@ def _template_unpickle(*args):
     return Template(*parts)
 
 
-Template.__module__ = Interpolation.__module__ = "string.templatelib"
+Template.__module__ = Interpolation.__module__ = TemplateIter.__module__ = "string.templatelib"
