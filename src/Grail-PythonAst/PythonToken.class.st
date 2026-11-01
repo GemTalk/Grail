@@ -18,7 +18,8 @@ Class {
 		'endLine',
 		'fieldStarts',
 		'openFieldAt',
-		'openFieldInSpec'
+		'openFieldInSpec',
+		'templateSpec'
 	],
 	#category : 'Grail-Parser'
 }
@@ -31,6 +32,16 @@ PythonToken class >> type: aSymbol value: aString line: aLine position: aPositio
                 line: aLine
 		value: aString 
 		position: aPosition 
+
+]
+
+{ #category : 'Grail-accessing' }
+PythonToken >> beTemplateSpec [
+	"This FSTRING token is the format spec of a field of a t-string.  It
+	parses as an f-string -- a t-string's format_spec is a str -- but its
+	errors name the t-string (isInTemplateString)."
+
+	templateSpec := true
 
 ]
 
@@ -72,6 +83,15 @@ PythonToken >> endPosition [
 { #category : 'Grail-accessors' }
 PythonToken >> endPosition: anInteger [
 	endPosition := anInteger
+
+]
+
+{ #category : 'Grail-testing' }
+PythonToken >> fieldErrorPrefix [
+	"What a field error in this literal begins with: CPython's messages name
+	the literal, ``t-string: expecting '}''' as against ``f-string: ...''."
+
+	^ self isInTemplateString ifTrue: ['t-string: '] ifFalse: ['f-string: ']
 
 ]
 
@@ -130,6 +150,14 @@ PythonToken >> isEndMarker [
 PythonToken >> isFString [
 
 	^type == #FSTRING
+
+]
+
+{ #category : 'Grail-testing' }
+PythonToken >> isInTemplateString [
+	"A t-string, or the format spec of one of its fields (beTemplateSpec)."
+
+	^ self isTString or: [templateSpec == true]
 
 ]
 

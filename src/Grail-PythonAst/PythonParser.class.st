@@ -1475,7 +1475,7 @@ PythonParser >> ___fstringError___: aMessage token: aTok fieldAt: aFieldStart fr
 	index is."
 
 	^ self
-		___fieldSyntaxError___: (aTok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) , aMessage
+		___fieldSyntaxError___: aTok fieldErrorPrefix , aMessage
 		token: aTok fieldAt: aFieldStart from: aStartIndex to: anEndIndex
 
 ]
@@ -1517,7 +1517,12 @@ PythonParser >> ___fstringSpecExprFor: spec at: locTok [
 	brace (``{3:{'}'}>10}''), its own conversion and spec (``{1 + 1:1d}''),
 	and the debug form (``{y=}'').  The scan this replaced matched braces
 	blindly and parsed the text bare, so test_fstring could not compile.
-	The child's declared names are propagated, as for any field."
+	The child's declared names are propagated, as for any field.
+
+	The spec of a t-string's field parses as an f-string too -- an
+	Interpolation's format_spec is a str -- but its errors name the t-string
+	(PythonToken >> beTemplateSpec): ``t'{x:{;}}''' said ``f-string: expecting
+	a valid expression after '{''' (test_tstring test_syntax_errors)."
 
 	| innerParser specAst specToken |
 	innerParser := PythonParser basicNew source: ''.
@@ -1527,6 +1532,7 @@ PythonParser >> ___fstringSpecExprFor: spec at: locTok [
 	``f'{10:{ }}''' had no location at all (eval reported ``None'')."
 	innerParser ___sourceText___: source.
 	specToken := PythonToken type: #FSTRING value: spec line: locTok line position: locTok position.
+	locTok isInTemplateString ifTrue: [specToken beTemplateSpec].
 	(specFieldStarts at: spec otherwise: nil) ifNotNil: [:starts | specToken fieldStarts: starts].
 	specAst := innerParser ___parseFStringLiteralToken___: specToken.
 	innerParser ___variableStack___ do: [:innerScope |
@@ -3231,7 +3237,7 @@ PythonParser >> ___signalOpenFieldOf___: anFString [
 	(Parser/lexer/lexer.c:1180-1192; test_fstring test_mismatched_braces)."
 
 	| prefix |
-	prefix := anFString isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '].
+	prefix := anFString fieldErrorPrefix.
 	anFString isOpenInFormatSpec ifTrue: [
 		^ PythonParser ___signal___: SyntaxError
 			message: prefix , 'expecting ''}'', or format specs'
@@ -5757,8 +5763,7 @@ PythonParser >> parseFStringLiteral [
 					pos := pos + 2.
 				] ifFalse: [
 					^ self ___syntaxError___:
-						(tok isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '])
-							, 'single ''}'' is not allowed'
+						tok fieldErrorPrefix , 'single ''}'' is not allowed'
 						at: tok]
 			] ifFalse: [
 				"Plain literal run."
