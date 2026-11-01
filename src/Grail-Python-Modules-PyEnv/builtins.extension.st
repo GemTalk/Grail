@@ -2577,6 +2577,21 @@ builtins >> ___isAsciiIdentifier___: aString [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+builtins >> ___isCallForClassUnderConstruction___: aName [
+	"Is a three-argument type() named aName made while a class statement of that
+	name is running a ``metaclass='' that is no class -- so that it is the
+	callable building the class the statement is defining?"
+
+	| pending |
+	pending := type ___classUnderConstruction___.
+	pending == nil ifTrue: [^ false].
+	pending ___grailMetaclassCallable___ == nil ifTrue: [^ false].
+	^ [pending ___pyNameOrEmpty___ @env0:asString @env0:= aName @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: false]
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 builtins >> ___isCellObject___: anObject [
 	"Whether anObject is a cell -- what a closure tuple must hold.
 
@@ -8093,6 +8108,16 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 	path in ClassDefAst emits for every class it builds.  Ensured below."
 
 	| il baseArray storageBase nameSym newClass ownAttrNames orderedKeys |
+	"INSIDE a class statement whose ``metaclass='' is no class, the callable's
+	own ``type(name, bases, ns)'' for that class is the type.__new__ the
+	statement is waiting for (object class >> ___grailDispatchMetaclassCallable___:):
+	it answers the class already built, whose methods and cells the body bound,
+	rather than a copy built from the namespace."
+	(self ___isCallForClassUnderConstruction___: className) ifTrue: [
+		SessionTemps @env0:current @env0:at: #'GrailTypeNewKwargs' put: classKeywords.
+		^ [type __new__: type _: className _: bases _: namespace]
+			@env0:ensure: [SessionTemps @env0:current
+				@env0:removeKey: #'GrailTypeNewKwargs' ifAbsent: [nil]]].
 	"VALIDATE FIRST.  type() built a class from almost anything -- a bytes
 	name, a list of bases, a mappingproxy namespace, a __slots__ of '42' --
 	and every one of those is a TypeError in CPython.  Building instead of
