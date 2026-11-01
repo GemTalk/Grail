@@ -931,6 +931,10 @@ ClassDefAst >> ___classBodyOrderedRuntimeStatements___ [
 	    name resolved through to the module and raised NameError (test_enum
 	    TestSpecial.test_ignore).  The dynamic read was already in place and
 	    correct -- what was wrong was WHEN it ran.
+	  * ``f.attr = value'' on a sibling def (___methodAttributeAssigns___),
+	    which a later statement reads back off the function: ``f.mark = 1;
+	    seen = f.mark'' raised AttributeError while the store waited for the
+	    body to finish (emitMethodAttributeAssign:on:).
 
 	CPython executes a class body top to bottom, once, so source order is not a
 	refinement here but the algorithm.  The remaining pass that does NOT join
@@ -938,9 +942,10 @@ ClassDefAst >> ___classBodyOrderedRuntimeStatements___ [
 	target (``Inner.x = 1'') and must keep running after the nested classes it
 	mutates are built."
 
-	| result |
+	| result methodAttributeAssigns |
 	result := OrderedCollection new.
 	body ifNil: [^ result].
+	methodAttributeAssigns := self ___methodAttributeAssigns___.
 	body body doWithIndex: [:stmt :pos |
 		((self ___classBodyGlobalTargetNames___: stmt) isEmpty not
 			or: [(self ___classBodyNonlocalTargetNames___: stmt) isEmpty not
@@ -948,7 +953,8 @@ ClassDefAst >> ___classBodyOrderedRuntimeStatements___ [
 			or: [(self ___isClassBodyDeleteStatement___: stmt)
 			or: [(stmt isKindOf: IfAst)
 			or: [(self ___isClassBodyNamespaceBinding___: stmt)
-			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]]])
+			or: [(self ___isClassBodyRuntimeStatement___: stmt)
+			or: [methodAttributeAssigns includesIdentical: stmt]]]]]]])
 				ifTrue: [result add: pos -> stmt]].
 	^ result
 
@@ -3189,7 +3195,8 @@ ClassDefAst >> ___methodAliasSourceFor___: aliasName def: origDef [
 ClassDefAst >> ___methodAttributeAssigns___ [
 	"The class-body statements ``f.attr = value'' whose ``f'' is a plain
 	(undecorated, non-overload) instance DEF defined EARLIER in the body -- an
-	attribute of that function.  See the emit after the method decorators."
+	attribute of that function.  The source-order flush emits each at its own
+	place (emitMethodAttributeAssign:on:)."
 
 	| seen result |
 	result := OrderedCollection new.
@@ -4394,6 +4401,45 @@ ClassDefAst >> emitMethodAnnotationsTableOn: aStream className: aClassName [
 		entries add: src contents]]
 		ensure: [CallAst methodAnnotationClassScope: savedScope].
 	self ___emitTable___: '___methodAnnotationsTable___' entries: entries category: 'Grail-Annotations' onStream: aStream
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+ClassDefAst >> emitMethodAttributeAssign: anAssign on: aStream [
+	"``f.attr = value'' on a sibling DEF in the class body -- an attribute of the
+	FUNCTION, which CPython sets while the body runs.  Such statements were
+	dropped (see ___isClassBodyAttributeAssign___), so ``C.f.attr'' was
+	missing.  pydantic marks its own initializer that way --
+	``__init__.__pydantic_base_init__ = True'' in BaseModel's body -- and,
+	finding no mark, took EVERY model for one with a custom __init__, so a
+	nested model was validated through a Python call and its errors lost the
+	outer field's location (docs/Support_Pydantic.md, Phase 5).
+
+	Stored onto the same UnboundMethod a later ``C.f.attr = v'' stores
+	through, under the class-body runtime class so the value expression reads
+	the body's names.  Sent from the source-order flush, at the statement's
+	OWN position: the method already exists there, compiled before the body
+	runs, and a statement after it reads the mark.  Emitted once the whole
+	body had run, ``f.__isabstractmethod__ = v; f = DynamicClassAttribute(f)''
+	built the descriptor before the mark (test_dynamicclassattribute
+	test_property___isabstractmethod__descriptor), and the value read each
+	name as the body LEFT it, not as it stood at the statement."
+
+	| target savedRuntimeClass |
+	target := anAssign targets first.
+	aStream
+		nextPutAll: '(UnboundMethod definingClass: ';
+		nextPutAll: self ___stVarName___;
+		nextPutAll: ' selector: #''';
+		nextPutAll: target value id asString;
+		nextPutAll: ''') @env1:__setattr__: ''';
+		nextPutAll: target attr asString;
+		nextPutAll: ''' _: ('.
+	savedRuntimeClass := CallAst classBodyRuntimeClass.
+	CallAst classBodyRuntimeClass: self ___stVarName___.
+	[anAssign value printSmalltalkOn: aStream]
+		ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
+	aStream nextPutAll: ').'
 
 ]
 
@@ -6943,7 +6989,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		(``empty_values = list(validators.EMPTY_VALUES)'' before
 		``def validators'' — django's Field)."
 		| firstBinding storePositions storesSeen pendingStmts flushPendingBefore defaultsEmitted
-		  pendingDefaults flushDefaultsBefore |
+		  pendingDefaults flushDefaultsBefore methodAttributeAssigns |
 		firstBinding := IdentityKeyValueDictionary new.
 		defaultsEmitted := IdentitySet new.
 		storePositions := IdentityKeyValueDictionary new.
@@ -7001,6 +7047,7 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		= g'' in a class body must leave y == 2 (test_listcomps
 		test_explicit_global), and with a trailing pass it answered 1."
 		pendingStmts := self ___classBodyOrderedRuntimeStatements___.
+		methodAttributeAssigns := self ___methodAttributeAssigns___.
 		"Defs whose decorators run AT THE DEF, below -- see
 		___defsDecoratedAtTheirPosition___."
 		earlyDecorated := self ___defsDecoratedAtTheirPosition___.
@@ -7114,7 +7161,9 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 													base: (self ___classBodyDecoratorScopeWith___: classAttrs))]]
 									ifFalse: [(stmt isKindOf: IfAst)
 										ifTrue: [self emitClassBodyIf: stmt on: aStream]
-										ifFalse: [stmt printSmalltalkOn: aStream]]]]
+										ifFalse: [(methodAttributeAssigns includesIdentical: stmt)
+											ifTrue: [self emitMethodAttributeAssign: stmt on: aStream]
+											ifFalse: [stmt printSmalltalkOn: aStream]]]]]
 							ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
 						aStream lf].
 			flushDefaultsBefore value: limit].
@@ -7832,34 +7881,6 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	they are ONE property object -- see ___decoratedPropertyNames___."
 	decoratedProps do: [:n |
 		self ___printDecoratedProperty___: n on: aStream siblingNames: decoratorScope].
-
-	"``f.attr = value'' on a sibling DEF in the class body -- an attribute of the
-	FUNCTION, which CPython sets while the body runs.  Such statements were
-	dropped (see ___isClassBodyAttributeAssign___), so ``C.f.attr'' was
-	missing.  pydantic marks its own initializer that way --
-	``__init__.__pydantic_base_init__ = True'' in BaseModel's body -- and,
-	finding no mark, took EVERY model for one with a custom __init__, so a
-	nested model was validated through a Python call and its errors lost the
-	outer field's location (docs/Support_Pydantic.md, Phase 5).  Emitted here,
-	once the methods exist, onto the same UnboundMethod a later ``C.f.attr =
-	v'' stores through, in source order, under the class-body runtime class so
-	the value expression reads the body's names."
-	self ___methodAttributeAssigns___ do: [:stmt |
-		| tgt savedRuntimeClass |
-		tgt := stmt targets first.
-		aStream
-			nextPutAll: '(UnboundMethod definingClass: ';
-			nextPutAll: self ___stVarName___;
-			nextPutAll: ' selector: #''';
-			nextPutAll: tgt value id asString;
-			nextPutAll: ''') @env1:__setattr__: ''';
-			nextPutAll: tgt attr asString;
-			nextPutAll: ''' _: ('.
-		savedRuntimeClass := CallAst classBodyRuntimeClass.
-		CallAst classBodyRuntimeClass: self ___stVarName___.
-		[stmt value printSmalltalkOn: aStream]
-			ensure: [CallAst classBodyRuntimeClass: savedRuntimeClass].
-		aStream nextPutAll: ').'; lf].
 
 	"``b = a'' where ``a'' is a sibling DEF must see the DECORATED def.  CPython
 	guarantees it by applying a decorator at the def statement, so by the time
