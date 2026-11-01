@@ -2894,10 +2894,10 @@ ClassDefAst >> ___isClassBodyNamespaceBinding___: stmt [
 	"True for a class-body ``def'' or nested ``class'' -- the two body
 	statements that BIND A NAME without producing a value.
 
-	They join the source-order flush not to be emitted (each already has its
-	own emission path -- a def compiles to a Smalltalk method, a nested class
-	is built and stored through ___classHolderAttrStore___) but so the name
-	can be offered to the prepared namespace AT ITS OWN POSITION.  CPython's
+	They join the source-order flush so the name can be offered to the
+	prepared namespace AT ITS OWN POSITION.  A def is not emitted there -- it
+	compiles to a Smalltalk method -- but a nested class is BUILT there
+	(emitNestedClass:on:), so its header reads the body in order.  CPython's
 	class namespace holds a function object for every def in the body;
 	Grail's held nothing for either, which is the gap
 	docs/Class_Body_Namespace.md calls the load-bearing one.
@@ -4660,6 +4660,45 @@ ClassDefAst >> emitMethodTypeParamsTableOn: aStream className: aClassName [
 		src nextPutAll: ');'.
 		entries add: src contents].
 	self ___emitTable___: '___methodTypeParamsTable___' entries: entries category: 'Grail-Python Metadata' onStream: aStream
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+ClassDefAst >> emitNestedClass: aClassDef on: aStream [
+	"A nested ``class'' at the top of this class body: built inside a bracketed
+	block (its class variable is block-local, not a module temp) and stored as
+	a class attribute on this class.  The nested emit saves and restores the
+	CallAst compile context itself.
+
+	Sent from the source-order flush, at the nested class's OWN position.  Its
+	header -- bases, keywords, decorators -- is evaluated in this class body,
+	so it must see exactly the names bound above it: ``base = int; class
+	B(base)'' and ``class C[T]: T = 'class'; class Inner(make_base(T))'' both
+	read the class-body binding (test_type_params
+	test_gen_exp_in_nested_class).  Built ahead of the attribute section, as
+	it was, the header ran before any of them and read past the class."
+
+	aStream nextPutAll: '[ | '; nextPutAll: aClassDef ___stVarName___;
+		nextPutAll: ' |'; lf.
+	aClassDef printSmalltalkOn: aStream.
+	aStream lf;
+		nextPutAll: self ___stVarName___;
+		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
+		"The BINDING is mangled (C._C__Inner) while the class's own __name__
+		 and __qualname__ keep the written spelling (__Inner, C.__Inner) --
+		 measured on CPython 3.14.6.  Stored raw, ``C._C__Inner'' was an
+		 AttributeError and the class could not be reached at all."
+		nextPutAll: (aClassDef ___manglePrivate___: aClassDef name) asString;
+		nextPutAll: ''' put: ';
+		nextPutAll: aClassDef ___stVarName___;
+		nextPutAll: '.'; lf.
+	"No __qualname__ store here.  The nested class stamps its OWN dotted
+	name during its own emit, from the lexical scope stack -- this class's
+	frame is on it, pushed beside classBeingCompiled.  A store built here
+	from ``self __qualname__'' would run BEFORE this class's qualname was
+	stamped (that happens after the attribute section), so a doubly nested
+	class read the short answer."
+	aStream nextPutAll: ' ] @env0:value.'; lf
 
 ]
 
@@ -6461,15 +6500,10 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	savedDynamicLocals := CallAst classBodyDynamicLocals.
 	CallAst classBodyDynamicLocals: self ___classBodyCanBindDynamically___.
 	CallAst inClassBodyValueEmit: true.
-	"NESTED CLASSES (``class Outer: class A: ...``) -- previously
-	dropped entirely.  Emit each nested classdef inside a bracketed
-	block (its class variable is block-local, not a module temp) and
-	store the built class as a class attribute on the outer class via
-	the per-class dynamic store, BEFORE the attr values emit so a later
-	``a = A()'' in the outer body can read it (test_functools'
-	TestPartialMethod.A).  The nested emit saves/restores the CallAst
-	compile context itself."
-	"...and a class body that can bind DYNAMICALLY needs them just as much: a
+	"NESTED CLASSES (``class Outer: class A: ...``) store into the per-class
+	holder, at their own source position in the attribute section (see
+	emitNestedClass:on:), so the holder must exist before that section runs."
+	"...and a class body that can bind DYNAMICALLY needs it just as much: a
 	``locals()['x'] = 43'' for a name no statement mentions has no accessor pair
 	to store through, so ___classBodyDefinitionalStore___ falls back to the
 	holder -- which must already exist by the time the attribute section runs,
@@ -6557,29 +6591,6 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 		type_params do: [:n |
 			aStream nextPutAll: ''''; nextPutAll: n asString; nextPutAll: ''' '].
 		aStream nextPutAll: ').'; lf].
-	(body body select: [:stmt | stmt isKindOf: ClassDefAst]) do: [:nested |
-		aStream nextPutAll: '[ | '; nextPutAll: nested ___stVarName___;
-			nextPutAll: ' |'; lf.
-		nested printSmalltalkOn: aStream.
-		aStream lf;
-			nextPutAll: self ___stVarName___;
-			nextPutAll: ' @env1:___classHolderAttrStore___: #''';
-			"The BINDING is mangled (C._C__Inner) while the class's own __name__
-			 and __qualname__ keep the written spelling (__Inner, C.__Inner) --
-			 measured on CPython 3.14.6.  Stored raw, ``C._C__Inner'' was an
-			 AttributeError and the class could not be reached at all."
-			nextPutAll: (nested ___manglePrivate___: nested name) asString;
-			nextPutAll: ''' put: ';
-			nextPutAll: nested ___stVarName___;
-			nextPutAll: '.'; lf.
-			"No __qualname__ store here.  The nested class stamps its OWN dotted
-			name during its own emit, from the lexical scope stack -- this class's
-			frame is on it, pushed beside classBeingCompiled above.  A store built
-			here from ``self __qualname__'' would run BEFORE this class's qualname
-			was stamped (that happens after the attribute section), so a doubly
-			nested class read the short answer."
-			aStream nextPutAll: ' ] @env0:value.'; lf.
-	].
 	"Class-side ``___methodCodeTable___'' (method name -> PyCode), the __code__
 	twin of the doc / signature / annotations tables.  A class-body def compiles
 	to a Smalltalk METHOD and so cannot carry the def-time ``___pyCode___:''
@@ -7033,10 +7044,13 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 							ifFalse: [
 								(self ___isClassBodyNamespaceBinding___: stmt)
 									ifTrue: [
-										"NOT an emit of the statement -- the def is already
-										compiled and the nested class already stored.  Only
-										the namespace binding, at this name's own source
-										position, so a mapping sees the body in order."
+										"A def is already compiled, so only its namespace
+										binding goes out here.  A nested class is BUILT here,
+										then bound: both at this name's own source position,
+										so its header and a mapping see the body in order."
+										(stmt isKindOf: ClassDefAst) ifTrue: [
+											self emitNestedClass: stmt on: aStream.
+											aStream lf].
 										aStream nextPutAll: self ___stVarName___;
 											nextPutAll: ' @env1:___grailNsBind___: ''';
 											nextPutAll: stmt name asString;
