@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 63 | 12 | 15 | 90 |
+| P1 | 65 | 10 | 15 | 90 |
 | P2 | 26 | 3 | 5 | 34 |
 | P3 | 23 | 4 | 29 | 56 |
 | P4 | 23 | 6 | 46 | 75 |
-| **In-scope** | **135** | **25** | **95** | **255** |
+| **In-scope** | **137** | **23** | **95** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **160 are wired into the harness** (P1 75 · P2 29 · P3 27 · P4 29) and **135 of those score OK**.
+Of the 255 in-scope modules, **160 are wired into the harness** (P1 75 · P2 29 · P3 27 · P4 29) and **137 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,12 +136,12 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 74 | 4386 | 441 | 3714 | 10% |
+| P1 | 75 | 4432 | 442 | 3850 | 10% |
 | P2 | 30 | 4286 | 558 | 3715 | 13% |
 | P3 | 27 | 3276 | 502 | 2754 | 15% |
-| P4 | 46 | 3781 | 143 | 3536 | 4% |
-| other | 22 | 1053 | 257 | 728 | 24% |
-| **all** | **199** | **16782** | **1901** | **14447** | **11%** |
+| P4 | 46 | 3781 | 142 | 3537 | 4% |
+| other | 22 | 1053 | 257 | 729 | 24% |
+| **all** | **200** | **16828** | **1901** | **14585** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_c_locale_coercion` 6 of 8 · `test_utf8_mode` 13 of 12.
 <!-- /test-tally -->
@@ -262,10 +262,10 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 |  | `test_syntax` | SyntaxError coverage (language). |
 | ❗ | `test_tstring` | Template strings / PEP 750 (language, new in 3.14). |
 | ✅ | `test_tuple` | tuple — core type (in harness). |
-| ❗ | `test_type_aliases` | type X = ... aliases / PEP 695 (language). |
+| ✅ | `test_type_aliases` | type X = ... aliases / PEP 695 (language). |
 | ❗ | `test_type_annotations` | Annotation syntax/semantics (language). |
 |  | `test_type_comments` | # type: comments (language/ast). |
-| ❗ | `test_type_params` | PEP 695 type parameters (language). |
+| ✅ | `test_type_params` | PEP 695 type parameters (language). |
 | ✅ | `test_typechecks` | type()/isinstance checks (language). |
 | ❗ | `test_types` | types module — built-in type objects (language). |
 | ✅ | `test_unary` | Unary operators (language). |
@@ -776,23 +776,23 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**41 of the 199 rows on the committed board are not OK.**
+**40 of the 200 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
 - `test.test_buffer` ERROR, 95 tests: 6 failed, 4 errors, 80 skipped
 - `test.test_largefile` ERROR, 16 tests: 0 failed, 2 errors, 6 skipped
 - `test.test_multibytecodec` ERROR, 36 tests: 5 failed, 1 errors, 2 skipped
-- `test.test_str` ERROR, 138 tests: 20 failed, 8 errors, 11 skipped
+- `test.test_str` ERROR, 138 tests: 19 failed, 7 errors, 11 skipped
 - `test.test_urllib` ERROR, 101 tests: 4 failed, 6 errors, 2 skipped
 - `test.test_ntpath` ERROR, 105 tests: 0 failed, 1 errors, 28 skipped
 - `test.test_signal` ERROR, 57 tests: 4 failed, 6 errors, 43 skipped
 - `test.test_posixpath` ERROR, 94 tests: 1 failed, 1 errors, 29 skipped
 - `test.test_genericpath` ERROR, 25 tests: 0 failed, 1 errors, 3 skipped
-- `test.test_sys` ERROR, 97 tests: 5 failed, 18 errors, 56 skipped
+- `test.test_sys` ERROR, 97 tests: 6 failed, 16 errors, 56 skipped
 - `test.test_fileio` SKIP, 0 tests: 0 failed, 0 errors, 0 skipped
-- `test.test_exceptions` ERROR, 107 tests: 14 failed, 14 errors, 30 skipped
-- `test.test_descr` ERROR, 162 tests: 49 failed, 31 errors, 12 skipped
+- `test.test_exceptions` ERROR, 107 tests: 6 failed, 3 errors, 30 skipped
+- `test.test_descr` ERROR, 162 tests: 41 failed, 17 errors, 12 skipped
 - `test.test_filecmp` ERROR, 16 tests: 0 failed, 1 errors, 0 skipped
 - `test.test_robotparser` ERROR, 50 tests: 0 failed, 2 errors, 0 skipped
 - `test.test_rlcompleter` FAIL, 8 tests: 2 failed, 0 errors, 0 skipped
@@ -810,17 +810,14 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_utils` FAIL, 22 tests: 1 failed, 0 errors, 1 skipped
 - `test.test_patma` ERROR, 328 tests: 6 failed, 1 errors, 0 skipped
 - `test.test_grammar` ERROR, 75 tests: 2 failed, 1 errors, 0 skipped
-- `test.test_fstring` ERROR, 90 tests: 23 failed, 3 errors, 4 skipped
-- `test.test_type_aliases` ERROR, 30 tests: 3 failed, 3 errors, 0 skipped
-- `test.test_type_params` ERROR, 108 tests: 12 failed, 13 errors, 0 skipped
-- `test.test_types` ERROR, 129 tests: 15 failed, 9 errors, 3 skipped
+- `test.test_fstring` ERROR, 90 tests: 8 failed, 2 errors, 4 skipped
+- `test.test_types` ERROR, 129 tests: 13 failed, 9 errors, 3 skipped
 - `test.test_genericalias` ERROR, 36 tests: 2 failed, 3 errors, 0 skipped
-- `test.test_tstring` FAIL, 12 tests: 3 failed, 0 errors, 0 skipped
+- `test.test_tstring` FAIL, 12 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_string.test_templatelib` FAIL, 13 tests: 2 failed, 0 errors, 0 skipped
 - `test.test_dynamicclassattribute` FAIL, 12 tests: 6 failed, 0 errors, 1 skipped
 - `test.test_base64` ERROR, 41 tests: 0 failed, 16 errors, 6 skipped
-
-Wired, but not on the board until the next nightly measures them: `test_type_annotations`.
+- `test.test_type_annotations` FAIL, 46 tests: 2 failed, 0 errors, 1 skipped
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
