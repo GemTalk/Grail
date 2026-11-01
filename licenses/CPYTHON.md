@@ -36,6 +36,7 @@ redistributed under the same Python Software Foundation License Version 2.
 |------|---------------|-------|
 | `src/python/stdlib/test/test_*.py` | `Lib/test/test_*.py` | The curated set wired into `scripts/cpython_suite_manifest.txt` (phases 1–4), vendored verbatim |
 | `src/python/stdlib/test/test_decimal.py` | `Lib/test/test_decimal.py` | **One deviation** from the verbatim row above: the `os.listdir(directory)` in `load_tests` is guarded by the `skip_expected` flag the file already computes, because Grail does not vendor the multi-megabyte `Lib/test/decimaltestdata/` corpus |
+| `src/python/stdlib/test/test_tstring.py` | `Lib/test/test_tstring.py` | Verbatim from **3.14.8**, not 3.14.4. 3.14.4's `test_debug_specifier` expected the expression `'value'` for `t"{value = }"`; 3.14.8 corrected it to `'value '`, and added tests of the expression text and of many t-strings in one module |
 | `src/python/stdlib/test/list_tests.py`, `seq_tests.py`, `mapping_tests.py`, `string_tests.py` | `Lib/test/*.py` | Sibling test mixins, vendored verbatim |
 | `src/python/stdlib/test/support/script_helper.py` | `Lib/test/support/script_helper.py` | **Rewritten**: every helper spawns a subprocess in CPython; Grail's raise `unittest.SkipTest` instead (`run_test_script` too). `make_zip_script` only writes a file, so it is CPython 3.14.4's verbatim |
 | `src/python/stdlib/test/support/numbers.py` | `Lib/test/support/numbers.py` | Verbatim (pure data) |
