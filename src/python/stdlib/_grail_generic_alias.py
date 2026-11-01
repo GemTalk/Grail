@@ -170,7 +170,11 @@ def repr_item(p):
     if p is Ellipsis:
         return '...'
     if isinstance(p, list):
-        return '[' + ', '.join(repr_item(x) for x in p) + ']'
+        # ga_repr_items_list takes the length ONCE and fetches each item by
+        # index, so a list that an item's repr empties raises IndexError
+        # (gh-143823, test_genericalias test_evil_repr3) rather than printing
+        # what is left.
+        return '[' + ', '.join([repr_item(p[i]) for i in range(len(p))]) + ']'
     try:
         if hasattr(p, '__origin__') and hasattr(p, '__args__'):
             return repr(p)
