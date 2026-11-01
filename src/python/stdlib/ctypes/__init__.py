@@ -35,6 +35,7 @@ DEFAULT_MODE = RTLD_LOCAL
 
 _NO_FFI = "Grail's ctypes has no foreign function interface"
 _NULL = object()      # "no initial value" -- py_object() is NULL, py_object(None) is None
+_GenericAlias = type(list[int])   # types.GenericAlias, what CPython's generic ctypes types answer
 
 
 class ArgumentError(Exception):
@@ -287,6 +288,8 @@ c_void_p = _simple("c_void_p", "P")
 c_char_p = _simple("c_char_p", "z")
 c_wchar_p = _simple("c_wchar_p", "Z")
 py_object = _simple("py_object", "O")
+# Generic in CPython (Lib/ctypes/__init__.py:167); the other simple types are not.
+py_object.__class_getitem__ = classmethod(_GenericAlias)
 
 c_voidp = c_void_p
 c_int8, c_uint8 = c_byte, c_ubyte
@@ -323,6 +326,9 @@ def _array_type(itemtype, length):
 class Array(_CData):
     _type_ = None
     _length_ = 0
+    # Generic over its element type, as CPython's (Modules/_ctypes/_ctypes.c:5308);
+    # an array type such as ``c_int * 3'' inherits it.
+    __class_getitem__ = classmethod(_GenericAlias)
 
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
@@ -728,6 +734,8 @@ class PyDLL(CDLL):
 
 
 class LibraryLoader:
+    __class_getitem__ = classmethod(_GenericAlias)   # Lib/ctypes/__init__.py:556
+
     def __init__(self, dlltype):
         self._dlltype = dlltype
 
