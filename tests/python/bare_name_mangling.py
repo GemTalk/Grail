@@ -117,7 +117,9 @@ class C:
 
 # --- the global is declared and written under the MANGLED name -------------
 C().set_global()
-rec('global_key', lambda: sorted(k for k in globals() if k.endswith('__g')))
+# A snapshot: a coroutine an earlier test dropped unawaited can be finalized by
+# a GC mid-loop, and its warning adds __warningregistry__ to these globals.
+rec('global_key', lambda: sorted(k for k in list(globals()) if k.endswith('__g')))
 rec('global_value', lambda: _C__g)
 
 # --- a bare read is mangled, so it does not reach the module's __helper -----
