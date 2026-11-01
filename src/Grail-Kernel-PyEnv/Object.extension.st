@@ -1048,6 +1048,8 @@ Object class >> ___grailDispatchMetaclass___ [
 	is not an instance of the metaclass."
 
 	| meta ns clsBases clsName stk fn result hdrKw kwTbl |
+	self ___grailMetaclassCallable___ ifNotNil: [:callable |
+		^ self ___grailDispatchMetaclassCallable___: callable].
 	"LAST STEP OF THE CLASS STATEMENT, so it also drops the pending namespace --
 	nothing after this is entitled to see it, and the separate
 	___grailFinishNamespace___ emit that used to do the job cannot survive here:
@@ -1103,83 +1105,7 @@ Object class >> ___grailDispatchMetaclass___ [
 		never told its parent about a subclass.  typing.Protocol is one:
 		every Protocol subclass lost its __parameters__.  See type >>
 		__new__:_:_:_:."
-		"THE IMPLICIT BINDINGS FIRST.  A CPython class body begins with
-		``__module__ = __name__'' and ``__qualname__ = '...''', so every
-		namespace a metaclass is handed carries both -- and typing's
-		NamedTupleMeta reads ``ns['__module__']'' unconditionally, while it
-		copies __qualname__ onto the class it builds.  Grail's body never
-		binds them (the class already knows both), so the namespace came
-		without.  Added before the snapshot, so type.__new__ sees them as
-		unchanged rather than as a metaclass's own write."
-		"__orig_bases__ too, when the header's __mro_entries__ substituted a
-		base: CPython's class statement puts it in the namespace, and
-		typing's _generic_init_subclass refuses ``Cannot inherit from plain
-		Generic'' for a class a metaclass rebuilt without it.  Absent on a
-		class that has none -- the read raises and nothing is added."
-		"And __annotations__ under ``from __future__ import annotations'':
-		there CPython's namespace holds the stringified dict itself, where a
-		PEP 649 body leaves __annotate_func__ instead -- which Grail already
-		supplies.  Seeded only when neither is present and there is
-		something to seed, so a class without annotations keeps a namespace
-		that says so.  typing's _TypedDictMeta pops it, so a future-annotated
-		TypedDict (test.typinganndata._typed_dict_helper) had no keys."
-		(((ns @env1:__contains__: '__annotations__') ___isTruthy___
-			or: [(ns @env1:__contains__: '__annotate_func__') ___isTruthy___
-			or: [(ns @env1:__contains__: '__annotate__') ___isTruthy___]]) @env0:not)
-				ifTrue: [
-					[ | ann |
-					ann := self ___pyAttrLoad___: #'__annotations__'.
-					(ann @env1:__len__ @env0:> 0) ifTrue: [
-						ns @env1:__setitem__: '__annotations__'
-							_: (ann @env1:copy)]]
-						@env0:on: AbstractException do: [:ex |
-							(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-							ex @env0:return: nil]].
-		"__orig_bases__ only when it is the class's OWN: read through
-		inheritance, ``class Child(Parent)'' for a TypedDict Parent handed
-		_TypedDictMeta Parent's (TypedDict,), which it kept as Child's.  The
-		sole-base path's substitution is still waiting in
-		GrailPendingOrigBases at this point (___grailInstallOrigBases___
-		stores it at the end of the statement); a multi-base one is already
-		in the class's dict."
-		#( #'__module__' #'__qualname__' ) @env0:do: [:k |
-			(ns @env1:__contains__: k @env0:asString) ___isTruthy___ ifFalse: [
-				[ns @env1:__setitem__: k @env0:asString _: (self ___pyAttrLoad___: k)]
-					@env0:on: AbstractException do: [:ex |
-						(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-						ex @env0:return: nil]]].
-		"A NESTED class's __qualname__ is stamped after __prepare__ ran -- the
-		store needs the class holder, which exists only by then -- so the seed
-		the namespace got there is the bare name.  NamedTupleMeta copies the
-		namespace's __qualname__ onto the class it builds, and ``Outer.Inner''
-		came out ``Inner'', which pickle cannot find (test_typing
-		test_copy_and_pickle).  Refresh a seed that is still the bare name."
-		[ | cur seeded |
-		cur := self ___pyAttrLoad___: #'__qualname__'.
-		seeded := (ns @env1:__contains__: '__qualname__') ___isTruthy___
-			ifTrue: [ns @env1:__getitem__: '__qualname__'] ifFalse: [nil].
-		((seeded @env0:isKindOf: CharacterCollection)
-			and: [(cur @env0:isKindOf: CharacterCollection)
-			and: [(seeded @env0:asString @env0:= (self ___pyAttrLoad___: #'__name__') @env0:asString)
-			and: [(cur @env0:asString @env0:= seeded @env0:asString) @env0:not]]])
-			ifTrue: [ns @env1:__setitem__: '__qualname__' _: cur]]
-			@env0:on: AbstractException do: [:ex |
-				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-				ex @env0:return: nil].
-		(ns @env1:__contains__: '__orig_bases__') ___isTruthy___ ifFalse: [
-			[ | pending |
-			pending := (SessionTemps @env0:current
-				@env0:at: #'GrailPendingOrigBases' otherwise: nil)
-					@env0:ifNotNil: [:tbl | tbl @env0:at: self otherwise: nil].
-			pending == nil ifTrue: [
-				(((self ___pyAttrLoad___: #'__dict__')
-						@env1:__contains__: '__orig_bases__') ___isTruthy___)
-					ifTrue: [pending := self ___pyAttrLoad___: #'__orig_bases__']].
-			pending == nil ifFalse: [
-				ns @env1:__setitem__: '__orig_bases__' _: pending]]
-				@env0:on: AbstractException do: [:ex |
-					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-					ex @env0:return: nil]].
+		self ___grailSeedNamespace___: ns.
 		self ___grailSnapshotNamespace___: ns.
 		stk := SessionTemps @env0:current
 			@env0:at: #'GrailClassUnderConstruction'
@@ -1244,6 +1170,52 @@ Object class >> ___grailDispatchMetaclass___ [
 		kwTbl := SessionTemps @env0:current
 			@env0:at: #'GrailPendingNamespaceSnapshot' otherwise: nil.
 		kwTbl == nil ifFalse: [kwTbl @env0:removeKey: self ifAbsent: [nil]]]
+
+]
+
+{ #category : 'Grail-Metaclass' }
+Object class >> ___grailDispatchMetaclassCallable___: aCallable [
+	"``class C(Base, metaclass=f, flag=1)'' with f no class: CPython's
+	__build_class__ answers ``f('C', (Base,), ns, flag=1)'' and binds C to
+	whatever that is (Python/bltinmodule.c, builtin___build_class__) -- a class
+	f built, ``42'', anything.  Grail built the class first, as it does for every
+	class statement, and the call is made with it under construction: when f
+	reaches type.__new__ -- ``type(name, bases, ns)'', ``Meta(name, bases, ns)'',
+	``MyMeta[A, B](...)'' -- that answers this very class, its body, cells and
+	methods intact (type >> __new__:_:_:_:).  When f answers anything else this
+	class never existed in CPython's terms, so it leaves its bases'
+	__subclasses__, and an __init_subclass__ chain still deferred is dropped
+	rather than run -- CPython would not have run it either."
+
+	| ns clsBases hdrKw stack result |
+	[
+	ns := self ___grailPendingNamespace___.
+	clsBases := self ___grailHeaderBases___.
+	clsBases == nil ifTrue: [
+		clsBases := [self ___pyAttrLoad___: #'__bases__']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: #()]].
+	hdrKw := (SessionTemps @env0:current @env0:at: #'GrailPendingClassKwargs' otherwise: nil)
+		@env0:ifNotNil: [:table | table @env0:at: self otherwise: nil].
+	self ___grailSeedNamespace___: ns.
+	self ___grailSnapshotNamespace___: ns.
+	stack := SessionTemps @env0:current
+		@env0:at: #'GrailClassUnderConstruction'
+		ifAbsentPut: [OrderedCollection @env0:new].
+	stack @env0:addLast: self.
+	[[result := aCallable @env1:___pyCallValue___: { self ___pyNameOrEmpty___. clsBases. ns } kw: hdrKw]
+		@env0:ifCurtailed: [(Python @env0:at: #importlib) @env0:___forgetSubclass___: self]]
+		@env0:ensure: [stack @env0:removeLast].
+	result == self ifFalse: [(Python @env0:at: #importlib) @env0:___forgetSubclass___: self].
+	^ result
+	] @env0:ensure: [
+		(SessionTemps @env0:current @env0:at: #'GrailDeferredInitSubclass' otherwise: nil)
+			@env0:ifNotNil: [:deferred | deferred @env0:remove: self ifAbsent: [nil]].
+		self ___grailFinishNamespace___.
+		self ___grailDropPendingClassCell___.
+		#( #'GrailPendingClassKwargs' #'GrailPendingNamespaceSnapshot' ) @env0:do: [:key |
+			(SessionTemps @env0:current @env0:at: key otherwise: nil)
+				@env0:ifNotNil: [:table | table @env0:removeKey: self ifAbsent: [nil]]].
+		self ___grailSetMetaclassCallable___: nil]
 
 ]
 
@@ -1617,6 +1589,23 @@ Object class >> ___grailInitSubclass___: kwargs [
 	needs to."
 
 	| sup sel instOwner metaOwner found meth assigned kw supplier |
+	"A ``metaclass='' that is no class takes every class keyword for its own
+	call, and CPython runs this chain only inside the type.__new__ that call
+	may reach, with what it forwards there -- so the keywords are stashed for
+	the call and the chain deferred to type >> __new__:_:_:_:, which
+	___grailDispatchMetaclassCallable___: drops if the call never gets there."
+	(self ___grailMetaclassCallable___ notNil
+		and: [(SessionTemps @env0:current
+			@env0:at: #'GrailInitSubclassExactKwargs' otherwise: nil) ~~ true]) ifTrue: [
+				(kwargs @env0:notNil and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+					(SessionTemps @env0:current
+						@env0:at: #'GrailPendingClassKwargs'
+						ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
+							@env0:at: self put: kwargs].
+				(SessionTemps @env0:current
+					@env0:at: #'GrailDeferredInitSubclass'
+					ifAbsentPut: [IdentitySet @env0:new]) @env0:add: self.
+				^ self].
 	sel := #'___init_subclass__:kw:'.
 	"ONE SEARCH DECIDES BOTH HALVES BELOW.  The MRO supplier answers which
 	class supplies the hook AND whether it supplies it by definition or by
@@ -3687,6 +3676,14 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 	precisely what __prepare__ is asked at."
 	(aMetaclass @env0:notNil and: [aMetaclass isKindOf: Behavior]) ifTrue: [
 		self ___grailSetMetaclass___: aMetaclass].
+	"A ``metaclass='' that is no class -- a function, ``MyMeta[A, B]'', any
+	callable.  CPython's __build_class__ calculates no metaclass for it: it asks
+	the callable for __prepare__ like any other, starts the body in a plain dict
+	when there is none, and calls it with the finished namespace
+	(___grailDispatchMetaclassCallable___:).  Recorded apart, because type(C)
+	is whatever the call answers, not the callable."
+	(aMetaclass @env0:notNil and: [(aMetaclass isKindOf: Behavior) not]) ifTrue: [
+		self ___grailSetMetaclassCallable___: aMetaclass].
 	aMetaclass isNil ifTrue: [
 		| inherited |
 		"No ``metaclass='' keyword -- but a class INHERITS its metaclass, and
@@ -3771,8 +3768,10 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 
 			Asked only of a class that named a metaclass, and answered nil for a
 			metaclass that overrides neither -- an ordinary class still allocates
-			nothing and stores exactly what it did before."
-			(self ___grailMetaclassConstructs___: aMetaclass) ifFalse: [^ nil].
+			nothing and stores exactly what it did before.  A callable that is no
+			class always gets one: the namespace is what it is called with."
+			((aMetaclass isKindOf: Behavior)
+				and: [(self ___grailMetaclassConstructs___: aMetaclass) not]) ifTrue: [^ nil].
 			"A plain dict only when nothing better is on offer.  __prepare__ is
 			INHERITED, and for a metaclass derived from EnumMeta the one it
 			inherits is EnumMeta's -- which answers an EnumDict, not a dict.
@@ -4353,6 +4352,92 @@ Object class >> ___grailSchemaReport___ [
 				attrs @env0:add: { r @env0:at: 1. r @env0:at: 3. holding }]].
 		rows @env0:at: i put: { (keys @env0:at: i) @env0:asString. insts @env0:size. attrs @env0:asArray }].
 	^ rows
+
+]
+
+{ #category : 'Grail-Class Namespace' }
+Object class >> ___grailSeedNamespace___: aNamespace [
+	"The bindings a CPython class body makes before its own statements, and a
+	few the class statement adds, put into aNamespace before a metaclass is
+	handed it (___grailDispatchMetaclass___, ___grailDispatchMetaclassCallable___:)."
+
+	"THE IMPLICIT BINDINGS FIRST.  A CPython class body begins with
+	``__module__ = __name__'' and ``__qualname__ = '...''', so every
+	namespace a metaclass is handed carries both -- and typing's
+	NamedTupleMeta reads ``ns['__module__']'' unconditionally, while it
+	copies __qualname__ onto the class it builds.  Grail's body never
+	binds them (the class already knows both), so the namespace came
+	without.  Added before the snapshot, so type.__new__ sees them as
+	unchanged rather than as a metaclass's own write."
+	"__orig_bases__ too, when the header's __mro_entries__ substituted a
+	base: CPython's class statement puts it in the namespace, and
+	typing's _generic_init_subclass refuses ``Cannot inherit from plain
+	Generic'' for a class a metaclass rebuilt without it.  Absent on a
+	class that has none -- the read raises and nothing is added."
+	"And __annotations__ under ``from __future__ import annotations'':
+	there CPython's namespace holds the stringified dict itself, where a
+	PEP 649 body leaves __annotate_func__ instead -- which Grail already
+	supplies.  Seeded only when neither is present and there is
+	something to seed, so a class without annotations keeps a namespace
+	that says so.  typing's _TypedDictMeta pops it, so a future-annotated
+	TypedDict (test.typinganndata._typed_dict_helper) had no keys."
+	(((aNamespace @env1:__contains__: '__annotations__') ___isTruthy___
+		or: [(aNamespace @env1:__contains__: '__annotate_func__') ___isTruthy___
+		or: [(aNamespace @env1:__contains__: '__annotate__') ___isTruthy___]]) @env0:not)
+			ifTrue: [
+				[ | ann |
+				ann := self ___pyAttrLoad___: #'__annotations__'.
+				(ann @env1:__len__ @env0:> 0) ifTrue: [
+					aNamespace @env1:__setitem__: '__annotations__'
+						_: (ann @env1:copy)]]
+					@env0:on: AbstractException do: [:ex |
+						(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+						ex @env0:return: nil]].
+	"__orig_bases__ only when it is the class's OWN: read through
+	inheritance, ``class Child(Parent)'' for a TypedDict Parent handed
+	_TypedDictMeta Parent's (TypedDict,), which it kept as Child's.  The
+	sole-base path's substitution is still waiting in
+	GrailPendingOrigBases at this point (___grailInstallOrigBases___
+	stores it at the end of the statement); a multi-base one is already
+	in the class's dict."
+	#( #'__module__' #'__qualname__' ) @env0:do: [:k |
+		(aNamespace @env1:__contains__: k @env0:asString) ___isTruthy___ ifFalse: [
+			[aNamespace @env1:__setitem__: k @env0:asString _: (self ___pyAttrLoad___: k)]
+				@env0:on: AbstractException do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil]]].
+	"A NESTED class's __qualname__ is stamped after __prepare__ ran -- the
+	store needs the class holder, which exists only by then -- so the seed
+	the namespace got there is the bare name.  NamedTupleMeta copies the
+	namespace's __qualname__ onto the class it builds, and ``Outer.Inner''
+	came out ``Inner'', which pickle cannot find (test_typing
+	test_copy_and_pickle).  Refresh a seed that is still the bare name."
+	[ | cur seeded |
+	cur := self ___pyAttrLoad___: #'__qualname__'.
+	seeded := (aNamespace @env1:__contains__: '__qualname__') ___isTruthy___
+		ifTrue: [aNamespace @env1:__getitem__: '__qualname__'] ifFalse: [nil].
+	((seeded @env0:isKindOf: CharacterCollection)
+		and: [(cur @env0:isKindOf: CharacterCollection)
+		and: [(seeded @env0:asString @env0:= (self ___pyAttrLoad___: #'__name__') @env0:asString)
+		and: [(cur @env0:asString @env0:= seeded @env0:asString) @env0:not]]])
+		ifTrue: [aNamespace @env1:__setitem__: '__qualname__' _: cur]]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(aNamespace @env1:__contains__: '__orig_bases__') ___isTruthy___ ifFalse: [
+		[ | pending |
+		pending := (SessionTemps @env0:current
+			@env0:at: #'GrailPendingOrigBases' otherwise: nil)
+				@env0:ifNotNil: [:tbl | tbl @env0:at: self otherwise: nil].
+		pending == nil ifTrue: [
+			(((self ___pyAttrLoad___: #'__dict__')
+					@env1:__contains__: '__orig_bases__') ___isTruthy___)
+				ifTrue: [pending := self ___pyAttrLoad___: #'__orig_bases__']].
+		pending == nil ifFalse: [
+			aNamespace @env1:__setitem__: '__orig_bases__' _: pending]]
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil]].
 
 ]
 
@@ -10472,6 +10557,23 @@ Object >> ___grailMetaclassCall___: positional kw: kwargs [
 ]
 
 { #category : 'Grail-Metaclass' }
+Object >> ___grailMetaclassCallable___ [
+	"The ``metaclass='' this class statement named when it is no class -- a
+	function, a generic alias, any other callable -- or nil.  CPython's
+	__build_class__ calls such a metaclass with the finished namespace and binds
+	the name to whatever it answers (___grailDispatchMetaclassCallable___:).
+	NOT inherited, unlike ___grailMetaclass___: what the callable answers has a
+	type of its own, and that is what a subclass inherits.  Session-local and
+	keyed by class, and dropped when the class statement is over."
+
+	| table |
+	table := SessionTemps @env0:current @env0:at: #'GrailClassMetaclassCallable' otherwise: nil.
+	table == nil ifTrue: [^ nil].
+	^ table @env0:at: self otherwise: nil
+
+]
+
+{ #category : 'Grail-Metaclass' }
 Object >> ___grailMetaclassCallHandler___ [
 	"The metaclass ``__call__'' that owns this class's instantiation, or nil
 	-- CACHED per class, because this is asked on EVERY construction.
@@ -11947,6 +12049,22 @@ Object >> ___grailSetMetaclass___: aMetaclass [
 	metaclass that defines one is recorded."
 	(object ___grailMetaclassDefinesGetattribute___: aMetaclass) ifTrue: [
 		SessionTemps @env0:current @env0:at: #'GrailMetaGetattribute' put: true].
+	^ self
+
+]
+
+{ #category : 'Grail-Metaclass' }
+Object >> ___grailSetMetaclassCallable___: aCallable [
+	"Record the ``metaclass='' of this class statement that is no class, or
+	forget it when aCallable is nil (___grailMetaclassCallable___)."
+
+	| table |
+	table := SessionTemps @env0:current
+		@env0:at: #'GrailClassMetaclassCallable'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	aCallable == nil
+		ifTrue: [table @env0:removeKey: self ifAbsent: [nil]]
+		ifFalse: [table @env0:at: self put: aCallable].
 	^ self
 
 ]

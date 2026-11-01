@@ -390,6 +390,13 @@ type class >> __new__: mcls _: aName _: bases _: ns [
 		from the class statement already."
 		pending ___grailRunDeferredInitSubclass___: (SessionTemps @env0:current
 			@env0:at: #'GrailTypeNewKwargs' otherwise: nil).
+		"A class statement whose ``metaclass='' is no class reached here through
+		its callable -- ``MyMeta(name, bases, ns)'' from a factory, or a generic
+		alias's call -- and the class is an instance of what that call named
+		(object class >> ___grailDispatchMetaclassCallable___:)."
+		(pending ___grailMetaclassCallable___ notNil
+			and: [mcls ~~ type and: [mcls @env0:inheritsFrom: type]])
+				ifTrue: [pending ___grailSetMetaclass___: mcls].
 		^ pending].
 	"NO class statement is running, so this is the DIRECT form:
 
