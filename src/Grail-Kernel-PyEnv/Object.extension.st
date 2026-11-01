@@ -999,6 +999,21 @@ Object class >> ___grailDeclaredMetaclass___ [
 
 ]
 
+{ #category : 'Grail-Class Attrs' }
+Object class >> ___grailDeclaresBuiltinProperty___: aSym [
+	"Did this class's own body declare aSym with the BUILTIN property --
+	``@property'' rather than ``@enum.property'' or ``@DynamicClassAttribute'',
+	which compile to the same accessor pair?  ClassDefAst records the builtin
+	ones in ___grailBuiltinPropertyNames___, compiled only for a class that has
+	some."
+
+	^ (self @env0:class @env0:includesSelector: #'___grailBuiltinPropertyNames___'
+			environmentId: 1)
+		and: [[(self @env1:___grailBuiltinPropertyNames___) @env0:includes: aSym @env0:asSymbol]
+			@env0:on: AbstractException do: [:e | e @env0:return: false]]
+
+]
+
 { #category : 'Grail-Initialization' }
 Object class >> ___grailDefinesInitSubclass___: aClass selector: sel [
 	"Does aClass ITSELF define the hook, in either spelling?  Own only:
@@ -3300,17 +3315,17 @@ Object class >> ___grailNsOwnPropertyFor___: aSym [
 	class's own getter; nil for any other name.  See ___grailNsBind___: for
 	why this is built rather than read off the class.
 
-	The BUILTIN property only (___grailBuiltinPropertyNames___, compiled before
-	the body as well): an @enum.property def compiles to the same accessor
-	pair, but CPython's namespace holds an enum.property, not a property.  The
-	object is UnboundMethod >> ___grailPropertyOrSelf___'s, so the namespace,
-	the class read and __dict__ all hand out the same property, setter and
-	deleter included."
+	The object is UnboundMethod >> ___grailPropertyOrSelf___'s, so the
+	namespace, the class read and __dict__ all hand out the same descriptor,
+	setter and deleter included: a property for the builtin, and for an
+	@enum.property or @DynamicClassAttribute def -- the same accessor pair --
+	the DynamicClassAttribute CPython's namespace holds.  It was the builtin
+	only while a property was the one descriptor that method built."
 
 	| prop |
-	((self @env0:class @env0:includesSelector: #'___grailBuiltinPropertyNames___'
+	((self @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___'
 			environmentId: 1)
-		and: [[(self @env1:___grailBuiltinPropertyNames___) @env0:includes: aSym]
+		and: [[(self @env1:___grailOwnPropertyNames___) @env0:includes: aSym]
 			@env0:on: AbstractException do: [:e | e @env0:return: false]])
 		ifFalse: [^ nil].
 	prop := [(UnboundMethod definingClass: self selector: aSym) ___grailPropertyOrSelf___]
@@ -8149,16 +8164,14 @@ Object >> ___classDict___ [
 			function, and inspect.classify_class_attrs -- which takes its kind
 			from this mapping -- called every @property 'data'.
 
-			The BUILTIN property only (___grailBuiltinPropertyNames___): an
-			``@enum.property'' def has the same accessors, but CPython's
-			__dict__ holds an enum.property there, which is no ``property'' --
-			and Enum.__dir__ drops a member-shadowed ``property'' that it keeps
-			otherwise, so entering one put ``first'' in dir(MainEnum.second)."
-			((defCls @env0:class @env0:includesSelector: #'___grailBuiltinPropertyNames___'
-					environmentId: 1)
-				and: [(defCls ___grailBuiltinPropertyNames___) @env0:includes: nm @env0:asSymbol])
-				ifTrue: [um := um ___grailPropertyOrSelf___].
-			d @env0:at: nm put: um]].
+			An ``@enum.property'' or ``@DynamicClassAttribute'' def has the
+			same accessors, and its entry is the DynamicClassAttribute CPython's
+			__dict__ holds, which is no ``property'' -- Enum.__dir__ drops a
+			member-shadowed ``property'' that it keeps otherwise, so a property
+			there put ``first'' in dir(MainEnum.second).  It was the getter
+			function, which a subclass's ``spam = Base.__dict__['spam']''
+			copied with no ``getter'' to call (test_dynamicclassattribute)."
+			d @env0:at: nm put: um ___grailPropertyOrSelf___]].
 	"(c) own instance-side methods."
 	imd := [self @env0:methodDictForEnv: 1] @env0:on: AbstractException do: [:e | e @env0:return: nil].
 	imd == nil ifFalse: [

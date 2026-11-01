@@ -232,6 +232,16 @@ AbstractPropertyDescriptor >> ___raiseUnreachable: instance kind: aKind [
 
 ]
 
+{ #category : 'Grail-Descriptor Protocol' }
+AbstractPropertyDescriptor >> ___readOffClass___: aClass [
+	"What a read of this descriptor off aClass answers -- its ``__get__(None,
+	aClass)'', for the class read of a declarative def (UnboundMethod class >>
+	___forClassRead___:family:selector:)."
+
+	^ self __get__: None _: aClass
+
+]
+
 { #category : 'Grail-Reflection' }
 AbstractPropertyDescriptor >> ___set_name__: positional kw: kwargs [
 	"``property.__set_name__(self, owner, name)'' -- exactly two positional

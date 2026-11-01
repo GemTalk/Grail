@@ -12,10 +12,16 @@ UnboundMethod class >> ___forClassRead___: aClass family: family selector: aSym 
 	in a subclass, ``C.foo.__isabstractmethod__'', inspect, dataclasses
 	(test_abc's test_abstractproperty_basics and
 	test_descriptors_with_abstractmethod).  Built here, at the class read, so
-	the instance path -- the hot one -- is untouched."
+	the instance path -- the hot one -- is untouched.
+
+	Read THROUGH, as CPython reads a descriptor off its class: a property
+	answers itself, and an @enum.property or @DynamicClassAttribute def's
+	DynamicClassAttribute refuses with AttributeError unless it is abstract.
+	Answering the descriptor made ``hasattr(C, 'spam')'' True and handed a
+	class read a property (test_dynamicclassattribute test_abstract_virtual)."
 
 	^ (self ___forClassReadMethod___: aClass family: family selector: aSym)
-		___grailPropertyOrSelf___
+		___grailPropertyOrSelf___ ___readOffClass___: aClass
 
 ]
 
@@ -533,6 +539,19 @@ UnboundMethod >> ___firstBuiltinAbove___: aClass upTo: found [
 
 ]
 
+{ #category : 'Grail-Descriptor' }
+UnboundMethod >> ___grailDeclaredDescriptorClass___ [
+	"The class of the descriptor this getter's def was declared as: the
+	builtin property for ``@property'', DynamicClassAttribute for
+	``@enum.property'' and ``@DynamicClassAttribute''.  Grail aliases those
+	two, as types.py says."
+
+	^ (definingClass ___grailDeclaresBuiltinProperty___: selector)
+		ifTrue: [PropertyDescriptor]
+		ifFalse: [DynamicClassAttribute]
+
+]
+
 { #category : 'Grail-Calling' }
 UnboundMethod >> ___grailDeletedOriginalNargs: nargs kwOk: kwOk [
 	"The original of this handle's method when a ``del'' removed it and nothing
@@ -635,7 +654,12 @@ UnboundMethod >> ___grailPropertyOrSelf___ [
 	read-only (that selector then only raises, filed under
 	'Grail-Property-ReadOnly'); fdel the ``___propDeleter_name'' method when
 	there is one.  Cached per (class, name) for the session, so ``C.foo is
-	C.foo'' as in CPython, and rebuilt when the getter is recompiled."
+	C.foo'' as in CPython, and rebuilt when the getter is recompiled.
+
+	A DynamicClassAttribute for a def declared with @enum.property or
+	@DynamicClassAttribute, which compile to the same accessor pair: that is
+	what CPython's class __dict__ holds for them, and it is no ``property''
+	(___grailDeclaredDescriptorClass___)."
 
 	| owner getter setSel delSel cache per entry fset fdel prop |
 	owner := definingClass.
@@ -663,7 +687,7 @@ UnboundMethod >> ___grailPropertyOrSelf___ [
 	fdel := (owner @env0:includesSelector: delSel environmentId: 1)
 		ifTrue: [UnboundMethod definingClass: owner selector: delSel]
 		ifFalse: [None].
-	prop := PropertyDescriptor __new__: self _: fset _: fdel.
+	prop := self ___grailDeclaredDescriptorClass___ __new__: self _: fset _: fdel.
 	per @env0:at: selector put: (Array @env0:with: getter with: prop).
 	^ prop
 
@@ -1227,6 +1251,17 @@ UnboundMethod >> ___rawDefaults___ [
 	entry := self ___tableEntryFor___: cls table: #'___methodDefaultKeysTable___'.
 	entry == nil ifTrue: [^ nil].
 	^ ExecBlock @env0:___pyDefaultsFromKeys___: entry on: cls
+
+]
+
+{ #category : 'Grail-Descriptor' }
+UnboundMethod >> ___readOffClass___: aClass [
+	"What reading this function off aClass answers: the function itself, as
+	``function.__get__(None, cls)'' does.  A descriptor ___grailPropertyOrSelf___
+	answers for a declarative def answers its own (AbstractPropertyDescriptor
+	>> ___readOffClass___:)."
+
+	^ self
 
 ]
 

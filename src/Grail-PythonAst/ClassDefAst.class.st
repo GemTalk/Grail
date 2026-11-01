@@ -6814,13 +6814,14 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 			classSide: true
 			onStream: aStream]] value: OrderedCollection new.
 	"The subset declared with the BUILTIN property (FunctionDefAst >>
-	___isBuiltinPropertyDef___).  object >> ___classDict___ enters a property
-	object for these alone: an ``@enum.property'' def compiles to the same
-	accessor pair, but its __dict__ entry in CPython is no ``property''.
+	___isBuiltinPropertyDef___).  These get a property object, the rest a
+	DynamicClassAttribute (UnboundMethod >> ___grailDeclaredDescriptorClass___):
+	an ``@enum.property'' def compiles to the same accessor pair, but its
+	__dict__ entry in CPython is no ``property''.
 
 	Emitted before the body, beside ___grailOwnPropertyNames___, for the same
-	reason: ___grailNsBind___: builds a property for the namespace only for
-	these names."
+	reason: ___grailNsBind___: builds the namespace's descriptor while the body
+	runs."
 	[:builtinNames |
 	self instanceMethodDefs do: [:def |
 		(def ___isBuiltinPropertyDef___ and: [(builtinNames includes: def name asSymbol) not])
