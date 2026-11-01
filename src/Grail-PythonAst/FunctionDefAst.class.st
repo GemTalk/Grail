@@ -114,18 +114,6 @@ FunctionDefAst >> ___arityReceiverOffset___: nPos [
 
 ]
 
-{ #category : 'Grail-code generation' }
-FunctionDefAst >> ___assignsAPropertyCall___: anAssign [
-	"Is anAssign's value a call of the builtin name ``property''?"
-
-	| value |
-	value := anAssign value.
-	^ (value isKindOf: CallAst)
-		and: [(value function isKindOf: NameAst)
-		and: [value function id asString = 'property']]
-
-]
-
 { #category : 'Grail-Class Method Compilation' }
 FunctionDefAst >> ___bindsOwnParameterNamed___: aSymbol [
 	"True when this def declares aSymbol as one of its OWN parameters that
@@ -182,19 +170,22 @@ FunctionDefAst >> ___classBodyNamesAProperty___: aSymbol [
 	enclosing class, not a top-level def, no earlier binding), which keeps the
 	long-standing reading.
 
-	An assignment of a ``property(...)'' CALL -- ``x = property(f)'', ``x =
-	property(doc='hello')'' -- is not: nothing compiles it as a property's
-	accessor pair, so an @x.setter or @x.getter over it is an ordinary
-	decorator, evaluated at the def as CPython evaluates ``x.setter(f)''.  Read
-	as declarative, the accessor was dropped and the class kept the assigned
-	property without it: ``has no setter'' (test_descr test_properties_plus).
+	An ASSIGNMENT is not -- ``x = property(doc='hello')'', ``spam =
+	Base.__dict__['spam']'', ``spam = DynamicClassAttribute(g)'': nothing
+	compiles the assigned value as this class's accessor pair, so an @x.setter
+	or @x.getter over it is an ordinary decorator, evaluated at the def as
+	CPython evaluates ``x.setter(f)'' on the namespace's raw value (object
+	class >> ___classBodyNamespaceValue___:).  Read as declarative, the
+	accessor was compiled beside the assigned descriptor and never reached
+	it: ``has no setter'' over a bare property (test_descr
+	test_properties_plus), and over a property copied from a base the base's
+	setter kept running (test_dynamicclassattribute
+	test_property_setter_copies_getter_docstring).
 
-	Only a property call, because the decorator reads ``x'' off the class, and
-	a property read off its class answers itself.  Any other descriptor need
-	not: ``spam = Base.__dict__['spam']'' over a DynamicClassAttribute, which
-	raises when read off the class, then found the compiled def instead
-	(``'function' object has no attribute 'getter''', test_dynamicclassattribute
-	at import).  Those keep the long-standing reading."
+	Only a property call used to qualify, because a DynamicClassAttribute
+	copied from a base's __dict__ was its getter FUNCTION there, which has no
+	``getter''.  The base's __dict__ now holds the descriptor
+	(UnboundMethod >> ___grailPropertyOrSelf___), so every assignment does."
 
 	| cls stmts idx prior |
 	cls := parent.
@@ -214,7 +205,7 @@ FunctionDefAst >> ___classBodyNamesAProperty___: aSymbol [
 				and: [st targets anySatisfy: [:t | (t isKindOf: NameAst) and: [t id asSymbol == aSymbol]]])
 			ifTrue: [prior := st]].
 	prior isNil ifTrue: [^ true].
-	(prior isKindOf: AssignAst) ifTrue: [^ (self ___assignsAPropertyCall___: prior) not].
+	(prior isKindOf: AssignAst) ifTrue: [^ false].
 	^ prior ___declaresPropertyBinding___
 
 ]

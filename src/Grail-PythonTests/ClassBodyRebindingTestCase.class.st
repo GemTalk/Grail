@@ -47,14 +47,20 @@ ClassBodyRebindingTestCase >> testEnumRejectsEverySpellingOfADuplicate [
 	SECOND ASSIGNMENT, while the first value is still what the mapping holds.
 	CPython's own test pins that reading: test_dynamic_members_with_static_methods
 	expects ``'FOO_CAT' already defined as 'aloof''' -- the existing value, not
-	the incoming one."
+	the incoming one.
+
+	Over an @enum.property def the existing value is the DESCRIPTOR, and the
+	message prints it (Lib/enum.py:403-405, ``enum overwriting a descriptor?'').
+	Grail answered ``as 1'' while the namespace's entry for such a def was no
+	enum.property, and this asserted that.  The address varies, so only the
+	prefix is fixed."
 
 	self assert: (self resultAt: 'dup_assign_assign') asString
 		equals: '''red'' already defined as 1'.
 	self assert: (self resultAt: 'dup_assign_def') asString
 		equals: '''red'' already defined as 1'.
-	self assert: (self resultAt: 'dup_property_assign') asString
-		equals: '''red'' already defined as 1'.
+	self assert: ((self resultAt: 'dup_property_assign') asString
+		beginsWith: '''red'' already defined as <enum.property object at ')
 
 ]
 
