@@ -250,8 +250,14 @@ namespace saw `a`, `b`, `c` and never `f` or `Inner`.
 
 Both join `___classBodyOrderedRuntimeStatements___`, the source-order flush the
 `global`/subscript/`del`/`if` statements already use, so the mapping sees the
-body in the order CPython executes it. They are **not** emitted by that flush —
-each already has its own emission path — only bound.
+body in the order CPython executes it. A `def` is **not** emitted by that flush —
+it compiles to a method — only bound.
+
+A nested class is **built** there too, then bound (`ClassDefAst >>
+emitNestedClass:on:`). It used to be built ahead of the attribute section, so
+its header — bases, keywords, decorators — ran before any other body statement:
+`base = int; class B(base)` raised NameError, and a class-body name shadowing a
+module one read the module's (test_type_params `test_gen_exp_in_nested_class`).
 
 `object >> ___grailNsBind___:` reads the value **back off the class** rather
 than taking one passed in: by the time it runs the method is compiled and the
