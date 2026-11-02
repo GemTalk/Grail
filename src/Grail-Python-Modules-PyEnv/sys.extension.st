@@ -815,6 +815,16 @@ sys >> _getsizeof: positional kw: kwargs [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+sys >> _is_gil_enabled [
+	"True, as CPython answers on any build without free threading
+	(Python/sysmodule.c, sys__is_gil_enabled_impl).  A gem runs one Python
+	thread at a time, which is what the GIL guarantees."
+
+	^ true
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 sys >> _set_asyncgen_hooks: positional kw: kwargs [
 	"sys.set_asyncgen_hooks(firstiter=..., finalizer=...) -- both keyword
 	arguments optional, and CPython only changes the ones actually given.
@@ -1498,6 +1508,7 @@ sys >> initialize_runtime_info [
 	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
 	self @env0:at: #flags put: (sys_flags instance).
 	self @env0:at: #float_info put: (sys_float_info instance).
+	self @env0:at: #_jit put: (sys__jit instance).
 	self @env0:at: #int_info put: (sys_int_info instance).
 	self @env0:at: #hash_info put: (sys_hash_info instance).
 	self @env0:at: #thread_info put: None.
