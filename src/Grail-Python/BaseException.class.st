@@ -397,6 +397,27 @@ BaseException class >> ___currentException___ [
 
 ]
 
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___cuttingFramesAtFinalizerHook___: aBlock [
+	"aBlock's value, with every live stack walked meanwhile cut at the frame
+	running finalizer hooks (___framesInsideFinalizerHook___:).  For a
+	WARNING's location only -- warnings' own lookups, and _py_warnings'
+	sys._getframe under _warn_unawaited_coroutine.  Everything else keeps the
+	whole stack: CPython gives an unraisable from a finalizer the traceback of
+	the frame running then, and a hook imports and reads globals() as any code
+	does.
+
+	A flag rather than a second walk, because ___liveFrameLevelOffset___:levels:
+	finds the walk's own frame by its selector, ___liveFrameChain___."
+
+	| temps saved |
+	temps := SessionTemps @env0:current.
+	saved := temps @env0:at: #'GrailFramesStopAtFinalizerHook' otherwise: false.
+	temps @env0:at: #'GrailFramesStopAtFinalizerHook' put: true.
+	^ aBlock @env0:ensure: [temps @env0:at: #'GrailFramesStopAtFinalizerHook' put: saved]
+
+]
+
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___deriveIRNestedNameForBlock___: aBlockMethod home: aHomeMethod [
 	"Uncached worker for ___irNestedNameForBlock___:home:.  The block's offset
@@ -980,6 +1001,41 @@ BaseException class >> ___framesAndLevelsOfSuspendedProcess___: aProcess [
 			ex return: nil])].
 	out isEmpty ifTrue: [^ nil].
 	^ { out asArray. levels }
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___framesInsideFinalizerHook___: triples [
+	"The (method, ip, receiver) triples of a live stack, innermost first, cut at
+	the frame that runs finalizer hooks (FinalizerEphemeron class >>
+	_runPending): a hook's own frames, or all of them when no hook is running.
+
+	A hook runs at a SAFE POINT inside whatever code reached one -- a
+	generator's first suspension registers its watch, and registering is one.
+	CPython runs the matching destructor where the object dies, in the code
+	that dropped it.  Grail cannot, and the code that reached the safe point
+	has nothing to do with the hook, so a hook sees no frame past its own, as
+	a CPython destructor sees none when no Python code is running.
+
+	Seen past it, an unawaited asend step's RuntimeWarning was blamed on the
+	module whose globals() a generator expression was walking: the warning
+	wrote __warningregistry__ into those globals and the walk raised
+	``dictionary changed size during iteration'' (#1999).  warnings now
+	blames such a warning on <sys>, as CPython's does when it finds no frame.
+
+	Only a warning's location is cut (___cuttingFramesAtFinalizerHook___:).
+	Cut for every reader, a generator's failing close lost the traceback its
+	unraisable report gets from the frame running, as CPython's does."
+
+	| runner |
+	runner := FinalizerEphemeron class compiledMethodAt: #'_runPending' environmentId: 0 otherwise: nil.
+	runner == nil ifTrue: [^ triples].
+	1 to: triples size by: 3 do: [:i | | method |
+		method := triples at: i.
+		(method == runner
+			or: [[method homeMethod == runner] on: Error do: [:e | e return: false]])
+				ifTrue: [^ triples copyFrom: 1 to: i - 1]].
+	^ triples
 
 ]
 
@@ -2018,6 +2074,8 @@ BaseException class >> ___liveFrameChain___ [
 	and format_stack report the calling line rather than the one after it."
 	st := BaseException ___toPortableIps___: st.
 	trimmed := self ___trimCapturedStack___: st.
+	(SessionTemps @env0:current @env0:at: #'GrailFramesStopAtFinalizerHook' otherwise: false)
+		ifTrue: [trimmed := self ___framesInsideFinalizerHook___: trimmed].
 	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
 	ever, so f_locals has to come from the OTHER live-stack reader --
 	GsProcess class>>_frameContentsAt:, which does answer names and values but is
