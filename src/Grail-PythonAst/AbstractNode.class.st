@@ -675,6 +675,21 @@ AbstractNode >> ___compileWarningsDo___: aBlock [
 
 ]
 
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___compilingDoitGlobals___ [
+	"The scope a DOIT being compiled reads its globals through -- what its
+	generated code names ``___pyGlobals___'', parked on the doit's symbol list
+	by ModuleAst >> ensureModuleScope: -- or nil outside one."
+
+	| scope |
+	scope := ModuleAst compilingDoitScope.
+	scope isNil ifTrue: [^ nil].
+	(scope isKindOf: SymbolDictionary)
+		ifTrue: [^ scope at: #'___pyGlobals___' ifAbsent: [nil]].
+	^ scope objectNamed: #'___pyGlobals___'
+
+]
+
 { #category : 'Grail-validation' }
 AbstractNode >> ___comprehensionScopeName___ [
 	"What CPython's symbol table calls this node when it is a comprehension --
@@ -873,6 +888,24 @@ AbstractNode >> ___defaultSourceString___ [
 	nodes that genuinely differ override."
 
 	^ self ___annotationSourceString___
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___definingModuleName___ [
+	"The ``__module__'' a function compiled now takes: CPython's is the
+	globals' ``__name__'' (Objects/funcobject.c:181-186).  A DOIT is compiled
+	when exec() runs it, against the globals it was handed, so their name is
+	known here -- the module being compiled is then the one that called exec(),
+	or none.  Nil when they hold no string name."
+
+	| globals name |
+	globals := self ___compilingDoitGlobals___.
+	globals isNil ifTrue: [^ CallAst moduleNameBeingCompiled].
+	name := ((Python at: #builtins) ___instance___) @env1:___doitGlobalsModuleName___: globals.
+	^ (name isKindOf: CharacterCollection)
+		ifTrue: [name]
+		ifFalse: [nil]
 
 ]
 
@@ -1427,6 +1460,23 @@ AbstractNode >> ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: a
 		nextPutAll: ' := ';
 		nextPutAll: sourceExpr;
 		nextPut: $.
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___emitModuleStampOn___: aStream [
+	"Cascade a def's or a lambda's ``__module__'' onto the block that is the
+	function, as a literal.  Every def exec'd from a doctest said
+	``<closure>'' while only a module's compile stamped one.  A literal and
+	not a run-time read of the doit's globals: a method is recompiled from its
+	source for a special receiver (UnboundMethod >>
+	___methodForSpecialReceiver___:class:) against dictionaries that do not
+	hold the doit's scope, and a read of it there does not compile."
+
+	self ___definingModuleName___ ifNotNil: [:modName |
+		aStream
+			nextPutAll: '; @env0:___pyModuleNamed___: ';
+			nextPutAll: modName asString printString]
 
 ]
 

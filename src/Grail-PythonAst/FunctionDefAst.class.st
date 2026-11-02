@@ -2318,11 +2318,7 @@ FunctionDefAst >> ___emitQualnameOn___: aStream name: aName [
 	``<closure>'' placeholder, because a module-level def gets its module by
 	forwarding to the receiving module and a block has no receiver to forward
 	to.  Pickling a callable by reference needs it alongside the qualname."
-	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
-		aStream
-			nextPutAll: '; @env0:___pyModuleNamed___: ''';
-			nextPutAll: modName asString;
-			nextPutAll: ''''].
+	self ___emitModuleStampOn___: aStream.
 	qualified := self ___qualifiedNameFor___: aName.
 	qualified = aName asString ifTrue: [^ self].
 	aStream

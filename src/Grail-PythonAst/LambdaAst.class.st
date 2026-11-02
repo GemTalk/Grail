@@ -1068,11 +1068,7 @@ LambdaAst >> printSmalltalkOn: aStream [
 	(test_callable_classification_cache_supports_large_apps), and an attribute
 	set on one lambda was set on all of them."
 	aStream nextPutAll: ' @env0:shallowCopy @env0:___pyNamed___: ''<lambda>'''.
-	CallAst moduleNameBeingCompiled ifNotNil: [:modName |
-		aStream
-			nextPutAll: '; @env0:___pyModuleNamed___: ''';
-			nextPutAll: modName asString;
-			nextPutAll: ''''].
+	self ___emitModuleStampOn___: aStream.
 	qualified = '<lambda>' ifFalse: [
 		aStream
 			nextPutAll: '; @env0:___pyQualname___: ''';
