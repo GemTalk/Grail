@@ -1782,6 +1782,7 @@ ByteArray >> ___searchOperand___: sub [
 	(sub ___respondsTo___: #'__buffer__:')
 		ifTrue: [
 			resolved := sub @env1:__buffer__: 0.
+			(resolved isKindOf: memoryview) ifTrue: [resolved := resolved tobytes].
 			(resolved isKindOf: bytes) ifFalse: [
 				TypeError ___signal___: '__buffer__ returned a non-buffer object']]
 		ifFalse: [
@@ -1992,6 +1993,22 @@ ByteArray >> __add__: other [
 	].
 
 	^ result
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
+ByteArray >> __buffer__: flags [
+	"PEP 688: a view onto the receiver's bytes, as bytes_getbuffer and
+	bytearray_getbuffer export them; a subclass's own __buffer__ reaches it
+	through super().  flags is the C int PyBUF_* mask, and this view meets
+	every one of them."
+
+	(flags isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: ('''' @env0:, (bytes ___pyTypeNameOf___: flags)
+			@env0:, ''' object cannot be interpreted as an integer')].
+	(flags @env0:between: -2147483648 and: 2147483647) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C int'].
+	^ memoryview ___over___: self format: 'B'
 
 ]
 
@@ -2366,6 +2383,17 @@ ByteArray >> __ne__: other [
 	| result |
 	result := self __eq__: other.
 	^ result @env0:not
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
+ByteArray >> __release_buffer__: aView [
+	"PEP 688: release aView, a view of the receiver's buffer, as
+	wrap_releasebuffer does (Objects/typeobject.c): it must be a memoryview."
+
+	(aView isKindOf: memoryview) ifFalse: [
+		^ TypeError ___signal___: 'expected a memoryview object'].
+	^ aView ___releasedBy___: self
 
 ]
 
