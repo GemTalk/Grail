@@ -1,6 +1,28 @@
 Extension { #name : 'memoryview' }
 
 { #category : 'Grail-Instance Creation' }
+memoryview class >> ___builtinExporters___ [
+	"The classes whose __buffer__ and __release_buffer__ are the builtin
+	ones, not a Python class's: bytes, bytearray and memoryview."
+
+	^ { ByteArray. bytearray. memoryview }
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> ___definesPythonHook___: aSelector for: anObject [
+	"Whether anObject's class has its own aSelector -- __buffer__: or
+	__release_buffer__: -- rather than none or the builtin one: what makes
+	CPython give a type its slot_bf_getbuffer or slot_bf_releasebuffer."
+
+	| implementor |
+	implementor := anObject @env0:class @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	^ implementor @env0:notNil
+		@env0:and: [(self ___builtinExporters___ @env0:includes: implementor) @env0:not]
+
+]
+
+{ #category : 'Grail-Instance Creation' }
 memoryview class >> ___isReadOnly___: anObject [
 	"Whether a view over anObject must refuse writes.
 
@@ -53,6 +75,13 @@ memoryview class >> ___itemsizeFor___: fmt [
 		ifTrue: [^ 8].
 	ValueError ___signal___:
 		('memoryview: unsupported format ' @env0:, s)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+memoryview class >> ___notThisObjectsBufferMessage [
+
+	^ 'memoryview''s buffer is not this object'
 
 ]
 
@@ -124,6 +153,24 @@ memoryview class >> ___over___: anObject format: fmt offset: anOffset length: aL
 ]
 
 { #category : 'Grail-Instance Creation' }
+memoryview class >> ___overExported___: anExporter [
+	"memoryview(x) for an x whose __buffer__ is its own: the view it answers,
+	re-exported, remembering x and that view, so that releasing this one hands
+	that same view to x's __release_buffer__ (the buffer wrapper of
+	Objects/typeobject.c)."
+
+	| exported view |
+	exported := anExporter @env1:__buffer__: 0.
+	(exported isKindOf: memoryview) ifFalse: [
+		^ TypeError ___signal___: '__buffer__ returned non-memoryview object'].
+	view := exported ___reexport___.
+	view @env0:dynamicInstVarAt: #'_exporter' put: anExporter.
+	view @env0:dynamicInstVarAt: #'_exported' put: exported.
+	^ view
+
+]
+
+{ #category : 'Grail-Instance Creation' }
 memoryview class >> ___overForeign___: anObject [
 	"A view over a C extension's object, through its buffer
 	(CPythonShim>>foreignBuffer:mode:index:value:): its format, with a
@@ -144,6 +191,13 @@ memoryview class >> ___overForeign___: anObject [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+memoryview class >> ___restrictedMessage [
+
+	^ 'cannot create new view on restricted memoryview'
+
+]
+
 { #category : 'Grail-Instance Creation' }
 memoryview class >> __new__: anObject [
 	"``memoryview(obj)''.
@@ -153,7 +207,7 @@ memoryview class >> __new__: anObject [
 	...)).format'' is 'h'.  Reading it off the source is what makes
 	``.cast('B')'' a reinterpretation rather than a no-op."
 
-	| fmt |
+	| fmt view |
 	"``memoryview(mv)'' is a NEW view onto the SAME memory -- same source, same
 	window, same format, and read-only if mv is -- not a view over mv's bytes
 	rendered afresh, which is what the ``tobytes'' fallback below would make of
@@ -166,21 +220,23 @@ memoryview class >> __new__: anObject [
 	"PEP 688: a Python class exports a buffer by defining ``__buffer__'', which
 	answers a memoryview.  pickle.PickleBuffer is one -- ``memoryview(pb).obj''
 	has to be the object the buffer wraps, which is how test.picklecommon's
-	zero-copy reconstructors tell a view of their own instance from a copy."
-	((anObject isKindOf: ByteArray) not
-		and: [anObject ___respondsTo___: #'__buffer__:']) ifTrue: [
-			| exported |
-			exported := anObject @env1:__buffer__: 0.
-			(exported isKindOf: memoryview) ifFalse: [
-				^ TypeError ___signal___: '__buffer__ returned non-memoryview object'].
-			^ exported ___reexport___].
+	zero-copy reconstructors tell a view of their own instance from a copy.  So
+	is a bytearray subclass that defines its own (test_buffer
+	test_inheritance_releasebuffer)."
+	(self ___definesPythonHook___: #'__buffer__:' for: anObject) ifTrue: [
+		^ self ___overExported___: anObject].
 	fmt := [| tc |
 		tc := anObject @env1:___pyAttrLoad___: #'typecode'.
 		((tc isKindOf: CharacterCollection) and: [tc @env0:size @env0:= 1])
 			ifTrue: [tc @env0:asString]
 			ifFalse: ['B']]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: 'B'].
-	^ self ___over___: anObject format: fmt
+	view := self ___over___: anObject format: fmt.
+	"An exporter whose only Python hook is __release_buffer__ is still told
+	when the view is released -- see release."
+	(self ___definesPythonHook___: #'__release_buffer__:' for: anObject) ifTrue: [
+		view @env0:dynamicInstVarAt: #'_exporter' put: anObject].
+	^ view
 
 ]
 
@@ -203,6 +259,16 @@ memoryview >> ___checkReleased___ [
 
 	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [
 		ValueError ___signal___: 'operation forbidden on released memoryview object']
+
+]
+
+{ #category : 'Grail-Private' }
+memoryview >> ___checkRestricted___ [
+	"The view a __release_buffer__ is handed while its buffer is being
+	released makes no other view of it, as CPython's restricted views do not."
+
+	((self @env0:dynamicInstVarAt: #'_restricted') @env0:= true) ifTrue: [
+		^ ValueError ___signal___: memoryview ___restrictedMessage]
 
 ]
 
@@ -349,6 +415,7 @@ memoryview >> ___reexport___ [
 
 	| view |
 	self ___checkReleased___.
+	self ___checkRestricted___.
 	view := memoryview
 		___over___: (self @env0:dynamicInstVarAt: #'_obj')
 		format: (self @env0:dynamicInstVarAt: #'format')
@@ -363,6 +430,32 @@ memoryview >> ___reexport___ [
 	view := view ___setStep___: self ___step___.
 	(self @env0:dynamicInstVarAt: #'ndim') @env0:= 1 ifFalse: [
 		^ view ___shapedAs___: (self @env0:dynamicInstVarAt: #'shape') @env0:asArray].
+	^ view
+
+]
+
+{ #category : 'Grail-Lifetime' }
+memoryview >> ___releasedBy___: anExporter [
+	"anExporter's builtin __release_buffer__(self), as wrap_releasebuffer
+	runs it: a view already released is ignored, one over something else is
+	refused, and anything else is released."
+
+	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [^ None].
+	(self @env0:dynamicInstVarAt: #'_obj') == anExporter ifFalse: [
+		^ ValueError ___signal___: memoryview ___notThisObjectsBufferMessage].
+	^ self release
+
+]
+
+{ #category : 'Grail-Lifetime' }
+memoryview >> ___restrictedView___ [
+	"A view onto this view's memory that makes no other view of it -- what a
+	__release_buffer__ is handed when the exporter's __buffer__ is the builtin
+	one."
+
+	| view |
+	view := self ___reexport___.
+	view @env0:dynamicInstVarAt: #'_restricted' put: true.
 	^ view
 
 ]
@@ -505,6 +598,24 @@ memoryview >> ___step___ [
 
 ]
 
+{ #category : 'Grail-Lifetime' }
+memoryview >> ___tellExporterOfRelease___: anExporter [
+	"Call anExporter's own __release_buffer__ with the view its __buffer__
+	answered, or with a restricted view of the buffer that is released
+	afterwards.  What it raises is not the caller's, as an unraisable
+	exception is not in CPython."
+
+	| exported given |
+	exported := self @env0:dynamicInstVarAt: #'_exported'.
+	given := exported @env0:ifNil: [self ___restrictedView___].
+	self @env0:dynamicInstVarAt: #'_releasing' put: true.
+	[anExporter @env1:__release_buffer__: given]
+		@env0:on: Exception
+		do: [:ex | ex @env0:return: nil].
+	exported @env0:ifNil: [given release]
+
+]
+
 { #category : 'Grail-Private' }
 memoryview >> ___viewBytes___ [
 	"The bytes THIS view covers -- the source's, narrowed to offset..length.
@@ -571,9 +682,15 @@ memoryview >> __buffer__: flags [
 	x; making the type real is what exposed that they had no buffer path for it.
 
 	``flags'' is accepted and ignored: it selects contiguity and writability
-	requirements in CPython, and this view is always 1-D contiguous."
+	requirements in CPython, and this view is always 1-D contiguous.
 
-	^ self tobytes
+	A new view onto the same memory, as PEP 688 says __buffer__ answers.  It
+	answered the bytes, which every caller in Grail converted back from; the
+	one that did not now takes a view too (ByteArray >> ___searchOperand___:)."
+
+	self ___checkReleased___.
+	self ___checkRestricted___.
+	^ self ___reexport___
 
 ]
 
@@ -651,7 +768,9 @@ memoryview >> __getitem__: index [
 	 UNALIGNED buffer to check that readers cope with one, so a slice that copied
 	 would still pass those tests while breaking the write-through they rely on
 	 elsewhere."
-	(index isKindOf: slice) ifTrue: [^ self ___sliceView___: index].
+	(index isKindOf: slice) ifTrue: [
+		self ___checkRestricted___.
+		^ self ___sliceView___: index].
 	i := index.
 	(i isKindOf: Integer) ifFalse: [
 		TypeError ___signal___: 'memoryview: invalid slice key'].
@@ -811,6 +930,7 @@ memoryview >> cast: fmt [
 	view of the thing the first memoryview was made from."
 
 	self ___checkReleased___.
+	self ___checkRestricted___.
 	self ___isContiguous___ ifFalse: [
 		TypeError ___signal___: 'memoryview: casts are restricted to C-contiguous views'].
 	"This view's WINDOW and writability, not the whole source's: a cast of
@@ -836,6 +956,8 @@ memoryview >> cast: fmt _: aShape [
 	product times the item size must be the buffer's size."
 
 	| dims view |
+	self ___checkReleased___.
+	self ___checkRestricted___.
 	((aShape isKindOf: tuple) or: [aShape isKindOf: list]) ifFalse: [
 		^ TypeError ___signal___: 'shape must be a list or a tuple'].
 	(self @env0:dynamicInstVarAt: #'ndim') @env0:= 1 ifFalse: [
@@ -862,8 +984,21 @@ memoryview >> hex [
 { #category : 'Grail-Lifetime' }
 memoryview >> release [
 	"``mv.release()'' -- drop the view.  Every later operation raises
-	ValueError, which is how CPython reports use after release."
+	ValueError, which is how CPython reports use after release.
 
+	A view over a Python exporter tells it first, as releasebuffer_call_python
+	does (Objects/typeobject.c): the view the exporter's __buffer__ answered
+	goes to its __release_buffer__, or, when only __release_buffer__ is
+	Python's, a restricted view of the buffer -- one that refuses to make
+	another view of it -- released afterwards.  A release already under way
+	is not started again, so a __release_buffer__ that releases its view
+	(bytearray's does) does not come back here."
+
+	| exporter |
+	((self @env0:dynamicInstVarAt: #'_released') @env0:= true
+		@env0:or: [(self @env0:dynamicInstVarAt: #'_releasing') @env0:= true]) ifTrue: [^ None].
+	exporter := self @env0:dynamicInstVarAt: #'_exporter'.
+	exporter @env0:isNil ifFalse: [self ___tellExporterOfRelease___: exporter].
 	self @env0:dynamicInstVarAt: #'_released' put: true.
 	^ None
 
