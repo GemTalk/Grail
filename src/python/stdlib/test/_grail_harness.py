@@ -58,6 +58,14 @@ def cases(mod):
 # functions and run_one share it without depending on that statement.
 _module_setup_error = ['']
 
+# A fixture that raises unittest.SkipTest -- ResourceDenied is one: a
+# resource the run did not enable -- is not a fixture that failed.  CPython's
+# suite counts it as a skip and runs none of the tests it covers
+# (unittest/suite.py _handleModuleFixture, _handleClassSetUp), so the module's
+# here are skipped likewise, where they used to run without their fixture and
+# error on what it would have made (test_largefile, test_robotparser).
+_module_skipped = [False]
+
 
 def setup_module(mod):
     # Answers '' or a one-line description of the failure.  run_one appends it
@@ -65,11 +73,14 @@ def setup_module(mod):
     # could not run says so -- instead of reporting N unrelated AttributeErrors
     # naming objects the fixture was supposed to have created.
     _module_setup_error[0] = ''
+    _module_skipped[0] = False
     fixture = getattr(mod, 'setUpModule', None)
     if fixture is None:
         return ''
     try:
         fixture()
+    except unittest.SkipTest:
+        _module_skipped[0] = True
     except Exception as e:
         _module_setup_error[0] = type(e).__name__ + ': ' + str(e)
     return _module_setup_error[0]
@@ -80,7 +91,7 @@ def teardown_module(mod):
     # since there is nothing to tear down -- but the cleanups are drained
     # either way, because a half-finished fixture may already have registered
     # some.
-    if not _module_setup_error[0]:
+    if not (_module_setup_error[0] or _module_skipped[0]):
         fixture = getattr(mod, 'tearDownModule', None)
         if fixture is not None:
             try:
@@ -124,6 +135,8 @@ def run_one(tc):
     # where detail is a one-line summary of the first failure/error --
     # the shell-side scoreboard buckets these to find shared root
     # causes across a module's tail.
+    if _module_skipped[0]:
+        return (0, 0, 1, '')
     result = unittest.TestResult()
     # Fire class fixtures around the single test.  The per-test bisection
     # loop (topaz-side) hands us individual TestCase instances, and a bare
@@ -142,6 +155,10 @@ def run_one(tc):
         try:
             setup()
             did_setup = True
+        except unittest.SkipTest:
+            # Skipped, not failed: see _module_skipped.  tearDownClass is not
+            # run, as CPython does not run it after a setUpClass that raised.
+            return (0, 0, 1, '')
         except Exception as e:
             # Keep the message.  Swallowing it outright is the resilient
             # behaviour we want -- one unsatisfiable class fixture must not
