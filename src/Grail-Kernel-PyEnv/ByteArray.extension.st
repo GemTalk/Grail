@@ -189,9 +189,9 @@ ByteArray class >> ___newZeroed___: count [
 
 	(count @env0:< 0) ifTrue: [
 		ValueError ___signal___: 'negative count'].
-	"Beyond sys.maxsize (which Grail defines as SmallInteger maximumValue)
-	the count does not fit an index at all -- CPython's OverflowError."
-	(count @env0:> (SmallInteger @env0:maximumValue)) ifTrue: [
+	"Beyond sys.maxsize the count does not fit an index at all -- CPython's
+	OverflowError."
+	(count @env0:> 16r7FFFFFFFFFFFFFFF) ifTrue: [
 		OverflowError ___signal___:
 			'cannot fit ''int'' into an index-sized integer'].
 	"A GemStone byte object cannot approach Py_ssize_t max; anything at that
@@ -2301,6 +2301,9 @@ ByteArray >> __mul__: count [
 			ifTrue: [n := bytes ___coerceIndex___: n]
 			ifFalse: [^ self ___binOpFallback___: n op: '*' reflected: #'__rmul__:']
 	].
+	"A count past sys.maxsize fits no index -- CPython's OverflowError, raised
+	before it looks at the sign."
+	n := n ___asRepeatCount___.
 
 	"If count <= 0, return an empty object of the receiver's base type"
 	(n @env0:<= 0) ifTrue: [
@@ -2314,10 +2317,17 @@ ByteArray >> __mul__: count [
 	(n @env0:= 1 and: [self @env0:class == ByteArray]) ifTrue: [^ self].
 
 	size := self @env0:size.
-	"A repeat count that would overflow the allocatable size is CPython's
-	OverflowError / MemoryError, not an uncatchable GemStone OutOfRange."
-	(size @env0:* n) @env0:> 1073741823 ifTrue: [
+	"CPython's two refusals, in its order: a RESULT whose length is past
+	sys.maxsize is bytes' OverflowError (bytearray's is MemoryError,
+	Objects/bytearrayobject.c:395), and one that fits but cannot be allocated is
+	MemoryError -- here, past what a GemStone byte object holds -- rather than an
+	uncatchable GemStone OutOfRange."
+	(size @env0:* n) @env0:> 16r7FFFFFFFFFFFFFFF ifTrue: [
+		(self isKindOf: bytearray) ifTrue: [MemoryError ___signal___: 'cannot allocate bytearray'].
 		OverflowError ___signal___: 'repeated bytes are too long'
+	].
+	(size @env0:* n) @env0:> 1073741823 ifTrue: [
+		MemoryError ___signal___: 'cannot allocate bytes object'
 	].
 	result := self ___translateResultClass___ ___new___: (size @env0:* n).
 	offset := 0.

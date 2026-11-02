@@ -116,7 +116,11 @@ FormatSpecAndComplexTestCase >> testHugePrecisionRaisesInEveryEngine [
 	there, which is how the distinction was found).  Each of these used to hang or
 	die on an uncatchable NumericError."
 
-	self assertResult: 'spec_precision_too_big' equals: 'ValueError: precision too big'.
+	"sys.maxsize + 1 does not even parse as a Py_ssize_t, so the format-spec
+	parser refuses its digits before it reaches the precision check -- CPython
+	3.14's answer for that number since sys.maxsize is PY_SSIZE_T_MAX here."
+	self assertResult: 'spec_precision_too_big'
+		equals: 'ValueError: Too many decimal digits in format string'.
 	self assertResult: 'str_mod_precision_too_big'
 		equals: 'OverflowError: precision too large'.
 	self assertResult: 'bytes_mod_precision_too_big'

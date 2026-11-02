@@ -1385,7 +1385,13 @@ sys >> initialize_platform_info [
 	self @env0:at: #byteorder put: ((cpuArch @env0:= 'SPARC')
 		ifTrue: ['big']
 		ifFalse: ['little']).
-	self @env0:at: #maxsize put: (SmallInteger @env0:maximumValue).
+	"PY_SSIZE_T_MAX of a 64-bit CPython, which is what code compares against:
+	test_grammar's ``maxsize == 9223372036854775807'' branch, _pydecimal's choice
+	of MAX_PREC.  It was SmallInteger maximumValue, 2^60-1, which no platform
+	CPython runs on reports; Grail's ints are unbounded, so the larger value
+	costs nothing where it is only a number, and the places that bound an index
+	by it read it from here."
+	self @env0:at: #maxsize put: 16r7FFFFFFFFFFFFFFF.
 	self @env0:at: #maxunicode put: 16r10FFFF.
 	self @env0:at: #platlibdir put: 'lib'.
 	self @env0:at: #float_repr_style put: 'short'.
