@@ -18,8 +18,8 @@ a Z_FINISH flush has handed libz its state back.  Past that point the
 object is spent, as CPython's is, and using it again raises the same
 zlib.error CPython raises.
 
-zdict (deflateSetDictionary) is not wired: it raises NotImplementedError
-rather than silently compressing without the dictionary."
+A zdict is preset with deflateSetDictionary right after deflateInit2_, as
+CPython presets it."
 Class {
 	#name : 'ZlibCompress',
 	#superclass : 'PythonInstance',
