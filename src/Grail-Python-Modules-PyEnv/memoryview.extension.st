@@ -255,6 +255,46 @@ memoryview >> ___itemAt___: index [
 
 ]
 
+{ #category : 'Grail-Sequence Protocol' }
+memoryview >> ___itemAtIndices___: aKey [
+	"``mv[i, j]'' on a view that is not 1-D: the item a full tuple of indices
+	names, counted in C order.  A single index or a slice would be a sub-view,
+	which CPython has not implemented for N-D either, and says so."
+
+	| dims flat |
+	dims := (self @env0:dynamicInstVarAt: #'shape') @env0:asArray.
+	((aKey isKindOf: slice)
+		or: [(aKey isKindOf: tuple) and: [aKey @env0:anySatisfy: [:each | each isKindOf: slice]]])
+			ifTrue: [^ NotImplementedError ___signal___: 'multi-dimensional slicing is not implemented'].
+	(aKey isKindOf: tuple) ifFalse: [
+		^ NotImplementedError ___signal___: 'multi-dimensional sub-views are not implemented'].
+	aKey @env0:size @env0:= dims @env0:size ifFalse: [
+		^ TypeError ___signal___: 'memoryview: invalid slice key'].
+	flat := 0.
+	1 @env0:to: dims @env0:size do: [:k | | i |
+		i := (aKey @env0:at: k) ___asIndex___.
+		i @env0:< 0 ifTrue: [i := i @env0:+ (dims @env0:at: k)].
+		(i @env0:between: 0 and: (dims @env0:at: k) @env0:- 1) ifFalse: [
+			^ IndexError ___signal___: 'index out of bounds on dimension ' @env0:, k @env0:printString].
+		flat := (flat @env0:* (dims @env0:at: k)) @env0:+ i].
+	^ self ___itemAt___: flat
+
+]
+
+{ #category : 'Grail-Conversion' }
+memoryview >> ___itemsOfShape___: dims from: aFirstItem [
+	"The items from flat item aFirstItem on, nested by dims: a list of lists for
+	an N-D view, and the item itself for no dimensions at all."
+
+	| inner count |
+	dims @env0:isEmpty ifTrue: [^ self ___itemAt___: aFirstItem].
+	inner := dims @env0:copyFrom: 2 to: dims @env0:size.
+	count := inner @env0:inject: 1 into: [:product :each | product @env0:* each].
+	^ list @env0:withAll: ((0 @env0:to: (dims @env0:at: 1) @env0:- 1) @env0:collect: [:i |
+		self ___itemsOfShape___: inner from: aFirstItem @env0:+ (i @env0:* count)])
+
+]
+
 { #category : 'Grail-Comparison' }
 memoryview >> ___itemValuesOfBuffer___: anObject [
 	"The item values of anObject's buffer, as a list -- or nil when it exports
@@ -317,8 +357,13 @@ memoryview >> ___reexport___ [
 	view @env0:dynamicInstVarAt: #'readonly'
 		put: (self @env0:dynamicInstVarAt: #'readonly').
 	"The STRIDE too: re-exporting ``memoryview(b)[::2]'' answered a
-	unit-stride view of the same window -- different bytes, and contiguous."
-	^ view ___setStep___: self ___step___
+	unit-stride view of the same window -- different bytes, and contiguous.
+	And the SHAPE: base64's input check takes ``memoryview(s).ndim'' to refuse
+	an N-D view, which a 1-D re-export let through."
+	view := view ___setStep___: self ___step___.
+	(self @env0:dynamicInstVarAt: #'ndim') @env0:= 1 ifFalse: [
+		^ view ___shapedAs___: (self @env0:dynamicInstVarAt: #'shape') @env0:asArray].
+	^ view
 
 ]
 
@@ -343,6 +388,25 @@ memoryview >> ___setStep___: anInteger [
 	self @env0:dynamicInstVarAt: #'contiguous' put: contiguous.
 	self @env0:dynamicInstVarAt: #'c_contiguous' put: contiguous.
 	self @env0:dynamicInstVarAt: #'f_contiguous' put: contiguous.
+	^ self
+
+]
+
+{ #category : 'Grail-Conversion' }
+memoryview >> ___shapedAs___: dims [
+	"This view given the C-contiguous shape dims, its strides counted from the
+	last dimension.  Only a 1-D or a 0-D view is also F-contiguous."
+
+	| strides stride |
+	strides := Array @env0:new: dims @env0:size.
+	stride := self @env0:dynamicInstVarAt: #'itemsize'.
+	dims @env0:size @env0:to: 1 by: -1 do: [:i |
+		strides @env0:at: i put: stride.
+		stride := stride @env0:* (dims @env0:at: i)].
+	self @env0:dynamicInstVarAt: #'shape' put: (tuple @env0:withAll: dims).
+	self @env0:dynamicInstVarAt: #'strides' put: (tuple @env0:withAll: strides).
+	self @env0:dynamicInstVarAt: #'ndim' put: dims @env0:size.
+	self @env0:dynamicInstVarAt: #'f_contiguous' put: dims @env0:size @env0:<= 1.
 	^ self
 
 ]
@@ -578,6 +642,9 @@ memoryview >> __getitem__: index [
 
 	| i n |
 	self ___checkReleased___.
+	"A view that is not 1-D (memoryview.cast(fmt, shape)) answers an item for a
+	full tuple of indices and refuses the rest, in CPython's words."
+	(self @env0:dynamicInstVarAt: #'ndim') @env0:= 1 ifFalse: [^ self ___itemAtIndices___: index].
 	n := self __len__.
 	"A SLICE answers another memoryview onto the same source -- not a copy, and
 	 not bytes.  ``mv[1:3]'' is how test_int/test_float/test_hash build an
@@ -628,6 +695,11 @@ memoryview >> __len__ [
 	is 2 in CPython."
 
 	self ___checkReleased___.
+	"N-D, its first dimension; 0-D, CPython's refusal."
+	(self @env0:dynamicInstVarAt: #'ndim') @env0:= 0 ifTrue: [
+		^ TypeError ___signal___: '0-dim memory has no length'].
+	(self @env0:dynamicInstVarAt: #'ndim') @env0:> 1 ifTrue: [
+		^ (self @env0:dynamicInstVarAt: #'shape') @env0:at: 1].
 	^ (self @env0:dynamicInstVarAt: #'nbytes')
 		@env0:// (self @env0:dynamicInstVarAt: #'itemsize')
 
@@ -754,6 +826,32 @@ memoryview >> cast: fmt [
 ]
 
 { #category : 'Grail-Conversion' }
+memoryview >> cast: fmt _: aShape [
+	"``mv.cast(fmt, shape)'' -- a cast that also gives the view a SHAPE:
+	``memoryview(b'123456').cast('B', (2, 3))'' is two rows of three.  The
+	bytes do not move, so the view is C-contiguous and tobytes() is unchanged;
+	len() is the first dimension, tolist() nests, and an item is indexed by a
+	tuple.  CPython's restrictions, in its order and words (memory_cast,
+	Objects/memoryobject.c): only a 1-D view casts to N-D, and the shape's
+	product times the item size must be the buffer's size."
+
+	| dims view |
+	((aShape isKindOf: tuple) or: [aShape isKindOf: list]) ifFalse: [
+		^ TypeError ___signal___: 'shape must be a list or a tuple'].
+	(self @env0:dynamicInstVarAt: #'ndim') @env0:= 1 ifFalse: [
+		^ TypeError ___signal___: 'memoryview: cast must be 1D -> ND or ND -> 1D'].
+	dims := aShape @env0:asArray.
+	(dims @env0:allSatisfy: [:each | (each @env0:isKindOf: Integer) and: [each @env0:> 0]]) ifFalse: [
+		^ ValueError ___signal___: 'memoryview.cast(): elements of shape must be integers > 0'].
+	view := self cast: fmt.
+	(dims @env0:inject: (view @env0:dynamicInstVarAt: #'itemsize') into: [:product :each | product @env0:* each])
+		@env0:= (view @env0:dynamicInstVarAt: #'nbytes') ifFalse: [
+			^ TypeError ___signal___: 'memoryview: product(shape) * itemsize != buffer size'].
+	^ view ___shapedAs___: dims
+
+]
+
+{ #category : 'Grail-Conversion' }
 memoryview >> hex [
 	"``mv.hex()'' -- CPython's memoryview has it, exactly as bytes does."
 
@@ -789,11 +887,11 @@ memoryview >> tobytes [
 memoryview >> tolist [
 	"``mv.tolist()'' -- the items as a Python list."
 
-	| out |
 	self ___checkReleased___.
-	out := OrderedCollection @env0:new.
-	0 @env0:to: self __len__ @env0:- 1 do: [:i | out @env0:add: (self ___itemAt___: i)].
-	^ list @env0:withAll: out @env0:asArray
+	"Nested by the shape for an N-D view, and the one item for a 0-D one."
+	^ self
+		___itemsOfShape___: (self @env0:dynamicInstVarAt: #'shape') @env0:asArray
+		from: 0
 
 ]
 
