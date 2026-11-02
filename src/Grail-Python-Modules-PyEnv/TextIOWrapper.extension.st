@@ -1,5 +1,13 @@
 Extension { #name : 'TextIOWrapper' }
 
+{ #category : 'Grail-Reading' }
+TextIOWrapper class >> ___closedFileMessage [
+	"CPython's text file says it with a full stop (Modules/_io/textio.c:1527)."
+
+	^ 'I/O operation on closed file.'
+
+]
+
 { #category : 'Grail-Opening' }
 TextIOWrapper class >> ___constructText___: posArgs kw: kwArgs [
 	"``io.TextIOWrapper(buffer, encoding, errors, newline, ...)'' -- and this

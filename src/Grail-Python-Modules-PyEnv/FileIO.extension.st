@@ -1,6 +1,14 @@
 Extension { #name : 'FileIO' }
 
 { #category : 'Grail-Opening' }
+FileIO class >> ___closedFileMessage [
+	"CPython's raw file says it without a full stop (Modules/_io/fileio.c:588)."
+
+	^ 'I/O operation on closed file'
+
+]
+
+{ #category : 'Grail-Opening' }
 FileIO class >> ___closeOwnedDescriptor___: aDescriptor [
 	"Close aDescriptor through the open Grail file whose fileno() handed it out,
 	and answer whether there was one.  os.close(f.fileno()) arrives here: the
@@ -635,7 +643,7 @@ FileIO >> __next__ [
 { #category : 'Grail-Private' }
 FileIO >> _checkOpen [
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
-		ValueError ___signal___: 'I/O operation on closed file.']
+		ValueError ___signal___: self @env0:class ___closedFileMessage]
 
 ]
 
@@ -833,6 +841,40 @@ FileIO >> readable [
 ]
 
 { #category : 'Grail-Reading' }
+FileIO >> readall [
+	"FileIO.readall(): the rest of the file.  It reads without asking the mode,
+	as CPython's does, so a file not open for reading fails as its read(2)
+	does: EBADF."
+
+	self _checkOpen.
+	self ___checkDescriptor___.
+	(self @env0:dynamicInstVarAt: #_readable) == true ifFalse: [^ os instance ___signalErrno: 9].
+	^ self _readToEnd @env0:asByteArray
+
+]
+
+{ #category : 'Grail-Reading' }
+FileIO >> readinto: aBuffer [
+	"FileIO.readinto(b): read as many bytes as the writable buffer b holds -- a
+	bytearray, or a memoryview over one, whatever its shape -- into it, and
+	answer how many arrived.  The buffer is refused before the file is asked
+	anything, as CPython's argument conversion runs first."
+
+	| window data |
+	window := os instance ___writableWindowOf: aBuffer argument: 1.
+	self _checkReadable.
+	data := (self _rawRead: (window @env0:at: 3)) @env0:asByteArray.
+	data @env0:isEmpty ifFalse: [
+		(window @env0:at: 1)
+			@env0:replaceFrom: (window @env0:at: 2) @env0:+ 1
+			to: (window @env0:at: 2) @env0:+ data @env0:size
+			with: data
+			startingAt: 1].
+	^ data @env0:size
+
+]
+
+{ #category : 'Grail-Reading' }
 FileIO >> readline [
 	^ self ___ioReadline___: -1
 
@@ -849,13 +891,28 @@ FileIO >> readlines [
 	"Read all remaining lines into a list.  Goes through self readline
 	so the TextIOWrapper subclass inherits this unchanged."
 
-	| out line |
+	^ self readlines: None
+
+]
+
+{ #category : 'Grail-Reading' }
+FileIO >> readlines: aHint [
+	"readlines(hint): the lines up to the one that brings their total size to
+	hint; None, or a hint that is not positive, reads every one, as
+	IOBase.readlines does."
+
+	| hint out line total |
 	self _checkReadable.
+	hint := aHint == None ifTrue: [-1] ifFalse: [aHint ___asIndex___].
 	out := list ___new___.
+	total := 0.
 	[
 		line := self readline.
 		line @env0:isEmpty
-	] @env0:whileFalse: [out append: line].
+	] @env0:whileFalse: [
+		out append: line.
+		total := total @env0:+ line @env0:size.
+		(hint @env0:> 0 @env0:and: [total @env0:>= hint]) ifTrue: [^ out]].
 	^ out
 
 ]

@@ -536,10 +536,20 @@ memoryview >> ___viewBytes___ [
 
 { #category : 'Grail-Private' }
 memoryview >> ___writableWindow___ [
+	"___writableWindowIfNone:, refused as os.readinto's second argument."
+
+	^ self ___writableWindowIfNone: [
+		TypeError ___signal___: (os ___readWriteBufferMessageFor: 2 given: self)]
+
+]
+
+{ #category : 'Grail-Private' }
+memoryview >> ___writableWindowIfNone: aBlock [
 	"{ source bytes. byte offset. byte length } for a caller that writes into
-	this view's memory in bulk -- os.readinto, which _pyio.FileIO reads through.
-	The LIVE source, never the copy ___viewBytes___ answers for a slice, so the
-	write lands where the view points."
+	this view's memory in bulk -- os.readinto, which _pyio.FileIO reads through,
+	and FileIO.readinto -- or aBlock's value for a view that cannot be written
+	that way.  The LIVE source, never the copy ___viewBytes___ answers for a
+	slice, so the write lands where the view points."
 
 	| bytes |
 	bytes := self ___sourceBytes___.
@@ -549,9 +559,7 @@ memoryview >> ___writableWindow___ [
 	(((self @env0:dynamicInstVarAt: #'readonly') @env0:= true)
 		@env0:or: [((self @env0:dynamicInstVarAt: #'_obj') isKindOf: ByteArray) @env0:not
 		@env0:or: [self ___isContiguous___ @env0:not]])
-		ifTrue: [
-			TypeError ___signal___:
-				'readinto() argument 2 must be read-write bytes-like object, not memoryview'].
+		ifTrue: [^ aBlock @env0:value].
 	^ { bytes.
 		self @env0:dynamicInstVarAt: #'_offset'.
 		self @env0:dynamicInstVarAt: #'_length' }
