@@ -21,9 +21,15 @@ sys_implementation >> initialize [
 	3.14), which is what packages gate features on."
 
 	self @env0:dynamicInstVarAt: #name put: 'grail'.
-	self @env0:dynamicInstVarAt: #version put: (tuple @env0:withAll: {3. 14. 0. 'final'. 0}).
+	"The version is sys.version_info's kind of struct sequence, as CPython's is,
+	so ``version.major'' and ``version[:2]'' both answer (test_sys
+	test_implementation)."
+	self @env0:dynamicInstVarAt: #version put: (sys_version_info @env0:withAll: {3. 14. 0. 'final'. 0}).
 	self @env0:dynamicInstVarAt: #hexversion put: 16r030E00F0.
 	self @env0:dynamicInstVarAt: #_multiarch put: 'gemstone'.
+	"PEP 734's flag.  A GemStone session runs one interpreter, so there are no
+	isolated subinterpreters to support."
+	self @env0:dynamicInstVarAt: #supports_isolated_interpreters put: false.
 	"``cache_tag'' NAMES THE BYTECODE-CACHE FILES an implementation would
 	write -- ``__pycache__/x.<tag>.pyc'' -- and PEP 421 lets it be None when
 	caching does not apply.  Grail's was None, which is defensible on its
