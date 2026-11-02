@@ -2095,9 +2095,14 @@ os >> chmod: aPath _: aMode [
 os >> close: fd [
 	"os.close(fd).  The descriptor is forgotten BEFORE close(2) runs: on an
 	error (even EINTR) Linux has already released it, so keeping it would let a
-	later os.open's reuse of the number be refused."
+	later os.open's reuse of the number be refused.
+
+	One a Grail file's fileno() handed out belongs to that file's GsFile, which
+	closes it; the file stays open over nothing, as CPython's does when its
+	descriptor is closed underneath it."
 
 	| n |
+	(FileIO ___closeOwnedDescriptor___: (self ___asCInt: fd)) ifTrue: [^ None].
 	n := self ___fd: fd.
 	self @env0:class ___openFds @env0:remove: n.
 	self ___libc: #close with: { n }.
