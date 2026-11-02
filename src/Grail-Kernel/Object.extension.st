@@ -1576,7 +1576,9 @@ Object >> ___pyClassNameForError___ [
 	name, because it runs on the error path: a receiver carrying no env-1
 	__name__ must still get its exception rather than a nested failure."
 
-	^ [(self @env1:__name__) @env0:asString]
+	"tp_name rather than __name__ itself: a type CPython implements in C names
+	its module there -- ``type object 'collections.deque' has no attribute''."
+	^ [self @env1:___pyTpName___]
 		on: Error do: [:ex | ex return: self @env0:name @env0:asString]
 
 ]

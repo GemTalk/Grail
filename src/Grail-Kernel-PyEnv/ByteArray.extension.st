@@ -241,7 +241,7 @@ ByteArray class >> ___pyTypeNameOf___: value [
 	(value isKindOf: bytearray) ifTrue: [^ 'bytearray'].
 	(value isKindOf: ByteArray) ifTrue: [^ 'bytes'].
 	(value isKindOf: CharacterCollection) ifTrue: [^ 'str'].
-	^ [(value @env1:__class__ @env1:__name__) @env0:asString]
+	^ [value @env1:__class__ ___pyTpName___]
 		@env0:on: Error do: [:ex | ex @env0:return: value @env0:class @env0:name @env0:asString]
 
 ]
