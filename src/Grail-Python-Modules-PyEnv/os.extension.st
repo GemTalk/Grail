@@ -306,6 +306,17 @@ os class >> ___pathTypeMessageFor: aFunctionName arg: anArgName accepting: anAcc
 
 ]
 
+{ #category : 'Grail-File Descriptors' }
+os class >> ___readWriteBufferMessageFor: aPosition given: anObject [
+	"readinto() refuses a buffer it cannot write into in these words, naming
+	the argument by its position."
+
+	^ 'readinto() argument ' @env0:, aPosition @env0:printString
+		@env0:, ' must be read-write bytes-like object, not '
+		@env0:, (bytes ___pyTypeNameOf___: anObject)
+
+]
+
 { #category : 'Grail-Error Messages' }
 os class >> ___renameFailedMessage: anOldPath to: aNewPath [
 
@@ -1571,13 +1582,24 @@ os >> ___walkSymlinksAsFiles [
 
 { #category : 'Grail-File Descriptors' }
 os >> ___writableWindowOf: aBuffer [
-	"{ bytes. offset. length } -- where a read into aBuffer must write."
+	"{ bytes. offset. length } -- where os.readinto's read into aBuffer, its
+	second argument, must write."
 
-	(aBuffer @env0:isKindOf: memoryview) ifTrue: [^ aBuffer ___writableWindow___].
+	^ self ___writableWindowOf: aBuffer argument: 2
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> ___writableWindowOf: aBuffer argument: aPosition [
+	"{ bytes. offset. length } -- where a read into aBuffer must write: a
+	bytearray, or a memoryview over one.  Anything else is refused as readinto()'s
+	argument at aPosition, as CPython's w* conversion refuses it."
+
+	| refusal |
+	refusal := [TypeError ___signal___: (self @env0:class ___readWriteBufferMessageFor: aPosition given: aBuffer)].
+	(aBuffer @env0:isKindOf: memoryview) ifTrue: [^ aBuffer ___writableWindowIfNone: refusal].
 	(aBuffer @env0:isKindOf: bytearray) ifTrue: [^ { aBuffer. 0. aBuffer @env0:size }].
-	^ TypeError ___signal___:
-		('readinto() argument 2 must be read-write bytes-like object, not '
-			@env0:, (bytes ___pyTypeNameOf___: aBuffer))
+	^ refusal @env0:value
 
 ]
 
