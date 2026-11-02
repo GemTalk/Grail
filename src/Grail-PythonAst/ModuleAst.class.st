@@ -465,6 +465,12 @@ ModuleAst class >> ___targetBindsReservedName___: aTarget [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+ModuleAst class >> ___tooManyStarredTargetsMessage [
+	^ 'too many expressions in star-unpacking assignment'
+
+]
+
 { #category : 'Grail-parsing' }
 ModuleAst class >> ___typeParameterBoundBy___: aStatement [
 	"The name aStatement binds when it is a synthesized scope's
@@ -857,8 +863,9 @@ ModuleAst class >> ___validatePatternsIn___: aModule [
 
 { #category : 'Grail-parsing' }
 ModuleAst class >> ___validateStarredTarget___: aTarget [
-	"A starred assignment target stands only inside a list or tuple, and only
-	once per one."
+	"A starred assignment target stands only inside a list or tuple, only
+	once per one, and with fewer than 256 targets before it: the unpacking
+	opcode carries that count in a byte (Python/codegen.c:3399-3410)."
 
 	| starred |
 	(aTarget isKindOf: StarredAst) ifTrue: [
@@ -868,6 +875,8 @@ ModuleAst class >> ___validateStarredTarget___: aTarget [
 	starred := aTarget elts select: [:each | each isKindOf: StarredAst].
 	starred size > 1 ifTrue: [
 		^ self ___syntaxError___: 'multiple starred expressions in assignment' node: aTarget].
+	(starred notEmpty and: [(aTarget elts indexOf: starred first) > 256]) ifTrue: [
+		^ self ___syntaxError___: self ___tooManyStarredTargetsMessage node: aTarget].
 	aTarget elts do: [:each |
 		(each isKindOf: StarredAst)
 			ifTrue: [self ___validateStarredTarget___: each value]
