@@ -3895,7 +3895,7 @@ builtins >> ___pyTypeNameOf___: value [
 	Falls back to the Smalltalk class name if the Python route fails, so a
 	diagnostic can never itself raise."
 
-	^ [(value @env1:__class__) @env1:__name__ @env0:asString]
+	^ [(value @env1:__class__) ___pyTpName___]
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: value @env0:class @env0:name @env0:asString]
 
