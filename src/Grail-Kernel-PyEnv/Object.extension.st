@@ -9703,6 +9703,62 @@ Object >> ___grailClassCellFromFrames___: aSym [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailClassGetitemOwnerIn___: aBehavior [
+	"The class that gives aBehavior a __class_getitem__ of its own -- a def, an
+	assigned value's accessor, or a Grail hook -- or nil when only the universal
+	roots answer it, whose default is no attribute (___grailClassGetitemRead___)."
+
+	#( #'__class_getitem__' #'__class_getitem__:' #'___class_getitem__:kw:' ) @env0:do: [:selector |
+		(self ___isProtocolFallbackSelector___: selector in: aBehavior) ifFalse: [
+			^ aBehavior @env0:whichClassIncludesSelector: selector environmentId: 1]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailClassGetitemRead___ [
+	"``x.__class_getitem__'' as the subscript ``C[item]'' would find it, as an
+	Association holding the answer, or nil to leave the read to the general
+	path, which answers an assigned value and a class-side hook rightly.
+
+	PEP 560's hook is an IMPLICIT classmethod, and a def of it -- like every
+	Grail hook a built-in carries (set, enumerate, re.Pattern, ...) -- compiles
+	instance-side.  Read off the class it answered the CLASS-side default
+	instead, Object class >> __class_getitem__:, so ``enumerate.__class_getitem__(int)''
+	was enumerate itself and a user's ``Own.__class_getitem__(int)'' never ran
+	the def.  It answers the def bound to the class now, as
+	Metaclass3 >> ___grailClassGetitemDispatch___: calls it; an instance reads
+	it bound to its class, as in CPython.
+
+	And the default is no attribute at all: it answers the class itself, so
+	that ``MultiDict[K, V]'' and dataclass field annotations subscript, and it
+	stands for nothing CPython has.  CPython's object, int, str and type
+	define no __class_getitem__, and duck-typed code branches on
+	``hasattr(T, '__class_getitem__')''.
+
+	A Python metaclass is left to the general path, since its own attributes
+	are the class's too; so is a value stored in the class chain."
+
+	| cls instanceOwner classOwner |
+	cls := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
+	cls ___grailMetaclass___ @env0:ifNotNil: [:metaclass | ^ nil].
+	(cls ___classChainAttrLookup___: #'__class_getitem__') @env0:ifNotNil: [:value | ^ nil].
+	instanceOwner := self ___grailClassGetitemOwnerIn___: cls.
+	classOwner := self ___grailClassGetitemOwnerIn___: cls @env0:class.
+	(classOwner notNil and: [instanceOwner isNil
+		or: [classOwner @env0:thisClass == instanceOwner
+		or: [classOwner @env0:thisClass @env0:inheritsFrom: instanceOwner]]]) ifTrue: [^ nil].
+	instanceOwner @env0:ifNotNil: [:owner |
+		^ #'__class_getitem__' @env0:-> (MethodBinding
+			instance: cls
+			callable: (UnboundMethod definingClass: cls selector: #'__class_getitem__'))].
+	self ___pyAttrHasGetattr___ ifTrue: [
+		^ #'__class_getitem__' @env0:-> (self ___pyAttrCallGetattr___: '__class_getitem__')].
+	^ AttributeError @env0:___signalMissing___: '__class_getitem__' on: self
+
+]
+
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailClassIsBuilding___: aClass [
 	"Is aClass inside its own class statement's cold-build region?"
@@ -9959,9 +10015,11 @@ Object >> ___grailDirListsSelector___: aSelector in: aBehavior [
 	than an attribute of the type, which ___classDict___ already leaves out of
 	``cls.__dict__'': a <grailProtocolRefusal> (int's __iter__, which only
 	raises CPython's TypeError), a <grailSubclassInstanceDict> (list's
-	__dict__, which only a Python subclass's instances have), or object's
+	__dict__, which only a Python subclass's instances have), object's
 	attribute-miss fallback __getattr__:, which CPython's object does not have
-	(test_descrtut's pprint of dir(list)).
+	(test_descrtut's pprint of dir(list)), or object class's permissive
+	__class_getitem__:, which no attribute read answers either
+	(___grailClassGetitemRead___).
 
 	Only a dunder can be one of these, so every other selector costs a
 	character test and no method lookup."
@@ -9974,6 +10032,7 @@ Object >> ___grailDirListsSelector___: aSelector in: aBehavior [
 	owner := aBehavior @env0:whichClassIncludesSelector: aSelector environmentId: 1.
 	owner @env0:isNil ifTrue: [^ true].
 	(aSelector == #'__getattr__:' and: [owner == Object]) ifTrue: [^ false].
+	(aSelector == #'__class_getitem__:' and: [owner == Object @env0:class]) ifTrue: [^ false].
 	method := owner @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
 	^ method @env0:isNil
 		or: [(method @env0:pragmas @env0:anySatisfy: [:pragma |
@@ -14390,6 +14449,11 @@ Object >> ___pyAttrLoad___: aSym [
 	dynValue == nil ifFalse: [
 		((self @env0:class ___grailOwnPropertyNames___) @env0:isEmpty
 			or: [(self ___grailPropertyOwns___: aSym) not]) ifTrue: [^ dynValue]].
+	"``__class_getitem__'' is read as the subscript would find it
+	(___grailClassGetitemRead___).  Tested by SIZE first, as __weakref__ is, so
+	the common read pays one comparison."
+	((aSym @env0:size) @env0:= 17 and: [aSym @env0:asString @env0:= '__class_getitem__']) ifTrue: [
+		self ___grailClassGetitemRead___ @env0:ifNotNil: [:read | ^ read @env0:value]].
 	s := aSym @env0:asString.
 	"The eight selectors one attribute name can compile to.  Building them is
 	seven concatenations and seven SYMBOL INTERNINGS -- a symbol-table hash
@@ -15184,9 +15248,14 @@ Object >> ___pyAttrLoad___: aSym [
 		forwarder to the class-side one (Behavior >>
 		___grailClassSideDefIsNearer___:family:).  Only a class carrying
 		forwarders asks, so everything else pays one cached respondsTo:."
+		"...nor when all the chain owns is a PROTOCOL REFUSAL: ``int.__iter__''
+		and ``int.__getitem__'' exist only to raise CPython's TypeError for
+		``iter(1)'' and ``1[0]'', and CPython's int has neither, so reading them
+		off the class misses as reading them off an instance does (#1632)."
 		((self ___chainOwnsAnyOf___: family orUnary: aSym from: self)
 			and: [((self ___respondsTo___: #'___grailClassSideOverrides___')
-				and: [self ___grailClassSideDefIsNearer___: aSym family: family]) not])
+				and: [self ___grailClassSideDefIsNearer___: aSym family: family]) not
+			and: [(self ___isProtocolFallback___: aSym family: family in: self) not]])
 			ifTrue: [
 				((self ___ownChainOwnsAnyOf___: family orUnary: aSym from: self)
 					or: [(self @env0:class ___ownChainOwnsAnyOf___: family
@@ -15652,12 +15721,13 @@ Object >> ___pyAttrLoad___: aSym [
 	plain tuple's) — without this branch the call falls through to
 	AttributeError."
 	((self isKindOf: Behavior)
-		and: [(self @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+		and: [((self @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
 			or: [(self @env0:whichClassIncludesSelector: sym1 environmentId: 1) notNil
 				or: [(self @env0:whichClassIncludesSelector: sym2 environmentId: 1) notNil
 					or: [(self @env0:whichClassIncludesSelector: sym3 environmentId: 1) notNil
 						or: [(self @env0:whichClassIncludesSelector: sym4 environmentId: 1) notNil
-							or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]]])
+							or: [(self @env0:whichClassIncludesSelector: symVA environmentId: 1) notNil]]]]])
+			and: [(self ___isProtocolFallback___: aSym family: family in: self) not]])
 		ifTrue: [
 			^ self ___unboundMethodClosure___: aSym
 		].

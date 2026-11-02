@@ -1,6 +1,19 @@
 Extension { #name : 'tuple' }
 
 { #category : 'Grail-Generics' }
+tuple class >> __class_getitem__: item [
+	"``tuple.__class_getitem__'' -- the hook CPython gives the type, answering the
+	alias the class-side __getitem__: shortcut answers subscripts with.
+	CLASS-side, where it binds the class however it is read, and where it
+	cannot keep a secondary base's hook from being merged onto a subclass:
+	``class A(TypedDict, Generic[T])'' has to get Generic's, which refuses a
+	subscript of a class that is not generic."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
+{ #category : 'Grail-Generics' }
 tuple class >> __getitem__: item [
 	"``tuple[int, str]'' -- a REAL types.GenericAlias, as list's is (see list
 	class >> __getitem__:, which this mirrors, subclass hook and all).
