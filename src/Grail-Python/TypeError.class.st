@@ -79,6 +79,20 @@ TypeError class >> ___checkCountOf___: positional keywords: keywords named: para
 ]
 
 { #category : 'Grail-Arity Checks' }
+TypeError class >> ___checkTernaryWrapperArguments___: positional keywords: keywords for: aWrapperName [
+	"The refusals of CPython's slot wrapper for a ternary dunder -- __pow__ and
+	__rpow__ take the exponent and an optional modulus, by position only
+	(Objects/typeobject.c:9329-9368, wrap_ternaryfunc and wrap_ternaryfunc_r,
+	through wrapper_call's keyword check)."
+
+	(keywords isNil or: [keywords isEmpty]) ifFalse: [
+		^ self @env1:___signal___: (self ___wrapperTakesNoKeywordsMessageFor: aWrapperName)].
+	(positional size between: 1 and: 2) ifFalse: [
+		^ self @env1:___signal___: (self ___ternaryWrapperArityMessageFor: positional size)]
+
+]
+
+{ #category : 'Grail-Arity Checks' }
 TypeError class >> ___grailCheckMultipleValues___: names pos: positional kw: keywords skip: skip name: qualname [
 	"CPython's ``got multiple values for argument'' check for one call (#1477):
 	names holds the call site's positional-OR-keyword parameters in order,
@@ -147,5 +161,17 @@ TypeError class >> ___refuseUnboundKeywordsIn___: keywords given: aPositionalCou
 		___refuseKeywordsIn___: keywords
 		otherThan: (parameterNames copyFrom: aPositionalOnlyCount + 1 to: parameterNames size)
 		for: aFunctionName
+
+]
+
+{ #category : 'Grail-Error Messages' }
+TypeError class >> ___ternaryWrapperArityMessageFor: anArgumentCount [
+	^ 'expected 1 or 2 arguments, got ' , anArgumentCount printString
+
+]
+
+{ #category : 'Grail-Error Messages' }
+TypeError class >> ___wrapperTakesNoKeywordsMessageFor: aWrapperName [
+	^ 'wrapper ' , aWrapperName , '() takes no keyword arguments'
 
 ]
