@@ -78,6 +78,35 @@ sys class >> ___argvFromCommandLine___: cmdArgs [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+sys class >> ___displayhookArityMessageFor: anArgumentCount [
+	^ 'sys.displayhook() takes exactly one argument (' @env0:, anArgumentCount @env0:printString
+		@env0:, ' given)'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+sys class >> ___excepthookArityMessageFor: anArgumentCount [
+	^ 'excepthook expected 3 arguments, got ' @env0:, anArgumentCount @env0:printString
+
+]
+
+{ #category : 'Grail-Error Messages' }
+sys class >> ___invalidExceptionValueLineFor: aValue [
+	"What CPython prints in place of a traceback for a value that is not an
+	exception (Python/pythonrun.c:802-818, print_exception_invalid_type)."
+
+	^ 'TypeError: print_exception(): Exception expected for value, '
+		@env0:, aValue ___pyTypeNameForError___ @env0:asString @env0:, ' found'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+sys class >> ___lostAttributeMessageFor: aName [
+	^ 'lost sys.' @env0:, aName @env0:asString
+
+]
+
 { #category : 'Grail-Streams' }
 sys class >> ___sessionStreams___ [
 	"SESSION-LOCAL home for sys's standard streams (issue #924), the same shape
@@ -321,6 +350,21 @@ sys >> ___frameName___: aFrame [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+sys >> ___functionHandleFor___: aSym [
+	"What a read of ``excepthook'' or ``displayhook'' answers: the object
+	seeded for the hook, which every call reaches through _excepthook:kw: or
+	_displayhook:kw:.  Those varargs forms are what make the two names read as
+	module functions, and the generic handle sends a call without arguments
+	to the fixed-arity ``excepthook'' accessor, answering the hook -- and is a
+	different object from sys.__excepthook__, which CPython makes the same."
+
+	(#(#excepthook #displayhook) @env0:includes: aSym @env0:asSymbol)
+		ifFalse: [^ super ___functionHandleFor___: aSym].
+	^ self @env0:at: aSym @env0:asSymbol ifAbsent: [super ___functionHandleFor___: aSym]
+
+]
+
 { #category : 'Grail-Initialization' }
 sys >> ___grailEnvVar___: aName [
 	"One environment variable of THIS gem as a Smalltalk String, or nil when the
@@ -447,6 +491,30 @@ sys >> ___grailVenvSiteDirs___ [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+sys >> ___printExpression___: value [
+	"What an expression statement compiled in 'single' mode does with its
+	value: hand it to sys.displayhook as the program has it now, or raise
+	``lost sys.displayhook'' for a program that deleted it -- CPython's
+	print_expr (Python/intrinsics.c:28-37).  ModuleAst >>
+	___displayValueOf___: emits the call."
+
+	^ (self ___requiredAttribute___: #displayhook) ___pyCallValue___: { value } kw: nil
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+sys >> ___printInvalidExceptionValue___: aValue on: aFile [
+	"sys.excepthook's report of a value that is not an exception: the line
+	CPython's fallback printer writes in place of a traceback."
+
+	(builtins @env1:instance)
+		@env1:_print: { self @env0:class ___invalidExceptionValueLineFor: aValue }
+		kw: ((PyDict @env0:new) @env0:at: 'file' put: aFile; yourself).
+	^ None
+
+]
+
 { #category : 'Grail-Streams' }
 sys >> ___pyAttrStore___: aName put: aValue [
 	"Route a store of one of the standard streams into SESSION state (issue
@@ -528,6 +596,23 @@ sys >> ___reportUncaught___: anException [
 						@env0:, lf @env0:, 'Original exception was:' @env0:, lf].
 			ex @env0:return: nil].
 	^ result
+
+]
+
+{ #category : 'Grail-Attributes' }
+sys >> ___requiredAttribute___: aName [
+	"The attribute sys has now, or CPython's RuntimeError for one a program
+	deleted -- _PySys_GetRequiredAttr (Python/sysmodule.c:79-98), which the
+	interpreter reads its hooks and streams through.  The error is raised
+	outside the handler, so it is not mistaken for the AttributeError."
+
+	| lost value |
+	lost := false.
+	value := [self ___pyAttrLoad___: aName]
+		@env0:on: AttributeError
+		do: [:missing | lost := true. missing @env0:return: nil].
+	lost ifTrue: [^ RuntimeError ___signal___: (self @env0:class ___lostAttributeMessageFor: aName)].
+	^ value
 
 ]
 
@@ -720,6 +805,30 @@ sys >> _clear_type_descriptors: aType [
 		st @env0:at: #GrailClearedTypeDescriptors put: set].
 	set @env0:add: aType.
 	^ None
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+sys >> _displayhook: positional kw: keywords [
+	"Every call of sys.displayhook and sys.__displayhook__: one positional
+	argument, or CPython's refusal (Python/clinic/sysmodule.c.h)."
+
+	TypeError @env0:___refuseKeywordsIn___: keywords for: 'sys.displayhook'.
+	positional @env0:size @env0:= 1 ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___displayhookArityMessageFor: positional @env0:size)].
+	^ self displayhook: (positional @env0:at: 1)
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+sys >> _excepthook: positional kw: keywords [
+	"Every call of sys.excepthook and sys.__excepthook__: three positional
+	arguments, or CPython's refusal (Python/clinic/sysmodule.c.h)."
+
+	TypeError @env0:___refuseKeywordsIn___: keywords for: 'sys.excepthook'.
+	positional @env0:size @env0:= 3 ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___excepthookArityMessageFor: positional @env0:size)].
+	^ self excepthook: (positional @env0:at: 1) _: (positional @env0:at: 2) _: (positional @env0:at: 3)
 
 ]
 
@@ -934,9 +1043,10 @@ sys >> copyright [
 
 { #category : 'Grail-Built-in Functions' }
 sys >> displayhook: value [
-	"displayhook(value) -- CPython's: nothing for None; otherwise builtins._
-	is cleared, repr(value) and a newline go to sys.stdout, and builtins._ is
-	set to the value.
+	"displayhook(value) -- CPython's sys_displayhook (Python/sysmodule.c:751-810):
+	nothing for None; otherwise builtins._ is cleared, repr(value) and a
+	newline go to sys.stdout, and builtins._ is set to the value.  A
+	sys.stdout that is gone or None is ``lost sys.stdout''.
 
 	It used to write the Smalltalk printString straight to the gem's stdout,
 	so a REDIRECTED sys.stdout -- doctest's _SpoofOut, captured_stdout() --
@@ -947,6 +1057,8 @@ sys >> displayhook: value [
 	value == None ifTrue: [^ None].
 	b := builtins @env1:instance.
 	b @env1:___pyAttrStore___: #'_' put: None.
+	(self ___requiredAttribute___: #stdout) == None ifTrue: [
+		^ RuntimeError ___signal___: (self @env0:class ___lostAttributeMessageFor: #stdout)].
 	b @env1:_print: { b @env1:repr: value } kw: nil.
 	b @env1:___pyAttrStore___: #'_' put: value.
 	^ None
@@ -988,7 +1100,9 @@ sys >> excepthook: excType _: excValue _: excTb [
 	as CPython's PyErr_Display prints them through the traceback module
 	(Python/pythonrun.c:1132-1218).  A traceback handed in goes onto an
 	exception that has none, which is what makes it print (bpo-18776), and a
-	None sys.stderr prints nothing.
+	None sys.stderr prints nothing.  A value that is not an exception is not
+	raised about: CPython's fallback printer reports it on sys.stderr in one
+	line, and the hook answers None.
 
 	It logged ``'Exception: ', excValue printString'' to the GCI server log
 	instead: nothing reached sys.stderr, and that printString is env 1, which
@@ -998,6 +1112,8 @@ sys >> excepthook: excType _: excValue _: excTb [
 	| file printException |
 	file := self ___pyAttrLoad___: #stderr.
 	file == None ifTrue: [^ None].
+	(excValue @env0:isKindOf: BaseException) ifFalse: [
+		^ self ___printInvalidExceptionValue___: excValue on: file].
 	((excValue @env0:isKindOf: BaseException) and: [excTb ~~ None
 		and: [excValue __traceback__ == None]]) ifTrue: [excValue with_traceback: excTb].
 	printException := (((Python @env0:at: #builtins) @env1:instance)
@@ -1219,6 +1335,8 @@ sys >> implementation [
 { #category : 'Grail-Initialization' }
 sys >> initialize [
 	"Initialize all module attributes with their default values"
+
+	| displayhook excepthook |
 	self
 		initialize_version_info;
 		initialize_platform_info;
@@ -1235,8 +1353,10 @@ sys >> initialize [
 	_breakpointhook:kw: below."
 	self @env0:at: #breakpointhook put: (BoundMethod receiver: self selector: #breakpointhook).
 	self @env0:at: #__breakpointhook__ put: (BoundMethod receiver: self selector: #breakpointhook).
-	self @env0:at: #__displayhook__ put: (BoundMethod receiver: self selector: #displayhook).
-	self @env0:at: #__excepthook__ put: (BoundMethod receiver: self selector: #excepthook).
+	displayhook := BoundMethod receiver: self selector: #displayhook everyCallTo: #'_displayhook:kw:'.
+	excepthook := BoundMethod receiver: self selector: #excepthook everyCallTo: #'_excepthook:kw:'.
+	self @env0:at: #__displayhook__ put: displayhook.
+	self @env0:at: #__excepthook__ put: excepthook.
 	self @env0:at: #__unraisablehook__ put: (BoundMethod receiver: self selector: #unraisablehook).
 	"THE UNDECORATED NAMES NEED SEEDING TOO.  In CPython ``sys.excepthook''
 	starts out identical to ``sys.__excepthook__'' -- ``sys.excepthook is
@@ -1258,8 +1378,8 @@ sys >> initialize [
 	correctly.  It is only the read BEFORE any assignment that had nothing to
 	find.  breakpointhook was already seeded for the neighbouring reason its
 	comment gives, which is why it alone survived."
-	self @env0:at: #displayhook put: (BoundMethod receiver: self selector: #displayhook).
-	self @env0:at: #excepthook put: (BoundMethod receiver: self selector: #excepthook).
+	self @env0:at: #displayhook put: displayhook.
+	self @env0:at: #excepthook put: excepthook.
 	"displayhook has NO unary accessor, deliberately, and that is not a
 	symmetry slip.  It owns a one-argument call form ``displayhook: value'',
 	and a unary getter beside a one-argument method is exactly the shape
@@ -1271,7 +1391,14 @@ sys >> initialize [
 	excepthook keeps its accessor safely because its call form takes three
 	arguments (``excepthook:_:_:''), which is not setter-shaped; breakpointhook
 	had already lost its accessor for the neighbouring reason its comment
-	gives.  The dict entry seeded just above is what answers the read now." 
+	gives.  The dict entry seeded just above is what answers the read now.
+
+	What the dict entries hold sends EVERY call to the varargs form
+	(_excepthook:kw:, _displayhook:kw:), which checks the arguments as
+	CPython's clinic does: a zero-argument ``sys.__excepthook__()'' reached
+	the fixed-arity accessor instead and answered the hook itself.  The plain
+	name is seeded with the same object as its dunder twin, so ``sys.excepthook is
+	sys.__excepthook__'' holds as it does in CPython." 
 	"``audit'' is stored the same way and for the same reason: it has no unary
 	method, so without a dict entry ``sys.audit()'' -- the zero-argument call
 	CPython rejects with a TypeError -- fell through attribute lookup and raised

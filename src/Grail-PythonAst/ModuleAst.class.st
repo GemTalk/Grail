@@ -1493,8 +1493,11 @@ ModuleAst >> ___displayInteractiveExpressions___ [
 	a scope of its own.
 
 	Done by rewriting each such statement's value to
-	``__import__('sys').displayhook(value)'' before codegen, so neither the
-	text nor the IR emitter has to know about the mode."
+	``__import__('sys').___printExpression___(value)'' before codegen, so
+	neither the text nor the IR emitter has to know about the mode.  That reads
+	sys.displayhook when the statement runs and calls it, as CPython's
+	print_expr does -- and a program that deleted it gets print_expr's
+	RuntimeError rather than an AttributeError (sys >> ___printExpression___:)."
 
 	self ___displayExpressionsIn___: body
 
@@ -1507,7 +1510,7 @@ ModuleAst >> ___displayValueOf___: anExprAst [
 	value keeps its own positions, so an error in it still reports its line."
 
 	| call |
-	call := (ModuleAst parseSource: '__import__(''sys'').displayhook(None)')
+	call := (ModuleAst parseSource: '__import__(''sys'').___printExpression___(None)')
 		body body first value.
 	call arguments at: 1 put: anExprAst value.
 	anExprAst value: call.

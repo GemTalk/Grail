@@ -355,6 +355,18 @@ BoundMethod class >> receiver: aReceiver selector: aSymbol definingClass: aClass
 
 ]
 
+{ #category : 'Grail-Instance Creation' }
+BoundMethod class >> receiver: aReceiver selector: aSymbol everyCallTo: aVarargsSelector [
+	"A callable that reads as aSymbol bound to aReceiver and sends every call,
+	whatever its arguments, to aVarargsSelector -- for a built-in whose
+	argument checks are its own, when aReceiver also answers a fixed-arity
+	selector of the same name that is not the call (sys's ``excepthook''
+	accessor beside sys.excepthook)."
+
+	^ self @env0:new @env0:_setReceiver: aReceiver selector: aSymbol everyCallTo: aVarargsSelector
+
+]
+
 { #category : 'Grail-Python protocol' }
 BoundMethod >> ___call__: positional kw: keywords [
 	"``f.__call__(*args, **kw)'' for every arity but one, and with keywords:
