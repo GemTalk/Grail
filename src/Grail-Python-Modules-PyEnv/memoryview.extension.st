@@ -255,6 +255,22 @@ memoryview >> ___itemAt___: index [
 
 ]
 
+{ #category : 'Grail-Comparison' }
+memoryview >> ___itemValuesOfBuffer___: anObject [
+	"The item values of anObject's buffer, as a list -- or nil when it exports
+	none, and so is no operand of a memoryview comparison.  A str and a number
+	are refused outright, which is most of what a comparison is ever handed."
+
+	((anObject isKindOf: CharacterCollection) or: [anObject isKindOf: Number]) ifTrue: [^ nil].
+	(anObject isKindOf: memoryview) ifTrue: [
+		((anObject @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [^ nil].
+		^ anObject tolist].
+	^ [(memoryview __new__: anObject) tolist]
+		@env0:on: TypeError
+		do: [:ex | ex @env0:return: nil]
+
+]
+
 { #category : 'Grail-Sequence Protocol' }
 memoryview >> ___normaliseDownBound___: value default: aDefault length: n [
 	"A slice bound for a NEGATIVE step, as CPython's PySlice_AdjustIndices
@@ -527,18 +543,20 @@ memoryview >> __enter__ [
 
 { #category : 'Grail-Comparison' }
 memoryview >> __eq__: other [
-	"CPython compares memoryviews by their ITEMS, and a memoryview compares equal
-	to a bytes-like object with the same bytes."
+	"CPython compares a memoryview with anything that exports a buffer by the
+	VALUES its items unpack to, each in its own format (memory_richcompare,
+	Objects/memoryobject.c): ``memoryview(b'abc') == array('h', [97, 98, 99])''
+	is True.  Anything else is NotImplemented, so the comparison goes on to the
+	other operand and then to identity.  It answered a send of a selector that
+	does not exist, which ended the session: ``memoryview(b'x') == 'x'''.
 
-	| mine theirs |
-	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [^ false].
-	mine := self ___viewBytes___.
-	theirs := (other isKindOf: memoryview)
-		ifTrue: [other ___viewBytes___]
-		ifFalse: [(other isKindOf: ByteArray)
-			ifTrue: [other]
-			ifFalse: [^ ExecBlock @env0:___pyNotImplemented___]].
-	^ mine @env0:= theirs
+	A released view equals only itself, as in CPython."
+
+	| theirs |
+	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [^ self == other].
+	theirs := self ___itemValuesOfBuffer___: other.
+	theirs == nil ifTrue: [^ NotImplemented].
+	^ self tolist __eq__: theirs
 
 ]
 
