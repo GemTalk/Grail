@@ -37,6 +37,23 @@ Class {
 	#category : 'Grail-Parser'
 }
 
+{ #category : 'Grail-other' }
+AnnAssignAst >> ___addKeyPartsOf___: aKey to: aCollection [
+	"codegen_check_ann_subscr (Python/codegen.c:5458-5487): a slice adds the
+	bounds it has, an extended slice each element in turn, any other key
+	itself."
+
+	(aKey isKindOf: SliceAst) ifTrue: [
+		{ aKey lower. aKey upper. aKey step } do: [:bound |
+			bound ifNotNil: [:present | aCollection add: present]].
+		^ self].
+	(aKey isKindOf: TupleAst) ifTrue: [
+		aKey elts do: [:element | self ___addKeyPartsOf___: element to: aCollection].
+		^ self].
+	aCollection add: aKey
+
+]
+
 { #category : 'Grail-Annotations' }
 AnnAssignAst >> ___addScopeAnnotationsTo___: aCollection [
 	"Only a simple annotation is one of its scope's annotated names."
@@ -82,7 +99,9 @@ AnnAssignAst >> ___emitExecutionRecordOn___: aStream [
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___emitIRStatementOn___: aBuilder [
 	| v |
-	value isNil ifTrue: [^ self].
+	value isNil ifTrue: [
+		self ___targetChecks___ do: [:check | check ___emitIRStatementOn___: aBuilder].
+		^ self].
 	(target isKindOf: AttributeAst) ifTrue: [
 		^ self ___plainAssign___ ___emitIRStatementOn___: aBuilder].
 	(target isKindOf: SubscriptAst) ifTrue: [
@@ -102,9 +121,13 @@ AnnAssignAst >> ___irEligibleStatementLocals___: localNames [
 	classAttrNames); a foreign ``obj.attr: T = v'' is the setter send; a
 	subscript is __setitem__.  An attribute target is its AssignAst's
 	(___plainAssign___).  A pure annotation (no value) emits nothing.  A
-	module-scope Name target (a global-declared name) stays on text."
+	module-scope Name target (a global-declared name) stays on text.  With no
+	value an attribute or subscript target still evaluates its parts
+	(___targetChecks___)."
 
-	value isNil ifTrue: [^ true].
+	value isNil ifTrue: [
+		^ self ___targetChecks___ allSatisfy: [:check |
+			check ___irEligibleStatementLocals___: localNames]].
 	(value ___irEligibleValueLocals___: localNames) ifFalse: [^ false].
 	(target isKindOf: NameAst) ifTrue: [
 		(self isModuleScopeAnnTarget: target) ifTrue: [^ false].
@@ -132,9 +155,13 @@ AnnAssignAst >> ___irLocalWriteTarget___: localSet [
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	"The value, and the receiver / index of an attribute or subscript target;
-	the annotation is never evaluated."
+	the annotation is never evaluated.  With no value, what ___targetChecks___
+	evaluates."
 
-	value isNil ifTrue: [^ self].
+	value isNil ifTrue: [
+		self ___targetChecks___ do: [:check |
+			check ___irReadLocalNamesInto___: aSet locals: localSet].
+		^ self].
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	(target isKindOf: AttributeAst) ifTrue: [
 		target value ___irReadLocalNamesInto___: aSet locals: localSet].
@@ -231,6 +258,49 @@ AnnAssignAst >> ___plainAssign___ [
 
 ]
 
+{ #category : 'Grail-other' }
+AnnAssignAst >> ___statementEvaluating___: anExpression [
+	"An expression statement that evaluates anExpression for effect, located
+	and parented as this statement, as ___plainAssign___'s assignment is."
+
+	| statement |
+	statement := ExprAst new
+		value: anExpression;
+		yourself.
+	statement
+		beginLine: self beginLine;
+		beginPosition: self beginPosition;
+		endLine: self endLine;
+		endPosition: self endPosition.
+	statement setParent: self.
+	^ statement
+
+]
+
+{ #category : 'Grail-other' }
+AnnAssignAst >> ___targetChecks___ [
+	"What an annotated ATTRIBUTE or SUBSCRIPT with no value still evaluates,
+	as expression statements whose values are discarded: the attribute's
+	object, or the subscript's object and the parts of its key.  CPython's
+	codegen_annassign (Python/codegen.c:5534-5546) does that through
+	codegen_check_ann_expr / codegen_check_ann_subscr, ``everything in a
+	subscript is defined at runtime''.  So ``no_such.attr: int'' raises
+	NameError, where Grail evaluated nothing at all.
+
+	Empty with a value -- the assignment evaluates the target -- and for a
+	name.  Built per call, as ___plainAssign___ is."
+
+	| parts |
+	value isNil ifFalse: [^ #()].
+	parts := OrderedCollection new.
+	(target isKindOf: AttributeAst) ifTrue: [parts add: target value].
+	(target isKindOf: SubscriptAst) ifTrue: [
+		parts add: target value.
+		self ___addKeyPartsOf___: target slice to: parts].
+	^ parts collect: [:each | self ___statementEvaluating___: each]
+
+]
+
 { #category : 'Grail-accessing' }
 AnnAssignAst >> annotation [
 	^ annotation
@@ -301,7 +371,9 @@ AnnAssignAst >> printSmalltalkOn: aStream [
 	keeps that record (___emitExecutionRecordOn___:) -- after the store, which
 	is CPython's order too (Python/codegen.c:5481-5523)."
 
-	value isNil ifTrue: [^ self ___emitExecutionRecordOn___: aStream].
+	value isNil ifTrue: [
+		self ___targetChecks___ do: [:check | check printSmalltalkOn: aStream].
+		^ self ___emitExecutionRecordOn___: aStream].
 	(target isKindOf: AttributeAst) ifTrue: [
 		^ self ___plainAssign___ printSmalltalkOn: aStream].
 	(target isKindOf: SubscriptAst) ifTrue: [

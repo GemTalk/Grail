@@ -2966,6 +2966,15 @@ ClassDefAst >> ___isClassBodyRuntimeStatement___: aStatement [
 	constant is excluded with it, since evaluating one can have no effect."
 	(aStatement isKindOf: ExprAst) ifTrue: [
 		^ (aStatement value isKindOf: ConstantAst) not].
+	"An annotated assignment to an ATTRIBUTE or a SUBSCRIPT -- ``obj.attr:
+	int = 0'', ``d['k']: int = 1'' -- binds no class attribute and records no
+	annotation (PEP 526 annotates a simple name only), but CPython still runs
+	it: the value and then the store, or for one with no value the target's
+	object alone.  Dropped whole, ``class C: no_such_name.attr: int = 0''
+	built C where CPython raises NameError (test_grammar
+	test_var_annot_basic_semantics)."
+	((aStatement isKindOf: AnnAssignAst)
+		and: [(aStatement target isKindOf: NameAst) not]) ifTrue: [^ true].
 	"``raise'' and ``assert'' bind nothing either, and were dropped the same
 	way -- silently, which is the worst of it: ``class C: raise X'' built C,
 	bound it, and carried on, so a class body that refuses to define itself
