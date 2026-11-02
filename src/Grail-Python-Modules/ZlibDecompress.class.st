@@ -11,7 +11,8 @@ State lives in dynamic instVars: #strm is the 112-byte z_stream
 CByteArray (its C address is handed to libz, so the CByteArray must
 stay reachable for the life of the object), #eof / #unused / #tail
 mirror the CPython ``eof`` / ``unused_data`` / ``unconsumed_tail``
-attributes, and #closed records that inflateEnd has run.
+attributes, #closed records that inflateEnd has run, and #zdict holds the
+dictionary to inflate with when the stream asks for one (nil for none).
 
 LIFETIME CAVEAT: libz mallocs its own window/state, which inflateEnd
 frees.  We call inflateEnd as soon as the stream ends or flush() is

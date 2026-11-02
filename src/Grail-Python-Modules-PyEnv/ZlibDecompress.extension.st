@@ -21,14 +21,43 @@ ZlibDecompress class >> ___errorMessage___: rc while: aPhase stream: strm [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+ZlibDecompress class >> _notABufferMessage [
+
+	^ 'zdict argument must support the buffer protocol'
+
+]
+
+{ #category : 'Grail-Private' }
+ZlibDecompress class >> _refuseNonBufferDictionary: aDictionary [
+	"CPython takes any object that supports the buffer protocol as the zdict and
+	refuses anything else before it inflates anything
+	(Modules/zlibmodule.c:666)."
+
+	[ByteArray ___bytesOfBuffer___: aDictionary]
+		@env0:on: TypeError
+		do: [:ex | ex @env0:return: (TypeError ___signal___: self _notABufferMessage)]
+
+]
+
 { #category : 'Grail-Instance Creation' }
 ZlibDecompress class >> wbits: wbits [
-	"Answer a fresh inflater for ``wbits'' (see _initWbits: for the
-	accepted ranges)."
+	"Answer a fresh inflater for ``wbits'' with no preset dictionary."
+
+	^ self wbits: wbits dictionary: nil
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+ZlibDecompress class >> wbits: wbits dictionary: aDictionary [
+	"Answer a fresh inflater for ``wbits'' (see _initWbits:dictionary: for the
+	accepted ranges) that inflates with aDictionary, any buffer, where the
+	stream asks for one -- nil for none."
 
 	| inst |
+	aDictionary @env0:isNil ifFalse: [self _refuseNonBufferDictionary: aDictionary].
 	inst := self @env0:new.
-	inst _initWbits: wbits.
+	inst _initWbits: wbits dictionary: aDictionary.
 	^ inst
 
 ]
@@ -73,9 +102,21 @@ ZlibDecompress >> _flush: positional kw: kwargs [
 
 { #category : 'Grail-Private' }
 ZlibDecompress >> _initWbits: wbits [
+	"An inflater with no preset dictionary."
+
+	^ self _initWbits: wbits dictionary: nil
+
+]
+
+{ #category : 'Grail-Private' }
+ZlibDecompress >> _initWbits: wbits dictionary: aDictionary [
 	"Allocate a zeroed z_stream and inflateInit2_ it.  CPython's accepted
 	windowBits: 8..15 zlib, -8..-15 raw deflate, 24..31 gzip,
-	40..47 auto-detect zlib-or-gzip."
+	40..47 auto-detect zlib-or-gzip.
+
+	A raw deflate stream has no header to ask for its dictionary, so one given
+	is set now, as zlib_decompressobj_impl sets it (Modules/zlibmodule.c:687);
+	any other stream asks, and _run:flushMode:maxLength: sets it then."
 
 	"LIBZ JUDGES THE WINDOW, as in CPython (zlib_decompressobj_impl): its
 	Z_STREAM_ERROR is the ValueError ``Invalid initialization option''.  A
@@ -99,7 +140,9 @@ ZlibDecompress >> _initWbits: wbits [
 	self @env0:dynamicInstVarAt: #eof put: false.
 	self @env0:dynamicInstVarAt: #closed put: false.
 	self @env0:dynamicInstVarAt: #unused put: ByteArray @env0:new.
-	self @env0:dynamicInstVarAt: #tail put: ByteArray @env0:new
+	self @env0:dynamicInstVarAt: #tail put: ByteArray @env0:new.
+	self @env0:dynamicInstVarAt: #zdict put: aDictionary.
+	(aDictionary @env0:notNil @env0:and: [window @env0:< 0]) ifTrue: [self _presetDictionary]
 
 ]
 
@@ -118,6 +161,23 @@ ZlibDecompress >> _join: chunks total: total [
 		out @env0:replaceFrom: pos to: (pos @env0:+ c @env0:size @env0:- 1) with: c startingAt: 1.
 		pos := pos @env0:+ c @env0:size].
 	^ out
+
+]
+
+{ #category : 'Grail-Private' }
+ZlibDecompress >> _presetDictionary [
+	"inflateSetDictionary with the zdict's bytes as they are now: CPython reads
+	the buffer each time it sets it (set_inflate_zdict,
+	Modules/zlibmodule.c:625), so a bytearray changed since is seen changed.  A
+	dictionary the stream does not match is zlib.error, as there."
+
+	| bytes strm rc |
+	bytes := ByteArray ___bytesOfBuffer___: (self @env0:dynamicInstVarAt: #zdict).
+	strm := self @env0:dynamicInstVarAt: #strm.
+	rc := ((zlib _libzCallouts) @env0:at: #inflateSetDictionary)
+		@env0:callWith: { strm. zlib _cBytesOf: bytes. bytes @env0:size }.
+	rc @env0:= 0 ifFalse: [
+		ZlibError ___signal___: (ZlibDecompress ___errorMessage___: rc while: 'while setting zdict' stream: strm)]
 
 ]
 
@@ -156,27 +216,34 @@ ZlibDecompress >> _run: inBytes flushMode: flushMode maxLength: maxLength [
 				produced @env0:> 0 ifTrue: [
 					chunks @env0:add: (dst @env0:byteArrayFrom: 0 numBytes: produced).
 					total := total @env0:+ produced].
-				rc @env0:= 1
+				(rc @env0:= 2 @env0:and: [(self @env0:dynamicInstVarAt: #zdict) @env0:notNil])
 					ifTrue: [
-						"Z_STREAM_END"
-						self @env0:dynamicInstVarAt: #eof put: true.
-						done := true]
+						"Z_NEED_DICT, and there is one: set it and inflate on, as CPython's
+						loop does (Modules/zlibmodule.c:938)."
+						self _presetDictionary]
 					ifFalse: [
-						rc @env0:< 0
+						rc @env0:= 1
 							ifTrue: [
-								"Z_BUF_ERROR (-5) just means no progress was possible -
-								more input is needed.  Everything else is fatal."
-								rc @env0:= -5
-									ifTrue: [done := true]
-									ifFalse: [
-										ZlibError ___signal___: (ZlibDecompress
-											___errorMessage___: rc
-											while: 'while decompressing data'
-											stream: strm)]]
+								"Z_STREAM_END"
+								self @env0:dynamicInstVarAt: #eof put: true.
+								done := true]
 							ifFalse: [
-								"Room left in the output buffer means libz emitted
-								everything it could from the input it has."
-								availOut @env0:> 0 ifTrue: [done := true]]]]].
+								(rc @env0:< 0 @env0:or: [rc @env0:= 2])
+									ifTrue: [
+										"Z_BUF_ERROR (-5) just means no progress was possible -
+										more input is needed.  Everything else is fatal, and so
+										is Z_NEED_DICT with no dictionary to give."
+										rc @env0:= -5
+											ifTrue: [done := true]
+											ifFalse: [
+												ZlibError ___signal___: (ZlibDecompress
+													___errorMessage___: rc
+													while: 'while decompressing data'
+													stream: strm)]]
+									ifFalse: [
+										"Room left in the output buffer means libz emitted
+										everything it could from the input it has."
+										availOut @env0:> 0 ifTrue: [done := true]]]]]].
 	availIn := strm @env0:uint32At: 8.
 	consumed := size @env0:- availIn.
 	remaining := availIn @env0:= 0

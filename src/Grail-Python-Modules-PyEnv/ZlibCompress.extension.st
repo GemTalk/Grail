@@ -66,6 +66,13 @@ ZlibCompress class >> _inconsistentStreamStateWhile: aPhase [
 ]
 
 { #category : 'Grail-Error Messages' }
+ZlibCompress class >> _invalidDictionaryMessage [
+
+	^ 'Invalid dictionary'
+
+]
+
+{ #category : 'Grail-Error Messages' }
 ZlibCompress class >> _invalidInitializationOptionMessage [
 
 	^ 'Invalid initialization option'
@@ -79,6 +86,25 @@ ZlibCompress class >> _noFlushMode [
 
 ]
 
+{ #category : 'Grail-Private' }
+ZlibCompress class >> _preset: aDictionary on: aStream [
+	"deflateSetDictionary, as zlib_compressobj_impl calls it right after
+	deflateInit2 (Modules/zlibmodule.c:593): any buffer, and libz's
+	Z_STREAM_ERROR is CPython's ValueError.  The stream libz will not use is
+	ended first, so its state is not left behind."
+
+	| bytes result callouts |
+	bytes := ByteArray ___bytesOfBuffer___: aDictionary.
+	callouts := zlib _libzCallouts.
+	result := (callouts @env0:at: #deflateSetDictionary)
+		@env0:callWith: { aStream. zlib _cBytesOf: bytes. bytes @env0:size }.
+	result @env0:= 0 ifTrue: [^ aStream].
+	(callouts @env0:at: #deflateEnd) @env0:callWith: { aStream }.
+	result @env0:= -2 ifTrue: [^ ValueError ___signal___: self _invalidDictionaryMessage].
+	^ ZlibError ___signal___: (self _errorMessageFor: result while: 'setting zdict')
+
+]
+
 { #category : 'Grail-Error Messages' }
 ZlibCompress class >> _zdictNotImplementedMessage [
 
@@ -88,16 +114,33 @@ ZlibCompress class >> _zdictNotImplementedMessage [
 
 { #category : 'Grail-Instance Creation' }
 ZlibCompress class >> level: aLevel method: aMethod wbits: aWindowBits memLevel: aMemoryLevel strategy: aStrategy [
-	"The one way to make a compressor.  libz judges every argument itself, so
-	the precondition IS deflateInit2_'s answer."
+	"A compressor with no preset dictionary."
 
-	^ self @env0:new _initializeStream:
-		(self
-			_deflateStreamLevel: aLevel
-			method: aMethod
-			wbits: aWindowBits
-			memLevel: aMemoryLevel
-			strategy: aStrategy)
+	^ self
+		level: aLevel
+		method: aMethod
+		wbits: aWindowBits
+		memLevel: aMemoryLevel
+		strategy: aStrategy
+		dictionary: None
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+ZlibCompress class >> level: aLevel method: aMethod wbits: aWindowBits memLevel: aMemoryLevel strategy: aStrategy dictionary: aDictionary [
+	"The one way to make a compressor.  libz judges every argument itself, so
+	the precondition IS deflateInit2_'s answer, and then deflateSetDictionary's
+	for aDictionary, any buffer, or None for none."
+
+	| stream |
+	stream := self
+		_deflateStreamLevel: aLevel
+		method: aMethod
+		wbits: aWindowBits
+		memLevel: aMemoryLevel
+		strategy: aStrategy.
+	aDictionary == None ifFalse: [self _preset: aDictionary on: stream].
+	^ self @env0:new _initializeStream: stream
 
 ]
 

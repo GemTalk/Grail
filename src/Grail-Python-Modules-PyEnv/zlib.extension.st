@@ -31,6 +31,16 @@ zlib class >> _asBytesArg: data [
 ]
 
 { #category : 'Grail-Private' }
+zlib class >> _cBytesOf: someBytes [
+	"someBytes in C memory, for a callout that reads them while it runs.  Never
+	an empty allocation, so a zero-length buffer still has an address."
+
+	someBytes @env0:isEmpty ifTrue: [^ CByteArray @env0:gcMalloc: 1].
+	^ CByteArray @env0:withAll: someBytes
+
+]
+
+{ #category : 'Grail-Private' }
 zlib class >> _libzCallouts [
 	"CCallout handles wrap per-process C state - cache them in
 	SessionTemps so each fresh gem rebuilds them on first use.
@@ -43,11 +53,12 @@ zlib class >> _libzCallouts [
 	hardcoding '1.x' here.
 
 	The key is VERSIONED and was bumped (v2 -> v3) when the deflate half was
-	added: a session that cached the old dictionary would otherwise answer
-	nil for #deflate for the rest of its life."
+	added, and again (v3 -> v4) for the two SetDictionary calls: a session that
+	cached the old dictionary would otherwise answer nil for a new callout for
+	the rest of its life."
 
 	| d lib libName |
-	d := SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v3 otherwise: nil.
+	d := SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v4 otherwise: nil.
 	d == nil ifTrue: [
 		"libz lives at a different path/extension per OS; pass a bare soname
 		and let the loader resolve it (avoids Linux multiarch dir differences).
@@ -69,9 +80,11 @@ zlib class >> _libzCallouts [
 			args: #(#'ptr' #'int32' #'int32' #'int32' #'int32' #'int32' #'ptr' #'int32')).
 		d @env0:at: #deflate put: (CCallout @env0:library: lib name: 'deflate' result: #int32 args: #(#'ptr' #'int32')).
 		d @env0:at: #deflateEnd put: (CCallout @env0:library: lib name: 'deflateEnd' result: #int32 args: #(#'ptr')).
+		d @env0:at: #deflateSetDictionary put: (CCallout @env0:library: lib name: 'deflateSetDictionary' result: #int32 args: #(#'ptr' #'ptr' #'uint32')).
+		d @env0:at: #inflateSetDictionary put: (CCallout @env0:library: lib name: 'inflateSetDictionary' result: #int32 args: #(#'ptr' #'ptr' #'uint32')).
 		d @env0:at: #zlibVersion put:
 			((CCallout @env0:library: lib name: 'zlibVersion' result: #'ptr' args: #()) @env0:callWith: #()).
-		SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v3 put: d].
+		SessionTemps @env0:current @env0:at: #Grail_zlib_callouts_v4 put: d].
 	^ d
 
 ]
@@ -196,14 +209,13 @@ zlib >> _compressobj: positional kw: kwargs [
 	| arguments |
 
 	arguments := self _compressobjArguments: positional kw: kwargs.
-	(arguments @env0:at: 6) == None ifFalse: [
-		NotImplementedError ___signal___: ZlibCompress _zdictNotImplementedMessage].
 	^ ZlibCompress
 		level: (arguments @env0:at: 1) ___asIndex___
 		method: (arguments @env0:at: 2) ___asIndex___
 		wbits: (arguments @env0:at: 3) ___asIndex___
 		memLevel: (arguments @env0:at: 4) ___asIndex___
 		strategy: (arguments @env0:at: 5) ___asIndex___
+		dictionary: (arguments @env0:at: 6)
 
 ]
 
@@ -261,14 +273,12 @@ zlib >> _decompress: positional kw: kwargs [
 
 { #category : 'Grail-Streaming' }
 zlib >> _decompressobj: positional kw: kwargs [
-	| wbits |
-	wbits := positional @env0:size @env0:>= 1
-		ifTrue: [positional @env0:at: 1]
-		ifFalse: [
-			kwargs == nil
-				ifTrue: [15]
-				ifFalse: [kwargs @env0:at: 'wbits' ifAbsent: [15]]].
-	^ ZlibDecompress wbits: wbits
+	"zlib.decompressobj(wbits=MAX_WBITS, zdict=b''), each by position or by
+	keyword.  A zdict not given is none at all, as CPython's C default is NULL."
+
+	^ ZlibDecompress
+		wbits: (self _argumentAt: 1 named: 'wbits' from: positional kw: kwargs ifAbsent: 15)
+		dictionary: (self _argumentAt: 2 named: 'zdict' from: positional kw: kwargs ifAbsent: nil)
 
 ]
 
@@ -417,6 +427,12 @@ zlib >> decompressobj [
 { #category : 'Grail-Streaming' }
 zlib >> decompressobj: wbits [
 	^ ZlibDecompress wbits: wbits
+
+]
+
+{ #category : 'Grail-Streaming' }
+zlib >> decompressobj: wbits _: aDictionary [
+	^ ZlibDecompress wbits: wbits dictionary: aDictionary
 
 ]
 
