@@ -1229,7 +1229,7 @@ warnings >> ___warningLocation___: aStacklevel skipPrefixes: skipPrefixes [
 	both test-time paths -- and never on the ordinary warn-and-print route."
 
 	| frame code fname lineno hops |
-	frame := [BaseException @env0:___liveFrameChain___]
+	frame := [BaseException @env0:___cuttingFramesAtFinalizerHook___: [BaseException @env0:___liveFrameChain___]]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	frame == nil ifTrue: [^ nil].
 	"stacklevel 1 is the innermost frame -- the warn() call site.  Each level
@@ -1296,7 +1296,7 @@ warnings >> ___warningOrigin___ [
 	origin means a module-scoped filter still cannot be evaluated."
 
 	| frame code fname mods hit |
-	frame := [BaseException @env0:___liveFrameChain___]
+	frame := [BaseException @env0:___cuttingFramesAtFinalizerHook___: [BaseException @env0:___liveFrameChain___]]
 		@env0:on: Error do: [:ex | ex @env0:return: nil].
 	frame == nil ifTrue: [^ nil].
 	code := [frame @env0:dynamicInstVarAt: #'f_code']
@@ -2135,10 +2135,17 @@ warnings >> _warn_unawaited_coroutine: coro [
 	it dies never awaited (PythonCoroutine >> ___warnNeverAwaited___).
 	Delegated, like _add_filter: _py_warnings' own function renders cr_origin
 	through linecache and traceback exactly as CPython's does, and warns
-	through _wm -- this module -- so the warning lands in Grail's filters."
+	through _wm -- this module -- so the warning lands in Grail's filters.
 
-	^ self ___pyWarningsCall___: #'_warn_unawaited_coroutine'
-		with: { coro } with: nil
+	Its location is found with every frame past a running finalizer hook cut
+	away, as warnings' own lookup is (BaseException class >>
+	___framesInsideFinalizerHook___:): a hook's warning is blamed on <sys>, and
+	does not write __warningregistry__ into the globals of code it interrupted
+	(#1999)."
+
+	^ BaseException @env0:___cuttingFramesAtFinalizerHook___: [
+		self ___pyWarningsCall___: #'_warn_unawaited_coroutine'
+			with: { coro } with: nil]
 
 ]
 
