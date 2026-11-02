@@ -182,7 +182,8 @@ io >> initialize [
 	self @env0:at: #FileIO put: FileIO.
 	self @env0:at: #TextIOWrapper put: TextIOWrapper.
 	self @env0:at: #UnsupportedOperation put: UnsupportedOperation.
-	self @env0:at: #DEFAULT_BUFFER_SIZE put: 8192.
+	"128 KiB since CPython 3.14 (Modules/_io/_iomodule.h:81), as _pyio's own is."
+	self @env0:at: #DEFAULT_BUFFER_SIZE put: 128 @env0:* 1024.
 	self @env0:at: #SEEK_SET put: 0.
 	self @env0:at: #SEEK_CUR put: 1.
 	self @env0:at: #SEEK_END put: 2
