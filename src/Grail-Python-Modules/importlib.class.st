@@ -6805,13 +6805,26 @@ importlib class >> ___mergeSecondaryBases___: aClass bases: secondaryBases resol
 					].
 					"Value pass for class attributes (unary getter in the
 					Grail-Class Attrs category): copy into aClass's
-					___dynInstVars___ holder when nothing shadows it."
+					___dynInstVars___ holder when nothing shadows it -- or when
+					the MRO puts this base AHEAD of the deep primary chain that
+					also binds it (override mode).  aClass's holder is the first
+					one the generated getter walks, so the copy is what
+					``Both.policy'' answers for ``class Both(Mixin, Base)'' where
+					Base is the storage base: Mixin's, as C3 has it.  It answered
+					Base's, which is how every test_email test built on
+					``class TestGenerator(TestGeneratorBase, TestEmailBase)'' ran
+					under compat32 instead of the mixin's policy.default.  Not for
+					an ancestor the storage base shares: C3 puts that after the
+					storage base, whose own binding then wins."
 					(cat == #'Grail-Class Attrs'
 						and: [(sel asString includes: $:) not
 						and: [(kernelSlots includes: sel) not
 						and: [sel ~~ #'__module__'
 						and: [sel ~~ #'___dynInstVars___'
-						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil]]]]]) ifTrue: [
+						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
+							or: [overrideMode
+								and: [walker ~~ storageBase
+								and: [(storageBase inheritsFrom: walker) not]]]]]]]]) ifTrue: [
 						| v holder |
 						"Read the value AS SEEN FROM ``base'' -- the class actually
 						named in the class header -- not from ``walker'', which is
