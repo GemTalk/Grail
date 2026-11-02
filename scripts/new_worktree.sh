@@ -125,8 +125,21 @@ fi
 
 # The directory holding GemStone's locks and logs, which install.sh needs when
 # /opt/gemstone/locks does not exist.  The product's parent unless .setenv says.
+# Left unset when /opt/gemstone/locks exists: that is where GemStone registers a
+# stone when the variable is unset, so pointing it anywhere else hides the stone
+# and every login fails with "could not find server ... EAI error 8".
+# GRAIL_GEMSTONE_LOCKS_DIR names another directory to test for, so the test can
+# take both branches on any machine.
+LOCKS_DIR=${GRAIL_GEMSTONE_LOCKS_DIR:-/opt/gemstone/locks}
 GLOBAL_DIR=$(setenv_value GEMSTONE_GLOBAL_DIR)
-GLOBAL_DIR=${GLOBAL_DIR:-$(dirname "$PRODUCT")}
+if [ -z "$GLOBAL_DIR" ] && [ ! -d "$LOCKS_DIR" ]; then
+    GLOBAL_DIR=$(dirname "$PRODUCT")
+fi
+if [ -n "$GLOBAL_DIR" ]; then
+    GLOBAL_DIR_LINE="export GEMSTONE_GLOBAL_DIR='$GLOBAL_DIR'"
+else
+    GLOBAL_DIR_LINE="# GEMSTONE_GLOBAL_DIR unset: stones are registered in $LOCKS_DIR"
+fi
 
 if [ ! -d "$PRODUCT" ]; then
     echo "Error: product dir for '$STONE' does not exist: $PRODUCT" >&2
@@ -213,7 +226,7 @@ cat > "$WT_PATH/.setenv" <<EOF
 # checkout at the same (stone, user) pair -- their installs would overwrite
 # each other.  Keep GEMSTONE_NAME in step with 'set gemstone' in ./.topazini.
 
-export GEMSTONE_GLOBAL_DIR='$GLOBAL_DIR'
+$GLOBAL_DIR_LINE
 export GEMSTONE='$PRODUCT'
 export GEMSTONE_NAME='$STONE'
 export GRAIL_NETLDI='$NETLDI'
