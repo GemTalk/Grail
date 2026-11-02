@@ -62,14 +62,14 @@ DictAst >> ___emitIRValueOn___: aBuilder [
 	accBlk := aBuilder blockWithArg: #'___d' do: [:dLeaf |
 		1 to: keys size do: [:i |
 			| k v |
-			"``{**m}'': ___emitSmalltalkOn___:'s own ``___d ___pyUpdate___: (m)''
-			-- an env-1 send into the SAME accumulator, in position, so later
-			keys overwrite earlier ones exactly as CPython's left-to-right
-			evaluation does."
+			"``{**m}'': ___emitSmalltalkOn___:'s own ``___d
+			___pyUpdateFromMapping___: (m)'' -- an env-1 send into the SAME
+			accumulator, in position, so later keys overwrite earlier ones
+			exactly as CPython's left-to-right evaluation does."
 			(keys at: i) isNil ifTrue: [
 				v := (values at: i) ___emitIRValueOn___: aBuilder.
 				aBuilder add: (aBuilder
-					send: #'___pyUpdate___:' to: (aBuilder var: dLeaf) with: { v })]
+					send: #'___pyUpdateFromMapping___:' to: (aBuilder var: dLeaf) with: { v })]
 			ifFalse: [
 				k := (keys at: i) ___emitIRValueOn___: aBuilder.
 				v := (values at: i) ___emitIRValueOn___: aBuilder.
@@ -95,8 +95,9 @@ DictAst >> ___emitSmalltalkOn___: aStream [
 				mapping in `values` with a None (nil) at the matching
 				`keys` position.  Merge the mapping's items into the
 				accumulator (later keys overwrite earlier ones, matching
-				CPython's left-to-right literal evaluation)."
-				aStream nextPutAll: '___d ___pyUpdate___: '.
+				CPython's left-to-right literal evaluation) -- a mapping
+				only, as DICT_UPDATE takes it."
+				aStream nextPutAll: '___d ___pyUpdateFromMapping___: '.
 				(values at: i) printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: '. '.
 			]
