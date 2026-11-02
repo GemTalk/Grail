@@ -38,22 +38,6 @@ ForAst >> ___drainGuardedStepFor___: iterTemp [
 ]
 
 { #category : 'Grail-IR Codegen' }
-ForAst >> ___emitIRForLengthLess___: anInteger source: aSourceBlock on: aBuilder [
-	"``((src __len__) @env0:- N)'' -- the arithmetic the text's star shape uses
-	to index from the end.  An env-0 SmallInteger subtraction on the Python
-	``__len__'', exactly as printSmalltalkOn: spells it; N is emitted even when
-	it is 0, because the text emits ``- 0'' for a trailing star and this
-	reproduces the sends rather than simplifying them."
-
-	^ aBuilder
-		send: #'-'
-		to: (aBuilder send: #'__len__' to: aSourceBlock value with: { })
-		with: { aBuilder obj: anInteger }
-		env: 0
-
-]
-
-{ #category : 'Grail-IR Codegen' }
 ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
 	"emitUnpackOn:target:source:depth:, star shapes included.  aSourceBlock
 	answers a FRESH node for the source expression on each call: IR nodes
@@ -84,7 +68,6 @@ ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
 	because both spell the loop this way; the fixture pins it as an XFAIL
 	rather than letting this emit quietly diverge from its oracle."
 
-	| elts starIdx nBefore nAfter |
 	(aTarget isKindOf: NameAst) ifTrue: [
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
@@ -97,48 +80,11 @@ ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
 	((aTarget isKindOf: SubscriptAst) or: [aTarget isKindOf: AttributeAst]) ifTrue: [
 		^ self ___emitIRUnpackStore___: aTarget
 			from: aSourceBlock value holder: '___tgt___' on: aBuilder].
-	elts := aTarget elts.
-	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
-	starIdx = 0 ifTrue: [
-		^ elts doWithIndex: [:elt :i |
-			self ___emitIRForUnpack___: elt
-				source: [aBuilder
-					send: #'__getitem__:' to: aSourceBlock value
-					with: { aBuilder obj: i - 1 }]
-				on: aBuilder]].
-	nBefore := starIdx - 1.
-	nAfter := elts size - starIdx.
-	elts doWithIndex: [:elt :i |
-		i < starIdx
-			ifTrue: [
-				self ___emitIRForUnpack___: elt
-					source: [aBuilder
-						send: #'__getitem__:' to: aSourceBlock value
-						with: { aBuilder obj: i - 1 }]
-					on: aBuilder]
-			ifFalse: [
-				i = starIdx
-					ifTrue: [
-						self ___emitIRForUnpack___: elt value
-							source: [aBuilder
-								send: #'__new__:' to: (aBuilder globalNamed: #list)
-								with: { aBuilder
-									send: #'__getitem__:' to: aSourceBlock value
-									with: { aBuilder
-										send: #'__new__:_:' to: (aBuilder globalNamed: #slice)
-										with: { aBuilder obj: nBefore.
-											self ___emitIRForLengthLess___: nAfter
-												source: aSourceBlock on: aBuilder }
-										env: 1 } }
-								env: 1]
-							on: aBuilder]
-					ifFalse: [
-						self ___emitIRForUnpack___: elt
-							source: [aBuilder
-								send: #'__getitem__:' to: aSourceBlock value
-								with: { self ___emitIRForLengthLess___: nAfter - (i - starIdx - 1)
-									source: aSourceBlock on: aBuilder }]
-							on: aBuilder]]]
+	"The element reads -- the star arm included -- are the comprehension
+	clause's too, so they live in one place: AbstractNode >>
+	___emitIRSequenceElementsOf___:source:on:do:.  Each leaf recurses here."
+	^ self ___emitIRSequenceElementsOf___: aTarget source: aSourceBlock on: aBuilder
+		do: [:leaf :src | self ___emitIRForUnpack___: leaf source: src on: aBuilder]
 
 ]
 
