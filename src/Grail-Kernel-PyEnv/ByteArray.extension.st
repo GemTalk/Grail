@@ -23,6 +23,20 @@ ByteArray class >> ___bufferOperand___: value [
 
 ]
 
+{ #category : 'Grail-Buffer Protocol' }
+ByteArray class >> ___bytesOfBuffer___: anObject [
+	"The bytes anObject's buffer holds, as CPython's ``y*'' argument converter
+	reads them -- bytes itself, or a copy of what a memoryview, an array or any
+	other exporter holds -- or CPython's TypeError for an object with none."
+
+	(anObject isKindOf: bytes) ifTrue: [^ anObject].
+	^ [(memoryview __new__: anObject) tobytes]
+		@env0:on: TypeError
+		do: [:ex | ex @env0:return: (TypeError ___signal___: ('a bytes-like object is required, not '''
+			@env0:, (bytes ___pyTypeNameOf___: anObject) @env0:, ''''))]
+
+]
+
 { #category : 'Grail-Constructors' }
 ByteArray class >> ___coerceByteValue___: obj [
 	"Coerce obj to an int in [0, 255] for use as a byte, honoring __index__
@@ -629,18 +643,15 @@ ByteArray class >> maketrans: frm _: to [
 	"Create translation table (identity table with replacements)
 	Note: This is actually a staticmethod in Python (doesn't receive cls),
 	but Grail doesn't have a staticmethod: directive for hand-written methods."
-	| frmSize toSize table |
-	"Both arguments must be bytes-like: CPython rejects str with a TypeError
-	(without the check, ``frm at: i'' handed a Character to arithmetic below
-	and died with an uncatchable env-0 DNU)."
-	(frm isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('a bytes-like object is required, not '''
-			@env0:, (bytes ___pyTypeNameOf___: frm) @env0:, '''')].
-	(to isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('a bytes-like object is required, not '''
-			@env0:, (bytes ___pyTypeNameOf___: to) @env0:, '''')].
-	frmSize := frm @env0:size.
-	toSize := to @env0:size.
+	| from into frmSize toSize table |
+	"Both arguments must be bytes-like -- any buffer, as CPython's converter
+	reads it: base64 passes a memoryview of altchars.  CPython rejects str with
+	a TypeError (without the check, ``frm at: i'' handed a Character to
+	arithmetic below and died with an uncatchable env-0 DNU)."
+	from := self ___bytesOfBuffer___: frm.
+	into := self ___bytesOfBuffer___: to.
+	frmSize := from @env0:size.
+	toSize := into @env0:size.
 
 	"frm and to must be same size"
 	(frmSize @env0:= toSize) ifFalse: [
@@ -656,8 +667,8 @@ ByteArray class >> maketrans: frm _: to [
 	"Apply replacements"
 	1 @env0:to: frmSize do: [:i |
 		| frmByte toByte |
-		frmByte := frm @env0:at: i.
-		toByte := to @env0:at: i.
+		frmByte := from @env0:at: i.
+		toByte := into @env0:at: i.
 		table @env0:at: (frmByte @env0:+ 1) put: toByte
 	].
 
@@ -4601,12 +4612,11 @@ ByteArray >> translate: table [
 	"Translate bytes using a 256-entry table (None = identity copy).  The
 	result is the receiver's own base type (bytes -> bytes, bytearray ->
 	bytearray), as in CPython."
-	| tableSize mySize result |
+	| map tableSize mySize result |
 	(table @env0:== None) ifTrue: [^ self ___translateResultClass___ ___copyBytesOf___: self].
-	(table isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('a bytes-like object is required, not '''
-			@env0:, (bytes ___pyTypeNameOf___: table) @env0:, '''')].
-	tableSize := table @env0:size.
+	"Any buffer, as CPython's converter reads one."
+	map := ByteArray ___bytesOfBuffer___: table.
+	tableSize := map @env0:size.
 	mySize := self @env0:size.
 
 	"Table must be 256 bytes"
@@ -4619,7 +4629,7 @@ ByteArray >> translate: table [
 	1 @env0:to: mySize do: [:i |
 		| byte newByte |
 		byte := self @env0:at: i.
-		newByte := table @env0:at: (byte @env0:+ 1).
+		newByte := map @env0:at: (byte @env0:+ 1).
 		result @env0:at: i put: newByte
 	].
 
@@ -4631,25 +4641,22 @@ ByteArray >> translate: table [
 ByteArray >> translate: table _: delete [
 	"bytes.translate(table, delete) -- map each byte through the 256-entry
 	table (None = identity) and drop every byte present in ``delete''."
-	| mySize kept tableIsNone result |
+	| mySize kept tableIsNone map deleted result |
 	mySize := self @env0:size.
 	tableIsNone := table @env0:== None.
+	"Both are any buffer, as CPython's converter reads one."
 	tableIsNone ifFalse: [
-		(table isKindOf: bytes) ifFalse: [
-			TypeError ___signal___: ('a bytes-like object is required, not '''
-				@env0:, (bytes ___pyTypeNameOf___: table) @env0:, '''')].
-		(table @env0:size @env0:= 256) ifFalse: [
+		map := ByteArray ___bytesOfBuffer___: table.
+		(map @env0:size @env0:= 256) ifFalse: [
 			ValueError ___signal___: 'translation table must be 256 characters long']].
 	"``delete'' is positional-only and must be bytes-like; None is a TypeError
 	(CPython: b'x'.translate(None, None) raises), not an identity copy."
-	(delete isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('a bytes-like object is required, not '''
-			@env0:, (bytes ___pyTypeNameOf___: delete) @env0:, '''')].
+	deleted := ByteArray ___bytesOfBuffer___: delete.
 	kept := OrderedCollection @env0:new.
 	1 @env0:to: mySize do: [:i | | byte |
 		byte := self @env0:at: i.
-		(delete @env0:includes: byte) ifFalse: [
-			kept @env0:add: (tableIsNone ifTrue: [byte] ifFalse: [table @env0:at: byte @env0:+ 1])]].
+		(deleted @env0:includes: byte) ifFalse: [
+			kept @env0:add: (tableIsNone ifTrue: [byte] ifFalse: [map @env0:at: byte @env0:+ 1])]].
 	result := self ___translateResultClass___ ___new___: kept @env0:size.
 	1 @env0:to: kept @env0:size do: [:i | result @env0:at: i put: (kept @env0:at: i)].
 	^ result

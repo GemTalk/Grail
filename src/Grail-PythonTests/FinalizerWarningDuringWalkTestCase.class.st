@@ -28,10 +28,25 @@ FinalizerWarningDuringWalkTestCase >> queueHooksWithoutRunningThem [
 
 ]
 
+{ #category : 'Grail-Private' }
+FinalizerWarningDuringWalkTestCase >> runHooksAlreadyDue [
+
+	"Collect whatever earlier code dropped and run its hooks now, so the walk
+	meets only the two this test queues.  A never-awaited coroutine an earlier
+	test left behind warns at the walk's safe point too, and the recording then
+	holds three warnings or more: on CI that was every run of the shard this
+	class landed on once the shard plan moved it."
+
+	self queueHooksWithoutRunningThem.
+	FinalizerEphemeron _runPending
+
+]
+
 { #category : 'Grail-Setup' }
 FinalizerWarningDuringWalkTestCase >> setUp [
 
 	super setUp.
+	self runHooksAlreadyDue.
 	importlib @env1:modules removeKey: #'finalizer_warning_during_walk' ifAbsent: [].
 	fixture := importlib
 		loadModuleFromPath: (importlib grailDir , '/tests/python/finalizer_warning_during_walk.py')

@@ -1794,6 +1794,7 @@ builtins >> ___formatPadBody___: body fill: fill align: align width: width signL
 
 	| padCount pad left lp rp leftPad |
 	width @env0:<= body @env0:size ifTrue: [^ body @env0:asString].
+	CharacterCollection ___refuseUnbuildableLength___: width.
 	padCount := width @env0:- body @env0:size.
 	"atAllPut: answers its ARGUMENT, not the receiver — assign first."
 	pad := String @env0:new: padCount.

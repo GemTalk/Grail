@@ -60,15 +60,12 @@ def _parse_string(s, i):
     out = []
     i += 1
     while i < n and s[i] != quote:
-        if s[i] == '\\' and i + 1 < n:
-            esc = s[i + 1]
-            mapping = {'n': '\n', 't': '\t', 'r': '\r',
-                       '"': '"', "'": "'", '\\': '\\'}
-            out.append(mapping.get(esc, esc))
-            i += 2
-        else:
-            out.append(s[i])
-            i += 1
+        # An ESCAPE is the full parser's: this one knew six of them and read
+        # ``'\\u00e9''' as 'u00e9'.  The caller falls back to it.
+        if s[i] == '\\':
+            raise _UnsupportedLiteral('escape sequence')
+        out.append(s[i])
+        i += 1
     if i >= n:
         raise _UnsupportedLiteral('unterminated string')
     return i + 1, ''.join(out)
@@ -191,9 +188,75 @@ def _parse_seq(s, i, close):
         raise _UnsupportedLiteral('expected "," or "' + close + '"')
 
 
-def literal_eval(s):
-    if not isinstance(s, str):
-        raise TypeError('literal_eval requires a string')
+def literal_eval(node_or_string):
+    """CPython's literal_eval (Lib/ast.py), over the tree parse() builds.
+
+    The string forms it accepts -- strings, bytes, numbers, tuples, lists,
+    dicts, sets, booleans and None -- are read first by the recursive descent
+    below, which needs no parse: dbm.dumb reads every line of its index this
+    way.  What that refuses, and every node handed in, goes to CPython's walk,
+    so the answers and the refusals are CPython's: ``literal_eval("f'x'")'' is
+    ``malformed node or string'', where this module answered ``unknown name
+    f'', and ``literal_eval(node)'' works.
+    """
+    if isinstance(node_or_string, str):
+        try:
+            return _literal_eval_string(node_or_string)
+        except ValueError:
+            # _UnsupportedLiteral, or a number the reader below could not
+            # convert (``...'', ``-(1)''): the full parse decides, so the answer
+            # or the refusal is CPython's.
+            pass
+        node_or_string = parse(node_or_string.lstrip(" \t"), mode='eval')
+    if isinstance(node_or_string, Expression):
+        node_or_string = node_or_string.body
+    def _raise_malformed_node(node):
+        msg = "malformed node or string"
+        if lno := getattr(node, 'lineno', None):
+            msg += f' on line {lno}'
+        raise ValueError(msg + f': {node!r}')
+    def _convert_num(node):
+        if not isinstance(node, Constant) or type(node.value) not in (int, float, complex):
+            _raise_malformed_node(node)
+        return node.value
+    def _convert_signed_num(node):
+        if isinstance(node, UnaryOp) and isinstance(node.op, (UAdd, USub)):
+            operand = _convert_num(node.operand)
+            if isinstance(node.op, UAdd):
+                return + operand
+            else:
+                return - operand
+        return _convert_num(node)
+    def _convert(node):
+        if isinstance(node, Constant):
+            return node.value
+        elif isinstance(node, Tuple):
+            return tuple(map(_convert, node.elts))
+        elif isinstance(node, List):
+            return list(map(_convert, node.elts))
+        elif isinstance(node, Set):
+            return set(map(_convert, node.elts))
+        elif (isinstance(node, Call) and isinstance(node.func, Name) and
+              node.func.id == 'set' and node.args == node.keywords == []):
+            return set()
+        elif isinstance(node, Dict):
+            if len(node.keys) != len(node.values):
+                _raise_malformed_node(node)
+            return dict(zip(map(_convert, node.keys),
+                            map(_convert, node.values)))
+        elif isinstance(node, BinOp) and isinstance(node.op, (Add, Sub)):
+            left = _convert_signed_num(node.left)
+            right = _convert_num(node.right)
+            if isinstance(left, (int, float)) and isinstance(right, complex):
+                if isinstance(node.op, Add):
+                    return left + right
+                else:
+                    return left - right
+        return _convert_signed_num(node)
+    return _convert(node_or_string)
+
+
+def _literal_eval_string(s):
     i, value = _parse_value(s, 0)
     i = _skip_ws(s, i)
     # A BARE TUPLE: CPython's literal_eval parses an expression, so
