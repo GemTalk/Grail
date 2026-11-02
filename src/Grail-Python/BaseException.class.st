@@ -397,6 +397,27 @@ BaseException class >> ___currentException___ [
 
 ]
 
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___cuttingFramesAtFinalizerHook___: aBlock [
+	"aBlock's value, with every live stack walked meanwhile cut at the frame
+	running finalizer hooks (___framesInsideFinalizerHook___:).  For a
+	WARNING's location only -- warnings' own lookups, and _py_warnings'
+	sys._getframe under _warn_unawaited_coroutine.  Everything else keeps the
+	whole stack: CPython gives an unraisable from a finalizer the traceback of
+	the frame running then, and a hook imports and reads globals() as any code
+	does.
+
+	A flag rather than a second walk, because ___liveFrameLevelOffset___:levels:
+	finds the walk's own frame by its selector, ___liveFrameChain___."
+
+	| temps saved |
+	temps := SessionTemps @env0:current.
+	saved := temps @env0:at: #'GrailFramesStopAtFinalizerHook' otherwise: false.
+	temps @env0:at: #'GrailFramesStopAtFinalizerHook' put: true.
+	^ aBlock @env0:ensure: [temps @env0:at: #'GrailFramesStopAtFinalizerHook' put: saved]
+
+]
+
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___deriveIRNestedNameForBlock___: aBlockMethod home: aHomeMethod [
 	"Uncached worker for ___irNestedNameForBlock___:home:.  The block's offset
@@ -1000,7 +1021,11 @@ BaseException class >> ___framesInsideFinalizerHook___: triples [
 	module whose globals() a generator expression was walking: the warning
 	wrote __warningregistry__ into those globals and the walk raised
 	``dictionary changed size during iteration'' (#1999).  warnings now
-	blames such a warning on <sys>, as CPython's does when it finds no frame."
+	blames such a warning on <sys>, as CPython's does when it finds no frame.
+
+	Only a warning's location is cut (___cuttingFramesAtFinalizerHook___:).
+	Cut for every reader, a generator's failing close lost the traceback its
+	unraisable report gets from the frame running, as CPython's does."
 
 	| runner |
 	runner := FinalizerEphemeron class compiledMethodAt: #'_runPending' environmentId: 0 otherwise: nil.
@@ -2048,7 +2073,9 @@ BaseException class >> ___liveFrameChain___ [
 	generates native code.  Converting here is what makes traceback.extract_stack
 	and format_stack report the calling line rather than the one after it."
 	st := BaseException ___toPortableIps___: st.
-	trimmed := self ___framesInsideFinalizerHook___: (self ___trimCapturedStack___: st).
+	trimmed := self ___trimCapturedStack___: st.
+	(SessionTemps @env0:current @env0:at: #'GrailFramesStopAtFinalizerHook' otherwise: false)
+		ifTrue: [trimmed := self ___framesInsideFinalizerHook___: trimmed].
 	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
 	ever, so f_locals has to come from the OTHER live-stack reader --
 	GsProcess class>>_frameContentsAt:, which does answer names and values but is
