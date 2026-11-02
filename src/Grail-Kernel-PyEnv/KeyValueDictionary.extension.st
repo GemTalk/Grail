@@ -368,6 +368,22 @@ KeyValueDictionary >> ___pyUpdate___: other [
 
 ]
 
+{ #category : 'Grail-Python Dict' }
+KeyValueDictionary >> ___pyUpdateFromMapping___: aMapping [
+	"A dict display's ``{**m}'' merged into the dict being built, as DICT_UPDATE
+	merges it (Python/ceval.c): only a mapping -- a dict, or anything with
+	keys() -- and anything else is ``'list' object is not a mapping''.  It went
+	through update:, which takes an iterable of pairs too, so ``{**[]}'' was {}
+	and ``{**1}'' said the int was not iterable."
+
+	((aMapping @env0:isKindOf: AbstractDictionary)
+		@env0:or: [aMapping ___hasProtocolForCall___: 'keys']) ifFalse: [
+			^ TypeError ___signal___: '''' @env0:, (aMapping ___pyTypeNameForError___) @env0:asString
+				@env0:, ''' object is not a mapping'].
+	^ self ___pyUpdate___: aMapping
+
+]
+
 { #category : 'Grail-Mutation Methods' }
 KeyValueDictionary >> ___removeStoredKey___: key [
 	"Remove the entry ``key'' names and answer its value, or answer the marker
