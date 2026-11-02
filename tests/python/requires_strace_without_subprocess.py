@@ -10,8 +10,10 @@ strace_python's requires_subprocess() wrapper raised SkipTest from inside the
 call -- so the nightly scored test_fileio SKIP while Darwin ran its 99 tests.
 
 Darwin never takes that path, so the check pretends to be Linux.  Under
-CPython the probe runs and finds no working strace; under Grail it is not run
-at all.  Either way the answer is a decorator that skips the class.
+CPython the probe runs, and the class is skipped or not as strace works there
+(it does on CI's Linux, not on a Mac); under Grail it is not run at all and
+the class is skipped.  Either way the answer is a decorator, and what it
+answers is the class.
 
 Every check here holds under CPython 3.14, which is what makes it evidence.
 """
@@ -40,12 +42,12 @@ class TracedTests(unittest.TestCase):
         pass
 
 
-r['it_skips_the_class'] = decorator is not None and getattr(decorator(TracedTests), '__unittest_skip__', False)
+r['it_answers_the_class'] = decorator is not None and decorator(TracedTests) is TracedTests
 r['the_platform_is_restored'] = sys.platform == real_platform
 
 EXPECTED = {
     'requires_strace_on_linux': 'a decorator',
-    'it_skips_the_class': True,
+    'it_answers_the_class': True,
     'the_platform_is_restored': True,
 }
 
