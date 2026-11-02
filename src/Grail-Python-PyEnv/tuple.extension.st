@@ -334,6 +334,11 @@ tuple >> __mul__: n [
 	identity optimization -- seq_tests test_repeat: id(s) == id(s*1)); a
 	tuple subclass still gets a fresh plain tuple."
 	((count @env0:= 1) and: [self @env0:class == tuple]) ifTrue: [^ self].
+	"As for a list (SequenceableCollection >> __mul__:): CPython's MemoryError
+	for a repeat that cannot be allocated, not a build that exhausts the gem's
+	temporary object memory and ends the session."
+	(self @env0:size @env0:* count) @env0:> 50000000 ifTrue: [
+		^ MemoryError ___signal___: 'repeated tuple would exhaust memory'].
 	accumulator := OrderedCollection @env0:new.
 	count @env0:timesRepeat: [accumulator @env0:addAll: self].
 	^ tuple @env0:withAll: accumulator
