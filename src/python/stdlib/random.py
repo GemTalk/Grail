@@ -97,6 +97,8 @@ SG_MAGICCONST = 1.0 + _log(4.5)
 BPF = 53        # Number of bits in a float
 RECIP_BPF = 2 ** -BPF
 _ONE = 1
+_RANDBYTES_CHUNK = 8192    # GRAIL: whole 32-bit words, well under 130144 bits; see randbytes
+_RANDBYTES_CEILING = 1 << 61    # GRAIL: n * 8 from here is getrandbits()' OverflowError
 _sha512 = None
 
 
@@ -292,7 +294,21 @@ class Random(_random.Random):
 
     def randbytes(self, n):
         """Generate n random bytes."""
-        return self.getrandbits(n * 8).to_bytes(n, 'little')
+        # GRAIL: a GemStone integer holds about 130144 bits, so getrandbits(n * 8)
+        # raised OverflowError past ~16 KB (test_zlib's 17 KB and 10 MB of random
+        # data).  getrandbits() hands out 32-bit words least significant first,
+        # and to_bytes(..., 'little') lays them out in that order, so drawing
+        # the bytes in chunks of whole words gives exactly the same bytes.  Only
+        # a length getrandbits() takes is drawn in chunks: any other -- not an
+        # int, negative, or n * 8 past 2**64 -- is refused by it as before.
+        if not _RANDBYTES_CHUNK < n < _RANDBYTES_CEILING:
+            return self.getrandbits(n * 8).to_bytes(n, 'little')
+        whole, rest = divmod(n, _RANDBYTES_CHUNK)
+        getrandbits = self.getrandbits
+        chunks = [getrandbits(_RANDBYTES_CHUNK * 8).to_bytes(_RANDBYTES_CHUNK, 'little')
+                  for _ in range(whole)]
+        chunks.append(getrandbits(rest * 8).to_bytes(rest, 'little'))
+        return b''.join(chunks)
 
 
     ## -------------------- integer methods  -------------------
