@@ -4009,14 +4009,21 @@ Object class >> ___grailPurePythonChain___ [
 	built-in whose own construction takes arguments (an Exception, a dict,
 	...).  The classes whose excess constructor arguments CPython's
 	object.__new__ / object.__init__ refuse, and the only ones Grail can
-	judge exactly: a built-in base constructs through paths of its own."
+	judge exactly: a built-in base constructs through paths of its own.
+
+	A class type() BUILT is one too -- to CPython it is the same thing as a
+	class statement's -- and carries ___pyTypeBuiltClass___ where a class
+	statement's carries ___pyDefinedClass___ (builtins >> type:_:_:kw:).
+	Counted as built-in, ``type('T', (), {})'' took ``object.__new__(T, 1)''
+	and answered ``T[int]'' with T itself, where CPython refuses both."
 
 	| c |
 	c := self.
 	[c == PythonInstance] @env0:whileFalse: [
 		(c @env0:isNil or: [c == object]) ifTrue: [^ false].
-		(c @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
-			ifFalse: [^ false].
+		((c @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
+			or: [c @env0:includesSelector: #'___pyTypeBuiltClass___' environmentId: 1])
+				ifFalse: [^ false].
 		c := c @env0:superclass].
 	^ true
 
