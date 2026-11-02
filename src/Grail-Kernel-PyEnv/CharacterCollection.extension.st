@@ -170,42 +170,34 @@ CharacterCollection class >> __new__: obj [
 		or: [self @env0:== Symbol]]]]) ifTrue: [
 		obj @env0:ifNil: [^ '' @env0:copy].
 		(obj isKindOf: CharacterCollection) ifTrue: [
-			| r isKernelString |
 			"__str__ is ALWAYS consulted, kernel string or not.  Answering a
 			kernel-class receiver unchanged looks like a safe fast path and is
 			not: a str-mixin enum member (``class E(str, Enum)'') IS stored in a
 			kernel string class, and its forced Enum __str__ answers 'E.name'
 			while its own character content is something else entirely.
 			Short-circuiting on the class returned the raw content and broke
-			five enum tests."
-			isKernelString := (obj @env0:class @env0:== Unicode7)
-				or: [(obj @env0:class @env0:== Unicode16)
-				or: [(obj @env0:class @env0:== Unicode32)
-				or: [(obj @env0:class @env0:== String)
-				or: [obj @env0:class @env0:== Symbol]]]].
-			r := ([obj __str__] @env0:on: AbstractException do: [:ex | obj])
-				@env0:___strResult___.
-			"A kernel string is returned WITHOUT copying.  ___allocateStringLike___
-			builds a string of the RECEIVER's class, so copying a wide
-			Unicode16/32 (auto-promoted by content, not a user subclass) into the
-			narrow canonical class would corrupt it."
-			isKernelString ifTrue: [^ r].
-			"A str SUBCLASS instance coerces DOWN to a genuine plain str --
-			CPython's str(subclass_instance) is exactly str, never the subclass.
-			Without it, FooStr.__float__ calling str(self) got back another
-			FooStr and recursed forever (test_float test_floatconversion)."
-			^ (r isKindOf: CharacterCollection)
-				ifTrue: [self ___allocateStringLike___: r]
-				ifFalse: [r]].
+			five enum tests.
+
+			What __str__ answered is answered UNCHANGED, as PyObject_Str answers
+			it, and without copying: a str subclass's inherited __str__
+			(CharacterCollection >> __str__) already answers an exact str, so
+			str(subclass_instance) is exactly str and FooStr.__float__ calling
+			str(self) does not recurse (test_float test_floatconversion), while a
+			__str__ that answers a str subclass instance is answered that
+			instance (test_str test_conversion).  Every answer used to be coerced
+			down, the overriding ones too."
+			^ ([obj __str__] @env0:on: AbstractException do: [:ex | obj])
+				@env0:___strResult___].
 		^ ([obj __str__] @env0:on: MessageNotUnderstood do: [:ex | obj __repr__])
 			@env0:___strResult___].
 
+	"The content is what PyObject_Str answers for obj, as unicode_new_impl takes
+	it, str argument or not: StrSubclass(StrWithStr('abc')), where the argument
+	is a str whose own characters are '' and whose __str__ answers 'abc', is
+	StrSubclass('abc') (test_str test_conversion).  An argument without an
+	override answers its own characters through str.__str__."
 	obj @env0:ifNil: [source := ''].
-	obj @env0:ifNotNil: [
-		(obj isKindOf: CharacterCollection)
-			ifTrue: [source := obj]
-			ifFalse: [source := obj __str__ @env0:___strResult___].
-	].
+	obj @env0:ifNotNil: [source := obj __str__ @env0:___strResult___].
 	"Allocate a self-typed string of the right size via Behavior's
 	primitive ``new:`` and copy bytes.  Do NOT route through
 	``___new___:`` here — Object's class-side bridge of that name

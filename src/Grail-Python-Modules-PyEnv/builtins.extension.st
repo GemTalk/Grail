@@ -6856,10 +6856,14 @@ builtins >> ascii: anObject [
 
 	| r ws cp hex |
 	r := anObject __repr__ @env0:___reprResult___.
+	"An all-ASCII repr is answered as it is, as PyObject_ASCII answers it
+	(Objects/object.c:851): a str subclass a __repr__ answered stays one.
+	Only a code point past 127 is escaped."
+	(r @env0:allSatisfy: [:ch | ch @env0:codePoint @env0:< 128]) ifTrue: [^ r].
 	ws := AppendStream @env0:on: Unicode7 @env0:new.
 	r @env0:do: [:ch |
 		cp := ch @env0:codePoint.
-		cp @env0:<= 126
+		cp @env0:< 128
 			ifTrue: [ws @env0:nextPut: ch]
 			ifFalse: [
 				hex := (cp @env0:printStringRadix: 16) @env0:asLowercase.
