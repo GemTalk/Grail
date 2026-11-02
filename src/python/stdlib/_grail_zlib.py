@@ -47,8 +47,14 @@ class _ZlibDecompressor:
         if self.eof:
             raise EOFError("End of stream already reached")
         data = self._kept + bytes(data)
-        output = self._decompressor.decompress(data, max(max_length, 0))
-        self._kept = self._decompressor.unconsumed_tail
+        if max_length == 0:
+            # No output at all, so nothing is inflated and every byte is kept:
+            # decompressobj's own 0 means the opposite, no limit.
+            output = b''
+            self._kept = data
+        else:
+            output = self._decompressor.decompress(data, max(max_length, 0))
+            self._kept = self._decompressor.unconsumed_tail
         if self._decompressor.eof:
             self.eof = True
             self.unused_data = self._decompressor.unused_data
@@ -56,3 +62,13 @@ class _ZlibDecompressor:
         else:
             self.needs_input = not self._kept
         return output
+
+    def __reduce_ex__(self, protocol):
+        # The C type cannot be pickled, so pickle refuses it whatever the
+        # protocol, where this class would pickle as an ordinary instance.
+        # copyreg names it by __name__ for protocols 0 and 1, and the refusal
+        # past that by its tp_name.
+        name = type(self).__name__
+        if protocol >= 2:
+            name = 'zlib.' + name
+        raise TypeError("cannot pickle %r object" % name)
