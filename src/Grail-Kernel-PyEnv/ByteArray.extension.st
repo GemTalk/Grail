@@ -2060,6 +2060,12 @@ ByteArray >> __eq__: other [
 	"Equal only to a bytes-like object (bytes / bytearray / subclasses); CPython
 	compares bytes and bytearray by value across the two types."
 	(other isKindOf: bytes) ifFalse: [
+		"...and a memoryview by ITS rule: bytes answers NotImplemented to one,
+		and the reflected memoryview.__eq__ compares the buffers, so
+		``b'abc' == memoryview(b'abc')'' is True.  Asked directly here rather than
+		by answering NotImplemented, because Grail's own code sends __eq__: and
+		expects a Boolean."
+		(other isKindOf: memoryview) ifTrue: [^ other __eq__: self].
 		^ false
 	].
 
