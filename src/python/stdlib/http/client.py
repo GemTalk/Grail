@@ -40,10 +40,12 @@
 # GsSocket bindTo:toAddress:, so the peer sees the source port asked for.
 #
 # Not supported: proxies/tunneling (set_tunnel raises), trailers are
-# read and discarded, no 100-continue request mode, no chunked REQUEST
-# bodies (``encode_chunked'' is accepted and ignored), and no request-side
-# header name/value validation (CPython's _validate_method / _validate_path
-# / _validate_host and the _is_legal_header_name checks in putheader).
+# read and discarded, no 100-continue request mode, and no chunked REQUEST
+# bodies (``encode_chunked'' is accepted and ignored).
+#
+# Requests are validated as CPython validates them, with its own patterns
+# and methods: a control character in the method, the URL or the host, and
+# an illegal header name or value, are refused before anything is sent.
 #
 # Header parsing is hand-rolled rather than handed to email.parser
 # (Grail's Parser takes no _class= and records no defects), but it
@@ -64,6 +66,7 @@ import email.message
 import errno
 import http
 import io
+import re
 import socket
 from collections import OrderedDict
 from urllib.parse import urlsplit
@@ -76,6 +79,20 @@ __all__ = [
     'RemoteDisconnected', 'HTTP_PORT', 'HTTPS_PORT', 'responses',
     'parse_headers',
 ]
+
+# CPython's request validation, verbatim (Lib/http/client.py:151-166): the
+# patterns for both name and value are more lenient than RFC definitions to
+# allow for backwards compatibility.
+_is_legal_header_name = re.compile(rb'[^:\s][^:\r\n]*').fullmatch
+_is_illegal_header_value = re.compile(rb'\n(?![ \t])|\r(?![ \t\n])').search
+
+# These characters are not allowed within HTTP URL paths (CVE-2019-9740),
+# nor in a host (CVE-2019-18348).
+_contains_disallowed_url_pchar_re = re.compile('[\x00-\x20\x7f]')
+
+# These characters are not allowed within HTTP method names
+# to prevent http header injection.
+_contains_disallowed_method_pchar_re = re.compile('[\x00-\x1f]')
 
 HTTP_PORT = 80
 HTTPS_PORT = 443
@@ -652,6 +669,7 @@ class HTTPConnection:
         self._raw_proxy_headers = None
 
         self.host, self.port = self._get_hostport(host, port)
+        self._validate_host(self.host)
 
         # An instance variable, exactly as in CPython, so a test can replace
         # it with a stand-in without patching the module.
@@ -781,9 +799,11 @@ class HTTPConnection:
         if self._state != _CS_IDLE:
             raise CannotSendRequest(self._state)
         self._state = _CS_REQ_STARTED
+        self._validate_method(method)
         self._method = method
         if not url:
             url = '/'
+        self._validate_path(url)
         self._buffer = ['%s %s %s' % (method, url, self._http_vsn_str)]
         if not skip_host:
             host = self.host
@@ -796,9 +816,46 @@ class HTTPConnection:
         if not skip_accept_encoding:
             self.putheader('Accept-Encoding', 'identity')
 
+    def _validate_method(self, method):
+        """Validate a method name for putrequest."""
+        # prevent http header injection
+        match = _contains_disallowed_method_pchar_re.search(method)
+        if match:
+            raise ValueError(
+                    f"method can't contain control characters. {method!r} "
+                    f"(found at least {match.group()!r})")
+
+    def _validate_path(self, url):
+        """Validate a url for putrequest."""
+        # Prevent CVE-2019-9740.
+        match = _contains_disallowed_url_pchar_re.search(url)
+        if match:
+            raise InvalidURL(f"URL can't contain control characters. {url!r} "
+                             f"(found at least {match.group()!r})")
+
+    def _validate_host(self, host):
+        """Validate a host so it doesn't contain control characters."""
+        # Prevent CVE-2019-18348.
+        match = _contains_disallowed_url_pchar_re.search(host)
+        if match:
+            raise InvalidURL(f"URL can't contain control characters. {host!r} "
+                             f"(found at least {match.group()!r})")
+
     def putheader(self, header, *values):
         if self._state != _CS_REQ_STARTED:
             raise CannotSendHeader()
+        # Judged as CPython judges them, on the bytes it would send: the name
+        # in ASCII, a str value in latin-1, an int by its digits.
+        name = header.encode('ascii') if hasattr(header, 'encode') else header
+        if not _is_legal_header_name(name):
+            raise ValueError('Invalid header name %r' % (name,))
+        for one_value in values:
+            if hasattr(one_value, 'encode'):
+                one_value = one_value.encode('latin-1')
+            elif isinstance(one_value, int):
+                one_value = str(one_value).encode('ascii')
+            if _is_illegal_header_value(one_value):
+                raise ValueError('Invalid header value %r' % (one_value,))
         parts = []
         for v in values:
             if isinstance(v, bytes):
