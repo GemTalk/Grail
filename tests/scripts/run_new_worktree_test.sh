@@ -75,10 +75,20 @@ check "--stone alone keeps the main checkout's product and NetLDI" \
 
 # --- 4. no .setenv in the main checkout --------------------------------------
 mv "$REPO/.setenv" "$SCRATCH/setenv.saved"
-new_worktree "$REPO" wt/five --stone stoneB --product "$PRODUCT_B" --netldi ldiB --user Claude8
+GRAIL_GEMSTONE_LOCKS_DIR="$SCRATCH/no-locks" \
+  new_worktree "$REPO" wt/five --stone stoneB --product "$PRODUCT_B" --netldi ldiB --user Claude8
 check "the options alone are enough" '[ "$(stone_of wt/five)" = "stoneB|$PRODUCT_B|ldiB" ]'
-check "and the locks directory is the product's parent" \
+check "and with no system locks directory, the locks directory is the product's parent" \
   '[ "$(setenv_of wt/five GEMSTONE_GLOBAL_DIR)" = "$SCRATCH/Elsewhere" ]'
+# Where GemStone's own locks directory exists, a stone registered there is found
+# only with GEMSTONE_GLOBAL_DIR unset; setting it gave "EAI error 8" at login.
+mkdir -p "$SCRATCH/system-locks"
+GRAIL_GEMSTONE_LOCKS_DIR="$SCRATCH/system-locks" \
+  new_worktree "$REPO" wt/five-b --stone stoneB --product "$PRODUCT_B" --netldi ldiB --user Claude5
+check "with a system locks directory, GEMSTONE_GLOBAL_DIR is left unset" \
+  '[ -f "$WORKTREES/wt/five-b/.setenv" ] && ! grep -q "^export GEMSTONE_GLOBAL_DIR" "$WORKTREES/wt/five-b/.setenv"'
+check "and .setenv says why" \
+  'grep -qx "# GEMSTONE_GLOBAL_DIR unset: stones are registered in $SCRATCH/system-locks" "$WORKTREES/wt/five-b/.setenv"'
 new_worktree "$REPO" wt/six --user Claude7; STATUS=$?
 check "without them it refuses" '[ "$STATUS" -ne 0 ]'
 check "naming every option it is missing" 'grep -q -- "Pass --stone --product --netldi" "$SCRATCH/out"'

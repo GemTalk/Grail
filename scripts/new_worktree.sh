@@ -128,14 +128,17 @@ fi
 # Left unset when /opt/gemstone/locks exists: that is where GemStone registers a
 # stone when the variable is unset, so pointing it anywhere else hides the stone
 # and every login fails with "could not find server ... EAI error 8".
+# GRAIL_GEMSTONE_LOCKS_DIR names another directory to test for, so the test can
+# take both branches on any machine.
+LOCKS_DIR=${GRAIL_GEMSTONE_LOCKS_DIR:-/opt/gemstone/locks}
 GLOBAL_DIR=$(setenv_value GEMSTONE_GLOBAL_DIR)
-if [ -z "$GLOBAL_DIR" ] && [ ! -d /opt/gemstone/locks ]; then
+if [ -z "$GLOBAL_DIR" ] && [ ! -d "$LOCKS_DIR" ]; then
     GLOBAL_DIR=$(dirname "$PRODUCT")
 fi
 if [ -n "$GLOBAL_DIR" ]; then
     GLOBAL_DIR_LINE="export GEMSTONE_GLOBAL_DIR='$GLOBAL_DIR'"
 else
-    GLOBAL_DIR_LINE="# GEMSTONE_GLOBAL_DIR unset: stones are registered in /opt/gemstone/locks"
+    GLOBAL_DIR_LINE="# GEMSTONE_GLOBAL_DIR unset: stones are registered in $LOCKS_DIR"
 fi
 
 if [ ! -d "$PRODUCT" ]; then
