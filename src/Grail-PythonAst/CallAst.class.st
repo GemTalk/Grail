@@ -2271,6 +2271,15 @@ CallAst >> ___emitIRBuiltinsInstanceOn___: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRCalleeOrNilOn___: aBuilder [
+	"printCalleeOrNilOn:'s operand: a NAME callee, else nil."
+
+	(function isKindOf: NameAst) ifFalse: [^ aBuilder nilLit].
+	^ function ___emitIRValueOn___: aBuilder
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRDefiningClassReadOn___: aBuilder cellSelector: aCellSelector [
 	"The DEFINING class, by whichever of the two routes reaches it -- the IR
 	twin of ___printClassObjectOn___:cellSelector:.
@@ -2385,20 +2394,31 @@ CallAst >> ___emitIRKeywordsOn___: aBuilder [
 	with Python-str (Smalltalk String) keys, exactly as the text.  (PyDict, an
 	ordered dict, so **kwargs / dict(**kw) preserve keyword order.)"
 
-	| specs |
+	| specs afterSplat |
 	keywords isEmpty ifTrue: [^ aBuilder nilLit].
 	"A lone ``**m'' is the mapping itself, no wrapping dict (cut 56)."
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
 		"The text's mapping check, send for send (object >> ___pyKwargsSplat___)."
 		^ self ___emitIRKwargsSplat___: keywords first value on: aBuilder].
+	"A keyword given twice is refused as the text refuses it -- see
+	printKeywordsDictOn:."
+	afterSplat := false.
 	specs := keywords collect: [:k |
 		k name isNil
 			ifTrue: [
-				"``**m'' among named keywords: the text's env-1 ``___pyUpdate___:''
-				of the mapping, in source order (later entries win)."
-				{ #'___pyUpdate___:'. { self ___emitIRKwargsSplat___: k value on: aBuilder }. 1 }]
+				"``**m'' among named keywords: the text's env-1
+				``___pyMergeKeywords___:for:'' of the mapping, in source order."
+				afterSplat := true.
+				{ #'___pyMergeKeywords___:for:'.
+					{ self ___emitIRKwargsSplat___: k value on: aBuilder. self ___emitIRCalleeOrNilOn___: aBuilder }. 1 }]
 			ifFalse: [
-				{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]].
+				afterSplat
+					ifTrue: [
+						{ #'___pyKeyword___:put:for:'.
+							{ aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder.
+								self ___emitIRCalleeOrNilOn___: aBuilder }. 1 }]
+					ifFalse: [
+						{ #'at:put:'. { aBuilder obj: k name asString. k value ___emitIRValueOn___: aBuilder }. 0 }]]].
 	specs := specs asOrderedCollection.
 	specs add: { #yourself. { }. 0 }.
 	aBuilder atNode: self.
@@ -5601,6 +5621,18 @@ CallAst >> printBareEvalExecOn: aStream [
 ]
 
 { #category : 'Grail-other' }
+CallAst >> printCalleeOrNilOn: aStream [
+	"The callee a keyword-merge error names, when it is a plain NAME -- one that
+	can be read a second time for free and without effect, as
+	printKwargsSplatCheckOn: hands it over -- else nil, and the message starts
+	at ``got''."
+
+	(function isKindOf: NameAst) ifFalse: [^ aStream nextPutAll: 'nil'].
+	function printSmalltalkWithParenthesisOn: aStream
+
+]
+
+{ #category : 'Grail-other' }
 CallAst >> printClassBodyLocalsOn: aStream [
 	"Emit the 0-arg ``locals()'' rewrite for a call INSIDE A CLASS BODY: a
 	mapping of the names the class body has bound so far, in source order,
@@ -5866,9 +5898,10 @@ CallAst >> printKeywordsDictOn: aStream [
 	  like jinja2's NodeVisitor.visit; without this the splat would
 	  be wrapped as ``{nil → kwargs}`` and the receiver would see a
 	  single bogus #nil-keyed entry instead of the actual kwargs.
-	- Otherwise → build a fresh KeyValueDictionary with the named
-	  entries (and skip any **splat for now — multi-source merge
-	  isn't modeled yet)."
+	- Otherwise → a fresh PyDict built in source order, each **splat
+	  merged into it refusing a keyword given twice, as CPython does."
+
+	| afterSplat |
 
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
@@ -5898,23 +5931,38 @@ CallAst >> printKeywordsDictOn: aStream [
 	``=''-keyed KeyValueDictionary instead.  PyDict (an ordered
 	KeyValueDictionary subclass) so **kwargs / dict(**kw) preserve
 	keyword order (docs/Ordered_Dict.md)."
+	"A keyword given twice -- named and in a ``**m'', or in two of them -- is
+	CPython's TypeError, as DICT_MERGE raises it: a ``**m'' is merged checking
+	each of its keys (___pyMergeKeywords___:for:), and a named keyword after
+	one is put checking that it is not there yet.  A named keyword before any
+	``**'' cannot meet another: the parser refuses a name given twice."
+	afterSplat := false.
 	aStream nextPutAll: '((PyDict @env0:new)'.
 	keywords do: [:kwAst |
 		kwAst name
 			ifNotNil: [
-				aStream nextPutAll: ' @env0:at: '''; nextPutAll: kwAst name asString; nextPutAll: ''' put: '.
-				kwAst value printSmalltalkWithParenthesisOn: aStream.
+				afterSplat
+					ifTrue: [
+						aStream nextPutAll: ' @env1:___pyKeyword___: '''; nextPutAll: kwAst name asString; nextPutAll: ''' put: '.
+						kwAst value printSmalltalkWithParenthesisOn: aStream.
+						aStream nextPutAll: ' for: '.
+						self printCalleeOrNilOn: aStream]
+					ifFalse: [
+						aStream nextPutAll: ' @env0:at: '''; nextPutAll: kwAst name asString; nextPutAll: ''' put: '.
+						kwAst value printSmalltalkWithParenthesisOn: aStream].
 				aStream nextPut: $;.
 			]
 			ifNil: [
-				"``**splat'' mixed with named kwargs — merge the mapping's
-				items via ___pyUpdate___: (source order, later entries win).
-				flask's ``Rule(rule, methods=methods, **options)'' dropped
-				the ``**options'' here, so the rule endpoint came back nil."
-				aStream nextPutAll: ' @env1:___pyUpdate___: ('.
+				"``**splat'' mixed with named kwargs -- merge the mapping's items in
+				source order.  flask's ``Rule(rule, methods=methods, **options)''
+				dropped the ``**options'' here, so the rule endpoint came back nil."
+				aStream nextPutAll: ' @env1:___pyMergeKeywords___: ('.
 				kwAst value printSmalltalkWithParenthesisOn: aStream.
 				self printKwargsSplatCheckOn: aStream.
-				aStream nextPutAll: ');'.
+				aStream nextPutAll: ') for: '.
+				self printCalleeOrNilOn: aStream.
+				aStream nextPut: $;.
+				afterSplat := true.
 			].
 	].
 	aStream nextPutAll: ' yourself)'.
