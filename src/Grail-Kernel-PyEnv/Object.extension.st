@@ -5317,6 +5317,7 @@ Object class >> ___moduleAttrIdentityTable___ [
 		t @env0:at: #'os_path' put: #('posixpath' nil).
 		t @env0:at: #'html_entities' put: #('html.entities' nil).
 		t @env0:at: #'json_decoder' put: #('json.decoder' nil).
+		t @env0:at: #'sys__jit' put: #('sys._jit' nil).
 
 		t]
 
