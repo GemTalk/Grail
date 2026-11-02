@@ -202,6 +202,15 @@ def requires_strace():
     if support.check_sanitizer(address=True, memory=True):
         return unittest.skip("LeakSanitizer does not work under ptrace (strace, gdb, etc)")
 
+    # GRAIL: strace runs a child Python, and Grail runs none (support's
+    # has_subprocess_support is False).  Without this, _can_strace() -- called
+    # here, while a decorated class is being defined -- reached strace_python's
+    # requires_subprocess() skip, which RAISES SkipTest when called: on Linux,
+    # where the platform check above lets it through, that skipped the whole of
+    # test_fileio at import.
+    if not support.has_subprocess_support:
+        return unittest.skip("requires subprocess support")
+
     return unittest.skipUnless(_can_strace(), "Requires working strace")
 
 
