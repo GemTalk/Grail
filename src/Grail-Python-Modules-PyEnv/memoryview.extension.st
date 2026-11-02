@@ -803,6 +803,21 @@ memoryview >> __setitem__: index _: value [
 ]
 
 { #category : 'Grail-Conversion' }
+memoryview >> _cast: positional kw: keywords [
+	"``mv.cast(format, shape)'' with either argument by name: both are nameable
+	in CPython (Objects/memoryobject.c memoryview_cast_impl), and a keyword call
+	reached the generic refusal, which said cast() took no keyword arguments at
+	all (test_gzip test_write_memoryview casts with shape=)."
+
+	| arguments |
+	arguments := TypeError @env0:___argumentsOf___: positional keywords: keywords
+		named: #('format' 'shape') positionalOnly: 0 required: 1 for: 'cast'.
+	(arguments @env0:at: 2) @env0:isNil ifTrue: [^ self cast: (arguments @env0:at: 1)].
+	^ self cast: (arguments @env0:at: 1) _: (arguments @env0:at: 2)
+
+]
+
+{ #category : 'Grail-Conversion' }
 memoryview >> cast: fmt [
 	"``mv.cast(fmt)'' -- reinterpret the SAME bytes as a different item type.
 
