@@ -82,6 +82,18 @@ FileIO class >> ___filenoUnavailableMessage [
 ]
 
 { #category : 'Grail-Opening' }
+FileIO class >> ___isOpenOwnedDescriptor___: aDescriptor [
+	"Whether aDescriptor is the one under an open Grail file whose fileno()
+	handed it out."
+
+	| owner |
+	owner := self ___fdOwners___ @env0:at: aDescriptor ifAbsent: [^ false].
+	(owner @env0:dynamicInstVarAt: #_closed) == true ifTrue: [^ false].
+	^ (owner @env0:dynamicInstVarAt: #_gsfile) @env0:fileDescriptor @env0:= aDescriptor
+
+]
+
+{ #category : 'Grail-Opening' }
 FileIO class >> ___nativeEncoding___: anEncoding errors: anErrors [
 	"The encoding Grail's own TextIOWrapper decodes for this open(), or nil
 	when the file needs _pyio's (see ___open___:mode:encoding:errors:...).
