@@ -1,10 +1,31 @@
 Extension { #name : 'os' }
 
 { #category : 'Grail-Error Messages' }
+os class >> ___boolAsDescriptorWarning [
+
+	^ 'bool is used as a file descriptor'
+
+]
+
+{ #category : 'Grail-Error Messages' }
 os class >> ___cIntOverflowMessage [
 	"CPython says ``too large'' on both sides of the range."
 
 	^ 'Python int too large to convert to C int'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+os class >> ___descriptorAboveMaximumMessage [
+
+	^ 'fd is greater than maximum'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+os class >> ___descriptorBelowMinimumMessage [
+
+	^ 'fd is less than minimum'
 
 ]
 
@@ -223,6 +244,39 @@ os class >> ___openFlagsDarwin: isDarwin arch: anArchitecture [
 	d @env0:at: #O_NOFOLLOW put: nofollow.
 	d @env0:at: #O_CLOEXEC put: 524288.
 	^ d
+
+]
+
+{ #category : 'Grail-Error Messages' }
+os class >> ___pathKinds [
+	"What a path argument may be, in the words of CPython's refusal."
+
+	^ 'string, bytes or os.PathLike'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+os class >> ___pathOrDescriptorKinds [
+
+	^ 'string, bytes, os.PathLike or integer'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+os class >> ___pathOrNoneKinds [
+
+	^ 'string, bytes, os.PathLike or None'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+os class >> ___pathTypeMessageFor: aFunctionName arg: anArgName accepting: anAcceptedKinds given: anObject [
+	"CPython's path converter refuses an argument of the wrong type in these
+	words, naming the function, the argument and what it does accept
+	(Modules/posixmodule.c:1457)."
+
+	^ aFunctionName @env0:, ': ' @env0:, anArgName @env0:, ' should be ' @env0:, anAcceptedKinds
+		@env0:, ', not ' @env0:, (anObject ___pyTypeNameForError___) @env0:asString
 
 ]
 
@@ -491,6 +545,27 @@ os >> ___fd: anObject [
 
 ]
 
+{ #category : 'Grail-File Descriptors' }
+os >> ___fileDescriptorArgument___: anObject [
+	"anObject as the descriptor a path-or-descriptor function takes, converted
+	as CPython's _fd_converter converts it (Modules/posixmodule.c:1109): a bool
+	is still taken, with a RuntimeWarning, and the value must fit a C int."
+
+	| descriptor |
+	(anObject @env0:isKindOf: Boolean) ifTrue: [
+		warnings instance
+			___warn___: self @env0:class ___boolAsDescriptorWarning
+			category: RuntimeWarning
+			stacklevel: 1].
+	descriptor := anObject ___asIndex___.
+	descriptor @env0:> 2147483647 ifTrue: [
+		^ OverflowError ___signal___: self @env0:class ___descriptorAboveMaximumMessage].
+	descriptor @env0:< -2147483648 ifTrue: [
+		^ OverflowError ___signal___: self @env0:class ___descriptorBelowMinimumMessage].
+	^ descriptor
+
+]
+
 { #category : 'Grail-File and Directory Operations' }
 os >> ___followsSymlinks: kwargs [
 	"The keyword-only follow_symlinks argument, true when absent."
@@ -560,12 +635,65 @@ os >> ___fsPathChecked___: aPath for: aFunctionName arg: anArgName [
 	because that is what its path converter reports.  (``embedded null byte''
 	is what open() says, from a different converter.)"
 
+	^ self
+		___fsPathChecked___: aPath
+		for: aFunctionName
+		arg: anArgName
+		accepting: self @env0:class ___pathKinds
+
+]
+
+{ #category : 'Grail-Filesystem' }
+os >> ___fsPathChecked___: aPath for: aFunctionName arg: anArgName accepting: anAcceptedKinds [
+	"___fsPathChecked___:for:arg:, for a function that accepts more than a
+	path -- os.stat a descriptor, os.listdir None -- and so names more in its
+	refusal.  The caller has already taken those others."
+
 	| path |
-	path := self ___fsPath___: aPath.
+	path := self ___pathOfType___: aPath for: aFunctionName arg: anArgName accepting: anAcceptedKinds.
 	(self ___hasNul___: path) ifTrue: [
 		^ ValueError ___signal___:
 			aFunctionName @env0:, ': embedded null character in ' @env0:, anArgName].
 	^ path
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> ___fstatOrErrno___: aDescriptor [
+	"fstat(2)'s GsFileStat for aDescriptor, or the errno it failed with.  A
+	negative descriptor is EBADF without asking the primitive."
+
+	| result |
+	aDescriptor @env0:< 0 ifTrue: [^ 9].
+	result := GsFile @env0:_fstat: aDescriptor isLstat: false.
+	((result @env0:isKindOf: GsFileStat) or: [result @env0:isKindOf: SmallInteger])
+		ifTrue: [^ result].
+	^ 9
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> ___fstatOrNil___: aDescriptor [
+	"fstat(2)'s GsFileStat for aDescriptor, or nil where it failed: what the
+	predicates ask of a descriptor."
+
+	| result |
+	result := self ___fstatOrErrno___: aDescriptor.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
+	^ nil
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> ___fstatOrSignal___: aDescriptor [
+	"fstat(2)'s GsFileStat for aDescriptor, or os.stat's OSError, which names
+	the descriptor as CPython's does: ``[Errno 9] Bad file descriptor: 9999''.
+	os.fstat's own names none."
+
+	| result |
+	result := self ___fstatOrErrno___: aDescriptor.
+	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
+	^ self ___signalErrno: result filename: aDescriptor
 
 ]
 
@@ -589,6 +717,16 @@ os >> ___idCall: aName [
 	cannot fail (POSIX: ``always successful''), so there is no errno to read."
 
 	^ (self @env0:class ___idCallouts @env0:at: aName @env0:asSymbol) @env0:callWith: #()
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> ___isDescriptorArgument___: anObject [
+	"Does a path-or-descriptor function take anObject as a descriptor?  Anything
+	with __index__ that is not a str or bytes, as in CPython, where the test
+	comes before __fspath__ is looked for."
+
+	^ (self ___isStrOrBytes___: anObject) not and: [anObject ___hasIndexDunder___]
 
 ]
 
@@ -624,10 +762,19 @@ os >> ___isLink___: aPath [
 	___statOrSignal___:isLstat:, which was written for the same trap).
 
 	lstat, never stat: stat follows the link and would report the TARGET's
-	type, so every symlink would answer false."
+	type, so every symlink would answer false.
+
+	genericpath's islink calls os.lstat, which takes no descriptor, and does
+	not catch the TypeError for an argument that is no path."
 
 	| st |
-	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: true.
+	st := self
+		___statOrNil___: (self
+			___pathOfType___: aPath
+			for: 'lstat'
+			arg: 'path'
+			accepting: self @env0:class ___pathKinds)
+		lstat: true.
 	st @env0:isNil ifTrue: [^ false].
 	"S_IFMT / S_IFLNK -- the file-type field of st_mode."
 	^ (st @env0:mode @env0:bitAnd: 16rF000) @env0:= 16rA000
@@ -709,8 +856,12 @@ os >> ___isPathLike___: anObject [
 os >> ___isStrOrBytes___: anObject [
 	"A str or bytes as os.fspath means it.  AbstractPyStr counts: a str holding
 	lone surrogates is a PyStrSurrogate, which is how os.fsdecode spells an
-	undecodable byte, and fspath refused it as a non-path."
+	undecodable byte, and fspath refused it as a non-path.
 
+	A bytearray does not count, though it is bytes here: CPython's test is
+	PyBytes_Check, and its path converter and os.fspath both refuse one."
+
+	(anObject isKindOf: bytearray) ifTrue: [^ false].
 	^ (anObject isKindOf: CharacterCollection)
 		or: [(anObject isKindOf: ByteArray)
 		or: [anObject isKindOf: AbstractPyStr]]
@@ -814,6 +965,24 @@ os >> ___pathBytes___: aPath [
 	(aPath @env0:isKindOf: ByteArray) ifTrue: [^ aPath].
 	(aPath isKindOf: PyStrSurrogate) ifTrue: [^ aPath encode: 'utf-8' _: 'surrogateescape'].
 	^ aPath @env0:encodeAsUTF8 @env0:asByteArray
+
+]
+
+{ #category : 'Grail-Filesystem' }
+os >> ___pathOfType___: aPath for: aFunctionName arg: anArgName accepting: anAcceptedKinds [
+	"aPath as os.fspath answers it, or CPython's TypeError for an argument that
+	is no path at all (Modules/posixmodule.c:1342, path_converter).  The GsFile
+	primitives send encodeAsUTF8 to whatever they are handed, so
+	``os.stat(2.5)'' and ``os.listdir(None)'' were an uncatchable
+	MessageNotUnderstood, which even ``except BaseException'' does not see."
+
+	((self ___isStrOrBytes___: aPath) or: [self ___isPathLike___: aPath]) ifFalse: [
+		^ TypeError ___signal___: (self @env0:class
+			___pathTypeMessageFor: aFunctionName
+			arg: anArgName
+			accepting: anAcceptedKinds
+			given: aPath)].
+	^ self fspath: aPath
 
 ]
 
@@ -1114,6 +1283,23 @@ os >> ___signalFileNotRemoved: path [
 
 ]
 
+{ #category : 'Grail-Filesystem' }
+os >> ___statOfPathOrDescriptor___: aPathOrDescriptor [
+	"The GsFileStat os.stat reports on, or what CPython's os.stat raises.  A
+	descriptor is fstat'ed, as CPython's path converter allows for os.stat."
+
+	(self ___isDescriptorArgument___: aPathOrDescriptor) ifTrue: [
+		^ self ___fstatOrSignal___: (self ___fileDescriptorArgument___: aPathOrDescriptor)].
+	^ self
+		___statOrSignal___: (self
+			___fsPathChecked___: aPathOrDescriptor
+			for: 'stat'
+			arg: 'path'
+			accepting: self @env0:class ___pathOrDescriptorKinds)
+		isLstat: false
+
+]
+
 { #category : 'Grail-File and Directory Operations' }
 os >> ___statOrNil___: aPath lstat: isLstat [
 	"The GsFileStat for aPath, or NIL if it cannot be stat'd.  The shared
@@ -1138,6 +1324,26 @@ os >> ___statOrNil___: aPath lstat: isLstat [
 	result := GsFile @env0:stat: (self ___primPath___: aPath) isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
 	^ nil
+
+]
+
+{ #category : 'Grail-Filesystem' }
+os >> ___statOrNilOfPathOrDescriptor___: aPathOrDescriptor [
+	"The GsFileStat that genericpath's exists, isdir and isfile ask os.stat for,
+	or nil where they answer False.  They catch OSError and ValueError and
+	nothing else, so os.stat's argument conversion is theirs too: a descriptor
+	is fstat'ed, a bool warns, and an argument that is no path is a TypeError
+	rather than a False."
+
+	(self ___isDescriptorArgument___: aPathOrDescriptor) ifTrue: [
+		^ self ___fstatOrNil___: (self ___fileDescriptorArgument___: aPathOrDescriptor)].
+	^ self
+		___statOrNil___: (self
+			___pathOfType___: aPathOrDescriptor
+			for: 'stat'
+			arg: 'path'
+			accepting: self @env0:class ___pathOrDescriptorKinds)
+		lstat: false
 
 ]
 
@@ -1364,6 +1570,7 @@ os >> _access: positional kw: kwargs [
 			ifTrue: [^ NotImplementedError ___signal___: 'access: effective_ids unavailable on this platform'].
 		(kwargs @env0:at: 'follow_symlinks' ifAbsent: [true]) ___isTruthy___
 			ifFalse: [^ NotImplementedError ___signal___: 'access: follow_symlinks unavailable on this platform']].
+	path := self ___fsPathChecked___: path for: 'access' arg: 'path'.
 	mode := self ___asCInt: mode.
 	^ (self ___libc: #access
 		with: { self ___cPathFor: path. mode }
@@ -1514,11 +1721,16 @@ os >> _listdir: positional kw: kwargs [
 	"os.listdir([path]) — list directory contents. 0-arg uses cwd."
 
 	| actualPath dirContents result |
-	actualPath := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [nil].
-	actualPath == nil ifTrue: [actualPath := self getcwd].
+	actualPath := (positional @env0:size @env0:>= 1) ifTrue: [positional @env0:at: 1] ifFalse: [None].
+	"None is the current directory, as an omitted path is."
+	actualPath == None ifTrue: [actualPath := self getcwd].
 	"listdir: routes its 1-arg fast path through here, so this one
 	coercion covers both spellings."
-	actualPath := self ___fsPathChecked___: actualPath for: 'listdir' arg: 'path'.
+	actualPath := self
+		___fsPathChecked___: actualPath
+		for: 'listdir'
+		arg: 'path'
+		accepting: self @env0:class ___pathOrNoneKinds.
 	"GsFile>>contentsOfDirectory: expands a PATTERN; it does not open a
 	directory, so it answers something plausible for two paths CPython
 	refuses outright, and neither answer looked like an error:
@@ -1655,7 +1867,12 @@ os >> _scandir: positional kw: kwargs [
 			((kwargs @env0:isNil) @env0:not and: [kwargs @env0:includesKey: 'path'])
 				ifTrue: [kwargs @env0:at: 'path']
 				ifFalse: ['.']].
-	target := self ___fsPathChecked___: target for: 'scandir' arg: 'path'.
+	target == None ifTrue: [target := '.'].
+	target := self
+		___fsPathChecked___: target
+		for: 'scandir'
+		arg: 'path'
+		accepting: self @env0:class ___pathOrNoneKinds.
 	names := self listdir: target.
 	entries := OrderedCollection @env0:new.
 	names @env0:do: [:name |
@@ -1955,7 +2172,7 @@ os >> exists: aPath [
 	to call.  What changes is that the QUESTIONS now answer about the file
 	that was named."
 
-	^ (self ___statOrNil___: (self ___fsPath___: aPath) lstat: false) @env0:notNil
+	^ (self ___statOrNilOfPathOrDescriptor___: aPath) @env0:notNil
 
 ]
 
@@ -2030,11 +2247,9 @@ os >> fstat: fd [
 	send_head does for every file it serves -- which os.open never saw.  A
 	closed or bogus descriptor still answers EBADF, from the primitive."
 	n := self ___asCInt: fd.
-	n @env0:< 0 ifTrue: [^ self ___signalErrno: 9].
-	result := GsFile @env0:_fstat: n isLstat: false.
+	result := self ___fstatOrErrno___: n.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ PyStatResult @env0:on: result].
-	(result @env0:isKindOf: SmallInteger) ifTrue: [^ self ___signalErrno: result].
-	^ self ___signalErrno: 9
+	^ self ___signalErrno: result
 
 ]
 
@@ -2123,10 +2338,7 @@ os >> getmtime: aPath [
 	enough for the auto-reloader (which only needs to notice that an edit
 	happened)."
 
-	| st path |
-	path := self ___fsPathChecked___: aPath for: 'stat' arg: 'path'.
-	st := self ___statOrSignal___: path @env0:asString isLstat: false.
-	^ st @env0:mtimeUtcSeconds
+	^ (self ___statOfPathOrDescriptor___: aPath) @env0:mtimeUtcSeconds
 
 ]
 
@@ -2194,17 +2406,17 @@ os >> initialize [
 	self @env0:at: #linesep put: ((Character @env0:lf) @env0:asString).
 	"os.supports_* -- the sets CPython uses to advertise which os functions
 	accept a file DESCRIPTOR in place of a path, a dir_fd, follow_symlinks=False,
-	or effective ids.  Every one is EMPTY here, and empty is the HONEST answer
-	rather than a placeholder: Grail's os functions take paths, and not one of
-	them accepts an fd or a dir_fd.
+	or effective ids.  Each holds exactly what Grail serves, and no more: os.stat
+	is the one function here that takes a descriptor, and none takes a dir_fd.
 
-	A caller probes these as sets -- ``os.stat in os.supports_fd'' -- and takes
+	A caller probes these as sets -- ``os.utime in os.supports_fd'' -- and takes
 	its path-based branch when the answer is no, which is the branch that works.
 	filelock asks exactly that at import time, and before these existed the probe
 	raised AttributeError, so ``import filelock'' failed outright.  Answering
-	nothing lets it import AND steers it onto the path that Grail can serve;
-	answering a non-empty set would do the opposite."
+	no for what Grail cannot do lets it import AND steers it onto the path that
+	Grail can serve; answering yes would do the opposite."
 	self @env0:at: #supports_fd put: (set ___new___).
+	(self @env0:at: #supports_fd) add: (self ___pyAttrLoad___: #stat).
 	self @env0:at: #supports_dir_fd put: (set ___new___).
 	self @env0:at: #supports_follow_symlinks put: (set ___new___).
 	self @env0:at: #supports_effective_ids put: (set ___new___).
@@ -2271,7 +2483,7 @@ os >> isdir: aPath [
 	without a preceding existence check that had the same expansion flaw."
 
 	| st |
-	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: false.
+	st := self ___statOrNilOfPathOrDescriptor___: aPath.
 	st @env0:isNil ifTrue: [^ false].
 	^ (st @env0:mode @env0:bitAnd: 16rF000) @env0:= 16r4000
 
@@ -2287,7 +2499,7 @@ os >> isfile: aPath [
 	gives."
 
 	| st |
-	st := self ___statOrNil___: (self ___fsPath___: aPath) lstat: false.
+	st := self ___statOrNilOfPathOrDescriptor___: aPath.
 	st @env0:isNil ifTrue: [^ false].
 	^ (st @env0:mode @env0:bitAnd: 16rF000) @env0:= 16r8000
 
@@ -2609,16 +2821,14 @@ os >> sep [
 
 { #category : 'Grail-File and Directory Operations' }
 os >> stat: aPath [
-	"os.stat(path) — get file status."
+	"os.stat(path) — get file status.  An integer, or anything else with
+	__index__, is a file DESCRIPTOR, as CPython's os.stat takes it."
 
-	| statResult path |
-	path := self ___fsPathChecked___: aPath for: 'stat' arg: 'path'.
-	statResult := self ___statOrSignal___: path isLstat: false.
 	"Answer CPython's os.stat_result, not the raw GsFileStat: the fields are the
 	same but Python code reads them as ``st_size'' / ``st_mtime'' (linecache does
 	so on every source lookup, django's session and file-storage backends too),
 	and a GsFileStat only answers GemStone names.  See PyStatResult."
-	^ PyStatResult @env0:on: statResult
+	^ PyStatResult @env0:on: (self ___statOfPathOrDescriptor___: aPath)
 
 ]
 
@@ -2674,9 +2884,12 @@ os >> unlink: path [
 	touched os_helper.TESTFN raised ``AttributeError: module has no attribute
 	'unlink''' instead of cleaning up (7 such errors in test.test_iter alone),
 	AND it left the scratch file behind -- that is the origin of the stray
-	``@test'' that kept appearing in the working tree."
+	``@test'' that kept appearing in the working tree.
 
-	^ self remove: path
+	The path is checked here first, so that a refusal names unlink, as
+	CPython's does."
+
+	^ self remove: (self ___fsPathChecked___: path for: 'unlink' arg: 'path')
 
 ]
 

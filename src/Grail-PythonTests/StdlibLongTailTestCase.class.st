@@ -358,15 +358,16 @@ StdlibLongTailTestCase >> testMaketransTwoArgumentForm [
 ]
 
 { #category : 'Grail-Tests - os' }
-StdlibLongTailTestCase >> testOsSupportsSetsExistAndAreEmpty [
-	"Empty is the HONEST answer, not a placeholder: no Grail os function takes
-	a file descriptor or a dir_fd.  filelock probes these at import time, and
-	an empty set both lets it import AND steers it onto the path-based branch,
-	which is the branch Grail can serve."
+StdlibLongTailTestCase >> testOsSupportsSetsListOnlyWhatGrailServes [
+	"The HONEST answer, not a placeholder: os.stat is the one Grail os function
+	that takes a file descriptor, and none takes a dir_fd.  filelock probes
+	``os.utime in os.supports_fd'' at import time, and a no both lets it import
+	AND steers it onto the path-based branch, which is the branch Grail can
+	serve."
 
 	| result |
 	result := self eval: 'import os
-(len(os.supports_fd) == 0 and len(os.supports_dir_fd) == 0
+(os.supports_fd == {os.stat} and len(os.supports_dir_fd) == 0
  and len(os.supports_follow_symlinks) == 0
  and len(os.supports_effective_ids) == 0)'.
 	self assert: result
