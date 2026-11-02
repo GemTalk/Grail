@@ -11,6 +11,28 @@ PyGenericAlias class >> ___argumentsOf___: item [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+PyGenericAlias class >> ___attributeExceptions___ [
+	"The names an alias answers ITSELF rather than reading them off its
+	origin: CPython's attr_exceptions (Objects/genericaliasobject.c:670-681),
+	which dir() lists as well."
+
+	^ #(#'__class__' #'__origin__' #'__args__' #'__unpacked__' #'__parameters__'
+		#'__typing_unpacked_tuple_args__' #'__mro_entries__' #'__reduce_ex__' #'__reduce__')
+
+]
+
+{ #category : 'Grail-Reflection' }
+PyGenericAlias class >> ___blockedAttributes___ [
+	"The names an alias does not read off its origin and has none of its own,
+	so a read raises AttributeError: CPython's attr_blocked
+	(Objects/genericaliasobject.c:683-688).  See __getattr__: for why
+	__bases__ must not be the origin's."
+
+	^ #(#'__bases__' #'__copy__' #'__deepcopy__')
+
+]
+
 { #category : 'Grail-Instantiation' }
 PyGenericAlias class >> ___checkArguments___: anArray keywords: aDictionary [
 	"CPython's ga_new (Objects/genericaliasobject.c:897): no keywords, and
@@ -190,6 +212,31 @@ PyGenericAlias >> ___nameOf___: anObject [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+PyGenericAlias >> ___pyAttrLoad___: aSym [
+	"CPython's ga_getattro (Objects/genericaliasobject.c:690-719): reading any
+	attribute but the alias's own reads it off the ORIGIN, so
+	``list[int].__getitem__'' is list.__getitem__ and ``list[int].__len__(a)''
+	is list's.  The alias's own names and the blocked ones are read off the
+	alias.  Only READS: an operator applied to the alias -- ``list[int][str]'',
+	``list[int] | None'', a call -- still runs the alias's own method, and so
+	do dir() and isinstance(), which ask its class.
+
+	A name the alias defines a method for used to answer that method, so
+	``list[int].__getitem__(a, 0)'' ran the alias's subscript and raised
+	(test_genericalias test_unbound_methods).  A subclass of the alias
+	forwards too, as CPython's does: its own methods are reached through its
+	class, not its instances."
+
+	| name |
+	name := aSym @env0:asSymbol.
+	((self @env0:class ___attributeExceptions___ @env0:includes: name)
+		or: [self @env0:class ___blockedAttributes___ @env0:includes: name])
+			ifTrue: [^ super ___pyAttrLoad___: aSym].
+	^ (self @env0:dynamicInstVarAt: #'__origin__') @env1:___pyAttrLoad___: aSym
+
+]
+
 { #category : 'Grail-Instantiation' }
 PyGenericAlias >> ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew [
 	"A Python subclass with no __new__ of its own -- ``class SubClass(GenericAlias)''
@@ -299,6 +346,22 @@ PyGenericAlias >> __dict__ [
 	as a core schema (``TypeAdapter(list[float]).json_schema()'')."
 
 	^ (self @env0:dynamicInstVarAt: #'__origin__') @env1:___pyAttrLoad___: #'__dict__'
+
+]
+
+{ #category : 'Grail-Reflection' }
+PyGenericAlias >> __dir__ [
+	"CPython's ga_dir (Objects/genericaliasobject.c:800): the ORIGIN's names,
+	which an attribute read reaches, and the alias's own.  It listed the
+	alias's class instead, so ``__setitem__'', ``__delitem__'' and
+	``__contains__'' were missing from dir(list[int]) (test_genericalias
+	test_dir)."
+
+	| names |
+	names := (builtins @env0:___instance___) dir: (self @env0:dynamicInstVarAt: #'__origin__').
+	self @env0:class ___attributeExceptions___ @env0:do: [:own |
+		(names __contains__: own @env0:asString) ifFalse: [names append: own @env0:asString]].
+	^ names
 
 ]
 
