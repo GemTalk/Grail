@@ -880,3 +880,22 @@ test.test_base64
 #                                   protocol, a user-set __annotate__,
 #                                   names inside class annotations
 test.test_type_annotations
+
+# --- Core language (added 2026-11-02): keywords and source encodings ---
+#
+# test_keyword, test_flufl, test_unicode_identifiers and test_utf8source are
+# CPython 3.14.8's, vendored verbatim, with the test.tokenizedata package the
+# last two read their bad sources from.  keyword.py is now CPython's
+# generated one: Grail's stub listed the soft keywords match and case in
+# kwlist (so "match = 42" read as an assignment to a keyword) and left it
+# unsorted, and its iskeyword read the mutable list.  Measured on Darwin
+# arm64:
+#
+#   keyword              11t OK
+#   flufl                 4t OK
+#   unicode_identifiers   3t OK
+#   utf8source            3t OK
+test.test_keyword
+test.test_flufl
+test.test_unicode_identifiers
+test.test_utf8source

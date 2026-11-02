@@ -56,6 +56,8 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/gzip.py`, `compression/` (`__init__.py`, `_common/`, `gzip.py`, `zlib.py`) | `Lib/gzip.py`, `Lib/compression/` | Verbatim from 3.14.4. Replaces Grail's earlier gzip stand-in. `_grail_zlib.py` beside them is ORIGINAL Grail code (zlib's `_ZlibDecompressor`, written in Python after `Modules/zlibmodule.c`'s behaviour), not derived source |
 | `src/python/stdlib/email/` (all 29 modules), `src/python/stdlib/test/test_email/` (with its `data/`) | `Lib/email/`, `Lib/test/test_email/` | Verbatim from 3.14.4. Replaces Grail's earlier partly hand-written email package |
 | `src/python/stdlib/_pydecimal.py` | `Lib/_pydecimal.py` | Verbatim, byte-for-byte (CPython's pure-Python `decimal`; `stdlib/decimal.py` is a Grail-authored re-export shim over it and is NOT derived from CPython's six-line `Lib/decimal.py` dispatcher) |
+| `src/python/stdlib/keyword.py` | `Lib/keyword.py` | Verbatim from 3.14.4 (CPython generates it from the grammar; identical in 3.14.8). Replaces Grail's earlier stub |
+| `src/python/stdlib/test/tokenizedata/` | `Lib/test/tokenizedata/` | Verbatim from 3.14.4: the sources and token streams the tokenizer and source-encoding tests read |
 
 Per PSF License clause 3, these are modified copies: the `support`
 package was reduced to the subset Grail can satisfy, and every context
