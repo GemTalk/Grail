@@ -308,6 +308,18 @@ KeyValueDictionary >> ___absentMarker___ [
 
 ]
 
+{ #category : 'Grail-Python Dict' }
+KeyValueDictionary >> ___duplicateKeyword___: aKey for: aCallee [
+	"CPython's TypeError for a call's keyword given twice
+	(_PyEval_FormatKwargsError): named for the callee when the call site could
+	hand it over, the key as str() spells it."
+
+	^ TypeError ___signal___: (self ___pyFunctionStrPrefix___: aCallee)
+		@env0:, 'got multiple values for keyword argument '''
+		@env0:, aKey __str__ @env0:asString @env0:, ''''
+
+]
+
 { #category : 'Grail-Initialization' }
 KeyValueDictionary >> ___init__: positional kw: keywords [
 	"Varargs dict.__init__ -- the form the Super resolver picks for
@@ -353,6 +365,31 @@ KeyValueDictionary >> ___initFrom___: positional kw: keywords [
 	keywords ifNotNil: [
 		keywords @env0:keysAndValuesDo: [:k :v |
 			self @env0:at: k @env0:asString put: v]].
+	^ self
+
+]
+
+{ #category : 'Grail-Python Dict' }
+KeyValueDictionary >> ___pyKeyword___: aName put: aValue for: aCallee [
+	"A call's named keyword after a ``**m'': put into the keyword dict being
+	built, unless the mapping already gave it."
+
+	(self @env0:includesKey: aName) ifTrue: [^ self ___duplicateKeyword___: aName for: aCallee].
+	^ self @env0:at: aName put: aValue
+
+]
+
+{ #category : 'Grail-Python Dict' }
+KeyValueDictionary >> ___pyMergeKeywords___: aMapping for: aCallee [
+	"A call's ``**m'' merged into the keyword dict being built, key by key in
+	the mapping's order, as DICT_MERGE merges it (Python/ceval.c): a key
+	already there, from a named keyword or an earlier ``**'', is refused.
+	___pyUpdate___:, which this replaced at call sites, let the later one win,
+	so ``f(x=5, **{'x': 3})'' called f with x=3."
+
+	aMapping @env0:keysAndValuesDo: [:key :value |
+		(self @env0:includesKey: key) ifTrue: [^ self ___duplicateKeyword___: key for: aCallee].
+		self @env0:at: key put: value].
 	^ self
 
 ]

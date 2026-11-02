@@ -16848,7 +16848,7 @@ Object >> ___pyKwargsSplatFor___: aCallee [
 			(iterOwner ~~ nil and: [iterOwner ___grailIsPythonClass___])
 				ifTrue: [
 					(list @env1:__new__: self keys) @env0:do: [:k |
-						d @env0:at: k put: (self __getitem__: k)]]
+						d ___pyKeyword___: k put: (self __getitem__: k) for: aCallee]]
 				ifFalse: [
 					self @env0:keysAndValuesDo: [:k :v | d @env0:at: k put: v]].
 			^ d].
@@ -16864,13 +16864,15 @@ Object >> ___pyKwargsSplatFor___: aCallee [
 	"Any other MAPPING is copied into a dict, which is what CPython hands the
 	callee in every case: a user class with keys() and __getitem__ was passed
 	through as it stood, and the callee's first dictionary message to it was
-	an uncatchable MessageNotUnderstood."
+	an uncatchable MessageNotUnderstood.  Key by key, as DICT_MERGE copies it,
+	so a key that keys() gives twice is a keyword given twice
+	(KeyValueDictionary >> ___pyKeyword___:put:for:)."
 	((self ___hasProtocolForCall___: 'keys')
 		and: [self ___hasProtocolForCall___: '__getitem__']) ifTrue: [
 			| d |
 			d := PyDict @env0:new.
 			(list @env1:__new__: self keys) @env0:do: [:k |
-				d @env0:at: k put: (self __getitem__: k)].
+				d ___pyKeyword___: k put: (self __getitem__: k) for: aCallee].
 			^ d].
 	^ TypeError ___signal___: ((self ___pyFunctionStrPrefix___: aCallee)
 		@env0:, ('argument after ** must be a mapping, not '
