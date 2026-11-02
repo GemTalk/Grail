@@ -1054,6 +1054,11 @@ def signature(obj, *args, **kwargs):
         return from_spec
 
     if isinstance(obj, type):
+        import builtins as _builtins
+        if getattr(_builtins, getattr(obj, '__name__', ''), None) is obj:
+            sig = _signature_from_builtins_table(obj, 'builtin type', True)
+            if sig is not None:
+                return sig
         sig = _signature_from_class(obj, **kwargs)
         if sig is not None:
             return sig
@@ -1069,6 +1074,14 @@ def signature(obj, *args, **kwargs):
                 sig = _signature_from_text(text)
                 if sig is not None:
                     return sig
+        # The UNWRAPPED callable, as CPython's _signature_from_callable asks:
+        # ``functools.wraps(object.__new__)'' over a def (warnings.deprecated
+        # wraps __new__ so) reports the builtin's parameters.
+        if _signature_is_builtin(target):
+            bound = getattr(target, '__self__', None) is not None
+            sig = _signature_from_builtins_table(target, 'builtin', bound)
+            if sig is not None:
+                return sig
         text = getattr(obj, '__call_signature__', None)
         if not isinstance(text, str):
             call = getattr(type(obj), '__call__', None)
@@ -1169,7 +1182,42 @@ def _signature_get_partial(wrapped_sig, partial, extra_args=()):
     return wrapped_sig.replace(parameters=new_params.values())
 
 
-def _signature_from_text(text):
+def _signature_is_builtin(obj):
+    """CPython's test for a callable implemented in C -- a builtin function or
+    method, or a method or slot descriptor of a builtin type."""
+    return (isbuiltin(obj) or ismethoddescriptor(obj)
+            or isinstance(obj, (_types.MethodDescriptorType, _types.WrapperDescriptorType,
+                                _types.MethodWrapperType, _types.ClassMethodDescriptorType)))
+
+
+def _signature_from_builtins_table(obj, kind, skip_bound_arg):
+    """The Signature of one of the builtins (a function of the builtins module,
+    a builtin type, or a method of one) from the text CPython's own carries --
+    Grail's are Smalltalk methods with none -- or None for a callable that is no
+    builtin of that name.  A builtin whose text is None has no signature, and
+    that is CPython's ValueError (_signature_from_builtin), not ``()''.  See
+    scripts/generate_builtin_text_signatures.py."""
+    import builtins as _builtins
+    from _grail_text_signatures import TEXT_SIGNATURES
+    name = getattr(obj, '__qualname__', None)
+    if not isinstance(name, str) or name not in TEXT_SIGNATURES:
+        return None
+    head = name.partition('.')[0]
+    owner = getattr(_builtins, head, None)
+    if owner is None or (head == name and owner is not obj):
+        return None
+    text = TEXT_SIGNATURES[name]
+    if text is None:
+        raise ValueError('no signature found for {} {!r}'.format(kind, obj))
+    sig = _signature_from_text(text, skip_bound_arg)
+    if sig is None:
+        # ``str.startswith'' is ``($self, prefix[, start[, end]], /)'', an
+        # optional-group text that CPython's parser refuses too.
+        raise ValueError('{!r} builtin has invalid signature'.format(obj))
+    return sig
+
+
+def _signature_from_text(text, skip_bound_arg=True):
     """A Signature with real Parameters from a builtin's text signature --
     ``(start_or_stop, /, stop=None, step=1, *, dtype=None)'' -- or None when
     the text is not a parameter list Python can compile.
@@ -1177,11 +1225,19 @@ def _signature_from_text(text):
     CPython parses it (_signature_fromstr); this compiles a function with that
     parameter list and asks for ITS signature, which the def-time spec answers
     with the names, kinds and defaults.  A leading ``$module'' / ``$self'' /
-    ``$type'' parameter is the bound receiver, which a bound builtin drops."""
+    ``$type'' parameter is the bound receiver, which a bound builtin drops.
+    Unbound -- ``str.split'', a method descriptor -- it stays, as ``self'',
+    positional-only as CPython makes it (_signature_fromstr)."""
     s = text.strip()
     if not (s.startswith('(') and s.endswith(')')):
         return None
-    if s.startswith('($'):
+    if s.startswith('($') and not skip_bound_arg and not s.startswith('($module'):
+        first, comma, rest = s[2:-1].partition(',')
+        rest = rest.lstrip()
+        if comma and '/' not in [part.strip() for part in rest.split(',')]:
+            rest = '/, ' + rest
+        s = '(' + first.strip() + (', ' + rest if comma else ', /') + ')'
+    elif s.startswith('($'):
         comma = s.find(',')
         if comma == -1:
             s = '()'
