@@ -90,10 +90,13 @@ os class >> ___fdCallouts [
 
 	open(2) is VARIADIC, and it has to be declared so: on Apple arm64 a
 	variadic argument travels on the stack rather than in a register, so a
-	fixed three-argument declaration would hand open() a garbage mode."
+	fixed three-argument declaration would hand open() a garbage mode.
+
+	The key is VERSIONED, and bumped when a callout is added (v2: fsync), so a
+	session that cached the older table does not answer nil for the new one."
 
 	^ SessionTemps @env0:current
-		@env0:at: #'Grail_os_fd_callouts'
+		@env0:at: #'Grail_os_fd_callouts_v2'
 		ifAbsentPut: [ | lib d |
 			lib := CLibrary @env0:named: self ___libcName.
 			d := SymbolKeyValueDictionary @env0:new.
@@ -110,6 +113,8 @@ os class >> ___fdCallouts [
 			d @env0:at: #ftruncate put: (CCallout @env0:library: lib name: 'ftruncate'
 				result: #'int32' args: #(#'int32' #'int64')).
 			d @env0:at: #isatty put: (CCallout @env0:library: lib name: 'isatty'
+				result: #'int32' args: #(#'int32')).
+			d @env0:at: #fsync put: (CCallout @env0:library: lib name: 'fsync'
 				result: #'int32' args: #(#'int32')).
 			d @env0:at: #unlink put: (CCallout @env0:library: lib name: 'unlink'
 				result: #'int32' args: #(#'ptr')).
@@ -185,6 +190,27 @@ os class >> ___missingArgumentMessage: aName at: anIndex for: aFunctionName [
 
 	^ aFunctionName @env0:, '() missing required argument ''' @env0:, aName
 		@env0:, ''' (pos ' @env0:, anIndex @env0:printString @env0:, ')'
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os class >> ___negativeDescriptorMessage: aDescriptor [
+
+	^ 'file descriptor cannot be a negative integer (' @env0:, aDescriptor @env0:printString @env0:, ')'
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os class >> ___nonIntegerFilenoMessage [
+
+	^ 'fileno() returned a non-integer'
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os class >> ___notAFileDescriptorMessage [
+
+	^ 'argument must be an int, or have a fileno() method.'
 
 ]
 
@@ -541,6 +567,10 @@ os >> ___fd: anObject [
 	(sockets @env0:notNil
 		and: [(sockets @env0:___gsSocketForFd___: fd) @env0:notNil])
 		ifTrue: [^ fd].
+	"So is the descriptor under an open Grail file, which code reads by number
+	too: os.fstat(f.fileno()) is how urllib's addinfourl, shutil.copyfile and
+	test_fileio's testBlksize learn about a file they opened."
+	(FileIO ___isOpenOwnedDescriptor___: fd) ifTrue: [^ fd].
 	^ self ___signalErrno: 9
 
 ]
@@ -563,6 +593,28 @@ os >> ___fileDescriptorArgument___: anObject [
 	descriptor @env0:< -2147483648 ifTrue: [
 		^ OverflowError ___signal___: self @env0:class ___descriptorBelowMinimumMessage].
 	^ descriptor
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> ___fileDescriptorOf___: anObject [
+	"anObject as the descriptor a fildes argument takes, converted as
+	PyObject_AsFileDescriptor converts it (Objects/fileobject.c): an int as it
+	is, anything else by its fileno(), which must answer an int, and a
+	negative descriptor refused."
+
+	| descriptor |
+	descriptor := (anObject @env0:isKindOf: Integer)
+		ifTrue: [anObject]
+		ifFalse: [
+			(anObject ___respondsTo___: #fileno) ifFalse: [
+				^ TypeError ___signal___: self @env0:class ___notAFileDescriptorMessage].
+			anObject fileno].
+	(descriptor @env0:isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: self @env0:class ___nonIntegerFilenoMessage].
+	descriptor @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: (self @env0:class ___negativeDescriptorMessage: descriptor)].
+	^ self ___asCInt: descriptor
 
 ]
 
@@ -2255,6 +2307,17 @@ os >> fstat: fd [
 	result := self ___fstatOrErrno___: n.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ PyStatResult @env0:on: result].
 	^ self ___signalErrno: result
+
+]
+
+{ #category : 'Grail-File Descriptors' }
+os >> fsync: fd [
+	"os.fsync(fd) -- force the file's data out to its storage device.  fd is a
+	descriptor, or an object with a fileno(), as CPython's fildes converter
+	takes it (Modules/posixmodule.c)."
+
+	self ___libc: #fsync with: { self ___fd: (self ___fileDescriptorOf___: fd) }.
+	^ None
 
 ]
 
