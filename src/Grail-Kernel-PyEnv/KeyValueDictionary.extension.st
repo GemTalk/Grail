@@ -54,6 +54,19 @@ KeyValueDictionary class >> ___updateSeqPairAt___: idx from: element [
 ]
 
 { #category : 'Grail-Generics' }
+KeyValueDictionary class >> __class_getitem__: item [
+	"``dict.__class_getitem__'' -- the hook CPython gives the type, answering the
+	alias the class-side __getitem__: shortcut answers subscripts with.
+	CLASS-side, where it binds the class however it is read, and where it
+	cannot keep a secondary base's hook from being merged onto a subclass:
+	``class A(TypedDict, Generic[T])'' has to get Generic's, which refuses a
+	subscript of a class that is not generic."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
+{ #category : 'Grail-Generics' }
 KeyValueDictionary class >> __getitem__: item [
 	"``dict[K, V]'' -- a REAL types.GenericAlias, as list's and tuple's are.
 

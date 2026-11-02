@@ -21,6 +21,19 @@ os_PathLike class >> ___registeredClasses___ [
 
 ]
 
+{ #category : 'Grail-Generics' }
+os_PathLike class >> __class_getitem__: item [
+	"``os.PathLike.__class_getitem__'' -- the hook CPython gives the type, answering the
+	alias the class-side __getitem__: shortcut answers subscripts with.
+	CLASS-side, where it binds the class however it is read, and where it
+	cannot keep a secondary base's hook from being merged onto a subclass:
+	``class A(TypedDict, Generic[T])'' has to get Generic's, which refuses a
+	subscript of a class that is not generic."
+
+	^ (Python @env0:at: #'PyGenericAlias') ___fromSubscript___: item origin: self
+
+]
+
 { #category : 'Grail-Filesystem' }
 os_PathLike class >> __instancecheck__: instance [
 	"Python os.PathLike.__subclasshook__: any object whose type defines
@@ -51,3 +64,4 @@ os_PathLike class >> register: aClass [
 	^ aClass
 
 ]
+
