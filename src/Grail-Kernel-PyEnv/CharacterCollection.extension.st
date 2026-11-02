@@ -575,29 +575,16 @@ CharacterCollection >> ___applyAlignWidthFormat___: spec [
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> ___applyFullCase___: toUpper [
-	"Full Unicode upper/lowercase.  GemStone asUppercase/asLowercase already
-	does the simple 1:1 mappings correctly (incl. Kelvin, long-s, Cyrillic);
-	this only adds the ~100 multi-character SpecialCasing expansions where a
-	single code point maps to several (ß->SS, ﬅ->ST, İ->i̇).  Pure-ASCII
-	(Unicode7) receivers take the fast path unchanged."
+	"Full Unicode upper or lowercase, from CPython's own case data (the
+	CharacterCollection tables scripts/generate_unicode_case_data.py writes):
+	every SpecialCasing expansion (ß->SS, İ->i̇), and a capital sigma's
+	lowercase by its Final_Sigma context.  The kernel's asUppercase and
+	asLowercase map one character to one from an older Unicode, so they serve
+	only pure-ASCII (Unicode7) receivers, where they agree."
 
-	| map stream needsExpand |
 	(self @env0:isKindOf: Unicode7) ifTrue: [
 		^ toUpper ifTrue: [self @env0:asUppercase] ifFalse: [self @env0:asLowercase]].
-	map := toUpper ifTrue: [self ___multicharUpperMap___] ifFalse: [self ___multicharLowerMap___].
-	needsExpand := false.
-	self @env0:do: [:ch |
-		(map @env0:includesKey: ch @env0:asInteger) ifTrue: [needsExpand := true]].
-	needsExpand ifFalse: [
-		^ toUpper ifTrue: [self @env0:asUppercase] ifFalse: [self @env0:asLowercase]].
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	self @env0:do: [:ch | | seq |
-		seq := map @env0:at: ch @env0:asInteger ifAbsent: [nil].
-		seq @env0:isNil
-			ifTrue: [stream @env0:nextPut:
-				(toUpper ifTrue: [ch @env0:asUppercase] ifFalse: [ch @env0:asLowercase])]
-			ifFalse: [seq @env0:do: [:cp | stream @env0:nextPut: (Character @env0:codePoint: cp)]]].
-	^ stream @env0:contents
+	^ toUpper ifTrue: [self @env0:___pyUppered___] ifFalse: [self @env0:___pyLowered___]
 
 ]
 
@@ -2952,28 +2939,23 @@ CharacterCollection >> _startswith: positional kw: kwargs [
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> capitalize [
-	"Return a copy of the string with its first character capitalized and the rest lowercased."
+	"Return a copy of the string with its first character titlecased and the
+	rest lowercased, by their full mappings (do_capitalize): 'ﬁnnish' is
+	'Finnish'."
 
-	| stream first rest |
-	(self @env0:isEmpty) ifTrue: [ ^ self ].
-
-	stream := AppendStream @env0:on: (Unicode7 ___new___).
-	first := self @env0:first.
-	rest := self @env0:allButFirst.
-
-	stream @env0:nextPut: (first @env0:asUppercase).
-	stream @env0:nextPutAll: (rest @env0:asLowercase).
-
-	^ stream @env0:contents
+	^ self @env0:___pyCapitalized___
 
 ]
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> casefold [
-	"Return a casefolded copy of the string. Similar to lowercase but more aggressive."
+	"Return a casefolded copy of the string: every character's full case
+	folding, which is not its lowercase -- 'ß' folds to 'ss', 'ﬁ' to 'fi', 'µ'
+	to 'μ' (do_casefold).  For ASCII the two agree."
 
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ casefold].
-	^ self @env0:asLowercase
+	(self @env0:isKindOf: Unicode7) ifTrue: [^ self @env0:asLowercase].
+	^ self @env0:___pyCasefolded___
 
 ]
 
@@ -3452,21 +3434,11 @@ CharacterCollection >> isidentifier [
 
 { #category : 'Grail-String Test Methods' }
 CharacterCollection >> islower [
-	"Return True if all cased characters are lowercase and there is at least one cased character."
+	"Return True if all cased characters are lowercase and there is at least
+	one cased character, by the Unicode Lowercase, Uppercase and Titlecase
+	properties: 'ⅷ' is lowercase and no letter."
 
-	| hasCased allLower |
-	hasCased := false.
-	allLower := true.
-	self @env0:do: [:char |
-		| isLetter isLower |
-		isLetter := char @env0:isLetter.
-		isLetter ifTrue: [
-			hasCased := true.
-			isLower := char @env0:isLowercase.
-			isLower ifFalse: [ allLower := false ].
-		].
-	].
-	^ hasCased @env0:& allLower
+	^ self @env0:___pyIsLower___
 
 ]
 
@@ -3511,47 +3483,21 @@ CharacterCollection >> isspace [
 { #category : 'Grail-String Test Methods' }
 CharacterCollection >> istitle [
 	"Return True if the string is titlecased and has at least one cased
-	character: an uppercase character may only follow an uncased one and a
-	lowercase character only a cased one.  ``''.istitle()'' and
+	character: an uppercase or titlecase character may only follow an uncased
+	one and a lowercase character only a cased one.  ``''.istitle()'' and
 	``'\n'.istitle()'' are False -- there is nothing cased to be titled."
 
-	| cased previousCased |
-	cased := false.
-	previousCased := false.
-	self @env0:do: [:char |
-		char @env0:isUppercase
-			ifTrue: [
-				previousCased ifTrue: [^ false].
-				previousCased := true.
-				cased := true]
-			ifFalse: [
-				char @env0:isLowercase
-					ifTrue: [
-						previousCased ifFalse: [^ false].
-						previousCased := true.
-						cased := true]
-					ifFalse: [previousCased := false]]].
-	^ cased
+	^ self @env0:___pyIsTitle___
 
 ]
 
 { #category : 'Grail-String Test Methods' }
 CharacterCollection >> isupper [
-	"Return True if all cased characters are uppercase and there is at least one cased character."
+	"Return True if all cased characters are uppercase and there is at least
+	one cased character, by the Unicode Lowercase, Uppercase and Titlecase
+	properties: 'Ⅷ' is uppercase and no letter."
 
-	| hasCased allUpper |
-	hasCased := false.
-	allUpper := true.
-	self @env0:do: [:char |
-		| isLetter isUpper |
-		isLetter := char @env0:isLetter.
-		isLetter ifTrue: [
-			hasCased := true.
-			isUpper := char @env0:isUppercase.
-			isUpper ifFalse: [ allUpper := false ].
-		].
-	].
-	^ hasCased @env0:& allUpper
+	^ self @env0:___pyIsUpper___
 
 ]
 
@@ -4018,46 +3964,20 @@ CharacterCollection >> strip: chars [
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> swapcase [
-	"Return a copy with uppercase characters converted to lowercase and vice versa."
+	"Return a copy with uppercase characters converted to lowercase and vice
+	versa, by their full mappings (do_swapcase)."
 
-	| stream |
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	self @env0:do: [:char |
-		| isUpper |
-		isUpper := char @env0:isUppercase.
-		isUpper ifTrue: [
-			stream @env0:nextPut: (char @env0:asLowercase)
-		] ifFalse: [
-			stream @env0:nextPut: (char @env0:asUppercase)
-		]
-	].
-	^ stream @env0:contents
+	^ self @env0:___pySwapcased___
 
 ]
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> title [
-	"Return a titlecased version of the string where words start with uppercase."
+	"Return a titlecased version of the string: a character after an uncased
+	one is titlecased, after a cased one lowercased, by their full mappings
+	(do_title)."
 
-	| stream inWord |
-	stream := WriteStream @env0:on: (Unicode7 ___new___).
-	inWord := false.
-	self @env0:do: [:char |
-		| isAlpha |
-		isAlpha := char @env0:isLetter.
-		isAlpha ifTrue: [
-			inWord ifTrue: [
-				stream @env0:nextPut: (char @env0:asLowercase)
-			] ifFalse: [
-				stream @env0:nextPut: (char @env0:asUppercase).
-				inWord := true.
-			]
-		] ifFalse: [
-			stream @env0:nextPut: char.
-			inWord := false.
-		]
-	].
-	^ stream @env0:contents
+	^ self @env0:___pyTitled___
 
 ]
 
