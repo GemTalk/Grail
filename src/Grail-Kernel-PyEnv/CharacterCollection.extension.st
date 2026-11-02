@@ -22,6 +22,41 @@ CharacterCollection class >> ___allocateStringLike___: source [
 ]
 
 { #category : 'Grail-Initialization' }
+CharacterCollection class >> ___bytesToDecode___: anObject [
+	"The bytes str(anObject, encoding, errors) decodes, as
+	PyUnicode_FromEncodedObject reads them (Objects/unicodeobject.c:3555):
+	bytes as they are and any other buffer's bytes -- a memoryview, a
+	bytearray, an array -- while a str is refused by name and anything else as
+	not bytes-like.  Asked as ___isPyStr___ so a surrogate-bearing str gets the
+	same complaint."
+
+	(anObject isKindOf: ByteArray) ifTrue: [^ anObject].
+	anObject @env0:___isPyStr___ ifTrue: [^ TypeError ___signal___: self ___decodingStrMessage].
+	^ [ByteArray ___bytesOfBuffer___: anObject]
+		@env0:on: TypeError
+		do: [:ex | ex @env0:return: (TypeError ___signal___: (self ___notBytesLikeMessageFor: anObject))]
+
+]
+
+{ #category : 'Grail-Initialization' }
+CharacterCollection class >> ___checkDecodeArgument___: anObject named: aName [
+	"str()'s encoding and errors must each be a str, checked before anything is
+	decoded (unicode_vectorcall's arg_as_utf8)."
+
+	(anObject isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'str() argument ''' @env0:, aName @env0:, ''' must be str, not '
+			@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: anObject)]
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___decodingStrMessage [
+
+	^ 'decoding str is not supported'
+
+]
+
+{ #category : 'Grail-Initialization' }
 CharacterCollection class >> ___grailStrSubclassNew___: positional kw: keywords [
 	"The content of a NEW INSTANCE of a str subclass with no __new__ of its
 	own: CPython's ``str.__new__(cls, *args, **kw)'' -- (object, encoding,
@@ -61,6 +96,15 @@ CharacterCollection class >> ___maketransKey___: aKey [
 		ifTrue: [^ cps @env0:at: 1].
 	^ TypeError ___signal___:
 		'string keys in translate table must be of length 1'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___notBytesLikeMessageFor: anObject [
+
+	^ 'decoding to str: need a bytes-like object, '
+		@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: anObject) @env0:asString
+		@env0:, ' found'
 
 ]
 
@@ -282,33 +326,20 @@ CharacterCollection class >> __new__: obj _: encoding [
 					res @env0:replaceFrom: 1 to: src @env0:size with: src startingAt: 1].
 				^ res].
 
-	(obj isKindOf: ByteArray) ifTrue: [
-		"CPython validates the decode arguments before decoding anything:
-		``str() argument 'encoding' must be str, not builtin_function_or_method''.
-		Grail handed whatever it was given straight to ``decode:'', which tried
-		to iterate it -- so ``str(b'2', sys.getdefaultencoding)'' surfaced as a
-		Smalltalk MessageNotUnderstood (``a BoundMethod does not understand
-		#do:'') rather than a TypeError, and inside a class body that meant an
-		enum definition failed with an internal error instead of the constructor
-		complaint.  test_enum test_custom_strenum."
-		(encoding isKindOf: CharacterCollection) ifFalse: [
-			^ TypeError ___signal___: 'str() argument ''encoding'' must be str, not '
-				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: encoding)].
-		"Re-wrap through the 1-arg SELF-TYPED allocator.  ``decode:''
-		answers a plain string, so returning it directly dropped the
-		subclass: ``Markup(b'x', 'ascii')'' decoded correctly but came
-		back a bare ``str'' rather than a ``Markup''.  When self IS the
-		canonical str class this is the same string, one copy later."
-		^ self __new__: (obj decode: encoding)
-	].
-	obj @env0:___isPyStr___ ifTrue: [
-		"CPython rejects str(str, encoding) with TypeError —
-		``decoding str is not supported''.  Match the shape.  Asked as
-		___isPyStr___ so a surrogate-bearing str gets the SAME complaint rather
-		than falling through to ``__new__: obj'' and being stringified."
-		TypeError ___signal___: 'decoding str is not supported'
-	].
-	^ self __new__: obj
+	"CPython validates the decode arguments before decoding anything
+	(unicode_vectorcall's arg_as_utf8): ``str() argument 'encoding' must be
+	str, not builtin_function_or_method''.  Grail handed whatever it was given
+	straight to ``decode:'', which tried to iterate it -- so ``str(b'2',
+	sys.getdefaultencoding)'' surfaced as a Smalltalk MessageNotUnderstood
+	rather than a TypeError (test_enum test_custom_strenum).  For ANY object,
+	not only bytes: ``str(1, 1)'' names the encoding too."
+	self ___checkDecodeArgument___: encoding named: 'encoding'.
+	"Re-wrap through the 1-arg SELF-TYPED allocator.  ``decode:'' answers a
+	plain string, so returning it directly dropped the subclass:
+	``Markup(b'x', 'ascii')'' decoded correctly but came back a bare ``str''
+	rather than a ``Markup''.  When self IS the canonical str class this is
+	the same string, one copy later."
+	^ self __new__: ((self ___bytesToDecode___: obj) decode: encoding)
 
 ]
 
@@ -328,22 +359,14 @@ CharacterCollection class >> __new__: obj _: encoding _: errors [
 	str(b'2', <not a str>, <not a str>) names the encoding, as CPython does.
 	The delegation below re-checks encoding; doing it here as well is what keeps
 	the two in that order."
-	(obj isKindOf: ByteArray) ifTrue: [
-		(encoding isKindOf: CharacterCollection) ifFalse: [
-			^ TypeError ___signal___: 'str() argument ''encoding'' must be str, not '
-				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: encoding)].
-		(errors isKindOf: CharacterCollection) ifFalse: [
-			^ TypeError ___signal___: 'str() argument ''errors'' must be str, not '
-				@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: errors)].
-		"DECODE WITH THE POLICY.  This used to validate ``errors'' and then
-		hand only the encoding on, so every policy behaved as strict:
-		``str(b'a\xed\xa0\x80', 'utf-8', 'surrogatepass')'' raised, and
-		test_codecs NameprepTest decodes its RFC 3454 vectors exactly that way.
-		Re-wrapped through the 1-arg allocator for the reason __new__:_:
-		gives (a str subclass must stay one)."
-		^ self __new__: (obj decode: encoding _: errors)].
-
-	^ self __new__: obj _: encoding
+	self ___checkDecodeArgument___: encoding named: 'encoding'.
+	self ___checkDecodeArgument___: errors named: 'errors'.
+	"DECODE WITH THE POLICY.  This used to validate ``errors'' and then hand
+	only the encoding on, so every policy behaved as strict: ``str(b'a\xed\xa0\x80',
+	'utf-8', 'surrogatepass')'' raised, and test_codecs NameprepTest decodes its
+	RFC 3454 vectors exactly that way.  Re-wrapped through the 1-arg allocator
+	for the reason __new__:_: gives (a str subclass must stay one)."
+	^ self __new__: ((self ___bytesToDecode___: obj) decode: encoding _: errors)
 
 ]
 
@@ -422,11 +445,13 @@ CharacterCollection class >> _new: positional kw: kwargs [
 		ifFalse: [kwargs @env0:at: 'errors' ifAbsent: [nil]].
 	(encoding @env0:isNil @env0:and: [errors @env0:isNil]) ifTrue: [
 		^ args @env0:isEmpty ifTrue: [self __new__] ifFalse: [self __new__: obj]].
-	((obj @env0:isKindOf: ByteArray) @env0:or: [obj @env0:isKindOf: memoryview]) ifFalse: [
-		^ TypeError ___signal___: 'decoding to str: need a bytes-like object, '
-			@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: obj) @env0:asString
-			@env0:, ' found'].
-	(obj @env0:isKindOf: memoryview) ifTrue: [obj := obj tobytes].
+	"No object is the empty string whatever else is given, once Argument
+	Clinic has checked that what is given is a str (unicode_new_impl):
+	``str(errors='strict')'' is ''."
+	args @env0:isEmpty ifTrue: [
+		encoding @env0:ifNotNil: [:given | self ___checkDecodeArgument___: given named: 'encoding'].
+		errors @env0:ifNotNil: [:given | self ___checkDecodeArgument___: given named: 'errors'].
+		^ self __new__].
 	^ self __new__: obj
 		_: (encoding @env0:ifNil: ['utf-8'])
 		_: (errors @env0:ifNil: ['strict'])
@@ -437,23 +462,22 @@ CharacterCollection class >> _new: positional kw: kwargs [
 CharacterCollection class >> _str: positional kw: kwargs [
 	"Varargs entry for ``str(*args, **kwargs)'' so the Python call
 	site dispatches through a single selector regardless of arity.
-	Routes by positional count + optional encoding kwarg."
+	Keywords of any kind are _new:kw:'s, which binds all three; without
+	them it routes by positional count, and more than three is
+	unicode_vectorcall's arity error."
 
-	| nargs encoding errors obj |
+	| nargs obj |
+	(kwargs @env0:notNil @env0:and: [kwargs @env0:isEmpty @env0:not]) ifTrue: [
+		^ self _new: positional kw: kwargs].
 	nargs := positional @env0:size.
+	nargs @env0:> 3 ifTrue: [
+		^ TypeError ___signal___: 'str expected at most 3 arguments, got '
+			@env0:, nargs @env0:printString].
 	nargs @env0:= 0 ifTrue: [^ self __new__].
 	obj := positional @env0:at: 1.
-	nargs @env0:= 1 ifTrue: [
-		(kwargs @env0:isNil @env0:not
-			and: [kwargs @env0:includesKey: 'encoding']) ifTrue: [
-			^ self __new__: obj _: (kwargs @env0:at: 'encoding')
-		].
-		^ self __new__: obj
-	].
-	encoding := positional @env0:at: 2.
-	nargs @env0:= 2 ifTrue: [^ self __new__: obj _: encoding].
-	errors := positional @env0:at: 3.
-	^ self __new__: obj _: encoding _: errors
+	nargs @env0:= 1 ifTrue: [^ self __new__: obj].
+	nargs @env0:= 2 ifTrue: [^ self __new__: obj _: (positional @env0:at: 2)].
+	^ self __new__: obj _: (positional @env0:at: 2) _: (positional @env0:at: 3)
 
 ]
 
