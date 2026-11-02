@@ -418,15 +418,25 @@ BoundMethod >> _setReceiver: aReceiver selector: aSymbol [
 ]
 
 { #category : 'Grail-Private' }
+BoundMethod >> _setReceiver: aReceiver selector: aSymbol everyCallTo: aVarargsSelector [
+	"Reads as aSymbol bound to aReceiver, but every call reaches
+	aVarargsSelector with the whole argument list -- no fixed-arity selector is
+	answered, so value:value: takes the varargs one, and the method there
+	checks the arguments itself."
+
+	self _setReceiver: aReceiver selector: aSymbol.
+	sel0 := sel1 := sel2 := sel3 := #'___grailNoFixedArity___'.
+	selVarargs := aVarargsSelector
+
+]
+
+{ #category : 'Grail-Private' }
 BoundMethod >> _setStaticExceptionNewOn: aClass [
 	"``Exc.__new__'' for a built-in exception class: reads as ``__new__'' bound
 	to aClass, but every call reaches BaseException class >>
-	___excStaticNew:kw: with the whole argument list, ``cls'' first -- no
-	fixed-arity selector is answered, so value:value: takes the varargs one."
+	___excStaticNew:kw: with the whole argument list, ``cls'' first."
 
-	self _setReceiver: aClass selector: #'__new__'.
-	sel0 := sel1 := sel2 := sel3 := #'___grailNoFixedArityForStaticNew___'.
-	selVarargs := #'___excStaticNew:kw:'
+	self _setReceiver: aClass selector: #'__new__' everyCallTo: #'___excStaticNew:kw:'
 
 ]
 
