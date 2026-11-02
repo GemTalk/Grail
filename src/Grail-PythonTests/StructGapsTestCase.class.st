@@ -14,7 +14,7 @@ width.
 
 AN OVERFLOW CAP THAT COULD NOT FIRE.  A repeat count is unbounded text,
 so the running total is capped -- at 2^63-1, which is CPython's
-PY_SSIZE_T_MAX on its platforms.  Grail's sys.maxsize is 2^60-1, a
+PY_SSIZE_T_MAX on its platforms.  Grail's sys.maxsize was 2^60-1 then, a
 GemStone SmallInteger, so a format built from ``sys.maxsize + 1' -- which
 is exactly how test_struct writes the case -- computed a total the cap
 never noticed.  Reading the same number the caller reads is what makes

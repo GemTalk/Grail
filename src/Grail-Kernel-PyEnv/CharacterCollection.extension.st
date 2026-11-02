@@ -1234,14 +1234,14 @@ CharacterCollection >> ___printfStarArg___: value [
 	CPython's ``* wants int'' TypeError.  ``asInteger'' accepted a str by
 	PARSING it, and for one that is not a number (``'%*s' % ('foo', 'bar')'')
 	raised an ImproperOperation no ``except'' can catch.  A '*' argument too
-	big for a Py_ssize_t (in Grail, a SmallInteger -- sys.maxsize) is
-	OverflowError, as in CPython.  bool is an int."
+	big for a Py_ssize_t (sys.maxsize) is OverflowError, as in CPython.  bool
+	is an int."
 
 	value == true ifTrue: [^ 1].
 	value == false ifTrue: [^ 0].
 	(value @env0:isKindOf: Integer) ifFalse: [
 		^ TypeError ___signal___: '* wants int'].
-	(value @env0:isKindOf: SmallInteger) ifFalse: [
+	(value @env0:between: -16r8000000000000000 and: 16r7FFFFFFFFFFFFFFF) ifFalse: [
 		^ OverflowError ___signal___: 'Python int too large to convert to C ssize_t'].
 	^ value
 
@@ -2403,9 +2403,9 @@ CharacterCollection >> __mod__: args [
 					i := i @env0:+ 1 ].
 				"CPython reads a literal width into a Py_ssize_t and refuses one
 				that overflows it (``'%18446744073709551616f''); Grail's Integer
-				would go on to build a result that wide.  Grail's Py_ssize_t is
-				the SmallInteger range -- it is what sys.maxsize reports."
-				width @env0:> SmallInteger @env0:maximumValue ifTrue: [
+				would go on to build a result that wide.  The bound is
+				sys.maxsize, PY_SSIZE_T_MAX."
+				width @env0:> 16r7FFFFFFFFFFFFFFF ifTrue: [
 					ValueError ___signal___: 'width too big']
 			].
 			"Precision: '.' then digits or '*' ('.' alone means 0)."

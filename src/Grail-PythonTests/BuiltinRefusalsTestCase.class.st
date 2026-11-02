@@ -44,7 +44,7 @@ arithmetic.  A BOOLEAN hash is accepted and normalised, because bool is
 an int in Python and Grail's true is not an Integer.
 
 The len bound is READ from sys.maxsize rather than hardcoded to 2^63-1,
-because Grail's is 2^60-1, a GemStone SmallInteger -- CPython's test
+because Grail's was 2^60-1 then, a GemStone SmallInteger -- CPython's test
 writes the case as ``sys.maxsize + 1', so reading the same number the
 caller reads is what makes it mean what it says.
 

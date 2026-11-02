@@ -269,6 +269,9 @@ bytearray >> __imul__: count [
 			ifTrue: [n := bytes ___coerceIndex___: n]
 			ifFalse: [^ NotImplemented]
 	].
+	"A count past sys.maxsize fits no index -- CPython's OverflowError, raised
+	before it looks at the sign."
+	n := n ___asRepeatCount___.
 
 	"If count <= 1, nothing to do (or clear if <= 0)"
 	(n @env0:<= 0) ifTrue: [
@@ -280,10 +283,11 @@ bytearray >> __imul__: count [
 		^ self
 	].
 
-	"A repeat that cannot be allocated is CPython's OverflowError, NOT an
-	extend loop that exhausts the gem's temporary object memory."
+	"A result whose length is past sys.maxsize, or that cannot be allocated, is
+	CPython's MemoryError (Objects/bytearrayobject.c:431) -- NOT an extend loop
+	that exhausts the gem's temporary object memory."
 	(self @env0:size @env0:* n) @env0:> 1073741823 ifTrue: [
-		OverflowError ___signal___: 'repeated bytes are too long'
+		MemoryError ___signal___: 'cannot allocate bytearray'
 	].
 
 	"Save original content"

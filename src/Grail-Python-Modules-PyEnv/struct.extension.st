@@ -609,8 +609,8 @@ struct >> _maxStructSize [
 	"The largest total a format may describe: CPython's PY_SSIZE_T_MAX,
 	which is exactly ``sys.maxsize''.
 
-	It was hardcoded to 2^63-1, the value on CPython's platforms.  Grail's
-	sys.maxsize is 2^60-1 -- a GemStone SmallInteger -- so a format built
+	It was hardcoded to 2^63-1, the value on CPython's platforms, while
+	Grail's sys.maxsize was 2^60-1 -- a GemStone SmallInteger -- so a format built
 	from ``sys.maxsize + 1'', which is how test_struct writes the
 	overflow case, computed a total the cap never noticed.  Reading the
 	same number the caller reads is what makes the test mean what it

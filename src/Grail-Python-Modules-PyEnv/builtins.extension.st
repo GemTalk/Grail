@@ -3205,8 +3205,8 @@ builtins >> ___lookUpInLiveLocals___: aName ifAbsent: aBlock [
 { #category : 'Grail-Built-in Functions' }
 builtins >> ___maxIndexSize___ [
 	"The largest value that fits an index: CPython's PY_SSIZE_T_MAX, which
-	is exactly ``sys.maxsize''.  Read rather than hardcoded to 2^63-1
-	because Grail's maxsize is 2^60-1, a GemStone SmallInteger -- see
+	is exactly ``sys.maxsize''.  Read rather than hardcoded, so the bound
+	and the number a caller compares against cannot drift apart -- see
 	struct >> _maxStructSize, which reads it for the same reason."
 
 	| sysMod |
@@ -7498,10 +7498,9 @@ builtins >> len: anObject [
 
 	TOO BIG is the third: len() has to fit an index, so a __len__ answering
 	``sys.maxsize + 1'' is an OverflowError in CPython and was handed back
-	whole here.  The bound is read from sys.maxsize rather than hardcoded
-	to 2^63-1, because Grail's is 2^60-1 (a GemStone SmallInteger) -- the
-	test writes the case as ``sys.maxsize + 1'', so reading the same number
-	the test reads is what makes it mean what it says.  ORDER MATTERS: a
+	whole here.  The bound is read from sys.maxsize rather than hardcoded --
+	the test writes the case as ``sys.maxsize + 1'', so reading the same
+	number the test reads is what makes it mean what it says.  ORDER MATTERS: a
 	hugely NEGATIVE length stays the ValueError, which is what
 	``-sys.maxsize-10'' asserts."
 
@@ -7518,7 +7517,7 @@ builtins >> len: anObject [
 			''' object cannot be interpreted as an integer')].
 	result @env0:< 0 ifTrue: [
 		^ ValueError ___signal___: '__len__() should return >= 0'].
-	"Only a LargeInteger can be too big: sys.maxsize is 2^60-1, the largest
+	"Only a LargeInteger can be too big: sys.maxsize is past the largest
 	SmallInteger.  Reading it is an attribute load inside a handler, which
 	was most of the cost of every len() (#1214)."
 	(result @env0:class @env0:== SmallInteger) ifTrue: [^ result].
