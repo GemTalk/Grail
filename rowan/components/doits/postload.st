@@ -357,6 +357,10 @@ UserGlobals
 	at: #''GrailRuntimeGeneration''
 	put: ((UserGlobals at: #''GrailRuntimeGeneration'' otherwise: 0) + 1).
 '.
+	"io.UnsupportedOperation is an OSError and a ValueError: tell BaseException, so
+	that ``except ValueError'' catches it.  Before the commit below, which keeps it."
+	'importlib ___registerKernelExceptionBases___
+'.
 	"src/smalltalk/install.gs:3421"
 	'System commit
 '.
