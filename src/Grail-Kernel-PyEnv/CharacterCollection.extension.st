@@ -90,6 +90,30 @@ CharacterCollection class >> ___percentOperandIsMapping___: args forBytes: forBy
 
 ]
 
+{ #category : 'Grail-Allocation' }
+CharacterCollection class >> ___refuseUnbuildableLength___: aLength [
+	"MemoryError, which is what CPython raises when the allocation of a str that
+	long fails, for a str of aLength characters that what is left of the gem's
+	temporary object memory cannot hold.  Raised BEFORE the build: the build
+	itself ended the whole session on a fatal VM out-of-memory, which no
+	``except'' sees -- ``'%*d' % (2**40, 1)'', ``'x'.center(2**40)'',
+	``'a' * 2**40''.  Four bytes a character allows for the stream the result
+	grows in as well as for a str of narrow characters.
+
+	A length past sys.maxsize is the OverflowError of CPython's argument
+	conversion instead: ``'x'.center(2**63)''."
+
+	"Every padded field and repeat asks, so an ordinary length answers before
+	the memory figures are read."
+	aLength @env0:< 1000000 ifTrue: [^ aLength].
+	aLength @env0:> 16r7FFFFFFFFFFFFFFF ifTrue: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C ssize_t'].
+	aLength @env0:* 4 @env0:> (System @env0:_tempObjSpaceMax @env0:- System @env0:_tempObjSpaceUsed)
+		ifTrue: [^ MemoryError ___signalNew___: #() kw: nil].
+	^ aLength
+
+]
+
 { #category : 'Grail-Python protocol' }
 CharacterCollection class >> __getitem__: index [
 	"Covers Python str (Unicode7, Unicode16, Unicode32, ISOLatin,
@@ -736,6 +760,13 @@ CharacterCollection >> ___expandtabs: tabsize [
 
 	| ws col n cp nSpaces |
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___expandtabs: tabsize].
+	"tabsize is a C int in CPython, so one past it is the int converter's
+	OverflowError; and no expansion is longer than a tab's worth of spaces for
+	every character, which is refused before the build if it cannot be held."
+	(tabsize @env0:between: -2147483648 and: 2147483647) ifFalse: [
+		^ OverflowError ___signal___: 'Python int too large to convert to C int'].
+	(tabsize @env0:> 1 and: [self @env0:includes: Character @env0:tab]) ifTrue: [
+		self @env0:class ___refuseUnbuildableLength___: self @env0:size @env0:* tabsize].
 	ws := WriteStream @env0:on: (self @env0:copyEmpty).
 	col := 0.
 	n := self @env0:size.
@@ -1101,6 +1132,7 @@ CharacterCollection >> ___padCentered___: width fill: aCharacter [
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___padCentered___: width fill: aCharacter].
 	mySize := self @env0:size.
 	width @env0:<= mySize ifTrue: [^ self].
+	self @env0:class ___refuseUnbuildableLength___: width.
 	marg := width @env0:- mySize.
 	leftPad := (marg @env0:// 2)
 		@env0:+ ((marg @env0:bitAnd: width) @env0:bitAnd: 1).
@@ -1119,6 +1151,7 @@ CharacterCollection >> ___padLeftJustified___: width fill: aCharacter [
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___padLeftJustified___: width fill: aCharacter].
 	mySize := self @env0:size.
 	width @env0:<= mySize ifTrue: [^ self].
+	self @env0:class ___refuseUnbuildableLength___: width.
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPutAll: self.
 	(width @env0:- mySize) @env0:timesRepeat: [
@@ -1133,6 +1166,7 @@ CharacterCollection >> ___padRightJustified___: width fill: aCharacter [
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ ___padRightJustified___: width fill: aCharacter].
 	mySize := self @env0:size.
 	width @env0:<= mySize ifTrue: [^ self].
+	self @env0:class ___refuseUnbuildableLength___: width.
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	(width @env0:- mySize) @env0:timesRepeat: [
 		stream @env0:nextPut: aCharacter].
@@ -2517,6 +2551,12 @@ CharacterCollection >> __mul__: n [
 	OverflowError, not an attempt to build it."
 	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
+	"CPython's two refusals, in its order (unicode_repeat): a result whose
+	length is past sys.maxsize is OverflowError, and one that cannot be
+	allocated MemoryError."
+	(self @env0:size @env0:* count) @env0:> 16r7FFFFFFFFFFFFFFF ifTrue: [
+		^ OverflowError ___signal___: 'repeated string is too long'].
+	self @env0:class ___refuseUnbuildableLength___: self @env0:size @env0:* count.
 
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	count @env0:timesRepeat: [
@@ -4080,6 +4120,7 @@ CharacterCollection >> zfill: width [
 	self @env0:___isExactPyStr___ ifFalse: [^ self ___asExactStr___ zfill: width].
 	mySize := self @env0:size.
 	(width @env0:<= mySize) ifTrue: [ ^ self ].
+	self @env0:class ___refuseUnbuildableLength___: width.
 
 	"Check if string starts with + or -"
 	hasSign := false.
