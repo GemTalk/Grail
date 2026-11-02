@@ -1,6 +1,24 @@
 Extension { #name : 'FileIO' }
 
 { #category : 'Grail-Opening' }
+FileIO class >> ___closeOwnedDescriptor___: aDescriptor [
+	"Close aDescriptor through the open Grail file whose fileno() handed it out,
+	and answer whether there was one.  os.close(f.fileno()) arrives here: the
+	descriptor is that file's GsFile's, so the GsFile is what closes it, and the
+	file stays open over nothing (see FileIO >> ___checkDescriptor___)."
+
+	| owner gsfile |
+	owner := self ___fdOwners___ @env0:at: aDescriptor ifAbsent: [^ false].
+	self ___fdOwners___ @env0:removeKey: aDescriptor.
+	(owner @env0:dynamicInstVarAt: #_closed) == true ifTrue: [^ false].
+	gsfile := owner @env0:dynamicInstVarAt: #_gsfile.
+	gsfile @env0:fileDescriptor @env0:= aDescriptor ifFalse: [^ false].
+	gsfile @env0:close.
+	^ true
+
+]
+
+{ #category : 'Grail-Opening' }
 FileIO class >> ___codecText___: aFileIO mode: modeArg encoding: encodingArg errors: errorsArg newline: newlineArg [
 	"_pyio's TextIOWrapper over an open binary file, with ``mode'' set as
 	CPython's open() sets it.  An encoding the codec registry does not know
@@ -54,6 +72,12 @@ FileIO class >> ___fdOwners___ [
 	^ SessionTemps @env0:current
 		@env0:at: #'Grail_io_fd_owners'
 		ifAbsentPut: [IntegerKeyValueDictionary @env0:new]
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO class >> ___filenoUnavailableMessage [
+	^ 'fileno() is unavailable for this file'
 
 ]
 
@@ -418,9 +442,33 @@ FileIO class >> _new: posArgs kw: kwArgs [
 
 ]
 
+{ #category : 'Grail-Private' }
+FileIO >> ___checkDescriptor___ [
+	"EBADF once the descriptor under this open file is closed: CPython's FileIO
+	does not notice the close, so every operation that reaches the descriptor
+	fails as the system call does (test_fileio's ClosedFDRaises tests close
+	``f.fileno()'' under the file)."
+
+	self ___descriptorIsClosed___ ifTrue: [^ os instance ___signalErrno: 9]
+
+]
+
+{ #category : 'Grail-Private' }
+FileIO >> ___descriptorIsClosed___ [
+	"Whether the descriptor under this file was closed while the file stayed
+	open: by os.close of the number fileno() handed out, or, for a file over a
+	borrowed descriptor, by the file that lent it.  Either closes the GsFile,
+	which is the one record of the descriptor."
+
+	^ (self @env0:dynamicInstVarAt: #_gsfile) @env0:isOpen == false
+
+]
+
 { #category : 'Grail-Opening' }
 FileIO >> ___initGsFile___: gsfile name: aName mode: aMode readable: isReadable writable: isWritable [
-	"Stamp the six bookkeeping instVars every FileIO needs onto SELF.
+	"Stamp the bookkeeping instVars every FileIO needs onto SELF, among them
+	the number of its descriptor, which fileno() answers once the descriptor is
+	closed underneath (see ___checkDescriptor___).
 
 	Extracted so the open() path and the ``io.FileIO(name, mode)'' constructor
 	initialise an instance the same way.  open() builds the instance itself (it
@@ -433,6 +481,7 @@ FileIO >> ___initGsFile___: gsfile name: aName mode: aMode readable: isReadable 
 	self @env0:dynamicInstVarAt: #_closed put: false.
 	self @env0:dynamicInstVarAt: #_readable put: isReadable.
 	self @env0:dynamicInstVarAt: #_writable put: isWritable.
+	self @env0:dynamicInstVarAt: #_fileno put: gsfile @env0:fileDescriptor.
 	^ self
 
 ]
@@ -461,6 +510,7 @@ FileIO >> ___ioSeek___: pos whence: whence [
 
 	| f |
 	self _checkOpen.
+	self ___checkDescriptor___.
 	f := self @env0:dynamicInstVarAt: #_gsfile.
 	whence @env0:= 0 ifTrue: [
 		pos @env0:< 0 ifTrue: [
@@ -480,7 +530,21 @@ FileIO >> ___ioSeek___: pos whence: whence [
 
 { #category : 'Grail-Private' }
 FileIO >> ___ioTruncate___: size [
+	self _checkWritable.
 	OSError ___signal___: 'truncate() is not supported in Grail'
+
+]
+
+{ #category : 'Grail-Private' }
+FileIO >> ___numberOfClosedDescriptor___ [
+	"The number the descriptor closed underneath had, as ___initGsFile___...
+	recorded it."
+
+	| fd |
+	fd := self @env0:dynamicInstVarAt: #_fileno.
+	((fd isKindOf: Integer) and: [fd @env0:>= 0]) ifFalse: [
+		^ OSError ___signal___: FileIO ___filenoUnavailableMessage].
+	^ fd
 
 ]
 
@@ -579,7 +643,8 @@ FileIO >> _checkOpen [
 FileIO >> _checkReadable [
 	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_readable) == true ifFalse: [
-		OSError ___signal___: 'not readable']
+		OSError ___signal___: 'not readable'].
+	self ___checkDescriptor___
 
 ]
 
@@ -587,7 +652,8 @@ FileIO >> _checkReadable [
 FileIO >> _checkWritable [
 	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_writable) == true ifFalse: [
-		OSError ___signal___: 'not writable']
+		OSError ___signal___: 'not writable'].
+	self ___checkDescriptor___
 
 ]
 
@@ -653,9 +719,13 @@ FileIO >> _remaining [
 { #category : 'Grail-State' }
 FileIO >> close [
 	"Idempotent, like CPython.  A file opened over a borrowed descriptor
-	with closefd=False leaves the GsFile to its owner."
+	with closefd=False leaves the GsFile to its owner.
 
-	| gsfile owners fd |
+	A file whose descriptor was closed underneath still closes, and then
+	reports EBADF: CPython's close(2) fails after the file has let go of the
+	descriptor, so a second close() is quiet."
+
+	| gsfile owners fd lostDescriptor |
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [^ None].
 	gsfile := self @env0:dynamicInstVarAt: #_gsfile.
 	owners := SessionTemps @env0:current @env0:at: #'Grail_io_fd_owners' ifAbsent: [nil].
@@ -663,8 +733,11 @@ FileIO >> close [
 		fd := gsfile @env0:fileDescriptor.
 		((fd isKindOf: SmallInteger) @env0:and: [(owners @env0:at: fd ifAbsent: [nil]) == self])
 			ifTrue: [owners @env0:removeKey: fd]].
+	lostDescriptor := self ___descriptorIsClosed___.
 	(self @env0:dynamicInstVarAt: #_closefd) == false ifFalse: [gsfile @env0:close].
 	self @env0:dynamicInstVarAt: #_closed put: true.
+	(lostDescriptor @env0:and: [(self @env0:dynamicInstVarAt: #_closefd) ~~ false])
+		ifTrue: [^ os instance ___signalErrno: 9].
 	^ None
 
 ]
@@ -688,13 +761,18 @@ FileIO >> fileno [
 	contract for them is OSError (``UnsupportedOperation'' is an OSError
 	subclass): a client-side file, where the fd lives in the client
 	process and is -1 here, and a compressed stream, which GsFile drives
-	through zlib rather than a plain descriptor."
+	through zlib rather than a plain descriptor.
+
+	A descriptor closed underneath leaves the GsFile with none, and fileno()
+	still answers its number, as CPython's does: it reads the number, not the
+	descriptor."
 
 	| fd |
 	self _checkOpen.
+	self ___descriptorIsClosed___ ifTrue: [^ self ___numberOfClosedDescriptor___].
 	fd := (self @env0:dynamicInstVarAt: #_gsfile) @env0:fileDescriptor.
 	((fd isKindOf: Integer) and: [fd @env0:>= 0]) ifFalse: [
-		OSError ___signal___: 'fileno() is unavailable for this file'
+		OSError ___signal___: FileIO ___filenoUnavailableMessage
 	].
 	"Remembered, so open(fd) can find the file it belongs to."
 	FileIO ___fdOwners___ @env0:at: fd put: self.
@@ -718,6 +796,7 @@ FileIO >> isatty [
 	an interactive topaz session."
 
 	self _checkOpen.
+	self ___descriptorIsClosed___ ifTrue: [^ false].
 	^ ((self @env0:dynamicInstVarAt: #_gsfile) @env0:isTerminal) == true
 
 ]
@@ -795,14 +874,18 @@ FileIO >> seek: pos _: whence [
 
 { #category : 'Grail-State' }
 FileIO >> seekable [
+	"False once the descriptor is closed underneath, where CPython's lseek
+	fails."
+
 	self _checkOpen.
-	^ true
+	^ self ___descriptorIsClosed___ @env0:not
 
 ]
 
 { #category : 'Grail-Position' }
 FileIO >> tell [
 	self _checkOpen.
+	self ___checkDescriptor___.
 	^ (self @env0:dynamicInstVarAt: #_gsfile) @env0:position
 
 ]
