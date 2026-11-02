@@ -2,41 +2,21 @@ Extension { #name : 'PyStatResult' }
 
 { #category : 'Instance Creation' }
 PyStatResult class >> __new__: sequence [
-	"``os.stat_result(sequence)''."
+	"``os.stat_result(sequence)'' -- the struct sequence constructor's, as
+	every struct sequence's is (PyStructSequence class >> __new__:)."
 
-	^ self __new__: sequence _: None
+	^ super __new__: sequence
 
 ]
 
 { #category : 'Instance Creation' }
 PyStatResult class >> __new__: sequence _: aDict [
 	"``os.stat_result(sequence, dict)'' -- what an unpickle calls, with the
-	pair __reduce__ answers.  CPython's checks and CPython's words."
+	pair __reduce__ answers.  The struct sequence constructor's checks and
+	words, which used to be copied here (PyStructSequence class >>
+	__new__:_:)."
 
-	| items n names |
-	items := [sequence @env0:___pyStarToArray___]
-		@env0:on: TypeError do: [:ex |
-			ex @env0:return: nil].
-	items @env0:isNil ifTrue: [^ TypeError ___signal___: 'constructor requires a sequence'].
-	n := items @env0:size.
-	n @env0:< 10 ifTrue: [
-		^ TypeError ___signal___: 'os.stat_result() takes an at least 10-sequence ('
-			@env0:, n @env0:printString @env0:, '-sequence given)'].
-	n @env0:> 19 ifTrue: [
-		^ TypeError ___signal___: 'os.stat_result() takes an at most 19-sequence ('
-			@env0:, n @env0:printString @env0:, '-sequence given)'].
-	(aDict == None or: [aDict @env0:isNil]) ifFalse: [
-		(aDict @env0:isKindOf: AbstractDictionary) ifFalse: [
-			^ TypeError ___signal___: 'os.stat_result() takes a dict as second arg, if any'].
-		"A key that is not a named-only field, or names one the sequence
-		already filled, is refused (3.13+)."
-		names := PyStatResult @env0:___namedOnlyFields___.
-		aDict @env0:keysDo: [:k | | i |
-			i := names @env0:indexOf: ((k @env0:isKindOf: CharacterCollection)
-				ifTrue: [k @env0:asSymbol] ifFalse: [nil]).
-			(i @env0:= 0 or: [i @env0:+ 10 @env0:<= n]) ifTrue: [
-				^ TypeError ___signal___: 'os.stat_result() got duplicate or unexpected field name(s)']]].
-	^ self @env0:___sequence___: items named: aDict
+	^ super __new__: sequence _: aDict
 
 ]
 

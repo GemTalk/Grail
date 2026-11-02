@@ -1,6 +1,6 @@
 Class {
 	#name : 'sys_version_info',
-	#superclass : 'tuple',
+	#superclass : 'PyStructSequence',
 	#category : 'Grail-Modules'
 }
 
@@ -15,5 +15,17 @@ sys_version_info class >> ___pythonValueAttrs___ [
 		"Inherited from tuple, which lists it -- see struct_time's copy."
 		add: #'__dict__';
 		yourself
+
+]
+
+{ #category : 'Grail-Fields' }
+sys_version_info class >> ___sequenceNames___ [
+	^ #(#'major' #'minor' #'micro' #'releaselevel' #'serial')
+
+]
+
+{ #category : 'Grail-Fields' }
+sys_version_info class >> ___typeName___ [
+	^ 'sys.version_info'
 
 ]

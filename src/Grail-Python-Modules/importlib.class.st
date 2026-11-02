@@ -5942,6 +5942,9 @@ importlib class >> ___isHiddenBase___: k of: aClass [
 	three are siblings under object, so type(coro).__mro__ is (coroutine,
 	object), and the base is no part of any of their Python ancestries."
 	k == (Python @env0:at: #PyGeneratorBase otherwise: nil) ifTrue: [^ true].
+	"And PyStructSequence, the machinery struct_time, stat_result and
+	version_info share: each of CPython's derives from tuple directly."
+	k == (Python @env0:at: #PyStructSequence otherwise: nil) ifTrue: [^ true].
 	ba := Python @env0:at: #bytearray otherwise: nil.
 	^ ba notNil
 		and: [k == ba superclass

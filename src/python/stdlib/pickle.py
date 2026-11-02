@@ -989,14 +989,6 @@ def _grail_type_reducers():
         reducers[collections.defaultdict] = _reduce_defaultdict
     except Exception:
         pass
-    try:
-        # CPython's structseq __reduce__: (type, (tuple(self), extras)).
-        # Grail's struct_time carries no fields beyond the nine, so there are
-        # no extras to add.
-        import time
-        reducers[time.struct_time] = lambda obj, proto: (type(obj), (tuple(obj),))
-    except Exception:
-        pass
     return reducers
 
 
