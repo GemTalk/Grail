@@ -111,6 +111,28 @@ LambdaAst >> ___coVarnames___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+LambdaAst >> ___emitIRGeneratorBodyOn___: aBuilder [
+	"A generator lambda's body, the text's wrap send for send:
+	``PythonGenerator @env1:___withBlock___: [:___gen___ | <body>]'' -- the
+	block's value (the body expression's) is what the generator returns, and
+	every ``yield'' in the body sends to the ``___gen___'' leaf
+	(PyMethodIRBuilder>>genLeaf), exactly as in a generator def's wrapper."
+
+	| genBlk |
+	genBlk := aBuilder blockWithArg: #'___gen___' do: [:gLeaf |
+		aBuilder genLeaf: gLeaf.
+		[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
+			ensure: [aBuilder genLeaf: nil]].
+	aBuilder atNode: self.
+	^ aBuilder
+		send: #'___withBlock___:'
+		to: (aBuilder globalNamed: #PythonGenerator)
+		with: { genBlk }
+		env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 LambdaAst >> ___emitIRLambdaBlockOn___: aBuilder [
 	"The ``[:___positional___ :___kwargs___ | | params | prologue. body]''
 	block with its stamps cascaded on.  Parameters are block temps bound into
@@ -159,7 +181,13 @@ LambdaAst >> ___emitIRLambdaBlockOn___: aBuilder [
 					aBuilder genLeaf: nil.
 					"Inside this lambda's scope frame, as the text path emits it."
 					savedDepth := CallAst ___pushScope___: self kind: #function name: '<lambda>'.
-					[aBuilder add: (body ___emitIRValueOn___: aBuilder)]
+					"A walrus target's read carries the text's unbound guard --
+					``lambda: x + (x := 1)'' raises UnboundLocalError -- scoped to
+					this block, as a nested def guards its own body locals."
+					[aBuilder withGuardedLocals: (self ___irWalrusLocalNames___ collect: [:n | n asSymbol]) do: [
+						(self ___irBodyHasYield___: body)
+							ifTrue: [aBuilder add: (self ___emitIRGeneratorBodyOn___: aBuilder)]
+							ifFalse: [aBuilder add: (body ___emitIRValueOn___: aBuilder)]]]
 						ensure: [
 							CallAst ___restoreScopeDepth___: savedDepth.
 							aBuilder genLeaf: savedGen]]]].
@@ -369,6 +397,25 @@ LambdaAst >> ___inferredTypeName___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+LambdaAst >> ___irBodyHasYield___: node [
+	"Does this lambda's own body hold a ``yield'' / ``yield from'' -- the
+	generator-lambda shape -- nested lambdas excluded?"
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irBodyHasYield___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: YieldAst) or: [node isKindOf: YieldFromAst]) ifTrue: [^ true].
+	((node isKindOf: LambdaAst) and: [node ~~ self]) ifTrue: [^ false].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irBodyHasYield___: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 LambdaAst >> ___irBodyHasYieldOrAwait___: node [
 	node isNil ifTrue: [^ false].
 	node isString ifTrue: [^ false].
@@ -442,14 +489,17 @@ LambdaAst >> ___irLambdaReasonUnguarded___: localNames [
 	(evaluated at the lambda's position, in the enclosing scope), *args and
 	**kwargs, a body that is an emittable value against the enclosing locals
 	plus the parameters, and (cut 75) a parameter spelled like a Smalltalk
-	pseudo-variable, declared under the text's transport identifier.  Refused:
-	a walrus in the body (its target is a block temp the text declares -- and
-	NamedExprAst is refused as a value anyway), a yield / await in the body (a
-	generator lambda), and two parameters whose transport identifiers collide."
+	pseudo-variable, declared under the text's transport identifier; and (P1.2)
+	a walrus in the body, whose target is a block temp as the text declares
+	it, and a generator lambda, wrapped as the text wraps it.  Refused: an
+	``await'' in the body, and two parameters whose transport identifiers
+	collide (``self'' and ``___self___'' -- the text fails to compile that
+	shape too, so there is no oracle to agree with)."
 
 	| own nestedLocals seed |
 	args isNil ifTrue: [^ #'LambdaAst:noArgs'].
-	(writes isNil or: [writes isEmpty]) ifFalse: [^ #'LambdaAst:walrus'].
+	"A WALRUS no longer refuses: its target is one of ___irOwnNames___, a block
+	temp of the lambda as in the text (LambdaAst:walrus is retired)."
 	own := self ___irOwnNames___.
 	"A parameter spelled like a Smalltalk pseudo-variable no longer refuses
 	(cut 75): the block temp is DECLARED under the text's transport identifier
@@ -459,7 +509,13 @@ LambdaAst >> ___irLambdaReasonUnguarded___: localNames [
 	whose transport identifiers collide (``self'' and ``_self'' in one
 	lambda)."
 	(self ___irLeafNamesCollide___: own) ifTrue: [^ #'LambdaAst:leafNameCollision'].
-	(self ___irBodyHasYieldOrAwait___: body) ifTrue: [^ #'LambdaAst:yield'].
+	"A GENERATOR lambda -- ``lambda: (yield 1)'', test_generators'
+	test_lambda_generator -- no longer refuses: the body is wrapped as the
+	text wraps it, ``PythonGenerator ___withBlock___: [:___gen___ | body]''
+	(___emitIRLambdaBlockOn___:).  An ``await'' in a lambda is a SyntaxError
+	the parser raises first; refused rather than wrapped if one ever arrives."
+	((self ___irBodyHasYieldOrAwait___: body)
+		and: [(self ___irBodyHasYield___: body) not]) ifTrue: [^ #'LambdaAst:yield'].
 	(args defaults ifNil: [#()]) do: [:d |
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'LambdaAst:defaultExpr']].
 	(args kw_defaults ifNil: [#()]) do: [:d |
@@ -525,6 +581,12 @@ LambdaAst >> ___irOwnNames___ [
 	(args kwonlyargs ifNil: [#()]) do: [:a | out add: a name asString].
 	args vararg ifNotNil: [:v | out add: v name asString].
 	args kwarg ifNotNil: [:k | out add: k name asString].
+	"...then every WALRUS target that is not already a parameter, the text's
+	``bodyLocals'' (printSmalltalkOn:): PEP 572 binds ``lambda: (x := 1)'' in
+	the lambda's own scope, so it is a block temp beside the parameters,
+	declared under its transport identifier and registered in the local table
+	for the body's duration -- which is all NamedExprAst's #local store needs."
+	self ___irWalrusLocalNames___ do: [:n | (out includes: n) ifFalse: [out add: n]].
 	^ out
 
 ]
@@ -549,6 +611,23 @@ LambdaAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 { #category : 'Grail-IR Codegen' }
 LambdaAst >> ___irRefusalDetail___: localSet [
 	^ (self ___irLambdaReason___: localSet) ifNil: [#'LambdaAst:other']
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+LambdaAst >> ___irWalrusLocalNames___ [
+	"The names a walrus in the body binds in this lambda's scope (``writes''),
+	as Strings, parameters excluded -- a walrus that rebinds a parameter writes
+	the parameter's own temp, as the text's declaration skips it."
+
+	| params |
+	params := OrderedCollection new.
+	((args posonlyargs ifNil: [#()]) , (args args ifNil: [#()])
+		, (args kwonlyargs ifNil: [#()])) do: [:a | params add: a name asString].
+	args vararg ifNotNil: [:v | params add: v name asString].
+	args kwarg ifNotNil: [:k | params add: k name asString].
+	^ ((writes ifNil: [#()]) collect: [:w | w asString])
+		reject: [:w | params includes: w]
 
 ]
 

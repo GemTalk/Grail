@@ -5693,11 +5693,28 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 			VALUE, not an error, which is the worst way for this to fail.
 
 			nil in that case, so nothing in the body maps to the receiver --
-			which is also what CPython has, the def having taken no self."
+			which is also what CPython has, the def having taken no self.
+
+			...and nil too when the carried-over name belongs to an ENCLOSING
+			FUNCTION beyond this class -- a method-local class whose def takes no
+			positional and reads the enclosing method's ``self'':
+
+			    def test_copy_reduce_ex(self):
+			        class C(object):
+			            def __reduce__(*args):
+			                self.fail(...)      # the TEST's self
+
+			CPython reads that ``self'' from the closure; mapping it to the
+			receiver answered the C instance instead (test_copy's four
+			__reduce__ / __reduce_ex__ hooks).  With the name unmapped the read
+			goes through the class cell, as a @staticmethod's captured ``self''
+			already does, and the IR path builds the def (it refused it as
+			method:noSelfNamesReceiver for want of exactly this answer)."
 			CallAst selfParameterName: (def allParameterNames isEmpty
 				ifTrue: [
 					(savedSelfForIM notNil
-						and: [def ___bindsOwnParameterNamed___: savedSelfForIM])
+						and: [(def ___bindsOwnParameterNamed___: savedSelfForIM)
+							or: [def ___enclosingFunctionLocalBeyondClass___: savedSelfForIM]])
 							ifTrue: [nil]
 							ifFalse: [savedSelfForIM]]
 				ifFalse: [def allParameterNames first asSymbol]).

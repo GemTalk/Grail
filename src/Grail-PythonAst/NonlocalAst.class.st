@@ -58,16 +58,22 @@ NonlocalAst >> ___irEligibleStatementLocals___: localNames [
 	empty_class_cell / empty_cell_again / bare_read_after_del, three
 	NO-RAISEs where CPython raises.
 
-	A ``del'' of a declared name is refused for the enclosing side of the same
-	problem: the delete UNBINDS the enclosing binding, and the enclosing
-	method's own flow proof has no way to record that -- cut 64's
+	A ``del'' of a declared name USED TO BE refused for the enclosing side of
+	the same problem: the delete UNBINDS the enclosing binding, and the
+	enclosing method's own flow proof has no way to record that -- cut 64's
 	___irWriteLocalNamesInto___:locals: reports the nested body's writes as
-	BINDINGS, which is the opposite -- so a later read in the enclosing body is
-	emitted bare and answers nil where CPython raises UnboundLocalError
+	BINDINGS, which is the opposite -- so a later read in the enclosing body
+	would be emitted bare and answer nil where CPython raises UnboundLocalError
 	(UnboundLocalErrorTestCase>>test_nested_nonlocal_del_keeps_guard_and_raises,
-	tests/python/unbound_local_guard.py's ``nested_nonlocal_del'')."
+	tests/python/unbound_local_guard.py's ``nested_nonlocal_del'').  It is
+	admitted now (P1.2, NonlocalAst:del retired) because the enclosing build
+	records the unbind the one way that cannot be wrong: every enclosing local
+	a nested ``del'' can reach keeps the unbound guard whatever the flow proof
+	says (FunctionDefAst>>___irNestedDeletedLocalNames___, unioned into the
+	guarded set by ___irMethodBodyCoreOn___:install:; a closure enclosing the
+	def already guards all of its own locals)."
 
-	| declared owner deleted |
+	| declared |
 	declared := names ifNil: [#()].
 	"A CLASS-CELL declaration is emittable without the name being a local: inside
 	a method of a method-local class, ``nonlocal x'' names an enclosing
@@ -82,14 +88,7 @@ NonlocalAst >> ___irEligibleStatementLocals___: localNames [
 		ifFalse: [^ false].
 	(declared allSatisfy: [:n | self ___enclosingFunctionLocalBeyondClass___: n])
 		ifTrue: [^ true].
-	owner := self ___irNonlocalOwnerDef___.
-	owner isNil ifTrue: [^ false].
-	deleted := owner deletedNamesInSubtree.
-	"``__class__'' is exempt: its delete is not an unbind of an enclosing temp
-	but a CLEAR of the class's shared cell, which DeleteAst now emits.  The
-	enclosing def's flow proof has nothing to record for it."
-	^ (declared anySatisfy: [:n |
-		n asString ~= '__class__' and: [deleted includes: n asSymbol]]) not
+	^ self ___irNonlocalOwnerDef___ notNil
 
 ]
 
@@ -111,7 +110,7 @@ NonlocalAst >> ___irNonlocalOwnerDef___ [
 
 { #category : 'Grail-IR Codegen' }
 NonlocalAst >> ___irRefusalDetail___: localSet [
-	"Census: which of the three exits above refused this declaration."
+	"Census: which of the two exits above refused this declaration."
 
 	| declared owner |
 	declared := names ifNil: [#()].
@@ -127,8 +126,6 @@ NonlocalAst >> ___irRefusalDetail___: localSet [
 		ifFalse: [^ #'NonlocalAst:notLocal'].
 	owner := self ___irNonlocalOwnerDef___.
 	owner isNil ifTrue: [^ #'NonlocalAst:noOwner'].
-	(declared anySatisfy: [:n | owner deletedNamesInSubtree includes: n asSymbol])
-		ifTrue: [^ #'NonlocalAst:del'].
 	^ #'NonlocalAst:other'
 
 ]
