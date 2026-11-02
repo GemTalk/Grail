@@ -5286,6 +5286,8 @@ Object class >> ___moduleAttrIdentityTable___ [
 		re-exports it from json, so its __module__ is 'json.decoder' even though
 		``json.JSONDecodeError'' is how most code names it."
 		t @env0:at: #'JSONDecodeError' put: #('JSONDecodeError' 'json.decoder').
+		"io.UnsupportedOperation: _iomodule.c sets its __module__ to io."
+		t @env0:at: #'UnsupportedOperation' put: #('UnsupportedOperation' 'io').
 		"JSONEncoder likewise lives in json.encoder upstream.  json>>initialize
 		builds it with PythonInstance ___subclass___:, so nothing else gives it a
 		module, and it answered AttributeError."

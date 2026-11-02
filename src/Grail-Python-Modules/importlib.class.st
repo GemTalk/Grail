@@ -6062,6 +6062,18 @@ importlib class >> ___isTrackedModule___: aName [
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___kernelMultipleBases___ [
+	"The classes Grail defines in Smalltalk whose CPython counterparts have more
+	than one base, each with all of them.  A Smalltalk class has the first as its
+	superclass; the others are registered as a class statement would register
+	them.  io.UnsupportedOperation is (OSError, ValueError), as
+	Modules/_io/_iomodule.c:659 builds it."
+
+	^ { UnsupportedOperation -> { OSError. ValueError } }
+
+]
+
 { #category : 'Grail-Configuration' }
 importlib class >> ___lastPathComponentOf___: aPath [
 	"'/a/b/Grail-1' -> 'Grail-1'.  Trailing slashes are ignored so
@@ -7058,13 +7070,17 @@ importlib class >> ___miRegistry___ [
 	dirtied the committed importlib class at every MI class definition
 	(multi-user commit conflicts).  A class DELIBERATELY committed by
 	an application loses its MRO metadata in later sessions -- such
-	sharing belongs in an application-managed RC* collection.  "
+	sharing belongs in an application-managed RC* collection.
+
+	It starts out holding the kernel's own multiple-inheritance classes, which
+	no class statement builds (___kernelMultipleBases___)."
 
 	| reg |
 	reg := SessionTemps current at: #GrailMiRegistry otherwise: nil.
 	reg ifNil: [
 		reg := IdentityKeyValueDictionary new.
-		SessionTemps current at: #GrailMiRegistry put: reg].
+		SessionTemps current at: #GrailMiRegistry put: reg.
+		self ___registerKernelBasesIn___: reg].
 	^ reg
 
 ]
@@ -8410,6 +8426,30 @@ importlib class >> ___registeredSubclassesOf___: aBase [
 
 	^ (self ___subclassRegistry___ at: aBase otherwise: nil)
 		ifNil: [#()]
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___registerKernelBasesIn___: aRegistry [
+	"Enter each of the kernel's multiple-inheritance classes in aRegistry, the
+	session's ___miRegistry___, as ___registerBases___:... enters a class a class
+	statement builds: its bases and its C3 linearization."
+
+	self ___kernelMultipleBases___ do: [:each |
+		aRegistry
+			at: each key
+			put: { Array withAll: each value. self ___c3Linearize___: each key bases: each value }]
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___registerKernelExceptionBases___ [
+	"Tell BaseException which bases of the kernel's multiple-inheritance
+	exception classes are off their Smalltalk chain, so ``except'' catches them
+	there too.  Committed state, so it is done once, by the install."
+
+	self ___kernelMultipleBases___ do: [:each |
+		self ___registerMiExceptionBases___: each key mro: (self ___mroOf___: each key)]
 
 ]
 
