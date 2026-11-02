@@ -53,10 +53,19 @@ CalendarTestCase >> testMonthrange [
 
 { #category : 'Grail-Tests - calendar' }
 CalendarTestCase >> testMonthrangeBadMonthRaises [
+	"CPython's IllegalMonthError is a ValueError and an IndexError, so Python's
+	``except ValueError'' catches it.  Asked in Python: a Smalltalk handler
+	sees only the class's storage base, which is the IndexError side."
+
 	self
-		should: [self eval: 'import calendar
-calendar.monthrange(2026, 13)']
-		raise: ValueError
+		assert: (self eval: 'import calendar
+def bad_month():
+    try:
+        calendar.monthrange(2026, 13)
+    except ValueError as e:
+        return type(e).__name__
+bad_month()')
+		equals: 'IllegalMonthError'
 
 ]
 
