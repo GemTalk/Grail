@@ -557,9 +557,10 @@ os_path >> lexists: path [
 { #category : 'Grail-Path Manipulation' }
 os_path >> normcase: aPath [
 	"POSIX normcase is the identity (case is significant) — but it still has
-	to answer a STRING for a PathLike argument, as CPython's does."
+	to answer a STRING for a PathLike argument, as CPython's does, and refuse
+	anything that is no path, which it does through os.fspath."
 
-	^ (os instance) ___fsPath___: aPath
+	^ (os instance) fspath: aPath
 
 ]
 
