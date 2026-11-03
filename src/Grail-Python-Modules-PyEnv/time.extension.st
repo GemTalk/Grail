@@ -287,7 +287,9 @@ time >> ___structTimeLocalFromDateTime___: dt [
 	isdst := ((tz @env0:secondsForDst @env0:~= 0)
 		@env0:and: [offset @env0:= (tz @env0:secondsFromGmt @env0:+ tz @env0:secondsForDst)])
 			ifTrue: [1] ifFalse: [0].
-	^ self
+	"tm_zone is the zone's name for the half of the year this instant is in,
+	tzname[tm_isdst], and tm_gmtoff the offset just measured."
+	^ (self
 		___structTimeYear___: dt @env0:year
 		_month: dt @env0:month
 		_day: dt @env0:dayOfMonth
@@ -296,15 +298,20 @@ time >> ___structTimeLocalFromDateTime___: dt [
 		_second: dt @env0:second
 		_dayOfWeek: dt @env0:dayOfWeek
 		_dayOfYear: dt @env0:dayOfYear
-		_isdst: isdst
+		_isdst: isdst)
+			___zone___: ((self @env0:dynamicInstVarAt: #tzname) @env0:at: isdst @env0:+ 1)
+			offset: offset
 
 ]
 
 { #category : 'Grail-Private' }
 time >> ___structTimeUtcFromDateTime___: dt [
-	"UTC struct_time tuple — uses DateTime's *Gmt accessors."
+	"UTC struct_time tuple — uses DateTime's *Gmt accessors.  What the C
+	library's gmtime answers: not daylight time, zone UTC, offset 0
+	(Modules/timemodule.c time_gmtime, through tmtotuple).  It said
+	tm_isdst -1, ``unknown'', which no gmtime reports."
 
-	^ self
+	^ (self
 		___structTimeYear___: dt @env0:yearGmt
 		_month: dt @env0:monthGmt
 		_day: dt @env0:dayOfMonthGmt
@@ -313,6 +320,9 @@ time >> ___structTimeUtcFromDateTime___: dt [
 		_second: dt @env0:secondGmt
 		_dayOfWeek: dt @env0:dayOfWeekGmt
 		_dayOfYear: dt @env0:dayOfYearGmt
+		_isdst: 0)
+			___zone___: 'UTC'
+			offset: 0
 
 ]
 
@@ -771,7 +781,9 @@ time >> localtime: epochSeconds [
 	instant rather than asking the session zone to convert."
 	secs := epochSeconds @env0:truncated @env0:+ (entry @env0:at: 1).
 	dt := epoch @env0:addSeconds: secs.
-	^ self
+	"The entry names the zone and its offset at this instant, which are
+	tm_zone and tm_gmtoff."
+	^ (self
 		___structTimeYear___: dt @env0:yearGmt
 		_month: dt @env0:monthGmt
 		_day: dt @env0:dayOfMonthGmt
@@ -780,7 +792,9 @@ time >> localtime: epochSeconds [
 		_second: dt @env0:secondGmt
 		_dayOfWeek: dt @env0:dayOfWeekGmt
 		_dayOfYear: dt @env0:dayOfYearGmt
-		_isdst: ((entry @env0:at: 2) @env0:= 0 ifTrue: [0] ifFalse: [1])
+		_isdst: ((entry @env0:at: 2) @env0:= 0 ifTrue: [0] ifFalse: [1]))
+			___zone___: (entry @env0:at: 3)
+			offset: (entry @env0:at: 1)
 
 ]
 

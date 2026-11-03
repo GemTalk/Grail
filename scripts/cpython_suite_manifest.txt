@@ -913,6 +913,18 @@ test.test_utf8source
 #   configparser   341t OK (5 skipped)
 test.test_configparser
 
+# --- Core types (added 2026-11-02): struct sequences ---
+#
+# test_structseq is CPython 3.14.4's (identical in 3.14.8), vendored
+# verbatim.  It needs time.struct_time and os.stat_result to be CPython's
+# struct sequences -- PyStructSequence -- and gmtime to fill tm_isdst,
+# tm_zone and tm_gmtoff as the C library does.  What is left: gc.is_tracked
+# (Grail has no cycle collector to ask), os.times (which Grail lacks), and a
+# subprocess test.  Measured on Darwin arm64:
+#
+#   structseq   25t  1 fail  1 error  1 skip
+test.test_structseq
+
 # --- Standard library (added 2026-11-02): calendar ---
 #
 # test_calendar is CPython 3.14.4's, vendored verbatim.  calendar.py is now

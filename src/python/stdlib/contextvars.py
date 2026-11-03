@@ -80,6 +80,15 @@ class Token:
         used = ' used' if self._used else ''
         return '<Token%s var=%r at %#x>' % (used, self._var, id(self))
 
+    # A token is its own context manager since 3.14: leaving the block resets
+    # the variable, so ``with var.set(x):`` scopes the value to the block
+    # (Python/context.c:1300-1333, token_enter and token_exit).
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, val, tb, /):
+        self._var.reset(self)
+
 
 class Context:
     """A mapping of ContextVar -> value, and a scope you can run code in.
