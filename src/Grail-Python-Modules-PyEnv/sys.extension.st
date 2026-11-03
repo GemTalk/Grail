@@ -959,6 +959,12 @@ sys >> _set_asyncgen_hooks: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-Accessors' }
+sys >> abiflags [
+	^ self ___dataGlobalAt___: #abiflags
+
+]
+
 { #category : 'Grail-Built-in Functions' }
 sys >> addaudithook [
 	"addaudithook(hook) - stub, auditing not implemented.  Kept UNARY so that
@@ -1532,6 +1538,10 @@ sys >> initialize_platform_info [
 	self @env0:at: #maxunicode put: 16r10FFFF.
 	self @env0:at: #platlibdir put: 'lib'.
 	self @env0:at: #float_repr_style put: 'short'.
+	"The ABI tag a POSIX CPython carries in its extension module names
+	(Python/sysmodule.c:3897): empty for a release build with the GIL and no
+	debug, which is the build sys.flags and sys._is_gil_enabled describe."
+	self @env0:at: #abiflags put: ''.
 
 ]
 
@@ -1633,11 +1643,11 @@ sys >> initialize_runtime_info [
 		'wsgiref'. 'xml'. 'xmlrpc'. 'zipapp'. 'zipfile'. 'zipimport'. 'zlib'.
 		'zoneinfo' }).
 	self @env0:at: #copyright put: 'Copyright (c) GemTalk Systems LLC. All rights reserved.'.
-	self @env0:at: #flags put: (sys_flags instance).
-	self @env0:at: #float_info put: (sys_float_info instance).
+	self @env0:at: #flags put: PySysFlags @env0:___sysInstance___.
+	self @env0:at: #float_info put: PySysFloatInfo @env0:___sysInstance___.
 	self @env0:at: #_jit put: (sys__jit instance).
-	self @env0:at: #int_info put: (sys_int_info instance).
-	self @env0:at: #hash_info put: (sys_hash_info instance).
+	self @env0:at: #int_info put: PySysIntInfo @env0:___sysInstance___.
+	self @env0:at: #hash_info put: PySysHashInfo @env0:___sysInstance___.
 	self @env0:at: #thread_info put: None.
 	self @env0:at: #warnoptions put: (list ___new___).
 	self @env0:at: #tracebacklimit put: 1000.
