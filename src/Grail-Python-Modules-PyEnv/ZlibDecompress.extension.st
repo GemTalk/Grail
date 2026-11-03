@@ -64,15 +64,14 @@ ZlibDecompress class >> wbits: wbits dictionary: aDictionary [
 
 { #category : 'Grail-Decompression' }
 ZlibDecompress >> _decompress: positional kw: kwargs [
-	| data maxLength |
-	data := positional @env0:at: 1.
-	maxLength := positional @env0:size @env0:>= 2
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [
-			kwargs == nil
-				ifTrue: [0]
-				ifFalse: [kwargs @env0:at: 'max_length' ifAbsent: [0]]].
-	^ self decompress: data _: maxLength
+	"decompress(data, /, max_length=0), bound as Argument Clinic binds it:
+	``decompress(data=...)'' read past the end of the positionals, an
+	OffsetError no Python code could catch (test_zlib test_keywords)."
+
+	| arguments |
+	arguments := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('data' 'max_length') positionalOnly: 1 required: 1 for: 'decompress'.
+	^ self decompress: (arguments @env0:at: 1) _: ((arguments @env0:at: 2) @env0:ifNil: [0])
 
 ]
 
@@ -92,11 +91,14 @@ ZlibDecompress >> _finish [
 { #category : 'Grail-Decompression' }
 ZlibDecompress >> _flush: positional kw: kwargs [
 
-	"flush(length=DEF_BUF_SIZE), by position or keyword.  It ignored its
-	arguments, so ``flush(0)'' -- CPython's ValueError -- was accepted."
+	"flush(length=DEF_BUF_SIZE, /), bound as Argument Clinic binds it: the
+	length is positional only, so ``flush(length=5)'' is refused.  It ignored
+	its arguments, so ``flush(0)'' -- CPython's ValueError -- was accepted."
 
-	^ self flush: (zlib @env0:___instance___
-		_argumentAt: 1 named: 'length' from: positional kw: kwargs ifAbsent: 16384)
+	| length |
+	length := (TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('length') positionalOnly: 1 required: 0 for: 'flush') @env0:at: 1.
+	^ self flush: (length @env0:ifNil: [16384])
 
 ]
 
@@ -233,8 +235,14 @@ ZlibDecompress >> _run: inBytes flushMode: flushMode maxLength: maxLength [
 										"Z_BUF_ERROR (-5) just means no progress was possible -
 										more input is needed.  Everything else is fatal, and so
 										is Z_NEED_DICT with no dictionary to give."
+										"Z_BUF_ERROR ends the loop only while the buffer has
+										room: under Z_FINISH it also means the output did not
+										fit, and CPython goes round again for as long as
+										avail_out is 0 (Modules/zlibmodule.c:1307-1326).
+										Stopping there made flush() answer one buffer's worth
+										(test_zlib test_flush_custom_length)."
 										rc @env0:= -5
-											ifTrue: [done := true]
+											ifTrue: [availOut @env0:> 0 ifTrue: [done := true]]
 											ifFalse: [
 												ZlibError ___signal___: (ZlibDecompress
 													___errorMessage___: rc
