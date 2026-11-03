@@ -51,6 +51,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/fork_wait.py`, `lock_tests.py` | `Lib/test/` | Verbatim from 3.14.4 (sibling helpers of test modules) |
 | `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
+| `src/python/stdlib/calendar.py` | `Lib/calendar.py` | Verbatim from 3.14.4. Replaces Grail's earlier subset, which had no Calendar, TextCalendar, HTMLCalendar, firstweekday or main |
 | `src/python/stdlib/locale.py` | `Lib/locale.py` | Verbatim from 3.14.4. Replaces Grail's earlier 77-line stub; with no `_locale` module it takes its own emulation of the C locale |
 | `src/python/stdlib/cmd.py`, `sched.py`, `fileinput.py`, `filecmp.py`, `rlcompleter.py`, `shelve.py`, `timeit.py`, `nturl2path.py`, `plistlib.py`, `urllib/robotparser.py`, `unittest/util.py` | `Lib/` | Verbatim from 3.14.4 |
 | `src/python/stdlib/gzip.py`, `compression/` (`__init__.py`, `_common/`, `gzip.py`, `zlib.py`) | `Lib/gzip.py`, `Lib/compression/` | Verbatim from 3.14.4. Replaces Grail's earlier gzip stand-in. `_grail_zlib.py` beside them is ORIGINAL Grail code (zlib's `_ZlibDecompressor`, written in Python after `Modules/zlibmodule.c`'s behaviour), not derived source |
