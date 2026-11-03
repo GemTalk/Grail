@@ -39,7 +39,10 @@ PyTime class >> ___buildTime___: positional kw: kwargs for: cls [
 		^ cls ___fromTimeState___: h tz: stateTz].
 	"CPython rejects a non-integer field with TypeError before any range
 	check (test_backdoor_resistance's leftover bad strings land here)."
-	PyDate ___requireIntegers___: { h. mi. s. us }.
+	h := PyDate ___integerFieldOf___: h.
+	mi := PyDate ___integerFieldOf___: mi.
+	s := PyDate ___integerFieldOf___: s.
+	us := PyDate ___integerFieldOf___: us.
 	tz == None ifTrue: [tz := nil].
 	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
 		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].

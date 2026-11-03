@@ -900,6 +900,19 @@ test.test_flufl
 test.test_unicode_identifiers
 test.test_utf8source
 
+# --- Standard library (added 2026-11-02): configparser ---
+#
+# test_configparser is CPython 3.14.4's, vendored verbatim with the
+# test/configdata files it reads.  configparser.py is now CPython's too --
+# 3.14.8's, whose write() folds \r\n and \r, which Grail already did:
+# Grail's was a 334-line subset with no interpolation classes (only basic
+# %(name)s, and no ExtendedInterpolation), no read_dict or converters, the
+# allow_no_value / delimiters / comment_prefixes options fixed, and no
+# _default_dict, which the test module imports.  Measured on Darwin arm64:
+#
+#   configparser   341t OK (5 skipped)
+test.test_configparser
+
 # --- Core types (added 2026-11-02): struct sequences ---
 #
 # test_structseq is CPython 3.14.4's (identical in 3.14.8), vendored
