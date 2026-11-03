@@ -3052,12 +3052,13 @@ CharacterCollection >> encode: encoding _: errors [
 	see ___unencodable___:errors:message: for the policies.  UTF-8 is a real
 	multi-byte encoder (GemStone encodeAsUTF8); UTF-16 (BOM/LE/BE) is
 	supported; ascii and latin-1 / idna are single-byte."
-	| enc size result info |
+	| name policy enc size result info |
 	"Both must be str, checked first as Clinic checks them: a non-str
 	encoding reached asLowercase as an uncatchable MessageNotUnderstood
 	(test_str test_codecs_errors), and a non-str errors was accepted."
-	TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'encode'.
-	TypeError @env0:___requireStr___: errors argument: 'errors' of: 'encode'.
+	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'encode'.
+	policy := TypeError @env0:___requireStr___: errors argument: 'errors' of: 'encode'.
+	(name == encoding and: [policy == errors]) ifFalse: [^ self encode: name _: policy].
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
 

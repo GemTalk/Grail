@@ -179,13 +179,19 @@ TypeError class >> ___refuseUnboundKeywordsIn___: keywords given: aPositionalCou
 
 { #category : 'Grail-Arity Checks' }
 TypeError class >> ___requireStr___: anObject argument: aName of: aFunctionName [
-	"A built-in's str parameter refused as Argument Clinic refuses it,
-	``encode() argument 'encoding' must be str, not int''
-	(_PyArg_BadArgument, Python/getargs.c)."
+	"A built-in's str parameter, converted as Argument Clinic converts one to a
+	C string, answering the plain str to go on with.  Anything but a str is
+	``encode() argument 'encoding' must be str, not int'' (_PyArg_BadArgument,
+	Python/getargs.c).  A str subclass or a StrEnum member is a str, and
+	answers its value; a str holding lone surrogates raises what its UTF-8
+	encoding raises (PyUnicode_AsUTF8AndSize).  Both used to be refused as no
+	str, which read ``must be str, not str''."
 
-	(anObject isKindOf: CharacterCollection) ifFalse: [
-		^ self @env1:___signal___: aFunctionName , '() argument ''' , aName , ''' must be str, not '
-			, ((Python at: #bytes) @env1:___pyTypeNameOf___: anObject) asString]
+	(anObject isKindOf: CharacterCollection) ifTrue: [^ anObject].
+	(anObject isKindOf: PyStrSurrogate) ifTrue: [^ anObject @env1:encode: 'utf-8'].
+	(anObject isKindOf: AbstractPyStr) ifTrue: [^ anObject dynamicInstVarAt: #value].
+	^ self @env1:___signal___: aFunctionName , '() argument ''' , aName , ''' must be str, not '
+		, ((Python at: #bytes) @env1:___pyTypeNameOf___: anObject) asString
 
 ]
 
