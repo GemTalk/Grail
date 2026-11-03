@@ -8106,10 +8106,12 @@ builtins >> type: anObject [
 
 { #category : 'Grail-Built-in Functions' }
 builtins >> type: className _: bases _: namespace [
-	"The ordinary three-argument type(), which is the same build with no class
-	keywords -- see the kw: variant for everything it does."
+	"The ordinary three-argument type(), which a literal ``type(name, bases,
+	ns)'' compiles to.  It is type's call, not the build: type class >>
+	_new:kw: passes it to a more derived metaclass of the bases first, and
+	builds with the kw: variant below otherwise."
 
-	^ self type: className _: bases _: namespace kw: nil
+	^ type _new: { className. bases. namespace } kw: nil
 
 ]
 
