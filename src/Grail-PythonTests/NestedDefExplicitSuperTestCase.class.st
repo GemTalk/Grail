@@ -171,11 +171,12 @@ NestedDefExplicitSuperTestCase >> testTheExplicitSpellingsAreNowEligible [
 	``def inner(): super()'' inside a method declares no positional parameter,
 	so CPython's answer is precondition 1 -- ``super(): no arguments'' -- and
 	that is a COMPILE-TIME fact the emit now spells, so there is nothing left
-	to refuse.  The fixture's OTHER bare-super def is at module scope and still
-	refuses, as `CallAst:super-noClass': it has no enclosing class, which is a
-	different arm and a different row.  Both messages are pinned by
-	testTheBareSpellingsStillRaise, which is what makes this a count rather
-	than the whole assertion.
+	to refuse.  The fixture's OTHER bare-super def is at module scope and used
+	to refuse, as `CallAst:super-noClass': it has no enclosing class, which is
+	a different arm.  That row is gone too since the P1.2 call/super cut,
+	which emits the text's no-class precondition arms, so the def COMPILES.
+	Both messages are pinned by testTheBareSpellingsStillRaise, which is what
+	makes this a count rather than the whole assertion.
 
 	Guarded on SUPPORT, not on the ambient flag: ___censusCountsForFixture___
 	forces the seam on itself, and ``___irCodegenEnabled___ ifFalse: [^ self]''
@@ -190,11 +191,11 @@ NestedDefExplicitSuperTestCase >> testTheExplicitSpellingsAreNowEligible [
 		description: 'a nested def still refuses as nestedDef:super, where the '
 			, 'precondition emits should have admitted it: ' , refused printString
 			, ' of ' , counts printString.
-	"...and the module-scope bare super still refuses, on its own row.  Asserted
-	because it is the half that must NOT have moved: it has no enclosing class,
-	so there is no receiver to take and no precondition-1 answer either."
-	self assert: (counts at: #'CallAst:super-noClass' ifAbsent: [0]) = 1
-		description: 'the module-scope bare super changed row: ' , counts printString
+	"...and the module-scope bare super no longer refuses either: it has no
+	enclosing class, and the emit now spells that arm (``arg[0] deleted'' /
+	``__class__ cell not found'') rather than refusing it."
+	self assert: (counts at: #'CallAst:super-noClass' ifAbsent: [0]) = 0
+		description: 'the module-scope bare super refuses again: ' , counts printString
 
 ]
 
