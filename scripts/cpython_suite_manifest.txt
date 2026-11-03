@@ -936,3 +936,14 @@ test.test_structseq
 #
 #   calendar   78t OK (17 skipped)
 test.test_calendar
+
+# --- Standard library (added 2026-11-02): contextvars ---
+#
+# test_context is CPython 3.14.4's, vendored verbatim.  contextvars is
+# Grail's own Python implementation of Python/context.c; it now reprs its
+# three types, compares and refuses arguments, keys and resets as the C
+# module does, and its types are final.  What is skipped is the HAMT tests,
+# which need _testinternalcapi.  Measured on Darwin arm64:
+#
+#   context   56t OK (23 skipped)
+test.test_context
