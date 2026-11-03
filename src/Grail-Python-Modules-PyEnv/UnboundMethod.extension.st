@@ -1311,6 +1311,24 @@ UnboundMethod >> ___recordHome___: aClass ofRecompile: aMethod [
 ]
 
 { #category : 'Grail-Calling' }
+UnboundMethod >> ___refusesForeignInstance___: anObject [
+	"Does this method of a BUILT-IN type refuse anObject as its self, as
+	CPython's descriptor checks refuse it (Objects/descrobject.c:80-90,
+	descr_check; :556-562, wrapperdescr_call)?  Asked only for an instance of
+	a Python class that does not derive from the type: that case ran the
+	type's own method on an object it knew nothing about, which died inside it
+	on a MessageNotUnderstood no Python code could catch -- ``list.sort(thing)''
+	(test_descr test_specialized_method_calls_check_types, test_proxy_call).
+	A special receiver has its own path below, and an instance of a subclass
+	of the type is one of its own."
+
+	^ (anObject @env0:isKindOf: PythonInstance)
+		and: [(anObject @env0:isKindOf: definingClass) @env0:not
+		and: [self @env0:___isBuiltinTypeMethod___]]
+
+]
+
+{ #category : 'Grail-Calling' }
 UnboundMethod >> ___run: aBlock withDefaultOwner: aClass [
 	"Run aBlock -- a class-body method performed on a receiver that is NOT an
 	instance of its class -- with aClass as the place its parameter defaults
@@ -1344,17 +1362,23 @@ UnboundMethod >> ___run: aBlock withDefaultOwner: aClass [
 
 { #category : 'Grail-Calling' }
 UnboundMethod >> ___signalDescriptorMismatch___: obj [
-	"CPython's ``descriptor 'x' for 'C' objects doesn't apply to a 'y' object''.
+	"CPython's ``descriptor 'x' for 'C' objects doesn't apply to a 'y' object''
+	(Objects/descrobject.c, descr_check), or for a slot wrapper ``descriptor
+	'__add__' requires a 'int' object but received a 'y''' (wrapperdescr_call).
 
 	Its own method so that value:value: -- whose frame width decides how deep a
 	recursion through an unbound call can go -- carries neither the string
 	building nor a temp to hold the decision that reaches it."
 
-	^ TypeError ___signal___:
-		('descriptor ''' @env0:, selector @env0:asString
+	^ TypeError ___signal___: (self @env0:___isSlotWrapper___
+		ifTrue: ['descriptor ''' @env0:, selector @env0:asString
+			@env0:, ''' requires a ''' @env0:, self @env0:___descriptorTypeName___
+			@env0:, ''' object but received a '''
+			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, '''']
+		ifFalse: ['descriptor ''' @env0:, selector @env0:asString
 			@env0:, ''' for ''' @env0:, self @env0:___descriptorTypeName___
 			@env0:, ''' objects doesn''t apply to a '''
-			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object')
+			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object'])
 
 ]
 
@@ -2129,6 +2153,7 @@ UnboundMethod >> value: positional value: kwargs [
 	((positional @env0:at: 1) ___bindsUnboundCallOf___: self)
 		ifTrue: [^ self ___callBoundOn___: (positional @env0:at: 1) positional: positional kw: kwargs].
 	obj := (positional @env0:at: 1) ___unboundSelfFor: definingClass.
+	(self ___refusesForeignInstance___: obj) ifTrue: [^ self ___signalDescriptorMismatch___: obj].
 	rest := (positional @env0:size @env0:> 1)
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
 		ifFalse: [#()].
