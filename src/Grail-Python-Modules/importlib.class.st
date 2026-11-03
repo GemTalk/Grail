@@ -2081,6 +2081,43 @@ importlib class >> ___clearSessionCachesFor___: aName [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___codecFunctionIn___: aCodecInfo for: aSelector [
+	"The encoder or the decoder of aCodecInfo -- by POSITION, as CPython takes
+	them (Python/codecs.c, _PyCodec_EncoderTuple), because a search function
+	may answer any 4-tuple and only a CodecInfo has the names.  Reading
+	``.decode'' off a plain tuple was an AttributeError (test_str
+	test_codecs_errors)."
+
+	^ aCodecInfo @env1:__getitem__: ((aSelector @env0:asString @env0:= 'encode') ifTrue: [0] ifFalse: [1])
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___codecMustAnswerATupleMessageFor: aSelector [
+	"CPython's two wordings, the decoder's without the space
+	(Python/codecs.c:426-431, :470-475)."
+
+	^ (aSelector @env0:asString @env0:= 'encode')
+		ifTrue: ['encoder must return a tuple (object, integer)']
+		ifFalse: ['decoder must return a tuple (object,integer)']
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___codecOutputOf___: aResult for: aSelector [
+	"The output a codec function answered, which must come as an (output,
+	length consumed) pair -- CPython refuses anything else before it looks at
+	the output, and adds no codec note to that refusal: the codec did not
+	fail, it answered the wrong shape.  Grail took the first element of
+	whatever came back."
+
+	((aResult @env0:isKindOf: tuple) and: [aResult @env0:size @env0:= 2]) ifFalse: [
+		^ TypeError @env1:___signal___: (self ___codecMustAnswerATupleMessageFor: aSelector)].
+	^ aResult @env0:at: 1
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___codecRoundTrip___: aName selector: aSelector with: aValue errors: errors [
 	"aName AS WRITTEN -- see the four-keyword variant."
 
@@ -2128,12 +2165,14 @@ importlib class >> ___codecRoundTrip___: aName selector: aSelector with: aValue 
 				codec failures.  ``pass'' re-raises the original exception, so
 				nothing is swallowed -- see the AlmostOutOfStack rule."
 				self ___checkTextModelResult___:
-					([((info @env1:___pyAttrLoad___: aSelector)
-						@env1:___pyCallValue___: { aValue. errors } kw: nil) @env0:at: 1]
-						@env0:on: AbstractException
-						do: [:ex |
-							self ___noteCodecFailure___: ex for: aSelector named: writtenName.
-							ex @env0:pass])
+					(self ___codecOutputOf___:
+						([(self ___codecFunctionIn___: info for: aSelector)
+							@env1:___pyCallValue___: { aValue. errors } kw: nil]
+							@env0:on: AbstractException
+							do: [:ex |
+								self ___noteCodecFailure___: ex for: aSelector named: writtenName.
+								ex @env0:pass])
+						for: aSelector)
 					for: aSelector named: writtenName]]
 				@env0:ensure: [active @env0:remove: key ifAbsent: [nil]]
 
