@@ -2926,6 +2926,19 @@ Object class >> ___grailInternedNameString___: aString [
 
 ]
 
+{ #category : 'Grail-Class Attr Overlay' }
+Object class >> ___grailIsAttributeHookName___: aName [
+	"Is aName a hook an attribute store or delete reaches only as a SEND to a
+	compiled method -- __setattr__ and __delattr__ of the instance's class,
+	__set__ and __delete__ of a data descriptor's?  The other protocol dunders
+	find a canonical class's assigned value by READING the class attribute
+	(___typeDunder___:), and a forwarder for one of them outlives a ``del'':
+	``del C.__bool__'' then raised where CPython falls back to truth."
+
+	^ #('__setattr__' '__delattr__' '__set__' '__delete__') @env0:includes: aName @env0:asString
+
+]
+
 { #category : 'Grail-Initialization' }
 Object class >> ___grailIsClassAttrAccessorCategory___: aCategory [
 	"True when aCategory marks a ClassDefAst-synthesised class-side
@@ -10115,6 +10128,13 @@ Object >> ___grailClassLacksSynthesizedDunder___: aSym [
 
 ]
 
+{ #category : 'Grail-Class Attr Overlay' }
+Object >> ___grailCompileForwarder___: aSource asSessionMethod: isSession [
+	isSession ifTrue: [^ self ___compileSessionMethod: aSource category: 'Grail-Protocol Forwarders'].
+	^ self ___compileMethod: aSource category: 'Grail-Protocol Forwarders'
+
+]
+
 { #category : 'Grail-Hashability' }
 Object >> ___grailCompileHashByClassAttribute___ [
 	"Give this class the __hash__ its body would have compiled for
@@ -10144,10 +10164,20 @@ Object >> ___grailCompileHashByClassAttribute___ [
 
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailCompileHookForwardersFor___: nm value: aValue [
+	"As the asSessionMethods: form, compiling ordinary methods."
+
+	^ self ___grailCompileHookForwardersFor___: nm value: aValue asSessionMethods: false
+
+]
+
+{ #category : 'Grail-Class Attr Overlay' }
+Object >> ___grailCompileHookForwardersFor___: nm value: aValue asSessionMethods: isSession [
 	"Compile, on this class, the selectors a def of aValue's arity would have
 	compiled to -- the fixed-arity forms and the ``_<nm>:kw:'' transport --
 	each fetching the function when CALLED (___grailProtocolHookFor___:) and
-	calling it with the receiver first."
+	calling it with the receiver first.  As SESSION methods when isSession: the
+	forwarders of a hook assigned to a canonical class, which stays in the
+	session overlay (___pyAttrStore___)."
 
 	| code argc ndefaults minArgs maxArgs pattern |
 	[code := aValue @env1:___pyAttrLoad___: #'__code__'.
@@ -10181,7 +10211,7 @@ Object >> ___grailCompileHookForwardersFor___: nm value: aValue [
 			@env0:, '	^ ___f @env1:value: { self'.
 		1 @env0:to: n do: [:k | src := src @env0:, '. a' @env0:, k @env0:printString].
 		src := src @env0:, ' } value: nil'.
-		self ___compileMethod: src category: 'Grail-Protocol Forwarders'].
+		self ___grailCompileForwarder___: src asSessionMethod: isSession].
 	src := '_' @env0:, nm @env0:, ': positional kw: kwargs'
 		@env0:, (String @env0:with: Character @env0:lf)
 		@env0:, '	| ___f |' @env0:, (String @env0:with: Character @env0:lf)
@@ -10192,7 +10222,7 @@ Object >> ___grailCompileHookForwardersFor___: nm value: aValue [
 			ifFalse: ['	___f == nil ifTrue: [___f := self ___grailProtocolHookFor___: #''' @env0:, nm @env0:, '''].'])
 		@env0:, (String @env0:with: Character @env0:lf)
 		@env0:, '	^ ___f @env1:value: ({ self } @env0:, positional @env0:asArray) value: kwargs'.
-	self ___compileMethod: src category: 'Grail-Protocol Forwarders' ]
+	self ___grailCompileForwarder___: src asSessionMethod: isSession ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	^ self
 
@@ -10624,6 +10654,14 @@ Object >> ___grailInstallAttrFunctionForwarder___: aName value: aValue [
 
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailInstallProtocolForwarder___: aName value: aValue [
+	"As the asSessionMethods: form, compiling ordinary methods."
+
+	^ self ___grailInstallProtocolForwarder___: aName value: aValue asSessionMethods: false
+
+]
+
+{ #category : 'Grail-Class Attr Overlay' }
+Object >> ___grailInstallProtocolForwarder___: aName value: aValue asSessionMethods: isSession [
 	"Make a conditionally-defined protocol dunder -- a ``def __setattr__''
 	under a class-body ``if'', ``for'', ``try'' or ``with'' -- reachable by the
 	protocol that calls it.
@@ -10649,7 +10687,13 @@ Object >> ___grailInstallProtocolForwarder___: aName value: aValue [
 	Skipped for the dunders that are not called through an instance send --
 	__new__, __init_subclass__, __class_getitem__, __set_name__ -- and for a
 	value that is not a plain function (a staticmethod or classmethod wrapper
-	keeps the holder path it has)."
+	keeps the holder path it has).
+
+	A plain function is a lambda or nested def (an ExecBlock) and equally a
+	module-level def, whose value is a function handle: ``C.__setattr__ =
+	refuse'' with a top-level ``def refuse'' was never reached, by a store
+	inside the class or outside it.  ___isDescriptorCallable___: is the test
+	CPython's binding makes -- a builtin function is not one."
 
 	| nm sym family |
 	nm := aName @env0:asString.
@@ -10660,12 +10704,12 @@ Object >> ___grailInstallProtocolForwarder___: aName value: aValue [
 		'__module__' '__qualname__' '__doc__' '__slots__' '__annotations__'
 		'__classcell__' '__firstlineno__' '__static_attributes__')
 			@env0:includes: nm) ifTrue: [^ self].
-	(aValue @env0:isKindOf: ExecBlock) ifFalse: [^ self].
+	(self ___isDescriptorCallable___: aValue) ifFalse: [^ self].
 	sym := nm @env0:asSymbol.
 	family := importlib @env0:___pythonNameFamilyOf___: sym.
 	(family @env0:anySatisfy: [:sel |
 		(self @env0:includesSelector: sel environmentId: 1)]) ifTrue: [^ self].
-	^ self ___grailCompileHookForwardersFor___: nm value: aValue
+	^ self ___grailCompileHookForwardersFor___: nm value: aValue asSessionMethods: isSession
 
 ]
 
@@ -16340,6 +16384,14 @@ Object >> ___pyAttrStore___: aName put: aValue [
 		((aValue == None and: [aName @env0:asString @env0:= '__hash__'])
 			and: [self ___respondsTo___: #___dynInstVars___])
 				ifTrue: [self ___grailCompileHashByClassAttribute___].
+		"A function assigned as an attribute hook of a CANONICAL class -- one an
+		imported module defined -- goes to the session overlay below, past the
+		holder branch's forwarder install, so ``C.__setattr__ = hook'' was never
+		reached.  Its forwarder is a SESSION method, as the overlay is session
+		state, and is ahead of the store for the dispatchers' reason."
+		((object ___grailIsAttributeHookName___: aName)
+			and: [self ___classAttrOverlayApplies___: self])
+				ifTrue: [self ___grailInstallProtocolForwarder___: aName value: aValue asSessionMethods: true].
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
 		par.7).  False (the default -- the class is not canonical) falls
