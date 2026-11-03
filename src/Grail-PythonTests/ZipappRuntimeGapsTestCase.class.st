@@ -69,15 +69,15 @@ ZipappRuntimeGapsTestCase >> testStringIOConstructor [
 ]
 
 { #category : 'Grail-Tests' }
-ZipappRuntimeGapsTestCase >> testStringIORefusesNewlineTranslation [
-	"Grail's StringIO never translates newlines, so a newline mode that would
-	(None, '\r', '\r\n') is refused rather than silently ignored.  A
-	deliberate divergence from CPython, recorded by the fixture rather than
-	compared."
+ZipappRuntimeGapsTestCase >> testStringIOTakesTheNewlinesThatTranslate [
+	"StringIO takes the newline modes that translate (None, '\r', '\r\n'),
+	which it used to refuse as NotImplementedError;
+	StringIOTranslatesNewlinesAndRefusesAsCPythonsTestCase checks what they
+	do."
 
 	self
 		assert: (((testModule @env1:___pyAttrLoad___: #'grail_only')
 			@env1:__getitem__: 'stringio_newline_translation') asString)
-		equals: '[''NotImplementedError'', ''NotImplementedError'', ''NotImplementedError'']'.
+		equals: '[''no error'', ''no error'', ''no error'']'.
 
 ]
