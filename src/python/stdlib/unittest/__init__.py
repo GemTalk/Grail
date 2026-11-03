@@ -349,9 +349,15 @@ class _AssertWarnsContext:
         # assertion is about whether the code warns, not about whatever filters
         # happen to be installed around it.  catch_warnings restores both the
         # filter list and -- in Grail -- the dedupe table on the way out.
+        #
+        # The manager and its list are kept under CPython's PUBLIC names,
+        # ``warnings_manager'' and ``warnings'': a test reads the records
+        # off the context -- ``len(cm.warnings) == 1'' in test_fstring's
+        # test_fstring_backslash_before_double_bracket_warns_once -- and
+        # found no attribute under the private names they had here.
         import warnings
-        self._catcher = warnings.catch_warnings(record=True)
-        self._recorded = self._catcher.__enter__()
+        self.warnings_manager = warnings.catch_warnings(record=True)
+        self.warnings = self.warnings_manager.__enter__()
         warnings.resetwarnings()
         warnings.simplefilter('always')
         return self
@@ -361,8 +367,8 @@ class _AssertWarnsContext:
         # exit can itself add a record: a coroutine dropped undriven in the
         # block warns as the capture closes (PythonCoroutine class >>
         # ___closeCapture___:), where CPython warned at the drop.
-        self._catcher.__exit__(exc_type, exc_value, tb)
-        recorded = list(self._recorded or [])
+        self.warnings_manager.__exit__(exc_type, exc_value, tb)
+        recorded = list(self.warnings or [])
         if exc_type is not None:
             # A real exception escaped the block -- let it propagate.
             return False
@@ -415,8 +421,8 @@ class _AssertNotWarnsContext(_AssertWarnsContext):
         # exit can itself add a record: a coroutine dropped undriven in the
         # block warns as the capture closes (PythonCoroutine class >>
         # ___closeCapture___:), where CPython warned at the drop.
-        self._catcher.__exit__(exc_type, exc_value, tb)
-        recorded = list(self._recorded or [])
+        self.warnings_manager.__exit__(exc_type, exc_value, tb)
+        recorded = list(self.warnings or [])
         if exc_type is not None:
             return False
         for rec in recorded:
