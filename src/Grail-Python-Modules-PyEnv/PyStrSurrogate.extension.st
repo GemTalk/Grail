@@ -31,6 +31,19 @@ PyStrSurrogate class >> ___translate___: aStr table: table [
 ]
 
 { #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> ___bindsUnboundCallOf___: anUnboundMethod [
+	"``str.islower(s)'' for a lone-surrogate s.  str's compiled methods read
+	Characters, which a lone surrogate cannot be, so running one on this
+	receiver died on a MessageNotUnderstood no Python code can catch --
+	test_str's test_surrogates ended the session.  This class answers str's
+	methods itself (or refuses them as Python errors), so the call is made
+	bound, as ``s.islower()'' already was."
+
+	^ anUnboundMethod ___isBuiltinStrMethod___
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> ___isTruthy___ [
 
 	^ codePoints @env0:size @env0:> 0

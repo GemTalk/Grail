@@ -206,6 +206,17 @@ UnboundMethod >> ___annotationsForClass___: aClass [
 ]
 
 { #category : 'Grail-Calling' }
+UnboundMethod >> ___callBoundOn___: aReceiver positional: positional kw: kwargs [
+	"``Cls.m(x, ...)'' run as ``x.m(...)'': the method x answers under this
+	handle's name, called with the arguments after x."
+
+	^ (aReceiver ___pyAttrLoad___: selector)
+		___pyCallValue___: (positional @env0:copyFrom: 2 to: positional @env0:size)
+		kw: kwargs
+
+]
+
+{ #category : 'Grail-Calling' }
 UnboundMethod >> ___callKeywordsBound___: obj rest: rest kw: kwargs [
 	"value:value: found no method to take this call.  With keywords, that is a
 	fixed-arity def with no ``_name:kw:'' companion to bind them -- which is
@@ -732,6 +743,16 @@ UnboundMethod >> ___grailVarargsSelector___ [
 	reaches."
 
 	^ ('_' @env0:, selector @env0:asString @env0:, ':kw:') @env0:asSymbol
+
+]
+
+{ #category : 'Grail-Python Metadata' }
+UnboundMethod >> ___isBuiltinStrMethod___ [
+	"Is this a method of str itself -- a built-in str class's, not one a
+	Python subclass of str defines?"
+
+	^ (definingClass @env0:isBehavior and: [definingClass @env0:isSubclassOf: CharacterCollection])
+		and: [(self ___isPythonClass___: definingClass) not]
 
 ]
 
@@ -2102,6 +2123,11 @@ UnboundMethod >> value: positional value: kwargs [
 		emitReceiverlessMethodTableOn:className:."
 		^ self ___callReceiverless___: #() kw: kwargs orSignal: nil
 	].
+	"A receiver that answers this method itself and cannot run its compiled
+	form -- a lone-surrogate str under str's methods -- takes the bound call.
+	A send and no temp, for this method's frame width (below)."
+	((positional @env0:at: 1) ___bindsUnboundCallOf___: self)
+		ifTrue: [^ self ___callBoundOn___: (positional @env0:at: 1) positional: positional kw: kwargs].
 	obj := (positional @env0:at: 1) ___unboundSelfFor: definingClass.
 	rest := (positional @env0:size @env0:> 1)
 		ifTrue: [positional @env0:copyFrom: 2 to: positional @env0:size]
