@@ -2453,22 +2453,15 @@ ByteArray >> _decode: positional kw: kwargs [
 	for its WSGI encoding dance, which the fixed-arity selectors above
 	don't catch."
 
-	| encoding errors |
-	encoding := (positional @env0:size @env0:>= 1)
-		@env0:ifTrue: [positional @env0:at: 1]
-		@env0:ifFalse: [
-			(kwargs @env0:isNil @env0:not
-				and: [kwargs @env0:includesKey: 'encoding'])
-				@env0:ifTrue: [kwargs @env0:at: 'encoding']
-				@env0:ifFalse: ['utf-8']].
-	errors := (positional @env0:size @env0:>= 2)
-		@env0:ifTrue: [positional @env0:at: 2]
-		@env0:ifFalse: [
-			(kwargs @env0:isNil @env0:not
-				and: [kwargs @env0:includesKey: 'errors'])
-				@env0:ifTrue: [kwargs @env0:at: 'errors']
-				@env0:ifFalse: ['strict']].
-	^ self decode: encoding _: errors
+	"Bound by Argument Clinic's rules (TypeError class >> ___argumentsOf___:...):
+	an unknown keyword or a third argument used to be ignored."
+
+	| values |
+	values := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('encoding' 'errors') positionalOnly: 0 required: 0 for: 'decode'.
+	^ self
+		decode: ((values @env0:at: 1) @env0:ifNil: ['utf-8'])
+		_: ((values @env0:at: 2) @env0:ifNil: ['strict'])
 
 ]
 
@@ -2786,6 +2779,9 @@ ByteArray >> decode: encoding [
 	"Decode bytes to string using specified encoding"
 
 	| encodingStr info |
+	"A non-str encoding is Clinic's TypeError, checked first; it reached
+	asLowercase as an uncatchable MessageNotUnderstood."
+	TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
 	"Normalise the codec name before dispatching, as CPython does and as
 	str>>encode already did on this side of the pair.  Without it every
 	branch below was an EXACT match on a lowercase hyphenated spelling, so
@@ -2967,6 +2963,9 @@ ByteArray >> decode: encoding _: errors [
 	input."
 
 	| enc info |
+	"Both must be str, as Clinic checks them: see decode:."
+	TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
+	TypeError @env0:___requireStr___: errors argument: 'errors' of: 'decode'.
 	enc := (encoding @env0:asLowercase)
 		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])

@@ -43,9 +43,7 @@ CharacterCollection class >> ___checkDecodeArgument___: anObject named: aName [
 	"str()'s encoding and errors must each be a str, checked before anything is
 	decoded (unicode_vectorcall's arg_as_utf8)."
 
-	(anObject isKindOf: CharacterCollection) ifFalse: [
-		^ TypeError ___signal___: 'str() argument ''' @env0:, aName @env0:, ''' must be str, not '
-			@env0:, ((Python @env0:at: #bytes) ___pyTypeNameOf___: anObject)]
+	TypeError @env0:___requireStr___: anObject argument: aName of: 'str'
 
 ]
 
@@ -2708,23 +2706,15 @@ CharacterCollection >> _encode: positional kw: kwargs [
 	outside the two is CPython's ``encode() got an unexpected keyword
 	argument''."
 
-	| encoding errors |
-	kwargs @env0:isNil ifFalse: [
-		kwargs @env0:keysDo: [:k |
-			(#('encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
-				^ TypeError ___signal___: 'encode() got an unexpected keyword argument '''
-					@env0:, k @env0:asString @env0:, '''']]].
-	encoding := (positional @env0:size @env0:>= 1)
-		ifTrue: [positional @env0:at: 1]
-		ifFalse: [(kwargs @env0:isNil @env0:not @env0:and: [kwargs @env0:includesKey: 'encoding'])
-			ifTrue: [kwargs @env0:at: 'encoding']
-			ifFalse: ['utf-8']].
-	errors := (positional @env0:size @env0:>= 2)
-		ifTrue: [positional @env0:at: 2]
-		ifFalse: [(kwargs @env0:isNil @env0:not @env0:and: [kwargs @env0:includesKey: 'errors'])
-			ifTrue: [kwargs @env0:at: 'errors']
-			ifFalse: ['strict']].
-	^ self encode: encoding _: errors
+	"Bound by Argument Clinic's rules (TypeError class >> ___argumentsOf___:...):
+	a third argument, positional or keyword, used to be read as nothing."
+
+	| values |
+	values := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('encoding' 'errors') positionalOnly: 0 required: 0 for: 'encode'.
+	^ self
+		encode: ((values @env0:at: 1) @env0:ifNil: ['utf-8'])
+		_: ((values @env0:at: 2) @env0:ifNil: ['strict'])
 
 ]
 
@@ -3063,6 +3053,11 @@ CharacterCollection >> encode: encoding _: errors [
 	multi-byte encoder (GemStone encodeAsUTF8); UTF-16 (BOM/LE/BE) is
 	supported; ascii and latin-1 / idna are single-byte."
 	| enc size result info |
+	"Both must be str, checked first as Clinic checks them: a non-str
+	encoding reached asLowercase as an uncatchable MessageNotUnderstood
+	(test_str test_codecs_errors), and a non-str errors was accepted."
+	TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'encode'.
+	TypeError @env0:___requireStr___: errors argument: 'errors' of: 'encode'.
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
 
