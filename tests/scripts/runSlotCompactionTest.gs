@@ -43,6 +43,17 @@ level 0
 run
 | out path f mod a b aInst bInst report dirtyRefused |
 out := GsFile stdout.
+"SELF-HEAL, and it MUST come before the snapshot (the convention of
+runAbortReimportTest.gs).  Session 1 commits several times before session 2
+cleans up, so a run that dies in between -- killed, timed out, or a reader of
+its output that closed the pipe -- leaves A committed with x compacted away.
+The next run's (x y z) import then reuses that A and appends x, its first
+layout check reads (y z x) as if the edit had moved a slot, and its snapshot
+records the residue as pre-existing, so no later run could recover."
+importlib ___forgetCanonicalModule___: 'grail_slot_compaction'.
+#(#'Grail_compact_snap' #'Grail_compact_path' #'Grail_compact_a' #'Grail_compact_b')
+  do: [:key | UserGlobals removeKey: key ifAbsent: []].
+System commit.
 UserGlobals at: #'Grail_compact_snap' put: importlib ___canonicalRegistrySnapshot___.
 path := '/tmp/grail_slot_compaction_' , System myUserProfile userId asString , '.py'.
 UserGlobals at: #'Grail_compact_path' put: path.

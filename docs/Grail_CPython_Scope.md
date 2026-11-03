@@ -820,7 +820,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_dynamicclassattribute` FAIL, 12 tests: 6 failed, 0 errors, 1 skipped
 - `test.test_base64` ERROR, 41 tests: 0 failed, 16 errors, 6 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_configparser`, `test_context`, `test_flufl`, `test_keyword`, `test_type_annotations`, `test_unicode_identifiers`, `test_utf8source`.
+Wired, but not on the board until the next nightly measures them: `test_configparser`, `test_context`, `test_flufl`, `test_keyword`, `test_structseq`, `test_type_annotations`, `test_unicode_identifiers`, `test_utf8source`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
