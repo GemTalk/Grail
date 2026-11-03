@@ -91,6 +91,14 @@ UnboundMethod class >> ___forClassReadMethod___: aClass family: family selector:
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+UnboundMethod class >> ___getOfNoneForNoneMessage [
+	"wrap_descr_get's words for ``f.__get__(None)'' (Objects/typeobject.c:9716)."
+
+	^ '__get__(None, None) is invalid'
+
+]
+
 { #category : 'Grail-Dynamic Rebinding' }
 UnboundMethod class >> ___grailForgetInterned___: aSelector [
 	"Drop the interned ``Cls.<name>'' handles for the Python name aSelector
@@ -202,6 +210,18 @@ UnboundMethod >> ___annotationsForClass___: aClass [
 	v := self ___tableEntryFor___: aClass table: #'___methodAnnotationsTable___'.
 	v == nil ifTrue: [^ KeyValueDictionary @env0:new].
 	^ v @env0:value: { 1 } value: nil
+
+]
+
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___appliesTo___: anObject [
+	"Is anObject's own type -- not what its __class__ claims -- this
+	descriptor's type or a subtype of it, as PyObject_TypeCheck asks?"
+
+	| functions |
+	functions := builtins @env1:instance.
+	^ (functions @env1:issubclass: (functions @env1:type: anObject) _: self __objclass__)
+		___isTruthy___
 
 ]
 
@@ -503,6 +523,17 @@ UnboundMethod >> ___docForClass___: aClass [
 	"This handle's selector in ___methodDocTable___, or nil."
 
 	^ self ___tableEntryFor___: aClass table: #'___methodDocTable___'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+UnboundMethod >> ___doesNotApplyMessageFor: anObject [
+	"descr_check's words (Objects/descrobject.c:80-90)."
+
+	^ 'descriptor ''' @env0:, selector @env0:asString
+		@env0:, ''' for ''' @env0:, self @env0:___descriptorTypeName___
+		@env0:, ''' objects doesn''t apply to a '''
+		@env0:, anObject @env0:class @env1:__name__ @env0:asString @env0:, ''' object'
 
 ]
 
@@ -1328,6 +1359,17 @@ UnboundMethod >> ___refusesForeignInstance___: anObject [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+UnboundMethod >> ___requiresMessageFor: anObject [
+	"wrapperdescr_call's words (Objects/descrobject.c:556-562)."
+
+	^ 'descriptor ''' @env0:, selector @env0:asString
+		@env0:, ''' requires a ''' @env0:, self @env0:___descriptorTypeName___
+		@env0:, ''' object but received a '''
+		@env0:, anObject @env0:class @env1:__name__ @env0:asString @env0:, ''''
+
+]
+
 { #category : 'Grail-Calling' }
 UnboundMethod >> ___run: aBlock withDefaultOwner: aClass [
 	"Run aBlock -- a class-body method performed on a receiver that is NOT an
@@ -1362,23 +1404,16 @@ UnboundMethod >> ___run: aBlock withDefaultOwner: aClass [
 
 { #category : 'Grail-Calling' }
 UnboundMethod >> ___signalDescriptorMismatch___: obj [
-	"CPython's ``descriptor 'x' for 'C' objects doesn't apply to a 'y' object''
-	(Objects/descrobject.c, descr_check), or for a slot wrapper ``descriptor
-	'__add__' requires a 'int' object but received a 'y''' (wrapperdescr_call).
+	"CPython's refusal of a receiver of another type: a method descriptor's
+	(descr_check) or a slot wrapper's (wrapperdescr_call).
 
 	Its own method so that value:value: -- whose frame width decides how deep a
 	recursion through an unbound call can go -- carries neither the string
 	building nor a temp to hold the decision that reaches it."
 
 	^ TypeError ___signal___: (self @env0:___isSlotWrapper___
-		ifTrue: ['descriptor ''' @env0:, selector @env0:asString
-			@env0:, ''' requires a ''' @env0:, self @env0:___descriptorTypeName___
-			@env0:, ''' object but received a '''
-			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, '''']
-		ifFalse: ['descriptor ''' @env0:, selector @env0:asString
-			@env0:, ''' for ''' @env0:, self @env0:___descriptorTypeName___
-			@env0:, ''' objects doesn''t apply to a '''
-			@env0:, obj @env0:class @env1:__name__ @env0:asString @env0:, ''' object'])
+		ifTrue: [self ___requiresMessageFor: obj]
+		ifFalse: [self ___doesNotApplyMessageFor: obj])
 
 ]
 
@@ -1818,7 +1853,18 @@ UnboundMethod >> __get__: instance _: owner [
 	read already answers (object >> ___instanceClassAttrGet___:); this is the
 	path an exception instance, among others, takes to the same place."
 
-	(instance == nil or: [instance == None]) ifTrue: [^ self].
+	"No owner either is wrap_descr_get's refusal (Objects/typeobject.c:9716),
+	for a def and a built-in's descriptor alike."
+	(instance == nil or: [instance == None]) ifTrue: [
+		(owner == nil or: [owner == None]) ifTrue: [
+			^ TypeError ___signal___: UnboundMethod ___getOfNoneForNoneMessage].
+		^ self].
+	"A built-in type's descriptor binds only an object of its type, as
+	method_get checks it (Objects/descrobject.c, descr_check); a def binds
+	anything.  ``set.add.__get__(0)'' answered a bound method of 0 (test_descr
+	test_methods_in_c)."
+	(self @env0:___isBuiltinTypeMethod___ and: [(self ___appliesTo___: instance) not])
+		ifTrue: [^ TypeError ___signal___: (self ___doesNotApplyMessageFor: instance)].
 	"A CLASS as the instance binds, as any object does: ``f.__get__(C, type(C))''
 	is how a descriptor binds a function to its owner -- sqlalchemy's
 	hybridmethod answers ``self.clslevel.__get__(owner, owner.__class__)'' for
