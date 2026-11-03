@@ -5281,6 +5281,12 @@ Object class >> ___moduleAttrIdentityTable___ [
 		t @env0:at: #'sys_hash_info' put: #('hash_info' 'sys').
 		t @env0:at: #'sys_int_info' put: #('int_info' 'sys').
 		t @env0:at: #'sys_implementation' put: #('SimpleNamespace' 'types').
+		"The struct sequences that took over from four of those native modules,
+		which stay in place unused (PySysFlags' class comment says why)."
+		t @env0:at: #'PySysFlags' put: #('flags' 'sys').
+		t @env0:at: #'PySysFloatInfo' put: #('float_info' 'sys').
+		t @env0:at: #'PySysIntInfo' put: #('int_info' 'sys').
+		t @env0:at: #'PySysHashInfo' put: #('hash_info' 'sys').
 
 		"json.  CPython defines JSONDecodeError in the json.decoder SUBMODULE and
 		re-exports it from json, so its __module__ is 'json.decoder' even though
