@@ -163,9 +163,15 @@ ZlibCompress >> _assertNotFinishedWhile: aPhase [
 
 { #category : 'Grail-Compression' }
 ZlibCompress >> _compress: positional kw: kwargs [
-	"The varargs form of compress(data), for a held-and-called-later method."
+	"The varargs form of compress(data, /), for a held-and-called-later method.
+	Bound as Argument Clinic binds it: ``compress(data=...)'' read past the end
+	of the positionals, an OffsetError no Python code could catch (test_zlib
+	test_keywords)."
 
-	^ self compress: (positional @env0:at: 1)
+	| data |
+	data := (TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('data') positionalOnly: 1 required: 1 for: 'compress') @env0:at: 1.
+	^ self compress: data
 
 ]
 
@@ -228,10 +234,14 @@ ZlibCompress >> _finish [
 
 { #category : 'Grail-Compression' }
 ZlibCompress >> _flush: positional kw: kwargs [
-	"The varargs form of flush([mode])."
+	"The varargs form of flush(mode=Z_FINISH, /), bound as Argument Clinic
+	binds it: the mode is positional only."
 
-	positional @env0:ifEmpty: [^ self flush].
-	^ self flush: (positional @env0:at: 1)
+	| mode |
+	mode := (TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('mode') positionalOnly: 1 required: 0 for: 'flush') @env0:at: 1.
+	mode == nil ifTrue: [^ self flush].
+	^ self flush: mode
 
 ]
 
