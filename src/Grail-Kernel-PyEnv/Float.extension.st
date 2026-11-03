@@ -24,6 +24,13 @@ Float class >> ___asciiDigitValue___: ch radix: radix [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+Float class >> ___cannotConvertMessageFor: anObject [
+
+	^ 'could not convert string to float: ' @env0:, anObject __repr__
+
+]
+
 { #category : 'Grail-Initialization' }
 Float class >> ___coerceFloatResult___: result from: dunderName [
 	"CPython's float() protocol: __float__ must return a float.  A
@@ -469,6 +476,9 @@ Float class >> __new__: obj [
 		^ self ___intToFloatChecked___: obj __index__
 	].
 
+	"A str holding lone surrogates: see Integer class >> __new__:."
+	(obj isKindOf: PyStrSurrogate) ifTrue: [
+		^ ValueError ___signal___: (self ___cannotConvertMessageFor: obj)].
 	"Try to convert from string"
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		^ self ___newFromString___: obj
