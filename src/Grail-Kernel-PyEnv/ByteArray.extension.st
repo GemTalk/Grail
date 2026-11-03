@@ -193,6 +193,18 @@ ByteArray class >> ___isHexWhitespace___: code [
 
 ]
 
+{ #category : 'Grail-String Operations' }
+ByteArray class >> ___isUtf7Base64___: aCodePoint [
+	"Is aCodePoint one of modified base64's characters -- a letter, a digit,
+	``+'' or ``/'' (IS_BASE64, Objects/unicodeobject.c:4651)?"
+
+	^ (aCodePoint @env0:between: 65 and: 90)
+		or: [(aCodePoint @env0:between: 97 and: 122)
+		or: [(aCodePoint @env0:between: 48 and: 57)
+		or: [aCodePoint @env0:= 43 or: [aCodePoint @env0:= 47]]]]
+
+]
+
 { #category : 'Grail-Constructors' }
 ByteArray class >> ___newZeroed___: count [
 	"bytes(n) / bytearray(n) -- n zero bytes, self-typed.  CPython raises
@@ -269,9 +281,13 @@ ByteArray class >> ___utf7FromCodePoints___: points [
 	and tilde (which RFC 2152 leaves out of the direct set).  A literal
 	``+'' is written ``+-''.  Everything else -- controls, non-ASCII, and a
 	lone surrogate, which UTF-7 carries rather than refuses -- goes into a
-	SHIFTED run: ``+'', the UTF-16BE code units in modified base64, then
-	``-''.  CPython writes that closing ``-'' even at end of string, and the
-	corpus compares bytes, so this does too.
+	SHIFTED run: ``+'', then the UTF-16BE code units in modified base64.
+	CPython ends a run with ``-'' only where it has to (_PyUnicode_EncodeUTF7,
+	Objects/unicodeobject.c:4938): before a base64 character or a ``-'', and
+	at the end of the string; any other direct character ends it implicitly.
+	And a ``+'' met inside a run is encoded in it, not written ``+-''.  Grail
+	wrote the ``-'' always and the ``+'' always as ``+-'', and the corpus
+	compares bytes (test_str test_codecs_utf7).
 
 	The run is a BIT accumulator rather than a per-character encode: base64
 	takes six bits at a time and a UTF-16 unit gives sixteen, so the two
@@ -294,23 +310,24 @@ ByteArray class >> ___utf7FromCodePoints___: points [
 			ws @env0:nextPut: (alphabet @env0:at:
 				(((acc @env0:bitShift: accBits @env0:negated) @env0:bitAnd: 63)
 					@env0:+ 1)) @env0:codePoint]].
-	flush := [
+	flush := [:next |
 		inRun ifTrue: [
 			accBits @env0:> 0 ifTrue: [
 				ws @env0:nextPut: (alphabet @env0:at:
 					(((acc @env0:bitShift: (6 @env0:- accBits)) @env0:bitAnd: 63)
 						@env0:+ 1)) @env0:codePoint].
-			ws @env0:nextPut: 45.
+			(next @env0:isNil or: [next @env0:= 45 or: [self ___isUtf7Base64___: next]])
+				ifTrue: [ws @env0:nextPut: 45].
 			acc := 0. accBits := 0. inRun := false]].
 	points @env0:do: [:cp | | direct |
 		direct := (cp @env0:= 9 or: [cp @env0:= 10 or: [cp @env0:= 13]])
 			or: [cp @env0:>= 32 and: [cp @env0:<= 125
 				and: [cp @env0:~= 43 and: [cp @env0:~= 92]]]].
 		direct
-			ifTrue: [flush @env0:value. ws @env0:nextPut: cp]
+			ifTrue: [flush @env0:value: cp. ws @env0:nextPut: cp]
 			ifFalse: [
-				cp @env0:= 43
-					ifTrue: [flush @env0:value. ws @env0:nextPut: 43. ws @env0:nextPut: 45]
+				(cp @env0:= 43 and: [inRun @env0:not])
+					ifTrue: [ws @env0:nextPut: 43. ws @env0:nextPut: 45]
 					ifFalse: [
 						inRun ifFalse: [ws @env0:nextPut: 43. inRun := true].
 						cp @env0:<= 16rFFFF
@@ -319,7 +336,7 @@ ByteArray class >> ___utf7FromCodePoints___: points [
 								v := cp @env0:- 16r10000.
 								emit @env0:value: (16rD800 @env0:+ (v @env0:bitShift: -10)).
 								emit @env0:value: (16rDC00 @env0:+ (v @env0:bitAnd: 16r3FF))]]]].
-	flush @env0:value.
+	flush @env0:value: nil.
 	^ bytes @env0:withAll: ws @env0:contents
 
 ]
