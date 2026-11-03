@@ -121,6 +121,15 @@ TypeError class >> ___grailCheckMultipleValues___: names pos: positional kw: key
 ]
 
 { #category : 'Grail-Error Messages' }
+TypeError class >> ___integerOrNoneMessageFor: anObject [
+	"A size argument that may be None refuses anything else in these words
+	(Python/modsupport.c:28, _Py_convert_optional_to_ssize_t)."
+
+	^ 'argument should be integer or None, not ''' , (anObject @env1:___pyTypeNameForError___) asString , ''''
+
+]
+
+{ #category : 'Grail-Error Messages' }
 TypeError class >> ___notIterableAfterStarMessageFor: aValue [
 	^ 'Value after * must be an iterable, not ' , (aValue @env1:___pyTypeNameForError___) asString
 

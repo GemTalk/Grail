@@ -960,3 +960,16 @@ test.test_context
 #
 #   dataclasses   280t  14 fail  9 error  2 skip
 test.test_dataclasses
+
+# --- Standard library (added 2026-11-03): io's in-memory streams ---
+#
+# test_memoryio is CPython 3.14.4's, vendored verbatim.  It runs each test
+# against _pyio's BytesIO and StringIO and against io's, which are Grail's
+# own Smalltalk classes; io.BytesIO now binds, converts and refuses as
+# Modules/_io/bytesio.c does.  What is left: the BufferError CPython raises
+# for a resize while a getbuffer() view is alive, which needs a reference
+# count Grail does not keep, and io.StringIO's newline translation, IOBase
+# methods and pickling.  Measured on Darwin arm64:
+#
+#   memoryio   182t  17 fail  24 error  5 skip
+test.test_memoryio
