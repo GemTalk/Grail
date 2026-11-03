@@ -92,10 +92,26 @@ CharacterCollection class >> ___maketransKey___: aKey [
 	"Through the shared code-point accessor, so a one-character key works for
 	every str representation -- a StrEnum member and a lone surrogate alike."
 	cps := aKey @env0:___pyCodePoints___.
-	(cps @env0:notNil @env0:and: [cps @env0:size @env0:= 1])
-		ifTrue: [^ cps @env0:at: 1].
-	^ TypeError ___signal___:
-		'string keys in translate table must be of length 1'
+	cps @env0:isNil ifTrue: [^ TypeError ___signal___: self ___maketransKeyTypeMessage].
+	cps @env0:size @env0:= 1 ifFalse: [^ ValueError ___signal___: self ___maketransKeyLengthMessage].
+	^ cps @env0:at: 1
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___maketransKeyLengthMessage [
+	"CPython's words, space and all: its two string literals concatenate
+	without one (Objects/unicodeobject.c:13400-13402)."
+
+	^ 'string keys in translatetable must be of length 1'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___maketransKeyTypeMessage [
+	"As ___maketransKeyLengthMessage (Objects/unicodeobject.c:13420-13421)."
+
+	^ 'keys in translate table mustbe strings or integers'
 
 ]
 
@@ -155,6 +171,18 @@ CharacterCollection class >> ___refuseUnbuildableLength___: aLength [
 	aLength @env0:* 4 @env0:> (System @env0:_tempObjSpaceMax @env0:- System @env0:_tempObjSpaceUsed)
 		ifTrue: [^ MemoryError ___signalNew___: #() kw: nil].
 	^ aLength
+
+]
+
+{ #category : 'Grail-String Methods' }
+CharacterCollection class >> ___streamsAsTranslation___: aReplacement [
+	"Can translate: write aReplacement to its stream of Characters: a str, or
+	a code point a Character holds -- in range(0x110000) and no surrogate?"
+
+	(aReplacement isKindOf: Integer) ifTrue: [
+		^ (aReplacement @env0:between: 0 and: 16r10FFFF)
+			and: [(aReplacement @env0:between: 16rD800 and: 16rDFFF) @env0:not]].
+	^ aReplacement @env0:isKindOf: CharacterCollection
 
 ]
 
@@ -4018,14 +4046,16 @@ CharacterCollection >> translate: table [
 			@env0:on: KeyError do: [:ex | ex @env0:return: ch].
 		replacement == ch ifTrue: [stream @env0:nextPut: ch] ifFalse: [
 			replacement == None ifFalse: [
-				"A replacement no Character can hold -- a lone surrogate, as an
-				int or inside a str -- makes the answer a PyStrSurrogate, which
-				only the code-point implementation can build.  Streaming it
-				died on an env-0 MessageNotUnderstood no Python code can catch."
-				(((replacement isKindOf: Integer)
-						and: [replacement @env0:>= 16rD800 and: [replacement @env0:<= 16rDFFF]])
-					or: [replacement @env0:isKindOf: PyStrSurrogate]) ifTrue: [
-						^ PyStrSurrogate ___translate___: self table: table].
+				"A replacement this stream cannot take goes to the code-point
+				implementation, which builds what CPython builds or raises what
+				it raises: a lone surrogate, as an int or inside a str, makes the
+				answer a PyStrSurrogate; an int outside range(0x110000) is a
+				ValueError (charmaptranslate_lookup, Objects/unicodeobject.c:9314-9320),
+				and any other value a TypeError.  Streaming the int died on an
+				OutOfRange, and the rest on a MessageNotUnderstood, neither of
+				which Python code can catch."
+				(CharacterCollection ___streamsAsTranslation___: replacement) ifFalse: [
+					^ PyStrSurrogate ___translate___: self table: table].
 				(replacement isKindOf: Integer) ifTrue: [
 					stream @env0:nextPut: (Character @env0:codePoint: replacement)
 				] ifFalse: [
