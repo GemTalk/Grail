@@ -567,8 +567,25 @@ FileIO >> ___ioSeek___: pos whence: whence [
 
 { #category : 'Grail-Private' }
 FileIO >> ___ioTruncate___: size [
+	"FileIO.truncate(size=None) (Modules/_io/fileio.c,
+	_io_FileIO_truncate_impl): ftruncate(2) on the descriptor -- to the current
+	position when no size is given -- answering the size and leaving the
+	position where it was.  The GsFile's buffered writes go first, so the
+	descriptor holds them; flushing a file open for reading and writing moves
+	the GsFile to the end of what it had read ahead, so the position is put
+	back.  It used to refuse outright (test_fileio testTruncate)."
+
+	| gsfile position length |
 	self _checkWritable.
-	OSError ___signal___: 'truncate() is not supported in Grail'
+	gsfile := self @env0:dynamicInstVarAt: #_gsfile.
+	position := self tell.
+	gsfile @env0:flush.
+	gsfile @env0:position: position.
+	length := (size == nil or: [size == None])
+		ifTrue: [position]
+		ifFalse: [size ___asIndex___].
+	(os instance) ftruncate: self fileno _: length.
+	^ length
 
 ]
 
@@ -767,6 +784,20 @@ FileIO >> __setattr__: name _: value [
 	(self ___readOnlyAttributeNames___ @env0:includes: name @env0:asString) ifTrue: [
 		^ AttributeError ___signal___: (FileIO ___notWritableMessageFor: name)].
 	^ super __setattr__: name _: value
+
+]
+
+{ #category : 'Grail-State' }
+FileIO >> _blksize [
+	"The descriptor's st_blksize, as fileio_get_blksize (Modules/_io/fileio.c)
+	reports it, or io.DEFAULT_BUFFER_SIZE when it is no more than 1 or the
+	descriptor cannot be stat'ed."
+
+	| stat |
+	stat := (os instance) ___fstatOrErrno___: self fileno.
+	((stat isKindOf: GsFileStat) and: [stat @env0:blksize @env0:> 1])
+		ifTrue: [^ stat @env0:blksize].
+	^ (io instance) @env0:at: #DEFAULT_BUFFER_SIZE
 
 ]
 

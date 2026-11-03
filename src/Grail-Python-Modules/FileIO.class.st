@@ -7,7 +7,7 @@ bookkeeping live in dynamic instVars: _gsfile, _name, _mode, _closed,
 _readable, _writable (and _encoding on TextIOWrapper instances).
 
 Known deviations from CPython, kept deliberately small for V1:
-  * truncate() is not supported (GsFile has no ftruncate) - raises OSError.
+  * truncate() is ftruncate(2) on the GsFile's descriptor.
   * fileno() is not supported - raises OSError.
   * No universal-newline translation: \r\n is not folded to \n on read
     and \n is written as-is (matches POSIX platforms for LF files).
@@ -24,6 +24,7 @@ FileIO class >> ___pythonValueAttrs___ [
 		add: #closed;
 		add: #name;
 		add: #mode;
+		add: #'_blksize';
 		yourself
 
 ]
