@@ -1,5 +1,17 @@
 Extension { #name : 'struct_time' }
 
+{ #category : 'Grail-Fields' }
+struct_time >> ___zone___: aZoneName offset: seconds [
+	"Fill tm_zone and tm_gmtoff, the two fields past the tuple, as CPython's
+	tmtotuple fills them from the C struct tm (Modules/timemodule.c:457-491).
+	Answers the receiver."
+
+	self @env0:dynamicInstVarAt: #'tm_zone' put: aZoneName.
+	self @env0:dynamicInstVarAt: #'tm_gmtoff' put: seconds.
+	^ self
+
+]
+
 { #category : 'Grail-Conversion' }
 struct_time >> __repr__ [
 	"CPython: time.struct_time(tm_year=2004, tm_mon=12, ..., tm_isdst=-1)."

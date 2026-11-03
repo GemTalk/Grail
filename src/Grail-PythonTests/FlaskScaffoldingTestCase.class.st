@@ -5021,8 +5021,9 @@ FlaskScaffoldingTestCase >> testTimeGmtimeStruct [
 	self assert: (t @env1:__getitem__: 0) > 2020.
 	"Month 1..12."
 	self assert: ((t @env1:__getitem__: 1) between: 1 and: 12).
-	"isdst -1 = unknown."
-	self assert: (t @env1:__getitem__: 8) equals: -1
+	"isdst 0: gmtime is never daylight time, which is what CPython's C library
+	answers -- not -1, ``unknown''."
+	self assert: (t @env1:__getitem__: 8) equals: 0
 
 ]
 
