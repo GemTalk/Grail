@@ -1,44 +1,136 @@
 Extension { #name : 'StringIO' }
 
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___closedStreamMessage [
+	"IOBase's _checkClosed says it with a period, where StringIO's own
+	checks do not (Modules/_io/iobase.c, iobase_check_closed)."
+
+	^ 'I/O operation on closed file.'
+
+]
+
 { #category : 'Grail-Initialization' }
 StringIO class >> ___construct___: initialValue newline: newlineArg [
-	"The one constructor.  initial_value is a str or None (None is empty);
-	anything else is CPython's TypeError, where it used to be printString'd
-	into the buffer (``StringIO(5)'' held '5').
+	"The one constructor: a stream that has run __init__ with initialValue
+	and newlineArg (see StringIO >> ___startOver:newline:)."
 
-	newline: CPython translates newlines on write for None, '\r' and '\r\n'.
-	This StringIO never translates, which is exactly the behaviour of '\n'
-	(the default) and '' -- so those two are accepted and the others refused
-	rather than silently ignored."
+	| stream |
+	stream := self @env0:new.
+	stream ___startOver: initialValue newline: newlineArg.
+	^ stream
 
-	| inst initial lf cr |
-	(initialValue == None @env0:or: [initialValue == nil])
-		ifTrue: [initial := '']
-		ifFalse: [
-			((initialValue @env0:isKindOf: CharacterCollection)
-				@env0:or: [initialValue @env0:isKindOf: AbstractPyStr]) ifFalse: [
-					TypeError ___signal___: 'initial_value must be str or None, not '
-						@env0:, (initialValue @env1:__class__ @env1:__name__) @env0:asString].
-			initial := initialValue].
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___illegalNewlineMessageFor: aNewline [
+	"Modules/_io/stringio.c:702."
+
+	^ 'illegal newline value: ' @env0:, (aNewline @env1:__repr__) @env0:asString
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___initialValueTypeMessageFor: anObject [
+	"Modules/_io/stringio.c:707."
+
+	^ 'initial_value must be str or None, not ' @env0:, (bytes ___pyTypeNameOf___: anObject)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___invalidWhenceMessageFor: aWhence [
+	"Modules/_io/stringio.c:508."
+
+	^ 'Invalid whence (' @env0:, aWhence @env0:printString @env0:, ', should be 0, 1 or 2)'
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO class >> ___legalNewlines [
+	"The newline arguments other than None that CPython takes
+	(Modules/_io/stringio.c:697-704)."
+
+	| lf cr |
 	lf := String @env0:with: Character @env0:lf.
 	cr := String @env0:with: Character @env0:cr.
-	newlineArg == None ifFalse: [
-		(newlineArg @env0:isKindOf: CharacterCollection) ifFalse: [
-			TypeError ___signal___: 'newline must be str or None, not '
-				@env0:, (newlineArg @env1:__class__ @env1:__name__) @env0:asString].
-		((newlineArg @env0:= '') @env0:or: [newlineArg @env0:= lf]) ifFalse: [
-			((newlineArg @env0:= cr) @env0:or: [newlineArg @env0:= (cr @env0:, lf)]) ifFalse: [
-				ValueError ___signal___: 'illegal newline value: '
-					@env0:, (newlineArg @env1:__repr__) @env0:asString]]].
-	(newlineArg == None @env0:or: [(newlineArg @env0:= '') @env0:not
-			@env0:and: [(newlineArg @env0:= lf) @env0:not]]) ifTrue: [
-		NotImplementedError ___signal___:
-			'Grail''s StringIO does not translate newlines; newline must be ''\n'' or '''''].
-	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #_buffer put: (inst ___carried___: initial) @env0:copy.
-	inst @env0:dynamicInstVarAt: #_pos put: 0.
-	inst @env0:dynamicInstVarAt: #_closed put: false.
-	^ inst
+	^ Array @env0:with: String @env0:new with: lf with: cr with: cr @env0:, lf
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___negativeSeekMessageFor: aPosition [
+	"An absolute seek before the start (Modules/_io/stringio.c:513)."
+
+	^ 'Negative seek position ' @env0:, aPosition @env0:printString
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___negativeSizeMessageFor: aSize [
+	"Modules/_io/stringio.c:468."
+
+	^ 'Negative size value ' @env0:, aSize @env0:printString
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___negativeStatePositionMessage [
+	"Modules/_io/stringio.c:962."
+
+	^ 'position value cannot be negative'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___newlineTypeMessageFor: anObject [
+	"Modules/_io/stringio.c:688."
+
+	^ 'newline must be str or None, not ' @env0:, (bytes ___pyTypeNameOf___: anObject)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___relativeSeekMessage [
+	"A text stream seeks relative to the current position or the end only
+	by 0 (Modules/_io/stringio.c:518)."
+
+	^ 'Can''t do nonzero cur-relative seeks'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___stateDictionaryMessageFor: anObject [
+	"Modules/_io/stringio.c:972."
+
+	^ 'fourth item of state should be a dict, got a ' @env0:, (bytes ___pyTypeNameOf___: anObject)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___stateMessageFor: aState [
+	"__setstate__ takes a tuple of at least four items, and names the
+	stream's type and the state's in refusing anything else
+	(Modules/_io/stringio.c:904)."
+
+	^ (self == StringIO ifTrue: ['_io.StringIO'] ifFalse: [self @env1:__name__])
+		@env0:, '.__setstate__ argument should be 4-tuple, got '
+		@env0:, (bytes ___pyTypeNameOf___: aState)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___statePositionMessageFor: anObject [
+	"Modules/_io/stringio.c:953."
+
+	^ 'third item of state must be an integer, got ' @env0:, (bytes ___pyTypeNameOf___: anObject)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+StringIO class >> ___stringExpectedMessageFor: anObject [
+	"Modules/_io/stringio.c:558."
+
+	^ 'string argument expected, got ''' @env0:, anObject ___pyTypeNameForError___ @env0:, ''''
 
 ]
 
@@ -62,8 +154,17 @@ StringIO class >> __new__ [
 
 { #category : 'Grail-Initialization' }
 StringIO class >> __new__: initialValue [
-	"StringIO([initial]) - text buffer seeded with initial."
+	"StringIO([initial]) - text buffer seeded with initial.
 
+	``StringIO.__new__(cls)'' -- how pickle and copy rebuild an instance --
+	arrives here with the CLASS as the value.  CPython's stringio_new
+	ignores its arguments and allocates cls, so this does too: a class is
+	never a str.  It used to be refused as one (``initial_value must be str
+	or None, not type''), so no StringIO could be unpickled."
+
+	((initialValue @env0:isKindOf: Behavior)
+		and: [initialValue == self or: [initialValue @env0:inheritsFrom: self]])
+			ifTrue: [^ initialValue __new__].
 	^ self ___construct___: initialValue newline: (String @env0:with: Character @env0:lf)
 
 ]
@@ -88,34 +189,14 @@ StringIO class >> __new__: initialValue _: newlineArg _: extra [
 { #category : 'Grail-Initialization' }
 StringIO class >> _new: posArgs kw: kwArgs [
 	"``StringIO(initial_value='', newline='\n')'' -- the keyword form, and
-	any call with more positionals than the fixed arities.  CPython's names
-	and messages; ``patch(..., new_callable=io.StringIO, initial_value=...)''
-	calls it this way."
+	any call with more positionals than the fixed arities;
+	``patch(..., new_callable=io.StringIO, initial_value=...)'' calls it this
+	way.  StringIO >> ___init__:kw: binds and refuses the arguments."
 
-	| n initial newline |
-	n := posArgs @env0:size.
-	n @env0:> 2 ifTrue: [
-		TypeError ___signal___: 'StringIO() takes at most 2 arguments ('
-			@env0:, n @env0:printString @env0:, ' given)'].
-	initial := n @env0:>= 1 ifTrue: [posArgs @env0:at: 1] ifFalse: [nil].
-	newline := n @env0:>= 2 ifTrue: [posArgs @env0:at: 2] ifFalse: [nil].
-	(kwArgs == nil @env0:or: [kwArgs == None]) ifFalse: [
-		kwArgs @env0:keysAndValuesDo: [:k :v | | key |
-			key := k @env0:asString.
-			key @env0:= 'initial_value' ifTrue: [
-				n @env0:>= 1 ifTrue: [TypeError ___signal___:
-					'argument for StringIO() given by name (''initial_value'') and position (1)'].
-				initial := v]
-			ifFalse: [key @env0:= 'newline' ifTrue: [
-				n @env0:>= 2 ifTrue: [TypeError ___signal___:
-					'argument for StringIO() given by name (''newline'') and position (2)'].
-				newline := v]
-			ifFalse: [
-				TypeError ___signal___: ('StringIO() got an unexpected keyword argument '''
-					@env0:, key @env0:, '''')]]]].
-	^ self ___construct___: initial newline: (newline == nil
-		ifTrue: [String @env0:with: Character @env0:lf]
-		ifFalse: [newline])
+	| stream |
+	stream := self @env0:new.
+	stream ___init__: posArgs kw: kwArgs.
+	^ stream
 
 ]
 
@@ -144,6 +225,25 @@ StringIO >> ___carried___: aString [
 
 ]
 
+{ #category : 'Grail-Initialization' }
+StringIO >> ___init__: positional kw: keywords [
+	"StringIO.__init__(self, initial_value='', newline='\n') -- which starts
+	a live stream over, bound and refused as Argument Clinic binds it."
+
+	| arguments |
+	arguments := TypeError @env0:___argumentsOf___: (positional @env0:ifNil: [#()])
+		keywords: keywords
+		named: #('initial_value' 'newline')
+		positionalOnly: 0
+		required: 0
+		for: 'StringIO'.
+	self
+		___startOver: (arguments @env0:at: 1)
+		newline: ((arguments @env0:at: 2) @env0:ifNil: [String @env0:with: Character @env0:lf]).
+	^ None
+
+]
+
 { #category : 'Grail-Private' }
 StringIO >> ___ioRead___: n [
 	"read(size=-1) - read up to size chars from the current position;
@@ -167,48 +267,176 @@ StringIO >> ___ioRead___: n [
 
 { #category : 'Grail-Private' }
 StringIO >> ___ioReadline___: limit [
-	"readline(size=-1) - read up to and including the next \\n, or
-	up to `size` chars (whichever first), or to EOF."
+	"readline(size=-1) - read up to and including the next line ending, or
+	up to `size` chars (whichever first), or to EOF (_stringio_readline).
+	Which ending ends a line is the newline argument's: any of \r, \n and
+	\r\n for '', the newline itself for '\r' and '\r\n', and \n otherwise --
+	newline=None has translated the other two away on write
+	(_PyIO_find_line_ending)."
 
-	| n start max |
+	| buffer size start maximum end |
 	self _checkOpen.
-	n := (self @env0:dynamicInstVarAt: #_buffer) @env0:size.
-	(self @env0:dynamicInstVarAt: #_pos) @env0:>= n ifTrue: [^ ''].
-	start := (self @env0:dynamicInstVarAt: #_pos).
-	max := (limit == nil @env0:or: [limit == None @env0:or: [limit @env0:< 0]])
-		ifTrue: [n]
-		ifFalse: [(start @env0:+ limit) @env0:min: n].
-	[(self @env0:dynamicInstVarAt: #_pos) @env0:< max @env0:and: [((self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ 1) @env0:~= Character @env0:lf]]
-		@env0:whileTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ 1)].
-	"Include the \\n itself when present."
-	((self @env0:dynamicInstVarAt: #_pos) @env0:< max @env0:and: [((self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ 1) @env0:= Character @env0:lf]) ifTrue: [
-		self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ 1)].
-	^ self ___restored___: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: start @env0:+ 1 to: (self @env0:dynamicInstVarAt: #_pos))
+	buffer := self @env0:dynamicInstVarAt: #_buffer.
+	size := buffer @env0:size.
+	start := self @env0:dynamicInstVarAt: #_pos.
+	start @env0:>= size ifTrue: [^ ''].
+	maximum := (limit == nil @env0:or: [limit == None @env0:or: [limit @env0:< 0]])
+		ifTrue: [size]
+		ifFalse: [(start @env0:+ limit) @env0:min: size].
+	end := self ___lineEndIn: buffer from: start @env0:+ 1 to: maximum.
+	self @env0:dynamicInstVarAt: #_pos put: end.
+	^ self ___restored___: (buffer @env0:copyFrom: start @env0:+ 1 to: end)
 
 ]
 
 { #category : 'Grail-Private' }
 StringIO >> ___ioSeek___: pos whence: whence [
-	"seek(pos, whence=0): 0=set, 1=cur, 2=end."
+	"seek(pos, whence=0) -- both as ints through __index__, so a float is a
+	TypeError; an unknown whence and an absolute position before the start
+	are ValueErrors, and a text stream seeks relative to the current
+	position or the end only by 0, an OSError otherwise
+	(_io_StringIO_seek_impl).  Grail took any relative seek and clamped a
+	negative absolute one to the start."
 
+	| position mode |
+	position := pos ___asIndex___.
+	mode := whence ___asIndex___.
 	self _checkOpen.
-	whence @env0:= 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (pos)]
-	ifFalse: [whence @env0:= 1 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_pos) @env0:+ pos)]
-	ifFalse: [whence @env0:= 2 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:size @env0:+ pos)]
-	ifFalse: [
-		ValueError ___signal___: 'whence must be 0, 1, or 2'
-	]]].
-	(self @env0:dynamicInstVarAt: #_pos) @env0:< 0 ifTrue: [self @env0:dynamicInstVarAt: #_pos put: (0)].
-	^ (self @env0:dynamicInstVarAt: #_pos)
+	(mode @env0:between: 0 and: 2) ifFalse: [
+		^ ValueError ___signal___: (self @env0:class ___invalidWhenceMessageFor: mode)].
+	(position @env0:< 0 and: [mode @env0:= 0]) ifTrue: [
+		^ ValueError ___signal___: (self @env0:class ___negativeSeekMessageFor: position)].
+	(mode @env0:~= 0 and: [position @env0:~= 0]) ifTrue: [
+		^ OSError ___signal___: self @env0:class ___relativeSeekMessage].
+	mode @env0:= 1 ifTrue: [position := self @env0:dynamicInstVarAt: #_pos].
+	mode @env0:= 2 ifTrue: [position := (self @env0:dynamicInstVarAt: #_buffer) @env0:size].
+	self @env0:dynamicInstVarAt: #_pos put: position.
+	^ position
 
 ]
 
 { #category : 'Grail-Private' }
 StringIO >> ___ioTruncate___: size [
+	"truncate(pos=None) -- cut the stream to at most pos characters, the
+	current position for None, leaving the position where it is
+	(_io_StringIO_truncate_impl)."
+
+	| newSize |
+	newSize := size ___asSizeOr: (self @env0:dynamicInstVarAt: #_pos).
 	self _checkOpen.
-	size @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
-		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: size)].
-	^ size
+	newSize @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: (self @env0:class ___negativeSizeMessageFor: newSize)].
+	newSize @env0:< (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
+		self @env0:dynamicInstVarAt: #_buffer
+			put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:copyFrom: 1 to: newSize)].
+	^ newSize
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___lineEndIn: aBuffer from: aFirst to: aLast [
+	"The index of the last character of the line that starts at aFirst in
+	aBuffer, looking no further than aLast; aLast when no line ends sooner."
+
+	| newline index character |
+	newline := self ___newline___.
+	(newline == None or: [newline @env0:= (String @env0:with: Character @env0:lf)]) ifTrue: [
+		index := aBuffer @env0:indexOf: Character @env0:lf startingAt: aFirst.
+		^ (index @env0:between: 1 and: aLast) ifTrue: [index] ifFalse: [aLast]].
+	newline @env0:isEmpty ifFalse: [
+		index := aBuffer @env0:indexOfSubCollection: newline startingAt: aFirst.
+		^ (index @env0:> 0 and: [index @env0:+ newline @env0:size @env0:- 1 @env0:<= aLast])
+			ifTrue: [index @env0:+ newline @env0:size @env0:- 1]
+			ifFalse: [aLast]].
+	index := aFirst.
+	[index @env0:<= aLast] @env0:whileTrue: [
+		character := aBuffer @env0:at: index.
+		character @env0:= Character @env0:lf ifTrue: [^ index].
+		character @env0:= Character @env0:cr ifTrue: [
+			^ (index @env0:< aLast and: [(aBuffer @env0:at: index @env0:+ 1) @env0:= Character @env0:lf])
+				ifTrue: [index @env0:+ 1]
+				ifFalse: [index]].
+		index := index @env0:+ 1].
+	^ aLast
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___newline___ [
+	"The newline argument this stream was made with: None, or one of '',
+	'\n', '\r' and '\r\n'.  A stream built before it was recorded is '\n'."
+
+	^ (self @env0:dynamicInstVarAt: #_newline)
+		@env0:ifNil: [String @env0:with: Character @env0:lf]
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___newlinesTranslated: aString [
+	"aString as the stream stores it (write_str): through CPython's newline
+	decoder for newline None or '' -- which notes each kind of line ending it
+	sees, and for None turns \r\n and \r into \n -- and then, for newline
+	'\r' or '\r\n', with every \n written as that newline."
+
+	| newline lf cr crlf translated crlfCount |
+	newline := self ___newline___.
+	lf := String @env0:with: Character @env0:lf.
+	newline @env0:= lf ifTrue: [^ aString].
+	cr := String @env0:with: Character @env0:cr.
+	crlf := cr @env0:, lf.
+	translated := aString.
+	(newline == None or: [newline @env0:isEmpty]) ifTrue: [
+		crlfCount := self ___occurrencesOf: crlf in: aString.
+		self ___noteNewlines: (Array
+			@env0:with: (aString @env0:occurrencesOf: Character @env0:cr) @env0:- crlfCount
+			with: (aString @env0:occurrencesOf: Character @env0:lf) @env0:- crlfCount
+			with: crlfCount).
+		newline == None ifTrue: [
+			translated := (translated @env0:copyReplaceAll: crlf with: lf)
+				@env0:copyReplaceAll: cr with: lf]].
+	(newline == None or: [newline @env0:isEmpty]) ifFalse: [
+		translated := translated @env0:copyReplaceAll: lf with: newline].
+	^ translated
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___noteNewlines: someCounts [
+	"Record which line endings have been written, from the counts of lone
+	\r, lone \n and \r\n in what was: the bits CPython's
+	IncrementalNewlineDecoder keeps for its newlines attribute (CR 1, LF 2,
+	CRLF 4 here)."
+
+	| seen |
+	seen := (self @env0:dynamicInstVarAt: #_seen) @env0:ifNil: [0].
+	(someCounts @env0:at: 1) @env0:> 0 ifTrue: [seen := seen @env0:bitOr: 1].
+	(someCounts @env0:at: 2) @env0:> 0 ifTrue: [seen := seen @env0:bitOr: 2].
+	(someCounts @env0:at: 3) @env0:> 0 ifTrue: [seen := seen @env0:bitOr: 4].
+	self @env0:dynamicInstVarAt: #_seen put: seen
+
+]
+
+{ #category : 'Grail-Private' }
+StringIO >> ___occurrencesOf: aSubstring in: aString [
+	"How many times aSubstring occurs in aString, not overlapping."
+
+	| count index |
+	count := 0.
+	index := aString @env0:indexOfSubCollection: aSubstring startingAt: 1.
+	[index @env0:> 0] @env0:whileTrue: [
+		count := count @env0:+ 1.
+		index := aString @env0:indexOfSubCollection: aSubstring startingAt: index @env0:+ aSubstring @env0:size].
+	^ count
+
+]
+
+{ #category : 'Grail-Reflection' }
+StringIO >> ___pyHiddenStateNames___ [
+	"The dynamic instVars that are Grail's implementation of the stream, not
+	attributes of the instance: __getstate__ leaves them out of the
+	instance's dict, which holds only what was assigned."
+
+	^ #( #_buffer #_pos #_closed #_surrogates #_newline #_seen )
 
 ]
 
@@ -237,6 +465,36 @@ StringIO >> ___restored___: aString [
 ]
 
 { #category : 'Grail-Private' }
+StringIO >> ___startOver: initialValue newline: newlineArg [
+	"__init__'s work, which it does again on a live stream
+	(_io_StringIO___init___impl): newline is checked as a str or None and
+	then as one CPython knows, initial_value as a str or None, and only then
+	does the stream start over -- open, empty, and holding initial_value as
+	written, newlines translated, from position 0.  newline None, '\r' and
+	'\r\n' used to be refused as NotImplementedError."
+
+	| newline |
+	newline := newlineArg.
+	newlineArg == None ifFalse: [
+		newlineArg @env0:___isPyStr___ ifFalse: [
+			^ TypeError ___signal___: (self @env0:class ___newlineTypeMessageFor: newlineArg)].
+		newline := self @env0:class ___legalNewlines
+			@env0:detect: [:each | each @env0:= newlineArg]
+			ifNone: [^ ValueError ___signal___: (self @env0:class ___illegalNewlineMessageFor: newlineArg)]].
+	(initialValue == None or: [initialValue == nil or: [initialValue @env0:___isPyStr___]]) ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___initialValueTypeMessageFor: initialValue)].
+	self @env0:dynamicInstVarAt: #_newline put: newline.
+	self @env0:dynamicInstVarAt: #_seen put: 0.
+	self @env0:dynamicInstVarAt: #_buffer put: String @env0:new.
+	self @env0:dynamicInstVarAt: #_pos put: 0.
+	self @env0:dynamicInstVarAt: #_closed put: false.
+	(initialValue == None or: [initialValue == nil]) ifTrue: [^ self].
+	self write: initialValue.
+	self @env0:dynamicInstVarAt: #_pos put: 0
+
+]
+
+{ #category : 'Grail-Private' }
 StringIO >> ___surrogatePlaceholders___ [
 	"Surrogate code point -> its placeholder in this stream's buffer; see
 	___carried___:."
@@ -256,6 +514,20 @@ StringIO >> __enter__ [
 StringIO >> __exit__: a _: b _: c [
 	self close.
 	^ false
+
+]
+
+{ #category : 'Grail-Serialization' }
+StringIO >> __getstate__ [
+	"(value, newline, position, dict) -- what pickle and copy rebuild a
+	stream from, the dict None while no attribute was ever set
+	(_io_StringIO___getstate___impl)."
+
+	^ tuple @env0:withAll: {
+		self getvalue.
+		self ___newline___.
+		self @env0:dynamicInstVarAt: #_pos.
+		super __getstate__ }
 
 ]
 
@@ -280,11 +552,79 @@ StringIO >> __next__ [
 
 ]
 
+{ #category : 'Grail-Serialization' }
+StringIO >> __setstate__: aState [
+	"Restore what __getstate__ answered: __init__ runs with the value and
+	the newline, the value then replaces the buffer as it stands -- it was
+	translated once already -- and the position and the dict's attributes
+	follow (_io_StringIO___setstate___impl, whose refusals and their order
+	this keeps)."
+
+	| value position attributes |
+	self _checkOpen.
+	((aState isKindOf: Array) and: [aState @env0:size @env0:>= 4]) ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___stateMessageFor: aState)].
+	value := aState @env0:at: 1.
+	self ___startOver: value newline: (aState @env0:at: 2).
+	self @env0:dynamicInstVarAt: #_buffer
+		put: (value == None ifTrue: [String @env0:new] ifFalse: [(self ___carried___: value) @env0:copy]).
+	position := aState @env0:at: 3.
+	(position isKindOf: Integer) ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___statePositionMessageFor: position)].
+	position @env0:< 0 ifTrue: [
+		^ ValueError ___signal___: self @env0:class ___negativeStatePositionMessage].
+	self @env0:dynamicInstVarAt: #_pos put: position.
+	attributes := aState @env0:at: 4.
+	attributes == None ifTrue: [^ None].
+	(attributes isKindOf: dict) ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___stateDictionaryMessageFor: attributes)].
+	attributes keys @env0:do: [:name |
+		self __setattr__: name _: (attributes __getitem__: name)].
+	^ None
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> _checkClosed [
+	"IOBase's closed check, which _pyio's wrappers call on the stream they
+	wrap: None, or the ValueError for a closed stream, in IOBase's words."
+
+	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
+		^ ValueError ___signal___: self @env0:class ___closedStreamMessage].
+	^ None
+
+]
+
 { #category : 'Grail-Private' }
 StringIO >> _checkOpen [
 	(self @env0:dynamicInstVarAt: #_closed) == true ifTrue: [
 		ValueError ___signal___: 'I/O operation on closed file'
 	]
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> _checkReadable [
+	"IOBase's capability checks: the predicate's answer, refused as it
+	refuses on a closed stream."
+
+	^ self readable
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> _checkSeekable [
+	"See _checkReadable."
+
+	^ self seekable
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> _checkWritable [
+	"See _checkReadable."
+
+	^ self writable
 
 ]
 
@@ -302,6 +642,38 @@ StringIO >> closed [
 ]
 
 { #category : 'Grail-Protocol' }
+StringIO >> detach [
+	"An in-memory stream has no buffer to hand over (TextIOBase)."
+
+	^ UnsupportedOperation ___signal___: (UnsupportedOperation @env0:___messageFor: 'detach')
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> encoding [
+	"None: a StringIO encodes nothing (TextIOBase), open or closed."
+
+	^ None
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> errors [
+	"None, as encoding is."
+
+	^ None
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> fileno [
+	"An in-memory stream has no file descriptor (IOBase), open or closed."
+
+	^ UnsupportedOperation ___signal___: (UnsupportedOperation @env0:___messageFor: 'fileno')
+
+]
+
+{ #category : 'Grail-Protocol' }
 StringIO >> flush [
 	"Nothing to push anywhere for an in-memory stream, and -- UNLIKE
 	BytesIO >> flush beside it -- CPython does NOT raise on a closed one.
@@ -315,8 +687,10 @@ StringIO >> flush [
 
 { #category : 'Grail-State' }
 StringIO >> getvalue [
-	"getvalue() - return the entire buffer contents as a single str."
+	"getvalue() - return the entire buffer contents as a single str,
+	refused once the stream is closed."
 
+	self _checkOpen.
 	^ self ___restored___: (self @env0:dynamicInstVarAt: #_buffer) @env0:copy
 
 ]
@@ -331,6 +705,37 @@ StringIO >> isatty [
 
 ]
 
+{ #category : 'Grail-Protocol' }
+StringIO >> line_buffering [
+	"False: nothing is flushed line by line; refused once closed."
+
+	self _checkOpen.
+	^ false
+
+]
+
+{ #category : 'Grail-Protocol' }
+StringIO >> newlines [
+	"The kinds of line ending written so far, as CPython's newline decoder
+	reports them -- None, one of '\r', '\n' and '\r\n', or a tuple of those
+	seen in that order -- for a stream with newline None or ''; None for any
+	other (_io_StringIO_newlines_get_impl)."
+
+	| seen kinds |
+	self _checkOpen.
+	(self ___newline___ == None or: [self ___newline___ @env0:isEmpty]) ifFalse: [^ None].
+	seen := (self @env0:dynamicInstVarAt: #_seen) @env0:ifNil: [0].
+	kinds := OrderedCollection @env0:new.
+	(seen @env0:bitAnd: 1) @env0:= 0 ifFalse: [kinds @env0:add: (String @env0:with: Character @env0:cr)].
+	(seen @env0:bitAnd: 2) @env0:= 0 ifFalse: [kinds @env0:add: (String @env0:with: Character @env0:lf)].
+	(seen @env0:bitAnd: 4) @env0:= 0 ifFalse: [
+		kinds @env0:add: (String @env0:with: Character @env0:cr with: Character @env0:lf)].
+	kinds @env0:isEmpty ifTrue: [^ None].
+	kinds @env0:size @env0:= 1 ifTrue: [^ kinds @env0:first].
+	^ tuple @env0:withAll: kinds
+
+]
+
 { #category : 'Grail-Reading' }
 StringIO >> read [
 	^ self ___ioRead___: -1
@@ -339,7 +744,7 @@ StringIO >> read [
 
 { #category : 'Grail-Reading' }
 StringIO >> read: n [
-	^ self ___ioRead___: n
+	^ self ___ioRead___: (n ___asSizeOr: -1)
 
 ]
 
@@ -360,22 +765,33 @@ StringIO >> readline [
 
 { #category : 'Grail-Reading' }
 StringIO >> readline: limit [
-	^ self ___ioReadline___: limit
+	^ self ___ioReadline___: (limit ___asSizeOr: -1)
 
 ]
 
 { #category : 'Grail-Reading' }
 StringIO >> readlines [
-	"Read all remaining lines into a list."
+	^ self readlines: None
 
-	| out line |
+]
+
+{ #category : 'Grail-Reading' }
+StringIO >> readlines: aHint [
+	"readlines(hint=-1) -- IOBase's: the lines left, stopping after the one
+	that takes their total length past the hint when it is positive
+	(_io__IOBase_readlines_impl)."
+
+	| hint lines line total |
+	hint := aHint ___asSizeOr: -1.
 	self _checkOpen.
-	out := list ___new___.
-	[
-		line := self readline.
-		line __len__ @env0:= 0
-	] @env0:whileFalse: [out append: line].
-	^ out
+	lines := list ___new___.
+	total := 0.
+	[line := self readline.
+	line __len__ @env0:= 0] @env0:whileFalse: [
+		lines append: line.
+		total := total @env0:+ line __len__.
+		(hint @env0:> 0 and: [total @env0:> hint]) ifTrue: [^ lines]].
+	^ lines
 
 ]
 
@@ -425,7 +841,7 @@ StringIO >> tell [
 
 { #category : 'Grail-Position' }
 StringIO >> truncate [
-	^ self ___ioTruncate___: (self @env0:dynamicInstVarAt: #_pos)
+	^ self ___ioTruncate___: None
 
 ]
 
@@ -446,30 +862,31 @@ StringIO >> writable [
 
 { #category : 'Grail-Writing' }
 StringIO >> write: data [
-	"Overwrite from the current position; grow on append.  Only a str is
-	written: CPython's StringIO.write refuses anything else, and asks before
-	it asks whether the stream is closed (Modules/_io/stringio.c:554).  Grail
-	wrote the argument's Smalltalk print string -- ``aByteArray'' for b'x',
-	``aNoneType'' for None -- so base64.encode into a StringIO succeeded with
-	garbage where test_base64 expects the TypeError."
+	"write(s) -- write the str at the current position, its newlines
+	translated as the stream's newline argument says, and answer its length
+	as given (_io_StringIO_write_impl).  Only a str is written, and asked
+	for before the stream is asked whether it is closed
+	(Modules/_io/stringio.c:554); Grail once wrote a print string --
+	``aByteArray'' for b'x' -- where test_base64 expects the TypeError.
+	Writing nothing changes nothing, even past the end, where an empty write
+	used to pad the stream out to the position (test_overseek)."
 
-	| s n endPos |
-	((data @env0:isKindOf: CharacterCollection) or: [data @env0:isKindOf: AbstractPyStr]) ifFalse: [
-		^ TypeError ___signal___: 'string argument expected, got '''
-			@env0:, data ___pyTypeNameForError___ @env0:, ''''].
+	| length stored endPosition buffer |
+	data @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: (self @env0:class ___stringExpectedMessageFor: data)].
 	self _checkOpen.
-	s := self ___carried___: data.
-	n := s @env0:size.
-	endPos := (self @env0:dynamicInstVarAt: #_pos) @env0:+ n.
-	endPos @env0:> (self @env0:dynamicInstVarAt: #_buffer) @env0:size ifTrue: [
-		"Extend buffer with the suffix from `s`."
-		self @env0:dynamicInstVarAt: #_buffer put: ((self @env0:dynamicInstVarAt: #_buffer) @env0:, (Unicode7 @env0:new: (endPos @env0:- (self @env0:dynamicInstVarAt: #_buffer) @env0:size))).
-	].
-	1 @env0:to: n do: [:i |
-		(self @env0:dynamicInstVarAt: #_buffer) @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ i put: (s @env0:at: i)
-	].
-	self @env0:dynamicInstVarAt: #_pos put: (endPos).
-	^ n
+	length := data __len__.
+	length @env0:= 0 ifTrue: [^ 0].
+	stored := self ___newlinesTranslated: (self ___carried___: data).
+	buffer := self @env0:dynamicInstVarAt: #_buffer.
+	endPosition := (self @env0:dynamicInstVarAt: #_pos) @env0:+ stored @env0:size.
+	endPosition @env0:> buffer @env0:size ifTrue: [
+		buffer := buffer @env0:, (Unicode7 @env0:new: endPosition @env0:- buffer @env0:size).
+		self @env0:dynamicInstVarAt: #_buffer put: buffer].
+	1 @env0:to: stored @env0:size do: [:index |
+		buffer @env0:at: (self @env0:dynamicInstVarAt: #_pos) @env0:+ index put: (stored @env0:at: index)].
+	self @env0:dynamicInstVarAt: #_pos put: endPosition.
+	^ length
 
 ]
 

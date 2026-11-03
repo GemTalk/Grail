@@ -8,8 +8,9 @@
 #     MagicMock: ``new_callable'' was not a patch keyword.
 #   * ``io.StringIO(initial_value=...)'' -- how patch passes its keywords on --
 #     took no keywords at all, and ``StringIO(5)'' / ``StringIO(None)'' held
-#     '5' / 'None'.  (newline=None, '\r' and '\r\n' translate newlines in
-#     CPython; Grail's StringIO refuses them, so they are not compared.)
+#     '5' / 'None'.  (newline=None, '\r' and '\r\n' translate newlines, in
+#     Grail as in CPython since stringio_translates_newlines_and_refuses_as_
+#     cpythons.py, which compares them; here they are only recorded.)
 #
 # Only platform-independent stat values are compared: _stat, where present,
 # supplies some bits (S_IFWHT, the UF_ flags) from the host's headers.
@@ -110,7 +111,7 @@ r['new_callable_refusals'] = repr([
     _err(lambda: patch('sys.stdout', new_callable=io.StringIO, autospec=True)),
 ])
 
-# --- newline translation (Grail-only: recorded, not compared) -----------------
+# --- newline translation (recorded, not compared: see the module comment) ---
 
 def _kind(f):
     try:

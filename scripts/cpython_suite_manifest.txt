@@ -965,11 +965,11 @@ test.test_dataclasses
 #
 # test_memoryio is CPython 3.14.4's, vendored verbatim.  It runs each test
 # against _pyio's BytesIO and StringIO and against io's, which are Grail's
-# own Smalltalk classes; io.BytesIO now binds, converts and refuses as
-# Modules/_io/bytesio.c does.  What is left: the BufferError CPython raises
-# for a resize while a getbuffer() view is alive, which needs a reference
-# count Grail does not keep, and io.StringIO's newline translation, IOBase
-# methods and pickling.  Measured on Darwin arm64:
+# own Smalltalk classes; io.BytesIO and io.StringIO now bind, convert and
+# refuse as Modules/_io/bytesio.c and stringio.c do, and StringIO translates
+# newlines.  What is left is the BufferError CPython raises for a resize
+# while a getbuffer() view is alive, which needs a reference count Grail
+# does not keep.  Measured on Darwin arm64:
 #
-#   memoryio   182t  17 fail  24 error  5 skip
+#   memoryio   182t  8 fail  5 skip
 test.test_memoryio
