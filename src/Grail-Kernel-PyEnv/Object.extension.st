@@ -19229,6 +19229,8 @@ Object >> __format__: formatSpec [
 	PythonInstance only, so formatting a number or a str pays nothing."
 
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		"``__format__ = None'' blocks format() as ``__str__ = None'' blocks str()."
+		(self ___cmpDunderBlocked___: #'__format__') ifTrue: [^ self ___cmpBlockedError___].
 		(self ___typeDunder___: #'__format__') @env0:ifNotNil: [:___fn |
 			^ self ___callTypeAttr___: ___fn with: { formatSpec }]].
 	((builtins instance) ___formatSpecArgument___: formatSpec) @env0:isEmpty ifTrue: [
@@ -19869,6 +19871,12 @@ Object >> __str__ [
 	#1218).  Asked of a PythonInstance only: a kernel-backed type cannot
 	carry one, and str() of those must not pay for the lookup."
 	(self @env0:isKindOf: PythonInstance) ifTrue: [
+		"``__str__ = None'' in the body BLOCKS the protocol: CPython finds the None
+		and calls it, so str() raises instead of falling back to repr (test_str
+		test_format's blocking fallback).  ___typeDunder___: counts the None as
+		absent, which is why this asks first; the rule and its message are the
+		comparison dunders' (___cmpDunderBlocked___:)."
+		(self ___cmpDunderBlocked___: #'__str__') ifTrue: [^ self ___cmpBlockedError___].
 		(self ___typeDunder___: #'__str__') @env0:ifNotNil: [:___fn |
 			^ self ___callTypeAttr___: ___fn with: #()]].
 	^ self __repr__
