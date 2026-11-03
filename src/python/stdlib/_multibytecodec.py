@@ -3,10 +3,12 @@
 # ``codec`` to an engine from _cjk (see _codecs_tw and friends), which owns
 # the tables and the shift state; these classes own buffering.
 #
-# The state a getstate() answers is OPAQUE, as CPython documents it: an int
-# for the encoder, a (pending bytes, int) pair for the decoder.  Its bits are
-# not CPython's -- nothing may read them but setstate() on the same codec --
-# and test_codecs' MixInCheckStateHandling checks exactly that round trip.
+# The state a getstate() answers is CPython's, byte for byte, as
+# Modules/cjkcodecs/multibytecodec.c builds it: an int for the encoder --
+# little-endian, a byte giving the pending text's UTF-8 length, that UTF-8,
+# then the codec's eight bytes of MultibyteCodec_State -- and a (pending
+# bytes, int of those eight bytes) pair for the decoder.  test_multibytecodec
+# checks the values themselves, not only the round trip.
 
 
 # CPython's MAXDECPENDING: an incremental decoder may hold at most this many
@@ -14,6 +16,12 @@
 # a UnicodeDecodeError over the whole buffer, whatever the error policy --
 # an ISO-2022 escape that never terminates reaches it.
 _MAXDECPENDING = 8
+
+# CPython's MAXENCPENDING: the characters an incremental encoder may hold.
+_MAXENCPENDING = 2
+
+# sizeof(MultibyteCodec_State.c), the codec's own state.
+_STATE_SIZE = 8
 
 
 def _check_pending(codec, data, pending):
@@ -46,26 +54,11 @@ def _refuse_errors_delete():
     raise AttributeError('cannot delete attribute')
 
 
-def _pack_encoder_state(pending, state):
-    """pending text (at most a few characters) and the engine's int state as
-    one non-negative int: state in the low 32 bits, then 21 bits a character
-    and the character count."""
-    value = len(pending)
-    for ch in pending:
-        value = (value << 21) | ord(ch)
-    return (value << 32) | (state or 0)
-
-
-def _unpack_encoder_state(value):
-    state = value & 0xFFFFFFFF
-    value >>= 32
-    chars = []
-    while value >= (1 << 21):
-        chars.append(value & 0x1FFFFF)
-        value >>= 21
-    count = value
-    chars.reverse()
-    return ''.join(chr(c) for c in chars[:count]), state
+def _state_bytes(codec, state, carried, encoder):
+    """The eight state bytes CPython keeps: the codec's for a stateful one,
+    otherwise the ones setstate() last gave, which nothing reads."""
+    c = codec.state_to_c(state, encoder)
+    return carried if c is None else c
 
 
 class MultibyteIncrementalEncoder:
@@ -87,6 +80,7 @@ class MultibyteIncrementalEncoder:
         self.errors = _check_errors(self, errors)
         self._pending = ''
         self._state = self.codec.initial_state()
+        self._carried = bytes(_STATE_SIZE)
 
     def encode(self, input, final=False):
         if not isinstance(input, str):
@@ -106,15 +100,25 @@ class MultibyteIncrementalEncoder:
         self._state = self.codec.initial_state()
 
     def getstate(self):
-        return _pack_encoder_state(self._pending, self.codec.state_to_int(self._state))
+        pending = self._pending.encode('utf-8')
+        if len(pending) > _MAXENCPENDING * 4:
+            raise UnicodeError('pending buffer too large')
+        c = _state_bytes(self.codec, self._state, self._carried, True)
+        return int.from_bytes(bytes((len(pending),)) + pending + c, 'little')
 
     def setstate(self, state):
         if not isinstance(state, int):
             raise TypeError('setstate() argument must be int, not %s'
                             % type(state).__name__)
-        pending, bits = _unpack_encoder_state(state)
+        statebytes = state.to_bytes(1 + _MAXENCPENDING * 4 + _STATE_SIZE, 'little')
+        size = statebytes[0]
+        if size > _MAXENCPENDING * 4:
+            raise UnicodeError('pending buffer too large')
+        pending = statebytes[1:1 + size].decode('utf-8')
+        c = statebytes[1 + size:1 + size + _STATE_SIZE]
         self._pending = pending
-        self._state = self.codec.state_from_int(bits)
+        self._carried = c
+        self._state = self.codec.state_from_c(c, True)
 
 
 class MultibyteIncrementalDecoder:
@@ -136,6 +140,7 @@ class MultibyteIncrementalDecoder:
         self.errors = _check_errors(self, errors)
         self._pending = b''
         self._state = self.codec.initial_state()
+        self._carried = bytes(_STATE_SIZE)
 
     def decode(self, input, final=False):
         data = self._pending + bytes(input)
@@ -152,16 +157,25 @@ class MultibyteIncrementalDecoder:
         self._state = self.codec.initial_state()
 
     def getstate(self):
-        return (self._pending, self.codec.state_to_int(self._state))
+        c = _state_bytes(self.codec, self._state, self._carried, False)
+        return (self._pending, int.from_bytes(c, 'little'))
 
     def setstate(self, state):
-        if not (isinstance(state, tuple) and len(state) == 2):
-            raise TypeError('setstate() argument must be tuple')
+        if not isinstance(state, tuple):
+            raise TypeError('setstate() argument must be tuple, not %s'
+                            % type(state).__name__)
+        # PyArg_ParseTuple(state, "SO!;setstate(): illegal state argument").
+        if not (len(state) == 2 and isinstance(state[0], bytes)
+                and isinstance(state[1], int)):
+            raise TypeError('setstate(): illegal state argument')
         pending, bits = state
-        if not isinstance(pending, bytes):
-            raise TypeError('state[0] must be bytes')
+        c = bits.to_bytes(_STATE_SIZE, 'little')
+        if len(pending) > _MAXDECPENDING:
+            raise UnicodeDecodeError(self.codec.name, bytes(pending), 0, len(pending),
+                                     'pending buffer too large')
         self._pending = pending
-        self._state = self.codec.state_from_int(bits)
+        self._carried = c
+        self._state = self.codec.state_from_c(c, False)
 
 
 class MultibyteStreamReader:

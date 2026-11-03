@@ -424,11 +424,16 @@ class StatelessCodec:
     def encode_flush(self, state):
         return b''
 
-    def state_to_int(self, state):
-        return 0
+    # The state as CPython's MultibyteCodec_State holds it, the eight bytes of
+    # ``c'' that getstate() answers and setstate() takes; None for a codec
+    # that keeps no state, whose bytes the incremental coder then carries
+    # through untouched, as CPython's do.
 
-    def state_from_int(self, value):
+    def state_to_c(self, state, encoder):
         return None
+
+    def state_from_c(self, c, encoder):
+        return self.initial_state()
 
 
 # ------------------------------------------------------------- the registry
@@ -458,6 +463,13 @@ def make_codec(name):
 
 _ESC, _SO, _SI, _LF = 0x1B, 0x0E, 0x0F, 0x0A
 _ASCII = 'B'           # the ASCII charset: what ``ESC ( B'' designates
+
+
+def _designation_mark(name):
+    """The byte CPython's ISO-2022 state records for a charset named by its
+    designation: its final byte, with CHARSET_DBCS (0x80) for a double-byte
+    one -- ``B'' is ASCII, 0x42; ``$B'' is JIS X 0208, 0xC2."""
+    return (ord(name[-1]) | 0x80) if name.startswith('$') else ord(name)
 
 
 def _is_escend(byte):
@@ -589,19 +601,23 @@ class Iso2022Codec:
     def _names(self):
         return [_ASCII] + sorted(self._charsets)
 
-    def state_to_int(self, state):
-        self._build()
-        names = self._names()
-        g0, g1, g2, shifted, through = state or self.initial_state()
-        return (names.index(g0) | (names.index(g1) << 8) | (names.index(g2) << 16)
-                | (int(shifted) << 24) | (int(through) << 25))
+    # As Modules/cjkcodecs/_codecs_iso2022.c lays it out: c[0..2] the charset
+    # designated to G0..G2 -- its final byte, with 0x80 for a double-byte one,
+    # so ``$B'' (JIS X 0208) is 0xC2 -- and c[4] the flags, shifted 0x01 and
+    # escape-throughout 0x02.  CPython's encoder never designates G2 until
+    # it must; its decoder starts it at ASCII.
 
-    def state_from_int(self, value):
+    def state_to_c(self, state, encoder):
+        g0, g1, g2, shifted, through = state or self.initial_state()
+        third = 0 if (encoder and g2 == _ASCII) else _designation_mark(g2)
+        flags = (0x01 if shifted else 0) | (0x02 if through else 0)
+        return bytes((_designation_mark(g0), _designation_mark(g1), third, 0, flags, 0, 0, 0))
+
+    def state_from_c(self, c, encoder):
         self._build()
-        names = self._names()
-        value = int(value)
-        return (names[value & 0xFF], names[(value >> 8) & 0xFF], names[(value >> 16) & 0xFF],
-                bool((value >> 24) & 1), bool((value >> 25) & 1))
+        names = {_designation_mark(name): name for name in self._names()}
+        g0, g1, g2 = (names.get(mark, _ASCII) for mark in c[:3])
+        return (g0, g1, g2, bool(c[4] & 0x01), bool(c[4] & 0x02))
 
     # -- decoding -----------------------------------------------------------
 
@@ -931,11 +947,13 @@ class HzCodec:
     def initial_state(self):
         return False            # in GB mode?
 
-    def state_to_int(self, state):
-        return int(bool(state))
+    # Modules/cjkcodecs/_codecs_cn.c: c[0] is 1 in GB mode (CN_STATE_OFFSET).
 
-    def state_from_int(self, value):
-        return bool(int(value) & 1)
+    def state_to_c(self, state, encoder):
+        return bytes((1 if state else 0, 0, 0, 0, 0, 0, 0, 0))
+
+    def state_from_c(self, c, encoder):
+        return c[0] != 0
 
     def decode_chunk(self, data, errors, final, state=None):
         self._build()
