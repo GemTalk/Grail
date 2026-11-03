@@ -3573,10 +3573,12 @@ builtins >> ___printfAsInteger___: value conv: conv [
 
 	(value isKindOf: Integer) ifTrue: [^ value].
 	(value isKindOf: Boolean) ifTrue: [^ value ifTrue: [1] ifFalse: [0]].
+	"d/i/u convert as int() does, __int__ before __index__ (PyNumber_Long,
+	Objects/unicodeobject.c:14909-14914); o/x/X by __index__ alone."
 	((conv @env0:= $d) @env0:or: [(conv @env0:= $i) @env0:or: [conv @env0:= $u]]) ifTrue: [
 		(value isKindOf: Float) ifTrue: [^ value @env0:truncated].
-		(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 		(value ___respondsTo___: #'__int__') ifTrue: [^ value __int__].
+		(value ___hasIndexDunder___) ifTrue: [^ value __index__].
 		TypeError ___signal___: ('%' @env0:, (String @env0:with: conv)
 			@env0:, ' format: a real number is required, not '
 			@env0:, (self ___pyTypeNameOf___: value))].
@@ -3611,9 +3613,10 @@ builtins >> ___printfCharBody___: value [
 			"An int SUBCLASS (or any __index__ provider) is accepted, as in
 			CPython; a float is not, since it has no __index__."
 			(value ___hasIndexDunder___) ifTrue: [iv := value __index__]]].
+	"Named with %T, as CPython names it (Objects/unicodeobject.c:15008-15011)."
 	iv @env0:isNil ifTrue: [
 		TypeError ___signal___: ('%c requires an int or a unicode character, not '
-			@env0:, (self ___pyTypeNameOf___: value))].
+			@env0:, (bytes ___pyQualifiedTypeNameOf___: value))].
 	((iv @env0:>= 0) @env0:and: [iv @env0:<= 16r10FFFF]) ifFalse: [
 		OverflowError ___signal___: '%c arg not in range(0x110000)'].
 	^ String @env0:with: (Character @env0:codePoint: iv @env0:asInteger)

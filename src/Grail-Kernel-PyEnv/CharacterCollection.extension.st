@@ -92,10 +92,26 @@ CharacterCollection class >> ___maketransKey___: aKey [
 	"Through the shared code-point accessor, so a one-character key works for
 	every str representation -- a StrEnum member and a lone surrogate alike."
 	cps := aKey @env0:___pyCodePoints___.
-	(cps @env0:notNil @env0:and: [cps @env0:size @env0:= 1])
-		ifTrue: [^ cps @env0:at: 1].
-	^ TypeError ___signal___:
-		'string keys in translate table must be of length 1'
+	cps @env0:isNil ifTrue: [^ TypeError ___signal___: self ___maketransKeyTypeMessage].
+	cps @env0:size @env0:= 1 ifFalse: [^ ValueError ___signal___: self ___maketransKeyLengthMessage].
+	^ cps @env0:at: 1
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___maketransKeyLengthMessage [
+	"CPython's words, space and all: its two string literals concatenate
+	without one (Objects/unicodeobject.c:13400-13402)."
+
+	^ 'string keys in translatetable must be of length 1'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___maketransKeyTypeMessage [
+	"As ___maketransKeyLengthMessage (Objects/unicodeobject.c:13420-13421)."
+
+	^ 'keys in translate table mustbe strings or integers'
 
 ]
 
@@ -158,20 +174,15 @@ CharacterCollection class >> ___refuseUnbuildableLength___: aLength [
 
 ]
 
-{ #category : 'Grail-Error Messages' }
-CharacterCollection class >> ___strArgumentGivenTwiceMessageFor: aName at: aPosition [
-	^ 'argument for str() given by name (''' @env0:, aName
-		@env0:, ''') and position (' @env0:, aPosition @env0:printString @env0:, ')'
+{ #category : 'Grail-String Methods' }
+CharacterCollection class >> ___streamsAsTranslation___: aReplacement [
+	"Can translate: write aReplacement to its stream of Characters: a str, or
+	a code point a Character holds -- in range(0x110000) and no surrogate?"
 
-]
-
-{ #category : 'Grail-Error Messages' }
-CharacterCollection class >> ___strTakesAtMostThreeMessageFor: aCount positional: aPositionalCount [
-	"Clinic's wording, which says ``keyword arguments'' when none of them was
-	positional (Python/getargs.c:2429-2440)."
-
-	^ 'str() takes at most 3 ' @env0:, (aPositionalCount @env0:= 0 ifTrue: ['keyword '] ifFalse: [''])
-		@env0:, 'arguments (' @env0:, aCount @env0:printString @env0:, ' given)'
+	(aReplacement isKindOf: Integer) ifTrue: [
+		^ (aReplacement @env0:between: 0 and: 16r10FFFF)
+			and: [(aReplacement @env0:between: 16rD800 and: 16rDFFF) @env0:not]].
+	^ aReplacement @env0:isKindOf: CharacterCollection
 
 ]
 
@@ -419,63 +430,39 @@ CharacterCollection class >> _new: positional kw: kwargs [
 	``str(b'x', errors='replace')'' used to raise.
 
 	CPython's contract: any of the three may be a keyword; supplying
-	``encoding'' OR ``errors'' means DECODE, with the other defaulted; and any
-	other keyword is ``str() got an unexpected keyword argument'' -- the
-	wording CPython 3.14 uses."
+	``encoding'' OR ``errors'' means DECODE, with the other defaulted.  The
+	arguments are bound by Argument Clinic, and refused as it refuses them
+	and in its order (TypeError class >> ___argumentsOf___:...): more than
+	three in all, keywords counted, then a parameter given by position and by
+	name, then a keyword that names none of the three.  Grail had counted the
+	positionals alone, so a fourth argument given by name was ignored, and had
+	checked only ``object'' for a duplicate."
 
-	| args obj encoding errors |
-	"MORE THAN THREE POSITIONALS is an arity error, in CPython's two
-	wordings: the vectorcall one for positionals alone, the tp_new one --
-	counting the keywords too -- when there are any.  Grail read the fourth
-	and later as nothing and the second and third as an encoding, and so
-	answered ``decoding to str: need a bytes-like object''."
-	positional @env0:size @env0:> 3 ifTrue: [
-		^ TypeError ___signal___: ((kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty])
-			ifTrue: ['str expected at most 3 arguments, got '
-				@env0:, positional @env0:size @env0:printString]
-			ifFalse: [self ___strTakesAtMostThreeMessageFor: positional @env0:size @env0:+ kwargs @env0:size
-				positional: positional @env0:size])].
-	"Argument Clinic counts the keywords too, and before it reads their names
-	(_PyArg_UnpackKeywords, Python/getargs.c:2429-2440): ``str(b'x', 'utf-8',
-	'strict', errors='ignore')'' is four arguments.  Grail read the positional
-	three and ignored the keyword."
-	positional @env0:size @env0:+ kwargs @env0:size @env0:> 3 ifTrue: [
-		^ TypeError ___signal___: (self ___strTakesAtMostThreeMessageFor: positional @env0:size @env0:+ kwargs @env0:size
-			positional: positional @env0:size)].
-	args := OrderedCollection @env0:withAll: positional.
-	kwargs @env0:keysDo: [:k |
-		(#('object' 'encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
-			^ TypeError ___signal___: 'str() got an unexpected keyword argument '''
-				@env0:, k @env0:asString @env0:, '''']].
-	"A parameter given by position and by name is refused for each of the
-	three, as Clinic refuses it (Python/getargs.c:2522-2541); Grail checked
-	``object'' only, and used the positional encoding or errors over the
-	keyword."
-	#('object' 'encoding' 'errors') @env0:doWithIndex: [:name :position |
-		((kwargs @env0:includesKey: name) and: [positional @env0:size @env0:>= position]) ifTrue: [
-			^ TypeError ___signal___: (self ___strArgumentGivenTwiceMessageFor: name at: position)]].
-	(kwargs @env0:includesKey: 'object') ifTrue: [
-		args @env0:add: (kwargs @env0:at: 'object')].
-	obj := args @env0:isEmpty ifTrue: [''] ifFalse: [args @env0:at: 1].
-	encoding := args @env0:size @env0:>= 2
-		ifTrue: [args @env0:at: 2]
-		ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]].
-	errors := args @env0:size @env0:>= 3
-		ifTrue: [args @env0:at: 3]
-		ifFalse: [kwargs @env0:at: 'errors' ifAbsent: [nil]].
+	| values obj encoding errors |
+	"More than three POSITIONALS alone is the vectorcall path's wording, not
+	Clinic's.  Grail read the fourth and later as nothing and the second and
+	third as an encoding, and so answered ``decoding to str: need a
+	bytes-like object''."
+	(positional @env0:size @env0:> 3 and: [kwargs @env0:isNil or: [kwargs @env0:isEmpty]]) ifTrue: [
+		^ TypeError ___signal___: 'str expected at most 3 arguments, got '
+			@env0:, positional @env0:size @env0:printString].
+	values := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('object' 'encoding' 'errors') positionalOnly: 0 required: 0 for: 'str'.
+	obj := values @env0:at: 1.
+	encoding := values @env0:at: 2.
+	errors := values @env0:at: 3.
 	(encoding @env0:isNil @env0:and: [errors @env0:isNil]) ifTrue: [
-		^ args @env0:isEmpty ifTrue: [self __new__] ifFalse: [self __new__: obj]].
+		^ obj @env0:isNil ifTrue: [self __new__] ifFalse: [self __new__: obj]].
 	"No object is the empty string whatever else is given, once Argument
 	Clinic has checked that what is given is a str (unicode_new_impl):
 	``str(errors='strict')'' is ''."
-	args @env0:isEmpty ifTrue: [
+	obj @env0:isNil ifTrue: [
 		encoding @env0:ifNotNil: [:given | self ___checkDecodeArgument___: given named: 'encoding'].
 		errors @env0:ifNotNil: [:given | self ___checkDecodeArgument___: given named: 'errors'].
 		^ self __new__].
 	^ self __new__: obj
 		_: (encoding @env0:ifNil: ['utf-8'])
 		_: (errors @env0:ifNil: ['strict'])
-
 ]
 
 { #category : 'Grail-Initialization' }
@@ -4046,14 +4033,16 @@ CharacterCollection >> translate: table [
 			@env0:on: KeyError do: [:ex | ex @env0:return: ch].
 		replacement == ch ifTrue: [stream @env0:nextPut: ch] ifFalse: [
 			replacement == None ifFalse: [
-				"A replacement no Character can hold -- a lone surrogate, as an
-				int or inside a str -- makes the answer a PyStrSurrogate, which
-				only the code-point implementation can build.  Streaming it
-				died on an env-0 MessageNotUnderstood no Python code can catch."
-				(((replacement isKindOf: Integer)
-						and: [replacement @env0:>= 16rD800 and: [replacement @env0:<= 16rDFFF]])
-					or: [replacement @env0:isKindOf: PyStrSurrogate]) ifTrue: [
-						^ PyStrSurrogate ___translate___: self table: table].
+				"A replacement this stream cannot take goes to the code-point
+				implementation, which builds what CPython builds or raises what
+				it raises: a lone surrogate, as an int or inside a str, makes the
+				answer a PyStrSurrogate; an int outside range(0x110000) is a
+				ValueError (charmaptranslate_lookup, Objects/unicodeobject.c:9314-9320),
+				and any other value a TypeError.  Streaming the int died on an
+				OutOfRange, and the rest on a MessageNotUnderstood, neither of
+				which Python code can catch."
+				(CharacterCollection ___streamsAsTranslation___: replacement) ifFalse: [
+					^ PyStrSurrogate ___translate___: self table: table].
 				(replacement isKindOf: Integer) ifTrue: [
 					stream @env0:nextPut: (Character @env0:codePoint: replacement)
 				] ifFalse: [
