@@ -66,7 +66,8 @@ class _FunctionTypeMeta(type):
         return type(obj).__name__ in ('function', 'ExecBlock', 'UnboundMethod')
 
     def __call__(cls, *args, **kwargs):
-        """FunctionType(code, globals) -- a callable built from a code object.
+        """FunctionType(code, globals, name=None, argdefs=None, closure=None,
+        kwdefaults=None) -- a callable built from a code object.
 
         CPython's function type is constructible, and that is the documented
         way to run a module compiled with PyCF_ALLOW_TOP_LEVEL_AWAIT: the code
@@ -75,22 +76,69 @@ class _FunctionTypeMeta(type):
         re-enters the code object through eval(), which is the same execution
         path and answers the same thing -- including that coroutine.
 
-        The arguments CPython accepts beyond globals (name, argdefs, closure)
-        describe a binding Grail does not have; they are accepted and ignored
-        rather than refused, because a code object compiled at module level --
-        the only kind this can be handed -- takes no parameters for them to
-        name.  There is no fall-through to ordinary instantiation because
+        The arguments are bound and checked as func_new binds and checks them
+        (Objects/funcobject.c, through its Argument Clinic parser), with
+        CPython's messages, and the name and the defaults are kept on the
+        callable.  The closure is checked but not bound: the code object Grail
+        can hand here is a module's, which has no free variables for it to
+        fill.  There is no fall-through to ordinary instantiation because
         CPython has none either: a function is never made any other way."""
-        if len(args) + len(kwargs) < 2:
-            raise TypeError('function expected at least 2 arguments, got %d'
-                            % (len(args) + len(kwargs)))
-        code = args[0] if args else kwargs.get('code')
-        if not isinstance(code, CodeType):
-            raise TypeError('function() arg 1 must be a code object')
-        glb = args[1] if len(args) > 1 else kwargs.get('globals')
-        if not isinstance(glb, dict):
-            raise TypeError('function() arg 2 must be a dict')
-        return lambda *a, **k: eval(code, glb)
+        return _function_from(**_function_arguments(args, kwargs))
+
+
+# FunctionType's parameters in Argument Clinic's order (Objects/funcobject.c,
+# func_new); the first two are required.
+_FUNCTION_PARAMETERS = ('code', 'globals', 'name', 'argdefs', 'closure',
+                        'kwdefaults')
+
+
+def _function_arguments(args, kwargs):
+    """FunctionType's arguments by name, bound as _PyArg_UnpackKeywords binds
+    them (Python/getargs.c) and refused with its messages, in its order."""
+    given = len(args) + len(kwargs)
+    if given > len(_FUNCTION_PARAMETERS):
+        raise TypeError('function() takes at most %d arguments (%d given)'
+                        % (len(_FUNCTION_PARAMETERS), given))
+    arguments = dict(zip(_FUNCTION_PARAMETERS, args))
+    for position, parameter in enumerate(_FUNCTION_PARAMETERS[:2], 1):
+        if parameter not in arguments and parameter not in kwargs:
+            raise TypeError("function() missing required argument '%s' (pos %d)"
+                            % (parameter, position))
+    for keyword in kwargs:
+        if keyword in arguments:
+            raise TypeError("argument for function() given by name ('%s') and "
+                            "position (%d)"
+                            % (keyword, _FUNCTION_PARAMETERS.index(keyword) + 1))
+    for keyword in kwargs:
+        if keyword not in _FUNCTION_PARAMETERS:
+            raise TypeError("function() got an unexpected keyword argument '%s'"
+                            % keyword)
+    arguments.update(kwargs)
+    return arguments
+
+
+def _function_from(code, globals, name=None, argdefs=None, closure=None,
+                   kwdefaults=None):
+    """func_new's checks, then the callable (see _FunctionTypeMeta.__call__)."""
+    if not isinstance(code, CodeType):
+        raise TypeError("function() argument 'code' must be code, not %s"
+                        % type(code).__name__)
+    if not isinstance(globals, dict):
+        raise TypeError("function() argument 'globals' must be dict, not %s"
+                        % type(globals).__name__)
+    if name is not None and not isinstance(name, str):
+        raise TypeError('arg 3 (name) must be None or string')
+    if argdefs is not None and not isinstance(argdefs, tuple):
+        raise TypeError('arg 4 (defaults) must be None or tuple')
+    if closure is not None and not isinstance(closure, tuple):
+        raise TypeError('arg 5 (closure) must be None or tuple')
+    if kwdefaults is not None and not isinstance(kwdefaults, dict):
+        raise TypeError('arg 6 (kwdefaults) must be None or dict')
+    function = lambda *a, **k: eval(code, globals)
+    function.__name__ = code.co_name if name is None else name
+    function.__defaults__ = argdefs
+    function.__kwdefaults__ = kwdefaults
+    return function
 
 
 class FunctionType(metaclass=_FunctionTypeMeta):
