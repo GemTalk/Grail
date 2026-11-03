@@ -32,17 +32,12 @@ PyUnionType class >> ___grailUnionFrom___: aSequence [
 	Flattening and the one-argument collapse match ``___of___:with:'' and
 	CPython: ``Union[int]'' is ``int'', not a union of one."
 
-	| args inst |
-	args := OrderedCollection @env0:new.
-	aSequence @env0:do: [:each |
-		(self ___membersOf___: each) @env0:do: [:m | self ___addMember___: m to: args]].
-	args @env0:isEmpty ifTrue: [
+	| builder |
+	builder := PyUnionBuilder @env0:empty.
+	aSequence @env0:do: [:each | builder addMembersOf: each].
+	builder isEmpty ifTrue: [
 		TypeError ___signal___: 'Cannot take a Union of no types.'].
-	args @env0:size @env0:= 1 ifTrue: [^ args @env0:first].
-	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #'__args__'
-		put: (tuple @env0:withAll: args @env0:asArray).
-	^ inst
+	^ builder union
 
 ]
 
@@ -130,16 +125,11 @@ PyUnionType class >> ___of___: left with: right [
 	union -- CPython''s ``int | str | bytes'' has three args, not two with one
 	nested."
 
-	| args inst |
-	args := OrderedCollection @env0:new.
-	(self ___membersOf___: left) @env0:do: [:m | self ___addMember___: m to: args].
-	(self ___membersOf___: right) @env0:do: [:m | self ___addMember___: m to: args].
-	"``int | int'' is ``int'': CPython's builder drops a repeat, and a union
-	of one member is that member."
-	args @env0:size @env0:= 1 ifTrue: [^ args @env0:first].
-	inst := self @env0:new.
-	inst @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: args @env0:asArray).
-	^ inst
+	| builder |
+	builder := PyUnionBuilder @env0:empty.
+	builder addMembersOf: left.
+	builder addMembersOf: right.
+	^ builder union
 
 ]
 
@@ -160,6 +150,29 @@ PyUnionType class >> ___subclass___: aSymbol instVarNames: ivarNames classInstVa
 	statement asks the base for a subclass."
 
 	^ TypeError ___signal___: 'type ''typing.Union'' is not an acceptable base type'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+PyUnionType class >> ___unhashableMessageFor: aCount [
+	"A union whose unhashable members have since become hashable is still
+	refused (Objects/unionobject.c:63)."
+
+	^ 'union contains ' @env0:, aCount @env0:printString @env0:, ' unhashable elements'
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+PyUnionType class >> ___withMembers: someMembers unhashable: someUnhashableMembers [
+	"The union of someMembers, in order, some of which -- someUnhashableMembers
+	-- did not hash when it was built."
+
+	| union |
+	union := self @env0:new.
+	union @env0:dynamicInstVarAt: #'__args__' put: (tuple @env0:withAll: someMembers).
+	someUnhashableMembers @env0:isEmpty ifFalse: [
+		union @env0:dynamicInstVarAt: #'___unhashable___' put: someUnhashableMembers].
+	^ union
 
 ]
 
@@ -200,6 +213,48 @@ PyUnionType class >> value: positional value: keywords [
 	``|'' or by subscripting it."
 
 	^ TypeError ___signal___: 'cannot create ''typing.Union'' instances'
+
+]
+
+{ #category : 'Grail-Comparison' }
+PyUnionType >> ___hashableMembers___ [
+	"The members that hashed when this union was built."
+
+	| unhashable |
+	unhashable := self ___unhashableMembers___.
+	^ (self @env0:dynamicInstVarAt: #'__args__') @env0:asArray
+		@env0:reject: [:each | unhashable @env0:includesIdentical: each]
+
+]
+
+{ #category : 'Grail-Comparison' }
+PyUnionType >> ___hasTheHashableMembersOf: aUnion [
+	"Do this union's hashable members and aUnion's make equal sets -- as many
+	of each, and each of these in aUnion's by hash and then ==, as
+	set_richcompare asks?"
+
+	| mine theirs |
+	mine := self ___hashableMembers___.
+	theirs := aUnion ___hashableMembers___.
+	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
+	^ mine @env0:allSatisfy: [:member | | hash |
+		hash := PyUnionBuilder ___hashOf: member.
+		theirs @env0:anySatisfy: [:each |
+			(PyUnionBuilder ___hashOf: each) @env0:= hash and: [each ___pyRichEqBool___: member]]]
+
+]
+
+{ #category : 'Grail-Comparison' }
+PyUnionType >> ___hasTheUnhashableMembersOf: aUnion [
+	"Do this union and aUnion have the same unhashable members -- none, or as
+	many with each of either's found in the other's by == (unions_equal)?"
+
+	| mine theirs |
+	mine := self ___unhashableMembers___.
+	theirs := aUnion ___unhashableMembers___.
+	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
+	^ (mine @env0:allSatisfy: [:member | theirs @env0:anySatisfy: [:each | each ___pyRichEqBool___: member]])
+		and: [theirs @env0:allSatisfy: [:member | mine @env0:anySatisfy: [:each | each ___pyRichEqBool___: member]]]
 
 ]
 
@@ -259,6 +314,15 @@ PyUnionType >> ___subclass___: aSymbol instVarNames: ivarNames classInstVarNames
 
 ]
 
+{ #category : 'Grail-Comparison' }
+PyUnionType >> ___unhashableMembers___ [
+	"The members that did not hash when this union was built, which is none
+	for a union built before that was recorded."
+
+	^ (self @env0:dynamicInstVarAt: #'___unhashable___') @env0:ifNil: [#()]
+
+]
+
 { #category : 'Grail-Attribute Access' }
 PyUnionType >> __args__ [
 	^ self @env0:dynamicInstVarAt: #'__args__'
@@ -292,20 +356,15 @@ PyUnionType >> __eq__: other [
 	a library caching parameterised annotations in a dict saw a miss every
 	time, and never said why."
 
-	| mine theirs |
-	(other @env0:isKindOf: PyUnionType) ifFalse: [^ NotImplemented].
-	mine := (self @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
-	theirs := (other @env0:dynamicInstVarAt: #'__args__') @env0:asArray.
-	mine @env0:size @env0:= theirs @env0:size ifFalse: [^ false].
 	"PYTHON equality per member, not Smalltalk's ``='': for a Python instance
 	 that is identity, which held for class members (int, str) and failed for
 	 anything with its own __eq__ -- two unions of equal ForwardRefs compared
-	 unequal (test_annotationlib test_or).  Python's order: identity, then
-	 __eq__, then the reflected __eq__ when the first answers NotImplemented."
-	mine @env0:do: [:m |
-		(theirs @env0:anySatisfy: [:t | PyUnionType ___pyEq___: t with: m])
-			ifFalse: [^ false]].
-	^ true
+	 unequal (test_annotationlib test_or).  As unions_equal compares them: the
+	 hashable members as sets, then the unhashable ones each way, with the
+	 errors of == propagating (test_types test_or_type_operator_with_genericalias)."
+	(other @env0:isKindOf: PyUnionType) ifFalse: [^ NotImplemented].
+	^ (self ___hasTheHashableMembersOf: other)
+		and: [self ___hasTheUnhashableMembersOf: other]
 
 ]
 
@@ -331,7 +390,14 @@ PyUnionType >> __hash__ [
 	the same bucket.  A union used as a dict key or put in a set is ordinary --
 	``Union[int, str]'' keys a cache in typing itself."
 
-	| r h |
+	| r h unhashable |
+	"A union with a member that did not hash when it was built is unhashable
+	for good (union_hash): it raises that member's error if it still has
+	one, and CPython's own TypeError if it has since become hashable."
+	unhashable := self ___unhashableMembers___.
+	unhashable @env0:isEmpty ifFalse: [
+		unhashable @env0:do: [:each | (builtins @env1:instance) @env1:hash: each].
+		^ TypeError ___signal___: (self @env0:class ___unhashableMessageFor: unhashable @env0:size)].
 	"CPython's union_hash (in _grail_generic_alias) hashes the member SET, so
 	two equal unions of equal-but-distinct members hash alike, and an
 	unhashable member raises -- the identity xor below did neither, and stays
