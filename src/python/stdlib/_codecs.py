@@ -150,13 +150,25 @@ def _note_codec_failure(exc, operation, encoding):
         pass
 
 
-def _call_codec(info_attr, operation, encoding, obj, errors):
-    """Call a registry codec and note the encoding on failure."""
+def _call_codec(info, operation, encoding, obj, errors):
+    """Call a registry codec and note the encoding on failure.
+
+    The codec function is taken BY POSITION, as Python/codecs.c's
+    _PyCodec_EncoderTuple does: a search function may answer any 4-tuple,
+    and only a CodecInfo has the ``encode''/``decode'' names.  And the call
+    must answer an (output, consumed) pair, refused in CPython's words --
+    the decoder's without the space (:426-431, :470-475) -- and with no
+    codec note, which CPython adds only when the codec itself raises."""
+    encoding_ = operation == 'encoding'
     try:
-        return info_attr(obj, errors)[0]
+        result = info[0 if encoding_ else 1](obj, errors)
     except Exception as exc:
         _note_codec_failure(exc, operation, encoding)
         raise
+    if not isinstance(result, tuple) or len(result) != 2:
+        raise TypeError('encoder must return a tuple (object, integer)' if encoding_
+                        else 'decoder must return a tuple (object,integer)')
+    return result[0]
 
 
 def encode(obj, encoding='utf-8', errors='strict'):
@@ -177,7 +189,7 @@ def encode(obj, encoding='utf-8', errors='strict'):
         if isinstance(obj, str):
             return obj.encode(encoding, errors)
         raise
-    return _call_codec(info.encode, 'encoding', encoding, obj, errors)
+    return _call_codec(info, 'encoding', encoding, obj, errors)
 
 
 def decode(obj, encoding='utf-8', errors='strict'):
@@ -191,7 +203,7 @@ def decode(obj, encoding='utf-8', errors='strict'):
         if isinstance(obj, (bytes, bytearray)):
             return obj.decode(encoding, errors)
         raise
-    return _call_codec(info.decode, 'decoding', encoding, obj, errors)
+    return _call_codec(info, 'decoding', encoding, obj, errors)
 
 
 # ----------------------------------------------------------- error handlers
