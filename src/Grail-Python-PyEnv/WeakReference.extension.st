@@ -1,9 +1,55 @@
 Extension { #name : 'WeakReference' }
 
+{ #category : 'Grail-Error Messages' }
+WeakReference class >> ___cannotReferenceMessageFor: anObject [
+
+	^ 'cannot create weak reference to ''' @env0:, anObject ___pyTypeNameForError___ @env0:asString
+		@env0:, ''' object'
+
+]
+
+{ #category : 'Grail-Weak-Python' }
+WeakReference class >> ___isRootedAtObject___: aClass [
+	"Is aClass a Python class whose first built-in ancestor is object itself?
+	Only there does the __slots__ rule decide alone: a built-in base can carry
+	weak-reference support of its own that Grail's slot table does not record
+	-- GenericAlias does, which collections.abc's Callable alias subclasses
+	with ``__slots__ = ()''."
+
+	| walker |
+	walker := aClass.
+	[walker ~~ nil and: [walker ___grailIsPythonClass___]]
+		@env0:whileTrue: [walker := walker @env0:superclass].
+	^ walker == PythonInstance or: [walker == Object]
+
+]
+
+{ #category : 'Grail-Weak-Python' }
+WeakReference class >> ___refuseUnreferenceable___: anObject [
+	"CPython refuses a weak reference to an object whose type has no
+	__weakref__ slot, ``cannot create weak reference to 'NoWeak' object''
+	(Objects/weakrefobject.c:413-417, get_or_create_weakref).  Asked here of an
+	instance of a Python class, whose __slots__ and whose bases' grant no
+	__weakref__ (Object >> ___grailProvidesInstanceSlot___:): Grail took the
+	reference (test_descr test_weakrefs, test_dataclasses
+	test_slots_no_weakref).  An instance of a built-in type keeps the
+	references it took, and so does an instance of a class over one
+	(___isRootedAtObject___:)."
+
+	| referentClass |
+	referentClass := anObject @env0:class.
+	(referentClass ___grailIsPythonClass___
+		and: [(self ___isRootedAtObject___: referentClass)
+		and: [(referentClass ___grailProvidesInstanceSlot___: '__weakref__') @env0:not]])
+			ifTrue: [^ TypeError ___signal___: (self ___cannotReferenceMessageFor: anObject)]
+
+]
+
 { #category : 'Grail-Weak-Python' }
 WeakReference class >> __new__: anObject [
 	"weakref.ref(obj) — create a weak reference."
 
+	self ___refuseUnreferenceable___: anObject.
 	^self @env0:on: anObject
 
 ]
@@ -16,6 +62,7 @@ WeakReference class >> __new__: anObject _: aCallback [
 	 simple `callback value: self` invocation routes through Python's
 	 (positional, kwargs) calling convention."
 
+	self ___refuseUnreferenceable___: anObject.
 	aCallback == None ifTrue: [^self @env0:on: anObject].
 	^self @env0:on: anObject
 		callback: [:r | aCallback @env0:value: (Array @env0:with: r) value: nil]
