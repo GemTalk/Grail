@@ -218,26 +218,32 @@ ByteArray class >> ___newZeroed___: count [
 
 { #category : 'Grail-String Operations' }
 ByteArray class >> ___pyQualifiedTypeNameOf___: value [
-	"``module.qualname'' for a user-defined class, matching CPython's %T
-	format code; built-ins keep their bare name (CPython's %T prints
-	``float'', not ``builtins.float'')."
+	"The name CPython's %T format code gives value's type
+	(_PyType_GetFullyQualifiedName, Objects/typeobject.c:1589-1619):
+	``module.qualname'' for a class a Python statement made, the qualname
+	alone when that module is builtins or __main__, and a built-in's own name
+	(``float'', not ``builtins.float'').  It used to answer the bare __name__
+	where CPython has the qualname, and kept __main__."
 
 	"``name'' is an instance variable of Class, so a class-side temp cannot
 	use that identifier -- hence shortName."
-	| shortName cls modName |
+	| shortName cls modName qualName |
 	shortName := bytes ___pyTypeNameOf___: value.
 	(#('NoneType' 'float' 'bool' 'int' 'bytearray' 'bytes' 'str')
 		@env0:includes: shortName) ifTrue: [^ shortName].
 	cls := [value @env1:__class__] @env0:on: Error do: [:ex | ex @env0:return: nil].
 	cls @env0:isNil ifTrue: [^ shortName].
+	qualName := [(cls @env1:__qualname__) @env0:asString]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: shortName].
 	"ClassDefAst emits a ``__module__'' class-side accessor on every Python
 	class, holding the defining module's dotted name string."
 	modName := [ | m | m := cls @env1:__module__.
 		m @env0:isNil ifTrue: [nil] ifFalse: [m @env0:asString] ]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
-	(modName @env0:isNil or: [modName @env0:isEmpty or: [modName @env0:= 'builtins']])
-		ifTrue: [^ shortName].
-	^ modName @env0:, '.' @env0:, shortName
+	(modName @env0:isNil or: [modName @env0:isEmpty
+		or: [modName @env0:= 'builtins' or: [modName @env0:= '__main__']]])
+			ifTrue: [^ qualName].
+	^ modName @env0:, '.' @env0:, qualName
 
 ]
 
