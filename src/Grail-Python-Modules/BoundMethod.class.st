@@ -88,7 +88,8 @@ BoundMethod class >> ___callableTypeAttributeFor___: aTypeName [
 
 	#( #('function' #FunctionType) #('method' #MethodType)
 		#('method-wrapper' #MethodWrapperType) #('method_descriptor' #MethodDescriptorType)
-		#('wrapper_descriptor' #WrapperDescriptorType) )
+		#('wrapper_descriptor' #WrapperDescriptorType)
+		#('classmethod_descriptor' #ClassMethodDescriptorType) )
 			do: [:pair | (pair at: 1) = aTypeName ifTrue: [^ pair at: 2]].
 	^ #BuiltinFunctionType
 

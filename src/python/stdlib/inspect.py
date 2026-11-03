@@ -2599,7 +2599,15 @@ def ismethoddescriptor(obj):
     # both are reached through a __get__ -- and so would reroute pydoc.docroutine
     # and pydoc.render_doc for every ordinary method in the corpus.  Nothing
     # measured needs it, so it keeps the conservative answer until something does.
-    return False
+    #
+    # The one exception is a built-in type's class method as its __dict__
+    # holds it, ``dict.__dict__['fromkeys'']'': Grail has the real
+    # classmethod_descriptor for that, which CPython's test calls a method
+    # descriptor, and doctest's _from_module raises "object must be a class
+    # or function" for a routine that is none of the kinds it knows -- so
+    # every DocTestSuite over a module holding a built-in type failed to load
+    # (test_builtin, test_enum).
+    return isinstance(obj, _types.ClassMethodDescriptorType)
 
 
 def isabstract(object):

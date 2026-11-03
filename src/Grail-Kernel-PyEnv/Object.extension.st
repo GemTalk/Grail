@@ -5302,6 +5302,7 @@ Object class >> ___moduleAttrIdentityTable___ [
 		t @env0:at: #'PyStatResult' put: #('stat_result' 'os').
 		"os.times_result, whose module CPython reports as ``posix''."
 		t @env0:at: #'PyTimesResult' put: #('times_result' 'posix').
+		t @env0:at: #'PyClassMethodDescriptor' put: #('classmethod_descriptor' 'builtins').
 
 		"struct.  ``error'' and ``Struct'' are too generic to claim as
 		top-level names in the flat Python dictionary, so the Smalltalk
@@ -8715,11 +8716,14 @@ Object >> ___classDict___ [
 				owner @env0:notNil ifTrue: [
 					d @env0:at: nm put: ((entry @env0:at: 2) == #static
 						"A staticmethod's __func__ is called with no receiver, so it
-						wraps what ``str.maketrans'' answers; a classmethod's takes
-						the class, which is what the metaclass handle expects."
+						wraps what ``str.maketrans'' answers.  A class method is
+						CPython's classmethod_descriptor, which takes the class --
+						what the metaclass handle expects -- and only this type or
+						a subtype of it."
 						ifTrue: [PyStaticMethod __new__: (self ___pyAttrLoad___: nm @env0:asSymbol)]
-						ifFalse: [PyClassMethod __new__:
-							(UnboundMethod definingClass: owner selector: nm @env0:asSymbol)])]].
+						ifFalse: [PyClassMethodDescriptor
+							@env0:type: self
+							method: (UnboundMethod definingClass: owner selector: nm @env0:asSymbol)])]].
 		"__doc__ is the docstring, not an accessor: CPython's
 		``object.__dict__['__doc__']'' is a str.  Every built-in type has one."
 		[ | doc |
