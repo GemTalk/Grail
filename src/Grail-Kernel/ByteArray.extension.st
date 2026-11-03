@@ -9,6 +9,12 @@ ByteArray class >> ___constructorName___ [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+ByteArray class >> ___malformedNamedEscapeReason [
+	^ 'malformed \N character escape'
+
+]
+
 { #category : 'Grail-Introspection' }
 ByteArray class >> ___pythonValueAttrs___ [
 	"Selectors ___pyAttrLoad___ must treat as VALUE attribute reads rather
@@ -58,6 +64,49 @@ ByteArray class >> ___stringFromCodePoints___: codePoints [
 	1 @env0:to: codePoints @env0:size do: [:k |
 		out @env0:at: k put: (Character @env0:codePoint: (codePoints @env0:at: k))].
 	^ out
+
+]
+
+{ #category : 'Grail-Error Messages' }
+ByteArray class >> ___unknownCharacterNameReason [
+	^ 'unknown Unicode character name'
+
+]
+
+{ #category : 'Grail-Encoding/Decoding' }
+ByteArray >> ___decodeNamedEscapeAt___: aBackslash into: someCodePoints size: aSize [
+	"The ``\\N{NAME}'' escape at aBackslash: add the character the Unicode
+	database names to someCodePoints and answer the index after its closing
+	brace, or raise CPython's error with CPython's span
+	(Objects/unicodeobject.c:6809-6836) -- ``malformed \\N character escape''
+	without an opening brace, a closing one or a name between them, ``unknown
+	Unicode character name'' for a name the database does not have.
+
+	The decoder had no such escape: it kept ``\\N{...}'' as its own text,
+	valid name or not, so no error handler ever saw it (test_str
+	test_codecs_errors)."
+
+	| close codePoint |
+	(aBackslash + 2 <= aSize and: [(self at: aBackslash + 2) = 123]) ifFalse: [
+		^ self ___escapeDecodeError___: 'unicodeescape'
+			from: aBackslash to: (aBackslash + 1 min: aSize) reason: self class ___malformedNamedEscapeReason].
+	close := aBackslash + 3.
+	[close <= aSize and: [(self at: close) ~= 125]] whileTrue: [close := close + 1].
+	close > aSize ifTrue: [
+		^ self ___escapeDecodeError___: 'unicodeescape'
+			from: aBackslash to: aSize reason: self class ___malformedNamedEscapeReason].
+	close = (aBackslash + 3) ifTrue: [
+		^ self ___escapeDecodeError___: 'unicodeescape'
+			from: aBackslash to: aBackslash + 2 reason: self class ___malformedNamedEscapeReason].
+	"The name's bytes as characters, one each: a ByteArray's own asString is its
+	print string."
+	codePoint := unicode_names ___codePointForName:
+		(self class ___stringFromCodePoints___: (self copyFrom: aBackslash + 3 to: close - 1)).
+	codePoint isNil ifTrue: [
+		^ self ___escapeDecodeError___: 'unicodeescape'
+			from: aBackslash to: close reason: self class ___unknownCharacterNameReason].
+	someCodePoints add: codePoint.
+	^ close + 1
 
 ]
 
@@ -208,9 +257,12 @@ ByteArray >> ___decodeUnicodeEscape___ [
 				cps add: (octVal).
 				i := j
 			] ifFalse: [
-				"Unknown escape — emit backslash literally and rescan from next."
-				cps add: (92).
-				i := i + 1
+				(next = 78)
+					ifTrue: [i := self ___decodeNamedEscapeAt___: i into: cps size: size]
+					ifFalse: [
+						"Unknown escape — emit backslash literally and rescan from next."
+						cps add: (92).
+						i := i + 1]
 			]]]]]]]]]]]]]]]
 		] ifFalse: [
 			"A LONE TRAILING BACKSLASH IS AN ERROR here, though not in
