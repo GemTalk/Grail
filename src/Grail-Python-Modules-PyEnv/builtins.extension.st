@@ -1137,6 +1137,26 @@ builtins >> ___dirOfNamespace___: aMapping [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+builtins >> ___doitGlobalsModuleName___: aScope [
+	"The ``__name__'' a DOIT's globals hold, or nil when they hold none --
+	what CPython stamps as the ``__module__'' of a function defined there
+	(Objects/funcobject.c:181-186), and what a class statement there reads
+	before falling back to builtins (___doitModuleName___:).
+
+	The GLOBALS, not the merged scope -- hence ___doitGlobalsView___:.  A
+	globals mapping read LIVE (a dict subclass; see _exec:) is not seeded into
+	the scope at all, so its storage is asked directly while it is parked."
+
+	| live |
+	^ (self ___doitGlobalsView___: aScope) @env0:at: #'__name__' ifAbsent: [
+		live := self ___grailLiveGlobals___.
+		live @env0:isNil
+			ifTrue: [nil]
+			ifFalse: [live @env0:at: '__name__' ifAbsent: [nil]]]
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 builtins >> ___doitGlobalsView___: aScope [
 	"What ``globals()'' answers inside a doit: the globals-only view that
 	_exec:/_eval: parked when they were handed a SEPARATE ``locals'' mapping,
@@ -1190,16 +1210,9 @@ builtins >> ___doitModuleName___: aScope [
 
 	The GLOBALS, not the merged scope: the class body's own namespace stands
 	where a locals mapping would, so exec()'s third argument is never
-	consulted -- hence ___doitGlobalsView___:.  A globals mapping read LIVE
-	(a dict subclass; see _exec:) is not seeded into the scope at all, so its
-	storage is asked directly while it is parked."
+	consulted -- see ___doitGlobalsModuleName___:."
 
-	| live |
-	^ (self ___doitGlobalsView___: aScope) @env0:at: #'__name__' ifAbsent: [
-		live := self ___grailLiveGlobals___.
-		live @env0:isNil
-			ifTrue: ['builtins']
-			ifFalse: [live @env0:at: '__name__' ifAbsent: ['builtins']]]
+	^ (self ___doitGlobalsModuleName___: aScope) ifNil: ['builtins']
 
 ]
 
