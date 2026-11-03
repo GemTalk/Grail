@@ -11659,6 +11659,20 @@ Object >> ___grailOwnDeclaredSlotNames___ [
 
 ]
 
+{ #category : 'Grail-Class Attr Overlay' }
+Object >> ___grailOwnHolderValueAt___: aSym [
+	"aSym in the receiver class's OWN ___dynInstVars___ holder, or nil -- the
+	store a class body's accessor reads, and the only one a class type() built
+	has."
+
+	| holder |
+	(self ___respondsTo___: #___dynInstVars___) ifFalse: [^ nil].
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	holder == nil ifTrue: [^ nil].
+	^ holder @env0:dynamicInstVarAt: aSym
+
+]
+
 { #category : 'Grail-Metaclass' }
 Object >> ___grailOwnMetaclass___ [
 	"The metaclass THIS class recorded for itself, without the inheriting walk
@@ -12619,7 +12633,11 @@ Object >> ___grailSlotsNameTheDirective___: aName [
 	membership as Python asks it."
 
 	| v |
-	v := self ___classBodyValueAt___: #'__slots__'.
+	"The class's own holder first: a class type() built -- dataclasses'
+	slots=True rebuild among them -- keeps __slots__ nowhere else, and was read
+	as naming neither directive."
+	v := self ___grailOwnHolderValueAt___: #'__slots__'.
+	v == nil ifTrue: [v := self ___classBodyValueAt___: #'__slots__'].
 	v == nil ifTrue: [^ false].
 	(v isKindOf: CharacterCollection) ifTrue: [^ v @env0:asString @env0:= aName].
 	^ [(v @env1:__contains__: aName) ___isTruthy___]
