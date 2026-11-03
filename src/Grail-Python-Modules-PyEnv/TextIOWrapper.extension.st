@@ -210,6 +210,36 @@ TextIOWrapper >> ___ioReadline___: limit [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+TextIOWrapper >> ___readOnlyAttributeNames___ [
+	"None of FileIO's: a text file's mode is an ordinary attribute, which
+	open() sets, in CPython as here."
+
+	^ #()
+
+]
+
+{ #category : 'Grail-Printing' }
+TextIOWrapper >> __repr__ [
+	"textiowrapper_repr (Modules/_io/textio.c): the type, then the name and the
+	mode when the file has them, then the encoding -- closed or not.  Re-entered
+	through its own name, the RuntimeError FileIO's repr raises."
+
+	^ self ___withReprGuard___: [ | name mode |
+		name := self ___optionalAttribute___: #name.
+		mode := self ___optionalAttribute___: #mode.
+		'<' @env0:, self ___pyTypeNameForError___ @env0:asString
+			@env0:, (name == nil
+				ifTrue: ['']
+				ifFalse: [' name=' @env0:, ((builtins @env1:instance) @env1:repr: name)])
+			@env0:, (mode == nil
+				ifTrue: ['']
+				ifFalse: [' mode=' @env0:, ((builtins @env1:instance) @env1:repr: mode)])
+			@env0:, ' encoding=' @env0:, ((builtins @env1:instance) @env1:repr: self encoding)
+			@env0:, '>']
+
+]
+
 { #category : 'Grail-Private' }
 TextIOWrapper >> _completeUtf8Tail: raw [
 	"read(n) reads n BYTES, which can split a multi-byte UTF-8 sequence.
