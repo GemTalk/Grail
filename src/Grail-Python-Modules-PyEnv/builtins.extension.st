@@ -8177,6 +8177,7 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 	class statement refuse it (importlib class >> ___refuseDuplicateBases___:):
 	``type('X', (A, A), {})'' built a class over A once (test_descr
 	test_mro_disagreement)."
+	il @env0:___refuseUnacceptableBases___: baseArray.
 	il @env0:___refuseDuplicateBases___: baseArray.
 	baseArray @env0:isEmpty ifTrue: [ baseArray := { PythonInstance } ].
 	storageBase := il @env0:___selectStorageBase___: baseArray.

@@ -307,6 +307,7 @@ type class >> __new__: mcls _: aName _: bases _: ns [
 			^ TypeError @env1:___signal___:
 				('__classcell__ must be a nonlocal cell, not <class ''' @env0:,
 					(___cellVal ___pyTypeNameForError___) @env0:, '''>')]].
+	(Python @env0:at: #importlib) @env0:___refuseUnacceptableBases___: bases.
 	(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: bases.
 	pending := type ___classUnderConstruction___.
 	"DIFFERENT BASES BUILD A DIFFERENT CLASS.  The class under construction can

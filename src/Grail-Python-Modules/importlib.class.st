@@ -3012,6 +3012,31 @@ importlib class >> ___exposedBuiltinFor___: aClass [
 
 ]
 
+{ #category : 'Grail-Class Creation' }
+importlib class >> ___finalClassNames___ [
+	"The Smalltalk classes that stand for CPython types without
+	Py_TPFLAGS_BASETYPE, which none can be a base of -- NoneType, range
+	(Interval), a generator, a code object and the rest.  bool and
+	typing.Union refuse on their own, as the storage base."
+
+	^ #( #NoneType #NotImplementedType #ellipsis #Interval #slice #memoryview
+		#mappingproxy #PythonGenerator #PythonCoroutine #PythonAsyncGenerator
+		#PyCode #PyCell #PyFrame #PyTraceback )
+
+]
+
+{ #category : 'Grail-Class Creation' }
+importlib class >> ___finalTypesModuleNames___ [
+	"The types module's names for the CPython types without
+	Py_TPFLAGS_BASETYPE that Grail writes in Python, as stand-ins over its own
+	callables (src/python/stdlib/types.py)."
+
+	^ #( #FunctionType #MethodType #BuiltinFunctionType #MethodDescriptorType
+		#WrapperDescriptorType #MethodWrapperType #ClassMethodDescriptorType
+		#GetSetDescriptorType #MemberDescriptorType )
+
+]
+
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___finishBuiltClasses___: aModuleName [
 	"The end of a body run, whether it completed or raised: the classes it rebuilt
@@ -5944,6 +5969,22 @@ importlib class >> ___isEnumClass___: b [
 
 ]
 
+{ #category : 'Grail-Class Creation' }
+importlib class >> ___isFinalType___: aBase [
+	"Is aBase one of the types CPython lets nothing derive from?  Asked by
+	identity, never by name: a class a program defines may be called range."
+
+	| symbols types |
+	(aBase isKindOf: Behavior) ifFalse: [^ false].
+	symbols := System myUserProfile symbolList.
+	(self ___finalClassNames___ anySatisfy: [:name | (symbols objectNamed: name) == aBase])
+		ifTrue: [^ true].
+	types := self @env1:modules at: #types ifAbsent: [^ false].
+	^ self ___finalTypesModuleNames___ anySatisfy: [:name |
+		([types @env1:___pyAttrLoad___: name] on: AbstractException do: [:ex | ex return: nil]) == aBase]
+
+]
+
 { #category : 'Grail-Selector Mangling' }
 importlib class >> ___isGrailInternalName___: aString [
 	"Private to the mangling API: the ___name___ convention Grail uses for its own
@@ -7517,6 +7558,13 @@ importlib class >> ___namesNoFile___: aSyntaxError [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+importlib class >> ___notAnAcceptableBaseMessageFor: aTypeName [
+
+	^ 'type ''' , aTypeName asString , ''' is not an acceptable base type'
+
+]
+
 { #category : 'Grail-Module Loading' }
 importlib class >> ___noteCodecFailure___: ex for: aSelector named: aName [
 	"Attach CPython's codec-failure note to ex: ``encoding with 'X' codec
@@ -8381,6 +8429,25 @@ importlib class >> ___refuseNonTextCodec___: aCodecInfo named: aName for: aSelec
 	^ LookupError @env1:___signal___:
 		'''' , aName @env0:asString , ''' is not a text encoding; use codecs.'
 			, verb , '() to handle arbitrary codecs'
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___refuseUnacceptableBases___: bases [
+	"CPython's best_base refuses a base whose type does not allow subclassing,
+	``type 'NoneType' is not an acceptable base type'' (Objects/typeobject.c,
+	best_base), wherever it stands among the bases -- before the duplicate
+	check, which the MRO makes later.  Grail built a class over NoneType,
+	range, a function's type, a generator and the rest (test_descr
+	test_unsubclassable_types, test_errors).
+
+	A class statement hands over a sole base as written, so a Behavior is
+	asked as one base."
+
+	((bases isKindOf: Behavior) ifTrue: [{ bases }] ifFalse: [bases]) do: [:base |
+		(self ___isFinalType___: base) ifTrue: [
+			^ TypeError @env1:___signal___: (self ___notAnAcceptableBaseMessageFor:
+				(base @env1:___pyAttrLoad___: #'__name__'))]]
 
 ]
 
