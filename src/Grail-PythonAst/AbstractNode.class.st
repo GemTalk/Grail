@@ -552,6 +552,19 @@ AbstractNode >> ___catchTargetUnbindsALocal___: aNameSymbol [
 
 ]
 
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___catchTargetUnbindsAModuleName___: aNameSymbol [
+	"Is ``except X as NAME'' bound in the MODULE -- a ``global''-declared or
+	module-level name -- so that PEP 3110's implicit ``del NAME'' must remove
+	the module binding?  The twin of ___catchTargetUnbindsALocal___: for the
+	other store route; a class-body target is neither (its definitional store
+	keeps the binding, as before)."
+
+	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol)
+		and: [self ___inClassBodyRuntimeScope___ not]
+
+]
+
 { #category : 'Grail-annotations' }
 AbstractNode >> ___cmpOpGlyph___: anOp [
 	(anOp isKindOf: EqAst) ifTrue: [^ '=='].
@@ -1406,6 +1419,12 @@ AbstractNode >> ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderNam
 			ifTrue: [aTarget ___irSelfInferredSlotAccessor___] ifFalse: [nil]) ifNotNil: [:acc |
 				^ aBuilder add: (aBuilder
 					send: (acc , ':') asSymbol to: aBuilder selfNode with: { rhsNode } env: 1)].
+		"The in-place type change for a foreign ``o.__class__'' leaf -- the text
+		leaf's branch (emitTupleElementStoreOn:...), which is AssignAst's."
+		(aTarget ___irIsClassChangeTarget___) ifTrue: [
+			^ aBuilder add: (aBuilder
+				send: #'___pyChangeClassOf:to:' to: (aBuilder globalNamed: #object)
+				with: { aTarget value ___emitIRValueOn___: aBuilder. rhsNode } env: 1)].
 		^ aBuilder add: (aBuilder
 			send: #'__setattr__:_:' to: (aTarget value ___emitIRValueOn___: aBuilder)
 			with: { aBuilder obj: aTarget ___mangledAttr___ asString. rhsNode })].
@@ -1468,8 +1487,12 @@ AbstractNode >> ___emitModuleScopeStoreOf___: aNameSymbol from: sourceExpr on: a
 			nextPutAll: sourceExpr;
 			nextPutAll: ').'.
 		^ self].
+	"Under the TRANSPORT identifier, as every other local store spells it: a
+	Python name that is a Smalltalk pseudo-variable (``except E as nil'',
+	``for self in ...'') cannot be assigned as itself, and the bare spelling
+	was a CompileError that took the whole module down."
 	aStream
-		nextPutAll: sym asString;
+		nextPutAll: (NameAst ___transportIdentifierFor___: sym);
 		nextPutAll: ' := ';
 		nextPutAll: sourceExpr;
 		nextPut: $.
@@ -2574,9 +2597,10 @@ AbstractNode >> ___irUnpackLeafEligible___: aLeaf locals: localNames [
 		the same four-way rule every other store in this file consults."
 		(aLeaf ___nameStoreRoutesToModule___: aLeaf id asSymbol) ifTrue: [^ true].
 		^ localNames includes: aLeaf id asString].
+	"``o.__class__'' is admitted: ___emitIRUnpackStore___: emits the type
+	change for it (and a self receiver's __setattr__), as the text leaf does."
 	(aLeaf isKindOf: AttributeAst) ifTrue: [
-		^ aLeaf attr asString ~= '__class__'
-			and: [aLeaf value ___irEligibleValueLocals___: localNames]].
+		^ aLeaf value ___irEligibleValueLocals___: localNames].
 	(aLeaf isKindOf: SubscriptAst) ifTrue: [
 		^ (aLeaf value ___irEligibleValueLocals___: localNames)
 			and: [aLeaf slice ___irEligibleValueLocals___: localNames]].
@@ -2623,8 +2647,8 @@ AbstractNode >> ___irUnpackReadsInto___: aSet target: aTarget locals: localSet [
 AbstractNode >> ___irUnpackTargetEligible___: aTarget locals: localNames [
 	"True when aTarget -- a Tuple/List assignment target -- is a nest the IR
 	unpack emitter handles: every leaf a Store-context local Name (parameter
-	or body local), an attribute store of the shape AssignAst's IR emit
-	already handles (not ``__class__''), or a subscript store; at most one
+	or body local), an attribute store (``__class__'' included -- the type
+	change), or a subscript store; at most one
 	starred element per level (Python's own rule), wrapping such a leaf;
 	nested tuples / lists recurse."
 
@@ -3943,6 +3967,20 @@ AbstractNode >> emitTupleElementStoreOn: aStream target: aTarget holder: holder 
 				nextPutAll: '). '.
 			^ self
 		].
+		"``o.__class__'' as a leaf -- ``with cm() as o.__class__'', ``for
+		o.__class__ in ...'', ``a, o.__class__ = ...'' -- is the in-place type
+		change, as the plain assignment's is (AssignAst >>
+		printSmalltalkAttributeStoreOn:target:, which says why the target goes
+		as an ARGUMENT).  Through __setattr__ it changed what ``o.__class__''
+		reads and left ``type(o)'' the old class.  A self-reference keeps the
+		__setattr__ path above, as the plain assignment's does."
+		(aTarget attr asString = '__class__'
+			and: [((aTarget value isKindOf: NameAst)
+				and: [CallAst isSelfReference: aTarget value id]) not]) ifTrue: [
+			aStream nextPutAll: '___object___ @env1:___pyChangeClassOf: ('.
+			aTarget value printSmalltalkWithParenthesisOn: aStream.
+			aStream nextPutAll: ') to: ('; nextPutAll: rhs; nextPutAll: '). '.
+			^ self].
 		aTarget value printSmalltalkWithParenthesisOn: aStream.
 		aStream
 			nextPutAll: ' @env1:__setattr__: ''';
