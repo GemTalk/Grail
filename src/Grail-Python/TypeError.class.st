@@ -177,6 +177,18 @@ TypeError class >> ___refuseUnboundKeywordsIn___: keywords given: aPositionalCou
 
 ]
 
+{ #category : 'Grail-Arity Checks' }
+TypeError class >> ___requireStr___: anObject argument: aName of: aFunctionName [
+	"A built-in's str parameter refused as Argument Clinic refuses it,
+	``encode() argument 'encoding' must be str, not int''
+	(_PyArg_BadArgument, Python/getargs.c)."
+
+	(anObject isKindOf: CharacterCollection) ifFalse: [
+		^ self @env1:___signal___: aFunctionName , '() argument ''' , aName , ''' must be str, not '
+			, ((Python at: #bytes) @env1:___pyTypeNameOf___: anObject) asString]
+
+]
+
 { #category : 'Grail-Error Messages' }
 TypeError class >> ___ternaryWrapperArityMessageFor: anArgumentCount [
 	^ 'expected 1 or 2 arguments, got ' , anArgumentCount printString
