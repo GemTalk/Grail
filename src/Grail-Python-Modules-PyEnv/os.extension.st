@@ -15,6 +15,15 @@ os class >> ___cIntOverflowMessage [
 
 ]
 
+{ #category : 'Grail-Process Times' }
+os class >> ___clockTicksSysconfName [
+	"_SC_CLK_TCK, the sysconf(3) name of the clock-tick rate times(2) counts
+	in: 3 in Darwin's unistd.h, 2 in glibc's."
+
+	^ self ___isDarwin ifTrue: [3] ifFalse: [2]
+
+]
+
 { #category : 'Grail-Error Messages' }
 os class >> ___descriptorAboveMaximumMessage [
 
@@ -92,11 +101,12 @@ os class >> ___fdCallouts [
 	variadic argument travels on the stack rather than in a register, so a
 	fixed three-argument declaration would hand open() a garbage mode.
 
-	The key is VERSIONED, and bumped when a callout is added (v2: fsync), so a
-	session that cached the older table does not answer nil for the new one."
+	The key is VERSIONED, and bumped when a callout is added (v2: fsync, v3:
+	times and sysconf), so a session that cached the older table does not
+	answer nil for the new one."
 
 	^ SessionTemps @env0:current
-		@env0:at: #'Grail_os_fd_callouts_v2'
+		@env0:at: #'Grail_os_fd_callouts_v3'
 		ifAbsentPut: [ | lib d |
 			lib := CLibrary @env0:named: self ___libcName.
 			d := SymbolKeyValueDictionary @env0:new.
@@ -134,6 +144,10 @@ os class >> ___fdCallouts [
 				result: #'int32' args: #(#'ptr' #'ptr')).
 			d @env0:at: #mkdir put: (CCallout @env0:library: lib name: 'mkdir'
 				result: #'int32' args: #(#'ptr' #'uint32')).
+			d @env0:at: #times put: (CCallout @env0:library: lib name: 'times'
+				result: #'int64' args: #(#'ptr')).
+			d @env0:at: #sysconf put: (CCallout @env0:library: lib name: 'sysconf'
+				result: #'int64' args: #(#'int32')).
 			d]
 
 ]
@@ -2533,6 +2547,7 @@ os >> initialize [
 	_PosixPathInfo gets _bsd_flags -- so without it pathlib failed at import.
 	PyStatResult has no st_flags, which is Linux CPython's answer too."
 	self @env0:at: #stat_result put: PyStatResult.
+	self @env0:at: #times_result put: PyTimesResult.
 	"Pre-store fsdecode as a BoundMethod so ``from os import
 	fsdecode'' (werkzeug's file_storage) reads the callable
 	directly via the ImportFromAst __pyAttrLoad path."
@@ -2961,6 +2976,25 @@ os >> system: command [
 	"os.system(command) — execute command in a subshell."
 
 	^ System @env0:performOnServer: command
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+os >> times [
+	"os.times() (Modules/posixmodule.c, os_times_impl): times(2)'s user and
+	system time of this process and of its children, and the elapsed real
+	time, each in seconds -- clock ticks over sysconf(_SC_CLK_TCK), as
+	_PyTime_GetTicksPerSecond reads it (Python/fileutils.c).  Grail had no
+	os.times at all."
+
+	| process elapsed ticks |
+	process := CByteArray @env0:gcMalloc: 32.
+	elapsed := self ___libc: #times with: { process }.
+	ticks := (self ___libc: #sysconf with: { self @env0:class ___clockTicksSysconfName }) @env0:asFloat.
+	^ PyTimesResult
+		@env0:___sequence___: ((#(0 8 16 24) @env0:collect: [:offset | (process @env0:int64At: offset) @env0:/ ticks])
+			@env0:, { elapsed @env0:/ ticks })
+		named: nil
 
 ]
 

@@ -5296,6 +5296,8 @@ Object class >> ___moduleAttrIdentityTable___ [
 		"os.stat_result -- a structseq CPython defines in posixmodule and publishes
 		from os; pickle saves it by that name."
 		t @env0:at: #'PyStatResult' put: #('stat_result' 'os').
+		"os.times_result, whose module CPython reports as ``posix''."
+		t @env0:at: #'PyTimesResult' put: #('times_result' 'posix').
 
 		"struct.  ``error'' and ``Struct'' are too generic to claim as
 		top-level names in the flat Python dictionary, so the Smalltalk
