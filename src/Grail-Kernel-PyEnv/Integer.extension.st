@@ -214,6 +214,20 @@ Integer class >> ___coerceIntResult___: result from: dunderName [
 ]
 
 { #category : 'Grail-Initialization' }
+Integer class >> ___fromText: aString literal: anObject [
+	"int() of aString, a str's text, in base 10 -- the whole of it but the
+	surrounding whitespace, PEP 515 underscores and Unicode decimal digits
+	included -- a bad literal reported as anObject, which is what int() was
+	given."
+
+	self ___checkStrDigitLimit___: aString.
+	^ [self ___parseInt: (aString @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) radix: 10]
+		@env0:on: Error
+		do: [:ex | self ___invalidLiteral___: anObject base: 10]
+
+]
+
+{ #category : 'Grail-Initialization' }
 Integer class >> ___invalidLiteral___: obj base: baseInt [
 	"Raise the exact ValueError CPython raises for an unparseable
 	int(obj[, base]) literal: 'invalid literal for int() with base N:
@@ -540,12 +554,12 @@ Integer class >> __new__: obj [
 	the literal is reported (test_str test_codecs_errors).  It reached the
 	refusal of a non-str."
 	(obj isKindOf: PyStrSurrogate) ifTrue: [^ self ___invalidLiteral___: obj base: 10].
-	(obj isKindOf: CharacterCollection) ifTrue: [
-		self ___checkStrDigitLimit___: obj.
-		^ [self ___parseInt: (obj @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) radix: 10]
-			@env0:on: Error
-			do: [:ex | self ___invalidLiteral___: obj base: 10]
-	].
+	(obj isKindOf: CharacterCollection) ifTrue: [^ self ___fromText: obj literal: obj].
+	"A str Grail boxes -- a StrEnum member -- is a str too: its text parses,
+	and a bad one is named by the member's own repr, as CPython names the
+	object it was given (``invalid literal for int() with base 10: <E.B:
+	'x'>'').  It was refused as no str at all."
+	(obj isKindOf: AbstractPyStr) ifTrue: [^ self ___fromText: obj @env0:___pyPlainStr___ literal: obj].
 
 	"Bytes-like objects parse the same as the equivalent str, base 10 --
 	CPython accepts bytes for the implicit-base int(x) form too, not just
@@ -614,6 +628,8 @@ Integer class >> __new__: obj _: base [
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		str := obj
 	] ifFalse: [
+		"A boxed str's text: see __new__:."
+		(obj isKindOf: AbstractPyStr) ifTrue: [str := obj @env0:___pyPlainStr___] ifFalse: [
 		(obj isKindOf: ByteArray) ifTrue: [
 			str := String @env0:new: obj @env0:size.
 			1 @env0:to: obj @env0:size do: [:i |
@@ -621,7 +637,7 @@ Integer class >> __new__: obj _: base [
 			]
 		] ifFalse: [
 			TypeError ___signal___: 'int() can''t convert non-string with explicit base'
-		]
+		]]
 	].
 
 	str := str @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace].

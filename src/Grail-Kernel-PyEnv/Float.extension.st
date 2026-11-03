@@ -193,7 +193,16 @@ Float class >> ___newFromBytes___: byteObj original: original [
 Float class >> ___newFromString___: str [
 	"float(s) for a str -- CPython strips full Unicode whitespace here."
 
-	^ self ___parseFloatBody___: (str @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) original: str
+	^ self ___newFromString___: str original: str
+
+]
+
+{ #category : 'Grail-Initialization' }
+Float class >> ___newFromString___: aString original: anObject [
+	"float() of aString, a str's text, with full Unicode whitespace stripped,
+	a bad one reported as anObject, which is what float() was given."
+
+	^ self ___parseFloatBody___: (aString @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) original: anObject
 
 ]
 
@@ -483,6 +492,9 @@ Float class >> __new__: obj [
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		^ self ___newFromString___: obj
 	].
+	"A str Grail boxes -- a StrEnum member: see Integer class >> __new__:."
+	(obj isKindOf: AbstractPyStr) ifTrue: [
+		^ self ___newFromString___: obj @env0:___pyPlainStr___ original: obj].
 
 	"Bytes-like objects parse the same as the equivalent str (test_float.py
 	test_non_numeric_input_types, test_float_memoryview) -- but see

@@ -350,6 +350,9 @@ complex class >> __new__: r [
 	(r @env0:isKindOf: PyStrSurrogate) ifTrue: [^ self ___malformed___].
 	(r @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ self ___parseString___: r].
+	"A str Grail boxes -- a StrEnum member: see Integer class >> __new__:."
+	(r @env0:isKindOf: AbstractPyStr) ifTrue: [
+		^ self ___parseString___: r @env0:___pyPlainStr___].
 	(self ___hasDunder___: r named: #'__complex__') ifTrue: [
 		c := self ___complexHookOn___: r.
 		^ self ___fromParts___: (c @env1:real) _: (c @env1:imag)].
