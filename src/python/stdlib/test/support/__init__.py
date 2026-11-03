@@ -1746,6 +1746,22 @@ class SaveSignals:
             self.signal.signal(signum, handler)
 
 
+def with_pymalloc():
+    try:
+        import _testcapi
+    except ImportError:
+        raise unittest.SkipTest("requires _testcapi")
+    return _testcapi.WITH_PYMALLOC and not Py_GIL_DISABLED
+
+
+def with_mimalloc():
+    try:
+        import _testcapi
+    except ImportError:
+        raise unittest.SkipTest("requires _testcapi")
+    return _testcapi.WITH_MIMALLOC
+
+
 def get_pagesize():
     """Get size of a page in bytes."""
     try:
