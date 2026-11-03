@@ -45,6 +45,10 @@ bytearray >> ___bytesFrom: value [
 	(value isKindOf: CharacterCollection) ifTrue: [
 		TypeError ___signal___:
 			'can assign only a bytes-like object to a bytearray slice'].
+	"A buffer assigns its bytes (bytearray_setslice): an array.array was
+	iterated by item."
+	(self ___isBufferExporter___: value) ifTrue: [
+		^ (ByteArray ___bytesOfBuffer___: value) @env0:asOrderedCollection].
 	src := ((value isKindOf: bytes)
 			or: [(cls == list) or: [(cls == tuple)
 				or: [(cls == Array) or: [cls == Interval]]]])
@@ -126,6 +130,15 @@ bytearray >> ___init__: positional kw: kwargs [
 	encoding ifNil: [^ self __init__: source].
 	errors ifNil: [^ self __init__: source _: encoding].
 	^ self __init__: source _: encoding _: errors
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
+bytearray >> ___isBufferExporter___: anObject [
+	"Does anObject export a buffer bytearray reads as its bytes -- a PEP 688
+	__buffer__, or the tobytes an array.array or a memoryview answers?"
+
+	^ (anObject ___respondsTo___: #'__buffer__:') or: [anObject ___respondsTo___: #tobytes]
 
 ]
 
@@ -242,7 +255,9 @@ bytearray >> __iadd__: other [
 	"Can only concatenate in place with a bytes-like object (bytes / bytearray /
 	subclasses).  Message uses the Python type NAMES (``can't concat str to
 	bytearray''); appending the class OBJECT used to raise an uncatchable MNU."
-	(other isKindOf: bytes) ifFalse: [
+	"Any buffer, as bytearray_iconcat takes one (Objects/bytearrayobject.c):
+	``b += array.array('B', ...)'' was refused by name."
+	((other isKindOf: bytes) or: [self ___isBufferExporter___: other]) ifFalse: [
 		TypeError ___signal___: ('can''t concat '
 			@env0:, (other @env1:__class__ @env1:__name__)
 			@env0:, ' to '
@@ -492,6 +507,12 @@ bytearray >> extend: iterable [
 		self @env1:___refuseIfBufferExported___.
 		self @env0:insertAll: data at: (at @env0:min: self @env0:size) @env0:+ 1.
 		^ None].
+
+	"An array.array is a buffer too: CPython extends by its bytes, not by its
+	items, which iterated as numbers 0..255 or failed beyond them (test_gzip
+	test_write_array, test_issue44439)."
+	(iterable ___respondsTo___: #tobytes) ifTrue: [
+		^ self extend: (ByteArray ___bytesOfBuffer___: iterable)].
 
 	"A str is iterable but not of integers -- CPython rejects it by name."
 	(iterable isKindOf: CharacterCollection) ifTrue: [
