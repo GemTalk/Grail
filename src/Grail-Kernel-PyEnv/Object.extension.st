@@ -3911,6 +3911,10 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 		@env0:at: #'GrailPendingClassBases'
 		ifAbsentPut: [IdentityKeyValueDictionary @env0:new])
 			@env0:at: self put: basesArray.
+	"A FINAL TYPE among the bases refuses the class statement whatever the
+	metaclass, as best_base refuses it (importlib class >>
+	___refuseUnacceptableBases___:)."
+	(Python @env0:at: #importlib) @env0:___refuseUnacceptableBases___: basesArray.
 	"DUPLICATE BASES are type.__new__'s refusal.  With no metaclass that takes
 	part in construction, nothing stands between this statement and type, so
 	refuse them now; a constructing one may discard them (a TypedDict's), and
@@ -9619,6 +9623,7 @@ Object >> ___grailAssignBases___: newBases [
 	"type_set_bases refuses a duplicate, as type.__new__ does -- which is how
 	``class Z(NamedTuple, NamedTuple)'' fails: NamedTupleMeta assigns
 	(tuple, tuple)."
+	(Python @env0:at: #importlib) @env0:___refuseUnacceptableBases___: newBases.
 	(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: newBases.
 	current := self @env1:___pyAttrLoad___: #'__bases__'.
 	(current @env0:size @env0:< newBases @env0:size) ifFalse: [^ false].
