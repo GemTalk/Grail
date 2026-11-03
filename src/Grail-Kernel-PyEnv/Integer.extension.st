@@ -917,6 +917,19 @@ Integer >> ___intTrueDivFloat___: other [
 
 ]
 
+{ #category : 'Grail-Arithmetic' }
+Integer >> ___pow__: positional kw: keywords [
+	"Every call of int.__pow__ its fixed-arity forms do not take -- with no
+	argument, three or a keyword -- refused as CPython's slot wrapper refuses
+	it (TypeError class >> ___checkTernaryWrapperArguments___:...)."
+
+	TypeError @env0:___checkTernaryWrapperArguments___: positional keywords: keywords for: '__pow__'.
+	^ positional @env0:size @env0:= 1
+		ifTrue: [self __pow__: (positional @env0:at: 1)]
+		ifFalse: [self __pow__: (positional @env0:at: 1) _: (positional @env0:at: 2)]
+
+]
+
 { #category : 'Grail-Bitwise Operations' }
 Integer >> ___pyBitAnd___: other [
 	"Python's ``&'' on two Integers.  GemStone's bitAnd: answers WRONG bits when
@@ -1003,6 +1016,22 @@ Integer >> ___pyShiftRight___: count [
 	(count @env0:class == SmallInteger) ifFalse: [
 		^ (self @env0:< 0) ifTrue: [-1] ifFalse: [0]].
 	^ self @env0:bitShift: count @env0:negated
+
+]
+
+{ #category : 'Grail-Arithmetic' }
+Integer >> ___rpow__: positional kw: keywords [
+	"Every call of int.__rpow__ its one-argument form does not take, as
+	___pow__:kw: does for __pow__.  With a modulus it is ``pow(other, self,
+	mod)'', which int answers only for an int ``other''
+	(Objects/typeobject.c:9350-9368, wrap_ternaryfunc_r)."
+
+	| other |
+	TypeError @env0:___checkTernaryWrapperArguments___: positional keywords: keywords for: '__rpow__'.
+	other := positional @env0:at: 1.
+	positional @env0:size @env0:= 1 ifTrue: [^ self __rpow__: other].
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ other __pow__: self _: (positional @env0:at: 2)
 
 ]
 

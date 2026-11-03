@@ -3534,6 +3534,13 @@ builtins >> ___pow3Dunder___: recv args: argArray base: baseName [
 
 	| sel ni |
 	ni := Python @env0:at: #NotImplemented otherwise: nil.
+	"An INT's varargs form is int's own slot wrapper (Integer >>
+	___pow__:kw:), not a class's three-argument dunder: it computes where the
+	slot would decline, so asking it first would answer pow(2, I(3), 5)
+	before I's __rpow__ and pow(10, Decimal(2), 7) before Decimal's.  An int
+	is left to the fast path above and to the operand's dunder.  A kernel
+	Integer has no Python subclass, so the class test names exactly that."
+	(recv @env0:isKindOf: Integer) ifTrue: [^ ni].
 	sel := ('_' @env0:, baseName @env0:, ':kw:') @env0:asSymbol.
 	(recv @env1:___respondsTo___: sel) ifFalse: [^ ni].
 	^ recv @env0:perform: sel env: 1 withArguments: { argArray. nil }
