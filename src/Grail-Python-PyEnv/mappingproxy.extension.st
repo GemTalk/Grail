@@ -1,5 +1,13 @@
 Extension { #name : 'mappingproxy' }
 
+{ #category : 'Grail-Error Messages' }
+mappingproxy class >> ___noMappingAttributeMessage [
+	"Objects/object.c, PyObject_GenericGetAttr's miss."
+
+	^ '''mappingproxy'' object has no attribute ''mapping'''
+
+]
+
 { #category : 'Grail-Initialization' }
 mappingproxy class >> ___on: aMapping [
 	"Wrap aMapping (the LIVE backing dict) — a mutation to it is visible
@@ -50,6 +58,14 @@ mappingproxy class >> _new: positional kw: keywords [
 ]
 
 { #category : 'Grail-Private' }
+mappingproxy >> ___mapping___ [
+	"The wrapped mapping, for Grail's own use: Python has no attribute for it."
+
+	^ mapping
+
+]
+
+{ #category : 'Grail-Private' }
 mappingproxy >> ___setMapping: aMapping [
 	mapping := aMapping
 
@@ -83,10 +99,18 @@ mappingproxy >> __delitem__: key [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+mappingproxy >> __dir__ [
+	"object's dir() but for ``mapping'', which a mappingproxy does not have."
+
+	^ super __dir__ @env0:reject: [:each | each @env0:= 'mapping']
+
+]
+
 { #category : 'Grail-Comparison' }
 mappingproxy >> __eq__: other [
 	| o |
-	o := (other @env0:isKindOf: mappingproxy) ifTrue: [other @env1:mapping] ifFalse: [other].
+	o := (other @env0:isKindOf: mappingproxy) ifTrue: [other ___mapping___] ifFalse: [other].
 	^ mapping @env1:__eq__: o
 
 ]
@@ -275,8 +299,13 @@ mappingproxy >> keys [
 
 { #category : 'Grail-Accessors' }
 mappingproxy >> mapping [
-	"CPython 3.12+ ``mappingproxy.mapping'' — the wrapped mapping."
-	^ mapping
+	"A mappingproxy has no ``mapping'' attribute in CPython -- a dict VIEW
+	has one, which answers a mappingproxy -- so the read is CPython's
+	AttributeError, and __dir__ leaves the name out (test_types
+	MappingProxyTests test_methods).  It used to answer the wrapped mapping,
+	which is ___mapping___'s now, for Grail's own use."
+
+	^ AttributeError ___signal___: self @env0:class ___noMappingAttributeMessage
 
 ]
 
