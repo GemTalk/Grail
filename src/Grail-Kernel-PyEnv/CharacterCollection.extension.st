@@ -158,6 +158,23 @@ CharacterCollection class >> ___refuseUnbuildableLength___: aLength [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___strArgumentGivenTwiceMessageFor: aName at: aPosition [
+	^ 'argument for str() given by name (''' @env0:, aName
+		@env0:, ''') and position (' @env0:, aPosition @env0:printString @env0:, ')'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+CharacterCollection class >> ___strTakesAtMostThreeMessageFor: aCount positional: aPositionalCount [
+	"Clinic's wording, which says ``keyword arguments'' when none of them was
+	positional (Python/getargs.c:2429-2440)."
+
+	^ 'str() takes at most 3 ' @env0:, (aPositionalCount @env0:= 0 ifTrue: ['keyword '] ifFalse: [''])
+		@env0:, 'arguments (' @env0:, aCount @env0:printString @env0:, ' given)'
+
+]
+
 { #category : 'Grail-Python protocol' }
 CharacterCollection class >> __getitem__: index [
 	"Covers Python str (Unicode7, Unicode16, Unicode32, ISOLatin,
@@ -416,17 +433,28 @@ CharacterCollection class >> _new: positional kw: kwargs [
 		^ TypeError ___signal___: ((kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty])
 			ifTrue: ['str expected at most 3 arguments, got '
 				@env0:, positional @env0:size @env0:printString]
-			ifFalse: ['str() takes at most 3 arguments ('
-				@env0:, (positional @env0:size @env0:+ kwargs @env0:size) @env0:printString
-				@env0:, ' given)'])].
+			ifFalse: [self ___strTakesAtMostThreeMessageFor: positional @env0:size @env0:+ kwargs @env0:size
+				positional: positional @env0:size])].
+	"Argument Clinic counts the keywords too, and before it reads their names
+	(_PyArg_UnpackKeywords, Python/getargs.c:2429-2440): ``str(b'x', 'utf-8',
+	'strict', errors='ignore')'' is four arguments.  Grail read the positional
+	three and ignored the keyword."
+	positional @env0:size @env0:+ kwargs @env0:size @env0:> 3 ifTrue: [
+		^ TypeError ___signal___: (self ___strTakesAtMostThreeMessageFor: positional @env0:size @env0:+ kwargs @env0:size
+			positional: positional @env0:size)].
 	args := OrderedCollection @env0:withAll: positional.
 	kwargs @env0:keysDo: [:k |
 		(#('object' 'encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
 			^ TypeError ___signal___: 'str() got an unexpected keyword argument '''
 				@env0:, k @env0:asString @env0:, '''']].
+	"A parameter given by position and by name is refused for each of the
+	three, as Clinic refuses it (Python/getargs.c:2522-2541); Grail checked
+	``object'' only, and used the positional encoding or errors over the
+	keyword."
+	#('object' 'encoding' 'errors') @env0:doWithIndex: [:name :position |
+		((kwargs @env0:includesKey: name) and: [positional @env0:size @env0:>= position]) ifTrue: [
+			^ TypeError ___signal___: (self ___strArgumentGivenTwiceMessageFor: name at: position)]].
 	(kwargs @env0:includesKey: 'object') ifTrue: [
-		args @env0:isEmpty ifFalse: [
-			^ TypeError ___signal___: 'argument for str() given by name (''object'') and position (1)'].
 		args @env0:add: (kwargs @env0:at: 'object')].
 	obj := args @env0:isEmpty ifTrue: [''] ifFalse: [args @env0:at: 1].
 	encoding := args @env0:size @env0:>= 2
