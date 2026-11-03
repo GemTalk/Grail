@@ -8551,9 +8551,7 @@ Object >> ___classDict___ [
 	(___unhashableByClassBody___); these are kernel classes with no holder, so
 	the entry is supplied here, for exactly those classes and not their
 	subclasses -- CPython's subclass inherits it through the MRO."
-	(#(#list #dict #set #bytearray #'dict_keys' #'dict_items') @env0:anySatisfy: [:nm |
-		(Python @env0:at: nm otherwise: nil) @env0:== self])
-			ifTrue: [d @env0:at: '__hash__' put: None].
+	self ___grailIsUnhashableBuiltin___ ifTrue: [d @env0:at: '__hash__' put: None].
 	"Descriptor kinds -- see ___grailPythonDictDescriptorKinds___.  After (b)/(c)
 	so the entry to wrap is there, before (d) so an explicit override still wins."
 	[ | kinds |
@@ -10794,6 +10792,18 @@ Object >> ___grailIsPythonClass___ [
 
 ]
 
+{ #category : 'Grail-Hashability' }
+Object >> ___grailIsUnhashableBuiltin___ [
+	"True for the built-in types whose own __dict__ holds ``__hash__ = None'' in
+	CPython: list, dict, set, bytearray, dict_keys and dict_items.  They are
+	kernel classes with no class-attribute holder, so the None is theirs by
+	name rather than by a stored attribute."
+
+	^ #(#list #dict #set #bytearray #'dict_keys' #'dict_items') @env0:anySatisfy: [:name |
+		(Python @env0:at: name otherwise: nil) @env0:== self]
+
+]
+
 { #category : 'Grail-Attribute Access' }
 Object >> ___grailLayoutBase___ [
 	"The receiver class, or the nearest ancestor that adds instance layout:
@@ -12601,6 +12611,25 @@ Object >> ___grailTypeDescriptorsCleared___ [
 	| set |
 	set := SessionTemps @env0:current @env0:at: #GrailClearedTypeDescriptors otherwise: nil.
 	^ set ~~ nil and: [set @env0:includes: self]
+
+]
+
+{ #category : 'Grail-Hashability' }
+Object >> ___grailTypeHashIsNone___ [
+	"True when the receiver's type -- the receiver itself, when it is a class --
+	has the ``__hash__ = None'' of an unhashable built-in
+	(___grailIsUnhashableBuiltin___): it is one, or a subclass of one that
+	neither defines nor was assigned a __hash__ of its own.  The MRO lookup
+	CPython makes, over the Smalltalk superclass chain the built-in is on."
+
+	| walker |
+	walker := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
+	(walker ___dynamicClassAttr___: #'__hash__') == nil ifFalse: [^ false].
+	[walker == nil] whileFalse: [
+		walker ___grailIsUnhashableBuiltin___ ifTrue: [^ true].
+		(walker @env0:includesSelector: #'__hash__' environmentId: 1) ifTrue: [^ false].
+		walker := walker @env0:superclass].
+	^ false
 
 ]
 
@@ -14770,6 +14799,13 @@ Object >> ___pyAttrLoad___: aSym [
 	the common read pays one comparison."
 	((aSym @env0:size) @env0:= 17 and: [aSym @env0:asString @env0:= '__class_getitem__']) ifTrue: [
 		self ___grailClassGetitemRead___ @env0:ifNotNil: [:read | ^ read @env0:value]].
+	"``__hash__'' of list, dict, set, bytearray, dict_keys and dict_items is the
+	None their class dicts hold, read off the type and off an instance alike:
+	dataclasses refuses a field default whose ``__class__.__hash__ is None'' as
+	mutable (Lib/dataclasses.py:916).  Their compiled raising __hash__ is
+	what a hash SEND finds; this is what a READ sees.  By identity, so every
+	other read pays one comparison."
+	(aSym == #'__hash__' and: [self ___grailTypeHashIsNone___]) ifTrue: [^ None].
 	s := aSym @env0:asString.
 	"The eight selectors one attribute name can compile to.  Building them is
 	seven concatenations and seven SYMBOL INTERNINGS -- a symbol-table hash
