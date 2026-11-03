@@ -7092,6 +7092,16 @@ Object >> ___augmentedOpTry___: other inplace: iSel binary: bSel [
 
 ]
 
+{ #category : 'Grail-Calling' }
+Object >> ___bindsUnboundCallOf___: anUnboundMethod [
+	"Should ``Cls.m(self, ...)'' run as ``self.m(...)'' rather than run Cls's
+	compiled m on the receiver?  Not for an ordinary object: the compiled
+	method is the function CPython calls."
+
+	^ false
+
+]
+
 { #category : 'Grail-Arithmetic' }
 Object >> ___binOpAdd___: other [
 	| r |
