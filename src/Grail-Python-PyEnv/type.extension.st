@@ -58,6 +58,26 @@ type class >> ___grailBuildWithMetaclass___: mcls as: aBlock [
 ]
 
 { #category : 'Grail-Class Construction' }
+type class >> ___grailWinningMetaclassOf___: bases [
+	"The most derived of the receiver and the bases' own metaclasses, or nil
+	when two of them conflict (Objects/typeobject.c,
+	_PyType_CalculateMetaclass): each base's metaclass has to be an ancestor
+	or a descendant of the winner so far.  A conflict is left to the build,
+	which does not refuse it yet."
+
+	| winner |
+	(bases @env0:isKindOf: SequenceableCollection) ifFalse: [^ nil].
+	winner := self.
+	bases @env0:do: [:base | | candidate |
+		candidate := base ___grailMetaclass___ ifNil: [type].
+		(candidate == winner or: [winner @env0:inheritsFrom: candidate]) ifFalse: [
+			(candidate @env0:inheritsFrom: winner) ifFalse: [^ nil].
+			winner := candidate]].
+	^ winner
+
+]
+
+{ #category : 'Grail-Class Construction' }
 type class >> ___new__: positional kw: kwargs [
 	"``type.__new__'' reached with KEYWORDS, which CPython refuses.
 
@@ -307,7 +327,7 @@ type class >> __new__: mcls _: aName _: bases _: ns [
 	(pending @env0:notNil
 		and: [type ___grailBases___: bases differFrom: pending]) ifTrue: [ | rebuilt |
 			rebuilt := type ___grailBuildWithMetaclass___: mcls
-				as: [(builtins @env1:instance) @env1:type: aName _: bases _: ns].
+				as: [(builtins @env1:instance) @env1:type: aName _: bases _: ns kw: nil].
 			rebuilt @env1:___grailSetMetaclass___: mcls.
 			^ rebuilt].
 	pending @env0:notNil ifTrue: [
@@ -415,7 +435,7 @@ type class >> __new__: mcls _: aName _: bases _: ns [
 	M)'' -- see object >> ___grailSetMetaclass___: for why a record is what
 	Grail can offer here.  The record is what makes type(C) answer M, which is
 	in turn what makes a SUBCLASS of C find M's __new__."
-	built := (builtins @env1:instance) @env1:type: aName _: bases _: ns.
+	built := (builtins @env1:instance) @env1:type: aName _: bases _: ns kw: nil.
 	"Recorded only for a metaclass that takes part in CLASS CREATION, which is
 	the same gate ``class C(metaclass=M)'' applies -- see object class >>
 	___grailMetaclassConstructs___: for why a metaclass that merely adds
@@ -496,9 +516,19 @@ type class >> _new: positional kw: kwargs [
 	to build a class dynamically AND pass it class keywords did not exist --
 	which is what types.new_class needs to do its job."
 
-	| n |
+	| n winner |
 	n := positional @env0:size.
 	(n @env0:= 3) @env0:ifTrue: [
+		"PASSED TO THE WINNER, as type_new_get_bases passes it (Objects/
+		typeobject.c): when a base's metaclass is more derived than the
+		receiver and has a __new__ or __init__ of its own, ``type(name, bases,
+		ns)'' is that metaclass's call.  ``type('T', (Model,), {})'' built a
+		class of Model's metaclass without running either
+		(test_types test_metaclass_new_error)."
+		winner := self ___grailWinningMetaclassOf___: (positional @env0:at: 2).
+		((winner ~~ self and: [winner notNil])
+			and: [object ___grailMetaclassConstructs___: winner]) ifTrue: [
+				^ winner @env1:value: positional value: kwargs].
 		^ (builtins @env1:instance)
 			@env1:type: (positional @env0:at: 1)
 			_: (positional @env0:at: 2)
