@@ -28,11 +28,8 @@ mappingproxy class >> __new__: aMapping [
 	"CPython's mappingproxy_check_mapping (Objects/descrobject.c): anything
 	PyMapping_Check admits -- anything with a __getitem__ -- but a list or a
 	tuple.  A ChainMap, a UserDict, a user Mapping qualify; only dicts did."
-	((aMapping @env0:isKindOf: AbstractDictionary)
-		@env0:or: [(aMapping @env0:isKindOf: KeyValueDictionary)
-		@env0:or: [((aMapping @env0:isKindOf: list) @env0:or: [aMapping @env0:isKindOf: tuple]) @env0:not
-			@env0:and: [(aMapping ___matchDefinesOwnSelector___: #'__getitem__:')
-			@env0:and: [aMapping ___grailDirListsSelector___: #'__getitem__:' in: aMapping @env0:class]]]]) ifFalse: [
+	(aMapping ___grailIsPyMapping___
+		@env0:and: [((aMapping @env0:isKindOf: list) @env0:or: [aMapping @env0:isKindOf: tuple]) @env0:not]) ifFalse: [
 		^ TypeError ___signal___: 'mappingproxy() argument must be a mapping, not '
 			@env0:, (aMapping ___pyTypeNameForError___) @env0:asString].
 	^ self ___on: aMapping
