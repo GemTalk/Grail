@@ -48,19 +48,37 @@ SIGINFO = 29
 SIG_DFL = 0
 SIG_IGN = 1
 
+from operator import index as _index
+
 NSIG = 32
 
 _handlers = {}
 
 
+def _signal_number(signalnum):
+    """signalnum as an int in 1..NSIG-1, refused as Modules/signalmodule.c
+    refuses one outside it."""
+    signalnum = _index(signalnum)
+    if signalnum < 1 or signalnum >= NSIG:
+        raise ValueError("signal number out of range")
+    return signalnum
+
+
 def signal(signalnum, handler):
+    signalnum = _signal_number(signalnum)
+    if not callable(handler) and handler not in (SIG_IGN, SIG_DFL):
+        raise TypeError("signal handler must be signal.SIG_IGN, "
+                        "signal.SIG_DFL, or a callable object")
+    # sigaction(2) refuses these two, and CPython reports its errno.
+    if signalnum in (SIGKILL, SIGSTOP):
+        raise OSError(22, 'Invalid argument')
     old = _handlers.get(signalnum, SIG_DFL)
     _handlers[signalnum] = handler
     return old
 
 
 def getsignal(signalnum):
-    return _handlers.get(signalnum, SIG_DFL)
+    return _handlers.get(_signal_number(signalnum), SIG_DFL)
 
 
 def raise_signal(signalnum):
@@ -83,9 +101,56 @@ def default_int_handler(signum, frame):
 _handlers[SIGINT] = default_int_handler
 
 
+# What strsignal(3) answers, as glibc words it; Darwin's adds the number
+# (``Interrupt: 2'').  The text is the platform's in CPython too.
+_DESCRIPTIONS = {
+    SIGHUP: 'Hangup', SIGINT: 'Interrupt', SIGQUIT: 'Quit',
+    SIGILL: 'Illegal instruction', SIGTRAP: 'Trace/breakpoint trap',
+    SIGABRT: 'Aborted', SIGEMT: 'EMT trap', SIGFPE: 'Floating point exception',
+    SIGKILL: 'Killed', SIGBUS: 'Bus error', SIGSEGV: 'Segmentation fault',
+    SIGSYS: 'Bad system call', SIGPIPE: 'Broken pipe', SIGALRM: 'Alarm clock',
+    SIGTERM: 'Terminated', SIGURG: 'Urgent I/O condition',
+    SIGSTOP: 'Stopped (signal)', SIGTSTP: 'Stopped', SIGCONT: 'Continued',
+    SIGCHLD: 'Child exited', SIGTTIN: 'Stopped (tty input)',
+    SIGTTOU: 'Stopped (tty output)', SIGIO: 'I/O possible',
+    SIGXCPU: 'CPU time limit exceeded', SIGXFSZ: 'File size limit exceeded',
+    SIGVTALRM: 'Virtual timer expired', SIGPROF: 'Profiling timer expired',
+    SIGWINCH: 'Window changed', SIGINFO: 'Information request',
+    SIGUSR1: 'User defined signal 1', SIGUSR2: 'User defined signal 2',
+}
+
+
 def strsignal(signalnum):
-    return "signal %d" % signalnum
+    return _DESCRIPTIONS.get(_signal_number(signalnum))
+
+
+_wakeup_fd = -1
+
+
+def set_wakeup_fd(fd, /, *, warn_on_full_buffer=True):
+    """The descriptor a signal's number would be written to, answering the
+    one it replaces; -1 for none.  As CPython does, a descriptor that is not
+    open is an OSError.  NOT MODELLED: CPython also refuses a blocking one
+    (``the fd 5 must be in non-blocking mode''); Grail's os cannot ask, and
+    Grail delivers no signal to write."""
+    global _wakeup_fd
+    fd = _index(fd)
+    if fd != -1:
+        import os
+        os.fstat(fd)
+    old, _wakeup_fd = _wakeup_fd, fd
+    return old
 
 
 def valid_signals():
     return set(range(1, NSIG))
+
+
+# CPython's _signal functions are built-in, so test_signal's
+# test_functions_module_attr passes them by; Grail's are Python functions, and
+# a routine that is not built-in must name signal -- where pydoc shows it -- as
+# its module.
+for _function in (signal, getsignal, raise_signal, alarm, pause,
+                  default_int_handler, strsignal, valid_signals, set_wakeup_fd):
+    _function.__module__ = 'signal'
+del _function
