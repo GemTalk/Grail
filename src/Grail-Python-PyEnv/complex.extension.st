@@ -346,6 +346,8 @@ complex class >> __new__: r [
 	read as a number -- so complex('(1-6j)') quietly became (nan+0j) and
 	complex('') did too, instead of raising ValueError.  A repr round-trip,
 	which is how most of test_complex checks itself, could not survive that."
+	"A str holding lone surrogates: see Integer class >> __new__:."
+	(r @env0:isKindOf: PyStrSurrogate) ifTrue: [^ self ___malformed___].
 	(r @env0:isKindOf: CharacterCollection) ifTrue: [
 		^ self ___parseString___: r].
 	(self ___hasDunder___: r named: #'__complex__') ifTrue: [

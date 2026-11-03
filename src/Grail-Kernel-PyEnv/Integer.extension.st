@@ -534,6 +534,12 @@ Integer class >> __new__: obj [
 	widened to a DoubleByteString / Unicode16 (e.g. a format spec with a
 	'→' fill widens its digit groups), and int('2') on that wide string
 	must still parse."
+	"A str holding lone surrogates is a str, and never a number: CPython maps
+	every character that is no digit and no space to an invalid one
+	(Objects/unicodeobject.c, _PyUnicode_TransformDecimalAndSpaceToASCII), so
+	the literal is reported (test_str test_codecs_errors).  It reached the
+	refusal of a non-str."
+	(obj isKindOf: PyStrSurrogate) ifTrue: [^ self ___invalidLiteral___: obj base: 10].
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		self ___checkStrDigitLimit___: obj.
 		^ [self ___parseInt: (obj @env0:trimBoth: [:c | c @env0:unicodeIsWhitespace]) radix: 10]
@@ -603,6 +609,8 @@ Integer class >> __new__: obj _: base [
 	String character-by-character (GS's ``ByteArray asString``
 	returns the printString, not a re-interpretation of the bytes
 	as characters)."
+	"A str holding lone surrogates: see __new__:."
+	(obj isKindOf: PyStrSurrogate) ifTrue: [^ self ___invalidLiteral___: obj base: baseInt].
 	(obj isKindOf: CharacterCollection) ifTrue: [
 		str := obj
 	] ifFalse: [
