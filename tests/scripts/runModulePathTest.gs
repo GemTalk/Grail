@@ -17,6 +17,11 @@ output pushnew runModulePathTest.out
 ! the name builds from another file.  Session 2 logs in fresh: an edited copy
 ! in moved/ is refused, relocate() lets it rebuild in place under the stored
 ! instance, and the OLD path is then the foreign one.  Session 2 cleans up.
+!
+! A third module is deployed from a/ in session 1, copied UNCHANGED to copy/,
+! and its a/ file deleted.  Session 2 relocates it and imports it from copy/:
+! the import must record copy/ even though the source did not change (issue
+! #1734), so that reload and an edit at the new location both work.
 iferr 1 where
 iferr 2 output pop
 iferr 3 where
@@ -35,7 +40,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out evalPython failures check root modName mod2 write load refusal r userClass |
+| out evalPython failures check root modName mod2 mod3 write load refusal r userClass |
 out := GsFile stdout.
 failures := OrderedCollection new.
 check := [:label :ok |
@@ -55,13 +60,15 @@ evalPython := [:src |
 and a deployed module outlives this run unless the cleanup below removes it."
 modName := 'grail_modpath_' , System myUserProfile userId asString.
 mod2 := 'grail_modpath2_' , System myUserProfile userId asString.
+mod3 := 'grail_modpath3_' , System myUserProfile userId asString.
 root := '/tmp/' , modName.
-#('' '/a' '/b' '/c' '/moved') do: [:sub |
+#('' '/a' '/b' '/c' '/moved' '/copy') do: [:sub |
   [GsFile createServerDirectory: root , sub] on: Error do: [:e | e return: nil]].
 UserGlobals at: #'Grail_modpath_snap' put: importlib ___canonicalRegistrySnapshot___.
 UserGlobals at: #'Grail_modpath_root' put: root.
 UserGlobals at: #'Grail_modpath_mod' put: modName.
 UserGlobals at: #'Grail_modpath_mod2' put: mod2.
+UserGlobals at: #'Grail_modpath_mod3' put: mod3.
 write := [:path :src | | f | f := GsFile openWriteOnServer: path. f nextPutAll: src. f close].
 load := [:sub :name | importlib loadModuleFromPath: root , sub , '/' , name , '.py' name: name].
 "What the import raised, or nil."
@@ -148,6 +155,21 @@ check value: 'and it is the new source'
   value: (((importlib @env1:lookupModule: mod2) @env1:Thing) includesSelector: #'other' environmentId: 1).
 System commitTransaction ifFalse: [self error: 'the mod2 commit failed'].
 
+"A module whose checkout moves UNCHANGED (issue #1734): deployed from a/,
+copied byte for byte to copy/, and the a/ file deleted.  Session 2, a fresh
+login, relocates it."
+write value: root , '/a/' , mod3 , '.py' value: 'class Widget:
+    def hello(self):
+        return "widget"
+
+def where():
+    return __file__
+'.
+load value: '/a' value: mod3.
+System commitTransaction ifFalse: [self error: 'the mod3 commit failed'].
+write value: root , '/copy/' , mod3 , '.py' value: ((GsFile openReadOnServer: root , '/a/' , mod3 , '.py') contents).
+GsFile removeServerFile: root , '/a/' , mod3 , '.py'.
+
 failures isEmpty ifFalse: [
   out nextPutAll: 'Session 1 failures:'; cr.
   failures do: [:each | out nextPutAll: '  '; nextPutAll: each; cr]].
@@ -169,7 +191,7 @@ dir ifNotNil: [
 %
 level 0
 run
-| out evalPython failures check root modName load refusal r stored |
+| out evalPython failures check root modName mod3 load refusal r stored |
 out := GsFile stdout.
 failures := OrderedCollection new.
 check := [:label :ok |
@@ -187,9 +209,47 @@ evalPython := [:src |
   module evaluateWithScope: scope].
 root := UserGlobals at: #'Grail_modpath_root'.
 modName := UserGlobals at: #'Grail_modpath_mod'.
+mod3 := UserGlobals at: #'Grail_modpath_mod3'.
 load := [:sub :name | importlib loadModuleFromPath: root , sub , '/' , name , '.py' name: name].
 refusal := [:sub :name | [load value: sub value: name. nil] on: ImportError do: [:e | e return: e messageText asString]].
 [
+  "An UNCHANGED module whose old file is gone (issue #1734)."
+  r := evalPython value: 'import gemdb.modules, importlib, sys
+gemdb.modules.relocate("' , mod3 , '")
+sys.path.insert(0, "' , root , '/copy")
+try:
+    __r = importlib.import_module("' , mod3 , '").__file__
+finally:
+    sys.path.remove("' , root , '/copy")
+__r'.
+  check value: 'relocate of unchanged source: the import answers the new __file__'
+    value: ((r isKindOf: CharacterCollection) and: [r includesString: '/copy/']).
+  check value: 'relocate of unchanged source: the allowance is used up by that import'
+    value: ((SessionTemps current at: #'GrailModulePathChangeAllowed' otherwise: #())
+      includes: mod3) not.
+  check value: 'relocate of unchanged source: the deployed path is the new file once committed'
+    value: (System commitTransaction and: [
+      ((importlib ___deployedSourcePathOf___: mod3) ifNil: ['']) includesString: '/copy/']).
+  r := [evalPython value: 'import importlib, ' , mod3 , ' as m
+m = importlib.reload(m)
+(m.where(), m.Widget().hello())'] on: Error do: [:e | e return: e messageText asString].
+  check value: 'relocate of unchanged source: reload rebuilds from the new file'
+    value: ((r isKindOf: CharacterCollection) not and: [
+      ((r @env1:__getitem__: 0) includesString: '/copy/') and: [(r @env1:__getitem__: 1) = 'widget']]).
+  System abortTransaction.
+  (GsFile openWriteOnServer: root , '/copy/' , mod3 , '.py')
+    nextPutAll: 'class Widget:
+    def hello(self):
+        return "edited"
+
+def where():
+    return __file__
+';
+    close.
+  r := refusal value: '/copy' value: mod3.
+  check value: 'relocate of unchanged source: an edit at the new location imports' value: r isNil.
+  System abortTransaction.
+
   r := refusal value: '/moved' value: modName.
   check value: 'a fresh session is refused the moved, edited file too' value: r notNil.
   r := evalPython value: 'import gemdb.modules
@@ -223,14 +283,14 @@ gemdb.root.pop("' , modName , '", None)
 gemdb.commit()'.
   importlib ___canonicalRegistryRestore___:
     (UserGlobals at: #'Grail_modpath_snap' ifAbsent: [importlib ___canonicalRegistrySnapshot___]).
-  {modName. UserGlobals at: #'Grail_modpath_mod2' ifAbsent: ['x']} do: [:n |
+  {modName. UserGlobals at: #'Grail_modpath_mod2' ifAbsent: ['x']. mod3} do: [:n |
     (importlib @env1:modules) removeKey: n asSymbol ifAbsent: [].
-    #('/a/' '/b/' '/c/' '/moved/') do: [:sub |
+    #('/a/' '/b/' '/c/' '/moved/' '/copy/') do: [:sub |
       [GsFile removeServerFile: root , sub , n , '.py'] on: Error do: [:e | e return: nil]]].
-  #('/a' '/b' '/c' '/moved' '') do: [:sub |
+  #('/a' '/b' '/c' '/moved' '/copy' '') do: [:sub |
     [GsFile removeServerDirectory: root , sub] on: Error do: [:e | e return: nil]].
   failures addAll: ((1 to: (UserGlobals at: #'Grail_modpath_failures' otherwise: 1)) collect: [:i | 'session 1 check']).
-  #(#'Grail_modpath_snap' #'Grail_modpath_root' #'Grail_modpath_mod' #'Grail_modpath_mod2' #'Grail_modpath_failures')
+  #(#'Grail_modpath_snap' #'Grail_modpath_root' #'Grail_modpath_mod' #'Grail_modpath_mod2' #'Grail_modpath_mod3' #'Grail_modpath_failures')
     do: [:k | UserGlobals removeKey: k ifAbsent: []].
   System commit].
 failures isEmpty
