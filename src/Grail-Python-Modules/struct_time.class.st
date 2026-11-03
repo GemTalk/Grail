@@ -1,8 +1,17 @@
 Class {
 	#name : 'struct_time',
-	#superclass : 'tuple',
+	#superclass : 'PyStructSequence',
 	#category : 'Grail-Modules'
 }
+
+{ #category : 'Grail-Fields' }
+struct_time class >> ___namedOnlyFields___ [
+	"tm_zone and tm_gmtoff, past the nine the tuple holds (Modules/timemodule.c,
+	struct_time_type_fields)."
+
+	^ #(#'tm_zone' #'tm_gmtoff')
+
+]
 
 { #category : 'Grail-Introspection' }
 struct_time class >> ___pythonValueAttrs___ [
@@ -27,5 +36,18 @@ struct_time class >> ___pythonValueAttrs___ [
 		bound method instead of raising AttributeError."
 		add: #'__dict__';
 		yourself
+
+]
+
+{ #category : 'Grail-Fields' }
+struct_time class >> ___sequenceNames___ [
+	^ #(#'tm_year' #'tm_mon' #'tm_mday' #'tm_hour' #'tm_min' #'tm_sec' #'tm_wday'
+		#'tm_yday' #'tm_isdst')
+
+]
+
+{ #category : 'Grail-Fields' }
+struct_time class >> ___typeName___ [
+	^ 'time.struct_time'
 
 ]

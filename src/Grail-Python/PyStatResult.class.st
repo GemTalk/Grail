@@ -34,7 +34,7 @@ validity, Django's session expiry), which whole seconds serve.
 "
 Class {
 	#name : 'PyStatResult',
-	#superclass : 'tuple',
+	#superclass : 'PyStructSequence',
 	#category : 'Grail-Filesystem'
 }
 
@@ -92,6 +92,20 @@ PyStatResult class >> ___sequenceNames___ [
 	CPython, and read by index only."
 
 	^ #(#'st_mode' #'st_ino' #'st_dev' #'st_nlink' #'st_uid' #'st_gid' #'st_size')
+
+]
+
+{ #category : 'Grail-Fields' }
+PyStatResult class >> ___typeName___ [
+	^ 'os.stat_result'
+
+]
+
+{ #category : 'Grail-Fields' }
+PyStatResult class >> ___unnamedFieldCount___ [
+	"The three int times, read by index only."
+
+	^ 3
 
 ]
 

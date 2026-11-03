@@ -26,6 +26,12 @@ sys_version_info class >> __new__: anObject _: another [
 
 ]
 
+{ #category : 'Instance Creation' }
+sys_version_info class >> _new: positional kw: keywords [
+	^ self ___refuseInstances___
+
+]
+
 { #category : 'Grail-Attributes' }
 sys_version_info >> ___pyAttrStore___: aName put: aValue [
 	"The fields are read-only, as a struct sequence's members are; anything
