@@ -2120,6 +2120,29 @@ CallAst >> ___directCallSelector___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRArgumentsArrayOn___: aBuilder [
+	"The positional arguments' Array, as ___emitIRElementsArrayOn___:elts:
+	builds a display's -- except that a LONE ``*'' is checked as a CALL's,
+	naming the callee when it refuses a non-iterable, as printArgumentsArrayOn:
+	emits it (object >> ___pyStarArgumentsFor___:, ___passesItsSplatWhole___)."
+
+	self ___passesItsSplatWhole___ ifFalse: [
+		^ self ___emitIRElementsArrayOn___: aBuilder elts: arguments].
+	^ self
+		___emitIRElementsArrayOn___: aBuilder
+		elts: arguments
+		starRuns: [:starred | | operand |
+			operand := starred value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: starred.
+			aBuilder
+				send: #'___pyStarArgumentsFor___:'
+				to: operand
+				with: { self ___emitIRCalleeOrNilOn___: aBuilder }
+				env: 0]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRArityMismatchOn___: aBuilder [
 	"printArityMismatchErrorOn:forName: -- ``(TypeError ___signal___: '<msg>')''.
 
@@ -2231,7 +2254,7 @@ CallAst >> ___emitIRBuiltinShadowProbeOn___: aBuilder varargs: isVarargs name: a
 			then: [
 				isVarargs
 					ifTrue: [| a k binst |
-						a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+						a := self ___emitIRArgumentsArrayOn___: aBuilder.
 						k := self ___emitIRKeywordsOn___: aBuilder.
 						aBuilder atNode: self.
 						binst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
@@ -2244,7 +2267,7 @@ CallAst >> ___emitIRBuiltinShadowProbeOn___: aBuilder varargs: isVarargs name: a
 						aBuilder add: (aBuilder
 							send: self bareCallFastPathSelector to: binst with: argVals env: 1)]]
 			else: [| a k |
-				a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+				a := self ___emitIRArgumentsArrayOn___: aBuilder.
 				k := self ___emitIRKeywordsOn___: aBuilder.
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder
@@ -2356,7 +2379,7 @@ CallAst >> ___emitIRGeneralCallOn___: aBuilder [
 	| callee argsArray kw |
 	callee := function ___emitIRValueOn___: aBuilder.
 	"printArgumentsArrayOn:: the brace literal, or the splat concatenation."
-	argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+	argsArray := self ___emitIRArgumentsArrayOn___: aBuilder.
 	kw := self ___emitIRKeywordsOn___: aBuilder.
 	aBuilder atNode: self.
 	^ aBuilder send: #'value:value:' to: callee
@@ -2586,7 +2609,7 @@ CallAst >> ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs [
 			then: [
 				isVarargs
 					ifTrue: [| a k |
-						a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+						a := self ___emitIRArgumentsArrayOn___: aBuilder.
 						k := self ___emitIRKeywordsOn___: aBuilder.
 						aBuilder atNode: self.
 						aBuilder add: (aBuilder
@@ -2597,7 +2620,7 @@ CallAst >> ___emitIRModuleSelfSendOn___: aBuilder varargs: isVarargs [
 						aBuilder add: (aBuilder
 							send: sel to: aBuilder selfNode with: argVals env: 1)]]
 			else: [| a k |
-				a := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+				a := self ___emitIRArgumentsArrayOn___: aBuilder.
 				k := self ___emitIRKeywordsOn___: aBuilder.
 				aBuilder atNode: self.
 				aBuilder add: (aBuilder
@@ -2826,7 +2849,7 @@ CallAst >> ___emitIRValueOn___: aBuilder [
 		the keyword dict (nil when there are none), as the module twin's
 		then-branch emits them."
 		| argsArray kw |
-		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+		argsArray := self ___emitIRArgumentsArrayOn___: aBuilder.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
 		aBuilder atNode: self.
 		^ aBuilder send: self classSelfSendVarargsSelector to: aBuilder selfNode
@@ -2861,7 +2884,7 @@ CallAst >> ___emitIRValueOn___: aBuilder [
 		shadow := self ___moduleGlobalShadowName___.
 		shadow notNil ifTrue: [
 			^ self ___emitIRBuiltinShadowProbeOn___: aBuilder varargs: true name: shadow].
-		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+		argsArray := self ___emitIRArgumentsArrayOn___: aBuilder.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
 		aBuilder atNode: self.
 		builtinsInst := self ___emitIRBuiltinsInstanceOn___: aBuilder.
@@ -2887,7 +2910,7 @@ CallAst >> ___emitIRValueOn___: aBuilder [
 	shape == #attrVarargs ifTrue: [
 		| recv argsArray kw |
 		recv := function value ___emitIRValueOn___: aBuilder.
-		argsArray := self ___emitIRElementsArrayOn___: aBuilder elts: arguments.
+		argsArray := self ___emitIRArgumentsArrayOn___: aBuilder.
 		kw := self ___emitIRKeywordsOn___: aBuilder.
 		aBuilder atNode: self.
 		^ aBuilder send: self attributeCallVarargsSelector to: recv
@@ -4506,6 +4529,18 @@ CallAst >> ___node: aNode isIn: aBody [
 
 ]
 
+{ #category : 'Grail-other' }
+CallAst >> ___passesItsSplatWhole___ [
+	"Are the positional arguments one ``*x'' and nothing else?  That is the
+	one shape CPython hands to the call as it stands (Python/codegen.c:4305),
+	so the call refuses a non-iterable and names the callee; any other is
+	first built as a tuple display, which refuses it as a display does --
+	``h(1, *1)'' says ``Value after *''."
+
+	^ arguments size = 1 and: [arguments first isKindOf: StarredAst]
+
+]
+
 { #category : 'Grail-Class Compile Context' }
 CallAst >> ___printShadowableSuperOn___: aStream arm: aBlock [
 	"Wrap a zero-argument ``super()'' emit in the run-time shadow probe.
@@ -5334,9 +5369,12 @@ CallAst >> printArgumentsArrayOn: aStream [
 	hasStar := arguments anySatisfy: [:each | each isKindOf: StarredAst].
 	hasStar ifFalse: [^ self ___printElementsArrayOf___: arguments on: aStream].
 	"Splat path: emit ``({} @env0:, {a. b.} @env0:, (splat @env0:___pyStarToArray___) ...)``.
-	Inject an empty seed so the result is always parenthesized.
-	``@env0:,`` dispatches the env-0 Array concatenation; bare ``,``
-	would resolve to env-1 where Array has no comma method."
+	A LONE splat is checked as a call's instead, ``(splat
+	@env0:___pyStarArgumentsFor___: f)'', the callee handed over for the
+	refusal of a non-iterable to name -- see ___passesItsSplatWhole___.  Inject
+	an empty seed so the result is always parenthesized.  ``@env0:,``
+	dispatches the env-0 Array concatenation; bare ``,`` would resolve to env-1
+	where Array has no comma method."
 	aStream nextPutAll: '({} '.
 	run := OrderedCollection new.
 	arguments do: [:each |
@@ -5349,7 +5387,12 @@ CallAst >> printArgumentsArrayOn: aStream [
 					run := OrderedCollection new].
 				aStream nextPutAll: '@env0:, ('.
 				each value printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' @env0:___pyStarToArray___) ']
+				self ___passesItsSplatWhole___
+					ifTrue: [
+						aStream nextPutAll: ' @env0:___pyStarArgumentsFor___: '.
+						self printCalleeOrNilOn: aStream.
+						aStream nextPutAll: ') ']
+					ifFalse: [aStream nextPutAll: ' @env0:___pyStarToArray___) ']]
 			ifFalse: [run add: each]].
 	run isEmpty ifFalse: [
 		aStream nextPutAll: '@env0:, '.
@@ -5622,10 +5665,11 @@ CallAst >> printBareEvalExecOn: aStream [
 
 { #category : 'Grail-other' }
 CallAst >> printCalleeOrNilOn: aStream [
-	"The callee a keyword-merge error names, when it is a plain NAME -- one that
-	can be read a second time for free and without effect, as
-	printKwargsSplatCheckOn: hands it over -- else nil, and the message starts
-	at ``got''."
+	"The callee a call's argument errors name -- a keyword given twice, a
+	``*'' operand that is not iterable -- when it is a plain NAME, one that can
+	be read a second time for free and without effect, as
+	printKwargsSplatCheckOn: hands it over; else nil, and the message starts
+	without it."
 
 	(function isKindOf: NameAst) ifFalse: [^ aStream nextPutAll: 'nil'].
 	function printSmalltalkWithParenthesisOn: aStream

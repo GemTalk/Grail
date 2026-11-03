@@ -120,6 +120,19 @@ TypeError class >> ___grailCheckMultipleValues___: names pos: positional kw: key
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+TypeError class >> ___notIterableAfterStarMessageFor: aValue [
+	^ 'Value after * must be an iterable, not ' , (aValue @env1:___pyTypeNameForError___) asString
+
+]
+
+{ #category : 'Grail-Error Messages' }
+TypeError class >> ___notIterableArgumentAfterStarMessageFor: aValue prefix: aCalleePrefix [
+	^ aCalleePrefix asString , 'argument after * must be an iterable, not '
+		, (aValue @env1:___pyTypeNameForError___) asString
+
+]
+
 { #category : 'Grail-Arity Checks' }
 TypeError class >> ___refuseKeywordsIn___: keywords for: aFunctionName [
 	"The refusal of a built-in that takes no keyword at all, whatever its name:

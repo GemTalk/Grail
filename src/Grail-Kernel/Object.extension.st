@@ -1473,6 +1473,17 @@ Object >> ___isPyStr___ [
 
 ]
 
+{ #category : 'Grail-Protocol' }
+Object >> ___isStarIterable___ [
+	"Can the receiver be the operand of a ``*'' -- a type with __iter__, or a
+	sequence with __getitem__, as CPython asks (Python/ceval.c:3395)?  The
+	probe iter() itself makes (builtins >> ___pyIter___:)."
+
+	^ (self @env1:___hasProtocolForCall___: '__iter__')
+		or: [self @env1:___hasProtocolForCall___: '__getitem__']
+
+]
+
 { #category : 'Grail-Transient Attrs' }
 Object >> ___isTransientAttr___: aSymbol [
 	"Is aSymbol one of the receiver's class-level __transient__ names (own or
@@ -1696,6 +1707,26 @@ Object >> ___pyPlainStr___ [
 
 ]
 
+{ #category : 'Grail-Protocol' }
+Object >> ___pyStarArgumentsFor___: aCallee [
+	"The receiver -- the operand of a ``*'' in a CALL's arguments -- as an
+	Array, or CPython's refusal of a non-iterable there, which names the
+	callee as _PyObject_FunctionStr does (Python/ceval.c:3393-3410):
+	``f() argument after * must be an iterable, not int''.  A display's ``*''
+	says ``Value after *'' instead (___pyStarToArray___).  aCallee is nil when
+	the call site cannot hand it over, and the message then starts at
+	``argument''.  A list or tuple takes the fast path first, as in
+	___pyStarToArray___: the probe costs a splat call a third of its time."
+
+	self ___splatsDirectly___ ifTrue: [^ self asArray].
+	self ___isStarIterable___ ifFalse: [
+		^ TypeError @env1:___signal___: (TypeError
+			___notIterableArgumentAfterStarMessageFor: self
+			prefix: (self @env1:___pyFunctionStrPrefix___: aCallee))].
+	^ (list @env1:__new__: self) asArray
+
+]
+
 { #category : 'Grail-Iteration' }
 Object >> ___pyStarToArray___ [
 	"Materialize the receiver — the source of a ``*''-unpack in a tuple /
@@ -1713,18 +1744,14 @@ Object >> ___pyStarToArray___ [
 	Smalltalk Characters -- ``(*'ab',)'' answered two Character objects, where
 	iterating a str yields one-character strs.  It takes the iteration path."
 
-	((self isKindOf: SequenceableCollection)
-		and: [(self isKindOf: CharacterCollection) not
-		and: [(self @env1:___iterIsPythonDefined___) not]]) ifTrue: [^ self asArray].
+	self ___splatsDirectly___ ifTrue: [^ self asArray].
 	"CPython's own message for a splat of a non-iterable -- ``[*42]'' and
 	``partial(f, *42)'' both say ``Value after * must be an iterable, not
 	int'' -- rather than list()'s ``'int' object is not iterable''.  Decided
 	by the protocol probe iter() itself uses (builtins>>___pyIter___:), so the
 	same objects count as iterable here as there."
-	((self @env1:___hasProtocolForCall___: '__iter__')
-		or: [self @env1:___hasProtocolForCall___: '__getitem__']) ifFalse: [
-			^ TypeError @env1:___signal___: 'Value after * must be an iterable, not '
-				, (self @env1:___pyTypeNameForError___) asString].
+	self ___isStarIterable___ ifFalse: [
+		^ TypeError @env1:___signal___: (TypeError ___notIterableAfterStarMessageFor: self)].
 	^ (list @env1:__new__: self) asArray
 
 ]
@@ -1791,6 +1818,19 @@ Object >> ___runInstanceSessionInitOnce___ [
 	done add: self.
 	self perform: #'__session_init__' env: 1.
 	^ true
+
+]
+
+{ #category : 'Grail-Iteration' }
+Object >> ___splatsDirectly___ [
+	"Is the receiver an Array as far as a ``*'' is concerned -- a list or a
+	tuple, whose own asArray is its items?  A str is a SequenceableCollection
+	too, but its asArray is an Array of Smalltalk Characters, and a class
+	that defines __iter__ in Python iterates as that says."
+
+	^ (self isKindOf: SequenceableCollection)
+		and: [(self isKindOf: CharacterCollection) not
+		and: [(self @env1:___iterIsPythonDefined___) not]]
 
 ]
 

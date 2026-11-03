@@ -1143,6 +1143,19 @@ AbstractNode >> ___emitIRElementsArrayOn___: aBuilder elts: aCollection [
 	is the same whatever the element order (cut 56).  Shared by call
 	arguments, tuple and list displays, which all print through that shape."
 
+	^ self
+		___emitIRElementsArrayOn___: aBuilder
+		elts: aCollection
+		starRuns: [:starred | starred ___emitIRStarArrayOn___: aBuilder]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRElementsArrayOn___: aBuilder elts: aCollection starRuns: aStarRunBlock [
+	"___emitIRElementsArrayOn___:elts:, with each ``*x'' element's run built by
+	aStarRunBlock -- a call's arguments check their splats as a call's
+	(CallAst >> ___emitIRArgumentsArrayOn___:)."
+
 	| acc |
 	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
 		^ self ___emitIRChunkedArrayOf___:
@@ -1152,7 +1165,7 @@ AbstractNode >> ___emitIRElementsArrayOn___: aBuilder elts: aCollection [
 	aCollection do: [:e |
 		| run |
 		run := (e isKindOf: StarredAst)
-			ifTrue: [e ___emitIRStarArrayOn___: aBuilder]
+			ifTrue: [aStarRunBlock value: e]
 			ifFalse: [aBuilder arrayOf: { e ___emitIRValueOn___: aBuilder }].
 		acc := aBuilder send: #, to: acc with: { run } env: 0].
 	^ acc
