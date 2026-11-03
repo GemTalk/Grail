@@ -947,3 +947,16 @@ test.test_calendar
 #
 #   context   56t OK (23 skipped)
 test.test_context
+
+# --- Standard library (added 2026-11-03): dataclasses ---
+#
+# test_dataclasses is CPython 3.14.8's package, vendored verbatim, because
+# Grail's dataclasses.py is 3.14.8's (licenses/CPYTHON.md says why).  What
+# is left: __weakref__ and __dict__ slots, pickling a make_dataclass or
+# frozen-slots class, docstring signatures that hold a ForwardRef, a
+# descriptor whose __set__/__get__ is a Mock, a frozen class's own methods
+# assigning its fields, and the function qualnames __create_fn__ gives.
+# Measured on Darwin arm64:
+#
+#   dataclasses   280t  14 fail  9 error  2 skip
+test.test_dataclasses
