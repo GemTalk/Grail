@@ -88,6 +88,15 @@ ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
 	(aTarget isKindOf: NameAst) ifTrue: [
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
+	"A subscript or attribute LEAF -- ``for d[k], o.a in pairs'' -- takes the
+	per-leaf store AssignAst's tuple unpack makes (___emitIRUnpackStore___:
+	from:holder:on:): ``(obj) __setitem__: (idx) _: (src __getitem__: i)'',
+	``(obj) __setattr__: 'a' _: ...'' or a self slot's accessor send.  The
+	text's emitUnpackOn: hands the same leaf to ___emitTargetStore___:from:on:
+	with the same element read as its right-hand side, so the sends agree."
+	((aTarget isKindOf: SubscriptAst) or: [aTarget isKindOf: AttributeAst]) ifTrue: [
+		^ self ___emitIRUnpackStore___: aTarget
+			from: aSourceBlock value holder: '___tgt___' on: aBuilder].
 	elts := aTarget elts.
 	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
 	starIdx = 0 ifTrue: [
@@ -250,9 +259,55 @@ ForAst >> ___emitIRStatementOn___: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ForAst >> ___emitIRStoreTargetBindFrom___: stepNode on: aBuilder [
+	"``for obj[i] in ...'' / ``for obj.a in ...'' -- and the async forms, which
+	differ only in stepNode.  CPython's order, per iteration, is FOR_ITER, then
+	the target's object, then its subscript, then STORE_SUBSCR / STORE_ATTR:
+
+	    ___itemN___ := step.
+	    (obj) __setitem__: (idx) _: ___itemN___.     ""or __setattr__:_:, or
+	    ___itemN___ := nil.                           a self slot's accessor""
+
+	THE ITEM IS TAKEN FIRST, INTO THE ITEM TEMP.  Handed to the store as an
+	argument, the step would run AFTER the receiver and index -- a send
+	evaluates its receiver, then its arguments -- so a subscript with side
+	effects would run before each item was fetched, and once more on the step
+	that drains the iterator.  The text emit had exactly that order until this
+	cut (printSmalltalkOn: now binds the same temp).
+
+	THE STORE IS THE ASSIGNMENT'S, not a copy of it: ___emitIRUnpackStore___:
+	from:holder:on: is the per-leaf store AssignAst's tuple unpack makes for
+	``o.a, d[k] = ...'', and it reads its right-hand side from whatever node it
+	is given -- here the temp.  The holder name is unused for a leaf.
+
+	The step stays drain-guarded and the store does not: a __setitem__ that
+	raises StopIteration / StopAsyncIteration propagates to the caller rather
+	than ending the loop (test_coroutines'
+	test_for_assign_raising_stop_async_iteration).  The temp is released after
+	the store, as the iterator temp is released after the loop: it is a METHOD
+	temp here where the text's is a block temp, and it would otherwise hold the
+	last item until the function returns."
+
+	| itemSym itemLeaf |
+	itemSym := self ___irItemTempSymbol___.
+	itemLeaf := (aBuilder leafFor: itemSym) ifNil: [aBuilder tempNamed: itemSym].
+	"The fetch is the iterator protocol, stamped at the iterable; the store is
+	the target's -- the same split the tuple branch below makes."
+	aBuilder atNode: iter.
+	aBuilder add: (aBuilder assign: itemLeaf from: stepNode).
+	aBuilder atNode: target.
+	self ___emitIRUnpackStore___: target
+		from: (aBuilder var: itemLeaf) holder: '___tgt___' on: aBuilder.
+	aBuilder add: (aBuilder assign: itemLeaf from: aBuilder nilLit).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ForAst >> ___emitIRTargetBindFrom___: stepNode on: aBuilder [
 	"Bind the loop target from the drain-guarded step.  A Name: ``target :=
-	step''.  A tuple / list: printSmalltalkOn:'s tuple branch --
+	step''.  A subscript or attribute: ___emitIRStoreTargetBindFrom___:on:.
+	A tuple / list: printSmalltalkOn:'s tuple branch --
 	  ___itemN___ := step.
 	  ___itemN___ := ___itemN___ ___unpackCheck___: n star: b after: m.
 	then one ``name := (src __getitem__: i)'' per leaf, a nested tuple reading
@@ -278,6 +333,8 @@ ForAst >> ___emitIRTargetBindFrom___: stepNode on: aBuilder [
 				from: stepNode on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: target id asSymbol) from: stepNode)].
+	((target isKindOf: SubscriptAst) or: [target isKindOf: AttributeAst]) ifTrue: [
+		^ self ___emitIRStoreTargetBindFrom___: stepNode on: aBuilder].
 	itemSym := self ___irItemTempSymbol___.
 	itemLeaf := (aBuilder leafFor: itemSym) ifNil: [aBuilder tempNamed: itemSym].
 	"THE ITERATOR PROTOCOL IS STAMPED AT THE ITERABLE; ONLY THE NAME BINDINGS ARE
@@ -400,12 +457,13 @@ ForAst >> ___exhaustedExceptionName___ [
 { #category : 'Grail-IR Codegen' }
 ForAst >> ___irEligibleStatementLocals___: localNames [
 	"A for (or, since cut 54, an async for -- the protocol differs in exactly
-	the three IR hooks below, as in the text) with no else clause over a simple
-	local Name target or a tuple / list of them (nested, no star -- see
-	___irForTargetEligible___:).  for-else and module-scope targets stay on text.  A user local
-	named like the iterator or item temp would collide with the method temp
-	this emit registers (text uses a shadowing BLOCK temp), so such a def
-	stays on text too."
+	the three IR hooks below, as in the text) whose target is a local or
+	module-routed Name, a subscript or attribute store, or a tuple / list nest
+	of local Names and such stores, one star per level (see
+	___irForTargetEligible___:).  An else clause is admitted when its
+	statements are (cut 68).  A user local named like the iterator or item temp
+	would collide with the method temp this emit registers (text uses a
+	shadowing BLOCK temp), so such a def stays on text."
 
 	(self class == ForAst or: [self class == AsyncForAst]) ifFalse: [^ false].
 	"An else clause (cut 68) is emittable when its statements are: the text
@@ -444,11 +502,21 @@ ForAst >> ___irFlowBound___: boundIn locals: localSet [
 	"The iterable's reads must be bound; the body walks from boundIn plus the
 	loop target names, which the step store binds before every iteration.  A
 	zero-trip loop binds nothing, so the set after the loop is the set before
-	it."
+	it.
 
-	| entry bodyOut |
+	A subscript or attribute target READS its receiver and index on every
+	iteration, before the body runs, so those must be bound on entry too --
+	judged against boundIn, before the loop.  That is conservative for
+	``for i, d[i] in pairs'', whose ``i'' the same unpack has just bound; the
+	flow then fails and the reads carry the unbound guard (cut 72), which is
+	slower but right."
+
+	| entry bodyOut targetReads |
 	(self ___irFlowReadsBound___: iter in: boundIn locals: localSet)
 		ifFalse: [^ nil].
+	targetReads := Set new.
+	self ___irUnpackReadsInto___: targetReads target: target locals: localSet.
+	(targetReads allSatisfy: [:r | boundIn includes: r]) ifFalse: [^ nil].
 	entry := boundIn copy.
 	(self ___irTargetNames___: localSet) do: [:n | entry add: n].
 	"Its own breaks are its own (cut 71): collected and discarded, so they do
@@ -477,12 +545,23 @@ ForAst >> ___irFlowBoundElse___: boundIn locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 ForAst >> ___irForTargetEligible___: localNames [
-	"A Store-context local Name, or a tuple / list nest of them -- nested
-	tuples allowed, a STAR not (the text's star shape needs a Smalltalk
-	arithmetic send the IR emit does not yet make) -- with the item temp free."
+	"A Store-context local Name (or one the store routes to the module); a
+	subscript or attribute store; or a tuple / list nest of local Names and
+	such stores (___irForTupleTargetEligible___:locals:).  Every shape but the
+	Name binds through the item temp, which must therefore be free.
+
+	A SUBSCRIPT OR ATTRIBUTE target -- ``for values[i] in gs[i]()'' (test_
+	generators' conjoin), ``async for tgt[0] in source()'' (test_coroutines)
+	-- is admitted on the assignment's own leaf test,
+	___irUnpackLeafEligible___:locals: (an emittable receiver and index; not
+	``__class__'', whose store is a type change), because it is emitted by the
+	assignment's own leaf store (___emitIRStoreTargetBindFrom___:on:)."
 
 	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [
 		(self ___irForTupleTargetEligible___: target locals: localNames) ifFalse: [^ false].
+		^ (localNames includes: self ___irItemTempSymbol___ asString) not].
+	((target isKindOf: SubscriptAst) or: [target isKindOf: AttributeAst]) ifTrue: [
+		(self ___irUnpackLeafEligible___: target locals: localNames) ifFalse: [^ false].
 		^ (localNames includes: self ___irItemTempSymbol___ asString) not].
 	(target isKindOf: NameAst) ifFalse: [^ false].
 	((target ctx) isKindOf: StoreAst) ifFalse: [^ false].
@@ -497,7 +576,13 @@ ForAst >> ___irForTargetEligible___: localNames [
 
 { #category : 'Grail-IR Codegen' }
 ForAst >> ___irForTupleTargetEligible___: aTarget locals: localNames [
-	"A nest of Store-context local Names, with AT MOST ONE star per level.
+	"A nest of Store-context local Names and subscript / attribute stores, with
+	AT MOST ONE star per level.
+
+	A Name leaf must be a LOCAL: ___emitIRForUnpack___:source:on: assigns its
+	leaf, and has no module-routed store (``global a; for a, b in ...'' stays
+	on text).  A subscript or attribute leaf takes the assignment unpack's leaf
+	test and store, as the single-target form does (___irForTargetEligible___:).
 
 	The star used to refuse -- ``the text's star shape needs a Smalltalk
 	arithmetic send the IR emit does not yet make''.  It makes it now
@@ -516,9 +601,12 @@ ForAst >> ___irForTupleTargetEligible___: aTarget locals: localNames [
 		t := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
 		((t isKindOf: TupleAst) or: [t isKindOf: ListAst])
 			ifTrue: [self ___irForTupleTargetEligible___: t locals: localNames]
-			ifFalse: [(t isKindOf: NameAst)
-				and: [((t ctx) isKindOf: StoreAst)
-				and: [localNames includes: t id asString]]]]
+			ifFalse: [
+				((t isKindOf: SubscriptAst) or: [t isKindOf: AttributeAst])
+					ifTrue: [self ___irUnpackLeafEligible___: t locals: localNames]
+					ifFalse: [(t isKindOf: NameAst)
+						and: [((t ctx) isKindOf: StoreAst)
+						and: [localNames includes: t id asString]]]]]
 
 ]
 
@@ -557,10 +645,16 @@ ForAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	"The body's reads of the loop TARGET names are satisfied by the per-
 	iteration step store, so they impose no bound-before obligation; every
 	other read does.  The target itself contributes no binding visible after
-	the loop (a zero-trip loop leaves it unbound)."
+	the loop (a zero-trip loop leaves it unbound).
+
+	What a subscript or attribute target READS -- its receiver and index, at
+	any depth of a tuple target -- is an ordinary read, not filtered by the
+	target names: ___irFlowBound___:locals: judges it against what was bound
+	before the loop, and this agrees with it."
 
 	| sub names |
 	iter ___irReadLocalNamesInto___: aSet locals: localSet.
+	self ___irUnpackReadsInto___: aSet target: target locals: localSet.
 	sub := Set new.
 	body ___irReadLocalNamesInto___: sub locals: localSet.
 	names := self ___irTargetNames___: localSet.
@@ -573,16 +667,39 @@ ForAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 ForAst >> ___irRefusalDetail___: localSet [
-	self class == ForAst ifFalse: [^ #'ForAst:async'].
-	((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [^ #'ForAst:tupleTargetShape'].
-	(target isKindOf: NameAst) ifFalse: [^ ('ForAst:target-' , target class name asString) asSymbol].
+	"Why this loop refused for its OWN form -- reached only when no child
+	refused (FunctionDefAst>>___irRefusalIn___:locals:).
+
+	AN ASYNC FOR ANSWERS WHAT A SYNC ONE WOULD.  This opened with ``self class
+	== ForAst ifFalse: [^ #'ForAst:async']'', so every AsyncForAst refusal was
+	named for the loop's kind whatever refused it -- although asyncness has
+	not been a refusal since cut 54 (___irEligibleStatementLocals___: accepts
+	both classes).  The one corpus row it named was really a subscript target
+	(test_coroutines' ``async for tgt[0] in source()'').  The tests follow
+	___irEligibleStatementLocals___:'s own order."
+
+	(self class == ForAst or: [self class == AsyncForAst])
+		ifFalse: [^ ('ForAst:class-' , self class name asString) asSymbol].
+	(self ___irForTargetEligible___: localSet) ifFalse: [
+		((target isKindOf: TupleAst) or: [target isKindOf: ListAst]) ifTrue: [
+			^ (self ___irForTupleTargetEligible___: target locals: localSet)
+				ifTrue: [#'ForAst:itemTemp']
+				ifFalse: [#'ForAst:tupleTargetShape']].
+		(((target isKindOf: SubscriptAst) or: [target isKindOf: AttributeAst])
+			and: [self ___irUnpackLeafEligible___: target locals: localSet])
+				ifTrue: [^ #'ForAst:itemTemp'].
+		^ ('ForAst:target-' , target class name asString) asSymbol].
+	(localSet includes: self ___irIterTempSymbol___ asString) ifTrue: [^ #'ForAst:iterTemp'].
 	^ #'ForAst:other'
 
 ]
 
 { #category : 'Grail-IR Codegen' }
 ForAst >> ___irTargetNames___: localSet [
-	"The local names the loop target binds each iteration (Strings)."
+	"The local names the loop target binds each iteration (Strings).  A
+	subscript or attribute target -- or such a leaf of a tuple target -- binds
+	none: it stores INTO an object, and what it reads is a read
+	(___irReadLocalNamesInto___:locals:)."
 
 	| names |
 	names := Set new.
@@ -594,7 +711,8 @@ ForAst >> ___irTargetNames___: localSet [
 { #category : 'Grail-IR Codegen' }
 ForAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 	"Body writes must be pre-bound like any nested write -- except the loop
-	target names, whose write/read pair is self-contained within an iteration."
+	target names, whose write/read pair is self-contained within an iteration.
+	A subscript or attribute target writes no local (___irTargetNames___:)."
 
 	| sub names |
 	sub := Set new.
@@ -868,8 +986,9 @@ ForAst >> printSmalltalkOn: aStream [
 	For tuple unpacking (for a, b in items), uses a temp ___item___
 	and unpacks with __getitem__:."
 
-	| isTupleTarget depth iterTemp itemTemp p hasElse |
+	| isTupleTarget isStoreTarget depth iterTemp itemTemp p hasElse |
 	isTupleTarget := target isKindOf: TupleAst.
+	isStoreTarget := (target isKindOf: SubscriptAst) or: [target isKindOf: AttributeAst].
 	hasElse := orelse notNil and: [orelse size > 0].
 
 	"Walk the AST parent chain to count enclosing ForAst nodes — depth
@@ -892,7 +1011,7 @@ ForAst >> printSmalltalkOn: aStream [
 
 	"Inner StopIteration handler block"
 	aStream nextPutAll: '[| '; nextPutAll: iterTemp.
-	isTupleTarget ifTrue: [aStream space; nextPutAll: itemTemp].
+	(isTupleTarget or: [isStoreTarget]) ifTrue: [aStream space; nextPutAll: itemTemp].
 	aStream nextPutAll: ' |'; lf; increaseIndent.
 
 	"iter := iterable __iter__.  Preceded by a PEP 657 position store so an
@@ -942,6 +1061,18 @@ ForAst >> printSmalltalkOn: aStream [
 			target: target
 			source: itemTemp
 			depth: depth.
+	] ifFalse: [isStoreTarget ifTrue: [
+		"A subscript or attribute target: the item FIRST, then the store.
+		CPython runs FOR_ITER, then evaluates the target's object and
+		subscript, then STORE_SUBSCR / STORE_ATTR.  Handed to the store as its
+		argument, the step ran AFTER the receiver and index -- a send evaluates
+		its receiver first -- so a side-effecting subscript ran before each
+		fetch and once more on the step that drained the iterator.  The IR
+		emit binds the same temp (___emitIRStoreTargetBindFrom___:on:)."
+		aStream nextPutAll: itemTemp; nextPutAll: ' := ';
+			nextPutAll: (self ___drainGuardedStepFor___: iterTemp); nextPutAll: '.'; lf.
+		self emitForTargetStore: target source: itemTemp on: aStream.
+		aStream lf
 	] ifFalse: [
 		"Simple: target := iter __next__.  Phase A: when the target is
 		a module-scope name (declared in body variables, not shadowed
@@ -955,7 +1086,7 @@ ForAst >> printSmalltalkOn: aStream [
 			emitForTargetStore: target
 			source: (self ___drainGuardedStepFor___: iterTemp)
 			on: aStream.
-	].
+	]].
 
 	"Body"
 	body printSmalltalkOn: aStream.
