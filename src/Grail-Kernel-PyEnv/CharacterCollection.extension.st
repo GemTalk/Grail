@@ -430,52 +430,39 @@ CharacterCollection class >> _new: positional kw: kwargs [
 	``str(b'x', errors='replace')'' used to raise.
 
 	CPython's contract: any of the three may be a keyword; supplying
-	``encoding'' OR ``errors'' means DECODE, with the other defaulted; and any
-	other keyword is ``str() got an unexpected keyword argument'' -- the
-	wording CPython 3.14 uses."
+	``encoding'' OR ``errors'' means DECODE, with the other defaulted.  The
+	arguments are bound by Argument Clinic, and refused as it refuses them
+	and in its order (TypeError class >> ___argumentsOf___:...): more than
+	three in all, keywords counted, then a parameter given by position and by
+	name, then a keyword that names none of the three.  Grail had counted the
+	positionals alone, so a fourth argument given by name was ignored, and had
+	checked only ``object'' for a duplicate."
 
-	| args obj encoding errors |
-	"MORE THAN THREE POSITIONALS is an arity error, in CPython's two
-	wordings: the vectorcall one for positionals alone, the tp_new one --
-	counting the keywords too -- when there are any.  Grail read the fourth
-	and later as nothing and the second and third as an encoding, and so
-	answered ``decoding to str: need a bytes-like object''."
-	positional @env0:size @env0:> 3 ifTrue: [
-		^ TypeError ___signal___: ((kwargs @env0:isNil @env0:or: [kwargs @env0:isEmpty])
-			ifTrue: ['str expected at most 3 arguments, got '
-				@env0:, positional @env0:size @env0:printString]
-			ifFalse: ['str() takes at most 3 arguments ('
-				@env0:, (positional @env0:size @env0:+ kwargs @env0:size) @env0:printString
-				@env0:, ' given)'])].
-	args := OrderedCollection @env0:withAll: positional.
-	kwargs @env0:keysDo: [:k |
-		(#('object' 'encoding' 'errors') @env0:includes: k @env0:asString) ifFalse: [
-			^ TypeError ___signal___: 'str() got an unexpected keyword argument '''
-				@env0:, k @env0:asString @env0:, '''']].
-	(kwargs @env0:includesKey: 'object') ifTrue: [
-		args @env0:isEmpty ifFalse: [
-			^ TypeError ___signal___: 'argument for str() given by name (''object'') and position (1)'].
-		args @env0:add: (kwargs @env0:at: 'object')].
-	obj := args @env0:isEmpty ifTrue: [''] ifFalse: [args @env0:at: 1].
-	encoding := args @env0:size @env0:>= 2
-		ifTrue: [args @env0:at: 2]
-		ifFalse: [kwargs @env0:at: 'encoding' ifAbsent: [nil]].
-	errors := args @env0:size @env0:>= 3
-		ifTrue: [args @env0:at: 3]
-		ifFalse: [kwargs @env0:at: 'errors' ifAbsent: [nil]].
+	| values obj encoding errors |
+	"More than three POSITIONALS alone is the vectorcall path's wording, not
+	Clinic's.  Grail read the fourth and later as nothing and the second and
+	third as an encoding, and so answered ``decoding to str: need a
+	bytes-like object''."
+	(positional @env0:size @env0:> 3 and: [kwargs @env0:isNil or: [kwargs @env0:isEmpty]]) ifTrue: [
+		^ TypeError ___signal___: 'str expected at most 3 arguments, got '
+			@env0:, positional @env0:size @env0:printString].
+	values := TypeError @env0:___argumentsOf___: positional keywords: kwargs
+		named: #('object' 'encoding' 'errors') positionalOnly: 0 required: 0 for: 'str'.
+	obj := values @env0:at: 1.
+	encoding := values @env0:at: 2.
+	errors := values @env0:at: 3.
 	(encoding @env0:isNil @env0:and: [errors @env0:isNil]) ifTrue: [
-		^ args @env0:isEmpty ifTrue: [self __new__] ifFalse: [self __new__: obj]].
+		^ obj @env0:isNil ifTrue: [self __new__] ifFalse: [self __new__: obj]].
 	"No object is the empty string whatever else is given, once Argument
 	Clinic has checked that what is given is a str (unicode_new_impl):
 	``str(errors='strict')'' is ''."
-	args @env0:isEmpty ifTrue: [
+	obj @env0:isNil ifTrue: [
 		encoding @env0:ifNotNil: [:given | self ___checkDecodeArgument___: given named: 'encoding'].
 		errors @env0:ifNotNil: [:given | self ___checkDecodeArgument___: given named: 'errors'].
 		^ self __new__].
 	^ self __new__: obj
 		_: (encoding @env0:ifNil: ['utf-8'])
 		_: (errors @env0:ifNil: ['strict'])
-
 ]
 
 { #category : 'Grail-Initialization' }
