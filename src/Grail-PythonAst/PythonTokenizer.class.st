@@ -49,6 +49,12 @@ PythonTokenizer class >> ___identifierEndIn___: aString from: anIndex [
 
 ]
 
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer class >> ___illegalUnicodeCharacterReason [
+	^ 'illegal Unicode character'
+
+]
+
 { #category : 'Grail-Identifiers' }
 PythonTokenizer class >> ___indexAfterWhitespaceIn___: aString from: anIndex [
 	"The index of the first character at or after anIndex in aString that is
@@ -2101,10 +2107,18 @@ PythonTokenizer >> tokenizeString [
 						radix: 16) to: str.
 				]
 				ifFalse: [(escaped == $U and: [isBytes not]) ifTrue: [
-					 str := self ___addCodePoint___: (PythonParser integerFrom:
+					"Eight digits reach past the last code point, which CPython
+					refuses (Objects/unicodeobject.c:6789-6792); building the
+					Character raised an uncatchable OutOfRange instead."
+					| codePoint |
+					codePoint := PythonParser integerFrom:
 						(self ___hexEscapeDigits___: 8 for: $U backslash: bsPos literal: lit
 							inBytes: isBytes)
-						radix: 16) to: str.
+						radix: 16.
+					codePoint > 16r10FFFF ifTrue: [
+						^ self ___escapeError___: self class ___illegalUnicodeCharacterReason
+							from: bsPos to: position - 1 literal: lit].
+					str := self ___addCodePoint___: codePoint to: str.
 				]
 				ifFalse: [(escaped == $N and: [isBytes not]) ifTrue: [
 					"\N{NAME} named-character escape.  Resolved against a
