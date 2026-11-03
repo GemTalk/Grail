@@ -68,6 +68,21 @@ TextIOWrapper class >> ___isPathLikeArgument___: anObject [
 
 ]
 
+{ #category : 'Grail-Private' }
+TextIOWrapper class >> ___notOpenForReadingMessage [
+	"CPython's text layer says it in its own words."
+
+	^ 'not readable'
+
+]
+
+{ #category : 'Grail-Private' }
+TextIOWrapper class >> ___notOpenForWritingMessage [
+
+	^ 'not writable'
+
+]
+
 { #category : 'Grail-Class Methods' }
 TextIOWrapper class >> __instancecheck__: anObject [
 	"isinstance(x, io.TextIOWrapper) for a TextIOWrapper over a BUFFER.

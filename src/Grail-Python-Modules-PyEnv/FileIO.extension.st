@@ -125,6 +125,20 @@ FileIO class >> ___nativeEncoding___: anEncoding errors: anErrors [
 
 ]
 
+{ #category : 'Grail-Private' }
+FileIO class >> ___notOpenForReadingMessage [
+
+	^ 'File not open for reading'
+
+]
+
+{ #category : 'Grail-Private' }
+FileIO class >> ___notOpenForWritingMessage [
+
+	^ 'File not open for writing'
+
+]
+
 { #category : 'Grail-Opening' }
 FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg [
 	"open(file, mode, encoding=encoding) with every later argument at its
@@ -164,25 +178,20 @@ FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg errors: 
 		(file isKindOf: Integer)
 			ifTrue: [fd := file]
 			ifFalse: [
-				"A bytes path is a filesystem name in the filesystem encoding,
-				as os.fsdecode reads it.  It fell through to __str__ and was
-				opened under its repr -- a name starting b' -- which never
-				exists (test_sax test_expat_binary_file_bytes_name).  The
-				file's NAME stays the bytes, as in CPython."
+				"The path converter CPython's open() uses (PEP 519): a str, a
+				bytes, or what a PathLike's __fspath__ answers -- anything else
+				is the TypeError os.fspath raises.  It used to be opened under
+				its __str__, so ``open([])'' looked for a file named '[]' and
+				raised FileNotFoundError (test_fileio testWarnings).
+
+				A bytes path is a filesystem name in the filesystem encoding, as
+				os.fsdecode reads it (test_sax test_expat_binary_file_bytes_name);
+				the file's NAME stays the bytes, as in CPython.  A
+				surrogate-escaped str stays a str: the primitives below get its
+				exact bytes through ___primPath___:."
+				file := (os instance) fspath: file.
 				(file isKindOf: ByteArray) ifTrue: [
-					file := (os instance) fsdecode: file].
-				"PEP 519 first: CPython's open() asks __fspath__, and only a
-				PathLike is guaranteed to answer the actual filesystem path there.
-				__str__ stays as the fallback because it is what this has always
-				used and the two coincide for pathlib.Path — but a class free to
-				define a display __str__ alongside a real __fspath__ would
-				otherwise be opened under whatever its repr-ish text happened to be."
-				file := (os instance) ___fsPath___: file.
-				"A surrogate-escaped str -- an undecodable bytes name, decoded
-				above -- is a str already, and stays one: the primitives below
-				get its exact bytes through ___primPath___:."
-				((file isKindOf: CharacterCollection) or: [file isKindOf: PyStrSurrogate])
-					ifFalse: [file := file __str__]]].
+					file := (os instance) fsdecode: file]]].
 	"AN EMBEDDED NUL IS A BAD ARGUMENT, not a missing file.  A path cannot
 	hold one -- the OS call takes a NUL-terminated string, so everything after
 	it is silently dropped -- and CPython refuses up front with ``ValueError:
@@ -663,7 +672,7 @@ FileIO >> _checkOpen [
 FileIO >> _checkReadable [
 	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_readable) == true ifFalse: [
-		OSError ___signal___: 'not readable'].
+		UnsupportedOperation ___signal___: self @env0:class ___notOpenForReadingMessage].
 	self ___checkDescriptor___
 
 ]
@@ -672,7 +681,7 @@ FileIO >> _checkReadable [
 FileIO >> _checkWritable [
 	self _checkOpen.
 	(self @env0:dynamicInstVarAt: #_writable) == true ifFalse: [
-		OSError ___signal___: 'not writable'].
+		UnsupportedOperation ___signal___: self @env0:class ___notOpenForWritingMessage].
 	self ___checkDescriptor___
 
 ]
@@ -984,9 +993,14 @@ FileIO >> write: data [
 
 	| bytes f r |
 	self _checkWritable.
-	(data isKindOf: CharacterCollection) ifTrue: [
-		TypeError ___signal___: 'a bytes-like object is required, not ''str'''].
-	bytes := (data isKindOf: ByteArray) ifTrue: [data] ifFalse: [data @env0:asByteArray].
+	"Any buffer, as CPython's ``y*'' converter reads one -- an array, a
+	memoryview -- and anything else is its TypeError.  It sent asByteArray to
+	whatever it was given, which an array and an int both answered with a
+	MessageNotUnderstood no Python code could catch (test_fileio
+	testWritelinesError)."
+	bytes := (data isKindOf: ByteArray)
+		ifTrue: [data]
+		ifFalse: [ByteArray ___bytesOfBuffer___: data].
 	bytes @env0:isEmpty ifTrue: [^ 0].
 	f := self @env0:dynamicInstVarAt: #_gsfile.
 	r := f @env0:nextPutAllBytes: bytes.
