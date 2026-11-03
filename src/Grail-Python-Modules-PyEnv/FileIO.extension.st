@@ -125,6 +125,14 @@ FileIO class >> ___nativeEncoding___: anEncoding errors: anErrors [
 
 ]
 
+{ #category : 'Grail-Attribute Access' }
+FileIO class >> ___notWritableMessageFor: anAttributeName [
+
+	^ 'attribute ''' @env0:, anAttributeName @env0:asString
+		@env0:, ''' of ''_io.FileIO'' objects is not writable'
+
+]
+
 { #category : 'Grail-Opening' }
 FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg [
 	"open(file, mode, encoding=encoding) with every later argument at its
@@ -276,7 +284,7 @@ FileIO class >> ___open___: fileArg mode: modeArg encoding: encodingArg errors: 
 		mode: mode
 		readable: ((hasR) @env0:or: [hasPlus])
 		writable: ((hasR @env0:not) @env0:or: [hasPlus]).
-	hasB ifTrue: [^ inst].
+	hasB ifTrue: [^ inst ___renormaliseMode___].
 	native == nil ifTrue: [
 		^ FileIO ___codecText___: inst mode: mode encoding: encodingArg
 			errors: errorsArg newline: newlineArg].
@@ -316,6 +324,7 @@ FileIO class >> ___openCompressedPath___: fileArg mode: modeArg [
 	inst := (binary ifTrue: [FileIO] ifFalse: [TextIOWrapper]) @env0:new.
 	inst @env0:dynamicInstVarAt: #_gsfile put: gsfile.
 	inst @env0:dynamicInstVarAt: #_name put: file.
+	inst @env0:dynamicInstVarAt: #name put: file.
 	inst @env0:dynamicInstVarAt: #_mode put: mode.
 	inst @env0:dynamicInstVarAt: #_closed put: false.
 	inst @env0:dynamicInstVarAt: #_readable put: reading.
@@ -358,7 +367,7 @@ FileIO class >> ___openDescriptor___: fd mode: mode binary: isBinary readable: i
 					readable: isReadable writable: isWritable.
 				closefdArg ___isTruthy___ ifFalse: [
 					inst @env0:dynamicInstVarAt: #_closefd put: false].
-				isBinary ifTrue: [^ inst].
+				isBinary ifTrue: [^ inst ___renormaliseMode___].
 				native == nil ifTrue: [
 					^ self ___codecText___: inst mode: mode encoding: encodingArg
 						errors: errorsArg newline: newlineArg].
@@ -393,6 +402,13 @@ FileIO class >> ___pathHasNul___: aPath [
 	(aPath isKindOf: PyStrSurrogate) ifTrue: [
 		^ (os instance) ___hasNul___: aPath].
 	^ false
+
+]
+
+{ #category : 'Grail-Printing' }
+FileIO class >> ___reentrantReprMessageFor: aTypeName [
+
+	^ 'reentrant call inside ' @env0:, aTypeName @env0:asString @env0:, '.__repr__'
 
 ]
 
@@ -497,6 +513,7 @@ FileIO >> ___initGsFile___: gsfile name: aName mode: aMode readable: isReadable 
 
 	self @env0:dynamicInstVarAt: #_gsfile put: gsfile.
 	self @env0:dynamicInstVarAt: #_name put: aName.
+	self @env0:dynamicInstVarAt: #name put: aName.
 	self @env0:dynamicInstVarAt: #_mode put: aMode.
 	self @env0:dynamicInstVarAt: #_closed put: false.
 	self @env0:dynamicInstVarAt: #_readable put: isReadable.
@@ -555,6 +572,18 @@ FileIO >> ___ioTruncate___: size [
 
 ]
 
+{ #category : 'Grail-Printing' }
+FileIO >> ___modeAndClosefdRepr___ [
+	"`` mode='rb' closefd=True>'', the tail both of fileio_repr's forms end in."
+
+	^ ' mode=''' @env0:, self mode @env0:asString @env0:, ''' closefd='
+		@env0:, ((self @env0:dynamicInstVarAt: #_closefd) == false
+			ifTrue: ['False']
+			ifFalse: ['True'])
+		@env0:, '>'
+
+]
+
 { #category : 'Grail-Private' }
 FileIO >> ___numberOfClosedDescriptor___ [
 	"The number the descriptor closed underneath had, as ___initGsFile___...
@@ -601,24 +630,78 @@ FileIO >> ___openInto___: fileArg mode: modeArg [
 
 ]
 
+{ #category : 'Grail-Printing' }
+FileIO >> ___optionalAttribute___: aName [
+	"The attribute, or nil when the file has none: PyObject_GetOptionalAttr,
+	which the reprs read the name and the mode with."
+
+	^ [self ___pyAttrLoad___: aName] @env0:on: AttributeError do: [:error | nil]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+FileIO >> ___readOnlyAttributeNames___ [
+	"mode and closed are getsets with no setter on CPython's FileIO."
+
+	^ #('closed' 'mode')
+
+]
+
 { #category : 'Grail-Opening' }
 FileIO >> ___renormaliseMode___ [
-	"Report ``mode'' the way CPython's FileIO does: 'b' present, '+' last.
+	"Report ``mode'' as CPython's FileIO does (Modules/_io/fileio.c,
+	mode_string): by what the file can do, not how the mode was spelt --
+	'xb' or 'ab' for a created or appending file, with a '+' when it also
+	reads, 'rb+' for any other file that reads and writes (so 'w+b' too),
+	and 'rb' or 'wb' otherwise.
 
-	open() keeps the mode string the CALLER passed, which is right for open() --
-	``open(p).mode'' is 'r' there too.  FileIO is the one that normalises:
-	``io.FileIO(p, 'r').mode'' is 'rb' and ``io.FileIO(p, 'r+').mode'' is 'rb+'."
+	open() keeps the mode string the caller passed for a TEXT file, which is
+	right -- ``open(p).mode'' is 'r' there too.  A binary file's mode is its
+	raw file's, so open() normalises that one as well: ``open(p,
+	'w+b').mode'' is 'rb+'."
 
-	| m base |
-	m := self @env0:dynamicInstVarAt: #_mode.
-	(m isKindOf: CharacterCollection) ifFalse: [^ self].
-	base := WriteStream @env0:on: String @env0:new.
-	m @env0:do: [:c |
-		((c @env0:= $b) @env0:or: [c @env0:= $+]) ifFalse: [base @env0:nextPut: c]].
-	base @env0:nextPut: $b.
-	(m @env0:includes: $+) ifTrue: [base @env0:nextPut: $+].
-	self @env0:dynamicInstVarAt: #_mode put: base @env0:contents.
+	| mode plus |
+	mode := self @env0:dynamicInstVarAt: #_mode.
+	(mode isKindOf: CharacterCollection) ifFalse: [^ self].
+	plus := (mode @env0:includes: $+) ifTrue: ['+'] ifFalse: [''].
+	self @env0:dynamicInstVarAt: #_mode put: ((mode @env0:includes: $x)
+		ifTrue: ['xb' @env0:, plus]
+		ifFalse: [(mode @env0:includes: $a)
+			ifTrue: ['ab' @env0:, plus]
+			ifFalse: [plus @env0:isEmpty
+				ifTrue: [(mode @env0:includes: $r) ifTrue: ['rb'] ifFalse: ['wb']]
+				ifFalse: ['rb+']]]).
 	^ self
+
+]
+
+{ #category : 'Grail-Printing' }
+FileIO >> ___withReprGuard___: aBlock [
+	"Py_ReprEnter: a repr re-entered on a file already being repr'd -- whose
+	name is the file itself -- is CPython's RuntimeError, not a recursion.  The
+	seen set is the #GrailReprSeen session set the containers' reprs use."
+
+	| seen |
+	seen := SessionTemps @env0:current @env0:at: #GrailReprSeen otherwise: nil.
+	seen @env0:isNil ifTrue: [
+		seen := IdentitySet @env0:new.
+		SessionTemps @env0:current @env0:at: #GrailReprSeen put: seen].
+	(seen @env0:includes: self) ifTrue: [
+		^ RuntimeError ___signal___:
+			(FileIO ___reentrantReprMessageFor: self ___pyTypeNameForError___)].
+	seen @env0:add: self.
+	^ aBlock @env0:ensure: [seen @env0:remove: self ifAbsent: [nil]]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+FileIO >> __delattr__: name [
+	"A read-only attribute cannot be deleted either: CPython's getset with no
+	setter refuses a delete in the words it refuses an assignment in."
+
+	(self ___readOnlyAttributeNames___ @env0:includes: name @env0:asString) ifTrue: [
+		^ AttributeError ___signal___: (FileIO ___notWritableMessageFor: name)].
+	^ super __delattr__: name
 
 ]
 
@@ -649,6 +732,41 @@ FileIO >> __next__ [
 		StopIteration ___signal___: ''
 	].
 	^ line
+
+]
+
+{ #category : 'Grail-Printing' }
+FileIO >> __repr__ [
+	"fileio_repr (Modules/_io/fileio.c): the type, the name -- or the
+	descriptor once the file has none -- the mode and closefd, or only
+	``[closed]''.  The name is read as an attribute, so ``del f.name'' shows
+	the descriptor, and a name that is the file itself raises RuntimeError
+	rather than recursing."
+
+	| typeName name |
+	typeName := self ___pyTypeNameForError___ @env0:asString.
+	self closed == true ifTrue: [^ '<' @env0:, typeName @env0:, ' [closed]>'].
+	name := self ___optionalAttribute___: #name.
+	name == nil ifTrue: [
+		^ '<' @env0:, typeName @env0:, ' fd=' @env0:, self fileno @env0:printString
+			@env0:, self ___modeAndClosefdRepr___].
+	^ self ___withReprGuard___: [
+		'<' @env0:, typeName
+			@env0:, ' name=' @env0:, ((builtins @env1:instance) @env1:repr: name)
+			@env0:, self ___modeAndClosefdRepr___]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+FileIO >> __setattr__: name _: value [
+	"mode and closed are getsets with no setter in CPython: assigning one is
+	AttributeError.  Grail's are reader methods, and a store beside one made
+	a dynamic instVar the reader then ignored, so the assignment silently did
+	nothing (test_fileio testAttributes)."
+
+	(self ___readOnlyAttributeNames___ @env0:includes: name @env0:asString) ifTrue: [
+		^ AttributeError ___signal___: (FileIO ___notWritableMessageFor: name)].
+	^ super __setattr__: name _: value
 
 ]
 
@@ -829,7 +947,15 @@ FileIO >> mode [
 
 { #category : 'Grail-State' }
 FileIO >> name [
-	^ (self @env0:dynamicInstVarAt: #_name)
+	"The name is an ordinary attribute, as CPython's is: stored when the file
+	is made (___initGsFile___), so this reader is reached only once it is
+	gone -- ``del f.name'' -- or by a Smalltalk send, and answers what the
+	attribute read would."
+
+	| stored |
+	stored := self @env0:dynamicInstVarAt: #name.
+	stored == nil ifTrue: [^ AttributeError @env0:___signalMissing___: #name on: self].
+	^ stored
 
 ]
 
