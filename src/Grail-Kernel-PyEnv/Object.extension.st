@@ -3853,6 +3853,19 @@ Object class >> ___grailPrepareBases___: basesArray [
 
 ]
 
+{ #category : 'Grail-Class Body Namespace' }
+Object class >> ___grailPrepareMustAnswerAMappingMessageFor: aMetaclass got: aNamespace [
+	"CPython names a metaclass that is a class by its type name, and any other
+	by ``<metaclass>''."
+
+	^ ((aMetaclass isKindOf: Behavior)
+			ifTrue: [(aMetaclass @env1:__name__) @env0:asString]
+			ifFalse: ['<metaclass>'])
+		@env0:, '.__prepare__() must return a mapping, not '
+		@env0:, aNamespace ___pyTypeNameForError___ @env0:asString
+
+]
+
 { #category : 'Grail-Class Namespace' }
 Object class >> ___grailPrepareNamespace___: aMetaclass [
 	"The namespace for a class with no bases and no keywords to report.  Class
@@ -4041,7 +4054,14 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 			ns := prep @env1:value: {
 					self @env1:__name__.
 					self ___grailPrepareBases___: basesArray }
-				value: kwargs].
+				value: kwargs.
+			"What it answers must be a mapping, or the class statement is CPython's
+			TypeError (Python/bltinmodule.c:197-202).  A None used to read as
+			``no namespace'' and the class was built anyway."
+			ns ___grailIsPyMapping___ ifFalse: [
+				^ TypeError ___signal___: (self
+					___grailPrepareMustAnswerAMappingMessageFor: aMetaclass
+					got: ns)]].
 	(ns isNil or: [ns == None]) ifTrue: [^ nil].
 	"THE BODY'S IMPLICIT FIRST BINDINGS.  A CPython class body begins with
 	``__module__ = __name__'' and ``__qualname__ = ...'', so a namespace that
@@ -10832,6 +10852,19 @@ Object >> ___grailIsFixedAritySelector___: aString from: firstColon [
 			ifFalse: [^ false].
 		i := i @env0:+ 2].
 	^ true
+
+]
+
+{ #category : 'Grail-Class Body Namespace' }
+Object >> ___grailIsPyMapping___ [
+	"PyMapping_Check (Objects/abstract.c): does the receiver's type fill
+	mp_subscript -- a dict, or a class with a __getitem__ of its own?  Not
+	the refusal Grail gives int (a <grailProtocolRefusal>), which only raises
+	CPython's TypeError."
+
+	(self @env0:isKindOf: AbstractDictionary) ifTrue: [^ true].
+	^ (self ___matchDefinesOwnSelector___: #'__getitem__:')
+		and: [self ___grailDirListsSelector___: #'__getitem__:' in: self @env0:class]
 
 ]
 
