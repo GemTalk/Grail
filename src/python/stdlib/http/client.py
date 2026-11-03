@@ -415,7 +415,9 @@ class HTTPResponse(io.BufferedIOBase):
             raise BadStatusLine(line)
         if status < 100 or status > 999:
             raise BadStatusLine(line)
-        if version == 'HTTP/1.0':
+        if version in ('HTTP/1.0', 'HTTP/0.9'):
+            # CPython's: a server still answering "0.9" is read as 1.0
+            # (test_urllib test_read_0_9), not refused as UnknownProtocol.
             self.version = 10
         elif version.startswith('HTTP/1.'):
             self.version = 11

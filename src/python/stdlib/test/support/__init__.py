@@ -1125,6 +1125,12 @@ TEST_DATA_DIR = _os.path.join(TEST_HOME_DIR, "data")
 
 INTERNET_TIMEOUT = 60.0
 
+# CPython's (Lib/test/support/__init__.py:670), the URL a test names when it
+# needs a plausible HTTP URL but fakes the connection: test_urllib's
+# urlretrieve tests answer their ContentTooShortError from fakehttp and never
+# reach the host, and died on the missing name instead.
+TEST_HTTP_URL = "http://www.pythontest.net"
+
 
 def open_urlresource(url, *args, **kw):
     import urllib.parse
