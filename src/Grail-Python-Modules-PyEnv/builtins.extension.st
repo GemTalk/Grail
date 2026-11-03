@@ -966,6 +966,31 @@ builtins >> ___console___ [
 
 ]
 
+{ #category : 'Grail-Console' }
+builtins >> ___consoleErrorWrite___: aString [
+	"Write text to the console's ERROR channel -- where sys.stderr and
+	sys.__stderr__ write (issue #1972).
+
+	The error channel is a SECOND box, SessionTemps #GrailConsoleErr, with the
+	#GrailConsole protocol: the sink in slot 1, #'utf8' in slot 2 when it takes
+	bytes.  ./grail installs GsFile stderr there, so sys.stderr is fd 2 as in
+	CPython; before it, sys.stderr wrote to the one console sink, which is
+	fd 1, and warnings, logging and tracebacks all landed on stdout.
+
+	An embedder that installs no error box keeps exactly what it had: the
+	error channel falls back to the console, which is the single sink a
+	capturing embedder (GemDB's notebook and shell) or a topaz-hosted run
+	(run_tests.sh workers, the Transcript) already reads.  One box per channel
+	rather than a third slot in the first, so an embedder that knows nothing of
+	this is not affected by it."
+
+	| box |
+	box := SessionTemps @env0:current @env0:at: #'GrailConsoleErr' otherwise: nil.
+	box == nil ifTrue: [^ self ___consoleWrite___: aString].
+	^ self ___consoleWrite___: aString box: box
+
+]
+
 { #category : 'Grail-Built-in Functions' }
 builtins >> ___consoleReadLine___ [
 	"One line from the console -- the session's stdin provider when there is
@@ -1007,15 +1032,27 @@ builtins >> ___consoleWrite___: aString [
 	spurious client stop.  So the EMBEDDER declares it, in the box's
 	second slot, and this method never sends to the sink to find out."
 
-	| box sink |
+	| box |
 	box := SessionTemps @env0:current @env0:at: #'GrailConsole' otherwise: nil.
 	box == nil ifTrue: [^ Transcript @env0:nextPutAll: aString].
+	^ self ___consoleWrite___: aString box: box
+
+]
+
+{ #category : 'Grail-Console' }
+builtins >> ___consoleWrite___: aString box: box [
+	"Write text to the sink a console box names, encoded the way its second
+	slot says the sink takes it -- see ___consoleWrite___: for why the box is
+	told and the sink never asked."
+
+	| sink |
 	sink := box @env0:at: 1.
 	(box @env0:size @env0:> 1 and: [(box @env0:at: 2) @env0:== #'utf8'])
 		ifTrue: [^ sink @env0:nextPutAsUtf8: aString].
 	^ sink @env0:nextPutAll: aString
 
 ]
+
 
 { #category : 'Grail-Format Spec Engine' }
 builtins >> ___decExp10Of___: absValue [
@@ -3794,8 +3831,10 @@ builtins >> ___printTarget___: kwargs [
 			"``print(x, file=sys.stdout)'' -- the same console, spelled
 			explicitly.  Answering nil for it keeps that spelling on the console
 			path rather than sending it through write:, which would reach the
-			same sink by a longer route."
-			(f @env0:isKindOf: PyConsoleStream) ifTrue: [^ nil].
+			same sink by a longer route.  Not for ``file=sys.stderr'': that
+			stream's write goes to the console's ERROR channel (#1972)."
+			((f @env0:isKindOf: PyConsoleStream) and: [f ___isError___ not])
+				ifTrue: [^ nil].
 			^ f]].
 	sysMod := Python @env0:at: #'sys' otherwise: nil.
 	sysMod @env0:isNil ifTrue: [^ nil].
@@ -3807,7 +3846,10 @@ builtins >> ___printTarget___: kwargs [
 	out := [sysMod @env0:___instance___ @env1:___pyAttrLoad___: #'stdout']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(out @env0:isNil or: [out @env0:== None]) ifTrue: [^ nil].
-	(out @env0:isKindOf: PyConsoleStream) ifTrue: [^ nil].
+	"The console's ERROR stream rebound as sys.stdout is a redirect like any
+	other: written through, to the error channel (#1972)."
+	((out @env0:isKindOf: PyConsoleStream) and: [out ___isError___ not])
+		ifTrue: [^ nil].
 	^ out
 
 ]

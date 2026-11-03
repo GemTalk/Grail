@@ -24,19 +24,23 @@ SessionTemps #GrailConsole box's second slot), a WriteStream or a
 ClientForwarder takes characters.  So a write through sys.stdout and a print
 land in the same place, encoded the same way.
 
-STDOUT AND STDERR GO TO THE SAME PLACE.  ___consoleWrite___: has ONE sink and
-draws no out/err distinction, so this class does not invent one: the two
-instances differ only in ``name' (``<stdout>' / ``<stderr>'), which is what
-CPython reports and what a caller printing the stream sees.  Anything wanting a
-genuinely separate error channel has to be given one at the ___console___ box,
-not here.
+STDOUT AND STDERR ARE TWO CHANNELS (issue #1972).  The ``<stderr>' instance
+writes through ``builtins >> ___consoleErrorWrite___:', whose sink is the
+SessionTemps #GrailConsoleErr box -- ./grail installs GsFile stderr there, so
+sys.stderr is fd 2, as CPython's is.  They used to share the one console sink,
+so under ./grail every warning, logging record and Python-printed traceback
+landed on fd 1.  An embedder that installs no error box sees no change: the
+error channel falls back to the console sink, which is what a capturing
+embedder or a topaz-hosted run already reads.
 
 PRINT IS UNCHANGED.  ``builtins >> ___printTarget___' reads sys.stdout at call
 time and treats any non-None value as a REDIRECT, so an object there would have
 re-routed every print in the corpus through this class's write.  It instead
 RECOGNISES this class and answers nil for it -- the console -- leaving print on
-byte-identically the path it was on.  ``warnings >> showwarning' makes the same
-recognition for sys.stderr.  A user redirect (``sys.stdout = io.StringIO()')
+byte-identically the path it was on.  The ``<stderr>' instance is the one it
+does NOT answer nil for: ``print(x, file=sys.stderr)' is written through this
+class's write, to the error channel.  ``warnings >> showwarning' makes the same
+recognition for sys.stderr, and writes to the error channel itself.  A user redirect (``sys.stdout = io.StringIO()')
 is not an instance of this class and is written through exactly as before.
 
 WHAT IT IS NOT.  isatty() answers false unconditionally.  The tty-ness of the

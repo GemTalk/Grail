@@ -407,7 +407,11 @@ class NullHandler(Handler):
 
 
 class StreamHandler(Handler):
-    """Writes formatted records to a stream.  With no stream, to print()."""
+    """Writes formatted records to a stream.  With no stream, to sys.stderr,
+    as CPython's does (#1972) -- read when the record is emitted rather than
+    stored at construction, so a handler made in one session and kept in a
+    deployed module writes to the EMITTING session's stderr, and holds no
+    session's stream object."""
     __class_getitem__ = classmethod(type(list[int]))  # types.GenericAlias, as CPython's
 
     terminator = '\n'
@@ -416,17 +420,21 @@ class StreamHandler(Handler):
         super().__init__()
         self.stream = stream
 
+    def _target(self):
+        return sys.stderr if self.stream is None else self.stream
+
     def flush(self):
-        if self.stream is not None and hasattr(self.stream, 'flush'):
-            self.stream.flush()
+        stream = self._target()
+        if stream is not None and hasattr(stream, 'flush'):
+            stream.flush()
 
     def emit(self, record):
         try:
             msg = self.format(record)
-            if self.stream is None:
-                print(msg)
+            stream = self._target()
+            if stream is None:
                 return
-            self.stream.write(msg + self.terminator)
+            stream.write(msg + self.terminator)
             self.flush()
         except RecursionError:
             raise
