@@ -1617,7 +1617,13 @@ BoundMethod >> __get__: obj _: objtype [
 	    -- is already bound, and CPython's method.__get__ answers it unchanged."
 
 	| definer |
-	obj == None ifTrue: [^ self].
+	"A FUNCTION with no instance and no owner is wrap_descr_get's refusal
+	(Objects/typeobject.c:9716), as UnboundMethod >> __get__:_: refuses it for a
+	method read off its class."
+	obj == None ifTrue: [
+		((objtype == None or: [objtype == nil]) and: [receiver @env0:isKindOf: module])
+			ifTrue: [^ TypeError ___signal___: UnboundMethod ___getOfNoneForNoneMessage].
+		^ self].
 	"A module function bound to ITS OWN MODULE is itself.  CPython functions
 	 have no __self__, but Grail's answer the module, so code that takes them
 	 for bound methods round-trips them: Django's Signal.connect wraps
