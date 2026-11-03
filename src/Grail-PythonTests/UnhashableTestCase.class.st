@@ -156,7 +156,7 @@ UnhashableTestCase >> testSubclassCanRestoreAHash [
 
 { #category : 'Grail-Tests-Unhashable' }
 UnhashableTestCase >> testSubclassInheritsUnhashabilityAndNamesItself [
-	"The emitted body reads the class at RUNTIME (___raiseUnhashableType___),
+	"The emitted body reads the class at RUNTIME (___hashByClassAttribute___),
 	so a subclass that does not define its own __hash__ inherits the raise and
 	reports ITSELF -- which is what CPython does."
 

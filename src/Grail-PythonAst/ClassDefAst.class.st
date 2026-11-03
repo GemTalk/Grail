@@ -7736,12 +7736,15 @@ ClassDefAst >> printSmalltalkRuntimeOn: aStream [
 	raising __hash__ costs nothing at runtime, and every hash entry point
 	(builtins hash:, PyDict >> hashFunction:, the set element gates) already
 	routes through __hash__, so one emitted method covers them all.  See
-	___unhashableByClassBody___ for exactly when it fires."
+	___unhashableByClassBody___ for exactly when it fires.  It hashes by the
+	class ATTRIBUTE bound below, so a __hash__ assigned on the class later --
+	dataclasses' unsafe_hash=True -- is the hash, as CPython's re-derived
+	tp_hash is (object >> ___hashByClassAttribute___)."
 	self ___unhashableByClassBody___ ifTrue: [
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: ('__hash__' , (String with: Character lf)
-				, '	^ self ___raiseUnhashableType___')
+				, '	^ self ___hashByClassAttribute___')
 			category: 'Grail-Unhashable'
 			env: 1
 			classSide: false

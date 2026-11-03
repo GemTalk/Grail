@@ -10109,6 +10109,33 @@ Object >> ___grailClassLacksSynthesizedDunder___: aSym [
 
 ]
 
+{ #category : 'Grail-Hashability' }
+Object >> ___grailCompileHashByClassAttribute___ [
+	"Give this class the __hash__ its body would have compiled for
+	``__hash__ = None'' (ClassDefAst >> ___unhashableByClassBody___): a None
+	assigned after creation has to beat a __hash__ the class compiles or
+	inherits as a method, which a send finds before any class attribute.
+	dataclasses assigns exactly that None to an eq=True class whose base
+	defines __hash__ (test_dataclasses TestHash.test_hash_no_args).
+
+	Only when there is such a method.  Object's own __hash__ already honours
+	the None, and every eq=True dataclass assigns one, so compiling for those
+	would cost each of them a compile for nothing.  A SESSION method, as the
+	self-send dispatchers are: the assignment is a patch, and it has to shadow
+	the dispatcher an earlier assigned function installed, which a persistent
+	method does not."
+
+	| owner |
+	owner := self @env0:whichClassIncludesSelector: #'__hash__' environmentId: 1.
+	(owner == Object or: [(owner @env0:categoryOfSelector: #'__hash__' environmentId: 1)
+		@env0:asString @env0:= 'Grail-Unhashable']) ifTrue: [^ self].
+	self
+		___compileSessionMethod: '__hash__' @env0:, (String @env0:with: Character @env0:lf)
+			@env0:, '	^ self ___hashByClassAttribute___'
+		category: 'Grail-Unhashable'
+
+]
+
 { #category : 'Grail-Class Attr Overlay' }
 Object >> ___grailCompileHookForwardersFor___: nm value: aValue [
 	"Compile, on this class, the selectors a def of aValue's arity would have
@@ -12627,6 +12654,41 @@ Object >> ___hasBuiltinRepeat___ [
 
 	^ (self ___concatSequenceName___ ~~ nil or: [self @env0:isKindOf: ByteArray])
 		and: [(self ___sequenceSlotDefinedBy___: #( #'__mul__:' #'__rmul__:' )) not]
+
+]
+
+{ #category : 'Grail-Hashability' }
+Object >> ___hashBy___: aHashFunction [
+	"Hash the receiver with aHashFunction, the __hash__ its class holds as an
+	ATTRIBUTE.  None is CPython's PyObject_HashNotImplemented: the slot an
+	assignment of None installs (Objects/typeobject.c:11392-11398), so the
+	class is unhashable rather than calling it."
+
+	aHashFunction == None ifTrue: [^ self ___raiseUnhashableType___].
+	^ self ___callTypeAttr___: aHashFunction with: #()
+
+]
+
+{ #category : 'Grail-Hashability' }
+Object >> ___hashByClassAttribute___ [
+	"The __hash__ of a class whose __hash__ is a class attribute rather than a
+	def: the None its body bound -- ``__hash__ = None'', or the one an __eq__
+	without a __hash__ implies -- or whatever was assigned in its place since.
+	CPython re-derives tp_hash on that assignment (Objects/typeobject.c:6231,
+	type_setattro's update_slot), so dataclasses' ``cls.__hash__ =
+	_hash_fn(...)'' makes an unhashable class hashable.
+
+	Nothing found means object's own __hash__ was assigned, which the walk
+	leaves out as the default (___isObjectDefault___:for:), so it hashes as
+	object does.  Not gated on GrailDynamicHashSeen, as Object >> __hash__ is:
+	this is reached only by a class with no hash of its own, where the
+	alternative is the raise, and a deployed module's assignment is in no
+	session's flag."
+
+	| assigned |
+	assigned := self ___dynamicInstanceDunder___: #'__hash__'.
+	assigned == nil ifTrue: [^ self @env0:hash].
+	^ self ___hashBy___: assigned
 
 ]
 
@@ -16267,6 +16329,11 @@ Object >> ___pyAttrStore___: aName put: aValue [
 				ifTrue: [
 					[self @env0:___grailInstallSelfSendDispatchers___: aName @env0:asSymbol]
 						@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
+		"``C.__hash__ = None'' has to beat a compiled __hash__ too, and is ahead of
+		the store for the same reason."
+		((aValue == None and: [aName @env0:asString @env0:= '__hash__'])
+			and: [self ___respondsTo___: #___dynInstVars___])
+				ifTrue: [self ___grailCompileHashByClassAttribute___].
 		"Canonical-class overlay: runtime stores on a shared canonical
 		class stay session-local (docs/Persistent_Modules_and_Classes.md
 		par.7).  False (the default -- the class is not canonical) falls
@@ -17288,14 +17355,11 @@ Object >> ___raiseUndeletableProperty___: aName [
 { #category : 'Grail-Hashability' }
 Object >> ___raiseUnhashableType___ [
 	"Raise CPython's ``TypeError: unhashable type: 'X''' for the RECEIVER's own
-	class.  The body a class-creation-time unhashable class gets for __hash__
-	(ClassDefAst >> ___unhashableByClassBody___).
+	class -- what ___hashBy___: does with a None __hash__, as a class made
+	unhashable at creation has (ClassDefAst >> ___unhashableByClassBody___).
 
-	A method rather than generated source for two reasons.  It keeps nested
-	quote-escaping out of the codegen -- the emitted body is just ``^ self
-	___raiseUnhashableType___'' -- and it reads the class at RUNTIME, so a
-	SUBCLASS that does not define its own __hash__ inherits this and reports
-	ITSELF, which is what CPython does."
+	It reads the class at RUNTIME, so a SUBCLASS that does not define its own
+	__hash__ inherits the raise and reports ITSELF, which is what CPython does."
 
 	^ TypeError ___signal___: 'unhashable type: ''' @env0:,
 		(self @env0:class @env0:name @env0:asString) @env0:, ''''
@@ -19297,8 +19361,7 @@ Object >> __hash__ [
 	(SessionTemps @env0:current @env0:at: #'GrailDynamicHashSeen' otherwise: false)
 		ifTrue: [
 			dyn := self ___dynamicInstanceDunder___: #'__hash__'.
-			dyn == nil ifFalse: [
-				^ self ___callTypeAttr___: dyn with: #()]].
+			dyn == nil ifFalse: [^ self ___hashBy___: dyn]].
 	^ self @env0:hash
 
 ]
