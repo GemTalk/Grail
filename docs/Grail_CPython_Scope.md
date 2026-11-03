@@ -29,9 +29,9 @@ Where the in-scope tiers stand:
 |------|------:|----------:|-------------:|------:|
 | P1 | 63 | 15 | 12 | 90 |
 | P2 | 26 | 4 | 4 | 34 |
-| P3 | 23 | 7 | 26 | 56 |
+| P3 | 23 | 8 | 25 | 56 |
 | P4 | 23 | 6 | 46 | 75 |
-| **In-scope** | **135** | **32** | **88** | **255** |
+| **In-scope** | **135** | **33** | **87** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **167 are wired into the harness** (P1 78 · P2 30 · P3 30 · P4 29) and **135 of those score OK**.
+Of the 255 in-scope modules, **168 are wired into the harness** (P1 78 · P2 30 · P3 31 · P4 29) and **135 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -340,7 +340,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ✅ | `test_contextlib_async` | async contextlib — pure Python. |
 | ✅ | `test_copyreg` | copyreg — pickle/copy registry. |
 |  | `test_csv` | csv — reader/writer (pure semantics). |
-|  | `test_dataclasses` | dataclasses — pure-Python codegen over classes. |
+| ❗ | `test_dataclasses` | dataclasses — pure-Python codegen over classes. |
 | ✅ | `test_difflib` | difflib — pure Python. |
 |  | `test_doctest` | doctest — pure-Python test framework. |
 | ✅ | `test_fnmatch` | fnmatch — pure glob-pattern matching on strings. |
@@ -820,7 +820,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_dynamicclassattribute` FAIL, 12 tests: 6 failed, 0 errors, 1 skipped
 - `test.test_base64` ERROR, 41 tests: 0 failed, 16 errors, 6 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_calendar`, `test_configparser`, `test_context`, `test_flufl`, `test_keyword`, `test_structseq`, `test_type_annotations`, `test_unicode_identifiers`, `test_utf8source`.
+Wired, but not on the board until the next nightly measures them: `test_calendar`, `test_configparser`, `test_context`, `test_dataclasses`, `test_flufl`, `test_keyword`, `test_structseq`, `test_type_annotations`, `test_unicode_identifiers`, `test_utf8source`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
