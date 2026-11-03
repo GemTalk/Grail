@@ -69,6 +69,24 @@ PyDate class >> ___fromDateState___: s [
 
 ]
 
+{ #category : 'Grail-Pickle' }
+PyDate class >> ___integerFieldOf___: aValue [
+	"A date or time field as CPython's ``i'' argument format reads it
+	(Modules/_datetimemodule.c's constructors, through PyLong_AsInt and
+	__index__): an int is itself, anything else with __index__ -- a bool, an
+	IntEnum member, an int subclass's instance -- is the int that answers,
+	and anything else is refused.  Only an int was taken, so
+	``date(2004, Month.JANUARY, 1)'' raised TypeError, and with it every
+	formatting method of CPython's calendar, whose months are IntEnums."
+
+	(aValue @env0:isKindOf: Integer) ifTrue: [^ aValue].
+	aValue @env0:isNil ifTrue: [^ TypeError @env1:___signal___: 'an integer is required'].
+	(aValue ___hasProtocolForCall___: '__index__')
+		ifFalse: [^ TypeError @env1:___signal___: (self ___notAnIntegerMessageFor: aValue)].
+	^ aValue __index__
+
+]
+
 { #category : 'Grail-Private' }
 PyDate class >> ___isoweek1monday___: year [
 	"Proleptic-ordinal of the Monday starting ISO week 1 of `year`."
@@ -96,6 +114,13 @@ PyDate class >> ___isPickleState___: obj width: n monthAt: i mask: maskFold [
 	b := PyDate ___byteValueOf___: obj at: i.
 	maskFold ifTrue: [b := b @env0:bitAnd: 127].
 	^ b @env0:between: 1 and: 12
+
+]
+
+{ #category : 'Grail-Error Messages' }
+PyDate class >> ___notAnIntegerMessageFor: aValue [
+	^ '''' @env0:, aValue ___pyTypeNameForError___ @env0:asString
+		@env0:, ''' object cannot be interpreted as an integer'
 
 ]
 
@@ -362,7 +387,9 @@ PyDate class >> value: positional value: kwargs [
 		d := kwargs @env0:at: 'day' ifAbsent: [d]].
 	(m @env0:isNil and: [PyDate ___isPickleState___: y width: 4 monthAt: 3 mask: false])
 		ifTrue: [^ self ___fromDateState___: y].
-	PyDate ___requireIntegers___: { y. m. d }.
+	y := PyDate ___integerFieldOf___: y.
+	m := PyDate ___integerFieldOf___: m.
+	d := PyDate ___integerFieldOf___: d.
 	^ self @env0:___fromFields___: y _: m _: d
 
 ]
@@ -416,7 +443,9 @@ PyDate >> ___new__: positional kw: kwargs [
 	date unpickles too (test_backdoor_resistance runs over subclasses)."
 	(m @env0:isNil and: [PyDate ___isPickleState___: y width: 4 monthAt: 3 mask: false])
 		ifTrue: [^ self ___fromDateState___: y].
-	PyDate ___requireIntegers___: { y. m. d }.
+	y := PyDate ___integerFieldOf___: y.
+	m := PyDate ___integerFieldOf___: m.
+	d := PyDate ___integerFieldOf___: d.
 	inst := self @env0:new.
 	inst @env0:_year: y _month: m _day: d.
 	^ inst

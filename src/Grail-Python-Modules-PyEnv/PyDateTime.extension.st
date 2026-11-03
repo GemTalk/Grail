@@ -528,7 +528,13 @@ PyDateTime class >> _datetime: positional kw: kwargs [
 	newDay:monthNumber:year: and died with an uncatchable ArgumentTypeError
 	(test_check_arg_types), and a byte string died on `#< not understood'
 	(test_backdoor_resistance)."
-	PyDate ___requireIntegers___: { year. month. day. hour. minute. second. micro }.
+	year := PyDate ___integerFieldOf___: year.
+	month := PyDate ___integerFieldOf___: month.
+	day := PyDate ___integerFieldOf___: day.
+	hour := PyDate ___integerFieldOf___: hour.
+	minute := PyDate ___integerFieldOf___: minute.
+	second := PyDate ___integerFieldOf___: second.
+	micro := PyDate ___integerFieldOf___: micro.
 	tz == None ifTrue: [tz := nil].
 	(tz @env0:isNil or: [tz @env0:isKindOf: PyTzinfo]) ifFalse: [
 		^ TypeError ___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
