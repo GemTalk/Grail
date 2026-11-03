@@ -2582,6 +2582,10 @@ CharacterCollection >> __mul__: n [
 	OverflowError, not an attempt to build it."
 	count := n ___asRepeatCount___.
 	(count @env0:<= 0) ifTrue: [ ^ '' @env0:copy ].
+	"One copy of an exact str is the str itself, as CPython answers it
+	(unicode_repeat, Objects/unicodeobject.c:12831-12832); a subclass's
+	instance still gets a new exact str."
+	(count @env0:= 1 and: [self @env0:___isExactPyStr___]) ifTrue: [^ self].
 	"CPython's two refusals, in its order (unicode_repeat): a result whose
 	length is past sys.maxsize is OverflowError, and one that cannot be
 	allocated MemoryError."
@@ -3552,7 +3556,7 @@ CharacterCollection >> join: iterable [
 	works for PythonGenerator and other lazy sequences that don't
 	implement Smalltalk's ``do:``."
 
-	| stream first iter done item pieces plain index |
+	| stream first iter done item pieces plain index onlyItem |
 	stream := WriteStream @env0:on: (Unicode7 ___new___).
 	first := true.
 	iter := iterable __iter__.
@@ -3571,6 +3575,7 @@ CharacterCollection >> join: iterable [
 					@env0:, ': expected str instance, '
 					@env0:, (bytes ___pyTypeNameOf___: item) @env0:, ' found'].
 			index := index @env0:+ 1.
+			index @env0:= 1 ifTrue: [onlyItem := item].
 			plain := item @env0:___pyPlainStr___.
 			plain @env0:== nil
 				ifTrue: [
@@ -3588,6 +3593,9 @@ CharacterCollection >> join: iterable [
 			first := false.
 		] @env0:on: StopIteration do: [:ex | done := true].
 	].
+	"A single exact str joins to itself, separator or not, as CPython answers
+	it (_PyUnicode_JoinArray, Objects/unicodeobject.c:10305-10311)."
+	(index @env0:= 1 and: [onlyItem @env0:___isExactPyStr___]) ifTrue: [^ onlyItem].
 	pieces @env0:isNil ifTrue: [^ stream @env0:contents].
 	"___fromCodePoints___ demotes back to an ordinary string when nothing in
 	the result was actually a surrogate after all."
