@@ -6913,6 +6913,21 @@ Object >> ___asRepeatCount___ [
 
 ]
 
+{ #category : 'Grail-Numeric Protocol' }
+Object >> ___asSizeOr: aDefault [
+	"This object as a size argument that may be None -- Argument Clinic's
+	``Py_ssize_t(accept={int, NoneType})'', _Py_convert_optional_to_ssize_t:
+	aDefault for None, an int or an __index__ object as its int, and
+	CPython's TypeError for anything else, a float or a str among them.
+	io's read(), readline() and truncate() take their sizes this way."
+
+	(self @env0:isNil or: [self == None]) ifTrue: [^ aDefault].
+	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
+		^ TypeError ___signal___: (TypeError @env0:___integerOrNoneMessageFor: self)].
+	^ self ___asIndex___
+
+]
+
 { #category : 'Grail-Context Manager' }
 Object >> ___asyncContextManagerProtocolError___: missingSelector [
 	"CPython's TypeError text for ``async with obj:'' on a non-manager -- the
