@@ -2778,10 +2778,12 @@ ByteArray >> decode [
 ByteArray >> decode: encoding [
 	"Decode bytes to string using specified encoding"
 
-	| encodingStr info |
+	| name encodingStr info |
 	"A non-str encoding is Clinic's TypeError, checked first; it reached
-	asLowercase as an uncatchable MessageNotUnderstood."
-	TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
+	asLowercase as an uncatchable MessageNotUnderstood.  A str subclass goes
+	on as the plain str it holds."
+	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
+	name == encoding ifFalse: [^ self decode: name].
 	"Normalise the codec name before dispatching, as CPython does and as
 	str>>encode already did on this side of the pair.  Without it every
 	branch below was an EXACT match on a lowercase hyphenated spelling, so
@@ -2962,10 +2964,11 @@ ByteArray >> decode: encoding _: errors [
 	non-UTF-8 codec) decode via the 1-arg form, which raises on ill-formed
 	input."
 
-	| enc info |
+	| name policy enc info |
 	"Both must be str, as Clinic checks them: see decode:."
-	TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
-	TypeError @env0:___requireStr___: errors argument: 'errors' of: 'decode'.
+	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
+	policy := TypeError @env0:___requireStr___: errors argument: 'errors' of: 'decode'.
+	(name == encoding and: [policy == errors]) ifFalse: [^ self decode: name _: policy].
 	enc := (encoding @env0:asLowercase)
 		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
 	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
