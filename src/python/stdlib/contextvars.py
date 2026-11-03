@@ -41,6 +41,9 @@
 # see _current below for why per thread rather than per session).
 
 
+import _collections_abc
+
+
 class _Missing:
     """Distinct from None, which is a perfectly good stored value."""
 
@@ -49,6 +52,17 @@ class _Missing:
 
 
 _MISSING = _Missing()
+
+
+def _refuse_subclassing(cls, type_name):
+    # CPython's three types are final: none sets Py_TPFLAGS_BASETYPE.
+    raise TypeError("type '%s' is not an acceptable base type" % type_name)
+
+
+def _check_key(key):
+    # Python/context.c:536-541, context_check_key_type.
+    if not isinstance(key, ContextVar):
+        raise TypeError('a ContextVar key was expected, got %r' % (key,))
 
 
 class Token:
@@ -67,6 +81,9 @@ class Token:
         self._var = var
         self._old_value = old_value
         self._used = False
+
+    def __init_subclass__(cls, **kwargs):
+        _refuse_subclassing(cls, '_contextvars.Token')
 
     @property
     def var(self):
@@ -98,10 +115,15 @@ class Context:
     what keeps a context's contents attributable to the code that ran in it.
     """
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        if args or kwargs:
+            raise TypeError('Context() does not accept any arguments')
         self._data = {}
         self._prev = None
         self._entered = False
+
+    def __init_subclass__(cls, **kwargs):
+        _refuse_subclassing(cls, '_contextvars.Context')
 
     # --- the scope half ---------------------------------------------------
 
@@ -134,19 +156,31 @@ class Context:
     # --- the mapping half -------------------------------------------------
 
     def __getitem__(self, var):
+        _check_key(var)
         value = self._data.get(var, _MISSING)
         if value is _MISSING:
             raise KeyError(var)
         return value
 
     def get(self, var, default=None):
+        _check_key(var)
         value = self._data.get(var, _MISSING)
         if value is _MISSING:
             return default
         return value
 
     def __contains__(self, var):
+        _check_key(var)
         return var in self._data
+
+    # Equal when they hold the same variables with equal values, and so not
+    # hashable (Python/context.c, context_tp_richcompare).
+    def __eq__(self, other):
+        if not isinstance(other, Context):
+            return NotImplemented
+        return self._data == other._data
+
+    __hash__ = None
 
     def __len__(self):
         return len(self._data)
@@ -176,9 +210,22 @@ class ContextVar:
     # does -- but it also accepts ContextVar('name', 5), which CPython rejects,
     # and a spelling that works here and fails there is the kind of divergence
     # that gets written once and found much later.
-    def __init__(self, name, *, default=_MISSING):
+    def __init__(self, *args, default=_MISSING):
+        # Python/context.c, contextvar_tp_new's "O|$O:ContextVar".
+        if len(args) != 1:
+            raise TypeError('ContextVar() takes %s 1 positional argument (%d given)'
+                            % ('exactly' if not args else 'at most', len(args)))
+        name = args[0]
+        if not isinstance(name, str):
+            raise TypeError('context variable name must be a str')
+        # CPython hashes the name as it makes the variable, so a str subclass
+        # with __eq__ and no __hash__ is refused here (gh-132002).
+        hash(name)
         self._name = name
         self._default = default
+
+    def __init_subclass__(cls, **kwargs):
+        _refuse_subclassing(cls, '_contextvars.ContextVar')
 
     @property
     def name(self):
@@ -199,7 +246,7 @@ class ContextVar:
             return args[0]
         if self._default is not _MISSING:
             return self._default
-        raise LookupError(self._name)
+        raise LookupError(self)
 
     def set(self, value):
         ctx = _current()
@@ -215,14 +262,14 @@ class ContextVar:
         resetting with the wrong token restores a plausible value and the
         divergence surfaces later, somewhere else.
         """
+        if token._used:
+            raise RuntimeError('%r has already been used once' % (token,))
         if token._var is not self:
             raise ValueError(
-                'Token was created by a different ContextVar')
-        if token._used:
-            raise RuntimeError('Token has already been used once')
+                '%r was created by a different ContextVar' % (token,))
         ctx = _current()
         if token._context is not ctx:
-            raise ValueError('Token was created in a different Context')
+            raise ValueError('%r was created in a different Context' % (token,))
         if token._old_value is _MISSING:
             ctx._data.pop(self, None)
         else:
@@ -230,7 +277,12 @@ class ContextVar:
         token._used = True
 
     def __repr__(self):
-        return '<ContextVar name=%r>' % (self._name,)
+        # Python/context.c, contextvar_tp_repr: the default when there is one,
+        # and the address, which a Token's repr carries too.  No recursion
+        # guard of its own: a default that contains the variable is cut short
+        # by that container's.
+        default = '' if self._default is _MISSING else ' default=%r' % (self._default,)
+        return '<ContextVar name=%r%s at %#x>' % (self._name, default, id(self))
 
 
 # The current context, per THREAD, as CPython's.  When nothing has been
@@ -275,3 +327,7 @@ def copy_context():
 def _get_current_context():
     """Grail-internal: asyncio needs the current context to default to."""
     return _current()
+
+
+# As CPython's Lib/contextvars.py does.
+_collections_abc.Mapping.register(Context)
