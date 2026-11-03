@@ -884,7 +884,7 @@ test.test_type_annotations
 # --- Core language (added 2026-11-02): keywords and source encodings ---
 #
 # test_keyword, test_flufl, test_unicode_identifiers and test_utf8source are
-# CPython 3.14.8's, vendored verbatim, with the test.tokenizedata package the
+# CPython 3.14.4's (identical in 3.14.8), vendored verbatim, with the test.tokenizedata package the
 # last two read their bad sources from.  keyword.py is now CPython's
 # generated one: Grail's stub listed the soft keywords match and case in
 # kwlist (so "match = 42" read as an assignment to a keyword) and left it
@@ -924,6 +924,18 @@ test.test_configparser
 #
 #   structseq   25t  1 fail  1 error  1 skip
 test.test_structseq
+
+# --- Standard library (added 2026-11-02): calendar ---
+#
+# test_calendar is CPython 3.14.4's, vendored verbatim.  calendar.py is now
+# CPython's too: Grail's was a 120-line subset with no Calendar,
+# TextCalendar, HTMLCalendar, firstweekday or main, which 59 of the 78 tests
+# need.  Its formatting reaches datetime with the Month and Day IntEnums,
+# which datetime takes since its fields read any int.  Measured on Darwin
+# arm64:
+#
+#   calendar   78t OK (17 skipped)
+test.test_calendar
 
 # --- Standard library (added 2026-11-02): contextvars ---
 #
