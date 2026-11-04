@@ -2479,8 +2479,20 @@ warnings >> showwarning: message _: category _: filename _: lineno _: file _: li
 		ClientForwarder anything forwards it to the client -- see
 		builtins ___consoleWrite___:, which this mirrors."
 		| console box |
-		box := SessionTemps @env0:current
-			@env0:at: #'GrailConsole' otherwise: nil.
+		"sys.stderr -- or no stream at all, which is where the warning would
+		have gone -- is the console's ERROR channel, #GrailConsoleErr, when
+		an embedder installed one: ./grail puts fd 2 there, as CPython's
+		stderr is (#1972).  Without one, or for an explicit
+		``file=sys.stdout'', the console box as before -- see builtins
+		___consoleErrorWrite___:, which this mirrors."
+		box := ((target @env0:isKindOf: PyConsoleStream)
+				and: [target ___isError___ not])
+			ifTrue: [nil]
+			ifFalse: [SessionTemps @env0:current
+				@env0:at: #'GrailConsoleErr' otherwise: nil].
+		box == nil ifTrue: [
+			box := SessionTemps @env0:current
+				@env0:at: #'GrailConsole' otherwise: nil].
 		console := box == nil
 			ifTrue: [Transcript]
 			ifFalse: [box @env0:at: 1].

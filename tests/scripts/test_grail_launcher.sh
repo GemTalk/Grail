@@ -295,6 +295,145 @@ else
     ok
 fi
 
+# --- sys.stderr is fd 2, not fd 1 (#1972) ----------------------------------
+
+# Grail's default sys.stderr wrote to the same sink as sys.stdout -- fd 1 -- so
+# everything reporting through it landed on stdout, where `2>` and a pipeline
+# saw it in the wrong stream.  Each case writes one marker to stderr between
+# two stdout lines, and checks BOTH files: the marker on stderr, and stdout
+# carrying exactly the two lines.  Every expectation is python3 3.14's.
+#
+# stderr_case NAME CODE STDERR-GREP-PATTERN [EXIT]
+stderr_case() {
+    local name="$1" code="$2" pattern="$3" want="${4:-0}"
+    printf 'import sys\nprint("before")\n%s\nprint("after")\n' "$code" > "$TMP/stderr_case.py"
+    if run "stderr: $name runs" "$want" -- "$TMP/stderr_case.py"; then
+        if ! grep -q -- "$pattern" "$ERR_FILE"; then
+            bad "stderr: $name reaches fd 2" \
+                "want on stderr: $pattern" "stderr: [$(cat "$ERR_FILE")]" \
+                "stdout: [$(cat "$OUT_FILE")]"
+        elif [ "$(cat "$OUT_FILE")" != "before
+after" ]; then
+            bad "stderr: $name leaves fd 1 alone" \
+                "stdout: [$(cat "$OUT_FILE")]" "stderr: [$(cat "$ERR_FILE")]"
+        else
+            ok
+        fi
+    fi
+}
+stderr_case "print(file=sys.stderr)" 'print("err-marker", file=sys.stderr)' '^err-marker$'
+stderr_case "sys.stderr.write" 'sys.stderr.write("err-marker\n")' '^err-marker$'
+stderr_case "sys.__stderr__.write" 'sys.__stderr__.write("err-marker\n")' '^err-marker$'
+stderr_case "print(file=sys.__stderr__)" 'print("err-marker", file=sys.__stderr__)' '^err-marker$'
+# python3: <path>:3: UserWarning: careful
+stderr_case "warnings.warn" 'import warnings; warnings.warn("careful")' \
+    'stderr_case.py:3: UserWarning: careful$'
+# python3: WARNING:root:logged -- basicConfig's handler is a StreamHandler on
+# sys.stderr.  (Spelled out: Grail's logging has no implicit basicConfig.)
+stderr_case "logging.basicConfig handler" \
+    'import logging; logging.basicConfig(); logging.warning("logged")' \
+    '^WARNING:root:logged$'
+stderr_case "logging.StreamHandler()" \
+    'import logging; h = logging.StreamHandler(); h.emit(logging.makeLogRecord({"msg": "handled"}))' \
+    '^handled$'
+stderr_case "traceback.print_exc" \
+    'import traceback
+try:
+    1/0
+except ZeroDivisionError:
+    traceback.print_exc()' \
+    '^ZeroDivisionError: division by zero$'
+# sys.stdout rebound to the error stream sends print there, as in CPython.
+stderr_case "print with sys.stdout = sys.stderr" \
+    'sys.stdout = sys.stderr; print("err-marker"); sys.stdout = sys.__stdout__' \
+    '^err-marker$'
+
+# An uncaught exception reported by a hook that writes through sys.stderr --
+# sys.__excepthook__ is CPython's own printer, so this is the path a program
+# taking over excepthook and delegating back to it takes.
+cat > "$TMP/hook_delegates.py" <<'EOF2'
+import sys
+def hook(t, v, tb):
+    sys.stderr.write("hook-marker\n")
+    sys.__excepthook__(t, v, tb)
+sys.excepthook = hook
+print("out")
+raise ValueError("boom")
+EOF2
+if run "stderr: an excepthook writing to sys.stderr" 1 -- "$TMP/hook_delegates.py"; then
+    if [ "$(cat "$OUT_FILE")" != "out" ]; then
+        bad "stderr: an excepthook's output leaves fd 1 alone" \
+            "stdout: [$(cat "$OUT_FILE")]" "stderr: [$(cat "$ERR_FILE")]"
+    elif [ "$(head -1 "$ERR_FILE")" != "hook-marker" ] \
+            || ! grep -q '^Traceback (most recent call last):$' "$ERR_FILE" \
+            || [ "$(tail -1 "$ERR_FILE")" != "ValueError: boom" ]; then
+        bad "stderr: an excepthook's output reaches fd 2" \
+            "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+
+# A program that rebinds sys.stderr gets the uncaught exception's report and
+# sys.exit's message there, as CPython writes both through sys.stderr.  The
+# launcher used to print them on fd 2 itself, because sys.stderr was fd 1.
+cat > "$TMP/stderr_rebound.py" <<'EOF2'
+import sys
+class Err:
+    def write(self, s):
+        sys.__stdout__.write("E:" + s)
+        return len(s)
+    def flush(self):
+        pass
+sys.stderr = Err()
+print("out")
+raise ValueError("boom")
+EOF2
+if run "stderr: a rebound sys.stderr" 1 -- "$TMP/stderr_rebound.py"; then
+    if [ -s "$ERR_FILE" ]; then
+        bad "stderr: a rebound sys.stderr leaves fd 2 alone" \
+            "stderr: [$(cat "$ERR_FILE")]" "stdout: [$(cat "$OUT_FILE")]"
+    elif ! grep -q '^E:Traceback (most recent call last):$' "$OUT_FILE" \
+            || ! grep -q 'ValueError: boom' "$OUT_FILE"; then
+        bad "stderr: the uncaught report goes to a rebound sys.stderr" \
+            "stdout: [$(cat "$OUT_FILE")]"
+    else
+        ok
+    fi
+fi
+printf 'import sys\nclass Err:\n    def write(self, s):\n        sys.__stdout__.write("E:" + s)\n    def flush(self):\n        pass\nsys.stderr = Err()\nsys.exit("bye")\n' \
+    > "$TMP/stderr_rebound_exit.py"
+if run "stderr: sys.exit(msg) with a rebound sys.stderr" 1 -- "$TMP/stderr_rebound_exit.py"; then
+    if [ -s "$ERR_FILE" ] || ! grep -q '^E:bye' "$OUT_FILE"; then
+        bad "stderr: sys.exit(msg) goes to a rebound sys.stderr" \
+            "stdout: [$(cat "$OUT_FILE")]" "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+# ...and a None sys.stderr does not lose it: fd 2 is the launcher's last resort.
+# (CPython prints nothing here; losing an uncaught exception's report is not a
+# behaviour worth copying.)
+printf 'import sys\nsys.stderr = None\nraise ValueError("boom")\n' > "$TMP/stderr_none.py"
+if run "stderr: a None sys.stderr" 1 -- "$TMP/stderr_none.py"; then
+    if [ "$(tail -1 "$ERR_FILE")" != "ValueError: boom" ]; then
+        bad "stderr: a None sys.stderr still reports on fd 2" \
+            "stderr: [$(cat "$ERR_FILE")]"
+    else
+        ok
+    fi
+fi
+
+# The REPL: a print to sys.stderr at the prompt goes to fd 2 as well.
+printf 'import sys\nprint("err-marker", file=sys.stderr)\n' \
+    | ./grail >"$OUT_FILE" 2>"$ERR_FILE"
+if ! grep -q '^err-marker$' "$ERR_FILE" || grep -q 'err-marker' "$OUT_FILE"; then
+    bad "stderr: the REPL's sys.stderr is fd 2" \
+        "stdout: [$(cat "$OUT_FILE")]" "stderr: [$(cat "$ERR_FILE")]"
+else
+    ok
+fi
+
 # --- CPython-shaped launcher behaviour -------------------------------------
 
 # python3 nosuch.py -> "<argv0>: can't open file '<abs path>': [Errno 2] No such

@@ -1,6 +1,16 @@
 Extension { #name : 'PyConsoleStream' }
 
 { #category : 'Grail-State' }
+PyConsoleStream >> ___isError___ [
+	"The console's ERROR stream -- sys.stderr / sys.__stderr__ -- which writes
+	to the console's error channel (builtins ___consoleErrorWrite___:), fd 2
+	under ./grail, rather than to the channel sys.stdout and print share."
+
+	^ (self @env0:dynamicInstVarAt: #'_name') @env0:= '<stderr>'
+
+]
+
+{ #category : 'Grail-State' }
 PyConsoleStream >> ___isInput___ [
 	"The console's INPUT stream -- sys.stdin -- as opposed to its two output
 	streams.  One class for all three, told apart by name, as stdout and stderr
@@ -266,7 +276,9 @@ PyConsoleStream >> write: data [
 	(data @env0:isKindOf: CharacterCollection) ifFalse: [
 		^ TypeError ___signal___: 'write() argument must be str, not '
 			@env0:, (bytes ___pyTypeNameOf___: data)].
-	(builtins @env0:___instance___) ___consoleWrite___: data.
+	self ___isError___
+		ifTrue: [(builtins @env0:___instance___) ___consoleErrorWrite___: data]
+		ifFalse: [(builtins @env0:___instance___) ___consoleWrite___: data].
 	^ data @env0:size
 
 ]

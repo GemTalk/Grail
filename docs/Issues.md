@@ -2642,6 +2642,13 @@ wanting a genuinely separate error channel has to be given one at the
 is not a regression — with both `None`, everything already landed in the one
 place.
 
+*Since #1972 they are two channels.* The separate error channel is exactly the
+second box this paragraph called for: SessionTemps `#GrailConsoleErr`, with the
+`#GrailConsole` protocol. `sys.stderr`/`sys.__stderr__` and warnings write there
+(`builtins ___consoleErrorWrite___:`), and `./grail` installs `GsFile stderr`
+in it, so they are fd 2 as in CPython. An embedder that installs no error box
+keeps the one channel it had: the error channel falls back to `#GrailConsole`.
+
 `write()` answers `len(s)`, the character count CPython returns — counted before
 any UTF-8 encoding `___consoleWrite___:` may do for a byte-taking sink, which is
 what CPython counts too.

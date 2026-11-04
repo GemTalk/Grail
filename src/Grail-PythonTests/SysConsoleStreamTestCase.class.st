@@ -218,18 +218,58 @@ print("explicit", file=sys.stdout)'].
 
 ]
 
-{ #category : 'Grail-Tests - write reaches the console' }
-SysConsoleStreamTestCase >> testStderrWritesReachTheSameConsole [
-	"sys.stderr is a SEPARATE object with its own name, but NOT a separate
-	channel: builtins ___consoleWrite___: has one sink and draws no out/err
-	distinction, so this pins that Grail does not pretend otherwise."
+{ #category : 'Grail-Tests - the error channel' }
+SysConsoleStreamTestCase >> testStderrWithNoErrorBoxReachesTheConsole [
+	"An embedder that installs only #GrailConsole -- GemDB's notebook and shell,
+	a topaz-hosted run -- keeps getting sys.stderr on that one sink: the error
+	channel falls back to the console when no #GrailConsoleErr box is installed
+	(#1972), so nothing that embedder captured goes missing."
 
-	| text |
-	text := self withCapturedConsole: [
+	| text saved |
+	saved := SessionTemps current at: #'GrailConsoleErr' otherwise: nil.
+	SessionTemps current removeKey: #'GrailConsoleErr' ifAbsent: [].
+	[text := self withCapturedConsole: [
 		self eval: 'import sys
-sys.stderr.write("to stderr\n")'].
+sys.stderr.write("to stderr\n")
+print("printed", file=sys.stderr)']]
+		ensure: [saved == nil ifFalse: [
+			SessionTemps current at: #'GrailConsoleErr' put: saved]].
 	self assert: text equals: 'to stderr
+printed
 '
+
+]
+
+{ #category : 'Grail-Tests - the error channel' }
+SysConsoleStreamTestCase >> testStderrWritesReachTheErrorChannel [
+	"With an error box installed -- ./grail installs fd 2 there -- everything
+	written through sys.stderr or sys.__stderr__ arrives in it and NOT on the
+	console, and sys.stdout stays on the console (#1972).  sys.stderr used to
+	share the console's one sink, so under ./grail it was fd 1."
+
+	| out err saved |
+	err := WriteStream on: (Unicode7 new).
+	saved := SessionTemps current at: #'GrailConsoleErr' otherwise: nil.
+	SessionTemps current at: #'GrailConsoleErr' put: (Array with: err).
+	[out := self withCapturedConsole: [
+		self eval: 'import sys, warnings
+print("out-1")
+sys.stderr.write("err-1\n")
+print("err-2", file=sys.stderr)
+sys.__stderr__.write("err-3\n")
+warnings.warn_explicit("err-4", UserWarning, "f.py", 1)
+print("out-2", file=sys.stdout)']]
+		ensure: [saved == nil
+			ifTrue: [SessionTemps current removeKey: #'GrailConsoleErr' ifAbsent: []]
+			ifFalse: [SessionTemps current at: #'GrailConsoleErr' put: saved]].
+	self assert: out equals: 'out-1
+out-2
+'.
+	self assert: (err contents asString copyFrom: 1 to: 18) equals: 'err-1
+err-2
+err-3
+'.
+	self assert: (err contents asString includesString: 'f.py:1: UserWarning: err-4')
 
 ]
 

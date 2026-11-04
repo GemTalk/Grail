@@ -1,7 +1,7 @@
 iferr 1 stk
 login
 run
-| args dashDashOfs haveDashD status systemExitStatus describeException reportUncaught |
+| args dashDashOfs haveDashD status systemExitStatus describeException reportUncaught writeStderr |
 " Search for  --  in command line, expect args before that to be topaz config, etc
 
   If -D is on command line after -- and script is interactive, pass errors to topaz for debugging.
@@ -16,6 +16,24 @@ args := System commandLineArguments.
 1 to: args size do:[:j | dashDashOfs ifNil:[ (args at: j) = '--' ifTrue:[ dashDashOfs := j ]]].
 dashDashOfs ifNil:[ ExitClientError signal: ' "--"   not found on topaz command line ' ].
 status := 0.
+" Text CPython writes to sys.stderr on the way out -- an uncaught exception's
+  report, sys.exit('msg') -- written there, so a program that rebinds
+  sys.stderr gets it, as CPython's PyErr_Display and PyFile_WriteObject give
+  it (#1972).  sys.stderr's default is the console's error channel, the
+  #GrailConsoleErr box below, which is fd 2.  This used to go to fd 2 directly
+  because sys.stderr was fd 1 (#1954), and fd 2 is still the last resort: a
+  None sys.stderr, or one whose write raises, must not lose the report. "
+writeStderr := [:text |
+    | err written |
+    written := false .
+    err := [ (sys @env1:instance) @env1:___pyAttrLoad___: #'stderr' ]
+        on: Error, BaseException do:[:inner | inner return: nil ].
+    (err == nil or:[ err == None ]) ifFalse:[
+        [ err @env1:write: text .
+          [ err @env1:flush ] on: Error, BaseException do:[:inner | inner return: nil ].
+          written := true ]
+            on: Error, BaseException do:[:inner | inner return: nil ] ].
+    written ifFalse:[ GsFile stderr nextPutAsUtf8: text; flush ] ].
 " SystemExit -> an exit status, CPython's rules, measured against python3
   3.14.6:
       sys.exit(3)     -> 3          sys.exit()/None/0 -> 0
@@ -47,7 +65,7 @@ systemExitStatus := [:exc |
                             on: Error, BaseException do:[:inner |
                                 inner return: code printString ].
                         GsFile stdout flush .
-                        GsFile stderr nextPutAsUtf8: text; lf; flush.
+                        writeStderr value: text , (String with: Character lf) .
                         result := 1 ]]]].
     result ].
 " How an uncaught exception is reported: the traceback CPython prints, frames
@@ -101,8 +119,8 @@ reportUncaught := [:exc |
         ifFalse:[
             reported == true ifFalse:[
                 GsFile stdout flush .
-                reported isEmpty ifFalse:[ GsFile stderr nextPutAsUtf8: reported ].
-                GsFile stderr nextPutAsUtf8: (describeException value: exc); lf; flush ].
+                writeStderr value: reported , (describeException value: exc)
+                    , (String with: Character lf) ].
             nil ] ].
 " Console output: the #GrailConsole override, NOT  Transcript := GsFile stdout .
 
@@ -132,6 +150,11 @@ reportUncaught := [:exc |
 "
 SessionTemps current at: #'GrailConsole'
     put: (Array with: GsFile stdout with: #'utf8').
+" The console's ERROR channel, same protocol: sys.stderr and sys.__stderr__
+  write here, warnings with them, so they are fd 2 as CPython's are (#1972).
+  Without it they share the box above and land on stdout. "
+SessionTemps current at: #'GrailConsoleErr'
+    put: (Array with: GsFile stderr with: #'utf8').
 [
     haveDashD := false .
     dashDashOfs < args size ifTrue:[
@@ -379,7 +402,9 @@ SessionTemps current at: #'GrailConsole'
             ].
         ].
     ]
-] ensure: [ SessionTemps current removeKey: #'GrailConsole' ifAbsent: [] ].
+] ensure: [
+    SessionTemps current removeKey: #'GrailConsole' ifAbsent: [] .
+    SessionTemps current removeKey: #'GrailConsoleErr' ifAbsent: [] ].
 " The exit status, last, so the ensure: above has already run: ExitClientError
   leaves topaz immediately and does NOT unwind through an ensure: (measured).
   topaz -l propagates the status verbatim (0 -> 0, 3 -> 3, 255 -> 255, measured),
