@@ -10407,9 +10407,17 @@ Object >> ___grailDirListsSelector___: aSelector in: aBehavior [
 	(___grailClassGetitemRead___).
 
 	Only a dunder can be one of these, so every other selector costs a
-	character test and no method lookup."
+	character test and no method lookup -- but for the two names of the
+	singleton plumbing NoneType, ellipsis, NotImplementedType and the modules
+	share, ``instance'' and ``clearInstance'', which are not attributes when
+	they are that plumbing: filed under 'Grail-Singleton'.  dir(None) listed
+	both, where a Python class's own ``instance'' method stays."
 
 	| owner method |
+	(aSelector == #'instance' or: [aSelector == #'clearInstance']) ifTrue: [
+		owner := aBehavior @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+		^ owner @env0:isNil
+			or: [(owner @env0:categoryOfSelector: aSelector environmentId: 1) ~~ #'Grail-Singleton']].
 	((aSelector @env0:size @env0:> 4)
 		and: [(aSelector @env0:at: 1) == $_
 		and: [(aSelector @env0:at: 2) == $_
@@ -12108,7 +12116,12 @@ Object >> ___grailPythonNameForSelector___: aSelector [
 		and: [(s @env0:copyFrom: (sz @env0:- 3) to: sz) @env0:= ':kw:']])
 			ifTrue: [^ s @env0:copyFrom: 2 to: (sz @env0:- 4)].
 	index := s @env0:indexOf: $:.
-	index == 0 ifTrue: [^ s].
+	"A BINARY selector names nothing: NoneType's env-1 ``<'' and ``<='' exist
+	because a sort block sends them, and dir(None) listed them."
+	index == 0 ifTrue: [
+		^ ((s @env0:at: 1) @env0:isLetter or: [(s @env0:at: 1) == $_])
+			ifTrue: [s]
+			ifFalse: [nil]].
 	(self ___grailIsFixedAritySelector___: s from: index)
 		ifTrue: [^ s @env0:copyFrom: 1 to: (index @env0:- 1)].
 	^ nil
