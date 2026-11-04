@@ -969,8 +969,9 @@ complex >> __dict__ [
 
 ]
 
-{ #category : 'Grail-Arithmetic' }
+{ #category : 'Grail-Protocol Refusal' }
 complex >> __divmod__: other [
+	<grailProtocolRefusal>
 	^ self ___unsupportedOperand___: 'divmod()' with: other reflected: false
 
 ]
@@ -1005,8 +1006,9 @@ complex >> __eq__: other [
 
 ]
 
-{ #category : 'Grail-Arithmetic' }
+{ #category : 'Grail-Protocol Refusal' }
 complex >> __floordiv__: other [
+	<grailProtocolRefusal>
 	^ self ___unsupportedOperand___: '//' with: other reflected: false
 
 ]
@@ -1192,8 +1194,9 @@ complex >> __lt__: other [
 
 ]
 
-{ #category : 'Grail-Arithmetic' }
+{ #category : 'Grail-Protocol Refusal' }
 complex >> __mod__: other [
+	<grailProtocolRefusal>
 	^ self ___unsupportedOperand___: '%' with: other reflected: false
 
 ]
@@ -1324,8 +1327,9 @@ complex >> __radd__: other [
 
 ]
 
-{ #category : 'Grail-Arithmetic' }
+{ #category : 'Grail-Protocol Refusal' }
 complex >> __rdivmod__: other [
+	<grailProtocolRefusal>
 	^ self ___unsupportedOperand___: 'divmod()' with: other reflected: true
 
 ]
@@ -1366,14 +1370,16 @@ complex >> __repr__ [
 
 ]
 
-{ #category : 'Grail-Arithmetic' }
+{ #category : 'Grail-Protocol Refusal' }
 complex >> __rfloordiv__: other [
+	<grailProtocolRefusal>
 	^ self ___unsupportedOperand___: '//' with: other reflected: true
 
 ]
 
-{ #category : 'Grail-Arithmetic' }
+{ #category : 'Grail-Protocol Refusal' }
 complex >> __rmod__: other [
+	<grailProtocolRefusal>
 	^ self ___unsupportedOperand___: '%' with: other reflected: true
 
 ]

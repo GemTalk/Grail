@@ -194,8 +194,9 @@ tuple >> __add__: other [
 
 ]
 
-{ #category : 'Grail-Sequence Protocol' }
+{ #category : 'Grail-Protocol Refusal' }
 tuple >> __delitem__: index [
+	<grailProtocolRefusal>
 	"Tuples are immutable - raise TypeError."
 
 	TypeError ___signal___: '''tuple'' object doesn''t support item deletion'
@@ -392,8 +393,9 @@ tuple >> __repr__ [
 
 ]
 
-{ #category : 'Grail-Sequence Protocol' }
+{ #category : 'Grail-Protocol Refusal' }
 tuple >> __setitem__: index _: value [
+	<grailProtocolRefusal>
 	"Tuples are immutable - raise TypeError."
 
 	TypeError ___signal___: '''tuple'' object does not support item assignment'
