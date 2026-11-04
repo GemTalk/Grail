@@ -399,6 +399,28 @@ Boolean >> __bool__ [
 
 ]
 
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __ceil__ [
+	"bool is an int subclass in CPython and inherits every int method it does not
+	define itself (Objects/boolobject.c:171-211, PyBool_Type, whose tp_base is
+	PyLong_Type at 202); Grail's bool is the kernel's Boolean, so each is answered by
+	the int the bool is."
+
+	^ self __int__ __ceil__
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __divmod__: other [
+	"int's binary slots answer NotImplemented unless BOTH operands are ints
+	(Objects/longobject.c:1768-1772, CHECK_BINOP), so the operator then tries
+	the other operand's -- and its TypeError names bool, not int."
+
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __divmod__: other
+
+]
+
 { #category : 'Grail-Documentation' }
 Boolean >> __doc__ [
 	"Return documentation string for bool type."
@@ -429,6 +451,12 @@ Boolean >> __float__ [
 	"Convert bool to float (True=1.0, False=0.0)."
 
 	^ self ifTrue: [1.0] ifFalse: [0.0]
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __floor__ [
+	^ self __int__ __floor__
 
 ]
 
@@ -558,6 +586,13 @@ Boolean >> __le__: other [
 
 ]
 
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __lshift__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __lshift__: other
+
+]
+
 { #category : 'Grail-Comparison' }
 Boolean >> __lt__: other [
 	"Less than comparison."
@@ -663,11 +698,123 @@ Boolean >> __pow__: other [
 
 ]
 
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __radd__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __radd__: other
+
+]
+
+{ #category : 'Grail-Bitwise' }
+Boolean >> __rand__: other [
+	"bool defines its reflected bitwise operators itself, as the forward ones,
+	so two bools answer a bool (Objects/boolobject.c:87-110 and the nb_and,
+	nb_xor and nb_or slots at 136-138); the operation
+	commutes."
+
+	^ self __and__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rdivmod__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rdivmod__: other
+
+]
+
 { #category : 'Grail-String Representation' }
 Boolean >> __repr__ [
 	"Return the official string representation of the bool."
 
 	^ (self ifTrue: ['True'] ifFalse: ['False']) @env0:asUnicodeString
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rfloordiv__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rfloordiv__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rlshift__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rlshift__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rmod__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rmod__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rmul__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rmul__: other
+
+]
+
+{ #category : 'Grail-Bitwise' }
+Boolean >> __ror__: other [
+	^ self __or__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __round__ [
+	^ self __int__ __round__
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __round__: ndigits [
+	^ self __int__ __round__: ndigits
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rpow__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rpow__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rrshift__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rrshift__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rshift__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rshift__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rsub__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rsub__: other
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __rtruediv__: other [
+	(self ___isPyIntOperand___: other) ifFalse: [^ NotImplemented].
+	^ self __int__ __rtruediv__: other
+
+]
+
+{ #category : 'Grail-Bitwise' }
+Boolean >> __rxor__: other [
+	^ self __xor__: other
 
 ]
 
@@ -711,6 +858,12 @@ Boolean >> __truediv__: other [
 
 ]
 
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __trunc__ [
+	^ self __int__ __trunc__
+
+]
+
 { #category : 'Grail-Bitwise' }
 Boolean >> __xor__: other [
 	"Bitwise XOR.  bool ^ bool stays bool (see __and__: for the
@@ -738,6 +891,12 @@ Boolean >> as_integer_ratio [
 	"bool inherits int's as_integer_ratio: (value, 1)."
 
 	^ (self ifTrue: [1] ifFalse: [0]) as_integer_ratio
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> bit_count [
+	^ self __int__ bit_count
 
 ]
 
@@ -770,6 +929,12 @@ Boolean >> imag [
 	"Imaginary part of a real number is 0 (see ``real'')."
 
 	^ 0
+
+]
+
+{ #category : 'Grail-Integer Methods' }
+Boolean >> is_integer [
+	^ self __int__ is_integer
 
 ]
 
