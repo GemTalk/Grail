@@ -2864,10 +2864,12 @@ Object class >> ___grailInstallTransientAttrs___ [
 	out addAll: self ___transientAttrPairs___.
 	^ out asArray')
 		@env0:do: [:src |
-			self @env0:compileMethod: src
-				dictionaries: System @env0:myUserProfile @env0:symbolList
-				category: #'Grail-Transient Attrs'
-				environmentId: 0].
+			"Without a change stamp: a stamp files the class in the user's
+			committed session-method package, so a session-local class that
+			declares __transient__ dirtied its session, and a commit made it
+			persistent through the stamp (#1970, as #1861 for a module's)."
+			(Python @env0:at: #'importlib')
+				@env0:___compileUnstamped___: src on: self category: #'Grail-Transient Attrs'].
 	^ self
 
 ]

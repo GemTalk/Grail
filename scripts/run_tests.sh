@@ -613,6 +613,14 @@ timed "codec-cache-session" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scri
 # forwarders used to survive the commit and break len() in every later session.
 timed "session-patch" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runSessionPatchTest.gs < /dev/null || EXIT=$?
 
+# A runtime compile writes nothing it was not asked to (#1970): a class's
+# __transient__, a module past 255 globals and a C extension import each
+# compiled an env-0 method WITH a change stamp, which files the class in the
+# user's committed session-method package. Each script, run and re-run
+# session-local, and a deployed module's warm re-import leave the session
+# clean. Commits, so not SUnit.
+timed "runtime-compile-writes" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runRuntimeCompileWritesTest.gs < /dev/null || EXIT=$?
+
 # REAL-APPLICATION acceptance (par.10): session A deploys a module-level
 # Flask app (committing the whole flask/werkzeug closure); session B
 # warm-binds it and the committed app must serve requests (routing, request

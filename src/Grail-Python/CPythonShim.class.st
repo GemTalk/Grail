@@ -69,7 +69,9 @@ CPythonShim class >> ___buildDynamicModule: moduleName fromPath: pathString meth
 	name with ArgumentError 2149 -- which is not a GrailShimError, so the
 	importer's handler could not turn it into an ImportError and the session
 	ended with no traceback at all.  Nothing looks this class up by name: the
-	C side is keyed by moduleName, and __name__ comes from the spec below."
+	C side is keyed by moduleName, and __name__ comes from the spec below.
+	So it goes in no dictionary: filing it in UserGlobals wrote that committed
+	dictionary on every import of an extension (#1970)."
 	moduleClass := module
 		subclass: (moduleName collect: [:c |
 			(c isLetter or: [c isDigit or: [c = $_]]) ifTrue: [c] ifFalse: [$_]])
@@ -77,7 +79,7 @@ CPythonShim class >> ___buildDynamicModule: moduleName fromPath: pathString meth
 		classVars: #()
 		classInstVars: #()
 		poolDictionaries: #()
-		inDictionary: UserGlobals
+		inDictionary: nil
 		options: #().
 	"Compile env:1 methods for each C function. Two selector shapes are
 	generated: a `_name:kw:` varargs method (for first-class use and kw
@@ -89,12 +91,13 @@ CPythonShim class >> ___buildDynamicModule: moduleName fromPath: pathString meth
 	"The C module this class fronts, for wrap: -- a function read off the
 	module is a BoundMethod on it, and goes back to C as that module's
 	function object (___functionObjectFor:)."
-	moduleClass class
-		compileMethod: '___shimModuleName___
+	"Without a change stamp, which would file the class in the user's committed
+	session-method package and dirty the session that imported it (#1970)."
+	importlib
+		___compileUnstamped___: '___shimModuleName___
 	^ ' , moduleName printString
-		dictionaries: symbolList
-		category: 'Grail-C Extension'
-		environmentId: 0.
+		on: moduleClass class
+		category: 'Grail-C Extension'.
 	methodNames do: [:methName |
 		| varargsSrc arity0Src arity1Src arity2Src arity3Src |
 		"Varargs form — actually invokes the C function. Keyword args

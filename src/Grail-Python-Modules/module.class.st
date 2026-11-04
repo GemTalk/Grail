@@ -328,12 +328,11 @@ module class >> ___installSpilledGlobalReaders___ [
 	^ self ___storedGlobalNames___'.
 	  #'dynamicInstVarPairs' -> 'dynamicInstVarPairs
 	^ self ___storedGlobalPairs___' } do: [:each |
+		"Without a change stamp: a stamp files the class in the user's committed
+		session-method package, so a session-local script that spilled dirtied
+		its session, and a commit made its class persistent (#1970)."
 		(d ~~ nil and: [d includesKey: each key]) ifFalse: [
-			self
-				compileMethod: each value
-				dictionaries: System myUserProfile symbolList
-				category: 'Grail-Spilled Globals'
-				environmentId: 0]]
+			importlib ___compileUnstamped___: each value on: self category: 'Grail-Spilled Globals']]
 
 ]
 
