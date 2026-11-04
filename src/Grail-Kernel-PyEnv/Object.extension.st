@@ -5938,10 +5938,13 @@ Object class >> ___pythonBuiltinTypeModule___ [
 	nm := self @env0:name @env0:asString @env0:asSymbol.
 	"NoneType, ellipsis and NotImplementedType too: CPython's
 	``type(None).__module__'' is 'builtins', and typing's _type_repr reads it
-	-- ``repr(Callable[..., None])'' raised AttributeError without it."
+	-- ``repr(Callable[..., None])'' raised AttributeError without it.  map,
+	filter and zip too, under their Smalltalk names: builtins binds the
+	iterator classes as those types (builtins >> initialize)."
 	((#( #bool #bytearray #bytes #complex #dict #enumerate #float #frozenset
 		#int #list #mappingproxy #memoryview #object #property #range #set #slice
-		#str #tuple #type #NoneType #ellipsis #NotImplementedType )
+		#str #tuple #type #NoneType #ellipsis #NotImplementedType
+		#map_iterator #filter_iterator #zip_iterator )
 		@env0:includes: nm)
 		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
 		@env0:ifFalse: [^ nil].

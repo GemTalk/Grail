@@ -6040,11 +6040,7 @@ builtins >> _filter: positional kw: kwargs [
 	TypeError (test_itertools.TestBasicOps.test_filter's
 	``self.assertRaises(TypeError, filter)'')."
 
-	TypeError @env0:___refuseKeywordsIn___: kwargs for: 'filter'.
-	positional @env0:size @env0:= 2 ifFalse: [
-		TypeError ___signal___: (('filter expected 2 arguments, got '
-			@env0:, positional @env0:size @env0:printString))].
-	^ self filter: (positional @env0:at: 1) _: (positional @env0:at: 2)
+	^ filter_iterator ___construct___: positional kw: kwargs
 
 ]
 
@@ -6192,17 +6188,7 @@ builtins >> _map: positional kw: kwargs [
 	instead.  3.14 gave map() zip()'s ``strict'' keyword; before that it
 	took none, and this method still rejects every OTHER keyword."
 
-	| iterators isStrict |
-	isStrict := self ___strictKeyword___: kwargs for: 'map'.
-	positional @env0:size @env0:< 2 ifTrue: [
-		TypeError ___signal___: 'map() must have at least two arguments.'].
-	iterators := Array @env0:new: positional @env0:size @env0:- 1.
-	2 @env0:to: positional @env0:size do: [:i |
-		iterators @env0:at: i @env0:- 1 put: (self ___pyIter___: (positional @env0:at: i))].
-	^ map_iterator
-		___on: (positional @env0:at: 1)
-		sources: iterators
-		strict: isStrict
+	^ map_iterator ___construct___: positional kw: kwargs
 
 ]
 
@@ -6715,16 +6701,10 @@ builtins >> _zip: positional kw: kwargs [
 	over mismatched lengths quietly truncated, which is the one outcome
 	the keyword exists to rule out."
 
-	| iterators |
-	iterators := Array @env0:new: positional @env0:size.
-	1 @env0:to: positional @env0:size do: [:i |
-		iterators @env0:at: i put: (self ___pyIter___: (positional @env0:at: i))].
 	"LAZY, as in CPython -- an eager zip looped forever (then
 	OOM-killed the session) on infinite sources like
 	zip(count(), count(1))."
-	^ zip_iterator
-		___on: iterators
-		strict: (self ___strictKeyword___: kwargs for: 'zip')
+	^ zip_iterator ___construct___: positional kw: kwargs
 
 ]
 
@@ -7333,9 +7313,10 @@ builtins >> initialize [
 	Types and exceptions live in the Python dict (install.gs Step 3 maps
 	int->Integer etc.; the object-subclass builtins like slice/tuple/set and every
 	exception class live there too).  A CPython builtin Grail implements as a
-	FUNCTION rather than a class (enumerate/filter/map/reversed/zip/type/super/
-	staticmethod/classmethod) is simply absent from the dict and skipped -- the
-	method path answers getattr for those.  Only CURATED name lists are consulted,
+	FUNCTION rather than a class (reversed) is simply absent from the dict and
+	skipped -- the method path answers getattr for it -- and one whose class is
+	spelled differently (super, map, filter, zip) is bound below by its Python
+	name.  Only CURATED name lists are consulted,
 	never the whole Python dict: the dict is Grail's global namespace (vendored
 	modules, iterators, PyCode, and non-builtin exceptions like JSONDecodeError)
 	and is NOT builtins.  The exception list is shared with
@@ -7371,6 +7352,14 @@ builtins >> initialize [
 	builtin name may be shadowed on a module (test_super's
 	test_shadowed_dynamic).  Bind it under its PYTHON name."
 	self @env0:dynamicInstVarAt: #'super' put: Super.
+	"map, filter and zip are CLASSES in CPython -- ``isinstance(x, map)'',
+	``class M(map)'' -- and Grail's are the iterator classes their calls
+	build, spelled differently in Smalltalk, so they are bound here by their
+	Python names as super is.  A call still takes the fast path
+	(builtins >> map:_:); this binds the VALUE a bare name reads."
+	self @env0:dynamicInstVarAt: #'map' put: map_iterator.
+	self @env0:dynamicInstVarAt: #'filter' put: filter_iterator.
+	self @env0:dynamicInstVarAt: #'zip' put: zip_iterator.
 	"Constants that are Smalltalk booleans."
 	self @env0:dynamicInstVarAt: #'True' put: true.
 	self @env0:dynamicInstVarAt: #'False' put: false.
