@@ -1846,8 +1846,21 @@ importlib >> reload: aModule [
 	load's do (module >> ___globalStoreIsSessionLocal___), and replace what
 	this session had changed: a patched function is the module's own again."
 	module @env0:___forgetSessionGlobalsOf___: name.
-	[module @env0:___withPersistentGlobalStores___: [aModule initialize]] @env0:ensure: [
-		imported := importlib @env0:___endDepCollection___: name].
+	"The re-run is the module's body in every other respect too, so it runs as
+	the initializing module, as a load's does (importlib class >>
+	___loadModuleFromPath___:name:).  A call that builds a class -- the
+	functional enum API, type(), namedtuple -- keys it by the module whose body
+	is running (___claimBuiltClass___:), and with none it minted a new class,
+	and new members for an enum, stranding every stored one (#1974).  The
+	body's records are kept from its previous run until this one completes,
+	and a run that does not complete discards them, as a failed load does."
+	importlib @env0:___pushInitializingModule___: name.
+	[[module @env0:___withPersistentGlobalStores___: [aModule initialize]]
+		@env0:ifCurtailed: [importlib @env0:___discardBodyRecordsOf___: name]]
+			@env0:ensure: [
+				imported := importlib @env0:___endDepCollection___: name.
+				importlib @env0:___finishBuiltClasses___: name.
+				importlib @env0:___popInitializingModule___].
 	"After a successful re-run: the current source is what the (same,
 	identity-preserved) instance now reflects -- update the committed hash
 	and registry entry in-transaction and mark the session verdict #match,
