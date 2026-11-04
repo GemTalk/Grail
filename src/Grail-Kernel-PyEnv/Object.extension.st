@@ -12801,9 +12801,11 @@ Object >> ___grailTypeHashIsNone___ [
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___grailWeakrefAttribute___ [
 	"What ``x.__weakref__'' answers, or nil to let the ordinary read decide:
-	the introducing class's getset_descriptor when the receiver is a class,
-	None when it is an instance of one; nil when nothing in the MRO introduces
-	the storage."
+	the introducing class's getset_descriptor when the receiver is a class;
+	when it is an instance of one, the weak reference weakref.ref(x) shares,
+	which CPython keeps at the head of x's list (Objects/typeobject.c:3818-3840,
+	subtype_getweakref), or None when there is none; nil when nothing in the
+	MRO introduces the storage."
 
 	| cls mro |
 	cls := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
@@ -12816,7 +12818,7 @@ Object >> ___grailWeakrefAttribute___ [
 			and: [c ___grailIntroducesInstanceSlot___: '__weakref__']) ifTrue: [
 				^ (self @env0:isKindOf: Behavior)
 					ifTrue: [c ___grailGetSetDescriptor___: '__weakref__']
-					ifFalse: [None]]].
+					ifFalse: [WeakReference @env0:sharedReferenceTo: self ifNone: [None]]]].
 	^ nil
 
 ]
@@ -14907,9 +14909,9 @@ Object >> ___pyAttrLoad___: aSym [
 	"``__weakref__'': CPython's getset_descriptor, which a class's __dict__ now
 	lists (___grailGetSetDescriptor___:) and dir() therefore reports.  Read
 	off a class it answers that descriptor, inherited from the class that
-	introduced the storage; read off an instance it answers None, the value
-	of an object no weak reference points at -- Grail keeps no per-instance
-	list to answer the first one from.  Without this, dir() listed a name
+	introduced the storage; read off an instance it answers the weak
+	reference weakref.ref shares, or None, the value of an object no such
+	reference points at.  Without this, dir() listed a name
 	every getattr of refused, and typing's NamedTuple walk -- getattr over
 	dir() -- failed to import (``type object 'NTC' has no attribute
 	'__weakref__'''); __dict__ needs nothing, the read was always answered.
