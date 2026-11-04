@@ -528,8 +528,11 @@ A deployed module name stands for one source file in the repository
 An import that finds a *different file with different source* under that name
 raises `ImportError` and names both paths and both commands. Without that,
 two programs that each have a `models.py` would take turns rebuilding one set
-of classes under each other's stored objects. `relocate` writes nothing and
-lifts the refusal for the next import of the name in this session. `forget`
+of classes under each other's stored objects. `relocate` writes nothing; the
+next import of the name in this session from a new file rebuilds the module in
+place from that file and records it, whether or not its source changed (an
+unchanged module is otherwise warm-bound and keeps naming the old file).
+`forget`
 scans the repository like `gemdb.schema.drop_class`, so it refuses on a dirty
 session, refuses (`ValueError`) while instances of the module's classes exist,
 and commits itself.
@@ -681,7 +684,9 @@ is now `gemdb.schema`, above.
   file refused (and the session left clean), an identical copy accepted,
   `forget` refused while the instance exists and succeeding on a module with
   none, then in a fresh session `relocate` rebuilding a moved, edited file in
-  place under the stored instance, and the old file refused afterwards.
+  place under the stored instance, and the old file refused afterwards; and
+  `relocate` of an UNCHANGED module whose old file is deleted recording the
+  new file, so reload and an edit there both work (issue #1734).
 * `tests/scripts/runAppNamespaceTest.gs` (wired in as `app-namespaces`) — two
   namespaces each deploy a module of one name from their own file, unrefused,
   and store an instance; a fresh session rejoining the first namespace

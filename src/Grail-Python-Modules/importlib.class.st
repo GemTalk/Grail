@@ -4335,10 +4335,12 @@ importlib class >> ___grailReloadModule___: modName [
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___grailRelocateModule___: aModuleName [
 	"gemdb.modules.relocate: the deployed module aModuleName now lives in a
-	different file, and is the SAME module.  Lifts the source-path refusal for
-	that name for the NEXT import that would be refused, which rebuilds it in
-	place -- its classes keep their identity and their instances -- and records
-	the new location; the caller's commit publishes it.  A session-local flag,
+	different file, and is the SAME module.  The NEXT import of that name from
+	a new file rebuilds it in place -- its classes keep their identity and
+	their instances -- and records the new location, whether its source
+	changed (the source-path refusal is lifted) or not (it is rebuilt rather
+	than warm-bound, ___relocatesUnchanged___:to:); the caller's commit
+	publishes it.  A session-local flag,
 	like the base-change allowance gemdb.schema.rebase uses, and writes
 	nothing, so it needs no clean transaction.  Refuses a name with nothing
 	deployed, which is almost certainly a typo."
@@ -6254,6 +6256,13 @@ importlib class >> ___loadModuleFromPath___: pathString name: moduleName [
 	"Whether a build from here on is caused by a change -- or is a re-run of a
 	module already current, which keeps its generation."
 	buildChanged := hashState == #'stale'.
+	"Unchanged source at the new file gemdb.modules.relocate announced: rebuilt
+	in place from here so the new location is recorded (issue #1734).  Not a
+	change -- buildChanged stays false, so the module keeps its generation and
+	nothing that imports it is made stale."
+	(local not and: [hashState == #'match'
+		and: [self ___relocatesUnchanged___: moduleName to: pathString]])
+			ifTrue: [hashState := #'stale'].
 	"A DIFFERENT FILE with DIFFERENT SOURCE under a deployed name is refused
 	before anything is built (D10, ___refuseForeignSourcePath___:for:).  Only a
 	source change can trigger it -- a module stale merely because a dependency
@@ -8667,6 +8676,31 @@ importlib class >> ___releaseModuleInit___: aName [
 	(owners at: aName asString otherwise: nil)
 			== (self ___pythonThreadOf___: Processor activeProcess)
 		ifTrue: [owners removeKey: aName asString]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___relocatesUnchanged___: moduleName to: pathString [
+	"Whether this import of the deployed module moduleName, whose source is
+	UNCHANGED, found it at a new file that gemdb.modules.relocate announced --
+	and if so, CONSUME the allowance (___modulePathChangeAllowed___:).
+
+	The refusal relocate lifts (___refuseForeignSourcePath___:for:) is only
+	ever reached by a source CHANGE: the same source at another path is the
+	same module, so it warm-binds the committed instance, whose __file__ and
+	__spec__ still name the old file.  Left there, the old path stays the
+	recorded one and the allowance stays pending, and once the old file is
+	gone neither reload nor a rebuild can read it (issue #1734).  So a
+	relocated module is rebuilt in place from the file this import found,
+	exactly as an edited one is, and records that location.  Paths that name
+	the same file (___sameSourcePath___:as:) are no move, and leave the
+	allowance for the import it was meant for."
+
+	| deployed |
+	deployed := self ___deployedSourcePathOf___: moduleName.
+	deployed isNil ifTrue: [^ false].
+	(self ___sameSourcePath___: pathString as: deployed) ifTrue: [^ false].
+	^ self ___modulePathChangeAllowed___: moduleName
 
 ]
 

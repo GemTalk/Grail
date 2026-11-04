@@ -784,7 +784,10 @@ The two ways past the refusal are commands, in `gemdb.modules`:
   refusal for the next import of `name` in this session, which rebuilds it in
   place (classes keep their identity, stored instances keep working) and
   records the new file at commit. The allowance is consumed by that import,
-  so the old file is foreign afterwards.
+  so the old file is foreign afterwards. An import that finds the SAME source
+  at the new file is never refused, so relocate also makes it rebuild in place
+  instead of warm-binding the committed instance, which would keep naming the
+  old file; it keeps its generation, so its dependents stay current.
 - `forget(name)`: a different module that shares the name. It un-deploys
   `name` and its submodules so the next import builds afresh. Like
   `gemdb.schema.drop_class`, it refuses while any instance of their classes
