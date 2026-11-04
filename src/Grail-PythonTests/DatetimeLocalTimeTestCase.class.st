@@ -80,8 +80,12 @@ DatetimeLocalTimeTestCase >> testGmtimeIsStillUtc [
 DatetimeLocalTimeTestCase >> testIsdstTracksTheZone [
 	"tm_isdst must reflect the zone on a DST-LESS zone as well as a DST one.
 
-	Checks two instants six months apart, so it has real coverage either
-	way: with no DST rule both must be 0, with a DST rule they must differ.
+	Checks two instants six months apart under zones the fixture PINS with
+	TZ -- DST in each hemisphere, and three without -- so it is independent
+	of the host: with no DST rule both must be 0, with a DST rule they must
+	differ.  It used to read the host zone and branch on time.daylight, and
+	failed on a host in America/Vancouver after November 2026 (daylight 0,
+	yet July 2026 was PDT) with no bug present.
 	The first implementation reported 1 for EVERY instant on a DST-less zone
 	(equal standard and DST offsets made the deciding comparison trivially
 	true), and nothing caught it -- on such a zone timezone == altzone, so

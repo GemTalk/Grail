@@ -15,6 +15,7 @@ tests that hardcoded an offset would pass locally and fail there (or the
 reverse).  The invariants are relationships, not fixed clock values.
 """
 
+import os
 import time
 import datetime
 from datetime import date, datetime as dt, timedelta
@@ -200,31 +201,72 @@ def localtime_and_gmtime_differ_by_the_offset():
     return offset_west == expected
 
 
+# Zones isdst_tracks_the_zone pins, with what CPython 3.14 answers under each:
+# (time.daylight, tm_isdst on 2026-01-15, tm_isdst on 2026-07-14).
+ISDST_ZONES = (
+    ('America/Denver', 1, (0, 1)),      # northern DST
+    ('Australia/Sydney', 1, (1, 0)),    # southern DST: the flags swap
+    ('UTC', 0, (0, 0)),                 # no DST rule at all
+    ('America/Phoenix', 0, (0, 0)),     # no DST, nonzero offset
+    ('America/Sao_Paulo', 0, (0, 0)),   # gave DST up in 2019, -03 all year
+)
+
+
+def _with_tz(spec, fn):
+    """Set TZ, run fn, restore the zone the session had."""
+    had = 'TZ' in os.environ
+    orig = os.environ.get('TZ')
+    os.environ['TZ'] = spec
+    try:
+        time.tzset()
+        return fn()
+    finally:
+        # Unset, not '': CPython reads an empty TZ as UTC, not the host zone.
+        if had:
+            os.environ['TZ'] = orig
+        else:
+            del os.environ['TZ']
+        time.tzset()
+
+
 def isdst_tracks_the_zone():
     """tm_isdst must reflect the zone, on a DST-less zone as well as a DST one.
 
-    Two instants six months apart, so this has real coverage either way:
+    Two instants six months apart, under zones PINNED with TZ: the host's own
+    zone is no witness.  This used to branch on the host's time.daylight --
+    daylight 0 meant both flags must be 0 -- and that is not an invariant:
+    what daylight says about a zone whose rules changed is the C library's
+    call.  On a host in America/Vancouver after it stopped changing its
+    clocks in November 2026 (PDT -7 became MST -7), Grail says daylight 0
+    while July 2026 was still PDT, so the check failed with no bug present;
+    CPython on macOS there says daylight 1, from a standard offset (PST -8)
+    the zone no longer uses.
 
-      * no DST rule (daylight == 0, e.g. a UTC host) -- tm_isdst must be 0 at
-        BOTH.  The first implementation reported 1 for every instant here,
-        because with equal standard and DST offsets the comparison deciding
-        the flag was trivially true.  Nothing caught it: on such a zone
-        timezone == altzone, so tests that pick between them by tm_isdst
-        agree whichever branch they take.
-      * a DST rule (daylight == 1) -- the two must DIFFER, whichever
-        hemisphere the zone is in.
+    Each zone checks both:
+
+      * DST-less zones (UTC, Phoenix, Sao Paulo) -- tm_isdst 0 at BOTH
+        instants.  The first implementation reported 1 for every instant on
+        such a zone, because with equal standard and DST offsets the
+        comparison deciding the flag was trivially true.  Nothing caught it:
+        there timezone == altzone, so tests that pick between them by
+        tm_isdst agree whichever branch they take.  Sao Paulo is the zone
+        that gave DST up, which GemStone's rule-based zone still carried a
+        rule for (daylight 1, see time>>___refreshTimezoneGlobals___).
+      * DST zones -- the two DIFFER, in both hemispheres.
 
     Values are also required to be exactly 0 or 1: localtime never reports
     the -1 "unknown" that the UTC path uses.
     """
-    winter = time.localtime(1768435200.0)   # 2026-01-15 00:00 UTC
-    summer = time.localtime(1784073600.0)   # 2026-07-14 00:00 UTC
-    flags = (winter.tm_isdst, summer.tm_isdst)
-    if not all(f in (0, 1) for f in flags):
-        return "not-a-flag:%r" % (flags,)
-    if time.daylight == 0:
-        return "ok" if flags == (0, 0) else "dstless-but-flagged:%r" % (flags,)
-    return "ok" if flags[0] != flags[1] else "dst-zone-but-constant:%r" % (flags,)
+    winter_ts = 1768435200.0   # 2026-01-15 00:00 UTC
+    summer_ts = 1784073600.0   # 2026-07-14 00:00 UTC
+    wrong = []
+    for zone, daylight, flags in ISDST_ZONES:
+        got = _with_tz(zone, lambda: (time.daylight,
+                                      (time.localtime(winter_ts).tm_isdst,
+                                       time.localtime(summer_ts).tm_isdst)))
+        if got != (daylight, flags):
+            wrong.append('%s:%r' % (zone, got))
+    return 'ok' if not wrong else 'wrong:' + ' '.join(wrong)
 
 
 def gmtime_is_still_utc():
