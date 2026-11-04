@@ -188,13 +188,12 @@ FunctionalEnumRebuildTestCase >> testAStoredMemberKeysADictTheRebuiltEnumFinds [
 ]
 
 { #category : 'Grail-Tests' }
-FunctionalEnumRebuildTestCase >> testAStrEnumKeepsItsClass [
-	"``StrEnum('Tone', 'SOFT LOUD')''.  Its members are strings -- byte-format
-	objects, which cannot take another member's state -- so, as for a class
-	statement StrEnum (Enum class >> ___grailKeepPreviousMember:named:in:), the
-	members are new; the class is kept."
+FunctionalEnumRebuildTestCase >> testAStrEnumKeepsItsClassAndMembers [
+	"``StrEnum('Tone', 'SOFT LOUD')''.  Its members are strings, AbstractPyStr
+	and pointer-format, so they take the new build's state as any member does
+	(Enum class >> ___grailKeepPreviousMember:named:in:, #1974)."
 
-	self assertKeepsClass: #Tone
+	self assertKeepsMembers: #Tone
 
 ]
 
