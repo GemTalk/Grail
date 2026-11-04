@@ -6223,6 +6223,7 @@ Object class >> ___setattr__: instance _: attrName _: attrValue [
 	instead of the ``:kw:'' varargs form.  Matches the dispatch in
 	``___setattr__:kw:'', and answers None as it does."
 
+	(Python @env0:at: #builtins) @env1:instance ___requireAttrName___: attrName.
 	instance ___pyAttrStore___: attrName put: attrValue.
 	^ None
 
@@ -6244,6 +6245,9 @@ Object class >> ___setattr__: args kw: kwargs [
 	instance := args @env0:at: 1.
 	attrName := args @env0:at: 2.
 	attrValue := args @env0:at: 3.
+	"A name that is no str is CPython's TypeError (Objects/object.c:
+	1945-1952), as for the instance-side __setattr__:_:."
+	(Python @env0:at: #builtins) @env1:instance ___requireAttrName___: attrName.
 	"None, as CPython's object.__setattr__ answers (Objects/typeobject.c:
 	9592-9607, wrap_setattr); it answered the value."
 	instance ___pyAttrStore___: attrName put: attrValue.
@@ -18973,8 +18977,11 @@ Object >> __delattr__: name [
 	hit the default behavior, call ``super().__delattr__(name)''.
 
 	It answers None, as CPython's slot wrapper does (Objects/typeobject.c:
-	9609-9625, wrap_delattr); it answered the object."
+	9609-9625, wrap_delattr); it answered the object.  A name that is no str
+	is CPython's TypeError, as for __setattr__, whose path a delete shares
+	(Objects/object.c:1945-1952)."
 
+	(Python @env0:at: #builtins) @env1:instance ___requireAttrName___: name.
 	self ___pyAttrDelete___: name.
 	^ None
 
@@ -19482,6 +19489,11 @@ Object >> __getattribute__: name [
 	AttributeError.  A class without __getattr__ pays nothing for this."
 
 	| sym method marks mark |
+	"A name that is no str is CPython's TypeError, ``attribute name must be
+	string'' (Objects/object.c:1821-1828, typeobject.c:6108-6115), the one
+	the builtins give (builtins >> ___requireAttrName___:); it was read as
+	the name its printString spells."
+	(Python @env0:at: #builtins) @env1:instance ___requireAttrName___: name.
 	sym := name @env0:asString @env0:asSymbol.
 	method := object @env0:compiledMethodAt: #'___pyAttrLoad___:' environmentId: 1.
 	self ___pyAttrHasGetattr___ ifFalse: [^ self @env0:with: sym @env0:performMethod: method].
@@ -19919,6 +19931,10 @@ Object >> __setattr__: name _: value [
 	default behavior, call ``super().__setattr__(name, value)''."
 
 	| sym setterSym enumCls rec |
+	"A name that is no str is CPython's TypeError (Objects/object.c:
+	1945-1952, typeobject.c:6247-6254); it stored an attribute under the
+	name its printString spells."
+	(Python @env0:at: #builtins) @env1:instance ___requireAttrName___: name.
 	sym := name @env0:asSymbol.
 	"Enum members are read-only: ``Color.RED = x'' raises AttributeError
 	(CPython EnumType.__setattr__).  Guard for a class receiver whose enum
