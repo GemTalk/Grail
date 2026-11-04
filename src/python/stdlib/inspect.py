@@ -1204,11 +1204,25 @@ def _signature_from_builtins_table(obj, kind, skip_bound_arg):
         return None
     head = name.partition('.')[0]
     owner = getattr(_builtins, head, None)
+    if owner is None:
+        # The singletons' types, which builtins does not name: the table holds
+        # their methods too, so that None's report CPython's parameters --
+        # ``None.__bool__'' is (self, /), a builtin whose __self__ is None
+        # keeping its receiver, which rlcompleter completes as ``None.__bool__(''.
+        owner = {each.__name__: each for each in
+                 (type(None), type(Ellipsis), type(NotImplemented))}.get(head)
     if owner is None or (head == name and owner is not obj):
         return None
     text = TEXT_SIGNATURES[name]
     if text is None:
         raise ValueError('no signature found for {} {!r}'.format(kind, obj))
+    if text.startswith('($type') and hasattr(obj, '__self__'):
+        # A ($type text is a class method's, and one BOUND -- it has a
+        # __self__, where the unbound classmethod_descriptor has none -- is
+        # bound to its class in CPython, read off an instance or not, so its
+        # receiver goes.  Grail binds one read off None to None itself, which
+        # would otherwise read as unbound: ``None.__init_subclass__'' is ().
+        skip_bound_arg = True
     sig = _signature_from_text(text, skip_bound_arg)
     if sig is None:
         # ``str.startswith'' is ``($self, prefix[, start[, end]], /)'', an

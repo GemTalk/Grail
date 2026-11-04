@@ -28,6 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TARGET = os.path.join(HERE, "..", "src", "python", "stdlib", "_grail_text_signatures.py")
 CALLABLE_KINDS = (types.BuiltinFunctionType, types.MethodDescriptorType,
                   types.WrapperDescriptorType, types.ClassMethodDescriptorType)
+SINGLETON_TYPES = (type(None), type(Ellipsis), type(NotImplemented))
 
 
 def entries():
@@ -42,6 +43,17 @@ def entries():
         for attribute in vars(value).values():
             if isinstance(attribute, CALLABLE_KINDS):
                 table[attribute.__qualname__] = attribute.__text_signature__
+    # The singletons' types, which builtins does not name: None's methods are
+    # what rlcompleter completes ``None.'' from.  Keyed by the TYPE's name and
+    # each name dir() lists, inherited ones too -- Grail answers every method of
+    # None with a ``NoneType.'' qualname, where CPython's inherited ones say
+    # ``object.''.
+    for value in SINGLETON_TYPES:
+        table[value.__qualname__] = value.__text_signature__
+        for name in dir(value):
+            attribute = getattr(value, name)
+            if isinstance(attribute, CALLABLE_KINDS):
+                table['%s.%s' % (value.__qualname__, name)] = attribute.__text_signature__
     return table
 
 
