@@ -329,7 +329,7 @@ stderr_case "print(file=sys.__stderr__)" 'print("err-marker", file=sys.__stderr_
 stderr_case "warnings.warn" 'import warnings; warnings.warn("careful")' \
     'stderr_case.py:3: UserWarning: careful$'
 # python3: WARNING:root:logged -- basicConfig's handler is a StreamHandler on
-# sys.stderr.  (Spelled out: Grail's logging has no implicit basicConfig.)
+# sys.stderr.  (Spelled out here; the implicit one is covered under #2122.)
 stderr_case "logging.basicConfig handler" \
     'import logging; logging.basicConfig(); logging.warning("logged")' \
     '^WARNING:root:logged$'
@@ -433,6 +433,64 @@ if ! grep -q '^err-marker$' "$ERR_FILE" || grep -q 'err-marker' "$OUT_FILE"; the
 else
     ok
 fi
+
+# --- logging with no configuration (#2122) ---------------------------------
+
+# Grail's logging printed nothing for a record that found no handler: it had
+# no lastResort, and its module-level functions did not call basicConfig().
+# Each case runs CODE between two stdout lines and compares BOTH streams
+# exactly; every expectation is python3 -I 3.14's output for the same file.
+#
+# log_case NAME CODE WANT-STDOUT-BETWEEN WANT-STDERR
+log_case() {
+    local name="$1" code="$2" want_out="$3" want_err="$4"
+    printf 'import logging, sys\nprint("before")\n%s\nprint("after")\n' "$code" \
+        > "$TMP/log_case.py"
+    if run "logging: $name runs" 0 -- "$TMP/log_case.py"; then
+        local want_stdout="before
+${want_out:+$want_out
+}after"
+        if [ "$(cat "$OUT_FILE")" != "$want_stdout" ] \
+                || [ "$(cat "$ERR_FILE")" != "$want_err" ]; then
+            bad "logging: $name" \
+                "want stdout: [$want_stdout]" "got stdout:  [$(cat "$OUT_FILE")]" \
+                "want stderr: [$want_err]" "got stderr:  [$(cat "$ERR_FILE")]"
+        else
+            ok
+        fi
+    fi
+}
+# The module-level function calls basicConfig() first.
+log_case "logging.warning() with no config" \
+    'logging.warning("x")' '' 'WARNING:root:x'
+# A named logger's record finds no handler: lastResort prints the bare message.
+log_case "a named logger with no config (lastResort)" \
+    'logging.getLogger("a").warning("x")' '' 'x'
+log_case "lastResort formats the message" \
+    'logging.getLogger("a").error("x %d", 3); logging.getLogger("a").info("y")' '' 'x 3'
+# Below WARNING prints nothing -- but logging.info() still configured the root,
+# so a named logger's warning afterwards goes through basicConfig's handler.
+log_case "info() below the threshold" \
+    'logging.info("x"); logging.getLogger("a").info("y")' '' ''
+log_case "info() still calls basicConfig()" \
+    'logging.info("x"); logging.getLogger("a").warning("y")' '' 'WARNING:a:y'
+log_case "basicConfig(level=INFO) then info()" \
+    'logging.basicConfig(level=logging.INFO); logging.info("x")' '' 'INFO:root:x'
+# basicConfig() does nothing once the root has a handler -- level included.
+log_case "basicConfig() after the implicit one is a no-op" \
+    'logging.warning("x"); logging.basicConfig(level=logging.INFO); logging.info("y")' \
+    '' 'WARNING:root:x'
+# A handler added explicitly is the only one: no basicConfig, no lastResort.
+log_case "a handler on the root does not double up" \
+    'logging.root.addHandler(logging.StreamHandler(sys.stdout)); logging.warning("x")' \
+    'x' ''
+log_case "a handler on a named logger does not double up" \
+    'lg = logging.getLogger("a"); lg.addHandler(logging.StreamHandler()); lg.warning("x")' \
+    '' 'x'
+# With lastResort gone, the one-time "No handlers" notice, as in CPython.
+log_case "lastResort = None" \
+    'logging.lastResort = None; logging.getLogger("a").warning("x"); logging.getLogger("b").warning("y")' \
+    '' 'No handlers could be found for logger "a"'
 
 # --- CPython-shaped launcher behaviour -------------------------------------
 

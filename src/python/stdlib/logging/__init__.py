@@ -8,13 +8,15 @@
 #   exception(msg, *args)           - logs the active exception
 #   NullHandler                     - silent handler for library use
 #   Handler / StreamHandler         - with filters and handleError
+#   lastResort                      - a WARNING-level handler on sys.stderr
+#                                     for a record that finds no handler
 #   Formatter                       - '%', '{' and '$' styles over the record
 #   Logger / LogRecord              - CPython's attributes and signatures,
 #                                     ``extra'', ``stack_info'', ``stacklevel''
 #   level constants: DEBUG INFO WARNING ERROR CRITICAL NOTSET
 #
 # Not provided: configuration file loaders, multiprocessing-safe handlers,
-# the lastResort handler, and thread locks (there is one gem per session).
+# and thread locks (there is one gem per session).
 #
 # Deliberately NOT vendored from CPython: its module holds a module-level
 # RLock, a WeakValueDictionary of handlers and atexit hooks, and in a DEPLOYED
@@ -442,6 +444,27 @@ class StreamHandler(Handler):
             self.handleError(record)
 
 
+class _StderrHandler(StreamHandler):
+    """CPython's: a StreamHandler whose stream is ``sys.stderr'' at the moment
+    it is asked -- a property, so the handler holds no stream object.
+    ``lastResort'' is one, made when logging is deployed and kept in the
+    module, and it writes to the EMITTING session's stderr (#2122)."""
+
+    def __init__(self, level=NOTSET):
+        Handler.__init__(self, level)
+
+    @property
+    def stream(self):
+        return sys.stderr
+
+
+# What Logger.callHandlers hands a record that found no handler at all, as in
+# CPython: WARNING and above, the bare message, on sys.stderr.  A program may
+# set ``logging.lastResort = None'' (or its own handler) to change that.
+_defaultLastResort = _StderrHandler(WARNING)
+lastResort = _defaultLastResort
+
+
 class Manager:
     """CPython's logger registry, ``Logger.manager''.
 
@@ -601,14 +624,27 @@ class Logger(Filterer):
         self.callHandlers(record)
 
     def callHandlers(self, record):
+        """Every handler from here up the propagating chain; a record that
+        finds none goes to ``lastResort'', as in CPython (#2122) -- or, with
+        lastResort set to None, a one-time notice on stderr."""
         logger = self
+        found = 0
         while logger is not None:
             for h in logger.handlers:
+                found = found + 1
                 if record.levelno >= h.level:
                     h.handle(record)
             if not logger.propagate:
-                return
+                break
             logger = logger.parent
+        if found == 0:
+            if lastResort:
+                if record.levelno >= lastResort.level:
+                    lastResort.handle(record)
+            elif raiseExceptions and not self.manager.emittedNoHandlerWarning:
+                sys.stderr.write('No handlers could be found for logger'
+                                 ' "%s"\n' % self.name)
+                self.manager.emittedNoHandlerWarning = True
 
     def debug(self, msg, *args, **kwargs):
         if self.isEnabledFor(DEBUG):
@@ -733,56 +769,112 @@ def getLogger(name=None):
 
 
 def basicConfig(**kwargs):
-    """basicConfig(level=, format=, datefmt=, style=, stream=, force=) -
-    install a StreamHandler on the root logger if it has none yet."""
-    if kwargs.get('force'):
-        del root.handlers[:]
-    if 'level' in kwargs:
-        _set_root_level(kwargs['level'])
-        root.level = kwargs['level']
-    if not root.handlers:
-        handler = StreamHandler(kwargs.get('stream'))
-        style = kwargs.get('style', '%')
-        fmt = kwargs.get('format', _STYLES.get(style, _STYLES['%'])[1])
-        handler.setFormatter(Formatter(fmt, kwargs.get('datefmt'), style))
-        root.addHandler(handler)
+    """CPython's: configure the root logger -- but only if it has no handlers
+    yet (``force=True'' removes and closes them first).  ``handlers'', else a
+    FileHandler for ``filename'', else a StreamHandler on ``stream'', gets a
+    Formatter from ``format''/``datefmt''/``style''; ``level'' sets the root's
+    level.  Any other keyword is refused.
+
+    The module-level functions call this when the root has no handlers, so
+    ``logging.warning('x')'' with no configuration prints ``WARNING:root:x''
+    (#2122).  With no stream the handler reads sys.stderr per record, so the
+    root logger of a deployed module holds no session's stream (#1972)."""
+    force = kwargs.pop('force', False)
+    encoding = kwargs.pop('encoding', None)
+    errors = kwargs.pop('errors', 'backslashreplace')
+    if force:
+        for h in root.handlers[:]:
+            root.removeHandler(h)
+            h.close()
+    if len(root.handlers) == 0:
+        handlers = kwargs.pop('handlers', None)
+        if handlers is None:
+            if 'stream' in kwargs and 'filename' in kwargs:
+                raise ValueError("'stream' and 'filename' should not be "
+                                 "specified together")
+        else:
+            if 'stream' in kwargs or 'filename' in kwargs:
+                raise ValueError("'stream' or 'filename' should not be "
+                                 "specified together with 'handlers'")
+        if handlers is None:
+            filename = kwargs.pop('filename', None)
+            mode = kwargs.pop('filemode', 'a')
+            if filename:
+                if 'b' in mode:
+                    errors = None
+                h = FileHandler(filename, mode, encoding=encoding,
+                                errors=errors)
+            else:
+                h = StreamHandler(kwargs.pop('stream', None))
+            handlers = [h]
+        dfs = kwargs.pop('datefmt', None)
+        style = kwargs.pop('style', '%')
+        if style not in _STYLES:
+            raise ValueError('Style must be one of: %s'
+                             % ','.join(_STYLES.keys()))
+        fs = kwargs.pop('format', _STYLES[style][1])
+        fmt = Formatter(fs, dfs, style)
+        for h in handlers:
+            if h.formatter is None:
+                h.setFormatter(fmt)
+            root.addHandler(h)
+        level = kwargs.pop('level', None)
+        if level is not None:
+            root.setLevel(level)
+            _set_root_level(root.level)
+        if kwargs:
+            keys = ', '.join(kwargs.keys())
+            raise ValueError('Unrecognised argument(s): %s' % keys)
 
 
-# Module-level convenience wrappers (CPython parity).
+# Module-level convenience wrappers, as CPython's: each configures the root
+# logger first when it has no handlers -- even for a record below its level.
 
 def debug(msg, *args, **kwargs):
+    if len(root.handlers) == 0:
+        basicConfig()
     root.debug(msg, *args, **kwargs)
 
 
 def info(msg, *args, **kwargs):
+    if len(root.handlers) == 0:
+        basicConfig()
     root.info(msg, *args, **kwargs)
 
 
 def warning(msg, *args, **kwargs):
+    if len(root.handlers) == 0:
+        basicConfig()
     root.warning(msg, *args, **kwargs)
 
 
 def warn(msg, *args, **kwargs):
-    root.warning(msg, *args, **kwargs)
+    warning(msg, *args, **kwargs)
 
 
 def error(msg, *args, **kwargs):
+    if len(root.handlers) == 0:
+        basicConfig()
     root.error(msg, *args, **kwargs)
 
 
 def critical(msg, *args, **kwargs):
+    if len(root.handlers) == 0:
+        basicConfig()
     root.critical(msg, *args, **kwargs)
 
 
 def fatal(msg, *args, **kwargs):
-    root.critical(msg, *args, **kwargs)
+    critical(msg, *args, **kwargs)
 
 
 def exception(msg, *args, exc_info=True, **kwargs):
-    root.error(msg, *args, exc_info=exc_info, **kwargs)
+    error(msg, *args, exc_info=exc_info, **kwargs)
 
 
 def log(level, msg, *args, **kwargs):
+    if len(root.handlers) == 0:
+        basicConfig()
     root.log(level, msg, *args, **kwargs)
 
 
@@ -825,7 +917,7 @@ __all__ = [
     'getLogger', 'getLevelName', 'basicConfig', 'disable', 'shutdown',
     'getLoggerClass', 'setLoggerClass', 'getLevelNamesMapping',
     'debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal',
-    'exception', 'log',
+    'exception', 'log', 'lastResort',
 ]
 
 
