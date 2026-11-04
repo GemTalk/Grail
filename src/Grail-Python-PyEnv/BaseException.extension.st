@@ -704,8 +704,9 @@ BaseException class >> ___signalOrPass___: excValue [
 
 ]
 
-{ #category : 'Grail-Generics' }
+{ #category : 'Grail-Protocol Refusal' }
 BaseException class >> __getitem__: item [
+	<grailProtocolRefusal>
 	"``Exception[OSError]'' -- CPython's TypeError: an exception class is not
 	generic.  Grail's default collapses a class subscript to the class itself
 	(Metaclass3), so this answered Exception and the test that it refuses
@@ -713,7 +714,12 @@ BaseException class >> __getitem__: item [
 	The group classes, which ARE generic, override this (BaseExceptionGroup
 	class >> __getitem__:), and so does any subclass defining its own
 	__class_getitem__ -- a user exception mixing in typing.Generic keeps
-	working."
+	working.
+
+	The subscription's TRANSPORT, not an attribute: CPython's type has no
+	__getitem__, so ``hasattr(ValueError, '__getitem__')'' is False and
+	dir(ValueError) does not list it.  Marked a refusal for that; the
+	subscription still sends it."
 
 	(((self @env0:whichClassIncludesSelector: #'__class_getitem__:' environmentId: 1) ~~ nil
 		or: [(self @env0:whichClassIncludesSelector: #'___class_getitem__:kw:' environmentId: 1) ~~ nil])
@@ -1560,14 +1566,18 @@ BaseException >> __init__: a [
 
 ]
 
-{ #category : 'Grail-Exception Methods' }
+{ #category : 'Grail-Protocol Refusal' }
 BaseException >> __notes__ [
+	<grailProtocolRefusal>
 	"PEP 678 list of notes attached via add_note.  CPython leaves ``__notes__''
 	ABSENT until the first add_note (accessing it raises AttributeError), so
 	mirror that rather than fabricating an empty list.
 
 	Reached only when the dynamic-instVar slot is unset, since ___pyAttrLoad___
-	probes that first -- so this is exactly the ``no notes'' case."
+	probes that first -- so this is exactly the ``no notes'' case.  A REFUSAL,
+	then, and marked one, so dir() and __dict__ leave it out as CPython's do
+	until add_note has stored the list, which dir() then finds in the
+	instance's own attributes."
 
 	| notes |
 	notes := self @env0:dynamicInstVarAt: #'__notes__'.
