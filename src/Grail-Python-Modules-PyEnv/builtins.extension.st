@@ -1124,6 +1124,22 @@ builtins >> ___definesOwnCallProtocol___: anObject [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+builtins >> ___deleteReflected___: pyName from: target [
+	"Take a name the exec'd source deleted out of the caller's mapping
+	(Python/bytecodes.c:1536-1553, DELETE_NAME): through __delitem__ when the
+	mapping is not a plain dict, as ___storeReflected___:at:into: stores, and
+	quietly when it no longer holds the name -- a ``global'' delete took it
+	out of the globals already (NameError class >>
+	___deleteDoitGlobal___:scope:)."
+
+	(self ___isPlainCopyableMapping___: target)
+		ifTrue: [target @env0:removeKey: pyName ifAbsent: [nil]]
+		ifFalse: [[target @env1:__delitem__: pyName]
+			@env0:on: KeyError do: [:ex | ex @env0:return: nil]]
+
+]
+
 { #category : 'Grail-Format Spec Engine' }
 builtins >> ___digitsAreAllZero___: digits [
 	"True when a formatted numeric body carries no significant digit -- ``0'',
@@ -4069,7 +4085,12 @@ builtins >> ___reflectDoitScope___: aScope seeded: seeded into: targetDict globa
 					@env0:and: [globalNames @env0:includes: pyName @env0:asString @env0:asSymbol])
 					ifTrue: [globalsDict]
 					ifFalse: [targetDict].
-				self ___storeReflected___: value at: pyName into: target]]]
+				"A SEEDED slot the source emptied is a ``del'': CPython's
+				DELETE_NAME deletes from the mapping, so the name leaves it
+				rather than coming back holding nil."
+				value @env0:== nil
+					ifTrue: [self ___deleteReflected___: pyName from: target]
+					ifFalse: [self ___storeReflected___: value at: pyName into: target]]]]
 
 ]
 

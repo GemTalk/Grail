@@ -209,6 +209,28 @@ module class >> new [
 ]
 
 { #category : 'Grail-Attribute Access' }
+module >> ___bindsGlobal___: aSym [
+	"Does a bare-name read of aSym find it in this module, before builtins?
+	___globalAt___:otherwise:'s answer, without its side effect: that read
+	MINTS a function's handle and caches it in the slot
+	(___functionHandleFor___:), so a delete asking it wrote the slot and
+	then removed it -- and a committed module re-running its body was left
+	dirty by ``def gone(): ...; del gone'' (runAppMainTest.gs, funcs.py).
+	A slot binds; a deleted name does not, whatever method backs it; a
+	method or a varargs def of the module class does, and so does a
+	dictionary entry."
+
+	(self @env0:dynamicInstVarAt: aSym) == nil ifFalse: [^ true].
+	(self ___isDeletedGlobal___: aSym) ifTrue: [^ false].
+	^ (self @env0:class @env0:whichClassIncludesSelector: aSym environmentId: 1) notNil
+		or: [(self @env0:class
+				@env0:whichClassIncludesSelector: ('_' @env0:, aSym @env0:asString @env0:, ':kw:') @env0:asSymbol
+				environmentId: 1) notNil
+			or: [self @env0:includesKey: aSym]]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 module >> ___clearWrappedGlobal___: aSym [
 	"Drop the cached BoundMethod a lazy wrap left in the dynamic slot, so a
 	delete is not undone by the wrap the last read stored there."
@@ -301,6 +323,18 @@ module >> ___deletedGlobals___ [
 ]
 
 { #category : 'Grail-Attribute Access' }
+module >> ___deleteGlobal___: aSym [
+	"``del name'' at this module's scope, or in a function that declares the
+	name global: CPython's DELETE_NAME and DELETE_GLOBAL, which raise NameError
+	when the module binds no such name -- its builtins do not count
+	(Python/bytecodes.c:1536-1553, 1683-1695)."
+
+	(self ___bindsGlobal___: aSym) ifFalse: [^ NameError @env0:___signalUndefined___: aSym].
+	self @env0:removeDynamicInstVar: aSym
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 module >> ___deleteOwnDef___: aSym [
 	"``del name'' in this module's own body, for the one top-level def the body
 	gives that name (DeleteAst >> ___deletesOwnTopLevelDef___:).  The def is a
@@ -319,9 +353,11 @@ module >> ___deleteOwnDef___: aSym [
 
 	The tombstone is session-local, and a DEPLOYED module runs its body once,
 	at deploy; so the deletion is also recorded, committed, for every session
-	that binds the module (importlib >> ___recordBodyDeletedDef___:of:)."
+	that binds the module (importlib >> ___recordBodyDeletedDef___:of:).
+	Deleting it again is a NameError, as any unbound name's is
+	(___deleteGlobal___:)."
 
-	self @env0:removeDynamicInstVar: aSym.
+	self ___deleteGlobal___: aSym.
 	self ___markGlobalDeleted___: aSym.
 	importlib @env0:___recordBodyDeletedDef___: aSym of: self
 

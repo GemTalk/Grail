@@ -71,13 +71,10 @@ DeleteGlobalNameTestCase >> ___irModule___ [
 { #category : 'Grail-Private' }
 DeleteGlobalNameTestCase >> ___keys___ [
 	"Named rather than read from the dict so a fixture key that stops being
-	produced fails here instead of silently dropping out of the comparison.
-
-	``deleting_twice_raises'' is deliberately absent -- it is the fixture's
-	XFAIL, pinned by its own test below."
+	produced fails here instead of silently dropping out of the comparison."
 
 	^ #('deleting_a_global_then_reading_it' 'another_function_sees_the_deletion'
-	    'rebinding_after_the_delete' 'the_name_leaves_globals'
+	    'rebinding_after_the_delete' 'deleting_twice_raises' 'the_name_leaves_globals'
 	    'two_globals_in_one_statement' 'a_local_and_a_global_together'
 	    'a_method_deleting_a_global' 'a_plain_local_still_unbinds'
 	    'subscript_and_attribute_targets')
@@ -122,29 +119,8 @@ DeleteGlobalNameTestCase >> testDeletingAGlobalIsNowEligible [
 ]
 
 { #category : 'Grail-Tests - deleting a global' }
-DeleteGlobalNameTestCase >> testDeletingAnAbsentGlobalIsStillSilent [
-	"The fixture's XFAIL, pinned rather than hidden: deleting an
-	ALREADY-DELETED global must raise NameError, and Grail's
-	``removeDynamicInstVar:'' is silent when the name is absent, so the second
-	``del'' succeeds.
-
-	Both paths do it, because the IR emit reproduces the text's send for send;
-	it is a gap in the delete primitive, not in either codegen.  When that is
-	fixed this test fails, which is the point of it."
-
-	| mod got |
-	mod := self ___irModule___.
-	got := ((mod @env1:___pyAttrLoad___: #'r')
-		@env1:__getitem__: 'deleting_twice_raises') @env1:__repr__ @env0:asString.
-	self assert: got = '''no raise'''
-		description: 'the silent-absent-delete divergence moved (CPython raises '
-			, 'NameError on the second del): ' , got
-
-]
-
-{ #category : 'Grail-Tests - deleting a global' }
 DeleteGlobalNameTestCase >> testEveryDeleteShapeAgreesWithCPythonUnderIR [
-	"Nine shapes with the seam forced on.
+	"Ten shapes with the seam forced on.
 
 	``a_local_and_a_global_together'' is the one that separates the two
 	branches in a single statement: ``del loc, mixed'' must nil a temp for the

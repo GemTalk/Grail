@@ -94,8 +94,10 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 	  del x[k]  -> (x) __delitem__: (k).
 	  del o.a   -> (o) @env1:__delattr__: 'a'.   [a Smalltalk String: user
 	               __delattr__ overrides compare name == 'a' str-vs-str]
-	  del name  -> name := nil.                 [the local's temp; a deleted
-	               parameter lives in a temp too, like a reassigned one]"
+	  del name  -> name ifNil: [<a read's error>]. name := nil.
+	               [the local's temp; a deleted parameter lives in a temp
+	               too, like a reassigned one]
+	  del <module name> -> <module> @env1:___deleteGlobal___: #name."
 
 	self deletedTargets do: [:t |
 		(t isKindOf: NameAst)
@@ -148,9 +150,9 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 								to: (self ___emitIRModuleReceiverOn___: aBuilder)
 								with: { aBuilder obj: t id asSymbol } env: 1)]
 							ifFalse: [aBuilder add: (aBuilder
-								send: #'removeDynamicInstVar:'
+								send: #'___deleteGlobal___:'
 								to: (self ___emitIRModuleReceiverOn___: aBuilder)
-								with: { aBuilder obj: t id asSymbol } env: 0)]]
+								with: { aBuilder obj: t id asSymbol } env: 1)]]
 					ifFalse: [
 						| leaf |
 						leaf := aBuilder leafFor: t id asSymbol.
@@ -160,6 +162,11 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 							silent miss here would drop the delete entirely."
 							Error signal: 'IR codegen: no local temp for del '
 								, t id printString].
+						"The text's guard: an already empty temp raises a
+						read's error (___unboundDeleteSignalSourceFor___:)."
+						aBuilder add: (aBuilder
+							ifNilValue: (aBuilder localVar: t id asSymbol)
+							then: [aBuilder add: (t ___irUnboundReadSignalWith___: aBuilder)]).
 						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]]]
 			ifFalse: [
 				| objV |
@@ -318,6 +325,19 @@ DeleteAst >> ___irRefusalDetail___: localSet [
 
 ]
 
+{ #category : 'Grail-other' }
+DeleteAst >> ___unboundDeleteSignalSourceFor___: aNameAst [
+	"The source of the error a ``del'' of aNameAst raises when the temp it
+	empties is already empty: a read's (NameAst >> ___unboundReadSignalSource___)
+	for a function's local or free variable, and DELETE_NAME's NameError for a
+	name no function binds -- the top of an exec()'s code."
+
+	^ (aNameAst ___pythonLocalInEnclosingFunctions___: aNameAst id)
+		ifTrue: [aNameAst ___unboundReadSignalSource___ , aNameAst id]
+		ifFalse: ['NameError @env0:___signalUndefined___: ''' , aNameAst id , '''']
+
+]
+
 { #category : 'Grail-Accessing' }
 DeleteAst >> deletedTargets [
 	"Each name, attribute and subscript the statement deletes, left to right.
@@ -363,7 +383,8 @@ DeleteAst >> printSmalltalkOn: aStream [
 
 	For each target:
 	  * SubscriptAst (del x[key]) → (x) __delitem__: (key)
-	  * NameAst (del name) → name := nil
+	  * NameAst (del name) → name := nil, raising first when the name is
+	    already unbound, as CPython's DELETE_* do
 	  * AttributeAst (del obj.attr) → not yet supported, raises error
 
 	See https://docs.python.org/3/reference/simple_stmts.html#the-del-statement"
@@ -476,11 +497,13 @@ DeleteAst >> printSmalltalkOn: aStream [
 						instVar storage.  A subsequent read probes
 						``self dynamicInstVarAt: ifAbsent: [NameError]''
 						and raises Python's NameError on miss — matching
-						CPython's module-scope semantics for ``del x''."
+						CPython's module-scope semantics for ``del x''.  So
+						does the delete itself when nothing binds the name
+						(module >> ___deleteGlobal___:)."
 						aStream nextPutAll: self ___moduleStoreReceiverExpr___;
 							nextPutAll: ((self ___deletesOwnTopLevelDef___: target)
 								ifTrue: [' @env1:___deleteOwnDef___: #''']
-								ifFalse: [' @env0:removeDynamicInstVar: #''']);
+								ifFalse: [' @env1:___deleteGlobal___: #''']);
 							nextPutAll: target id;
 							nextPutAll: '''.'.
 					] ifFalse: [
@@ -496,12 +519,36 @@ DeleteAst >> printSmalltalkOn: aStream [
 						once the body rebinds it -- ``self := nil'' is not
 						Smalltalk, and the whole method failed to compile.
 						anyio's TaskHandle._run_coro ends ``del self  # Break the
-						reference cycle'', so no anyio task could be spawned."
-						aStream
-							nextPutAll: ((FunctionDefAst isSmalltalkReservedIdentifier: target id)
-								ifTrue: [NameAst ___transportIdentifierFor___: target id]
-								ifFalse: [target id]);
-							nextPutAll: ' := nil.'
+						reference cycle'', so no anyio task could be spawned.
+
+						The temp is checked first: CPython's DELETE_FAST and
+						DELETE_DEREF raise when the binding is already empty
+						(Python/bytecodes.c:1856-1867, 1883-1893), with a read's
+						error (Python/ceval.c:3485-3499) -- so the guard is a
+						read's.  At the top of an exec()'s code the temp is the
+						exec's scope slot, and DELETE_NAME's NameError applies.
+						A ``global'' declaration there reaches the scope through
+						its handle, as the store does (AssignAst, NameError class
+						>> ___storeDoitGlobal___:value:scope:)."
+						(ModuleAst compilingDoitScope notNil
+							and: [target ___nearestEnclosingScopeDeclaresGlobal___: target id])
+							ifTrue: [
+								aStream
+									nextPutAll: 'NameError @env0:___deleteDoitGlobal___: ''';
+									nextPutAll: target id;
+									nextPutAll: ''' scope: ___pyGlobals___.']
+							ifFalse: [
+								| identifier |
+								identifier := (FunctionDefAst isSmalltalkReservedIdentifier: target id)
+									ifTrue: [NameAst ___transportIdentifierFor___: target id]
+									ifFalse: [target id].
+								aStream
+									nextPutAll: identifier;
+									nextPutAll: ' ifNil: [';
+									nextPutAll: (self ___unboundDeleteSignalSourceFor___: target);
+									nextPutAll: ']. ';
+									nextPutAll: identifier;
+									nextPutAll: ' := nil.']
 					]] ifNotNil: [:clsName |
 						aStream nextPutAll: clsName;
 							nextPutAll: ' @env1:___classBodyDefinitionalDelete___: #''';

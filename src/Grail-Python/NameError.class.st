@@ -4,6 +4,26 @@ Class {
 	#category : 'Grail-Exceptions'
 }
 
+{ #category : 'Grail-Name Errors' }
+NameError class >> ___deleteDoitGlobal___: aName scope: aScope [
+	"``global x; del x'' in code an exec() compiled: the twin of
+	___storeDoitGlobal___:value:scope:, emptying the exec's scope slot and
+	taking the name out of its globals dict.  CPython's DELETE_GLOBAL pops the
+	dict and raises NameError when it held no such name -- builtins do not
+	count (Python/bytecodes.c:1683-1695)."
+
+	| slot globals inGlobals |
+	slot := NameAst doitScopeNameFor: aName asSymbol.
+	globals := [aScope dynamicInstVarAt: #'___grailExecGlobals___']
+		on: AbstractException do: [:ex | ex return: nil].
+	inGlobals := globals notNil and: [(globals @env1:__contains__: aName asString) == true].
+	((aScope at: slot ifAbsent: [nil]) isNil and: [inGlobals not])
+		ifTrue: [^ self ___signalUndefined___: aName].
+	aScope at: slot put: nil.
+	inGlobals ifTrue: [globals @env1:__delitem__: aName asString]
+
+]
+
 { #category : 'Grail-Python Attrs' }
 NameError class >> ___pythonValueAttrs___ [
 	"The keyword attributes are VALUES -- ``e.name'' is a string or None, never
