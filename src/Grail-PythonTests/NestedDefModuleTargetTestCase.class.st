@@ -83,18 +83,18 @@ NestedDefModuleTargetTestCase >> tearDown [
 ]
 
 { #category : 'Grail-Tests - a nested def binding a global' }
-NestedDefModuleTargetTestCase >> testADecoratedModuleScopeDefStillRefuses [
-	"The shape deliberately left out, asserted rather than assumed: the text
-	re-stores the module binding for each decorator step and reads it back
-	between them, which this emit does not spell.  When that is cut, this fails
-	and the row retires."
+NestedDefModuleTargetTestCase >> testADecoratedModuleScopeDefIsBuiltThroughIR [
+	"The shape this test used to pin as LEFT OUT, and said it would fail when it
+	was cut: the text re-stores the module binding for each decorator step and
+	reads it back between them, and the IR tail now spells that too (P1.2,
+	FunctionDefAst >> ___emitIRNestedDecoratorsOn___:read:store:).  So the row
+	is asserted gone; the value check above covers what it answers."
 
 	| counts |
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
 	counts := self ___censusCountsForFixture___.
-	self assert: (counts at: #'nestedDef:moduleScopeTargetDecorated' ifAbsent: [0]) = 1
-		description: 'the decorated module-scope def no longer refuses under its '
-			, 'own row: ' , counts printString
+	self assert: (counts at: #'nestedDef:moduleScopeTargetDecorated' ifAbsent: [0]) = 0
+		description: 'the decorated module-scope def still refuses: ' , counts printString
 
 ]
 
@@ -106,8 +106,8 @@ NestedDefModuleTargetTestCase >> testBothGuardsAreGone [
 
 	Two rows, not one.  Dropping ``moduleScopeTarget'' alone moved every site to
 	``nameNotLocal'' for a +0 net, so both are asserted here -- measured on this
-	fixture, where the undecorated defs are three and the decorated one still
-	refuses."
+	fixture, where the undecorated defs are three (the decorated one is
+	asserted separately)."
 
 	| counts |
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
@@ -123,7 +123,7 @@ NestedDefModuleTargetTestCase >> testBothGuardsAreGone [
 { #category : 'Grail-Tests - a nested def binding a global' }
 NestedDefModuleTargetTestCase >> testEveryModuleScopeDefShapeAgreesWithCPythonUnderIR [
 	"Eight checks: defining a global function, calling it from MODULE scope
-	afterwards, redefining it, the decorated shape that still refuses, the same
+	afterwards, redefining it, the decorated shape, the same
 	statement inside a METHOD (whose receiver is not the module), and the name
 	appearing in globals()."
 

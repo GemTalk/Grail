@@ -11,12 +11,11 @@ sites to ``nestedDef:nameNotLocal`` and gained nothing: the def's name is not a
 local precisely BECAUSE it is a module name, so the very next guard caught it.
 A +0 net that only a row-by-row diff makes visible.
 
-A DECORATED module-scope def is deliberately still refused, under its own
-census row.  printSmalltalkOn: re-stores the module binding for each decorator
-step and reads it back between them, which is a different emit from the
-leaf-based decorator tail -- a separate shape rather than a harder one, and
-none of the corpus's four sites is decorated.  It is here so the fixture covers
-what still refuses as well as what no longer does; both paths answer the same
+A DECORATED module-scope def was refused for longer, under its own census row
+(nestedDef:moduleScopeTargetDecorated): printSmalltalkOn: re-stores the module
+binding for each decorator step and reads it back between them, which was a
+different emit from the leaf-based decorator tail.  P1.2 gave the IR tail that
+read and store, so it is built through IR too; both paths answer the same
 thing for it.
 
 ``the_module_sees_*`` call the created functions from MODULE scope afterwards,

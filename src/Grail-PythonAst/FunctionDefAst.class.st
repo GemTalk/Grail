@@ -982,15 +982,17 @@ FunctionDefAst >> ___emitIRCodeExtrasOn___: aBuilder code: codeNode nested: isNe
 ]
 
 { #category : 'Grail-IR Codegen' }
-FunctionDefAst >> ___emitIRDecoratorApply___: i count: n fns: fnsLeaf leaf: leaf on: aBuilder applicable: applicable [
+FunctionDefAst >> ___emitIRDecoratorApply___: i count: n fns: fnsLeaf base: baseBlock on: aBuilder applicable: applicable [
 	"emitOrderedLocalDecoratorApplicationOn:index:count:lines:: ``((fns at: i)
-	value: { <apply i+1> } value: nil)'', the undecorated function at the base.
+	value: { <apply i+1> } value: nil)'', the undecorated function at the base
+	-- read by baseBlock, the enclosing temp for a local def, the module slot
+	for a module-scope one (emitOrderedLocalDecoratorBaseOn:'s two reads).
 	The inner application is built FIRST so that this call can be positioned
 	at its own decorator afterwards (#1406)."
 
 	| inner |
-	i > n ifTrue: [^ aBuilder var: leaf].
-	inner := self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf leaf: leaf
+	i > n ifTrue: [^ baseBlock value].
+	inner := self ___emitIRDecoratorApply___: i + 1 count: n fns: fnsLeaf base: baseBlock
 		on: aBuilder applicable: applicable.
 	aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
 	^ aBuilder
@@ -1010,7 +1012,11 @@ FunctionDefAst >> ___emitIRDecoratorValue___: deco on: aBuilder [
 	expression decorator is emitted as a value."
 
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___emitIRValueOn___: aBuilder].
-	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [
+	"A late-bound module name (___decoratorNameIsUnboundInModule___:) takes the
+	same module-instance load as a module variable: the text's
+	``(<Mod> ___instance___ ___moduleAttrLoad___: #d)'', NameError on a miss."
+	((self ___decoratorNameIsModuleGlobal___: deco)
+		or: [self ___decoratorNameIsUnboundInModule___: deco]) ifTrue: [
 			^ aBuilder
 				send: #'___moduleAttrLoad___:'
 				to: (aBuilder
@@ -1428,13 +1434,19 @@ FunctionDefAst >> ___emitIRNestedBodyOn___: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
-FunctionDefAst >> ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf [
+FunctionDefAst >> ___emitIRNestedDecoratorsOn___: aBuilder read: readBlock store: storeBlock [
 	"printSmalltalkOn:'s decorator tail for a function-local def.  One
 	decorator: ``name := deco value: { name } value: nil''.  A chain: the
 	ordered one-statement form (emitOrderedLocalDecoratorsOn:) --
 	``name := [:___grailDecoFns___ | ((fns at: 1) value: { ((fns at: 2)
 	value: { name } value: nil) } value: nil)] value: { d1. d2 }'' -- every
-	decorator expression evaluated in source order before any is applied."
+	decorator expression evaluated in source order before any is applied.
+
+	readBlock answers a read of the binding and storeBlock the statement
+	storing its argument there: the enclosing temp for a local def, the module
+	instance's slot for ``global g; @deco def g()'' -- the text's
+	``dynamicInstVarAt:put:'' / ``dynamicInstVarAt:ifAbsent:'' pair, which
+	re-stores the binding after each step exactly as the leaf form does."
 
 	| applicable |
 	applicable := (decorator_list ifNil: [#()]) reject: [:deco |
@@ -1446,20 +1458,20 @@ FunctionDefAst >> ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf [
 		| dv |
 		aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: 1) ifNil: [self]).
 		dv := self ___emitIRDecoratorValue___: applicable first on: aBuilder.
-		aBuilder add: (aBuilder assign: leaf from: (aBuilder
+		aBuilder add: (storeBlock value: (aBuilder
 			send: #'value:value:' to: dv
-			with: { aBuilder arrayOf: { aBuilder var: leaf }. aBuilder nilLit } env: 1)).
+			with: { aBuilder arrayOf: { readBlock value }. aBuilder nilLit } env: 1)).
 		^ self].
 	[
 		| blk vals |
 		blk := aBuilder blockWithArg: #'___grailDecoFns___' do: [:fl |
 			aBuilder add: (self ___emitIRDecoratorApply___: 1 count: applicable size
-				fns: fl leaf: leaf on: aBuilder applicable: applicable)].
+				fns: fl base: readBlock on: aBuilder applicable: applicable)].
 		vals := (1 to: applicable size) collect: [:i |
 			aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
 			self ___emitIRDecoratorValue___: (applicable at: i) on: aBuilder].
 		aBuilder atNode: self.
-		aBuilder add: (aBuilder assign: leaf from: (aBuilder
+		aBuilder add: (storeBlock value: (aBuilder
 			send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0))
 	] value.
 	^ self
@@ -1742,6 +1754,46 @@ FunctionDefAst >> ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwL
 ]
 
 { #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRPreEvaluatedDecoratedStatementOn___: aBuilder [
+	"___printWithPreEvaluatedDecoratorsOn___:'s shape, for a nested def whose
+	decorator READS THE DEF'S OWN NAME (``@g.register def g'', ``@lambda f:
+	null(f) def f'' in test_grammar test_funcdef): every decorator expression
+	is evaluated FIRST, into the argument of a one-argument block, and only
+	then is the function made, bound and decorated --
+
+	    [:___grailPreDeco___ |
+	        g := <the function>.
+	        g := ((___grailPreDeco___ at: 1) value: { g } value: nil) ...
+	    ] value: { <decorator 1>. ... }
+
+	so ``g.register'' reads the binding as it stood before the def (an unbound
+	local raises, as CPython's UnboundLocalError) rather than the new plain
+	function.  The application chain is ___emitIRDecoratorApply___:'s, over the
+	block argument instead of an array built after the bind."
+
+	| leaf applicable blk vals |
+	leaf := aBuilder leafFor: self ___mangledName___ asSymbol.
+	applicable := self ___applicableLocalDecorators___.
+	aBuilder atNode: self.
+	blk := aBuilder blockWithArg: #'___grailPreDeco___' do: [:fl |
+		| fn |
+		fn := self ___emitIRNestedFunctionValueOn___: aBuilder.
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder assign: leaf from: fn).
+		aBuilder add: (aBuilder assign: leaf from: (self ___emitIRDecoratorApply___: 1
+			count: applicable size fns: fl base: [aBuilder var: leaf] on: aBuilder
+			applicable: applicable))].
+	vals := (1 to: applicable size) collect: [:i |
+		aBuilder atNode: ((self ___decoratorNodeFor___: applicable index: i) ifNil: [self]).
+		self ___emitIRDecoratorValue___: (applicable at: i) on: aBuilder].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder
+		send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___emitIRPyCodeExprOn___: aBuilder qualname: aQualname nested: isNested [
 	"emitPyCodeExprOn:qualname:nested: as an IR value node -- the PyCode a
 	generator / coroutine answers for gi_code / cr_code, field for field the
@@ -1843,6 +1895,35 @@ FunctionDefAst >> ___emitIRSignatureSpecOn___: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRSmalltalkForwarderOn___: aBuilder [
+	"generateSmalltalkForwarderSourceOn:argCount:'s body as IR:
+
+	    ___stResult___ := self perform: #'<target>' env: 0 withArguments: { a. b }.
+	    ^ ___stResult___ == nil ifTrue: [None] ifFalse: [___stResult___]
+
+	the result's nil test spelled as the builder's inlined ``ifNil:'', which
+	answers the same object in both arms.  The target selector and the
+	argument count are the text generator's own (smalltalkForwarderTargetSelector:,
+	the forwarded parameters), so the two cannot disagree about what is sent."
+
+	| argLeaves sent |
+	argLeaves := self ___irBuildParamNames___ collect: [:p |
+		aBuilder var: (aBuilder leafFor: p asSymbol)].
+	aBuilder atNode: self.
+	sent := aBuilder
+		send: #'perform:env:withArguments:'
+		to: aBuilder selfNode
+		with: {
+			aBuilder obj: (self smalltalkForwarderTargetSelector: argLeaves size) asSymbol.
+			aBuilder obj: 0.
+			aBuilder arrayOf: argLeaves asArray }
+		env: 0.
+	aBuilder add: (aBuilder return: (aBuilder ifNilValue: sent
+		then: [aBuilder add: (aBuilder globalNamed: #None)]))
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___emitIRStatementOn___: aBuilder [
 	"A nested def as a statement (cut 64): bind the closure to the enclosing
 	local of its name, then apply the decorators as the text does --
@@ -1850,6 +1931,11 @@ FunctionDefAst >> ___emitIRStatementOn___: aBuilder [
 	the one-statement ordered form for a chain."
 
 	| leaf fn |
+	"A decorator that reads the def's own name is evaluated before the def
+	exists -- the text's pre-evaluated wrapper (nestedDef:decoratorReadsOwnName
+	is retired)."
+	(self isModuleScopeNestedDefTarget not and: [self ___needsPreEvaluatedDecorators___])
+		ifTrue: [^ self ___emitIRPreEvaluatedDecoratedStatementOn___: aBuilder].
 	fn := self ___emitIRNestedFunctionValueOn___: aBuilder.
 	"``global f; def f(): ...'' binds the MODULE, not an enclosing temp: there
 	is no leaf to assign, because the parser declared the name in the module
@@ -1857,20 +1943,36 @@ FunctionDefAst >> ___emitIRStatementOn___: aBuilder [
 	-- and the receiver is the shared one, so a def and an assignment to the
 	same global cannot reach different objects.
 
-	Eligibility admits only the UNDECORATED shape here (see
-	___irNestedDefReasonUnguarded___), so there is no decorator tail to apply."
+	A DECORATED one (P1.2, nestedDef:moduleScopeTargetDecorated retired) takes
+	the text's tail too: each step reads the slot back and stores the result,
+	as emitOrderedLocalDecoratorsOn: does for this shape.  The read goes to the
+	same module receiver as the store -- the text reads ``self'', which is the
+	module only for a module-level enclosing def."
 	self isModuleScopeNestedDefTarget ifTrue: [
+		| store |
+		store := [:v |
+			aBuilder
+				send: #dynamicInstVarAt:put:
+				to: (self ___emitIRModuleReceiverOn___: aBuilder)
+				with: { aBuilder obj: self ___mangledName___ asSymbol. v }
+				env: 0].
 		aBuilder atNode: self.
-		aBuilder add: (aBuilder
-			send: #dynamicInstVarAt:put:
-			to: (self ___emitIRModuleReceiverOn___: aBuilder)
-			with: { aBuilder obj: self ___mangledName___ asSymbol. fn }
-			env: 0).
+		aBuilder add: (store value: fn).
+		self ___emitIRNestedDecoratorsOn___: aBuilder
+			read: [aBuilder
+				send: #dynamicInstVarAt:ifAbsent:
+				to: (self ___emitIRModuleReceiverOn___: aBuilder)
+				with: { aBuilder obj: self ___mangledName___ asSymbol.
+					aBuilder inBlockDo: [aBuilder add: aBuilder nilLit] }
+				env: 0]
+			store: store.
 		^ self].
 	leaf := aBuilder leafFor: self ___mangledName___ asSymbol.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: leaf from: fn).
-	self ___emitIRNestedDecoratorsOn___: aBuilder leaf: leaf.
+	self ___emitIRNestedDecoratorsOn___: aBuilder
+		read: [aBuilder var: leaf]
+		store: [:v | aBuilder assign: leaf from: v].
 	^ self
 
 ]
@@ -2665,28 +2767,6 @@ FunctionDefAst >> ___irBodyEligibleWithLocals___: localNames [
 ]
 
 { #category : 'Grail-IR Codegen' }
-FunctionDefAst >> ___irBodyHoldsANestedScope___: node [
-	"Is there a def or a lambda anywhere under node?  Asked only to keep
-	___irNestedDefReason___'s bare-super narrowing conservative: a deeper
-	scope has its own parameter list, so a bare super found by the walk
-	might belong to it rather than to this def, and the walk does not say
-	which."
-
-	node isNil ifTrue: [^ false].
-	node isString ifTrue: [^ false].
-	(node isKindOf: SequenceableCollection) ifTrue: [
-		^ node anySatisfy: [:each | self ___irBodyHoldsANestedScope___: each]].
-	(node isKindOf: AbstractNode) ifFalse: [^ false].
-	((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-		ifTrue: [^ true].
-	node class allInstVarNames doWithIndex: [:nameSym :i |
-		nameSym == #parent ifFalse: [
-			(self ___irBodyHoldsANestedScope___: (node instVarAt: i)) ifTrue: [^ true]]].
-	^ false
-
-]
-
-{ #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irBodyLocalNames___ [
 	"The function's body-local names (Strings): everything the parser recorded in
 	body.variables that is not a parameter OF ANY KIND (the *vararg, keyword-only
@@ -2901,6 +2981,22 @@ FunctionDefAst >> ___irDefaultsReason___ [
 			rcvr := self ___irReceiverParamName___.
 			(localSet select: [:n | n ~= rcvr]) asSet]
 		ifFalse: [Set new].
+	"A METHOD's default may read the RECEIVER'S NAME after all.  The value the
+	call binds is the class-side table's (``___grailClassDefault___:''), which
+	ClassDefAst filled by evaluating the expression where the class statement
+	stands -- for test_descr's ``def __getattr__(self, attr, test=self)'' in a
+	method-local Checker, the ENCLOSING method's self, which is CPython's
+	answer.  The inline expression is only the miss arm, and there both paths
+	read the name the same way, as the receiver (isSelfReference: in the text,
+	___irIsSelfReceiver___ here), so emitting it agrees with the oracle
+	whichever arm runs.  At module level the shape cannot run at all: the
+	class body raises NameError before the method exists.  A REBOUND receiver
+	is not the Smalltalk receiver in either path and keeps the refusal."
+	(self ___irMethodMode___ and: [self ___defaultOwnerClassName___ notNil
+		and: [self ___irSelfReboundName___ isNil]]) ifTrue: [
+			self ___irReceiverParamName___ ifNotNil: [:rcvr |
+				shadowable := shadowable copy.
+				shadowable add: rcvr]].
 	judge := [:d |
 		| reads |
 		(d ___irEligibleValueLocals___: Set new) ifFalse: [^ #'signature:defaultExpr'].
@@ -3308,6 +3404,26 @@ FunctionDefAst >> ___irIneligibilityReason___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___irLambdaBelowHoldsBareSuper___: node [
+	"Is there a zero-argument ``super()'' inside the body of a LAMBDA anywhere
+	under node?  See ___irNestedDefReasonUnguarded___: for why a lambda is the
+	one nested scope whose bare super() this def must refuse."
+
+	node isNil ifTrue: [^ false].
+	node isString ifTrue: [^ false].
+	(node isKindOf: SequenceableCollection) ifTrue: [
+		^ node anySatisfy: [:each | self ___irLambdaBelowHoldsBareSuper___: each]].
+	(node isKindOf: AbstractNode) ifFalse: [^ false].
+	((node isKindOf: LambdaAst) and: [self ___irNestedBodyBareSuperCall___: node body])
+		ifTrue: [^ true].
+	node class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irLambdaBelowHoldsBareSuper___: (node instVarAt: i)) ifTrue: [^ true]]].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irLeafNameFor___: aName [
 	"The Smalltalk leaf name for the Python local aName: the text's transport
 	identifier -- an underscore prefix for the six pseudo-variables, the name
@@ -3461,6 +3577,12 @@ FunctionDefAst >> ___irMethodBodyCoreOn___: aClass install: installBool [
 			also routes a simple-positional ``__init__'' here, as the text does
 			(cut 44; ___irUsesVarargsForm___)."
 			self ___emitIRVarargsPrologueOn___: builder].
+	"A ``@smalltalk'' forwarder has no Python body to build: the arguments are
+	declared above (a forwarder is fixed-arity by construction), and the body
+	is the one forwarding send."
+	(self isSmalltalkForwarder and: [self ___irMethodMode___]) ifTrue: [
+		self ___emitIRSmalltalkForwarderOn___: builder.
+		^ installBool ifTrue: [builder install] ifFalse: [builder]].
 	"A method that REBINDS its receiver carries it in a temp instead; the flag
 	set by ___irMethodBodyOn___:install: has already made every receiver fast
 	path stand down for this build."
@@ -3472,7 +3594,10 @@ FunctionDefAst >> ___irMethodBodyCoreOn___: aClass install: installBool [
 	outside the frame can empty, so no flow proof can speak for it."
 	(self ___irAssignFlowSafe___: self ___irLocalNameSet___)
 		ifTrue: [ | celled |
-			celled := self ___irCellCapturedLocalNames___.
+			celled := self ___irCellCapturedLocalNames___ copy.
+			"...and one a nested def can DELETE (``nonlocal x; del x''), for
+			the same reason: the unbind happens outside this frame's flow."
+			self ___irNestedDeletedLocalNames___ do: [:n | celled add: n].
 			celled isEmpty ifFalse: [builder guardLocals: celled]]
 		ifFalse: [builder guardLocals: self ___irGuardedLocalNames___].
 	"A generator / coroutine body does not run on call: the method answers the
@@ -3632,9 +3757,18 @@ FunctionDefAst >> ___irMethodModeReason___ [
 	___namesEnclosingReceiver___: over-approximates on purpose: it asks whether
 	the body names the receiver anywhere, so its errors are refusals, never
 	wrong answers."
+	"ONLY WHILE A NAME STILL MAPS TO THE RECEIVER.  ClassDefAst clears
+	selfParameterName for such a def when the carried-over name is an
+	enclosing function's local (test_copy's ``def __reduce__(*args):
+	self.fail(...)'' in a method-local class), so the read is a class-cell
+	read in both paths and nothing is left to agree on.  What still refuses is
+	a name that the text maps to the receiver although the def took none --
+	a module-level class's ``def m(*args): return self'', where CPython reads
+	a global."
 	self allParameterNames isEmpty ifTrue: [
-		(self ___namesEnclosingReceiver___: CallAst selfParameterName)
-			ifTrue: [^ #'method:noSelfNamesReceiver'].
+		(CallAst selfParameterName notNil
+			and: [self ___namesEnclosingReceiver___: CallAst selfParameterName])
+				ifTrue: [^ #'method:noSelfNamesReceiver'].
 		"``super()'' with NO declared parameter is CPython's ``super(): no
 		arguments'' RuntimeError arm -- its check is on co_argcount, and there
 		is no argument 0 to take the receiver from.  The IR super shapes (cut
@@ -3664,12 +3798,14 @@ FunctionDefAst >> ___irMethodModeReason___ [
 	(___irSelfReboundName___, ___emitIRSelfTransportOn___:name:), which is the
 	pair generateMethodSourceOn: emits.
 
-	A DELETED one still does.  ``del self'' does not compile on the text path
-	either, so admitting it would put the IR path ahead of its own oracle and
-	leave the flag-off build failing on the same source; the row keeps saying so
-	rather than the board claiming a shape nobody supports."
-	(self deletedNamesInSubtree includes: CallAst selfParameterName)
-		ifTrue: [^ #'method:selfDeleted'].
+	A DELETED one no longer does either (P1.2).  This used to say ``del self''
+	did not compile on the text path; measured, it does -- generateMethodSourceOn:
+	carries a deleted receiver in the same transport temp as a rebound one, and
+	``del self; self'' raises UnboundLocalError, which is CPython's answer.
+	___irSelfReboundName___ already counts a ``del'' as a rebind, so the IR
+	build takes the transport temp too, DeleteAst nils it as it nils any local,
+	and the read after it carries the unbound guard (___irGuardedLocalNames___
+	keeps a deleted parameter)."
 	^ self ___irMethodModeTailReason___
 
 ]
@@ -3679,7 +3815,16 @@ FunctionDefAst >> ___irMethodModeTailReason___ [
 	"The method-mode conditions that do not concern the receiver -- shared by
 	the receiver-bearing shapes and the @staticmethod shape (cut 67)."
 
-	self isSmalltalkForwarder ifTrue: [^ #'method:smalltalkForwarder'].
+	"A ``@smalltalk'' FORWARDER is built too (P1.2): its whole body is one
+	env-0 perform on the receiver, ___emitIRSmalltalkForwarderOn___:, the
+	text's generateSmalltalkForwarderSourceOn:argCount: send for send.  Still
+	refused when that generator would RAISE (a varargs signature, a target
+	selector of the wrong arity -- the text's compile-time error is the answer
+	there, and it comes from the fallback), or when the text's header selector
+	is not the one the IR would install under (a private name, which the text
+	header leaves unmangled)."
+	self isSmalltalkForwarder ifTrue: [
+		self ___irSmalltalkForwarderBuildable___ ifFalse: [^ #'method:smalltalkForwarder']].
 	"A method on the varargs selector (defaults, *args, keyword-only, and
 	``__init__'' always -- compilesAsVarargs) is built by the cuts 40-43
 	prologue in method mode since cut 44: the receiver is the Smalltalk
@@ -3770,6 +3915,11 @@ FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
 		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
 	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ true].
 	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
+	"A name nothing static binds -- a star import, ``globals().update'', a
+	binding made at run time -- is the text's late module-name read
+	(___printDecoratorNameOn___:name:, #1517), which ___emitIRDecoratorValue___:on:
+	spells the same way (P1.2: one cause of nestedDef:decorator)."
+	(self ___decoratorNameIsUnboundInModule___: deco) ifTrue: [^ true].
 	(localNames includes: deco asString) ifTrue: [^ true].
 	^ NameAst isResolvableSymbol: deco asSymbol
 
@@ -3847,14 +3997,15 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	assignment and the unpack all route a module-bound name through; only the
 	binding target differs, and the closure itself is unchanged.
 
-	A DECORATED one still refuses, under its own row.  printSmalltalkOn:
+	A DECORATED one no longer refuses either (P1.2).  printSmalltalkOn:
 	re-stores the module binding for EACH decorator step and reads it back with
-	``dynamicInstVarAt: #f ifAbsent: [nil]'' between them, so the decorator tail
-	is a different emit from the leaf-based one here -- not a harder one, but a
-	separate shape, and none of the corpus's four sites is decorated."
-	self isModuleScopeNestedDefTarget ifTrue: [
-		(decorator_list isNil or: [decorator_list isEmpty])
-			ifFalse: [^ #'nestedDef:moduleScopeTargetDecorated']].
+	``dynamicInstVarAt: #f ifAbsent: [nil]'' between them; the IR tail is the
+	leaf form's own emit, ___emitIRNestedDecoratorsOn___:read:store:, handed
+	that read and store instead of a leaf.  Only the pre-evaluated wrapper (a
+	decorator reading the def's own name) still refuses for this binding
+	target: the wrapper is written against a leaf."
+	(self isModuleScopeNestedDefTarget and: [self ___needsPreEvaluatedDecorators___])
+		ifTrue: [^ #'nestedDef:moduleScopeTargetDecorated'].
 	"...and the name need not be a LOCAL when the def binds the MODULE: the
 	parser declared it in the module body's variables precisely because
 	``global f'' said so, which is what makes ``localNames includes:'' false
@@ -3930,20 +4081,27 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	emits -- so there is nothing left to refuse.  That is the whole of
 	test_super's ``def f(): super()'' (test_obscure_super_errors).
 
-	Narrowed CONSERVATIVELY: a def nested deeper inside this one has its own
-	parameter list and its own answer, and this walk cannot tell whose bare
-	super it found, so the presence of any further def or lambda keeps the
-	refusal."
-	((self ___irNestedBodyBareSuperCall___: body)
-		and: [self ___irBodyHoldsANestedScope___: body])
-			ifTrue: [^ #'nestedDef:super'].
+	NARROWED AGAIN (P1.2), from ``any further def or lambda'' to the one place
+	the answer would really be wrong.  A bare super() in THIS def's own scope
+	takes this def's answer whatever else the body nests: the emit reads
+	CallAst functionBeingCompiled, which is this def for its own statements.
+	One in a DEEPER DEF is that def's to judge and to emit -- it is a statement
+	of this body, so its own ___irNestedDefReason___: runs, and its block emit
+	makes itself functionBeingCompiled.  Only a LAMBDA does neither: it has its
+	own parameter list (``lambda: super()'' is CPython's ``no arguments''
+	arm) but neither a super check nor a functionBeingCompiled of its own, so
+	its bare super() would be built with THIS def's argument 0.  That is the
+	refusal left (___irLambdaBelowHoldsBareSuper___:)."
+	(self ___irLambdaBelowHoldsBareSuper___: body)
+		ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
 		(self ___irNestedDecoratorEligible___: d locals: localNames)
 			ifFalse: [^ #'nestedDef:decorator']].
 	"A decorator that reads the def's own name has to be evaluated before the
 	def binds it; the text emit wraps the def to do that
-	(___printWithPreEvaluatedDecoratorsOn___:), and this emit has no such form."
-	self ___needsPreEvaluatedDecorators___ ifTrue: [^ #'nestedDef:decoratorReadsOwnName'].
+	(___printWithPreEvaluatedDecoratorsOn___:), and so does this one now
+	(___emitIRPreEvaluatedDecoratedStatementOn___:) -- except for a def whose
+	name lands at module scope, whose decorated form refuses above."
 	(args defaults ifNil: [#()]) do: [:d |
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'nestedDef:defaultExpr']].
 	nestedLocals := self ___irNestedLocals___: localNames.
@@ -3957,6 +4115,21 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	CPython raises UnboundLocalError, which is exactly what
 	test_listcomps.test_unbound_local_after_comprehension asserts."
 	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___irNestedDeletedLocalNames___ [
+	"This def's own locals that a ``del'' INSIDE A NESTED DEF can unbind -- a
+	``nonlocal x; del x'' below -- as Symbols.  deletedNamesInSubtree descends
+	into nested scopes; intersected with this def's locals, and
+	over-approximating (a nested def's own local of the same name counts too),
+	which only costs a guard."
+
+	| mine |
+	mine := self ___irLocalNameSet___.
+	^ (self deletedNamesInSubtree select: [:n | mine includes: n asString])
+		collect: [:n | n asSymbol]
 
 ]
 
@@ -4299,6 +4472,29 @@ FunctionDefAst >> ___irSingleMissingArgument___: pname kind: kindString on: aBui
 			aBuilder obj: (Array with: pname asString).
 			aBuilder obj: kindString.
 			aBuilder obj: (self ___qualifiedNameFor___: name) }
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___irSmalltalkForwarderBuildable___ [
+	"Can ___emitIRSmalltalkForwarderOn___: build this ``@smalltalk'' forwarder
+	as the text would?  Only in method mode (a module-level @smalltalk def is
+	not a forwarder in the text either), only when the text's generator does
+	not raise for it -- its signature and arity checks ARE the oracle -- and
+	only when the text's header selector (the unmangled ``name'' / ``name:_:'')
+	is the selector the IR installs under."
+
+	| n header |
+	self ___irMethodMode___ ifFalse: [^ false].
+	n := self ___irBuildParamNames___ size.
+	[self generateSmalltalkForwarderSourceOn: (WriteStream on: String new) argCount: n]
+		on: Error do: [:ex | ^ false].
+	header := WriteStream on: String new.
+	header nextPutAll: name asString.
+	n > 0 ifTrue: [
+		header nextPut: $:.
+		2 to: n do: [:i | header nextPutAll: '_:']].
+	^ header contents = self ___irSelector___ asString
 
 ]
 
@@ -4694,9 +4890,15 @@ FunctionDefAst >> ___needsPreEvaluatedDecorators___ [
 	(CallAst ___compileContext___ at: #'grailPreDecoratedDef' otherwise: nil) == self
 		ifTrue: [^ false].
 	own := self ___mangledName___ asString.
+	"A BARE decorator spelled like the def counts too -- ``h = mark(); @h def
+	h()'', where CPython applies the OLD binding.  The parser records a bare
+	decorator as a Symbol, which the expression walk below never sees, so the
+	local emit bound the new function first and then called it on itself
+	(TypeError, both paths)."
 	^ self ___applicableLocalDecorators___ anySatisfy: [:deco |
-		(deco isKindOf: Symbol) not
-			and: [self ___node: deco readsName: own]]
+		(deco isKindOf: Symbol)
+			ifTrue: [deco asString = own]
+			ifFalse: [self ___node: deco readsName: own]]
 
 ]
 
