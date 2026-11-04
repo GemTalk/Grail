@@ -19132,6 +19132,21 @@ Object >> __dir__ [
 	debang to the same name -- dedup before sorting."
 	transportName := self ___grailClassCallTransportName___.
 	result := result @env0:reject: [:name | (name @env0:= 'new') or: [name @env0:= transportName]].
+	"TYPE'S OWN ATTRIBUTES, for type and every metaclass.  CPython's
+	type.__dict__ holds __name__, __mro__, __bases__ and their kin, and
+	dir(type) lists them.  Grail answers them from Behavior, the kernel
+	protocol the class walk above stops below -- dir(str) must not list
+	__mro__ -- so they were missing exactly where CPython lists them, and
+	rlcompleter, which adds dir(type(cls)) to a class's completions, offered no
+	``CompleteMe.__name__'' (test_rlcompleter test_attr_matches).  Only the
+	names Grail answers: CPython's __basicsize__, __flags__ and their kin have
+	no Grail value, and a listed name every read of refuses would be worse."
+	(self @env0:isBehavior and: [(self == type) or: [self @env0:inheritsFrom: type]]) ifTrue: [
+		| names |
+		names := result @env0:asSet.
+		#('__base__' '__bases__' '__call__' '__module__' '__mro__' '__name__' '__or__'
+			'__prepare__' '__qualname__' '__ror__' '__type_params__') @env0:do: [:name |
+				(names @env0:includes: name) ifFalse: [result := result @env0:copyWith: name]]].
 	"``new'' is a raw Smalltalk class-side selector (Object class>>new)
 	reachable through allSelectorsForEnvironment: on a kernel-backed
 	class's metaclass (e.g. dict's PyDict class) -- it isn't a genuine
