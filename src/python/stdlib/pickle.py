@@ -877,6 +877,23 @@ def _grail_object_reduce_ex(obj, proto):
     return newobj, newargs, state, listitems, dictitems
 
 
+def _grail_default_reduce_ex(obj, proto):
+    """GRAIL: what CPython's object.__reduce_ex__(proto) -- object.__reduce__()
+    at protocol 0 -- answers for an instance of a Python class that does not
+    override __reduce__, which Grail's object asks of this module (Object >>
+    ___grailDefaultReduction___:).  The same answer _Pickler._grail_reduce
+    reaches for such an instance: a weakref proxy forwards to its referent,
+    a Python subclass of a type whose C reduction CPython supplies takes that
+    one, and any other instance object's own."""
+    referent = _proxy_referent(obj)
+    if referent is not None:
+        return referent.__reduce_ex__(proto)
+    reducer = _grail_type_reducer(type(obj))
+    if reducer is not None:
+        return reducer(obj, proto)
+    return _grail_object_reduce_ex(obj, proto)
+
+
 def _reduce_ordered_dict(obj, proto):
     # CPython's OrderedDict.__reduce__.
     getstate = getattr(obj, '__getstate__', None)
