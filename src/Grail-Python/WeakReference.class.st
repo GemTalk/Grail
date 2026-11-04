@@ -82,6 +82,26 @@ WeakReference class >> on: anObject callback: aBlock [
 
 ]
 
+{ #category : 'Grail-Weak-constructors' }
+WeakReference class >> sharedOn: anObject [
+	"The weak reference without a callback that every weakref.ref(anObject)
+	 answers while it lives (SharedWeakReferences).  A special or committed
+	 referent gets a reference of its own: beEphemeron: has no effect on one,
+	 so its reference holds it strongly, and sharing that reference would hold
+	 it for the rest of the session."
+
+	(anObject isSpecial or: [anObject isCommitted]) ifTrue: [^ self on: anObject].
+	^ SharedWeakReferences current referenceTo: anObject ifNonePut: [self on: anObject]
+
+]
+
+{ #category : 'Grail-Weak-accessing' }
+WeakReference class >> sharedReferenceTo: anObject ifNone: aBlock [
+
+	^ SharedWeakReferences current referenceTo: anObject ifNone: aBlock
+
+]
+
 { #category : 'Grail-Weak-private' }
 WeakReference >> _setHolder: aHolder hashCache: aHash [
 

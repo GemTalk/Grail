@@ -460,8 +460,8 @@ class getset_descriptor:
     instances that storage.  Grail keeps an instance's attributes in its own
     storage and computes ``vars()`` from it, so instances never consult this;
     like MemberDescriptorType it exists so the class dict says what CPython's
-    does.  ``__weakref__`` reads None: Grail keeps no per-instance weakref list
-    to answer the first reference from."""
+    does.  ``__weakref__`` reads the weak reference ``weakref.ref`` shares,
+    or None, as the attribute does."""
 
     def __init__(self, name, objclass):
         self.__name__ = name
@@ -475,9 +475,7 @@ class getset_descriptor:
             raise TypeError(
                 f"descriptor {self.__name__!r} for {self.__objclass__.__name__!r} "
                 f"objects doesn't apply to a {type(instance).__name__!r} object")
-        if self.__name__ == '__dict__':
-            return object.__getattribute__(instance, '__dict__')
-        return None
+        return object.__getattribute__(instance, self.__name__)
 
     def __set__(self, instance, value):
         # type's own __dict__ entry has no setter: CPython never replaces a

@@ -27,10 +27,11 @@ _weakref >> ref_class [
 
 { #category : 'Grail-Built-in Functions' }
 _weakref >> ref: anObject [
-	"weakref.ref(obj) — construct a weak reference. Python fast-path attribute
-	 call `_weakref.ref(x)` dispatches here."
+	"weakref.ref(obj) — the shared weak reference (WeakReference class >>
+	 sharedOn:). Python fast-path attribute call `_weakref.ref(x)` dispatches
+	 here."
 
-	^WeakReference @env0:on: anObject
+	^WeakReference @env0:sharedOn: anObject
 
 ]
 
@@ -41,7 +42,7 @@ _weakref >> ref: anObject _: aCallback [
 	 1-arg Smalltalk block so #mourn's `callback value: self` invocation
 	 routes through Python's calling convention."
 
-	aCallback == None ifTrue: [^WeakReference @env0:on: anObject].
+	aCallback == None ifTrue: [^WeakReference @env0:sharedOn: anObject].
 	^WeakReference @env0:on: anObject
 		callback: [:r | aCallback @env0:value: (Array @env0:with: r) value: nil]
 

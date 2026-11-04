@@ -47,9 +47,13 @@ WeakReference class >> ___refuseUnreferenceable___: anObject [
 
 { #category : 'Grail-Weak-Python' }
 WeakReference class >> __new__: anObject [
-	"weakref.ref(obj) — create a weak reference."
+	"weakref.ref(obj) — the weak reference every such call shares while it
+	 lives (WeakReference class >> sharedOn:); a subclass's are never shared,
+	 as CPython reuses only an exact weakref.ref
+	 (Objects/weakrefobject.c:330-354, try_reuse_basic_ref)."
 
 	self ___refuseUnreferenceable___: anObject.
+	self == WeakReference ifTrue: [^ self @env0:sharedOn: anObject].
 	^self @env0:on: anObject
 
 ]
@@ -62,8 +66,8 @@ WeakReference class >> __new__: anObject _: aCallback [
 	 simple `callback value: self` invocation routes through Python's
 	 (positional, kwargs) calling convention."
 
+	aCallback == None ifTrue: [^self __new__: anObject].
 	self ___refuseUnreferenceable___: anObject.
-	aCallback == None ifTrue: [^self @env0:on: anObject].
 	^self @env0:on: anObject
 		callback: [:r | aCallback @env0:value: (Array @env0:with: r) value: nil]
 
