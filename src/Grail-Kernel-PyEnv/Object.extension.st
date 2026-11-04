@@ -10303,6 +10303,20 @@ Object >> ___grailDeclaredMetaclassOrNil___ [
 
 ]
 
+{ #category : 'Grail-Serialization' }
+Object >> ___grailDefaultReduction___: aProtocol [
+	"CPython's object.__reduce_ex__(aProtocol) for this instance of a Python
+	class, as pickle.py computes it (_grail_default_reduce_ex): a weakref
+	proxy's referent's, a Python subclass of a builtin that CPython reduces
+	itself the builtin's, and object's own for the rest."
+
+	| pickle |
+	pickle := (Python @env0:at: #builtins) @env1:instance @env1:___import__: { 'pickle' } kw: nil.
+	^ (pickle @env1:___pyAttrLoad___: #'_grail_default_reduce_ex')
+		@env1:___pyCallValue___: { self. aProtocol } kw: nil
+
+]
+
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___grailDefiningClassOf___: aMethod [
 	"The class aMethod -- a frame's method, or a block of one -- was compiled for,
@@ -12216,6 +12230,20 @@ Object >> ___grailRecordDirectMetaclass___: aMetaclass [
 
 	importlib @env0:___recordDirectMetaclass___: self meta: aMetaclass.
 	^ self
+
+]
+
+{ #category : 'Grail-Serialization' }
+Object >> ___grailReducesAsAPythonInstance___ [
+	"Does object's reduction for this receiver come from CPython's
+	object.__reduce_ex__ -- an instance of a class Python code defined, with
+	no __reduce__ assigned to it?  Grail's own types answer NotImplemented
+	instead, and pickle.py reduces them by type; an assigned __reduce__ (``=
+	None'' refuses pickling) is pickle.py's to call."
+
+	^ (self @env0:isKindOf: Behavior) @env0:not
+		and: [self @env0:class ___grailIsPythonClass___
+		and: [(self @env0:class ___classChainAttrLookup___: #'__reduce__') == nil]]
 
 ]
 
@@ -19689,18 +19717,20 @@ Object >> __ne__: other [
 
 { #category : 'Grail-Serialization' }
 Object >> __reduce__ [
-	"Default pickle reduce.  Answers the NotImplemented singleton to signal
-	pickle.py that this object has NO custom reduce, so it should be pickled
-	generically -- by class reference plus __getstate__ (pickle.py's ``O''
-	tag), rebuilt via object.__new__(cls).  Doing it this way (rather than
-	returning a (reconstructor, args, state) tuple like CPython) avoids having
-	to pickle a reconstructor function by reference: Grail module functions are
-	BoundMethods with no __module__, so they cannot round-trip as globals.
+	"Default pickle reduce.  For an instance of a Python class it is CPython's
+	object.__reduce__, the protocol-0 reduction -- ``(copyreg._reconstructor,
+	(cls, object, None), state)'' -- which test_descr's PicklingTests ask of it
+	directly.  For anything else it answers the NotImplemented singleton:
+	pickle.py and copy.py read that as ``no reduce of its own'' and compute
+	the reduction themselves (pickle.py's _Pickler._grail_reduce), because a
+	Grail builtin's reduction is the type's -- by reference, or a per-type
+	reducer -- and Grail has no C type to answer it.
 
 	A class defining its OWN __reduce__ (e.g. functools.partial) overrides
 	this, returning a real tuple that pickle.py handles via the ``r'' tag.
 	Previously this raised ``Not yet implemented: __reduce__''."
 
+	self ___grailReducesAsAPythonInstance___ ifTrue: [^ self ___grailDefaultReduction___: 0].
 	^ NotImplemented
 
 ]
@@ -19714,8 +19744,19 @@ Object >> __reduce_ex__: protocol [
 	for free -- date/time/datetime/timedelta/timezone all rely on that
 	(``orig.__reduce__() == orig.__reduce_ex__(2)'' in test_pickling).
 	A class that overrides NEITHER still lands on object>>__reduce__
-	below, which reports that it is not implemented."
+	below, which reports that it is not implemented.
 
+	An instance of a Python class that does not override __reduce__ answers
+	CPython's object.__reduce_ex__(protocol) instead, the protocol-2 form
+	(copyreg.__newobj__ ...) from protocol 2 on -- not __reduce__'s
+	protocol-0 one.  The protocol is an int, as CPython's argument clinic
+	takes it: ``__reduce_ex__(None)'' is a TypeError (test_object_reduce)."
+
+	| proto |
+	proto := protocol ___asIndex___.
+	(self ___grailReducesAsAPythonInstance___
+		and: [(self @env0:class @env0:whichClassIncludesSelector: #'__reduce__' environmentId: 1) == Object])
+			ifTrue: [^ self ___grailDefaultReduction___: proto].
 	^ self __reduce__
 
 ]
