@@ -282,6 +282,16 @@ zlib >> _decompressobj: positional kw: kwargs [
 
 ]
 
+{ #category : 'Grail-Private' }
+zlib >> _libzVersion [
+	"The version string of the zlib library actually loaded, zlibVersion().
+	Both ZLIB_RUNTIME_VERSION and ZLIB_VERSION answer it unless Python has
+	assigned them, and neither follows an assignment to the other."
+
+	^ (self _callouts @env0:at: #zlibVersion) @env0:stringFromCharStar
+
+]
+
 { #category : 'Grail-Checksums' }
 zlib >> adler32: data [
 	^ self adler32: data _: 1
@@ -469,9 +479,11 @@ zlib >> initialize [
 zlib >> ZLIB_RUNTIME_VERSION [
 
 	"The version string of the zlib library actually loaded, zlibVersion(),
-	as CPython reports it.  test_zlib reads it at import time."
+	as CPython reports it.  test_zlib reads it at import time.  A Python
+	assignment to the name is what this answers instead (issue #1973)."
 
-	^ (self _callouts @env0:at: #zlibVersion) @env0:stringFromCharStar
+	^ self ___assignedGlobalAt___: #'ZLIB_RUNTIME_VERSION'
+		otherwise: [self _libzVersion]
 
 ]
 
@@ -480,8 +492,11 @@ zlib >> ZLIB_VERSION [
 
 	"The zlib version the module was BUILT against, in CPython.  Grail is
 	built against no zlib header -- it calls the library it finds at run time
-	-- so the two are the same string here."
+	-- so the two are the same string here.  It is the LIBRARY's string, not
+	a read of ZLIB_RUNTIME_VERSION, which a Python assignment can shadow
+	(issue #1973): CPython's ZLIB_VERSION is a compile-time constant."
 
-	^ self ZLIB_RUNTIME_VERSION
+	^ self ___assignedGlobalAt___: #'ZLIB_VERSION'
+		otherwise: [self _libzVersion]
 
 ]

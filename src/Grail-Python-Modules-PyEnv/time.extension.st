@@ -462,7 +462,7 @@ time >> ___tzEnvironmentSpec___ [
 	| osMod env v |
 	osMod := (Python @env0:at: #os otherwise: nil).
 	osMod == nil ifTrue: [^ nil].
-	env := [osMod @env0:___instance___ environ]
+	env := [osMod @env0:___instance___ ___environView___]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	env == nil ifTrue: [^ nil].
 	v := [env @env0:at: 'TZ' otherwise: nil]
