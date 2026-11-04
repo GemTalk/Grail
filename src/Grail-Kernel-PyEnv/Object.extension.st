@@ -8760,6 +8760,11 @@ Object >> ___classDict___ [
 	``new'' keeps it."
 	((self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:not)
 		ifTrue: [d @env0:removeKey: 'new' ifAbsent: [nil]].
+	"Nor is a built-in type's class-call transport, named after the type --
+	``datetime'' in datetime.__dict__ (___grailClassCallTransportName___)."
+	((self @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:not)
+		ifTrue: [self ___grailClassCallTransportName___ ifNotNil: [:transportName |
+			d @env0:removeKey: transportName ifAbsent: [nil]]].
 	"Each DECLARED __slots__ name is a member descriptor in CPython's class
 	dict -- ``<member 'x' of 'S' objects>''.  inspect.getattr_static finds a
 	slot through exactly that entry, and typing's runtime protocols ask it:
@@ -9947,6 +9952,36 @@ Object >> ___grailCellFromReceiverFrames___: aSym [
 				blk @env0:isNil ifFalse: [^ blk]]].
 		i := i @env0:+ 3].
 	^ nil
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailClassCallTransportName___ [
+	"The name dir() and a class's __dict__ would decode from the class-call
+	transport of the built-in type the receiver is, or is an instance or a
+	subclass of -- or nil.  A call of str dispatches ``_str:kw:'' on str's
+	class side, a call of datetime ``_datetime:kw:'', and
+	___grailPythonNameForSelector___: reads each as a method named after its
+	type, where CPython's types have no such attribute (rlcompleter offered
+	``str.str()'', test_rlcompleter test_attr_matches).  Only the NEAREST
+	built-in type's own name: an ancestor's can be a real method of the
+	receiver's -- datetime.datetime.date()."
+
+	| walker name transport |
+	walker := (self @env0:isKindOf: Behavior) ifTrue: [self] ifFalse: [self @env0:class].
+	[walker ~~ nil and: [walker ___grailIsPythonClass___]]
+		@env0:whileTrue: [walker := walker @env0:superclass].
+	walker == nil ifTrue: [^ nil].
+	name := [walker ___pyAttrLoad___: #'__name__']
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	transport := Symbol @env0:_existingWithAll: '_' @env0:, name @env0:asString @env0:, ':kw:'.
+	transport == nil ifTrue: [^ nil].
+	^ (walker @env0:class @env0:whichClassIncludesSelector: transport environmentId: 1) == nil
+		ifTrue: [nil]
+		ifFalse: [name @env0:asString]
 
 ]
 
@@ -18949,7 +18984,7 @@ Object >> __dir__ [
 	Returns an Array of Strings containing all method names for environment 1 (Python).
 	Excludes convenience methods (those starting with ___) that are internal implementation helpers."
 
-	| selectors result myClass strs others walker lacking |
+	| selectors result myClass strs others walker lacking transportName |
 	myClass := self @env0:class.
 	"A DECLARED ``__class__'' SLOT THAT IS UNSET LEAVES dir() WITH THE
 	INSTANCE'S OWN NAMES.  CPython reaches the type through ``getattr(self,
@@ -19070,7 +19105,8 @@ Object >> __dir__ [
 	"CPython dir() returns unique names; a simple-positional def can yield BOTH
 	a fixed-arity selector and a ``_name:kw:'' keyword companion, which now
 	debang to the same name -- dedup before sorting."
-	result := result @env0:reject: [:name | name @env0:= 'new'].
+	transportName := self ___grailClassCallTransportName___.
+	result := result @env0:reject: [:name | (name @env0:= 'new') or: [name @env0:= transportName]].
 	"``new'' is a raw Smalltalk class-side selector (Object class>>new)
 	reachable through allSelectorsForEnvironment: on a kernel-backed
 	class's metaclass (e.g. dict's PyDict class) -- it isn't a genuine
