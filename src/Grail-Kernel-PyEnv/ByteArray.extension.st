@@ -2437,8 +2437,9 @@ ByteArray >> __rmod__: other [
 
 ]
 
-{ #category : 'Grail-Sequence Protocol' }
+{ #category : 'Grail-Protocol Refusal' }
 ByteArray >> __setitem__: index _: value [
+	<grailProtocolRefusal>
 	"bytes is immutable - raise TypeError"
 	TypeError ___signal___: '''bytes'' object does not support item assignment'
 
