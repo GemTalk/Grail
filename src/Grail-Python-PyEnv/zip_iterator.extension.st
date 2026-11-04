@@ -1,6 +1,21 @@
 Extension { #name : 'zip_iterator' }
 
 { #category : 'Grail-Instance Creation' }
+zip_iterator class >> ___construct___: positional kw: kwargs [
+	"An instance of the RECEIVER class -- so ``class Z(zip)'' builds a Z --
+	from zip's iterables, each iter()-ed now, and its ``strict'' keyword
+	(Python/bltinmodule.c:3094-3158, zip_new)."
+
+	| namespace iterators |
+	namespace := builtins @env0:___instance___.
+	iterators := Array @env0:new: positional @env0:size.
+	1 @env0:to: positional @env0:size do: [:i |
+		iterators @env0:at: i put: (namespace ___pyIter___: (positional @env0:at: i))].
+	^ self ___on: iterators strict: (namespace ___strictKeyword___: kwargs for: 'zip')
+
+]
+
+{ #category : 'Grail-Instance Creation' }
 zip_iterator class >> ___on: anArrayOfIterators [
 	^ self ___on: anArrayOfIterators strict: false
 
@@ -12,6 +27,57 @@ zip_iterator class >> ___on: anArrayOfIterators strict: aBoolean [
 	instance := self ___new___.
 	instance ___sources: anArrayOfIterators strict: aBoolean.
 	^ instance
+
+]
+
+{ #category : 'Grail-Introspection' }
+zip_iterator class >> __name__ [
+	^ self @env0:== zip_iterator
+		ifTrue: ['zip']
+		ifFalse: [super __name__]
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+zip_iterator class >> __new__ [
+	"The arities a class call dispatches by count (Object class >>
+	value:value:), which would otherwise reach object's __new__:; more
+	arguments go to _new:kw:."
+
+	^ self ___construct___: #() kw: nil
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+zip_iterator class >> __new__: anIterable [
+	^ self ___construct___: { anIterable } kw: nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+zip_iterator class >> __qualname__ [
+	^ self @env0:== zip_iterator
+		ifTrue: ['zip']
+		ifFalse: [super __qualname__]
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+zip_iterator class >> _new: positional kw: kwargs [
+	"A call of the class itself -- ``z = zip; z(xs, ys)'' -- with any other
+	arity or with keywords (Object class >> value:value:)."
+
+	^ self ___construct___: positional kw: kwargs
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+zip_iterator >> ___new__: positional kw: kwargs [
+	"A subclass's call: ___allocateInstance___:kw: finds this varargs
+	__new__ on the instance side and sends it to the CLASS, as a Python
+	``def __new__(cls, ...)'' compiles."
+
+	^ self ___construct___: positional kw: kwargs
 
 ]
 

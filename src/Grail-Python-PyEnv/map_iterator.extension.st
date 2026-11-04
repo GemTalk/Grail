@@ -1,6 +1,25 @@
 Extension { #name : 'map_iterator' }
 
 { #category : 'Grail-Instance Creation' }
+map_iterator class >> ___construct___: positional kw: kwargs [
+	"An instance of the RECEIVER class -- so ``class M(map)'' builds an M --
+	from map's arguments: a function, one or more iterables, and 3.14's
+	``strict'' keyword (Python/bltinmodule.c:1366-1420, map_new).  Each
+	iterable is iter()-ed now, so a non-iterable fails at the call."
+
+	| namespace iterators isStrict |
+	namespace := builtins @env0:___instance___.
+	isStrict := namespace ___strictKeyword___: kwargs for: 'map'.
+	positional @env0:size @env0:< 2 ifTrue: [
+		^ TypeError ___signal___: 'map() must have at least two arguments.'].
+	iterators := Array @env0:new: positional @env0:size @env0:- 1.
+	2 @env0:to: positional @env0:size do: [:i |
+		iterators @env0:at: i @env0:- 1 put: (namespace ___pyIter___: (positional @env0:at: i))].
+	^ self ___on: (positional @env0:at: 1) sources: iterators strict: isStrict
+
+]
+
+{ #category : 'Grail-Instance Creation' }
 map_iterator class >> ___on: aFunction sources: anArrayOfIterators [
 	^ self ___on: aFunction sources: anArrayOfIterators strict: false
 
@@ -15,11 +34,62 @@ map_iterator class >> ___on: aFunction sources: anArrayOfIterators strict: aBool
 
 ]
 
+{ #category : 'Grail-Introspection' }
+map_iterator class >> __name__ [
+	^ self @env0:== map_iterator
+		ifTrue: ['map']
+		ifFalse: [super __name__]
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+map_iterator class >> __new__ [
+	"The arities a class call dispatches by count (Object class >>
+	value:value:), which would otherwise reach object's __new__:; more
+	arguments go to _new:kw:."
+
+	^ self ___construct___: #() kw: nil
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+map_iterator class >> __new__: aFunction [
+	^ self ___construct___: { aFunction } kw: nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+map_iterator class >> __qualname__ [
+	^ self @env0:== map_iterator
+		ifTrue: ['map']
+		ifFalse: [super __qualname__]
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+map_iterator class >> _new: positional kw: kwargs [
+	"A call of the class itself -- ``m = map; m(f, xs)'' -- with any other
+	arity or with keywords (Object class >> value:value:)."
+
+	^ self ___construct___: positional kw: kwargs
+
+]
+
 { #category : 'Grail-Private' }
 map_iterator >> ___func: aFunction sources: anArrayOfIterators strict: aBoolean [
 	func := aFunction.
 	sources := anArrayOfIterators.
 	strict := aBoolean
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+map_iterator >> ___new__: positional kw: kwargs [
+	"A subclass's call: ___allocateInstance___:kw: finds this varargs
+	__new__ on the instance side and sends it to the CLASS, as a Python
+	``def __new__(cls, ...)'' compiles."
+
+	^ self ___construct___: positional kw: kwargs
 
 ]
 
