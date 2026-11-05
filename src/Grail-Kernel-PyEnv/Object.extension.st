@@ -4008,8 +4008,14 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 			ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 		tbl @env0:at: self put: ns.
 		^ ns].
+	"Only an AttributeError means the metaclass has no __prepare__.  Anything
+	else reading it raises -- a descriptor's own error -- is the class
+	statement's, as PyObject_GetOptionalAttr lets it through
+	(Python/bltinmodule.c:183).  Every exception used to read as absent, so a
+	__prepare__ that failed was quietly not called (test_metaclass's
+	FailDescr)."
 	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
 	"type's own __prepare__ is not one the metaclass SUPPLIES.  Every metaclass
 	inherits it, ABCMeta included, so treating it as supplied would hand every
 	class with a Python metaclass a namespace -- where one that overrides
