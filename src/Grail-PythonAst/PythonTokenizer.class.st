@@ -722,6 +722,20 @@ PythonTokenizer >> ___continueLine___ [
 
 ]
 
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___detectedLine___ [
+	"The line CPython's lexer names when it meets the end of what it is
+	reading: at the end of input, the last line, whose newline ends the
+	source -- ``z = '''\n'' is ``detected at line 1'' (test_fstring
+	test_not_closing_quotes's source, seven lines, at line 7).  The counter
+	here has already moved past that newline, onto a line that is not there."
+
+	^ (self atEnd and: [sourceSize > 0 and: [(source at: sourceSize) == Lf]])
+		ifTrue: [line - 1]
+		ifFalse: [line]
+
+]
+
 { #category : 'Grail-private' }
 PythonTokenizer >> ___dotStartsNumberTail___ [
 	"After digits and a dot, decide whether the identifier-looking char that
@@ -1081,7 +1095,7 @@ PythonTokenizer >> ___unterminatedString___: isTriple from: aStart [
 
 	^ PythonParser ___signalLexical___: SyntaxError
 		message: 'unterminated ' , (isTriple ifTrue: ['triple-quoted '] ifFalse: ['']) ,
-			(self ___literalKindAt___: aStart) , ' literal (detected at line ' , line printString , ')'
+			(self ___literalKindAt___: aStart) , ' literal (detected at line ' , self ___detectedLine___ printString , ')'
 		in: source from: aStart to: nil
 
 ]
