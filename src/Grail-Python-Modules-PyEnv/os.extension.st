@@ -486,6 +486,34 @@ os >> ___cwdBytes___ [
 
 ]
 
+{ #category : 'Grail-Private' }
+os >> ___environView___ [
+	"The live read-through view of this gem's environment that os.environ
+	answers (see environ), and that C-getenv readers use directly.
+
+	This used to answer a bare KeyValueDictionary that was created empty
+	at module-init and NEVER populated: the docstring promised a
+	read-through that no code implemented, so ``os.environ.get('HOME')''
+	answered None while ``os.getenv('HOME')'' answered the real value.
+	Anything reading configuration the documented way (Flask's
+	``FLASK_DEBUG'' / ``FLASK_SKIP_DOTENV'', Django's ``DJANGO_SETTINGS_MODULE'')
+	silently saw an unset variable.
+
+	Session-local, per Concurrency.md: the environment belongs to this gem
+	process, so the view must not live anywhere a commit could carry it."
+
+	| temps env |
+	temps := SessionTemps @env0:current.
+	env := temps @env0:at: #'___GrailOsEnviron___' ifAbsent: [nil].
+	env == nil ifTrue: [
+		env := os_Environ @env0:new.
+		env ___seedKnownNames___.
+		temps @env0:at: #'___GrailOsEnviron___' put: env.
+	].
+	^ env
+
+]
+
 { #category : 'Grail-File and Directory Operations' }
 os >> ___errnoOfLibc: aName onPath: path [
 	"When reading the filesystem back cannot say why a removal failed --
@@ -2232,28 +2260,14 @@ os >> cpu_count [
 
 { #category : 'Grail-Constants' }
 os >> environ [
-	"os.environ — a live read-through view of this gem's environment.
+	"os.environ — a live read-through view of this gem's environment (see
+	___environView___), unless Python has assigned the name: the assigned
+	object is then what this answers, as for every reader of a module
+	attribute in CPython (issue #1973).  Readers that stand for C getenv --
+	time's TZ, sys.breakpointhook's PYTHONBREAKPOINT -- read the view itself,
+	since CPython's do not consult the attribute."
 
-	This used to answer a bare KeyValueDictionary that was created empty
-	at module-init and NEVER populated: the docstring promised a
-	read-through that no code implemented, so ``os.environ.get('HOME')''
-	answered None while ``os.getenv('HOME')'' answered the real value.
-	Anything reading configuration the documented way (Flask's
-	``FLASK_DEBUG'' / ``FLASK_SKIP_DOTENV'', Django's ``DJANGO_SETTINGS_MODULE'')
-	silently saw an unset variable.
-
-	Session-local, per Concurrency.md: the environment belongs to this gem
-	process, so the view must not live anywhere a commit could carry it."
-
-	| temps env |
-	temps := SessionTemps @env0:current.
-	env := temps @env0:at: #'___GrailOsEnviron___' ifAbsent: [nil].
-	env == nil ifTrue: [
-		env := os_Environ @env0:new.
-		env ___seedKnownNames___.
-		temps @env0:at: #'___GrailOsEnviron___' put: env.
-	].
-	^ env
+	^ self ___assignedGlobalAt___: #environ otherwise: [self ___environView___]
 
 ]
 

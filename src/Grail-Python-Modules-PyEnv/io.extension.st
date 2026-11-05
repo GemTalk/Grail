@@ -128,31 +128,36 @@ io >> _text_encoding: positional kw: kwargs [
 
 { #category : 'Grail-Type Accessors' }
 io >> BufferedIOBase [
-	^ self ___pyioClass___: #'BufferedIOBase'
+	^ self ___assignedGlobalAt___: #'BufferedIOBase'
+		otherwise: [self ___pyioClass___: #'BufferedIOBase']
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 io >> BufferedRandom [
-	^ self ___pyioClass___: #'BufferedRandom'
+	^ self ___assignedGlobalAt___: #'BufferedRandom'
+		otherwise: [self ___pyioClass___: #'BufferedRandom']
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 io >> BufferedReader [
-	^ self ___pyioClass___: #'BufferedReader'
+	^ self ___assignedGlobalAt___: #'BufferedReader'
+		otherwise: [self ___pyioClass___: #'BufferedReader']
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 io >> BufferedRWPair [
-	^ self ___pyioClass___: #'BufferedRWPair'
+	^ self ___assignedGlobalAt___: #'BufferedRWPair'
+		otherwise: [self ___pyioClass___: #'BufferedRWPair']
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 io >> BufferedWriter [
-	^ self ___pyioClass___: #'BufferedWriter'
+	^ self ___assignedGlobalAt___: #'BufferedWriter'
+		otherwise: [self ___pyioClass___: #'BufferedWriter']
 
 ]
 
@@ -161,7 +166,8 @@ io >> IncrementalNewlineDecoder [
 	"The universal-newlines decoder TextIOWrapper reads through, public in
 	CPython's io and imported from there by doctest."
 
-	^ self ___pyioClass___: #'IncrementalNewlineDecoder'
+	^ self ___assignedGlobalAt___: #'IncrementalNewlineDecoder'
+		otherwise: [self ___pyioClass___: #'IncrementalNewlineDecoder']
 
 ]
 
@@ -192,7 +198,8 @@ io >> initialize [
 
 { #category : 'Grail-Type Accessors' }
 io >> IOBase [
-	^ self ___pyioClass___: #'IOBase'
+	^ self ___assignedGlobalAt___: #'IOBase'
+		otherwise: [self ___pyioClass___: #'IOBase']
 
 ]
 
@@ -223,7 +230,8 @@ io >> open: file _: mode [
 
 { #category : 'Grail-Type Accessors' }
 io >> RawIOBase [
-	^ self ___pyioClass___: #'RawIOBase'
+	^ self ___assignedGlobalAt___: #'RawIOBase'
+		otherwise: [self ___pyioClass___: #'RawIOBase']
 
 ]
 
@@ -232,14 +240,16 @@ io >> Reader [
 	"CPython 3.14's io.Reader, defined in Lib/io.py and so in neither _io nor
 	_pyio: src/python/stdlib/_grail_io.py holds it."
 
-	^ ((importlib @env0:___instance___) @env1:import_module: '_grail_io')
-		@env1:___pyAttrLoad___: #'Reader'
+	^ self ___assignedGlobalAt___: #'Reader' otherwise: [
+		((importlib @env0:___instance___) @env1:import_module: '_grail_io')
+			@env1:___pyAttrLoad___: #'Reader']
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 io >> TextIOBase [
-	^ self ___pyioClass___: #'TextIOBase'
+	^ self ___assignedGlobalAt___: #'TextIOBase'
+		otherwise: [self ___pyioClass___: #'TextIOBase']
 
 ]
 
@@ -247,7 +257,8 @@ io >> TextIOBase [
 io >> Writer [
 	"io.Writer; see io >> Reader."
 
-	^ ((importlib @env0:___instance___) @env1:import_module: '_grail_io')
-		@env1:___pyAttrLoad___: #'Writer'
+	^ self ___assignedGlobalAt___: #'Writer' otherwise: [
+		((importlib @env0:___instance___) @env1:import_module: '_grail_io')
+			@env1:___pyAttrLoad___: #'Writer']
 
 ]

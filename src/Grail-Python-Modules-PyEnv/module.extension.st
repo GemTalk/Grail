@@ -209,6 +209,29 @@ module class >> new [
 ]
 
 { #category : 'Grail-Attribute Access' }
+module >> ___assignedGlobalAt___: aSym otherwise: aBlock [
+	"The value a Python assignment stored over aSym, else ``aBlock value'': for a
+	data accessor that COMPUTES its value rather than reading a dictionary entry
+	(datetime >> date, gemstone >> needs_commit, copyreg >> dispatch_table, ...).
+
+	``m.x = v'' stores a dynamic instVar, which Python's read probes before the
+	method (___globalAt___:otherwise:), so Python read back what it wrote while
+	the accessor, performed from Smalltalk, kept computing its own value (issue
+	#1973).  CPython has no second reader: an assignment to a module attribute
+	is what every reader of the attribute sees -- as an assignment shadows a
+	module __getattr__.
+
+	Unlike ___dataGlobalAt___:otherwise: no entry is consulted: such a name has
+	none, and a computed value must not be answered from a stale one."
+
+	| val |
+	val := self @env0:dynamicInstVarAt: aSym.
+	val == nil ifFalse: [^ val].
+	^ aBlock @env0:value
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 module >> ___bindsGlobal___: aSym [
 	"Does a bare-name read of aSym find it in this module, before builtins?
 	___globalAt___:otherwise:'s answer, without its side effect: that read

@@ -10,52 +10,54 @@ datetime >> __all__ [
 
 { #category : 'Grail-Type Accessors' }
 datetime >> date [
-	^ PyDate
+	^ self ___assignedGlobalAt___: #date otherwise: [PyDate]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> datetime [
 	"Resolves to the PyDateTime class so Python `datetime.datetime`
-	hands back a callable class."
+	hands back a callable class.  A Python assignment to the name is what this
+	answers instead, as it is for every type accessor here (issue #1973): see
+	module >> ___assignedGlobalAt___:otherwise:."
 
-	^ PyDateTime
+	^ self ___assignedGlobalAt___: #datetime otherwise: [PyDateTime]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> MAXYEAR [
-	^ 9999
+	^ self ___assignedGlobalAt___: #MAXYEAR otherwise: [9999]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> MINYEAR [
-	^ 1
+	^ self ___assignedGlobalAt___: #MINYEAR otherwise: [1]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> time [
-	^ PyTime
+	^ self ___assignedGlobalAt___: #time otherwise: [PyTime]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> timedelta [
-	^ PyTimedelta
+	^ self ___assignedGlobalAt___: #timedelta otherwise: [PyTimedelta]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> timezone [
-	^ PyTimezone
+	^ self ___assignedGlobalAt___: #timezone otherwise: [PyTimezone]
 
 ]
 
 { #category : 'Grail-Type Accessors' }
 datetime >> tzinfo [
-	^ PyTzinfo
+	^ self ___assignedGlobalAt___: #tzinfo otherwise: [PyTzinfo]
 
 ]
 
@@ -63,6 +65,6 @@ datetime >> tzinfo [
 datetime >> UTC [
 	"datetime.UTC — alias for timezone.utc (added in CPython 3.11)."
 
-	^ PyTimezone utc
+	^ self ___assignedGlobalAt___: #UTC otherwise: [PyTimezone utc]
 
 ]
