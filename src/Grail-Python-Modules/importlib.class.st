@@ -10045,7 +10045,7 @@ importlib class >> ___textSourceFor___: aMethod in: aClass selector: aSelector [
 	UnboundMethod).  A text-compiled method's sourceString is that.  An
 	IR-built method's sourceString is its PYTHON (native line mapping), so the
 	class-build code stores the text the IR replaced in a class-side
-	___irTextSources___ table (ClassDefAst>>emitIRTextSourcesOn:pairs:onStream:):
+	___irTextSources___ table (ClassDefAst>>emitIRTextSourcesOn:pairs:emitter:):
 	the same string the text path would have compiled, so every consumer
 	behaves exactly as it did.  nil when neither is available."
 
