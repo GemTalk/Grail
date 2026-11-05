@@ -874,9 +874,10 @@ sys >> _getframe: depth [
 	frame := BaseException @env0:___liveFrameChain___.
 	"Drop this implementation's own frames.  Both _getframe and _getframe: decode
 	to the Python name ``_getframe'', so this skips either arrival route, and what
-	is left innermost is the caller -- CPython's depth 0."
+	is left innermost is the caller -- CPython's depth 0.  _getframemodulename,
+	which asks here for its caller's frame, is skipped the same way."
 	[(frame @env0:~~ nil) and: [(frame @env0:~~ None) and: [
-		(self @env1:___frameName___: frame) @env0:= '_getframe']]]
+		#('_getframe' '_getframemodulename') @env0:includes: (self @env1:___frameName___: frame)]]]
 		whileTrue: [frame := frame @env0:dynamicInstVarAt: #'f_back'].
 	n := depth.
 	[(n @env0:notNil) and: [n @env0:> 0]] whileTrue: [
@@ -887,6 +888,41 @@ sys >> _getframe: depth [
 	((frame @env0:== nil) or: [frame @env0:== None]) ifTrue: [
 		^ ValueError ___signal___: 'call stack is not deep enough'].
 	^ frame
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+sys >> _getframemodulename [
+	"_getframemodulename() -> the module of the CALLER's frame (depth 0)."
+
+	^ self @env1:_getframemodulename: 0
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+sys >> _getframemodulename: depth [
+	"_getframemodulename(depth) -> the name of the module of the frame ``depth''
+	levels above the caller, or None when the stack is not that deep
+	(Python/sysmodule.c:2597-2617).  CPython asks the frame's function for its
+	__module__; a Grail frame knows its globals, whose __name__ that is, and
+	which is what test_sys's test_getframemodulename compares it with.  There
+	was no such function, and typing reads it to name the module a TypeVar is
+	made in."
+
+	| frame globals |
+	frame := [self @env1:_getframe: depth]
+		@env0:on: ValueError
+		do: [:ex | ex @env0:return: nil].
+	frame isNil ifTrue: [^ None].
+	"A frame with no globals to read, or globals with no __name__ -- code
+	exec'd in ``{}'' -- has no module to name, which is None, as CPython's
+	PyFunction_GetModule answers it; typing's _caller then takes its default
+	(test_typing NewTypeTests.test_missing__name__)."
+	globals := frame @env1:f_globals.
+	(globals isNil or: [globals == None]) ifTrue: [^ None].
+	^ [globals @env1:__getitem__: '__name__']
+		@env0:on: KeyError
+		do: [:ex | ex @env0:return: None]
 
 ]
 
