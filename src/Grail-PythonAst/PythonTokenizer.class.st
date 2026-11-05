@@ -2276,6 +2276,18 @@ PythonTokenizer >> tokenizeString [
 							fieldStarts isNil ifTrue: [fieldStarts := OrderedCollection new].
 							fieldStarts add: { str size + 2. position + 1. line }.
 							fields add: (self ___fieldFrameAt___: position)]].
+				"A ``}'' in the literal text is a doubled one, the literal ``}'', or
+				CPython's lexer error, raised where the brace stands
+				(Parser/lexer/lexer.c, ``single '}' is not allowed''): the parser
+				reported it at the start of the whole literal."
+				(isFString and: [char == $}]) ifTrue: [
+					(self peekAt: 1) == $}
+						ifTrue: [str add: self advance]
+						ifFalse: [
+							^ PythonParser ___signalLexical___: SyntaxError
+								message: (isTString ifTrue: ['t-string: '] ifFalse: ['f-string: ']) ,
+									'single ''}'' is not allowed'
+								in: source from: position to: nil]].
 				str add: self advance.
 			]]].
 		].
