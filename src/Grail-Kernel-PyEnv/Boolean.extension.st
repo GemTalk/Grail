@@ -504,6 +504,17 @@ Boolean >> __ge__: other [
 
 ]
 
+{ #category : 'Grail-Integer Methods' }
+Boolean >> __getnewargs__ [
+	"bool inherits int's __getnewargs__, so it answers the int it is: (1,) for
+	True, as CPython's does."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self __int__ }
+
+]
+
 { #category : 'Grail-Comparison' }
 Boolean >> __gt__: other [
 	"Greater than comparison."
