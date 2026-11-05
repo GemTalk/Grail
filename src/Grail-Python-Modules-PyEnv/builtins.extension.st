@@ -787,6 +787,26 @@ builtins >> ___builtinsOverrideIn___: globalsDict [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+builtins >> ___callSelector___: aSelector isOwnIn: aClass [
+	"Does aClass answer aSelector with a call of its own?  Not when the method
+	is PythonInstance's forwarder or object's raiser, which every object
+	inherits, nor when it exists only to refuse the call: classmethod's
+	(<grailProtocolRefusal>), which raises CPython's ``'classmethod' object is
+	not callable'' -- CPython gave staticmethod a tp_call in 3.10 and left
+	classmethod without one (Objects/funcobject.c:1699, cm_type's tp_call 0),
+	so ``callable(classmethod(f))'' is False."
+
+	| owner method |
+	owner := aClass @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	(owner == nil or: [owner == PythonInstance or: [owner == object]]) ifTrue: [^ false].
+	method := owner @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
+	^ method @env0:isNil
+		or: [(method @env0:pragmas @env0:anySatisfy: [:pragma |
+			pragma @env0:keyword == #grailProtocolRefusal]) @env0:not]
+
+]
+
 { #category : 'Grail-Format Spec Engine' }
 builtins >> ___checkDuplicateGrouping___: spec at: i first: firstChar [
 	"A SECOND grouping char right after the first is its own diagnosis, not
@@ -1111,16 +1131,8 @@ builtins >> ___definesOwnCallProtocol___: anObject [
 	the class declares none), and object's ``___pyCallValue___:kw:''
 	exists only to raise ``not callable''."
 
-	| cls owner |
-	cls := anObject @env0:class.
-	owner := cls @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
-	(owner @env0:~~ nil
-		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]])
-		ifTrue: [^ true].
-	owner := cls
-		@env0:whichClassIncludesSelector: #'___pyCallValue___:kw:' environmentId: 1.
-	^ owner @env0:~~ nil
-		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]]
+	^ (self ___callSelector___: #'value:value:' isOwnIn: anObject @env0:class)
+		or: [self ___callSelector___: #'___pyCallValue___:kw:' isOwnIn: anObject @env0:class]
 
 ]
 

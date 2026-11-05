@@ -99,8 +99,9 @@ PyClassMethod >> ___new__: positional kw: keywords [
 
 ]
 
-{ #category : 'Grail-Callable' }
+{ #category : 'Grail-Protocol Refusal' }
 PyClassMethod >> ___pyCallValue___: positional kw: kwargs [
+	<grailProtocolRefusal>
 	"A classmethod object is NOT callable.  CPython made STATICMETHOD callable in
 	3.10 (bpo-43682) and deliberately left classmethod alone, because a
 	classmethod has nothing to bind its first argument to until a class supplies
@@ -243,8 +244,9 @@ PyClassMethod >> __wrapped__ [
 
 ]
 
-{ #category : 'Grail-Callable' }
+{ #category : 'Grail-Protocol Refusal' }
 PyClassMethod >> value: positional value: kwargs [
+	<grailProtocolRefusal>
 	"The other call entry point, refusing for the same reason -- both have to,
 	or which one a caller happens to reach decides whether the refusal is
 	catchable."
