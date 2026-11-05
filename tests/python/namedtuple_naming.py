@@ -68,21 +68,16 @@ r['requalified_qualname'] = P2.__qualname__
 r['requalified_name_unchanged'] = P2.__name__
 
 # --- __module__ -------------------------------------------------------------------
-# CPython defaults it to the CALLER's module and, when it cannot work that out,
-# deliberately leaves it alone rather than guessing.  Grail has no caller-frame
-# access, so only the second branch is available.
+# CPython defaults it to the CALLER's module (sys._getframemodulename(1), else
+# the caller frame's globals) and, when it cannot work that out, leaves it
+# alone rather than guessing.  Grail reads the caller's frame too, so a
+# namedtuple belongs to the module that made it -- which is also where pickle
+# looks it up by name, and why the round-trips above pass.  It used to be None,
+# a gap recorded here.
 
 r['module_default'] = repr(T.__module__)
+r['module_is_the_callers'] = repr(T.__module__ == __name__)
 
 # An explicit module= still wins, as upstream.
 M = namedtuple('M', 'a', module='some.where')
 r['module_explicit'] = M.__module__
-
-# KNOWN GAP, recorded rather than endorsed: CPython would report the module the
-# factory was CALLED from, and Grail reports None.  Clearing it is what makes
-# pickling work -- pickle trusts a string __module__, and the inherited
-# ``collections`` was never right, so it looked for ``collections.T``.  With no
-# string there, pickle falls back to its own documented whichmodule() scan and
-# finds where the class is actually bound, which is why the round-trips above
-# pass.
-r['module_is_a_known_gap'] = repr(T.__module__ is None)

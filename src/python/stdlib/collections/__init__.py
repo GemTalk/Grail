@@ -1090,20 +1090,25 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
     _NT.__name__ = typename
     _NT.__qualname__ = typename
 
-    # CPython defaults __module__ to the CALLER's module
-    # (``_sys._getframe(1).f_globals['__name__']``) and, when it cannot work
-    # that out, deliberately leaves __module__ alone rather than guessing.
-    # Grail has no caller-frame access at all -- there is no sys._getframe, and
-    # GemStone refuses frame inspection on the running process -- so the second
-    # branch is the only one available here.
+    # The CALLER's module, as CPython names it (Lib/collections/__init__.py
+    # :518-531): sys._getframemodulename(1), else the caller frame's
+    # f_globals['__name__'], and an explicit ``module='' wins.  Grail's sys
+    # answers both now, so a namedtuple belongs to the module that made it and
+    # pickle finds it there by name; it used to be None everywhere, which said
+    # "unknown" of every namedtuple.
     #
-    # Leaving it alone would mean inheriting ``collections'' from the class
-    # statement above, which is never right and is worse than nothing: pickle
-    # trusts a string __module__ and would look for ``collections.T''.  Clearing
-    # it instead hands the question to pickle's own documented fallback,
-    # whichmodule(), which scans sys.modules for where the class is actually
-    # bound -- so a namedtuple built at module scope pickles, which none did
-    # before.  An explicit ``module='' argument still wins, as upstream.
+    # When neither can be read, __module__ is cleared rather than left as the
+    # class statement's ``collections'': pickle trusts a string __module__ and
+    # would look for ``collections.T'', where None hands the question to
+    # whichmodule(), which scans sys.modules for where the class is bound.
+    if module is None:
+        try:
+            module = _sys._getframemodulename(1) or '__main__'
+        except AttributeError:
+            try:
+                module = _sys._getframe(1).f_globals.get('__name__', '__main__')
+            except (AttributeError, ValueError):
+                pass
     _NT.__module__ = module
     return _NT
 
