@@ -157,6 +157,18 @@ Interval >> ___refuseReadOnlyAttr___: aName [
 
 ]
 
+{ #category : 'Grail-Protocol Refusal' }
+Interval >> __add__: other [
+	<grailProtocolRefusal>
+	"range has no concatenation: its type fills neither sq_concat nor nb_add
+	(Objects/rangeobject.c:674, 749-751), so ``range(2) + x'' is x's __radd__
+	or CPython's TypeError, and a range has no __add__.  Inherited from
+	SequenceableCollection, the method answered for hasattr() and dir()."
+
+	^ self ___binOpFallback___: other op: '+' reflected: #'__radd__:'
+
+]
+
 { #category : 'Grail-Sequence Protocol' }
 Interval >> __bool__ [
 	"Test if range is non-empty"
@@ -289,6 +301,18 @@ Interval >> __len__ [
 
 ]
 
+{ #category : 'Grail-Protocol Refusal' }
+Interval >> __mul__: aCount [
+	<grailProtocolRefusal>
+	"range has no repetition: its type fills neither sq_repeat nor nb_multiply
+	(Objects/rangeobject.c:675, 749-751), so ``range(2) * 2'' is CPython's
+	TypeError.  Inherited from SequenceableCollection, it answered the list
+	[0, 1, 0, 1], and ``range(2) * True'' the list [0, 1]."
+
+	^ self ___binOpFallback___: aCount op: '*' reflected: #'__rmul__:'
+
+]
+
 { #category : 'Grail-Comparison' }
 Interval >> __ne__: other [
 	"Test inequality with another range"
@@ -368,6 +392,18 @@ Interval >> __reversed__ [
 	newStop := startVal @env0:+ newStep.
 
 	^ (range __new__: newStart _: newStop _: newStep) __iter__
+
+]
+
+{ #category : 'Grail-Protocol Refusal' }
+Interval >> __rmul__: aCount [
+	<grailProtocolRefusal>
+	"``2 * range(2)'': the int's multiplication refused a range and asked it
+	for the reflected one, which range does not have either
+	(Objects/rangeobject.c:675, 749-751) -- CPython's TypeError, the operands
+	in source order.  Inherited from SequenceableCollection, it repeated."
+
+	^ aCount ___binOpTypeError___: self op: '*'
 
 ]
 

@@ -1510,9 +1510,12 @@ Integer >> __mul__: other [
 	reflected multiply running, so a PYTHON subclass goes that way too: its
 	own __rmul__ if it defines one (``3 * S('b')''), a TypeError if that
 	declines, else the builtin repeat -- never its __mul__ (#1552).  A builtin
-	sequence is the direct send, as before."
+	sequence is the direct send, as before.  Not a range, which is a
+	SequenceableCollection here but repeats nothing: it goes the reflected way
+	too, so its __rmul__ names the operands in source order, ``'int' and
+	'range'''."
 	((other isKindOf: CharacterCollection)
-		or: [(other isKindOf: SequenceableCollection)
+		or: [((other isKindOf: SequenceableCollection) and: [(other isKindOf: Interval) not])
 		or: [other isKindOf: ByteArray]]) ifTrue: [
 		(other @env0:class @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
 			ifFalse: [^ other __mul__: self].
