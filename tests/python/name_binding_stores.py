@@ -259,6 +259,31 @@ def walrus_class_cell_in_comprehension():
     return C().m(), last
 
 
+# A walrus in a class statement's decorator or keywords evaluates in the scope
+# enclosing the class statement, so inside a method it binds the method's own
+# local -- not a cell, even though a class is being compiled
+# (test_grammar's test_classdef: ``@d := class_decorator'').
+class HeaderWalrus:
+    def m(self):
+        def deco(c):
+            return c
+
+        class Meta(type):
+            pass
+
+        @d := deco
+        class I:
+            pass
+
+        class K(metaclass=(mk := Meta)):
+            pass
+        return d is deco, I.__name__, mk is Meta, type(K) is Meta
+
+
+def walrus_in_class_header():
+    return HeaderWalrus().m()
+
+
 # --- del of an empty target list, and of mixed shapes ---------------------------
 
 def del_empty_tuple():
@@ -326,6 +351,7 @@ record('chained_holder_is_a_target', chained_holder_is_a_target)
 record('chained_holder_value_first_store', chained_holder_value_first_store)
 record('walrus_class_cell', walrus_class_cell)
 record('walrus_class_cell_in_comprehension', walrus_class_cell_in_comprehension)
+record('walrus_in_class_header', walrus_in_class_header)
 record('del_empty_tuple', del_empty_tuple)
 record('del_empty_list', del_empty_list)
 record('del_mixed_targets', del_mixed_targets)
@@ -360,6 +386,7 @@ EXPECTED = {
     'chained_holder_value_first_store': (['val', 'obj', ('set', 'x', 7)], 'mine'),
     'walrus_class_cell': (6, 5),
     'walrus_class_cell_in_comprehension': ([0, 2, 4], 4),
+    'walrus_in_class_header': (True, 'I', True, True),
     'del_empty_tuple': 'ok',
     'del_empty_list': 'ok',
     'del_mixed_targets': (False, False, 3, {'j': 2}, False),

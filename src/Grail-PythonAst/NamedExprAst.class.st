@@ -154,13 +154,20 @@ NamedExprAst >> ___emitSmalltalkOn___: aStream [
 NamedExprAst >> ___irClassCellTargetName___ [
 	"The target's name when this walrus writes an enclosing function's local
 	from inside a method-local class's method, else nil -- the guard of
-	AssignAst's and AugAssignAst's class-cell branches."
+	AssignAst's and AugAssignAst's class-cell branches.
+
+	A walrus, unlike an assignment, can also sit in a class statement's
+	decorators or keywords (``@d := deco'', ``class C(metaclass=(m := M))''),
+	which evaluate in the scope ENCLOSING the class statement and are emitted
+	under inDecoratorEmit: there ``d'' is the enclosing function's own local,
+	not a cell, so the guard stands down as it does for inBasesEmit."
 
 	^ ((target isKindOf: NameAst)
 		and: [CallAst classBeingCompiled notNil
 		and: [CallAst inClassBodyValueEmit ~~ true
 		and: [CallAst inBasesEmit ~~ true
-		and: [target ___enclosingFunctionLocalBeyondClass___: target id]]]])
+		and: [CallAst inDecoratorEmit ~~ true
+		and: [target ___enclosingFunctionLocalBeyondClass___: target id]]]]])
 			ifTrue: [target id]
 			ifFalse: [nil]
 
