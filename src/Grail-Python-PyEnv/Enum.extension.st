@@ -912,54 +912,11 @@ Enum class >> ___grailBuildMembers: cls names: attrNames [
 															TypeError ___signal___:
 																'_value_ not set in __new__, unable to create it']]]]
 								ifFalse: [
-									"For a str-storage-rooted enum (``class C(str, Enum)'')
-									the member IS a string: give it CONTENT str(value) so
-									hash / bool / == behave like a plain str.  basicNew leaves
-									the indexed char content empty (member was len 0 -> every
-									member hashed/compared equal: ``C.A == 'aval''' compared ''
-									to 'aval', and a dict keyed by members collided).  A str
-									value keeps its own chars; an int auto value gets content
-									'1' even though its .value stays the int (CPython
-									_member_type_ is str -> str content, but _value_ is the raw/
-									auto value).  int/float storage keeps the value in a named
-									slot, so basicNew is right there."
-									"A TUPLE-rooted enum (``class SomeTuple(tuple, Enum)'')
-									has the same problem the str branch below solves, for
-									the same reason: basicNew leaves the INDEXED content
-									empty, so every member was a zero-length tuple --
-									len() 0, indexing raised IndexError, iteration yielded
-									nothing, and ``SomeTuple.third == (3, 'for the
-									music')'' was False even though _value_ held exactly
-									that (test_tuple_subclass).  Give the member the
-									value's elements, as the str branch gives it the
-									value's characters.
-
-									A namedtuple mixin IS caught here now that the
-									collections factory subclasses tuple, and wants to be:
-									``class NTCEnum(TT, Enum)'' otherwise built members
-									with empty indexed content for the same reason a
-									plain tuple mixin did."
-									(cls @env0:inheritsFrom: tupleClass)
-										ifTrue: [ | els |
-											els := [effVal @env0:asArray]
-												@env0:on: AbstractException
-												do: [:e | Array @env0:with: effVal].
-											member := cls @env0:new: els @env0:size.
-											els @env0:size @env0:> 0 ifTrue: [
-												member @env0:replaceFrom: 1 to: els @env0:size
-													with: els startingAt: 1]]
-									ifFalse: [
-									(cls @env0:inheritsFrom: CharacterCollection)
-										ifTrue: [ | s |
-											s := (effVal isKindOf: CharacterCollection)
-												ifTrue: [effVal]
-												ifFalse: [[effVal __str__]
-													@env0:on: AbstractException do: [:e | '']].
-											member := cls @env0:new: s @env0:size.
-											s @env0:size @env0:> 0 ifTrue: [
-												member @env0:replaceFrom: 1 to: s @env0:size
-													with: s startingAt: 1]]
-										ifFalse: [member := cls @env0:basicNew]].
+									"A member that IS its data -- a tuple, str, bytes or
+									bytearray mixin -- needs that data as its indexed
+									content, which basicNew leaves empty (see
+									___grailNewMember:content:)."
+									member := Enum ___grailNewMember: cls content: effVal.
 									"effVal already carries member_type(*args) for a
 									foreign-mixin enum (else the raw value)."
 									memberValue := effVal].
@@ -1238,7 +1195,16 @@ Enum class >> ___grailCoerceMemberValue: rawValue toMemberType: mt [
 			(rawValue isKindOf: CharacterCollection) ifTrue: [^ rawValue].
 			ctor := Enum ___grailStrBuiltin]
 		ifFalse: [
-			(rawValue isKindOf: mt) ifTrue: [^ rawValue].
+			"bytes and bytearray are one Smalltalk hierarchy (bytearray
+			subclasses ByteArray), so isKindOf: ByteArray is true of a
+			bytearray, and a bytearray value of a bytes enum would be kept
+			unconverted.  CPython converts either way round: the value of
+			``class Buf(bytearray, Enum): A = b''aa'''' is bytearray(b'aa'), and
+			a bytes enum's value is always bytes.  So the class must match
+			exactly."
+			((Enum ___grailIsBytesType: mt)
+				ifTrue: [rawValue @env0:class == mt]
+				ifFalse: [rawValue isKindOf: mt]) ifTrue: [^ rawValue].
 			ctor := mt].
 	^ Enum ___grailConstructMemberValue: ctor args: rawValue
 
@@ -2425,28 +2391,20 @@ Enum class >> ___grailFunctional: cls positional: positional keywords: keywords 
 			(byValue @env0:includesKey: effVal)
 				ifTrue: [member := byValue @env0:at: effVal]
 				ifFalse: [ | canonical |
-					"A str-storage-rooted enum's member IS a string, so it needs
-					CONTENT -- basicNew leaves the indexed characters empty, and
-					every member then hashes and compares equal to '' (and to each
-					other).  The class-syntax builder has done this since the
-					str-storage work; the FUNCTIONAL builder never did, which is
-					why ``MinorEnum.june == '1''' was false for the four
-					TestMixedStrClass.test_programmatic_function_* cases even once
-					_value_ carried the coerced string."
-					member := (newCls @env0:inheritsFrom: CharacterCollection)
-						ifTrue: [ | s m |
-							s := (effVal isKindOf: CharacterCollection)
-								ifTrue: [effVal]
-								ifFalse: [[effVal __str__]
-									@env0:on: AbstractException do: [:e | '']].
-							m := newCls @env0:new: s @env0:size.
-							s @env0:size @env0:> 0 ifTrue: [
-								m @env0:replaceFrom: 1 to: s @env0:size
-									with: s startingAt: 1].
-							m]
-						ifFalse: [newCls @env0:basicNew].
+					"A member that IS its data -- a tuple, str, bytes or bytearray mixin
+					-- needs that data as its indexed content, exactly as the
+					class-statement builder gives it (see ___grailNewMember:content:).
+					This builder only ever did the str case, so ``Enum('Octet', {...},
+					type=bytes)'' built every member as b''."
+					member := Enum ___grailNewMember: newCls content: effVal.
 					member @env0:dynamicInstVarAt: #value put: effVal.
 					member @env0:dynamicInstVarAt: #name put: nameStr.
+					"CPython's canonical sunder attributes, as the class-statement builder
+					stores them.  A data-mixed member does not inherit Enum >> _value_,
+					so without them ``Letter.P._value_'' (type=str, int, bytes alike)
+					answered a bound method rather than the value."
+					member @env0:dynamicInstVarAt: #'_value_' put: effVal.
+					member @env0:dynamicInstVarAt: #'_name_' put: nameStr.
 					"A rebuild keeps the member object stored data refers to."
 					member := Enum ___grailKeepPreviousMember: member named: nameStr in: previous.
 					byValue @env0:at: effVal put: member.
@@ -3089,10 +3047,23 @@ Enum class >> ___grailIsBodyDescriptor: aValue [
 ]
 
 { #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailIsBytesType: mt [
+	"True when mt is ``bytes'' (ByteArray) or ``bytearray'' (its subclass) --
+	or a user subclass of either.  Their members are byte-format, and the
+	member's bytes are its value (see ___grailNewMember:content:)."
+
+	^ (mt == ByteArray)
+		or: [(mt @env0:isKindOf: Behavior)
+			and: [mt @env0:inheritsFrom: ByteArray]]
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
 Enum class >> ___grailIsDataTypeBase: b [
 	"True when base b contributes instance STORAGE to an enum -- a data type in
 	CPython's _find_data_type_ sense: rooted at int/float/str storage, or
-	carrying its own constructor (date/time via ___new__:kw:).  The universal
+	carrying its own constructor (date/time via ___new__:kw:), or bytes /
+	bytearray, whose constructor is the ByteArray class's own.  The universal
 	roots (object/PythonInstance/Object), ENUM classes (IntEnum inherits Integer
 	but is an enum, not a data-type mixin), and pure behaviour mixins (methods
 	only, no storage) are NOT data types."
@@ -3104,7 +3075,8 @@ Enum class >> ___grailIsDataTypeBase: b [
 	^ (b == Integer) or: [(b @env0:inheritsFrom: Integer)
 		or: [(b == Float) or: [(b @env0:inheritsFrom: Float)
 		or: [(b == CharacterCollection) or: [(b @env0:inheritsFrom: CharacterCollection)
-		or: [(b @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:notNil]]]]]]
+		or: [(self ___grailIsBytesType: b)
+		or: [(b @env0:whichClassIncludesSelector: #'___new__:kw:' environmentId: 1) @env0:notNil]]]]]]]
 
 ]
 
@@ -3845,6 +3817,54 @@ Enum class >> ___grailNamespaceForClass: cls [
 	``enum_dict._cls_name'' plus the generator taken off the first base."
 	ns @env0:dynamicInstVarAt: #'_cls' put: cls.
 	^ ns
+
+]
+
+{ #category : 'Grail-Enum Metaclass' }
+Enum class >> ___grailNewMember: cls content: effVal [
+	"A fresh member of cls whose INDEXED content is effVal's, for an enum whose
+	member IS its data: a tuple, str, bytes or bytearray mixin.  basicNew leaves
+	that content empty, so every member was a zero-length tuple / '' / b'':
+	len() 0, indexing raised IndexError, ``C.A == value'' was False, and members
+	of two different enums of one mixin compared and hashed equal.  int/float
+	storage keeps the value in a named slot, so basicNew is right there.
+
+	Both builders allocate through here -- the class statement and the
+	functional API -- because they drifted: the functional one only ever did
+	the str case.
+
+	  * tuple: the value's elements.  A namedtuple mixin is a tuple subclass
+	    and is caught here too.
+	  * str: str(value) -- an int auto value gets content '1' even though its
+	    _value_ stays the int (CPython's _member_type_ is str: str content, raw
+	    _value_).
+	  * bytes / bytearray (ByteArray and its subclasses): the bytes of effVal,
+	    which ___grailCoerceMemberValue: has already made member_type(*args) --
+	    bytes(2) for ``ZEROS = 2'', bytes('hi', 'ascii') for a (str, encoding)
+	    value.  A value bytes() refused stays raw and gives an empty member."
+
+	| els member |
+	(cls @env0:inheritsFrom: (Python @env0:at: #tuple otherwise: Array))
+		ifTrue: [
+			els := [effVal @env0:asArray]
+				@env0:on: AbstractException
+				do: [:e | Array @env0:with: effVal]]
+		ifFalse: [
+			(cls @env0:inheritsFrom: CharacterCollection)
+				ifTrue: [
+					els := (effVal isKindOf: CharacterCollection)
+						ifTrue: [effVal]
+						ifFalse: [[effVal __str__]
+							@env0:on: AbstractException do: [:e | '']]]
+				ifFalse: [
+					(cls @env0:inheritsFrom: ByteArray) ifFalse: [^ cls @env0:basicNew].
+					els := (effVal isKindOf: ByteArray)
+						ifTrue: [effVal]
+						ifFalse: [ByteArray @env0:new]]].
+	member := cls @env0:new: els @env0:size.
+	els @env0:size @env0:> 0 ifTrue: [
+		member @env0:replaceFrom: 1 to: els @env0:size with: els startingAt: 1].
+	^ member
 
 ]
 
@@ -4698,7 +4718,8 @@ Enum class >> ___grailValueMixinFor: cls [
 		(cls @env0:inheritsFrom: Enum) ifTrue: [^ mt].
 		((mt == Integer)
 			or: [(mt == Float)
-			or: [Enum ___grailIsStringType: mt]]) ifTrue: [^ mt]].
+			or: [(Enum ___grailIsStringType: mt)
+			or: [Enum ___grailIsBytesType: mt]]]) ifTrue: [^ mt]].
 	"Only a data type WRITTEN IN PYTHON widens.  _find_data_type_ can also answer
 	one of Grail's own storage roots -- a plain ``class Book(StrEnum)'' resolves
 	to AbstractPyStr -- and those are not Python data types at all, they are how
