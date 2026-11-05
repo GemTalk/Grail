@@ -161,20 +161,15 @@ PythonParser class >> ___lineStartPositionIn___: aSource at: aPosition [
 ]
 
 { #category : 'Grail-parsing' }
-PythonParser class >> ___signal___: aClass message: aMessage in: aSource from: aStart to: anEnd [
-	"Raise aClass located as CPython locates its parser errors: from the 1-based
-	source index aStart to the EXCLUSIVE index anEnd, as lineno / offset /
-	end_lineno / end_offset, all 1-based and in characters.  An anEnd of nil
-	means a point (end_offset = offset, the shape CPython's tokenizer gives).
-
-	Every located error the parser raises goes through here, so a position is
-	worked out in one place: against the RAW line, leading indentation and
-	non-ASCII characters included, which is what 3.14.8's gh-156894 fixed in
-	CPython for errors that cover a range."
+PythonParser class >> ___locationIn___: aSource from: aStart to: anEnd [
+	"The (filename, lineno, offset, text, end_lineno, end_offset) of an error
+	from the 1-based source index aStart to the EXCLUSIVE index anEnd, as
+	___signal___:message:in:from:to: describes them, or nil when aStart is in
+	no line of aSource."
 
 	| loc endLoc locTuple endLine endOffset |
 	loc := self ___sourceLocationIn___: aSource at: aStart.
-	loc isNil ifTrue: [^ aClass signal: aMessage].
+	loc isNil ifTrue: [^ nil].
 	anEnd isNil
 		ifTrue: [endLine := loc @env0:at: 1. endOffset := loc @env0:at: 2]
 		ifFalse: [
@@ -206,9 +201,56 @@ PythonParser class >> ___signal___: aClass message: aMessage in: aSource from: a
 	locTuple @env0:at: 4 put: (loc @env0:at: 3).
 	locTuple @env0:at: 5 put: endLine.
 	locTuple @env0:at: 6 put: endOffset.
+	^ locTuple
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> ___signal___: aClass message: aMessage in: aSource from: aStart to: anEnd [
+	"Raise aClass located as CPython locates its parser errors: from the 1-based
+	source index aStart to the EXCLUSIVE index anEnd, as lineno / offset /
+	end_lineno / end_offset, all 1-based and in characters.  An anEnd of nil
+	means a point (end_offset = offset, the shape CPython's tokenizer gives).
+
+	Every located error the parser raises goes through here, so a position is
+	worked out in one place: against the RAW line, leading indentation and
+	non-ASCII characters included, which is what 3.14.8's gh-156894 fixed in
+	CPython for errors that cover a range."
+
+	^ self
+		___signal___: aClass
+		message: aMessage
+		located: (self ___locationIn___: aSource from: aStart to: anEnd)
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> ___signal___: aClass message: aMessage located: aLocation [
+	"Raise aClass at aLocation, as ___locationIn___:from:to: answers one, or
+	with no location at all when it is nil."
+
+	aLocation isNil ifTrue: [^ aClass signal: aMessage].
 	^ aClass @env1:___signalNew___:
-		(Array @env0:with: aMessage with: (tuple @env0:withAll: locTuple))
+		(Array @env0:with: aMessage with: (tuple @env0:withAll: aLocation))
 		kw: nil
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> ___signalLexical___: aClass message: aMessage in: aSource from: aStart to: anEnd [
+	"___signal___:message:in:from:to: for an error CPython's LEXER reports,
+	whose text is the line it is on WITHOUT its newline
+	(Parser/lexer/lexer.c, _syntaxerror_range: strcspn(tok->line_start,
+	'\n')): an unterminated string, an invalid character or literal, a
+	bracket closed by the wrong one or by none, an f-string's own errors.
+	The parser's errors, and the lexer's line continuation and unindent,
+	which it hands the parser to report, keep the newline.  Grail kept it
+	for all of them (test_fstring test_not_closing_quotes)."
+
+	| location |
+	location := self ___locationIn___: aSource from: aStart to: anEnd.
+	location ifNotNil: [location @env0:at: 4 put: (self ___withoutNewline___: (location @env0:at: 4))].
+	^ self ___signal___: aClass message: aMessage located: location
 
 ]
 
@@ -302,6 +344,16 @@ PythonParser class >> ___sourceLocationIn___: aSource at: aPosition [
 	^ Array @env0:with: lineNo
 		with: pos - lineStart + 1
 		with: (aSource copyFrom: lineStart to: (lineEnd min: size))
+
+]
+
+{ #category : 'Grail-parsing' }
+PythonParser class >> ___withoutNewline___: aLineText [
+	"aLineText without the newline that ends it, if it has one."
+
+	(aLineText notNil and: [aLineText notEmpty and: [aLineText last == Character lf]])
+		ifFalse: [^ aLineText].
+	^ aLineText copyFrom: 1 to: aLineText size - 1
 
 ]
 
@@ -3252,7 +3304,7 @@ PythonParser >> ___signalOpenFieldOf___: anFString [
 		^ PythonParser ___signal___: SyntaxError
 			message: prefix , 'expecting ''}'', or format specs'
 			in: source from: anFString openFieldAt to: anFString openFieldAt + 1].
-	^ PythonParser ___signal___: SyntaxError
+	^ PythonParser ___signalLexical___: SyntaxError
 		message: prefix , 'expecting ''}'''
 		in: source from: anFString openFieldAt to: nil
 
