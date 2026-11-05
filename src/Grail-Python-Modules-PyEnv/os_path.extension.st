@@ -170,30 +170,62 @@ os_path >> ___posixpath___: aName with: anArray [
 	and os.fsdecode answer it (PEP 383) -- cannot go to posixpath as it is:
 	PyStrSurrogate implements only part of the str protocol, and posixpath
 	reaches for rfind, rstrip, split and the rest.  So every argument goes as
-	its bytes (os.fsencode, surrogateescape) and every str in the answer comes
-	back through os.fsdecode, as CPython's posixpath would have answered it:
-	its bytes branch is the same algorithm over the same bytes.  A list
-	argument (commonpath, commonprefix) is converted element by element."
+	its bytes and every str in the answer comes back decoded the same way, as
+	CPython's posixpath would have answered it: its bytes branch is the same
+	algorithm over the same bytes, because a ``/'' or a ``.'' is one byte in
+	UTF-8 and part of no other character's encoding.  A list argument
+	(commonpath, commonprefix) is converted element by element.
 
-	| theOs surrogates args result |
-	theOs := os instance.
+	The bytes are os.fsencode's, surrogateescape, whenever it can make them:
+	that is the encoding an undecodable name came from, so a path built from
+	one reaches the filesystem as the bytes it was read as.  It maps only
+	U+DC80..U+DCFF, though, and any other surrogate -- test_filecmp's
+	``'\ud834\udd1e.py''' -- raised its UnicodeEncodeError here, where
+	CPython's posixpath, working on the str, answers.  Such arguments go as
+	UTF-8 with surrogatepass, which holds every code point and decodes back to
+	the same str."
+
+	| surrogates errors args result |
 	surrogates := anArray @env0:anySatisfy: [:a |
 		(a isKindOf: PyStrSurrogate) or: [(a isKindOf: list)
 			and: [a @env0:anySatisfy: [:e | e isKindOf: PyStrSurrogate]]]].
 	surrogates ifFalse: [
 		^ (self ___posixpathModule @env1:___pyAttrLoad___: aName)
 			___pyCallValue___: anArray kw: nil].
-	args := anArray @env0:collect: [:a |
-		(a isKindOf: list)
-			ifTrue: [list @env0:withAll: (a @env0:collect: [:e | theOs fsencode: e])]
-			ifFalse: [theOs fsencode: a]].
+	errors := 'surrogateescape'.
+	args := [self ___posixpathArguments___: anArray errors: errors]
+		@env0:on: UnicodeEncodeError
+		do: [:ex | ex @env0:return: nil].
+	args @env0:isNil ifTrue: [
+		errors := 'surrogatepass'.
+		args := self ___posixpathArguments___: anArray errors: errors].
 	result := (self ___posixpathModule @env1:___pyAttrLoad___: aName)
 		___pyCallValue___: args kw: nil.
-	(result @env0:isKindOf: ByteArray) ifTrue: [^ theOs fsdecode: result].
+	(result @env0:isKindOf: ByteArray) ifTrue: [^ result decode: 'utf-8' _: errors].
 	(result isKindOf: tuple) ifTrue: [
 		^ tuple @env0:withAll: (result @env0:collect: [:e |
-			(e @env0:isKindOf: ByteArray) ifTrue: [theOs fsdecode: e] ifFalse: [e]])].
+			(e @env0:isKindOf: ByteArray) ifTrue: [e decode: 'utf-8' _: errors] ifFalse: [e]])].
 	^ result
+
+]
+
+{ #category : 'Grail-Path Manipulation' }
+os_path >> ___posixpathArguments___: anArray errors: anErrors [
+	"anArray's paths as ___posixpath___:with: hands them to posixpath: each
+	through os.fspath, then a str encoded as UTF-8 under anErrors -- os.fsencode
+	when anErrors is surrogateescape -- and bytes as they are."
+
+	| theOs bytes |
+	theOs := os instance.
+	bytes := [:aPath | | path |
+		path := theOs fspath: aPath.
+		(path @env0:isKindOf: ByteArray)
+			ifTrue: [path]
+			ifFalse: [path encode: 'utf-8' _: anErrors]].
+	^ anArray @env0:collect: [:a |
+		(a isKindOf: list)
+			ifTrue: [list @env0:withAll: (a @env0:collect: bytes)]
+			ifFalse: [bytes @env0:value: a]]
 
 ]
 
@@ -611,9 +643,17 @@ os_path >> realpath: path [
 	directory holding it, unwinds ``..'' AFTER following, and has to notice a
 	symlink LOOP and answer differently for strict.  A second copy of that
 	algorithm beside the one in the tree would be a second thing to get
-	wrong."
+	wrong.
 
-	^ self ___posixpath___: #realpath with: { path }
+	os.lstat encodes the path the filesystem's way, and CPython's realpath lets
+	that UnicodeEncodeError through.  So a surrogate surrogateescape cannot map
+	is refused here, as _realpath:kw: refuses it, before ___posixpath___:with:
+	could carry it as surrogatepass and resolve a path no lstat can be handed."
+
+	| filename |
+	filename := (os instance) fspath: path.
+	(filename isKindOf: PyStrSurrogate) ifTrue: [(os instance) fsencode: filename].
+	^ self ___posixpath___: #realpath with: { filename }
 
 ]
 

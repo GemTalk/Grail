@@ -1394,11 +1394,20 @@ os >> ___statOrNil___: aPath lstat: isLstat [
 	A path with an embedded NUL cannot be stat'd, and CPython's predicates say
 	no to it (genericpath catches the ValueError).  Asking the primitive
 	instead answered about the path cut short at the NUL -- ``exists('/tmp\\x00x')''
-	was true.  See ___fsPathChecked___:."
+	was true.  See ___fsPathChecked___:.
 
-	| result |
-	(self ___hasNul___: aPath) ifTrue: [^ nil].
-	result := GsFile @env0:stat: (self ___primPath___: aPath) isLstat: isLstat.
+	Nor can a str holding a surrogate the filesystem encoding does not map,
+	anything outside U+DC80..U+DCFF: os.stat's UnicodeEncodeError is a
+	ValueError too, so genericpath says no to it, where this raised it."
+
+	| primitivePath result |
+	primitivePath := [(self ___hasNul___: aPath)
+		ifTrue: [nil]
+		ifFalse: [self ___primPath___: aPath]]
+			@env0:on: UnicodeEncodeError
+			do: [:ex | ex @env0:return: nil].
+	primitivePath @env0:isNil ifTrue: [^ nil].
+	result := GsFile @env0:stat: primitivePath isLstat: isLstat.
 	(result @env0:isKindOf: GsFileStat) ifTrue: [^ result].
 	^ nil
 
