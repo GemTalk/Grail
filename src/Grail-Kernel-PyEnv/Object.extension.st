@@ -9407,10 +9407,15 @@ Object >> ___descriptorDelete___: descr [
 	``del obj.x'' on a descriptor with __set__ but no __delete__ is
 	``AttributeError: __delete__'' in CPython."
 
+	| deleter |
 	(descr ___respondsTo___: #'___delete__:kw:')
 		ifTrue: [^ descr ___delete__: { self } kw: nil].
 	(descr ___respondsTo___: #'__delete__:')
 		ifTrue: [^ descr __delete__: self].
+	"A class attribute that is any callable, as ___descriptorSet___:value:
+	calls one."
+	deleter := descr ___typeDunder___: #'__delete__'.
+	deleter isNil ifFalse: [^ descr ___callTypeAttr___: deleter with: { self }].
 	^ AttributeError ___signal___: '__delete__'
 
 ]
@@ -9437,6 +9442,7 @@ Object >> ___descriptorGet___: aValue [
 	(e.g. itsdangerous' ``digest_method = staticmethod(hashlib.sha1)'')
 	would redirect such calls at the holder instance and DNU."
 
+	| getter |
 	(aValue == nil or: [aValue == None]) ifTrue: [^ aValue].
 	(aValue isKindOf: BoundMethod) ifTrue: [^ aValue].
 	"``__get__(self, instance, cls=None)'' — the ``cls'' default makes
@@ -9446,6 +9452,12 @@ Object >> ___descriptorGet___: aValue [
 		ifTrue: [^ aValue ___get__: { self. self @env0:class } kw: nil].
 	(aValue ___respondsTo___: #'__get__:_:')
 		ifTrue: [^ aValue __get__: self _: self @env0:class].
+	"A class attribute of its type that is any callable: unlike __set__,
+	CPython's slot calls it with the descriptor passed explicitly, whatever
+	it is (Objects/typeobject.c:10524-10546, slot_tp_descr_get), so a
+	callable instance receives (descriptor, instance, owner)."
+	getter := aValue ___typeDunder___: #'__get__'.
+	getter isNil ifFalse: [^ getter ___pyCallValue___: { aValue. self. self @env0:class } kw: nil].
 	^ aValue
 
 ]
@@ -9457,10 +9469,17 @@ Object >> ___descriptorSet___: descr value: aValue [
 	___isDataDescriptorValue___:); CPython's shared slot then raises
 	``AttributeError: __set__'', and so does this."
 
+	| setter |
 	(descr ___respondsTo___: #'___set__:kw:')
 		ifTrue: [^ descr ___set__: { self. aValue } kw: nil].
 	(descr ___respondsTo___: #'__set__:_:')
 		ifTrue: [^ descr __set__: self _: aValue].
+	"A class attribute that is any callable: CPython's slot calls it as a
+	method of the descriptor (Objects/typeobject.c:10549-10566,
+	vectorcall_method), so a function is bound to it and a callable instance
+	is called with the target and the value alone (___callTypeAttr___:with:)."
+	setter := descr ___typeDunder___: #'__set__'.
+	setter isNil ifFalse: [^ descr ___callTypeAttr___: setter with: { self. aValue }].
 	^ AttributeError ___signal___: '__set__'
 
 ]
@@ -13365,10 +13384,16 @@ Object >> ___isDataDescriptorValue___: aValue [
 
 	(aValue == nil or: [aValue == None]) ifTrue: [^ false].
 	(aValue @env0:isKindOf: AbstractPropertyDescriptor) ifTrue: [^ true].
+	"Or under a class ATTRIBUTE of its type, which need not be a def at all:
+	``D.__set__ = Mock()'' makes every D a data descriptor in CPython, which
+	looks the dunder up on the type whatever it is (Objects/typeobject.c,
+	slot_tp_descr_set); dataclasses' TestDescriptors does exactly that."
 	^ (aValue ___respondsTo___: #'__set__:_:')
 		or: [(aValue ___respondsTo___: #'___set__:kw:')
 		or: [(aValue ___respondsTo___: #'__delete__:')
-		or: [aValue ___respondsTo___: #'___delete__:kw:']]]
+		or: [(aValue ___respondsTo___: #'___delete__:kw:')
+		or: [(aValue ___typeDunder___: #'__set__') notNil
+		or: [(aValue ___typeDunder___: #'__delete__') notNil]]]]]
 
 ]
 
