@@ -8200,7 +8200,9 @@ PythonParser >> source: aString [
 
 	| tokenizer |
 	source := PythonTokenizer translateNewlines: aString.
-	tokenizer := PythonTokenizer on: source.
+	"Eval input is read without the newline CPython adds to exec input
+	(PythonTokenizer class >> on:endsInNewline:)."
+	tokenizer := PythonTokenizer on: source endsInNewline: evalInput ~~ true.
 	"An error the TOKENIZER raises comes after any TabError it noted, which is
 	on an earlier line, so CPython's lexer would have stopped at the TabError."
 	tokens := [tokenizer tokenize]

@@ -88,22 +88,14 @@ NamedtupleNamingTestCase >> testTheClassIsNamedAfterTheTypename [
 
 ]
 
-{ #category : 'Grail-Tests - Known gaps' }
-NamedtupleNamingTestCase >> testTheDefaultModuleIsUnsetWhichIsAKnownGap [
-	"Recorded, NOT endorsed.  CPython defaults __module__ to the module the
-	factory was CALLED from, via sys._getframe(1); Grail has no caller-frame
-	access -- there is no sys._getframe, and GemStone refuses frame inspection
-	on the running process -- so it reports None.
+{ #category : 'Grail-Tests - Naming' }
+NamedtupleNamingTestCase >> testTheDefaultModuleIsTheCallers [
+	"CPython defaults __module__ to the module the factory was CALLED from
+	(sys._getframemodulename(1), else the caller frame's globals); Grail now
+	reads the caller's frame too.  It answered None, a recorded gap."
 
-	Clearing it is deliberate rather than an oversight, and it is what makes the
-	pickling above work: pickle trusts a string __module__, and the
-	``collections'' inherited from the factory's class statement was never
-	right, so pickle went looking for ``collections.T''.  With no string there,
-	pickle falls back to its own documented whichmodule() scan and finds where
-	the class is actually bound.  CPython takes the same leave-it-alone branch
-	when it cannot determine the caller."
-
-	self assert: (self resultAt: 'module_default') asString equals: 'None'.
-	self assert: (self resultAt: 'module_is_a_known_gap') asString equals: 'True'.
+	self assert: (self resultAt: 'module_default') asString equals: '''namedtuple_naming'''.
+	self assert: (self resultAt: 'module_is_the_callers') asString equals: 'True'.
 
 ]
+

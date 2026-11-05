@@ -22,7 +22,8 @@ Class {
 		'parenDepth',
 		'atLineStart',
 		'sourceSize',
-		'openBrackets'
+		'openBrackets',
+		'endsInNewline'
 	],
 	#classVars : [
 		'FormFeed',
@@ -526,9 +527,21 @@ PythonTokenizer class >> keywords [
 
 { #category : 'Grail-instance creation' }
 PythonTokenizer class >> on: aString [
+	"A tokenizer of EXEC input, which CPython reads as ending in a newline
+	whether or not it does (Parser/tokenizer/helpers.c:244-246)."
 
-	^self basicNew
-		source: aString;
+	^ self on: aString endsInNewline: true
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer class >> on: aString endsInNewline: aBoolean [
+	"aBoolean false for eval and single input: CPython appends the newline
+	only to exec input (Parser/pegen.c, _PyPegen_run_parser_from_string,
+	``exec_input = start_rule == Py_file_input'')."
+
+	^ self basicNew
+		source: aString endsInNewline: aBoolean;
 		yourself
 
 ]
@@ -689,13 +702,17 @@ PythonTokenizer >> ___continueLine___ [
 	``x = 1 \'' compiled (test_fstring
 	test_invalid_backslashes_inside_fstring_context).
 
-	A backslash that ENDS the source continues like one followed by its
-	newline, because CPython's string input always ends in one
+	A backslash that ENDS exec input continues like one followed by its
+	newline, because CPython's exec input always ends in one
 	(Parser/tokenizer/helpers.c:244-246): with a bracket open, it is the
-	bracket that is reported."
+	bracket that is reported.  Eval input gets no newline, so there the
+	backslash is followed by nothing, which is no newline either
+	(___refuseContinuationAtEndOfInput___:)."
 
 	| backslash |
 	backslash := position.
+	((self peekAt: 1) isNil and: [endsInNewline not]) ifTrue: [
+		^ self ___refuseContinuationAtEndOfInput___: backslash].
 	(self peekAt: 1) isNil ifFalse: [
 		(self peekAt: 1) == Lf ifFalse: [^ self ___refuseContinuationAt___: backslash].
 		self advance].
@@ -955,9 +972,7 @@ PythonTokenizer >> ___refuseContinuationAt___: aBackslash [
 	"CPython's E_LINECONT for the backslash at aBackslash: at the character
 	after it, end_offset 0 (Parser/pegen_errors.c:110-112, 122-124)."
 
-	^ PythonParser ___signalLocated___: SyntaxError
-		message: 'unexpected character after line continuation character'
-		in: source at: aBackslash + 1 endOffset: 0
+	^ self ___refuseContinuationLocatedAt___: aBackslash + 1
 
 ]
 
@@ -969,6 +984,27 @@ PythonTokenizer >> ___refuseContinuationAtEndFrom___: aBackslash [
 	^ PythonParser ___signalLocated___: SyntaxError
 		message: 'unexpected EOF while parsing'
 		in: source at: aBackslash + 1 endOffset: -1
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___refuseContinuationAtEndOfInput___: aBackslash [
+	"E_LINECONT for a backslash that ends eval input, where no newline
+	follows it: located AT the backslash, as measured on CPython 3.14 --
+	``compile('1 +\\', f, 'eval')'' is (1, 4, 1, 0), with or without a
+	bracket open (test_fstring test_invalid_backslashes_inside_fstring_context
+	evals a lone backslash)."
+
+	^ self ___refuseContinuationLocatedAt___: aBackslash
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer >> ___refuseContinuationLocatedAt___: anIndex [
+
+	^ PythonParser ___signalLocated___: SyntaxError
+		message: 'unexpected character after line continuation character'
+		in: source at: anIndex endOffset: 0
 
 ]
 
@@ -1394,6 +1430,14 @@ PythonTokenizer >> source: aString [
 	 one can be reported AT ITSELF rather than at end of input."
 	openBrackets := OrderedCollection new.
 	atLineStart := true.
+
+]
+
+{ #category : 'Grail-accessors' }
+PythonTokenizer >> source: aString endsInNewline: aBoolean [
+
+	self source: aString.
+	endsInNewline := aBoolean
 
 ]
 

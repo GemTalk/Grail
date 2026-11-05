@@ -213,25 +213,35 @@ def remove_handler_stops_emit():
 
 
 def has_handlers_walks_chain():
+    # Restores root's handlers: leaving the NullHandler on root made every
+    # later test in the session see a configured root (#2159).
     root = logging.getLogger()
+    saved_handlers = list(root.handlers)
     root.handlers = []
-    leaf = logging.getLogger('hh.leaf')
-    leaf.handlers = []
-    leaf.propagate = True
-    before = leaf.hasHandlers()
-    root.addHandler(logging.NullHandler())
-    after = leaf.hasHandlers()
-    return (before, after)
+    try:
+        leaf = logging.getLogger('hh.leaf')
+        leaf.handlers = []
+        leaf.propagate = True
+        before = leaf.hasHandlers()
+        root.addHandler(logging.NullHandler())
+        after = leaf.hasHandlers()
+        return (before, after)
+    finally:
+        root.handlers = saved_handlers
 
 
 def has_handlers_stops_when_propagation_off():
     root = logging.getLogger()
+    saved_handlers = list(root.handlers)
     root.handlers = []
-    root.addHandler(logging.NullHandler())
-    leaf = logging.getLogger('hh2.leaf')
-    leaf.handlers = []
-    leaf.propagate = False
-    return leaf.hasHandlers()
+    try:
+        root.addHandler(logging.NullHandler())
+        leaf = logging.getLogger('hh2.leaf')
+        leaf.handlers = []
+        leaf.propagate = False
+        return leaf.hasHandlers()
+    finally:
+        root.handlers = saved_handlers
 
 
 def formatter_asctime_shape():
