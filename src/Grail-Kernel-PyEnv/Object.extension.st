@@ -10947,6 +10947,24 @@ Object >> ___grailIsFixedAritySelector___: aString from: firstColon [
 
 ]
 
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailIsInternalName___: aName [
+	"Is aName, a decoded selector's Python name, one of Grail's ___internal___
+	ones rather than an attribute?  The rules ___classDict___ applies: three
+	leading underscores, or three TRAILING ones -- an ``___x___'' transported
+	as ``____x___:kw:'' decodes to ``__x___'', and ``___x___:kw:'' to
+	``__x___'' too -- or a character no identifier has, left by a keyword
+	selector the decoder does not recognise."
+
+	| size |
+	size := aName @env0:size.
+	size @env0:>= 3 ifFalse: [^ false].
+	(aName @env0:copyFrom: 1 to: 3) @env0:= '___' ifTrue: [^ true].
+	(aName @env0:copyFrom: size @env0:- 2 to: size) @env0:= '___' ifTrue: [^ true].
+	^ aName @env0:anySatisfy: [:character | (character @env0:isAlphaNumeric or: [character == $_]) @env0:not]
+
+]
+
 { #category : 'Grail-Class Body Namespace' }
 Object >> ___grailIsPyMapping___ [
 	"PyMapping_Check (Objects/abstract.c): does the receiver's type fill
@@ -19106,18 +19124,27 @@ Object >> __dir__ [
 			selectors @env0:addAll: ((myClass @env0:allSelectorsForEnvironment: 1)
 				@env0:select: [:selector | self ___grailDirListsSelector___: selector in: myClass])].
 	selectors := selectors @env0:asArray.
-	"Filter out convenience methods (starting with ___)"
+	"Filter out convenience methods (starting with ___) -- but not a DUNDER's
+	varargs transport, which carries one underscore more than its name:
+	``___call__:kw:'' is staticmethod's __call__, which the spelling took for
+	one of Grail's ___internal___ selectors, so a dunder defined only that way
+	was missing from dir() while __dict__, which decodes first, listed it.  So
+	a ``___'' selector stays only when it decodes to a dunder that is no
+	internal name either: ``___allocateForNew:kw:'' still goes."
 	selectors := selectors @env0:reject: [:selector |
-		| selectorStr prefix |
+		| selectorStr name |
 		selectorStr := selector @env0:asString.
 		"``asFloat'' is PythonInstance's kernel-numeric bridge, compiled in env 1
 		so GemStone's own math reaches __float__ -- a Smalltalk selector, not a
 		Python attribute, and every class and instance listed it."
 		(selectorStr @env0:= 'asFloat') or: [
-		((selectorStr @env0:size) @env0:>= 3) ifTrue: [
-			prefix := selectorStr @env0:copyFrom: 1 to: 3.
-			prefix @env0:= '___'
-		] ifFalse: [false]]
+			((selectorStr @env0:size) @env0:>= 3
+				and: [(selectorStr @env0:copyFrom: 1 to: 3) @env0:= '___'])
+				and: [
+					name := self ___grailPythonNameForSelector___: selector.
+					(name ~~ nil
+						and: [(self ___grailIsDunderName___: name)
+						and: [(self ___grailIsInternalName___: name) @env0:not]]) @env0:not]]
 	].
 	"Each selector as the Python name it implements -- see
 	___grailPythonNameForSelector___:, which also explains the two encodings
