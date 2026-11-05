@@ -1532,7 +1532,13 @@ PythonParser >> ___fstringSpecExprFor: spec at: locTok [
 	``f'{10:{ }}''' had no location at all (eval reported ``None'')."
 	innerParser ___sourceText___: source.
 	specToken := PythonToken type: #FSTRING value: spec line: locTok line position: locTok position.
+	specToken beFormatSpec.
 	locTok isInTemplateString ifTrue: [specToken beTemplateSpec].
+	"The f-string ended inside the field this spec belongs to, so a field of
+	the spec left open is that same open field, and its error is the one
+	the f-string's own token reports."
+	locTok openFieldAt ifNotNil: [:anOpenPosition |
+		specToken openFieldAt: anOpenPosition inSpec: locTok isOpenInFormatSpec].
 	(specFieldStarts at: spec otherwise: nil) ifNotNil: [:starts | specToken fieldStarts: starts].
 	specAst := innerParser ___parseFStringLiteralToken___: specToken.
 	innerParser ___variableStack___ do: [:innerScope |
@@ -3119,9 +3125,13 @@ PythonParser >> ___signalFieldError___: anError in: aWrappedSource token: aTok f
 	message := self ___messageOf___: anError.
 	"A bracket the field leaves open, in a field the f-string ended inside of:
 	CPython's parser asks for the token after it and meets its lexer's error
-	first (``f'{a(''')."
-	((self ___isOpenField___: aFieldStart of: aTok) and: [message endsWith: 'was never closed'])
-		ifTrue: [^ self ___signalOpenFieldOf___: aTok].
+	first (``f'{a(''').  The parentheses the field is parsed in close a ``(''
+	the expression left open, and meet a ``['' or a ``{'' as a mismatch, so
+	that is the same error: ``f'{a[''' and ``f'{3:a{{''' are ``expecting '}'''."
+	((self ___isOpenField___: aFieldStart of: aTok)
+		and: [(message endsWith: 'was never closed')
+			or: [message beginsWith: 'closing parenthesis '')'' does not match']])
+				ifTrue: [^ self ___signalOpenFieldOf___: aTok].
 	message = 'cannot use starred expression here' ifTrue: [
 		^ self ___resignal___: anError message: 'can''t use starred expression here'
 			in: aWrappedSource token: aTok field: aFieldStart at: anExpressionStart].
@@ -5480,8 +5490,11 @@ PythonParser >> parseFStringLiteral [
 	[pos <= len] whileTrue: [
 		ch := value at: pos.
 		ch == ${ ifTrue: [
-			"``{{`` is a literal ``{``."
-			((pos < len) and: [(value at: pos + 1) == ${]) ifTrue: [
+			"``{{`` is a literal ``{``, except in a format spec, where every ``{''
+			opens a field, as CPython's lexer reads it (Parser/lexer/lexer.c:1478,
+			``peek != '{' || in_format_spec''): ``f'{3:{{x}}}''' formats 3 with
+			the set {x}, and ``f'{3:{{>10}''' is a field with no expression."
+			((pos < len) and: [(value at: pos + 1) == ${ and: [tok isFormatSpec not]]) ifTrue: [
 				parts add: #literal -> '{'.
 				pos := pos + 2.
 			] ifFalse: [
@@ -5697,7 +5710,14 @@ PythonParser >> parseFStringLiteral [
 								token: tok field: exprStart at: exprStart + lead].
 				(wrapped and: [self ___isBareGenerator___: exprAst in: innerSource]) ifTrue: [
 					self ___signalFieldStrayIn___: innerSource token: tok field: exprStart at: exprStart + lead].
-				exprEnd isNil ifTrue: [^ self ___signalOpenFieldOf___: tok].
+				exprEnd isNil ifTrue: [
+					"The f-string ended inside this field.  The nested fields of its
+					spec come first, as CPython's parser meets their errors before
+					the end of the f-string: ``f'{3:{>}''' is the nested field's
+					``expecting a valid expression after '{'''."
+					(formatSpec notNil and: [formatSpec includes: ${])
+						ifTrue: [self ___fstringSpecExprFor: formatSpec at: tok].
+					^ self ___signalOpenFieldOf___: tok].
 				"Its positions are relative to the FIELD, not the module: the
 				child parse sees ``(expr)'' as a whole source, so every node in
 				it counts from there.  REBASE them onto the module when the
