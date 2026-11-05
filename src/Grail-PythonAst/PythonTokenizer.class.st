@@ -658,7 +658,7 @@ PythonTokenizer >> ___closeBracket___: aChar at: aPosition of: anOpening [
 	((anOpening at: 1) == $( and: [aChar == $)]) ifTrue: [^ self].
 	((anOpening at: 1) == $[ and: [aChar == $]]) ifTrue: [^ self].
 	((anOpening at: 1) == ${ and: [aChar == $}]) ifTrue: [^ self].
-	^ PythonParser ___signal___: SyntaxError
+	^ PythonParser ___signalLexical___: SyntaxError
 		message: 'closing parenthesis ''' , aChar asString
 			, ''' does not match opening parenthesis ''' , (anOpening at: 1) asString , ''''
 			, ((anOpening at: 3) = line
@@ -840,7 +840,7 @@ PythonTokenizer >> ___invalidCharacter___: aCharacter [
 	| hex |
 	hex := aCharacter codePoint printStringRadix: 16 showRadix: false.
 	hex size < 4 ifTrue: [hex := (String new: 4 - hex size withAll: $0) , hex].
-	^ PythonParser ___signal___: SyntaxError
+	^ PythonParser ___signalLexical___: SyntaxError
 		message: ((String new @env1:___pyIsPrintableCodePoint___: aCharacter codePoint)
 			ifTrue: ['invalid character ''' , (String with: aCharacter) , ''' (U+' , hex , ')']
 			ifFalse: ['invalid non-printable character U+' , hex])
@@ -897,7 +897,7 @@ PythonTokenizer >> ___literalError___: aMessage literal: lit [
 	quote, with the escape's span counted from the literal segment after the
 	last replacement field.  Here an f-string is reported like any literal."
 
-	^ PythonParser ___signal___: SyntaxError message: aMessage
+	^ PythonParser ___signalLexical___: SyntaxError message: aMessage
 		in: source from: (lit at: 1) to: (self ___literalEnd___: lit)
 
 ]
@@ -931,7 +931,7 @@ PythonTokenizer >> ___numberError___: aMessage [
 	"CPython's _PyTokenizer_syntaxerror: offset and end_offset both the number
 	of characters of the line before the lexer's cursor."
 
-	^ PythonParser ___signal___: SyntaxError message: aMessage
+	^ PythonParser ___signalLexical___: SyntaxError message: aMessage
 		in: source from: position - 1 to: nil
 
 ]
@@ -1043,7 +1043,7 @@ PythonTokenizer >> ___unterminatedString___: isTriple from: aStart [
 	Grail called ``f'abc'' an unterminated string literal (test_fstring
 	test_not_closing_quotes)."
 
-	^ PythonParser ___signal___: SyntaxError
+	^ PythonParser ___signalLexical___: SyntaxError
 		message: 'unterminated ' , (isTriple ifTrue: ['triple-quoted '] ifFalse: ['']) ,
 			(self ___literalKindAt___: aStart) , ' literal (detected at line ' , line printString , ')'
 		in: source from: aStart to: nil
@@ -1289,7 +1289,7 @@ PythonTokenizer >> isStringStart [
 	 (letters size >= 2 and: [ch == $' or: [ch == $"]]) ifTrue: [
 		#(#($u $b) #($u $r) #($u $f) #($u $t) #($b $f) #($b $t) #($f $t)) do: [:pair |
 			((letters includes: (pair at: 1)) and: [letters includes: (pair at: 2)]) ifTrue: [
-				^ PythonParser ___signal___: SyntaxError
+				^ PythonParser ___signalLexical___: SyntaxError
 					message: '''' , (pair at: 1) asString , ''' and ''' , (pair at: 2) asString
 						, ''' prefixes are incompatible'
 					in: source from: position to: position + k]]]] value.
@@ -1657,7 +1657,7 @@ PythonTokenizer >> tokenizeNumber [
 		(c == $e or: [c == $E]) ifTrue: [exponentPart value].
 		(c == $j or: [c == $J]) ifTrue: [imaginaryPart value].
 		nonzero ifTrue: [
-			^ PythonParser ___signal___: SyntaxError
+			^ PythonParser ___signalLexical___: SyntaxError
 				message: 'leading zeros in decimal integer literals are not permitted; '
 					, 'use an 0o prefix for octal integers'
 				in: source from: startPos to: zerosEnd - 1].
@@ -1784,7 +1784,7 @@ PythonTokenizer >> tokenizeOperator [
 		Parser/lexer/state.h:7) and refuses the next one where it opens,
 		before any parsing (Parser/lexer/lexer.c:1305)."
 		parenDepth >= 200 ifTrue: [
-			^ PythonParser ___signal___: SyntaxError
+			^ PythonParser ___signalLexical___: SyntaxError
 				message: 'too many nested parentheses'
 				in: source from: startPos to: nil].
 		parenDepth := parenDepth + 1.
@@ -1795,7 +1795,7 @@ PythonTokenizer >> tokenizeOperator [
 		"CPython's lexer: a closer with nothing open is ``unmatched ')''', one
 		of the wrong kind names both, and both are placed at the closer."
 		openBrackets isEmpty ifTrue: [
-			^ PythonParser ___signal___: SyntaxError
+			^ PythonParser ___signalLexical___: SyntaxError
 				message: 'unmatched ''' , char asString , ''''
 				in: source from: startPos to: nil].
 		opening := openBrackets removeLast.
@@ -1945,7 +1945,7 @@ PythonTokenizer >> tokenizeString [
 							"A single-quoted f-string's spec ends at its line: CPython's
 							lexer refuses the newline (Parser/lexer/lexer.c:1467-1480)."
 							(char == Lf and: [triple not]) ifTrue: [
-								^ PythonParser ___signal___: SyntaxError
+								^ PythonParser ___signalLexical___: SyntaxError
 									message: (isTString ifTrue: ['t-string: newlines are not allowed in format specifiers for single quoted t-strings']
 										ifFalse: ['f-string: newlines are not allowed in format specifiers for single quoted f-strings'])
 									in: source from: position to: nil].
@@ -1992,7 +1992,7 @@ PythonTokenizer >> tokenizeString [
 											char == $}
 												ifTrue: [fields removeLast]
 												ifFalse: [
-													^ PythonParser ___signal___: SyntaxError
+													^ PythonParser ___signalLexical___: SyntaxError
 														message: (isTString ifTrue: ['t-string: '] ifFalse: ['f-string: '])
 															, 'unmatched ''' , char asString , ''''
 														in: source from: position to: nil]]]
