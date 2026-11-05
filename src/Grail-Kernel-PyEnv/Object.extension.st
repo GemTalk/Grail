@@ -8386,7 +8386,7 @@ Object >> ___classDict___ [
 	Grail-internal ``___...___'' selectors are excluded.  Data values that
 	read as Smalltalk nil are ABSENT (project convention) and skipped."
 
-	| d holder pairs imd cmd addSel |
+	| d holder pairs imd cmd addSel refused |
 	"An ORDERED dict, and the holder read FIRST.  CPython's class __dict__ is
 	insertion-ordered -- bpo-34320 made ``type('C', (), od)'' preserve the
 	namespace's order, and test_builtin's test_namespace_order asserts exactly
@@ -8432,8 +8432,9 @@ Object >> ___classDict___ [
 	``allowed'' is nil for a class whose method dictionary IS its Python
 	namespace, or the set of names to keep for one where it is not -- see
 	___grailPythonDictNames___."
+	refused := Set @env0:new.
 	addSel := [:sel :defCls :allowed |
-		| nm merged |
+		| nm merged refusal |
 		"THE SELECTOR IS DECODED, not cut at its first colon.  Every def compiles
 		a varargs transport ``_<name>:kw:'', and cutting that at the colon named
 		the method with one underscore too many: ``def star(self, *a)'' read as
@@ -8472,14 +8473,19 @@ Object >> ___classDict___ [
 
 		And a name must be a Python IDENTIFIER: a Smalltalk binary selector
 		(``<'', ``<='') on a kernel-backed class is no attribute of anything."
-		merged := [| meth |
-			((defCls @env0:categoryOfSelector: sel environmentId: 1)
-				@env0:= #'Grail-MI-Inherited')
-				or: [meth := defCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil.
-					meth @env0:notNil and: [meth @env0:pragmas @env0:anySatisfy: [:p |
-						p @env0:keyword == #grailProtocolRefusal
-							or: [p @env0:keyword == #grailSubclassInstanceDict]]]]]
+		refusal := [| meth |
+			meth := defCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil.
+			meth @env0:notNil and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+				p @env0:keyword == #grailProtocolRefusal
+					or: [p @env0:keyword == #grailSubclassInstanceDict]]]]
 			@env0:on: AbstractException do: [:e | e @env0:return: false].
+		merged := refusal or: [[(defCls @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-MI-Inherited']
+			@env0:on: AbstractException do: [:e | e @env0:return: false]].
+		"A refusal SHADOWS the hidden ancestors folded in below: bytearray's
+		__getnewargs__ refuses because its ancestor ByteArray -- bytes -- has a
+		real one, which must not then enter bytearray.__dict__ in its place."
+		(refusal and: [nm @env0:size @env0:> 0]) ifTrue: [refused @env0:add: nm].
 		(nm @env0:size @env0:> 0 and: [((nm @env0:at: 1) @env0:isLetter
 			or: [(nm @env0:at: 1) == $_]) @env0:not]) ifTrue: [nm := ''].
 		"...and EVERY character of it: a keyword selector the decoder does not
@@ -8496,7 +8502,8 @@ Object >> ___classDict___ [
 			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
 			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not
-			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]) ifTrue: [
+			and: [(refused @env0:includes: nm) @env0:not
+			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]]) ifTrue: [
 			| um |
 			um := UnboundMethod definingClass: defCls selector: nm @env0:asSymbol.
 			"A declarative @property's getter is entered as the PROPERTY, the

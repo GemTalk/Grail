@@ -2178,6 +2178,19 @@ ByteArray >> __getitem__: index [
 
 ]
 
+{ #category : 'Grail-Pickle Support' }
+ByteArray >> __getnewargs__ [
+	"CPython's bytes.__getnewargs__: the bytes themselves, as a plain bytes
+	(Objects/bytesobject.c:2664-2668).  A Python subclass of bytes inherits it
+	and answers its value unwrapped, as str's does (CharacterCollection >>
+	__getnewargs__)."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { ByteArray @env0:withAll: self }
+
+]
+
 { #category : 'Grail-Hashing' }
 ByteArray >> __hash__ [
 	"Return hash of bytes"

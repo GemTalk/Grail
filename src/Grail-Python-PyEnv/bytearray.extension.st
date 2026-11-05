@@ -239,6 +239,18 @@ bytearray >> __delitem__: index [
 
 ]
 
+{ #category : 'Grail-Protocol Refusal' }
+bytearray >> __getnewargs__ [
+	<grailProtocolRefusal>
+	"CPython's bytearray has no __getnewargs__ -- it reduces through
+	__reduce_ex__ -- but Grail's bytearray is a ByteArray, which is bytes and
+	answers one.  So this one is a refusal: no attribute, and the miss
+	CPython raises."
+
+	^ AttributeError ___signal___: '''bytearray'' object has no attribute ''__getnewargs__'''
+
+]
+
 { #category : 'Grail-Hashing' }
 bytearray >> __hash__ [
 	"bytearray is mutable and therefore unhashable (matches CPython).

@@ -1324,6 +1324,19 @@ Integer >> __getitem__: idx [
 
 ]
 
+{ #category : 'Grail-Pickle Support' }
+Integer >> __getnewargs__ [
+	"CPython's int.__getnewargs__: (int(self),), the argument tuple that
+	rebuilds the value through __new__ (Objects/longobject.c:5962-5966).
+	AbstractPyInt answers it for a Python subclass of int; a plain int had
+	none, so ``(5).__getnewargs__'' was an AttributeError."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self }
+
+]
+
 { #category : 'Grail-Comparison' }
 Integer >> __gt__: other [
 	"Return self > other.  Same int unwrapping as __ge__:."
