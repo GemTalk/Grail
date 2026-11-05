@@ -141,8 +141,8 @@ test.test_format
 # single modules.  A package's SUBMODULE can be listed, as test_asyncio's are;
 # test.test_string.test_string is (with the vendored string package).
 #
-# Not wired YET: test_metaclass, test_unpack_ex, test_genexps, test_descrtut,
-# test_extcall and test_pep646_syntax carry NO unittest.TestCase at all -- they
+# Not wired YET: test_metaclass, test_genexps, test_descrtut, test_extcall
+# and test_pep646_syntax carry NO unittest.TestCase at all -- they
 # are pure doctest modules.  They used to score SKIP with 0 tests, because
 # doctest was a stub whose DocTestSuite() was empty and Grail's unittest loader
 # never called load_tests.  Both are fixed (#1381), so these can now be trialled
@@ -973,3 +973,13 @@ test.test_dataclasses
 #
 #   memoryio   182t  8 fail  5 skip
 test.test_memoryio
+
+# --- Core language (added 2026-11-05): extended unpacking ---
+#
+# test_unpack_ex is CPython 3.14.4's, vendored verbatim (identical in
+# 3.14.8): one doctest of starred assignment and unpacking, and of the
+# SyntaxErrors its misuses raise.  It passes as vendored.  Measured on
+# Darwin arm64:
+#
+#   unpack_ex   1t OK
+test.test_unpack_ex

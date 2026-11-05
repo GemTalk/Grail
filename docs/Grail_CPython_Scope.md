@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 69 | 9 | 12 | 90 |
+| P1 | 69 | 10 | 11 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
 | P3 | 30 | 2 | 24 | 56 |
 | P4 | 25 | 4 | 46 | 75 |
-| **In-scope** | **154** | **15** | **86** | **255** |
+| **In-scope** | **154** | **16** | **85** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **169 are wired into the harness** (P1 78 · P2 30 · P3 32 · P4 29) and **154 of those score OK**.
+Of the 255 in-scope modules, **170 are wired into the harness** (P1 79 · P2 30 · P3 32 · P4 29) and **154 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -271,7 +271,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_unary` | Unary operators (language). |
 | ✅ | `test_unicode_identifiers` | Unicode identifier support (language). |
 | ✅ | `test_unpack` | Sequence unpacking (language). |
-|  | `test_unpack_ex` | Extended (starred) unpacking (language). |
+| ❗ | `test_unpack_ex` | Extended (starred) unpacking (language). |
 | ✅ | `test_utf8source` | UTF-8 source files (parser). |
 | ✅ | `test_with` | with statement / context managers (language). |
 | ✅ | `test_yield_from` | yield from (language). |
@@ -806,6 +806,8 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_structseq` FAIL, 25 tests: 1 failed, 0 errors, 1 skipped
 - `test.test_dataclasses` ERROR, 280 tests: 16 failed, 6 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
+
+Wired, but not on the board until the next nightly measures them: `test_unpack_ex`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
