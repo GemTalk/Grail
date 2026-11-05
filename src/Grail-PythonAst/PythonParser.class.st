@@ -5672,13 +5672,16 @@ PythonParser >> parseFStringLiteral [
 				wrapping is all that is needed.  An EMPTY field is left unwrapped so
 				it still fails, rather than quietly becoming the empty tuple."
 				rawExpr := exprText asString.
-				innerSource := rawExpr trimSeparators.
-				"How much trimSeparators took off the FRONT, and how many lines
-				 that spans: both shift the child's coordinates relative to the
-				 field's start, and a PEP 701 field may legitimately open with a
-				 newline."
+				"Only the layout Python's tokenizer skips: trimSeparators also took
+				 off a U+00A0, so ``f'{\xa0}''' was an empty field rather than
+				 CPython's ``invalid non-printable character U+00A0''
+				 (test_fstring test_missing_expression)."
+				innerSource := PythonTokenizer ___withoutLayoutAround___: rawExpr.
+				"How much was taken off the FRONT, and how many lines that spans:
+				 both shift the child's coordinates relative to the field's start,
+				 and a PEP 701 field may legitimately open with a newline."
 				lead := 0.
-				[lead < rawExpr size and: [(rawExpr at: lead + 1) isSeparator]]
+				[lead < rawExpr size and: [PythonTokenizer ___isLayoutCharacter___: (rawExpr at: lead + 1)]]
 					whileTrue: [lead := lead + 1].
 				leadNewlines := 0.
 				1 to: lead do: [:k |
