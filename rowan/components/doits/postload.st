@@ -361,6 +361,14 @@ UserGlobals
 	that ``except ValueError'' catches it.  Before the commit below, which keeps it."
 	'importlib ___registerKernelExceptionBases___
 '.
+	"Remove the change stamps Grail's runtime compiles left in this user's
+	session-method package before #2108: each kept a class Grail built persistent
+	(#1971).  Idempotent: once they are gone this removes nothing.  Before the
+	commit below, which keeps the removal."
+	'| n |
+n := importlib ___removeStaleChangeStamps___.
+Transcript show: ''Removed '' , n printString , '' stale change stamp(s) from the session-method package''.
+'.
 	"src/smalltalk/install.gs:3421"
 	'System commit
 '.
