@@ -104,6 +104,18 @@ PythonTokenizer class >> ___isIdentifierStart___: aChar [
 
 ]
 
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer class >> ___isLayoutCharacter___: aCharacter [
+	"Is aCharacter one the tokenizer skips between tokens -- a space, a tab, a
+	form feed or a newline (Parser/lexer/lexer.c, tok_get_normal_mode)?
+	GemStone's isSeparator answers true for every Unicode space, U+00A0
+	included, which Python's tokenizer refuses as ``invalid non-printable
+	character''."
+
+	^ aCharacter == $  or: [aCharacter == Tab or: [aCharacter == FormFeed or: [aCharacter == Lf]]]
+
+]
+
 { #category : 'Grail-Identifiers' }
 PythonTokenizer class >> ___mayChangeUnderNfkc___: aChar [
 	"Can aChar, in an identifier, make the name change under NFKC: on its
@@ -232,6 +244,22 @@ PythonTokenizer class >> ___ranges___: ranges include: cp [
 					ifTrue: [lo := mid + 1]
 					ifFalse: [^ true]]].
 	^ false
+
+]
+
+{ #category : 'Grail-tokenizing' }
+PythonTokenizer class >> ___withoutLayoutAround___: aString [
+	"aString without the layout characters (___isLayoutCharacter___:) that
+	open and close it."
+
+	| first last |
+	first := 1.
+	[first <= aString size and: [self ___isLayoutCharacter___: (aString at: first)]]
+		whileTrue: [first := first + 1].
+	last := aString size.
+	[last >= first and: [self ___isLayoutCharacter___: (aString at: last)]]
+		whileTrue: [last := last - 1].
+	^ aString copyFrom: first to: last
 
 ]
 

@@ -5335,6 +5335,8 @@ Object class >> ___moduleAttrIdentityTable___ [
 		t @env0:at: #'PySysFloatInfo' put: #('float_info' 'sys').
 		t @env0:at: #'PySysIntInfo' put: #('int_info' 'sys').
 		t @env0:at: #'PySysHashInfo' put: #('hash_info' 'sys').
+		"sys.thread_info, which was None."
+		t @env0:at: #'PySysThreadInfo' put: #('thread_info' 'sys').
 
 		"json.  CPython defines JSONDecodeError in the json.decoder SUBMODULE and
 		re-exports it from json, so its __module__ is 'json.decoder' even though
