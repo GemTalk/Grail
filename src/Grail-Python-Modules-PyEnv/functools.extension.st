@@ -337,8 +337,8 @@ functools >> ___lruWrap___: aFunction maxsize: aMaxsize typed: aTyped [
 		___updateWrapper___: (LruCacheWrapper
 			___wrap___: aFunction maxsize: aMaxsize typed: aTyped)
 		wrapped: aFunction
-		assigned: self WRAPPER_ASSIGNMENTS
-		updated: self WRAPPER_UPDATES
+		assigned: self ___wrapperAssignments___
+		updated: self ___wrapperUpdates___
 
 ]
 
@@ -608,6 +608,25 @@ functools >> ___wrapperArg___: positional kw: kwargs at: anIndex named: aName de
 
 ]
 
+{ #category : 'Grail-Private' }
+functools >> ___wrapperAssignments___ [
+	"CPython's WRAPPER_ASSIGNMENTS as functools defines it, for update_wrapper's
+	and wraps' default, which CPython binds at def time and so does not follow
+	an assignment to the module constant.  See WRAPPER_ASSIGNMENTS."
+
+	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotate__' '__type_params__')
+
+]
+
+{ #category : 'Grail-Private' }
+functools >> ___wrapperUpdates___ [
+	"CPython's WRAPPER_UPDATES as functools defines it; see
+	___wrapperAssignments___."
+
+	^ tuple @env0:withAll: #('__dict__')
+
+]
+
 { #category : 'Grail-ABC MRO' }
 functools >> __c3_mro: positional kw: kwargs [
 	"functools._c3_mro(cls, abcs=None).  CPython keeps this private but
@@ -813,9 +832,9 @@ functools >> _update_wrapper: positional kw: kwargs [
 	wrapper := positional @env0:at: 1.
 	wrapped := positional @env0:at: 2.
 	assigned := self ___wrapperArg___: positional kw: kwargs
-		at: 3 named: 'assigned' default: self WRAPPER_ASSIGNMENTS.
+		at: 3 named: 'assigned' default: self ___wrapperAssignments___.
 	updated := self ___wrapperArg___: positional kw: kwargs
-		at: 4 named: 'updated' default: self WRAPPER_UPDATES.
+		at: 4 named: 'updated' default: self ___wrapperUpdates___.
 	^ self ___updateWrapper___: wrapper wrapped: wrapped
 		assigned: assigned updated: updated
 
@@ -832,9 +851,9 @@ functools >> _wraps: positional kw: kwargs [
 		TypeError ___signal___: 'wraps() missing required argument: wrapped'].
 	wrapped := positional @env0:at: 1.
 	assigned := self ___wrapperArg___: positional kw: kwargs
-		at: 2 named: 'assigned' default: self WRAPPER_ASSIGNMENTS.
+		at: 2 named: 'assigned' default: self ___wrapperAssignments___.
 	updated := self ___wrapperArg___: positional kw: kwargs
-		at: 3 named: 'updated' default: self WRAPPER_UPDATES.
+		at: 3 named: 'updated' default: self ___wrapperUpdates___.
 	^ [:positional2 :keywords2 |
 		self ___updateWrapper___: (positional2 @env0:at: 1)
 			wrapped: wrapped assigned: assigned updated: updated]
@@ -997,8 +1016,8 @@ functools >> singledispatch: aFunc [
 	^ self
 		___updateWrapper___: (functools_singledispatch ___on: aFunc)
 		wrapped: aFunc
-		assigned: self WRAPPER_ASSIGNMENTS
-		updated: self WRAPPER_UPDATES
+		assigned: self ___wrapperAssignments___
+		updated: self ___wrapperUpdates___
 
 ]
 
@@ -1072,8 +1091,8 @@ functools >> update_wrapper: wrapper _: wrapped [
 	``@wraps``-using library) leans on this at module-init time."
 
 	^ self ___updateWrapper___: wrapper wrapped: wrapped
-		assigned: self WRAPPER_ASSIGNMENTS
-		updated: self WRAPPER_UPDATES
+		assigned: self ___wrapperAssignments___
+		updated: self ___wrapperUpdates___
 
 ]
 
@@ -1093,18 +1112,27 @@ functools >> WRAPPER_ASSIGNMENTS [
 	check_wrapper asserts identity for every name in this list, so the
 	wrapper and the wrapped must end up sharing the very same annotate
 	function -- which is why it is stamped once at def-time rather than
-	rebuilt per read."
+	rebuilt per read.
 
-	^ tuple @env0:withAll: #('__module__' '__name__' '__qualname__' '__doc__' '__annotate__' '__type_params__')
+	A Python assignment to the name is what this answers instead (issue
+	#1973).  update_wrapper's and wraps' own defaults do not follow it: CPython
+	binds them when functools is defined, so they read
+	___wrapperAssignments___."
+
+	^ self ___assignedGlobalAt___: #'WRAPPER_ASSIGNMENTS'
+		otherwise: [self ___wrapperAssignments___]
 
 ]
 
 { #category : 'Grail-Constants' }
 functools >> WRAPPER_UPDATES [
 	"Tuple of attribute names ``functools.update_wrapper`` MERGES
-	from wrapped into wrapper (default: just ``__dict__``)."
+	from wrapped into wrapper (default: just ``__dict__``).  An assignment
+	shadows it as for WRAPPER_ASSIGNMENTS, and the defaults likewise read
+	___wrapperUpdates___."
 
-	^ tuple @env0:withAll: #('__dict__')
+	^ self ___assignedGlobalAt___: #'WRAPPER_UPDATES'
+		otherwise: [self ___wrapperUpdates___]
 
 ]
 
@@ -1116,7 +1144,7 @@ functools >> wraps: wrapped [
 	^ [:positional :keywords |
 		self ___updateWrapper___: (positional @env0:at: 1)
 			wrapped: wrapped
-			assigned: self WRAPPER_ASSIGNMENTS
-			updated: self WRAPPER_UPDATES]
+			assigned: self ___wrapperAssignments___
+			updated: self ___wrapperUpdates___]
 
 ]

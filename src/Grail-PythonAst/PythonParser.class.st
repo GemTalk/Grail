@@ -4672,6 +4672,15 @@ PythonParser >> parseCallArgList [
 						"Explicitly FORBIDDEN even though the call as a whole
 						permits one: the value of ``name=...'' is a plain test."
 						value := self ___withWalrus___: false do: [self parseExpression].
+						"invalid_kwarg once more: a keyword's value running on into a
+						comprehension -- ``dict(a = i for i in range(10))'' -- is a
+						likely ``=='' or ``:='', underlined from the name through the
+						``='' (Grammar/python.gram:1213-1214).  Grail reported a bare
+						``invalid syntax'' at the ``for''."
+						((self atKeyword: 'for') or: [self atKeyword: 'async']) ifTrue: [
+							^ self ___syntaxError___:
+								'invalid syntax. Maybe you meant ''=='' or '':='' instead of ''=''?'
+								from: exprStartTok to: eqTok].
 						kwargs add: (KeywordAst new
 							arg: name;
 							value: value;

@@ -787,6 +787,26 @@ builtins >> ___builtinsOverrideIn___: globalsDict [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+builtins >> ___callSelector___: aSelector isOwnIn: aClass [
+	"Does aClass answer aSelector with a call of its own?  Not when the method
+	is PythonInstance's forwarder or object's raiser, which every object
+	inherits, nor when it exists only to refuse the call: classmethod's
+	(<grailProtocolRefusal>), which raises CPython's ``'classmethod' object is
+	not callable'' -- CPython gave staticmethod a tp_call in 3.10 and left
+	classmethod without one (Objects/funcobject.c:1699, cm_type's tp_call 0),
+	so ``callable(classmethod(f))'' is False."
+
+	| owner method |
+	owner := aClass @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	(owner == nil or: [owner == PythonInstance or: [owner == object]]) ifTrue: [^ false].
+	method := owner @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
+	^ method @env0:isNil
+		or: [(method @env0:pragmas @env0:anySatisfy: [:pragma |
+			pragma @env0:keyword == #grailProtocolRefusal]) @env0:not]
+
+]
+
 { #category : 'Grail-Format Spec Engine' }
 builtins >> ___checkDuplicateGrouping___: spec at: i first: firstChar [
 	"A SECOND grouping char right after the first is its own diagnosis, not
@@ -1111,16 +1131,8 @@ builtins >> ___definesOwnCallProtocol___: anObject [
 	the class declares none), and object's ``___pyCallValue___:kw:''
 	exists only to raise ``not callable''."
 
-	| cls owner |
-	cls := anObject @env0:class.
-	owner := cls @env0:whichClassIncludesSelector: #'value:value:' environmentId: 1.
-	(owner @env0:~~ nil
-		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]])
-		ifTrue: [^ true].
-	owner := cls
-		@env0:whichClassIncludesSelector: #'___pyCallValue___:kw:' environmentId: 1.
-	^ owner @env0:~~ nil
-		and: [owner @env0:~~ PythonInstance and: [owner @env0:~~ object]]
+	^ (self ___callSelector___: #'value:value:' isOwnIn: anObject @env0:class)
+		or: [self ___callSelector___: #'___pyCallValue___:kw:' isOwnIn: anObject @env0:class]
 
 ]
 
@@ -6572,6 +6584,15 @@ builtins >> _quit: positional kw: kwargs [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+builtins >> _reversed: positional kw: kwargs [
+	"reversed() with any other arity, or with keywords: the type's own refusal
+	(reversed_iterator class >> ___construct___:kw:)."
+
+	^ reversed_iterator ___construct___: positional kw: kwargs
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 builtins >> _round: positional kw: kwargs [
 	"Python builtin round(number[, ndigits]) — varargs fast path.
 	The 1-arg case has a fixed-arity fast path (`round:`); this method
@@ -7376,10 +7397,10 @@ builtins >> initialize [
 	Types and exceptions live in the Python dict (install.gs Step 3 maps
 	int->Integer etc.; the object-subclass builtins like slice/tuple/set and every
 	exception class live there too).  A CPython builtin Grail implements as a
-	FUNCTION rather than a class (reversed) is simply absent from the dict and
-	skipped -- the method path answers getattr for it -- and one whose class is
-	spelled differently (super, map, filter, zip) is bound below by its Python
-	name.  Only CURATED name lists are consulted,
+	FUNCTION rather than a class is simply absent from the dict and skipped --
+	the method path answers getattr for it -- and one whose class is spelled
+	differently (super, map, filter, zip, reversed) is bound below by its
+	Python name.  Only CURATED name lists are consulted,
 	never the whole Python dict: the dict is Grail's global namespace (vendored
 	modules, iterators, PyCode, and non-builtin exceptions like JSONDecodeError)
 	and is NOT builtins.  The exception list is shared with
@@ -7423,6 +7444,9 @@ builtins >> initialize [
 	self @env0:dynamicInstVarAt: #'map' put: map_iterator.
 	self @env0:dynamicInstVarAt: #'filter' put: filter_iterator.
 	self @env0:dynamicInstVarAt: #'zip' put: zip_iterator.
+	"reversed too: CPython's is a type (Objects/enumobject.c, PyReversed_Type),
+	whose call answers a sequence's own __reversed__ or a reversed object."
+	self @env0:dynamicInstVarAt: #'reversed' put: reversed_iterator.
 	"Constants that are Smalltalk booleans."
 	self @env0:dynamicInstVarAt: #'True' put: true.
 	self @env0:dynamicInstVarAt: #'False' put: false.
@@ -7950,61 +7974,11 @@ builtins >> repr: anObject [
 
 { #category : 'Grail-Built-in Functions' }
 builtins >> reversed: aSequence [
-	"Python builtin reversed(seq) — fixed-arity fast path.  Prefer
-	the receiver's own __reversed__ (the Python protocol); fall back
-	to reverseDo: for native Smalltalk SequenceableCollections that
-	don't override.  Without the __reversed__ branch, Python user
-	classes like collections.deque (which has __reversed__ but no
-	env-0 reverseDo:) hit MNU."
+	"Python builtin reversed(seq) -- the fixed-arity fast path of a call of the
+	reversed TYPE (reversed_iterator class >> ___reversing___:, which has
+	CPython's rules)."
 
-	| lst |
-	"``__reversed__ = None'' BLOCKS, the same rule that makes ``__hash__ =
-	None'' unhashable: the lookup succeeds and yields None, so CPython reports
-	the type as not reversible rather than falling back to the sequence
-	protocol.  A class that declares __len__ and __getitem__ would otherwise
-	reverse perfectly well, which is precisely what the block exists to
-	prevent (test_enumerate's TestReversed.test_objmethods)."
-	(self ___reversedBlocked___: aSequence)
-		ifTrue: [^ self ___notReversible___: aSequence].
-	((aSequence ___respondsTo___: #'__reversed__')
-		or: [(aSequence @env0:isKindOf: PythonInstance)
-			and: [(aSequence ___typeDunder___: #'__reversed__') ~~ nil]])
-		ifTrue: [^ aSequence __reversed__].
-	"A string reversed must yield 1-char STRINGS, matching forward str
-	iteration -- the ``reverseDo:'' fallback yields Characters, so
-	``list(reversed('abcd'))'' came back as [$d $c $b $a] not ['d','c','b','a']
-	(test_deque test_reversed / test_extendleft).  bytes/bytearray are not
-	CharacterCollections, so they keep the reverseDo: path (ints)."
-	(aSequence @env0:isKindOf: CharacterCollection)
-		ifTrue: [^ (aSequence @env0:reverse) __iter__].
-	"OLD-STYLE SEQUENCE PROTOCOL.  A user class with no __reversed__ is
-	reversible when it answers __getitem__, and CPython walks it DOWN from
-	len - 1.  Grail went straight to the env-0 ``reverseDo:'', which such a
-	class does not understand -- an uncatchable MNU, not the TypeError Python
-	code catches.
-
-	The two failure messages are distinct and CPython distinguishes them in
-	this order: reversed_new tests PySequence_Check (i.e. __getitem__) FIRST,
-	so an object with __len__ but no __getitem__ is ``not reversible'', and
-	only then takes the length, so an object with __getitem__ but no __len__
-	reports ``has no len()''."
-	"A NATIVE Smalltalk sequence keeps the reverseDo: route.  It would satisfy
-	the sequence protocol below too, but the iterator type is observable:
-	pickle.py reduces each built-in iterator by type, and routing tuples
-	through seq_iterator made a reversed tuple reload as a tuple_iterator --
-	a different type than it started as (TestReversed.test_pickle)."
-	(aSequence @env0:class @env0:whichClassIncludesSelector: #'reverseDo:'
-		environmentId: 0) @env0:isNil ifFalse: [
-		lst := list ___new___.
-		aSequence @env0:reverseDo: [:item | lst append: item].
-		^ lst __iter__].
-	(self ___hasProtocolForCall___: aSequence _: '__getitem__') ifTrue: [
-		(self ___hasProtocolForCall___: aSequence _: '__len__') ifFalse: [
-			^ TypeError ___signal___: ('object of type '''
-				@env0:, (aSequence ___pyTypeNameForError___)
-				@env0:, ''' has no len()')].
-		^ seq_iterator ___onReverse: aSequence].
-	^ self ___notReversible___: aSequence
+	^ reversed_iterator ___reversing___: aSequence
 
 ]
 

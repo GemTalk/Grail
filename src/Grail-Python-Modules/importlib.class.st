@@ -8726,6 +8726,64 @@ importlib class >> ___remintedThisSession___ [
 
 ]
 
+{ #category : 'Grail-Install' }
+importlib class >> ___removeStaleChangeStamps___ [
+	"Remove the change stamps Grail's own runtime compiles left in the user's
+	session-method packages, and answer how many entries were removed (#1971).
+
+	Before #1962 and #2108, an environment-0 compile Grail made at runtime -- a
+	class's or a module's ``__transient__'' readers, a module's spilled globals,
+	a C extension's module class -- went through Behavior >>
+	compileMethod:dictionaries:category:environmentId:.  The method went into the
+	class's own method dictionary, but with the user's GsPackagePolicy enabled
+	the kernel also stamps it: GsPackage >> setStamp:forBehavior:forMethod: files
+	the class in the package's environment-0 map as
+
+	  aClass -> {methodDict. categoryDict. stampDict. pragmaDict}
+
+	with both method dictionaries EMPTY and stampDict at: aClass holding the
+	stamps.  Once committed, that entry alone kept the class persistent: a
+	session-local ``__main__'' class, or a deployed module's class that
+	``forget'' cannot reach.  Nothing reads the stamp of a method no package
+	holds, so the entry is dead weight.
+
+	An entry is removed only when ALL of these hold:
+	- it holds no session method: its method dictionary is empty, so removing it
+	  removes no code;
+	- its class is not a kernel class: no dictionary in the policy's
+	  externalSymbolList holds a version of it -- the test
+	  GsPackagePolicy >> permitSessionMethodFor:selector:environmentId: applies
+	  -- so Grail-Kernel's entries and a stamp on any kernel class are kept;
+	- its class is one Grail built: a Python class statement's class (it
+	  answers ___pyDefinedClass___ in environment 1) or a module class, so a
+	  stamp a Smalltalk tool left on the user's own Smalltalk class is kept.
+	Only environment 0 is looked at: no environment-1 compile stamps, and a
+	@smalltalk_class extension of a kernel class is an environment-1 session
+	method.  A second run finds nothing."
+
+	| policy kernel removed |
+	policy := GsPackagePolicy current.
+	kernel := [:cls | (policy externalSymbolList ifNil: [#()]) anySatisfy: [:dict | | k |
+		k := dict at: cls name otherwise: nil.
+		k isBehavior and: [cls isVersionOf: k]]].
+	removed := 0.
+	policy packages_Do: [:package | | map stale |
+		map := package sessionMethods.
+		stale := map isNil
+			ifTrue: [#()]
+			ifFalse: [map keys select: [:behavior | | cls |
+				cls := behavior theNonMetaClass.
+				((map at: behavior) at: 1) isEmpty
+					and: [(kernel value: cls) not
+					and: [(cls whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) notNil
+						or: [(cls allSuperclasses detect: [:each | each isVersionOf: module] ifNone: [nil]) notNil]]]]].
+		stale do: [:behavior | map removeKey: behavior].
+		removed := removed + stale size.
+		false].
+	^ removed
+
+]
+
 { #category : 'Grail-Module Loading' }
 importlib class >> ___removeStaleModuleMethods___: previousMethods from: aModuleClass boundBy: moduleAst functions: functionNames [
 	"Remove what the previous build of aModuleClass generated and this one did

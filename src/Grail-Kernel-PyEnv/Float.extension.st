@@ -991,6 +991,18 @@ Float >> __ge__: other [
 
 ]
 
+{ #category : 'Grail-Pickle Support' }
+Float >> __getnewargs__ [
+	"CPython's float.__getnewargs__: (float(self),) (Objects/floatobject.c:
+	1673-1677).  AbstractPyFloat answers it for a Python subclass of float; a
+	plain float had none."
+
+	| tupleClass |
+	tupleClass := Python @env0:at: #tuple otherwise: Array.
+	^ tupleClass @env0:withAll: { self }
+
+]
+
 { #category : 'Grail-Comparison' }
 Float >> __gt__: other [
 	"Greater than comparison."

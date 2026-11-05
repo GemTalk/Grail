@@ -996,11 +996,64 @@ memoryview >> cast: fmt _: aShape [
 
 ]
 
+{ #category : 'Grail-Sequence Protocol' }
+memoryview >> count: aValue [
+	"memoryview.count(value), new in 3.14: how many items equal aValue,
+	identity first and then ==, item before value
+	(Objects/memoryobject.c:2787-2818, memoryview_count_impl)."
+
+	| count |
+	self ___checkReleased___.
+	count := 0.
+	0 @env0:to: self __len__ @env0:- 1 do: [:index |
+		((self ___itemAt___: index) ___pyRichEqBool___: aValue) ifTrue: [count := count @env0:+ 1]].
+	^ count
+
+]
+
 { #category : 'Grail-Conversion' }
 memoryview >> hex [
 	"``mv.hex()'' -- CPython's memoryview has it, exactly as bytes does."
 
 	^ (self tobytes) @env1:hex
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+memoryview >> index: aValue [
+	^ self index: aValue _: 0 _: SmallInteger @env0:maximumValue
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+memoryview >> index: aValue _: aStart [
+	^ self index: aValue _: aStart _: SmallInteger @env0:maximumValue
+
+]
+
+{ #category : 'Grail-Sequence Protocol' }
+memoryview >> index: aValue _: aStart _: aStop [
+	"memoryview.index(value, start=0, stop=sys.maxsize), new in 3.14: the
+	first index in [start, stop) whose item equals aValue, the bounds clamped
+	as a slice's are; ValueError when there is none.  Only for one dimension
+	(Objects/memoryobject.c:2840-2903, memoryview_index_impl)."
+
+	| ndim n start stop |
+	self ___checkReleased___.
+	ndim := self @env0:dynamicInstVarAt: #'ndim'.
+	ndim @env0:= 0 ifTrue: [^ TypeError ___signal___: 'invalid lookup on 0-dim memory'].
+	ndim @env0:= 1 ifFalse: [
+		^ NotImplementedError ___signal___: 'multi-dimensional lookup is not implemented'].
+	n := self __len__.
+	start := aStart ___asIndex___.
+	stop := aStop ___asIndex___.
+	start @env0:< 0 ifTrue: [start := start @env0:+ n @env0:max: 0].
+	stop @env0:< 0 ifTrue: [stop := stop @env0:+ n @env0:max: 0].
+	stop := stop @env0:min: n.
+	start := start @env0:min: stop.
+	start @env0:to: stop @env0:- 1 do: [:index |
+		((self ___itemAt___: index) ___pyRichEqBool___: aValue) ifTrue: [^ index]].
+	^ ValueError ___signal___: 'memoryview.index(x): x not found'
 
 ]
 

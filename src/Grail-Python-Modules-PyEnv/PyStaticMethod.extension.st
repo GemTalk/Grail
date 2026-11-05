@@ -71,6 +71,18 @@ PyStaticMethod class >> value: positional value: keywords [
 
 ]
 
+{ #category : 'Grail-Python Protocol' }
+PyStaticMethod >> ___call__: positional kw: kwargs [
+	"``sm.__call__(*args, **kwargs)'': CPython 3.10+ gives staticmethod a
+	tp_call that calls the wrapped function (Objects/funcobject.c:1839-1843,
+	sm_call, the type's tp_call at 1947), so the object is callable and has a
+	__call__.  Grail's was callable through ___pyCallValue___:kw: alone, and
+	``sm.__call__'' was an AttributeError."
+
+	^ self ___pyCallValue___: positional kw: kwargs
+
+]
+
 { #category : 'Grail-Instantiation' }
 PyStaticMethod >> ___init__: positional kw: keywords [
 	"sm_init (Objects/funcobject.c:1731-1741): no keyword, then exactly one

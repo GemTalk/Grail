@@ -337,7 +337,8 @@ gemstone >> mySymbolList [
 	performs this method and returns the value (see ___pyAttrLoad___'s
 	module branch) rather than wrapping it as a BoundMethod."
 
-	^ list @env0:withAll: (GsCurrentSession @env0:currentSession @env0:symbolList)
+	^ self ___assignedGlobalAt___: #mySymbolList otherwise: [
+		list @env0:withAll: (GsCurrentSession @env0:currentSession @env0:symbolList)]
 
 ]
 
@@ -354,7 +355,7 @@ gemstone >> needs_commit [
 	on a deployed image -- see the guarded store in functools.gs
 	initialize for the one offender found and fixed."
 
-	^ System @env0:needsCommit
+	^ self ___assignedGlobalAt___: #needs_commit otherwise: [System @env0:needsCommit]
 
 ]
 
@@ -375,7 +376,7 @@ gemstone >> repository [
 	Compiled in the Grail-Accessors category so a bare attribute read
 	performs this method and returns the instance."
 
-	^ SystemRepository
+	^ self ___assignedGlobalAt___: #repository otherwise: [SystemRepository]
 
 ]
 
@@ -385,7 +386,8 @@ gemstone >> session_ids [
 	session (System currentSessions), system gems included, as a Python
 	list.  Describe one with gemstone.describe_session(id)."
 
-	^ list @env0:withAll: (System @env0:currentSessions)
+	^ self ___assignedGlobalAt___: #session_ids otherwise: [
+		list @env0:withAll: (System @env0:currentSessions)]
 
 ]
 
@@ -394,7 +396,7 @@ gemstone >> session_serial [
 	"Python gemstone.session_serial — this session's serial number
 	(System session), the id sessions are listed and described by."
 
-	^ System @env0:session
+	^ self ___assignedGlobalAt___: #session_serial otherwise: [System @env0:session]
 
 ]
 
@@ -427,7 +429,7 @@ gemstone >> system [
 	Compiled in the Grail-Accessors category so a bare attribute read
 	performs this method and returns the class."
 
-	^ System
+	^ self ___assignedGlobalAt___: #system otherwise: [System]
 
 ]
 
@@ -443,17 +445,17 @@ gemstone >> transaction_conflicts [
 	Read it AFTER a failed commit and BEFORE the abort that releases the
 	failed transaction -- abort discards the conflict information."
 
-	| result |
-	result := dict ___new___.
-	(System @env0:transactionConflicts) @env0:keysAndValuesDo: [:k :v | | key val |
-		key := str @env0:withAll: (k @env0:asString).
-		val := v.
-		(v @env0:isKindOf: Symbol) ifTrue: [val := str @env0:withAll: (v @env0:asString)].
-		(v @env0:isKindOf: Array) ifTrue: [val := list @env0:withAll: v].
-		v == nil ifTrue: [val := None].
-		result __setitem__: key _: val.
-	].
-	^ result
+	^ self ___assignedGlobalAt___: #transaction_conflicts otherwise: [| result |
+		result := dict ___new___.
+		(System @env0:transactionConflicts) @env0:keysAndValuesDo: [:k :v | | key val |
+			key := str @env0:withAll: (k @env0:asString).
+			val := v.
+			(v @env0:isKindOf: Symbol) ifTrue: [val := str @env0:withAll: (v @env0:asString)].
+			(v @env0:isKindOf: Array) ifTrue: [val := list @env0:withAll: v].
+			v == nil ifTrue: [val := None].
+			result __setitem__: key _: val.
+		].
+		result]
 
 ]
 
@@ -485,14 +487,16 @@ gemstone >> uncommitted_imports [
 	one a developer meets in their own edit loop.  A plain warm bind answers
 	nothing."
 
-	^ list @env0:withAll: ((importlib @env0:___uncommittedImportedModuleNames___)
-		@env0:collect: [:each | str @env0:withAll: each])
+	^ self ___assignedGlobalAt___: #uncommitted_imports otherwise: [
+		list @env0:withAll: ((importlib @env0:___uncommittedImportedModuleNames___)
+			@env0:collect: [:each | str @env0:withAll: each])]
 
 ]
 
 { #category : 'Grail-Metadata' }
 gemstone >> version [
 	"Return the GemStone version."
-	^ str @env0:withAll: (System @env0:stoneVersionAt: 'gsVersion')
+	^ self ___assignedGlobalAt___: #version otherwise: [
+		str @env0:withAll: (System @env0:stoneVersionAt: 'gsVersion')]
 
 ]

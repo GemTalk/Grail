@@ -91,13 +91,22 @@ copyreg class >> ___sessionTable___: aKey [
 
 { #category : 'Grail-Accessors' }
 copyreg >> __newobj__ [
-	^ (self @env0:class) ___helperAt___: #'__newobj__'
+	"CPython's copyreg binds this name, and _reconstructor, _reduce_ex,
+	_slotnames, __newobj_ex__ and pickle_union, to plain Python FUNCTIONS, and
+	this answers the same function objects, from _grail_copyreg.  So these are
+	value accessors -- the attribute's value is a function -- and not Smalltalk
+	functions: a dispatcher would CALL an assigned function with no arguments
+	(#1954).  A Python assignment to the name is what they answer (#1973)."
+
+	^ self ___assignedGlobalAt___: #'__newobj__'
+		otherwise: [(self @env0:class) ___helperAt___: #'__newobj__']
 
 ]
 
 { #category : 'Grail-Accessors' }
 copyreg >> __newobj_ex__ [
-	^ (self @env0:class) ___helperAt___: #'__newobj_ex__'
+	^ self ___assignedGlobalAt___: #'__newobj_ex__'
+		otherwise: [(self @env0:class) ___helperAt___: #'__newobj_ex__']
 
 ]
 
@@ -105,7 +114,8 @@ copyreg >> __newobj_ex__ [
 copyreg >> _extension_cache [
 	"``code -> object''.  Session-local; see ___sessionTable___:."
 
-	^ (self @env0:class) ___sessionTable___: #'GrailCopyregExtensionCache'
+	^ self ___assignedGlobalAt___: #'_extension_cache'
+		otherwise: [(self @env0:class) ___sessionTable___: #'GrailCopyregExtensionCache']
 
 ]
 
@@ -113,7 +123,8 @@ copyreg >> _extension_cache [
 copyreg >> _extension_registry [
 	"``(module, name) -> code''.  Session-local; see ___sessionTable___:."
 
-	^ (self @env0:class) ___sessionTable___: #'GrailCopyregExtensionRegistry'
+	^ self ___assignedGlobalAt___: #'_extension_registry'
+		otherwise: [(self @env0:class) ___sessionTable___: #'GrailCopyregExtensionRegistry']
 
 ]
 
@@ -121,25 +132,29 @@ copyreg >> _extension_registry [
 copyreg >> _inverted_registry [
 	"``code -> (module, name)''.  Session-local; see ___sessionTable___:."
 
-	^ (self @env0:class) ___sessionTable___: #'GrailCopyregInvertedRegistry'
+	^ self ___assignedGlobalAt___: #'_inverted_registry'
+		otherwise: [(self @env0:class) ___sessionTable___: #'GrailCopyregInvertedRegistry']
 
 ]
 
 { #category : 'Grail-Accessors' }
 copyreg >> _reconstructor [
-	^ (self @env0:class) ___helperAt___: #'_reconstructor'
+	^ self ___assignedGlobalAt___: #'_reconstructor'
+		otherwise: [(self @env0:class) ___helperAt___: #'_reconstructor']
 
 ]
 
 { #category : 'Grail-Accessors' }
 copyreg >> _reduce_ex [
-	^ (self @env0:class) ___helperAt___: #'_reduce_ex'
+	^ self ___assignedGlobalAt___: #'_reduce_ex'
+		otherwise: [(self @env0:class) ___helperAt___: #'_reduce_ex']
 
 ]
 
 { #category : 'Grail-Accessors' }
 copyreg >> _slotnames [
-	^ (self @env0:class) ___helperAt___: #'_slotnames'
+	^ self ___assignedGlobalAt___: #'_slotnames'
+		otherwise: [(self @env0:class) ___helperAt___: #'_slotnames']
 
 ]
 
@@ -174,9 +189,12 @@ copyreg >> constructor: anObject [
 copyreg >> dispatch_table [
 	"Python ``copyreg.dispatch_table''.  Delegates to the SESSION-LOCAL
 	class-side table, so a stale (deploy-session) instance still answers the
-	CURRENT session's table -- see ___dispatchTable___."
+	CURRENT session's table -- see ___dispatchTable___ -- unless Python has
+	assigned the name, which is then the table (issue #1973), as it is for
+	copyreg.pickle in CPython: it stores into the module global."
 
-	^ (self @env0:class) ___dispatchTable___
+	^ self ___assignedGlobalAt___: #'dispatch_table'
+		otherwise: [(self @env0:class) ___dispatchTable___]
 
 ]
 
@@ -236,7 +254,8 @@ copyreg >> pickle_super: aSuper [
 
 { #category : 'Grail-Accessors' }
 copyreg >> pickle_union [
-	^ (self @env0:class) ___helperAt___: #'pickle_union'
+	^ self ___assignedGlobalAt___: #'pickle_union'
+		otherwise: [(self @env0:class) ___helperAt___: #'pickle_union']
 
 ]
 
@@ -249,7 +268,9 @@ copyreg >> pickle: obType _: pickleFunc [
 
 	((builtins instance) callable: pickleFunc) ___isTruthy___ ifFalse: [
 		^ TypeError ___signal___: 'reduction functions must be callable'].
-	((self @env0:class) ___dispatchTable___) @env0:at: obType put: pickleFunc.
+	"Into whatever ``copyreg.dispatch_table'' now is -- CPython's copyreg.pickle
+	stores into the module global, so an assigned table is the one filled."
+	self dispatch_table @env1:__setitem__: obType _: pickleFunc.
 	^ None
 
 ]

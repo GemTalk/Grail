@@ -2303,6 +2303,16 @@ CallAst >> ___emitIRCalleeOrNilOn___: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRCallKeywords___: aKeywordsValue on: aBuilder [
+	"printKeywordsDictOn:'s ``@env1:___asCallKeywords___'' of a keyword dict
+	that holds a ``**m'''s keys, send for send."
+
+	aBuilder atNode: self.
+	^ aBuilder send: #'___asCallKeywords___' to: aKeywordsValue with: { } env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRDefiningClassReadOn___: aBuilder cellSelector: aCellSelector [
 	"The DEFINING class, by whichever of the two routes reaches it -- the IR
 	twin of ___printClassObjectOn___:cellSelector:.
@@ -2415,14 +2425,18 @@ CallAst >> ___emitIRKeywordsOn___: aBuilder [
 	"printKeywordsDictOn:'s value: nil with no keywords, else a PyDict built in
 	source order -- ``((PyDict @env0:new) @env0:at: 'k' put: v; ...; yourself)''
 	with Python-str (Smalltalk String) keys, exactly as the text.  (PyDict, an
-	ordered dict, so **kwargs / dict(**kw) preserve keyword order.)"
+	ordered dict, so **kwargs / dict(**kw) preserve keyword order.)  A dict that
+	holds a ``**m'''s keys goes through ___asCallKeywords___, as the text's
+	does."
 
-	| specs afterSplat |
+	| specs afterSplat dict |
 	keywords isEmpty ifTrue: [^ aBuilder nilLit].
 	"A lone ``**m'' is the mapping itself, no wrapping dict (cut 56)."
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
 		"The text's mapping check, send for send (object >> ___pyKwargsSplat___)."
-		^ self ___emitIRKwargsSplat___: keywords first value on: aBuilder].
+		^ self
+			___emitIRCallKeywords___: (self ___emitIRKwargsSplat___: keywords first value on: aBuilder)
+			on: aBuilder].
 	"A keyword given twice is refused as the text refuses it -- see
 	printKeywordsDictOn:."
 	afterSplat := false.
@@ -2445,9 +2459,11 @@ CallAst >> ___emitIRKeywordsOn___: aBuilder [
 	specs := specs asOrderedCollection.
 	specs add: { #yourself. { }. 0 }.
 	aBuilder atNode: self.
-	^ aBuilder
+	dict := aBuilder
 		cascade: (aBuilder send: #new to: (aBuilder globalNamed: #PyDict) with: { } env: 0)
-		specs: specs
+		specs: specs.
+	afterSplat ifFalse: [^ dict].
+	^ self ___emitIRCallKeywords___: dict on: aBuilder
 
 ]
 
@@ -5943,9 +5959,14 @@ CallAst >> printKeywordsDictOn: aStream [
 	  be wrapped as ``{nil → kwargs}`` and the receiver would see a
 	  single bogus #nil-keyed entry instead of the actual kwargs.
 	- Otherwise → a fresh PyDict built in source order, each **splat
-	  merged into it refusing a keyword given twice, as CPython does."
+	  merged into it refusing a keyword given twice, as CPython does.
 
-	| afterSplat |
+	Either way a dict that holds a **splat's keys is handed over through
+	___asCallKeywords___ (AbstractDictionary), which refuses a key that is no
+	str, as CPython does once the merge is done, and copies one whose keys can
+	run code as binding compares them.  Named keywords alone need neither."
+
+	| afterSplat hasSplat |
 
 	keywords isEmpty ifTrue: [
 		aStream nextPutAll: 'nil'.
@@ -5953,10 +5974,10 @@ CallAst >> printKeywordsDictOn: aStream [
 	].
 	(keywords size = 1 and: [keywords first name isNil]) ifTrue: [
 		"Checked to be a mapping -- see object >> ___pyKwargsSplatFor___:."
-		aStream nextPut: $(.
+		aStream nextPutAll: '(('.
 		keywords first value printSmalltalkWithParenthesisOn: aStream.
 		self printKwargsSplatCheckOn: aStream.
-		aStream nextPut: $).
+		aStream nextPutAll: ') @env1:___asCallKeywords___)'.
 		^ self
 	].
 	"Build with Python ``str'' (Smalltalk String) keys to match
@@ -5981,6 +6002,8 @@ CallAst >> printKeywordsDictOn: aStream [
 	one is put checking that it is not there yet.  A named keyword before any
 	``**'' cannot meet another: the parser refuses a name given twice."
 	afterSplat := false.
+	hasSplat := keywords anySatisfy: [:kwAst | kwAst name isNil].
+	hasSplat ifTrue: [aStream nextPut: $(].
 	aStream nextPutAll: '((PyDict @env0:new)'.
 	keywords do: [:kwAst |
 		kwAst name
@@ -6010,6 +6033,7 @@ CallAst >> printKeywordsDictOn: aStream [
 			].
 	].
 	aStream nextPutAll: ' yourself)'.
+	hasSplat ifTrue: [aStream nextPutAll: ' @env1:___asCallKeywords___)'].
 
 ]
 

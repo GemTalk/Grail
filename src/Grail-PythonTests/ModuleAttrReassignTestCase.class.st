@@ -34,22 +34,54 @@ Class {
 { #category : 'Grail-Fixtures' }
 ModuleAttrReassignTestCase class >> accessors [
 	"{ Python module name. Smalltalk class name. { { attribute. accessor } ... } }
-	for every one-line data accessor that reads a dictionary entry."
+	for every data accessor of a native module: the one-line accessors that read
+	a dictionary entry (#1953), and those that compute or import their value
+	instead (#1973) -- datetime's and io's types, copyreg's helpers and tables,
+	gemstone's session values, functools' and zlib's constants, os.environ and
+	sys.modules.
+
+	gemstone exists only in Grail, so its row has no counterpart in the
+	fixture's CPython-checked ACCESSORS and is stored the way
+	assign:to:on:named: stores on a module the fixture did not import."
 
 	^ {
 		{ '_sre'. #'_sre'. #(#(#CODESIZE #CODESIZE) #(#MAGIC #MAGIC)
 			#(#MAXGROUPS #MAXGROUPS) #(#MAXREPEAT #MAXREPEAT)) }.
 		{ 'cmath'. #cmath. #(#(#e #e) #(#inf #inf) #(#infj #infj) #(#nan #nan)
 			#(#nanj #nanj) #(#pi #pi) #(#tau #tau)) }.
+		{ 'copyreg'. #copyreg. #(#(#'__newobj__' #'__newobj__')
+			#(#'__newobj_ex__' #'__newobj_ex__') #(#'_extension_cache' #'_extension_cache')
+			#(#'_extension_registry' #'_extension_registry')
+			#(#'_inverted_registry' #'_inverted_registry')
+			#(#'_reconstructor' #'_reconstructor') #(#'_reduce_ex' #'_reduce_ex')
+			#(#'_slotnames' #'_slotnames') #(#dispatch_table #dispatch_table)
+			#(#pickle_union #pickle_union)) }.
+		{ 'datetime'. #datetime. #(#(#date #date) #(#datetime #datetime)
+			#(#MAXYEAR #MAXYEAR) #(#MINYEAR #MINYEAR) #(#time #time)
+			#(#timedelta #timedelta) #(#timezone #timezone) #(#tzinfo #tzinfo)
+			#(#UTC #UTC)) }.
 		{ 'enum'. #enum. #(#(#Enum #Enum) #(#Flag #Flag) #(#IntEnum #IntEnum)
 			#(#IntFlag #IntFlag) #(#KEEP #KEEP) #(#StrEnum #StrEnum)) }.
 		{ 'fractions'. #fractions. #(#(#Fraction #Fraction)) }.
+		{ 'functools'. #functools. #(#(#'WRAPPER_ASSIGNMENTS' #'WRAPPER_ASSIGNMENTS')
+			#(#'WRAPPER_UPDATES' #'WRAPPER_UPDATES')) }.
+		{ 'gemstone'. #gemstone. #(#(#mySymbolList #mySymbolList)
+			#(#needs_commit #needs_commit) #(#repository #repository)
+			#(#session_ids #session_ids) #(#session_serial #session_serial)
+			#(#system #system) #(#transaction_conflicts #transaction_conflicts)
+			#(#uncommitted_imports #uncommitted_imports) #(#version #version)) }.
 		{ 'hashlib'. #hashlib. #(#(#algorithms_available #algorithms_available)
 			#(#algorithms_guaranteed #algorithms_guaranteed)) }.
 		{ 'html'. #html. #(#(#entities #entities)) }.
 		{ 'html.entities'. #html_entities. #(#(#codepoint2name #codepoint2name)
 			#(#entitydefs #entitydefs) #(#html5 #html5)
 			#(#name2codepoint #name2codepoint)) }.
+		{ 'io'. #io. #(#(#BufferedIOBase #BufferedIOBase)
+			#(#BufferedRandom #BufferedRandom) #(#BufferedReader #BufferedReader)
+			#(#BufferedRWPair #BufferedRWPair) #(#BufferedWriter #BufferedWriter)
+			#(#IncrementalNewlineDecoder #IncrementalNewlineDecoder)
+			#(#IOBase #IOBase) #(#RawIOBase #RawIOBase) #(#Reader #Reader)
+			#(#TextIOBase #TextIOBase) #(#Writer #Writer)) }.
 		{ 'math'. #math. #(#(#e #e) #(#inf #inf) #(#nan #nan) #(#pi #pi)
 			#(#tau #tau)) }.
 		{ 'mimetypes'. #mimetypes. #(#(#common_types #common_types)
@@ -58,7 +90,8 @@ ModuleAttrReassignTestCase class >> accessors [
 		{ 'numbers'. #numbers. #(#(#Complex #Complex) #(#Integral #Integral)
 			#(#Number #Number) #(#Rational #Rational) #(#Real #Real)) }.
 		{ 'os'. #os. #(#(#'_walk_symlinks_as_files' #'___walkSymlinksAsFiles')
-			#(#linesep #linesep) #(#path #path) #(#pathsep #pathsep) #(#sep #sep)) }.
+			#(#environ #environ) #(#linesep #linesep) #(#path #path)
+			#(#pathsep #pathsep) #(#sep #sep)) }.
 		{ 'sys'. #sys. #(#(#'__breakpointhook__' #'__breakpointhook__')
 			#(#'__displayhook__' #'__displayhook__') #(#'__excepthook__' #'__excepthook__')
 			#(#'__unraisablehook__' #'__unraisablehook__') #(#api_version #api_version)
@@ -71,7 +104,9 @@ ModuleAttrReassignTestCase class >> accessors [
 			#(#float_repr_style #float_repr_style) #(#getrefcount #getrefcount)
 			#(#getsizeof #getsizeof) #(#hash_info #hash_info)
 			#(#hexversion #hexversion) #(#implementation #implementation)
-			#(#int_info #int_info)) }
+			#(#int_info #int_info) #(#modules #modules)) }.
+		{ 'zlib'. #zlib. #(#(#'ZLIB_RUNTIME_VERSION' #'ZLIB_RUNTIME_VERSION')
+			#(#'ZLIB_VERSION' #'ZLIB_VERSION')) }
 	}
 
 ]
@@ -185,8 +220,45 @@ ModuleAttrReassignTestCase >> testCmathAccessors [
 ]
 
 { #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testCopyregAccessors [
+	"The helpers (_reconstructor, __newobj__, ...) are FUNCTION-VALUED
+	attributes: CPython's copyreg binds module globals to Python functions, and
+	Grail's accessor answers those same function objects from _grail_copyreg.
+	So they stay value accessors that honour an assignment, not Smalltalk
+	functions -- a dispatcher would CALL the assigned function with no
+	arguments.  dispatch_table and the extension tables are session-local
+	dicts, shadowed the same way."
+
+	self assertAccessorsOf: 'copyreg'
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testDatetimeAccessors [
+	self assertAccessorsOf: 'datetime'
+
+]
+
+{ #category : 'Grail-Tests' }
 ModuleAttrReassignTestCase >> testEnumAccessors [
 	self assertAccessorsOf: 'enum'
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testEnvironAssignmentLeavesTheProcessEnvironmentAlone [
+	"Reading TZ is time.tzset's job, which CPython does through C getenv, not
+	through the os.environ attribute.  So once os >> environ honours an
+	assignment, the readers that stand for C getenv must not follow it: after
+	``os.environ = object()'' time still finds the TZ it found before."
+
+	| osInst timeInst before |
+	osInst := os @env1:instance.
+	timeInst := time @env1:instance.
+	before := timeInst @env1:___tzEnvironmentSpec___.
+	self assign: 'object' to: #environ on: osInst named: 'os'.
+	[self assert: timeInst @env1:___tzEnvironmentSpec___ equals: before]
+		ensure: [self restore: #environ on: osInst]
 
 ]
 
@@ -198,7 +270,7 @@ ModuleAttrReassignTestCase >> testEveryCheckAgreesWithCPython [
 
 	self
 		assert: (testModule @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '12 checks, 0 disagreeing [], keys match: True'
+		equals: '20 checks, 0 disagreeing [], keys match: True'
 
 ]
 
@@ -209,6 +281,25 @@ ModuleAttrReassignTestCase >> testFractionsAccessors [
 	See assign:to:on:named: for how the store is made."
 
 	self assertAccessorsOf: 'fractions'
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testFunctoolsAccessors [
+	"update_wrapper's own defaults do not follow: CPython binds them at def
+	time.  The fixture's ``functools defaults'' row checks that half."
+
+	self assertAccessorsOf: 'functools'
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testGemstoneAccessors [
+	"Computed on every read (System needsCommit, the session list, ...).  A
+	Python assignment shadows the computation, as an assignment shadows a
+	module __getattr__ in CPython."
+
+	self assertAccessorsOf: 'gemstone'
 
 ]
 
@@ -227,6 +318,12 @@ ModuleAttrReassignTestCase >> testHtmlAccessors [
 { #category : 'Grail-Tests' }
 ModuleAttrReassignTestCase >> testHtmlEntitiesAccessors [
 	self assertAccessorsOf: 'html.entities'
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testIoAccessors [
+	self assertAccessorsOf: 'io'
 
 ]
 
@@ -271,5 +368,36 @@ ModuleAttrReassignTestCase >> testSysAccessors [
 	over the accessor (#1954)."
 
 	self assertAccessorsOf: 'sys'
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testSysBreakpointIsAFunction [
+	"sys.breakpoint is a function (it pauses for the debugger), filed as a value
+	accessor -- so a READ performed it (#1233), and #1958's rule kept an
+	assigned function from reaching ``sys breakpoint''.  Filed as a function,
+	an assignment patches it like any module function.
+
+	The category is checked FIRST: with the old one the send below would run
+	the real breakpoint, which halts the gem rather than failing the test."
+
+	| inst |
+	inst := sys @env1:instance.
+	self deny: (Object ___grailIsModuleDataAccessor___: #breakpoint on: sys).
+	self call: #reassign with: #('sys' 'breakpoint' 'function').
+	[self assert: (inst perform: #breakpoint env: 1) equals: 'CALLED']
+		ensure: [
+			(inst dynamicInstVarAt: #breakpoint) == nil
+				ifFalse: [inst removeDynamicInstVar: #breakpoint]]
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleAttrReassignTestCase >> testZlibAccessors [
+	"ZLIB_VERSION used to answer ``self ZLIB_RUNTIME_VERSION''; once that
+	honours an assignment, ZLIB_VERSION must not follow it.  The fixture's
+	``zlib versions'' row checks that half."
+
+	self assertAccessorsOf: 'zlib'
 
 ]

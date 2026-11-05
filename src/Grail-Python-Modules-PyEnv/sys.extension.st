@@ -743,10 +743,11 @@ sys >> _breakpointhook: positional kw: kwargs [
 
 	Read from os.environ rather than the process environment: that is what
 	CPython consults, and it is what test.support's EnvironmentVarGuard
-	mutates."
+	mutates.  The VIEW, not the attribute: CPython's hook reads the process
+	environment, so it does not follow ``os.environ = other'' (issue #1973)."
 
 	| envDict hookname dotIdx modname funcname mod hook |
-	envDict := ((Python @env0:at: #os) @env0:___instance___) @env1:environ.
+	envDict := ((Python @env0:at: #os) @env0:___instance___) @env1:___environView___.
 	hookname := envDict @env1:get: 'PYTHONBREAKPOINT' _: None.
 	(hookname == nil or: [hookname @env0:== None])
 		ifTrue: [hookname := ''].
@@ -1005,7 +1006,7 @@ sys >> base_prefix [
 
 ]
 
-{ #category : 'Grail-Accessors' }
+{ #category : 'Grail-Built-in Functions' }
 sys >> breakpoint [
    "Signal a Smalltalk Halt that will be signalled with _signalToDebugger, to be handled by the
     controlling GCI debugger.  Exception handlers on the stack will not be executed.
@@ -1021,7 +1022,11 @@ sys >> breakpoint [
     'breakpointhook'?''.  So a bare breakpoint() with $PYTHONBREAKPOINT unset,
     which is the ordinary way to use it, raised an AttributeError naming the
     hook it had just come through.  Every other sys function here is an
-    instance method for the same reason."
+    instance method for the same reason.
+
+    A FUNCTION, filed with the others.  Filed as a value accessor, a plain
+    read of sys.breakpoint performed it and halted the gem (#1233), and an
+    assigned function never reached ``sys breakpoint'' (#1973)."
    self @env0:pause
 
 ]
@@ -1755,9 +1760,14 @@ sys >> modules [
 	(via loadModuleFromPath:).  That broke pickle-by-reference of a cold class
 	under canonical mode: pickle._find_global did ``sys.modules.get(modname)''
 	against the stale dict.  Because method lookup is dynamic, this accessor
-	shadows the stale slot even on a committed sys instance."
+	shadows the stale slot even on a committed sys instance.
 
-	^ sys modules
+	A Python ``sys.modules = d'' is what this answers instead (issue #1973),
+	as in CPython, where the attribute is rebound while the import system
+	keeps its own registry -- here the class-side ``sys modules'', which
+	importlib reads directly."
+
+	^ self ___assignedGlobalAt___: #modules otherwise: [sys modules]
 
 ]
 

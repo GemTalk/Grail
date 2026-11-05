@@ -621,6 +621,12 @@ timed "session-patch" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/ru
 # clean. Commits, so not SUnit.
 timed "runtime-compile-writes" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runRuntimeCompileWritesTest.gs < /dev/null || EXIT=$?
 
+# The install removes the change stamps those compiles left before #2108
+# (#1971): a stamp-only entry in the session-method package for a class Grail
+# built kept the class persistent. Seeds stale and legitimate entries and
+# checks the cleanup removes exactly the stale ones, idempotently. Commits.
+timed "stale-change-stamps" env LC_ALL=C topaz -lq -C "$TOPAZ_CFG" -S tests/scripts/runStaleChangeStampsTest.gs < /dev/null || EXIT=$?
+
 # REAL-APPLICATION acceptance (par.10): session A deploys a module-level
 # Flask app (committing the whole flask/werkzeug closure); session B
 # warm-binds it and the committed app must serve requests (routing, request

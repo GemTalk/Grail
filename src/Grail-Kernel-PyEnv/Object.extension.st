@@ -4008,8 +4008,14 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 			ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
 		tbl @env0:at: self put: ns.
 		^ ns].
+	"Only an AttributeError means the metaclass has no __prepare__.  Anything
+	else reading it raises -- a descriptor's own error -- is the class
+	statement's, as PyObject_GetOptionalAttr lets it through
+	(Python/bltinmodule.c:183).  Every exception used to read as absent, so a
+	__prepare__ that failed was quietly not called (test_metaclass's
+	FailDescr)."
 	prep := [aMetaclass ___pyAttrLoad___: #'__prepare__']
-		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil].
 	"type's own __prepare__ is not one the metaclass SUPPLIES.  Every metaclass
 	inherits it, ABCMeta included, so treating it as supplied would hand every
 	class with a Python metaclass a namespace -- where one that overrides
@@ -5941,12 +5947,12 @@ Object class >> ___pythonBuiltinTypeModule___ [
 	"NoneType, ellipsis and NotImplementedType too: CPython's
 	``type(None).__module__'' is 'builtins', and typing's _type_repr reads it
 	-- ``repr(Callable[..., None])'' raised AttributeError without it.  map,
-	filter and zip too, under their Smalltalk names: builtins binds the
-	iterator classes as those types (builtins >> initialize)."
+	filter, zip and reversed too, under their Smalltalk names: builtins binds
+	the iterator classes as those types (builtins >> initialize)."
 	((#( #bool #bytearray #bytes #complex #dict #enumerate #float #frozenset
 		#int #list #mappingproxy #memoryview #object #property #range #set #slice
 		#str #tuple #type #NoneType #ellipsis #NotImplementedType
-		#map_iterator #filter_iterator #zip_iterator )
+		#map_iterator #filter_iterator #zip_iterator #reversed_iterator )
 		@env0:includes: nm)
 		@env0:or: [(self ___pythonBuiltinExceptionNames___) @env0:includes: nm])
 		@env0:ifFalse: [^ nil].
@@ -8386,7 +8392,7 @@ Object >> ___classDict___ [
 	Grail-internal ``___...___'' selectors are excluded.  Data values that
 	read as Smalltalk nil are ABSENT (project convention) and skipped."
 
-	| d holder pairs imd cmd addSel |
+	| d holder pairs imd cmd addSel refused |
 	"An ORDERED dict, and the holder read FIRST.  CPython's class __dict__ is
 	insertion-ordered -- bpo-34320 made ``type('C', (), od)'' preserve the
 	namespace's order, and test_builtin's test_namespace_order asserts exactly
@@ -8432,8 +8438,9 @@ Object >> ___classDict___ [
 	``allowed'' is nil for a class whose method dictionary IS its Python
 	namespace, or the set of names to keep for one where it is not -- see
 	___grailPythonDictNames___."
+	refused := Set @env0:new.
 	addSel := [:sel :defCls :allowed |
-		| nm merged |
+		| nm merged refusal |
 		"THE SELECTOR IS DECODED, not cut at its first colon.  Every def compiles
 		a varargs transport ``_<name>:kw:'', and cutting that at the colon named
 		the method with one underscore too many: ``def star(self, *a)'' read as
@@ -8472,14 +8479,19 @@ Object >> ___classDict___ [
 
 		And a name must be a Python IDENTIFIER: a Smalltalk binary selector
 		(``<'', ``<='') on a kernel-backed class is no attribute of anything."
-		merged := [| meth |
-			((defCls @env0:categoryOfSelector: sel environmentId: 1)
-				@env0:= #'Grail-MI-Inherited')
-				or: [meth := defCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil.
-					meth @env0:notNil and: [meth @env0:pragmas @env0:anySatisfy: [:p |
-						p @env0:keyword == #grailProtocolRefusal
-							or: [p @env0:keyword == #grailSubclassInstanceDict]]]]]
+		refusal := [| meth |
+			meth := defCls @env0:compiledMethodAt: sel environmentId: 1 otherwise: nil.
+			meth @env0:notNil and: [meth @env0:pragmas @env0:anySatisfy: [:p |
+				p @env0:keyword == #grailProtocolRefusal
+					or: [p @env0:keyword == #grailSubclassInstanceDict]]]]
 			@env0:on: AbstractException do: [:e | e @env0:return: false].
+		merged := refusal or: [[(defCls @env0:categoryOfSelector: sel environmentId: 1)
+				@env0:= #'Grail-MI-Inherited']
+			@env0:on: AbstractException do: [:e | e @env0:return: false]].
+		"A refusal SHADOWS the hidden ancestors folded in below: bytearray's
+		__getnewargs__ refuses because its ancestor ByteArray -- bytes -- has a
+		real one, which must not then enter bytearray.__dict__ in its place."
+		(refusal and: [nm @env0:size @env0:> 0]) ifTrue: [refused @env0:add: nm].
 		(nm @env0:size @env0:> 0 and: [((nm @env0:at: 1) @env0:isLetter
 			or: [(nm @env0:at: 1) == $_]) @env0:not]) ifTrue: [nm := ''].
 		"...and EVERY character of it: a keyword selector the decoder does not
@@ -8496,7 +8508,8 @@ Object >> ___classDict___ [
 			and: [(nm @env0:copyFrom: 1 to: (3 @env0:min: nm @env0:size)) @env0:~= '___'
 			and: [nm @env0:~= '___dynInstVars___'
 			and: [(d @env0:includesKey: nm) @env0:not
-			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]) ifTrue: [
+			and: [(refused @env0:includes: nm) @env0:not
+			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]]) ifTrue: [
 			| um |
 			um := UnboundMethod definingClass: defCls selector: nm @env0:asSymbol.
 			"A declarative @property's getter is entered as the PROPERTY, the
@@ -10944,6 +10957,24 @@ Object >> ___grailIsFixedAritySelector___: aString from: firstColon [
 			ifFalse: [^ false].
 		i := i @env0:+ 2].
 	^ true
+
+]
+
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Object >> ___grailIsInternalName___: aName [
+	"Is aName, a decoded selector's Python name, one of Grail's ___internal___
+	ones rather than an attribute?  The rules ___classDict___ applies: three
+	leading underscores, or three TRAILING ones -- an ``___x___'' transported
+	as ``____x___:kw:'' decodes to ``__x___'', and ``___x___:kw:'' to
+	``__x___'' too -- or a character no identifier has, left by a keyword
+	selector the decoder does not recognise."
+
+	| size |
+	size := aName @env0:size.
+	size @env0:>= 3 ifFalse: [^ false].
+	(aName @env0:copyFrom: 1 to: 3) @env0:= '___' ifTrue: [^ true].
+	(aName @env0:copyFrom: size @env0:- 2 to: size) @env0:= '___' ifTrue: [^ true].
+	^ aName @env0:anySatisfy: [:character | (character @env0:isAlphaNumeric or: [character == $_]) @env0:not]
 
 ]
 
@@ -19106,18 +19137,27 @@ Object >> __dir__ [
 			selectors @env0:addAll: ((myClass @env0:allSelectorsForEnvironment: 1)
 				@env0:select: [:selector | self ___grailDirListsSelector___: selector in: myClass])].
 	selectors := selectors @env0:asArray.
-	"Filter out convenience methods (starting with ___)"
+	"Filter out convenience methods (starting with ___) -- but not a DUNDER's
+	varargs transport, which carries one underscore more than its name:
+	``___call__:kw:'' is staticmethod's __call__, which the spelling took for
+	one of Grail's ___internal___ selectors, so a dunder defined only that way
+	was missing from dir() while __dict__, which decodes first, listed it.  So
+	a ``___'' selector stays only when it decodes to a dunder that is no
+	internal name either: ``___allocateForNew:kw:'' still goes."
 	selectors := selectors @env0:reject: [:selector |
-		| selectorStr prefix |
+		| selectorStr name |
 		selectorStr := selector @env0:asString.
 		"``asFloat'' is PythonInstance's kernel-numeric bridge, compiled in env 1
 		so GemStone's own math reaches __float__ -- a Smalltalk selector, not a
 		Python attribute, and every class and instance listed it."
 		(selectorStr @env0:= 'asFloat') or: [
-		((selectorStr @env0:size) @env0:>= 3) ifTrue: [
-			prefix := selectorStr @env0:copyFrom: 1 to: 3.
-			prefix @env0:= '___'
-		] ifFalse: [false]]
+			((selectorStr @env0:size) @env0:>= 3
+				and: [(selectorStr @env0:copyFrom: 1 to: 3) @env0:= '___'])
+				and: [
+					name := self ___grailPythonNameForSelector___: selector.
+					(name ~~ nil
+						and: [(self ___grailIsDunderName___: name)
+						and: [(self ___grailIsInternalName___: name) @env0:not]]) @env0:not]]
 	].
 	"Each selector as the Python name it implements -- see
 	___grailPythonNameForSelector___:, which also explains the two encodings
