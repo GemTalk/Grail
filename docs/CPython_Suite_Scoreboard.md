@@ -85,7 +85,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_funcattrs | OK | 38 | 0 | 0 | 4 |  |
 | test.test_decorators | OK | 16 | 0 | 0 | 0 |  |
 | test.test_print | OK | 9 | 0 | 0 | 0 |  |
-| test.test_builtin | OK | 137 | 0 | 0 | 15 |  |
+| test.test_builtin | OK | 136 | 0 | 0 | 15 |  |
 | test.test_call | OK | 189 | 0 | 0 | 182 |  |
 | test.test_dynamic | OK | 11 | 0 | 0 | 2 |  |
 | test.test_exception_variations | OK | 30 | 0 | 0 | 0 |  |
@@ -122,7 +122,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_netrc | OK | 24 | 0 | 0 | 1 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 191 | 0 | 0 | 0 |  |
-| test.test_ssl | OK | 203 | 0 | 0 | 23 |  |
+| test.test_ssl | OK | 203 | 0 | 0 | 22 |  |
 | test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | OK | 233 | 0 | 0 | 7 |  |
@@ -175,7 +175,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_utf8_mode | OK | 12 | 0 | 0 | 13 |  |
 | test.test_urllib | OK | 101 | 0 | 0 | 2 |  |
 | test.test_ntpath | OK | 105 | 0 | 0 | 28 |  |
-| test.test_signal | ERROR | 57 | 1 | 2 | 43 |  |
+| test.test_signal | ERROR | 57 | 0 | 2 | 43 |  |
 | test.test_posixpath | OK | 94 | 0 | 0 | 29 |  |
 | test.test_genericpath | OK | 25 | 0 | 0 | 3 |  |
 | test.test_sys | ERROR | 97 | 1 | 8 | 60 |  |
@@ -183,7 +183,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_fileio | ERROR | 99 | 0 | 4 | 3 |  |
 | test.test_defaultdict | OK | 13 | 0 | 0 | 0 |  |
 | test.test_exceptions | ERROR | 107 | 6 | 3 | 30 |  |
-| test.test_descr | ERROR | 162 | 36 | 16 | 12 |  |
+| test.test_descr | ERROR | 162 | 34 | 15 | 12 |  |
 | test.test_cmd | OK | 7 | 0 | 0 | 3 |  |
 | test.test_sched | OK | 11 | 0 | 0 | 0 |  |
 | test.test_fileinput | OK | 57 | 0 | 0 | 1 |  |
@@ -192,7 +192,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_filecmp | ERROR | 16 | 0 | 1 | 0 |  |
 | test.test_dbm_dumb | OK | 26 | 0 | 0 | 1 |  |
 | test.test_robotparser | OK | 50 | 0 | 0 | 3 |  |
-| test.test_rlcompleter | FAIL | 8 | 1 | 0 | 0 |  |
+| test.test_rlcompleter | OK | 8 | 0 | 0 | 0 |  |
 | test.test_timeit | OK | 41 | 0 | 0 | 0 |  |
 | test.test_nturl2path | OK | 3 | 0 | 0 | 0 |  |
 | test.test_plistlib | ERROR | 70 | 0 | 1 | 5 |  |
@@ -235,5 +235,5 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_structseq | FAIL | 25 | 1 | 0 | 1 |  |
 | test.test_calendar | OK | 78 | 0 | 0 | 17 |  |
 | test.test_context | OK | 56 | 0 | 0 | 23 |  |
-| test.test_dataclasses | ERROR | 280 | 16 | 6 | 2 |  |
+| test.test_dataclasses | ERROR | 280 | 12 | 6 | 2 |  |
 | test.test_memoryio | FAIL | 182 | 8 | 0 | 5 |  |

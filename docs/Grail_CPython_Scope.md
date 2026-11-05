@@ -136,12 +136,12 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 78 | 4447 | 445 | 3907 | 10% |
+| P1 | 78 | 4446 | 445 | 3909 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
-| P3 | 32 | 4213 | 554 | 3629 | 13% |
-| P4 | 46 | 3781 | 146 | 3620 | 4% |
-| other | 23 | 1177 | 267 | 885 | 23% |
-| **all** | **210** | **17915** | **1970** | **15780** | **11%** |
+| P3 | 32 | 4213 | 554 | 3633 | 13% |
+| P4 | 46 | 3781 | 145 | 3621 | 4% |
+| other | 23 | 1177 | 267 | 887 | 23% |
+| **all** | **210** | **17914** | **1969** | **15789** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12.
 <!-- /test-tally -->
@@ -776,7 +776,7 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**28 of the 210 rows on the committed board are not OK.**
+**27 of the 210 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
@@ -784,13 +784,12 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_buffer` ERROR, 95 tests: 2 failed, 2 errors, 80 skipped
 - `test.test_multibytecodec` ERROR, 36 tests: 0 failed, 1 errors, 2 skipped
 - `test.test_str` ERROR, 138 tests: 1 failed, 1 errors, 11 skipped
-- `test.test_signal` ERROR, 57 tests: 1 failed, 2 errors, 43 skipped
+- `test.test_signal` ERROR, 57 tests: 0 failed, 2 errors, 43 skipped
 - `test.test_sys` ERROR, 97 tests: 1 failed, 8 errors, 60 skipped
 - `test.test_fileio` ERROR, 99 tests: 0 failed, 4 errors, 3 skipped
 - `test.test_exceptions` ERROR, 107 tests: 6 failed, 3 errors, 30 skipped
-- `test.test_descr` ERROR, 162 tests: 36 failed, 16 errors, 12 skipped
+- `test.test_descr` ERROR, 162 tests: 34 failed, 15 errors, 12 skipped
 - `test.test_filecmp` ERROR, 16 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_rlcompleter` FAIL, 8 tests: 1 failed, 0 errors, 0 skipped
 - `test.test_plistlib` ERROR, 70 tests: 0 failed, 1 errors, 5 skipped
 - `test.test_gzip` FAIL, 75 tests: 2 failed, 0 errors, 9 skipped
 - `test.test_email.test__header_value_parser` ERROR, 380 tests: 0 failed, 8 errors, 0 skipped
@@ -804,7 +803,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_types` ERROR, 129 tests: 6 failed, 7 errors, 3 skipped
 - `test.test_type_annotations` FAIL, 46 tests: 2 failed, 0 errors, 1 skipped
 - `test.test_structseq` FAIL, 25 tests: 1 failed, 0 errors, 1 skipped
-- `test.test_dataclasses` ERROR, 280 tests: 16 failed, 6 errors, 2 skipped
+- `test.test_dataclasses` ERROR, 280 tests: 12 failed, 6 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
 <!-- /not-ok-rows -->
 
