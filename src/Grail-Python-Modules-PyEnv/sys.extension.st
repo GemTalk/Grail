@@ -1653,7 +1653,7 @@ sys >> initialize_runtime_info [
 	self @env0:at: #_jit put: (sys__jit instance).
 	self @env0:at: #int_info put: PySysIntInfo @env0:___sysInstance___.
 	self @env0:at: #hash_info put: PySysHashInfo @env0:___sysInstance___.
-	self @env0:at: #thread_info put: None.
+	self @env0:at: #thread_info put: PySysThreadInfo @env0:___sysInstance___.
 	self @env0:at: #warnoptions put: (list ___new___).
 	self @env0:at: #tracebacklimit put: 1000.
 	self @env0:at: #ps1 put: '>>> '.
