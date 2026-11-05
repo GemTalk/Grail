@@ -53,6 +53,27 @@ LoggingLastResortTestCase >> testBasicConfigAsInCPython [
 ]
 
 { #category : 'Grail-Tests' }
+LoggingLastResortTestCase >> testEveryCheckPassesWithAHandlerLeftOnRoot [
+	"The checks empty the root logger and put it back; they must not depend on
+	it being empty to start with.  A handler an earlier test left on root --
+	FlaskScaffoldingTestCase's hasHandlers checks left a NullHandler -- made
+	testLastResort fail in any session that ran one first (#2159)."
+
+	| helper handler |
+	importlib @env1:modules removeKey: #'logging_root_handler' ifAbsent: [].
+	helper := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/logging_root_handler.py')
+		name: 'logging_root_handler'.
+	handler := helper @env1:add_root_handler.
+	[self setUp.
+	self assert: (helper @env1:failing: self results) @env1:__len__ equals: 0]
+		ensure: [
+			helper @env1:remove_root_handler: handler.
+			importlib @env1:modules removeKey: #'logging_root_handler' ifAbsent: []]
+
+]
+
+{ #category : 'Grail-Tests' }
 LoggingLastResortTestCase >> testEveryFixtureCheckIsAssertedByATestHere [
 	"The lists here name 15 checks.  A check added to the fixture without
 	being listed would pass unasserted, so the count is pinned."
