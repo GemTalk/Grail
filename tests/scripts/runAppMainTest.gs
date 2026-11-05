@@ -220,7 +220,13 @@ greeting = "hello"
 '.
 
 System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
+importlib ___irBuilderCacheReset___.
 main := importlib runPath: root , '/main.py'.
+"The control for session 2's warm checks: the cold run DOES build A's and
+B's methods and cache their builders, so an empty cache there is a fact."
+check value: 'the first run caches the builders of its class methods'
+  value: (importlib ___irCodegenEnabled___ not
+    or: [importlib ___irBuilderCache___ notEmpty]).
 check value: 'the top file runs as the app''s canonical __main__'
   value: (((importlib ___grailNamespace___ at: #'GrailCanonicalModules') at: '__main__' otherwise: nil) == main).
 check value: 'a transient global reads in the session that set it'
@@ -355,9 +361,19 @@ b1 := committed dynamicInstVarAt: #'b1'.
 started := committed dynamicInstVarAt: #'started'.
 
 System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
+"Warm bind compiles nothing: no IR method built (classes A and B have
+methods, so a class build would build some), and no builder cached for a
+regeneration -- the cache is filled by builds, so an empty one is the same
+fact seen from P2.1's side."
+importlib ___irStatsReset___.
+importlib ___irBuilderCacheReset___.
 main := importlib runPath: root , '/main.py'.
 check value: 'a re-run runs over the committed globals' value: main == committed.
 check value: 'an unchanged re-run writes nothing' value: System needsCommit not.
+check value: 'an unchanged re-run builds no IR method'
+  value: ((importlib ___irStats___ at: #compiled) = 0
+    and: [(importlib ___irStats___ at: #fallbacks) = 0]).
+check value: 'and caches no builder' value: importlib ___irBuilderCache___ isEmpty.
 check value: 'its stored object is the same object' value: (main dynamicInstVarAt: #'b1') == b1.
 check value: 'the transient global was rebound by this run'
   value: (main dynamicInstVarAt: #'scratch') = 'session'.
