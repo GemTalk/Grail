@@ -19,7 +19,8 @@ Class {
 		'fieldStarts',
 		'openFieldAt',
 		'openFieldInSpec',
-		'templateSpec'
+		'templateSpec',
+		'formatSpec'
 	],
 	#category : 'Grail-Parser'
 }
@@ -32,6 +33,16 @@ PythonToken class >> type: aSymbol value: aString line: aLine position: aPositio
                 line: aLine
 		value: aString 
 		position: aPosition 
+
+]
+
+{ #category : 'Grail-accessing' }
+PythonToken >> beFormatSpec [
+	"This FSTRING token is the format spec of a replacement field, parsed by a
+	child parser (PythonParser >> ___fstringSpecExprFor:at:), where a brace
+	always opens a field rather than escaping one (isFormatSpec)."
+
+	formatSpec := true
 
 ]
 
@@ -143,6 +154,13 @@ PythonToken >> isBytes [
 PythonToken >> isEndMarker [
 
 	^type == #ENDMARKER
+
+]
+
+{ #category : 'Grail-testing' }
+PythonToken >> isFormatSpec [
+
+	^ formatSpec == true
 
 ]
 
