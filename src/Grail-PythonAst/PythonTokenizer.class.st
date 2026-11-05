@@ -1775,7 +1775,14 @@ PythonTokenizer >> tokenizeOperator [
 	startLine := line.
 	startPos := position .
 	char := self advance.
-	char codePoint >= 128 ifTrue: [^ self ___invalidCharacter___: char].
+	"Non-ASCII, or an ASCII control character: CPython's lexer names one that
+	starts no token -- ``invalid non-printable character U+007F'' for DEL,
+	U+000B for a vertical tab -- where a printable one like ``$'' falls
+	through to the parser's ``invalid syntax'' (Parser/lexer/lexer.c,
+	tok_get_normal_mode)."
+	(char codePoint >= 128
+		or: [(String new @env1:___pyIsPrintableCodePoint___: char codePoint) not])
+			ifTrue: [^ self ___invalidCharacter___: char].
 	next := self peek.
 
 	"Three-character operators  **= //= <<= >>= ... "
