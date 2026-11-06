@@ -56,6 +56,16 @@ def _ranges(text):
     return starts, values
 
 
+def _sparse(text, convert):
+    """``point:value;...`` (point in hex) -> {point: convert(value)}."""
+    table = {}
+    for item in _text(text).split(';'):
+        if item:
+            point, value = item.split(':')
+            table[int(point, 16)] = convert(value)
+    return table
+
+
 class Database:
     """The queries ``unicodedata`` answers, for one UCD version."""
 
@@ -96,6 +106,12 @@ class Database:
                 first, second, composite = item.split(' ')
                 compose[(int(first, 16), int(second, 16))] = int(composite, 16)
         self._compose = compose
+        self._eaw_starts, self._eaw_values = _ranges(data.EAST_ASIAN_WIDTH)
+        self._mirrored_starts, mirrored = _ranges(data.MIRRORED)
+        self._mirrored_values = [int(v) for v in mirrored]
+        self._decimal = _sparse(data.DECIMAL, int)
+        self._digit = _sparse(data.DIGIT, int)
+        self._numeric = _sparse(data.NUMERIC, float)
         self._built = True
 
     @staticmethod
@@ -112,11 +128,50 @@ class Database:
         return values[bisect.bisect_right(starts, point) - 1]
 
     @staticmethod
-    def _point(ch, what):
-        if not isinstance(ch, str) or len(ch) != 1:
-            raise TypeError('%s() argument must be a unicode character, not %s'
-                            % (what, type(ch).__name__))
+    def _point(ch, what, argument='argument'):
+        """The code point of ch, refused as Argument Clinic's ``int(accept={str})''
+        refuses anything but a one-character str (Modules/clinic/unicodedata.c.h)."""
+        if not isinstance(ch, str):
+            raise TypeError('%s() %s must be a unicode character, not %s'
+                            % (what, argument, type(ch).__name__))
+        if len(ch) != 1:
+            raise TypeError('%s(): %s must be a unicode character, not a string of length %d'
+                            % (what, argument, len(ch)))
         return ord(ch)
+
+    def _value(self, table, ch, default, what, refusal):
+        """A numeric value of ch, the default when it has none, or ValueError
+        when none is given (unicodedata_UCD_decimal_impl and its two siblings,
+        Modules/unicodedata.c)."""
+        if len(default) > 1:
+            raise TypeError('%s expected at most 2 arguments, got %d' % (what, 1 + len(default)))
+        point = self._point(ch, what, 'argument 1')
+        self._build()
+        values = getattr(self, table)
+        if point in values:
+            return values[point]
+        if default:
+            return default[0]
+        raise ValueError(refusal)
+
+    def decimal(self, ch, *default):
+        return self._value('_decimal', ch, default, 'decimal', 'not a decimal')
+
+    def digit(self, ch, *default):
+        return self._value('_digit', ch, default, 'digit', 'not a digit')
+
+    def numeric(self, ch, *default):
+        return self._value('_numeric', ch, default, 'numeric', 'not a numeric character')
+
+    def east_asian_width(self, ch):
+        self._build()
+        return self._lookup(self._eaw_starts, self._eaw_values,
+                            self._point(ch, 'east_asian_width'))
+
+    def mirrored(self, ch):
+        self._build()
+        return self._lookup(self._mirrored_starts, self._mirrored_values,
+                            self._point(ch, 'mirrored'))
 
     def category(self, ch):
         self._build()
