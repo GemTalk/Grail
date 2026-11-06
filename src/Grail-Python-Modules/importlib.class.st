@@ -2181,6 +2181,14 @@ importlib class >> ___codecRoundTrip___: aName selector: aSelector with: aValue 
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___codecsModule___ [
+	"_codecs, imported if nothing has imported it yet."
+
+	^ ((Python at: #builtins) @env1:instance) @env1:___import__: { '_codecs' } kw: nil
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___codegenTraceDir___ [
 	"Return the codegen-trace output directory, or nil if tracing is
@@ -2559,6 +2567,19 @@ importlib class >> ___currencyMemo___ [
 
 ]
 
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___decode___: someBytes as: anEncoding callingHandler: aHandlerName [
+	"someBytes decoded by bytes.decode's own anEncoding, calling the handler
+	registered as aHandlerName at each error, or None for a codec it leaves
+	to bytes.decode -- see _codecs _decode_calling_handler."
+
+	^ self ___codecsModule___
+		@env1:_decode_calling_handler: someBytes
+		_: anEncoding
+		_: aHandlerName
+
+]
+
 { #category : 'Grail-Canonical Classes' }
 importlib class >> ___depCollectorStack___ [
 	"Session-local stack of { moduleName . namesImported } for the module
@@ -2764,6 +2785,19 @@ importlib class >> ___dropUnbuiltClasses___: aModuleName [
 					ifTrue: [reg removeKey: k ifAbsent: []]]].
 	(SessionTemps current at: #'GrailBuiltThisLoad' otherwise: nil)
 		ifNotNil: [:map | map removeKey: aModuleName asString asSymbol ifAbsent: []]
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___encode___: aStr as: anEncoding callingHandler: aHandlerName [
+	"aStr encoded by str.encode's own anEncoding, calling the handler
+	registered as aHandlerName at each error, or None for a codec it leaves
+	to str.encode -- see _codecs _encode_calling_handler."
+
+	^ self ___codecsModule___
+		@env1:_encode_calling_handler: aStr
+		_: anEncoding
+		_: aHandlerName
 
 ]
 
@@ -7997,6 +8031,17 @@ importlib class >> ___mroOverrideRegistry___ [
 		reg := IdentityKeyValueDictionary new.
 		SessionTemps current at: #GrailMroOverrideRegistry put: reg].
 	^ reg
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___namesARegisteredHandler___: anErrorsName [
+	"Whether anErrorsName is not one of the eight handlers str.encode and
+	bytes.decode implement themselves (codecs_builtin_error_handlers,
+	Python/codecs.c:22-26), so names one codecs.register_error registers."
+
+	^ (#('strict' 'ignore' 'replace' 'xmlcharrefreplace' 'backslashreplace'
+		'namereplace' 'surrogatepass' 'surrogateescape') includes: anErrorsName) not
 
 ]
 

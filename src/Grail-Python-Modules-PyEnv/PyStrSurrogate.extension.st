@@ -477,6 +477,19 @@ PyStrSurrogate >> encode: encoding _: errors [
 
 	| e enc |
 	e := errors @env0:asString.
+	"A handler codecs.register_error registered is called at each error -- see
+	str's encode:_:.  A codec _codecs does not implement is the registry's,
+	whose codec calls the handler itself: the refusal at the end of this
+	method knows only the policies above."
+	(importlib @env0:___namesARegisteredHandler___: e) ifTrue: [ | encoded |
+		encoded := importlib @env0:___encode___: self as: encoding callingHandler: e.
+		encoded == None ifFalse: [^ encoded].
+		encoded := importlib
+			@env0:___codecRoundTrip___: encoding @env0:asString
+			selector: #'encode'
+			with: self
+			errors: e.
+		encoded == nil ifFalse: [^ encoded]].
 	"utf-8-sig IS utf-8 WITH ONE BOM IN FRONT, which is exactly how CPython's
 	codec is written (``codecs.utf_8_encode'' behind a BOM).  Handing it to
 	the branches below whole wrote a BOM per re-encoded fragment -- the
