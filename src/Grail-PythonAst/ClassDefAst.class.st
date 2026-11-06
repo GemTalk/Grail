@@ -2714,7 +2714,10 @@ ClassDefAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irRefusalDetail___: localNames [
-	^ (self ___irMethodLocalClassReason___: localNames) ifNil: [#'shape:ClassDefAst']
+	"The predicate is this reason's isNil, so a nil here means the two drifted:
+	an INVARIANT (P1.3)."
+
+	^ (self ___irMethodLocalClassReason___: localNames) ifNil: [#'invariant:ClassDefAst-noReason']
 
 ]
 
@@ -5832,7 +5835,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 								importlib ___irCensusOn___ ifTrue: [
 									importlib ___irCensusNote___:
 											('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
-												on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+												on: Error do: [:ex | ex return: #'invariant:reasonProbeRaised']) asString) asSymbol
 										module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 										def: name asString , '.' , def name asString count: 1].
 								"Keyed by SELECTOR, not Python name: a @property getter and its
@@ -5933,7 +5936,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 					importlib ___irCensusOn___ ifTrue: [
 						importlib ___irCensusNote___:
 								('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
-									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+									on: Error do: [:ex | ex return: #'invariant:reasonProbeRaised']) asString) asSymbol
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
 					(importlib ___irClassSeamEnabled___
@@ -5971,7 +5974,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 					importlib ___irCensusOn___ ifTrue: [
 						importlib ___irCensusNote___:
 								('cm:' , ([def ___irIneligibilityReason___ ifNil: [#eligible]]
-									on: Error do: [:ex | ex return: #reasonProbeError]) asString) asSymbol
+									on: Error do: [:ex | ex return: #'invariant:reasonProbeRaised']) asString) asSymbol
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
 					(importlib ___irClassSeamEnabled___

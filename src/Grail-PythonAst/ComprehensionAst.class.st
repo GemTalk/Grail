@@ -547,12 +547,12 @@ ComprehensionAst class >> ___irRefusal___: generators [
 	clause structure.  Guarded: eligibility never raises."
 
 	^ [(generators isNil or: [generators isEmpty])
-		ifTrue: [#'Comprehension:noGenerators']
+		ifTrue: [#'invariant:Comprehension-noGenerators']
 		ifFalse: [
 			(generators detect: [:g | (self ___irTargetShapeOk___: g target) not] ifNone: [nil])
 				ifNil: [nil]
 				ifNotNil: [:g | self ___irTargetRefusal___: g target]]]
-		on: Error do: [:ex | #'Comprehension:probeError']
+		on: Error do: [:ex | #'invariant:Comprehension-probeRaised']
 
 ]
 
@@ -593,18 +593,25 @@ ComprehensionAst class >> ___irTargetRefusal___: aTarget [
 	`Comprehension:starTarget' is retired with the refusal it named: a starred
 	ELEMENT is admitted.  What remains are the two star shapes the parser
 	already rejects as SyntaxErrors -- a bare ``for *a in x'' and two stars in
-	one tuple -- labelled for what they are rather than for the old cut."
+	one tuple -- labelled for what they are rather than for the old cut.
 
-	(aTarget isKindOf: StarredAst) ifTrue: [^ #'Comprehension:bareStarTarget'].
+	EVERY row here is a PARSER INVARIANT (P1.3), so every one carries the
+	``invariant:'' prefix: parseComprehensions gives each clause target Store
+	context through setStoreCtx:, whose ___invalidTarget___:kind: rejects any
+	target that is not a name, attribute, subscript or a tuple / list nest of
+	them, and the star rules are SyntaxErrors.  A tuple target with no
+	elements list (``-targetNoElts'') is not something the parser builds."
+
+	(aTarget isKindOf: StarredAst) ifTrue: [^ #'invariant:Comprehension-bareStarTarget'].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
 		((aTarget elts ifNil: [#()]) select: [:e | e isKindOf: StarredAst]) size > 1
-			ifTrue: [^ #'Comprehension:target-starCount'].
+			ifTrue: [^ #'invariant:Comprehension-starCount'].
 		(aTarget elts ifNil: [#()]) do: [:e |
 			| leaf |
 			leaf := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
 			(self ___irTargetShapeOk___: leaf) ifFalse: [^ self ___irTargetRefusal___: leaf]].
-		^ #'Comprehension:target-other'].
-	^ ('Comprehension:target-' , aTarget class name asString) asSymbol
+		^ #'invariant:Comprehension-targetNoElts'].
+	^ ('invariant:Comprehension-target-' , aTarget class name asString) asSymbol
 
 ]
 

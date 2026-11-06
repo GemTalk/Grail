@@ -112,7 +112,7 @@ NonlocalAst >> ___irNonlocalOwnerDef___ [
 NonlocalAst >> ___irRefusalDetail___: localSet [
 	"Census: which of the two exits above refused this declaration."
 
-	| declared owner |
+	| declared |
 	declared := names ifNil: [#()].
 
 	"A name that is NOT a local of this def may still be emittable: inside a
@@ -124,9 +124,11 @@ NonlocalAst >> ___irRefusalDetail___: localSet [
 		(localSet includes: n asString)
 			or: [self ___enclosingFunctionLocalBeyondClass___: n]])
 		ifFalse: [^ #'NonlocalAst:notLocal'].
-	owner := self ___irNonlocalOwnerDef___.
-	owner isNil ifTrue: [^ #'NonlocalAst:noOwner'].
-	^ #'NonlocalAst:other'
+	"Past that test the predicate refuses only for a missing owner, and a
+	``nonlocal'' outside every def is the parser's ``nonlocal declaration not
+	allowed at module level'': an INVARIANT (P1.3).  The old
+	``NonlocalAst:other'' row after it could not be reached."
+	^ #'invariant:NonlocalAst-noOwner'
 
 ]
 

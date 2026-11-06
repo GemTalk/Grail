@@ -134,6 +134,34 @@ AbstractNode class >> ___irCollectBreakSetsDuring___: aBlock [
 ]
 
 { #category : 'Grail-IR Codegen' }
+AbstractNode class >> ___irIsInvariantReason___: aReason [
+	"Is aReason -- an IR refusal Symbol, as the census records it -- one that
+	only a BROKEN INVARIANT can produce?  Those all live under one prefix,
+	``invariant:<Owner>-<cause>'' (P1.3):
+
+	  * a parser or compile-context invariant: the shape the exit guards is a
+	    SyntaxError Grail's parser already raises, or a context the seams
+	    never set up (``invariant:TryAst-noHandlersNoFinally'');
+	  * ``-probeRaised'': an ``on: Error'' guard around a predicate fired --
+	    eligibility itself raised, which is a Grail bug;
+	  * ``-noReason'': a refusal detail that mirrors its predicate exit for
+	    exit found nothing to name -- the two have drifted.
+
+	Such an exit still answers false, so the def keeps its correct text
+	compile; the prefix is what lets a census (and P1.4's strict mode, under
+	which any fallback raises) tell an internal error from a shape the IR path
+	does not emit yet.  A cm: row is the same reason behind the class-method
+	seam's prefix."
+
+	| s |
+	aReason isNil ifTrue: [^ false].
+	s := aReason asString.
+	(s beginsWith: 'cm:') ifTrue: [s := s copyFrom: 4 to: s size].
+	^ s beginsWith: 'invariant:'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AbstractNode class >> ___irRecordBreakSet___: aSet [
 	| stack |
 	stack := self ___irBreakSetStack___.

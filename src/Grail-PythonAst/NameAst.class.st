@@ -2337,22 +2337,32 @@ NameAst >> ___irRefusalDetail___: localSet [
 	resolution, and is named by the rows below it."
 	id asSymbol == #'super' ifTrue: [
 		(self ___declaredInEnclosingFunction___: #'super')
-			ifTrue: [^ #'NameAst:super-declaredInFunction'].
-		self ___irSpecialNameFallsThrough___ ifFalse: [^ #'NameAst:super-other']].
+			ifTrue: [^ #'NameAst:super-declaredInFunction']].
 	id asSymbol == #'__class__' ifTrue: [
 		self ___irSpecialNameFallsThrough___ ifFalse: [^ #'NameAst:__class__-other']].
 	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands
-	down for a read that goes through the class cell, so such a read must fall
-	through to the #classCell row below rather than be named for its spelling."
+	down for a read that goes through the class cell, so such a read must not
+	be named for its spelling -- it is the #classCell kind, which admits it."
 	((FunctionDefAst isSmalltalkReservedIdentifier: id asString)
 		and: [self ___readsThroughClassCell___ not
 		and: [self ___irSpecialNameFallsThrough___ not]])
 			ifTrue: [^ #'NameAst:reservedIdentifier'].
-	CallAst classBeingCompiled notNil ifTrue: [
-		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
-		^ #'NameAst:classContextOther'].
-	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule'].
-	^ #'NameAst:other'
+	CallAst classBeingCompiled isNil ifTrue: [
+		CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule']].
+	"Nothing else can answer nil, so what is left is an INVARIANT (P1.3).
+
+	A non-special name in a method takes ___irClassContextLoadKind___, which
+	has no nil exit; in a module def it takes ___irOrdinaryLoadKind___'s module
+	tail, which has none either.  ``type'' always resolves (its own kind, or
+	the ordinary one); ``super'' not declared by an enclosing function is
+	#superClass / #superShadowed, or the ordinary kind when the module binds
+	it; a reserved name or ``super'' read through the class cell is #classCell.
+	So ___irNonLocalLoadKind___: answers nil past the rows above only when its
+	``on: Error do: [nil]'' guard fired, or for a NameAst with no ctx.  Four
+	rows used to stand here -- `NameAst:super-other', `NameAst:classCell',
+	`NameAst:classContextOther' and `NameAst:other' -- each naming a load the
+	predicate admits."
+	^ #'invariant:NameAst-loadKindNil'
 
 ]
 

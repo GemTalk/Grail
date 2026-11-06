@@ -174,11 +174,20 @@ AnnAssignAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___irRefusalDetail___: localSet [
+	"An attribute target with a value is its AssignAst's, and says so.  The
+	other two exits are PARSER INVARIANTS for a def body (P1.3): a Name target
+	there is module-scope only under ``global x'', and ``global x; x: T = v''
+	is the parser's ``annotated name 'x' can't be global''; any other Name
+	target is a local, because the annotated assignment binds it (``nonlocal
+	x; x: T'' is ``can't be nonlocal''); and a target that is not a Name,
+	attribute or subscript is ``only single target ... can be annotated''.  A
+	subscript whose pieces refuse is named by the walk before this runs."
+
 	(value notNil and: [target isKindOf: AttributeAst]) ifTrue: [
 		^ self ___plainAssign___ ___irRefusalDetail___: localSet].
 	((target isKindOf: NameAst) and: [self isModuleScopeAnnTarget: target])
-		ifTrue: [^ #'AnnAssignAst:moduleTarget'].
-	^ #'AnnAssignAst:target'
+		ifTrue: [^ #'invariant:AnnAssignAst-moduleTarget'].
+	^ #'invariant:AnnAssignAst-target'
 
 ]
 
