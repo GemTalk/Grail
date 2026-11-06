@@ -1034,8 +1034,8 @@ FileIO >> readall [
 { #category : 'Grail-Reading' }
 FileIO >> readinto: aBuffer [
 	"FileIO.readinto(b): read as many bytes as the writable buffer b holds -- a
-	bytearray, or a memoryview over one, whatever its shape -- into it, and
-	answer how many arrived.  The buffer is refused before the file is asked
+	bytearray, a memoryview whatever its shape, or an array.array -- into it,
+	and answer how many arrived.  The buffer is refused before the file is asked
 	anything, as CPython's argument conversion runs first."
 
 	| window data |
