@@ -40,7 +40,15 @@ ESCAPES.  Two operations hand the construct to something else:
 CHILD AST node, which has its own text and IR emitters; ``unrouted:'' hands
 the text stream to a ClassDefAst helper that has not been moved onto this
 protocol yet.  Every ``unrouted:'' is a place an IR backend cannot follow, and
-the list of them is the remaining work."
+the list of them is the remaining work.
+
+BLOCKS.  ``block:'' and ``blockWithArgs:temps:do:'' are real block LITERALS
+(not sent ``value'' -- a closure cell, a default's thunk, the annotate
+function); the conditionals ``ifTrue:do:'', ``ifFalse:do:'' and
+``ifTrue:do:ifFalse:'' take their bodies as blocks the backend inlines.  In a
+body, a construct written with ``statement:'' / ``statementWithoutNewline:'' is
+a statement; what the body block itself answers last, unterminated, is the
+block's value (``[x]'', ``[:v | x := v]'', ``... ___annotations___]'')."
 Class {
 	#name : 'ClassBuildEmitter',
 	#superclass : 'Object',
@@ -66,6 +74,26 @@ ClassBuildEmitter >> assign: aName from: aBlock [
 
 ]
 
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> block: bodyBlock [
+	"A zero-argument block LITERAL, ``[<body>]'' -- not sent ``value'': a
+	closure cell's reader, a default's thunk, an annotation's value.  The body
+	is usually one expression, which is the block's value."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> blockWithArgs: argNames temps: tempNames do: bodyBlock [
+	"A block LITERAL with arguments and (possibly no) temps,
+	``[:a :b | | t | <body>]'' -- a closure cell's setter, the annotate
+	function.  What the body answers last, unterminated, is its value."
+
+	^ self subclassResponsibility
+
+]
+
 { #category : 'Grail-literals' }
 ClassBuildEmitter >> boolean: aBoolean [
 	"The literal ``true'' or ``false''."
@@ -77,6 +105,17 @@ ClassBuildEmitter >> boolean: aBoolean [
 { #category : 'Grail-expressions' }
 ClassBuildEmitter >> braceArray: elementBlocks [
 	"``{ e1. e2 }'' -- an Array built at run time."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> braceArrayOnNextLine: elementBlocks [
+	"braceArray: in a third spelling, its elements starting a line of their own
+	-- a decorator call's argument, which the text's line scan must see on the
+	line after the receiver's position store (FunctionDefAst >>
+	printDecoratorCallOn:line:receiver:argument:)."
 
 	^ self subclassResponsibility
 
@@ -160,6 +199,32 @@ ClassBuildEmitter >> emptyArray [
 { #category : 'Grail-children' }
 ClassBuildEmitter >> expressionNode: anAst [
 	"A child node's expression, as the node emits it."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> ifFalse: condBlock do: bodyBlock [
+	"The expression ``<cond> ifFalse: [<body>]''."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> ifTrue: condBlock do: bodyBlock [
+	"The expression ``<cond> ifTrue: [<body>]'' -- ifTrue:inline: without the
+	statement around it, so it can stand inside a block or another statement."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> ifTrue: condBlock do: thenBlock ifFalse: elseBlock [
+	"The expression ``<cond> ifTrue: [<then>] ifFalse: [<else>]'' -- a
+	class-body ``if'', whose branches are statements."
 
 	^ self subclassResponsibility
 
@@ -277,7 +342,20 @@ ClassBuildEmitter >> send: aSelector env: anEnvOrNil to: rcvrBlock [
 
 { #category : 'Grail-expressions' }
 ClassBuildEmitter >> send: aSelector env: anEnvOrNil to: rcvrBlock with: argBlocks [
-	"A binary or keyword send, one argument block per argument."
+	"A binary or keyword send, one argument block per argument.  A binary
+	selector takes an environment like any other (``a @env0:-> b'')."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> sendOnNextLine: aSelector env: anEnvOrNil to: rcvrBlock with: argBlocks [
+	"A keyword send whose keywords start a new line: send:env:to:with: in the
+	spelling a decorator call needs, so that the text's line scan attributes the
+	call to the decorator's line (FunctionDefAst >>
+	printDecoratorCallOn:line:receiver:argument:).  Layout only: an IR
+	backend implements it as send:env:to:with:."
 
 	^ self subclassResponsibility
 
@@ -332,6 +410,19 @@ ClassBuildEmitter >> stringArray: strings [
 ]
 
 { #category : 'Grail-literals' }
+ClassBuildEmitter >> stringIndentedByStream: aString [
+	"A String literal in the spelling AbstractNode >> emitStringLiteral:on: has
+	always written: a character at a time, so the text stream indents a newline
+	INSIDE it.  That changes the value -- a known text-arm defect (P3.1 design
+	note, section 8) -- and is kept only so the generated text does not change.
+	An IR backend answers the plain literal, as string: does; moving the
+	callers to string: fixes the text arm too."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-literals' }
 ClassBuildEmitter >> symbol: aString [
 	"A Symbol literal."
 
@@ -350,6 +441,14 @@ ClassBuildEmitter >> symbolArray: names [
 { #category : 'Grail-literals' }
 ClassBuildEmitter >> symbolPairArray: pairs [
 	"A literal Array of two-Symbol Arrays, ``#( #( a b ) #( c d ) )''."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildEmitter >> terminatedBraceArray: elementBlocks [
+	"braceArray: in the spelling with every element terminated, ``{ a. b. }''."
 
 	^ self subclassResponsibility
 
