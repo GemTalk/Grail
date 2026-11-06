@@ -1003,3 +1003,17 @@ test.test_extcall
 #
 #   charmapcodec   4t OK
 test.test_charmapcodec
+
+# --- stat (added 2026-11-06) ---
+#
+# test_stat is CPython 3.14.4's, vendored verbatim (identical in 3.14.8): the
+# stat module's mode constants and predicates, over os.stat/lstat/fstat on
+# real files.  It is listed out of scope with the OS modules, as test_fileio
+# and test_filecmp are, and runs here as they do.  Its import needed one
+# GRAIL ADAPTATION in test.support.socket_helper: skip_unless_bind_unix_socket
+# made an AF_UNIX socket outside its try, and GemStone's sockets refuse one
+# with OSError.  The C _stat variants skip, as there is no _stat.  Measured on
+# Darwin arm64:
+#
+#   stat   22t OK (14 skipped)
+test.test_stat

@@ -807,7 +807,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_dataclasses` ERROR, 280 tests: 16 failed, 6 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_charmapcodec`, `test_extcall`, `test_unpack_ex`.
+Wired, but not on the board until the next nightly measures them: `test_charmapcodec`, `test_extcall`, `test_stat`, `test_unpack_ex`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
