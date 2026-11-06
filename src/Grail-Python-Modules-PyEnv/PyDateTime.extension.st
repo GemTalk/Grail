@@ -1966,6 +1966,11 @@ PyDateTime >> strftime: format [
 	the `time' module's formatter has no tzinfo concept (it would emit a
 	guessed 'UTC' for %Z and drop %z entirely)."
 	fmt := PyDateTime ___expandTzDirectives___: fmt for: self.
+	fmt := time
+		@env0:___normalizingCenturyOf___: fmt
+		year: (self @env0:dynamicInstVarAt: #_year)
+		month: (self @env0:dynamicInstVarAt: #_month)
+		day: (self @env0:dynamicInstVarAt: #_day).
 	^ time instance strftime: fmt _: structTime
 
 ]
