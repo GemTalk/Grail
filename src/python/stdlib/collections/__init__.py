@@ -930,9 +930,14 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
 
         # ``cls, /'': a field may be NAMED cls (or self), and its keyword must
         # reach **kwargs rather than collide with the receiver.
+        #
+        # This and _make, _replace and __repr__ read the fields the factory
+        # was called with, not the class's: CPython generates them from
+        # field_names, so a subclass that declares more _fields -- platform's
+        # uname_result adds 'processor' -- is still built from the base's.
         def __new__(cls, /, *args, **kwargs):
-            nfields = len(cls._fields)
-            tname = cls._typename
+            nfields = len(fields)
+            tname = typename
             if len(args) > nfields:
                 raise TypeError(
                     tname + '() takes ' + str(nfields)
@@ -940,22 +945,22 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
                     + ' were given')
             values = list(args)
             for i in range(len(args), nfields):
-                name = cls._fields[i]
+                name = fields[i]
                 if name in kwargs:
                     values.append(kwargs.pop(name))
-                elif name in cls._field_defaults:
-                    values.append(cls._field_defaults[name])
+                elif name in field_defaults:
+                    values.append(field_defaults[name])
                 else:
                     raise TypeError(
                         tname + '() missing required argument: '
                         + repr(name))
             for name in kwargs:
-                if name not in cls._fields:
+                if name not in fields:
                     raise TypeError(
                         tname
                         + '() got an unexpected keyword argument: '
                         + repr(name))
-                idx = cls._fields.index(name)
+                idx = fields.index(name)
                 if idx < len(args):
                     raise TypeError(
                         tname
@@ -1016,10 +1021,11 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
             object.__delattr__(self, name)
 
         def _asdict(self):
-            result = {}
-            for i in range(len(self._fields)):
-                result[self._fields[i]] = tuple.__getitem__(self, i)
-            return result
+            # The class's _fields, zipped with the values as iterating gives
+            # them, as CPython's is: a subclass with more _fields than values
+            # stops at the shorter, and one with its own __iter__ is read
+            # through it.
+            return dict(zip(self._fields, self))
 
         def __getnewargs__(self):
             return tuple(self)
@@ -1036,20 +1042,20 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
             arguments, and re-running it on already-normalised values is
             both wasteful and, for a subclass that validates, wrong."""
             values = list(iterable)
-            if len(values) != len(cls._fields):
+            if len(values) != len(fields):
                 raise TypeError(
-                    cls._typename + '._make expected ' + str(len(cls._fields))
+                    typename + '._make expected ' + str(len(fields))
                     + ' values, got ' + str(len(values))
                 )
             return tuple.__new__(cls, values)
 
         def _replace(self, /, **kwargs):
-            extra = [k for k in kwargs if k not in self._fields]
+            extra = [k for k in kwargs if k not in fields]
             if extra:
                 raise TypeError('Got unexpected field names: ' + repr(extra))
             values = list(self)
             for k in kwargs:
-                values[self._fields.index(k)] = kwargs[k]
+                values[fields.index(k)] = kwargs[k]
             return type(self)._make(values)
 
         # Python 3.13's copy.replace() protocol; _replace is its older name
@@ -1062,9 +1068,9 @@ def namedtuple(typename, field_names, rename=False, defaults=None, module=None):
             # direct namedtuple and a REAL subclass (``class B(A): pass'')
             # are both answered by asking the class.
             parts = []
-            for i in range(len(self._fields)):
+            for i in range(len(fields)):
                 parts.append(
-                    self._fields[i] + '=' + repr(tuple.__getitem__(self, i)))
+                    fields[i] + '=' + repr(tuple.__getitem__(self, i)))
             return type(self).__name__ + '(' + ', '.join(parts) + ')'
 
     # Taken by _NT; cleared in case something else was created in its place.

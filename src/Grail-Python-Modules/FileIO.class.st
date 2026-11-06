@@ -22,6 +22,7 @@ Class {
 FileIO class >> ___pythonValueAttrs___ [
 	^ IdentitySet new
 		add: #closed;
+		add: #closefd;
 		add: #name;
 		add: #mode;
 		add: #'_blksize';

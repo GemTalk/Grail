@@ -5310,6 +5310,7 @@ Object class >> ___moduleAttrIdentityTable___ [
 		t @env0:at: #'PyStatResult' put: #('stat_result' 'os').
 		"os.times_result, whose module CPython reports as ``posix''."
 		t @env0:at: #'PyTimesResult' put: #('times_result' 'posix').
+		t @env0:at: #'PyUnameResult' put: #('uname_result' 'posix').
 		t @env0:at: #'PyClassMethodDescriptor' put: #('classmethod_descriptor' 'builtins').
 
 		"struct.  ``error'' and ``Struct'' are too generic to claim as
@@ -9671,9 +9672,14 @@ Object >> ___grailAssignBases___: newBases [
 	becoming ``(tuple, Generic)'' or ``(Generic, tuple)''.  The appended bases join exactly as a class
 	statement's secondary bases do (importlib >> ___mergeSecondaryBases___:),
 	which re-records __bases__ / __mro__ and brings their methods in.
-	CPython's own refusals come first: a non-tuple, an empty tuple, a non-class."
+	CPython's own refusals come first: a non-tuple, an empty tuple, a non-class,
+	a duplicate, and bases that lay instances out otherwise.  A class no class
+	statement built is left to the general path, which refuses it as an
+	immutable type before anything else is looked at, as check_set_special_type_attr
+	does first."
 
 	| current |
+	self ___grailIsPythonClass___ ifFalse: [^ false].
 	(newBases @env0:isKindOf: tuple) ifFalse: [
 		TypeError ___signal___: 'can only assign tuple to ' @env0:,
 			(self @env1:___pyAttrLoad___: #'__name__') @env0:asString @env0:,
@@ -9692,6 +9698,7 @@ Object >> ___grailAssignBases___: newBases [
 	(tuple, tuple)."
 	(Python @env0:at: #importlib) @env0:___refuseUnacceptableBases___: newBases.
 	(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: newBases.
+	self ___refuseBasesLaidOutOtherwise___: newBases.
 	current := self @env1:___pyAttrLoad___: #'__bases__'.
 	(current @env0:size @env0:< newBases @env0:size) ifFalse: [^ false].
 	current @env0:do: [:b |
@@ -9935,6 +9942,22 @@ Object >> ___grailBuiltinNewOwner___ [
 			___pyAttrLoad___: name @env0:asSymbol]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	^ (canon @env0:isKindOf: Behavior) ifTrue: [canon] ifFalse: [nil]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___grailBuiltinStorage___ [
+
+	"The builtin a class's instances are stored as: the nearest ancestor no
+	Python class statement built, reported as the builtin it stands for --
+	AbstractPyInt as int, PythonInstance as object."
+
+	| storage |
+
+	storage := self.
+	[storage ___grailIsPythonClass___] whileTrue: [storage := storage @env0:superclass].
+	storage == PythonInstance ifTrue: [^ Object].
+	^ ((Python @env0:at: #importlib) @env0:___exposedBuiltinFor___: storage) @env0:ifNil: [storage]
 
 ]
 
@@ -16916,18 +16939,9 @@ Object >> ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew [
 	a separate gap, not one to guess at from here."
 	((self @env0:isKindOf: FileIO)
 		and: [(self @env0:isKindOf: TextIOWrapper) @env0:not]) ifTrue: [
-		| mode |
 		"An own __new__ has already built whatever it built; do not reopen over it."
 		hasNew ifTrue: [^ self].
-		positional @env0:isEmpty ifTrue: [
-			TypeError ___signal___:
-				'FileIO() missing required argument ''file'' (pos 1)'].
-		mode := (positional @env0:size @env0:>= 2)
-			ifTrue: [positional @env0:at: 2]
-			ifFalse: [(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not])
-				ifTrue: [keywords @env0:at: 'mode' ifAbsent: ['r']]
-				ifFalse: ['r']].
-		self @env1:___openInto___: (positional @env0:at: 1) mode: mode].
+		self @env1:___openInto___: positional kw: keywords].
 	^ self
 
 ]
@@ -17882,6 +17896,26 @@ Object >> ___refuseAttrWithoutDict___: aName [
 	^ self ___pyHasGenericSetattr___
 		ifTrue: [AttributeError @env0:___signalNoDict___: aName on: self]
 		ifFalse: [AttributeError @env0:___signalMissing___: aName on: self]
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+Object >> ___refuseBasesLaidOutOtherwise___: newBases [
+
+	"type_set_bases's compatible_for_assignment (Objects/typeobject.c): the best
+	of the new bases must lay its instances out as the class's own base does,
+	so a list subclass cannot become a dict subclass, nor a plain class a list
+	subclass -- ``__bases__ assignment: 'dict' object layout differs from
+	'list'''.  What is compared is the builtin storage each stands on; bases
+	that differ only in their __slots__ are left to the store, as before."
+
+	| newBase oldBase |
+
+	newBase := (Python @env0:at: #importlib) @env0:___selectStorageBase___: newBases @env0:asArray.
+	oldBase := self @env1:___pyAttrLoad___: #'__base__'.
+	newBase ___grailBuiltinStorage___ == oldBase ___grailBuiltinStorage___ ifTrue: [^ self].
+	^ TypeError ___signal___: '__bases__ assignment: ''' @env0:, newBase ___grailPyNameForError___
+		@env0:, ''' object layout differs from ''' @env0:, oldBase ___grailPyNameForError___ @env0:, ''''
 
 ]
 

@@ -32,6 +32,17 @@ TypeError class >> ___argumentsOf___: positional keywords: keywords named: param
 ]
 
 { #category : 'Grail-Arity Checks' }
+TypeError class >> ___badArgumentNameOf___: anObject [
+
+	"What _PyArg_BadArgument calls an argument of the wrong type
+	(Python/getargs.c:622-628): None by itself, anything else by its type."
+
+	anObject == None ifTrue: [^ 'None'].
+	^ ((Python at: #bytes) @env1:___pyTypeNameOf___: anObject) asString
+
+]
+
+{ #category : 'Grail-Arity Checks' }
 TypeError class >> ___bind___: keywords into: values named: parameterNames from: aFirstIndex required: aRequiredCount for: aFunctionName [
 	"Fill the parameters from aFirstIndex on by name, refusing a required one
 	no keyword supplies.  Once every keyword is consumed only the required
@@ -194,13 +205,14 @@ TypeError class >> ___requireStr___: anObject argument: aName of: aFunctionName 
 	Python/getargs.c).  A str subclass or a StrEnum member is a str, and
 	answers its value; a str holding lone surrogates raises what its UTF-8
 	encoding raises (PyUnicode_AsUTF8AndSize).  Both used to be refused as no
-	str, which read ``must be str, not str''."
+	str, which read ``must be str, not str''.  None is named as itself, not
+	as NoneType (getargs.c:622-628)."
 
 	(anObject isKindOf: CharacterCollection) ifTrue: [^ anObject].
 	(anObject isKindOf: PyStrSurrogate) ifTrue: [^ anObject @env1:encode: 'utf-8'].
 	(anObject isKindOf: AbstractPyStr) ifTrue: [^ anObject dynamicInstVarAt: #value].
 	^ self @env1:___signal___: aFunctionName , '() argument ''' , aName , ''' must be str, not '
-		, ((Python at: #bytes) @env1:___pyTypeNameOf___: anObject) asString
+		, (self ___badArgumentNameOf___: anObject)
 
 ]
 
