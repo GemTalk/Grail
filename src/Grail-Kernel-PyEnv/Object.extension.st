@@ -5310,6 +5310,7 @@ Object class >> ___moduleAttrIdentityTable___ [
 		t @env0:at: #'PyStatResult' put: #('stat_result' 'os').
 		"os.times_result, whose module CPython reports as ``posix''."
 		t @env0:at: #'PyTimesResult' put: #('times_result' 'posix').
+		t @env0:at: #'PyUnameResult' put: #('uname_result' 'posix').
 		t @env0:at: #'PyClassMethodDescriptor' put: #('classmethod_descriptor' 'builtins').
 
 		"struct.  ``error'' and ``Struct'' are too generic to claim as
