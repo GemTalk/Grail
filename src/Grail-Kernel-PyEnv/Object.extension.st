@@ -16916,18 +16916,9 @@ Object >> ___pyBuiltinSubclassInit___: positional kw: keywords new: hasNew [
 	a separate gap, not one to guess at from here."
 	((self @env0:isKindOf: FileIO)
 		and: [(self @env0:isKindOf: TextIOWrapper) @env0:not]) ifTrue: [
-		| mode |
 		"An own __new__ has already built whatever it built; do not reopen over it."
 		hasNew ifTrue: [^ self].
-		positional @env0:isEmpty ifTrue: [
-			TypeError ___signal___:
-				'FileIO() missing required argument ''file'' (pos 1)'].
-		mode := (positional @env0:size @env0:>= 2)
-			ifTrue: [positional @env0:at: 2]
-			ifFalse: [(keywords @env0:notNil and: [keywords @env0:isEmpty @env0:not])
-				ifTrue: [keywords @env0:at: 'mode' ifAbsent: ['r']]
-				ifFalse: ['r']].
-		self @env1:___openInto___: (positional @env0:at: 1) mode: mode].
+		self @env1:___openInto___: positional kw: keywords].
 	^ self
 
 ]

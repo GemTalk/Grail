@@ -1,6 +1,54 @@
 Extension { #name : 'FileIO' }
 
 { #category : 'Grail-Opening' }
+FileIO class >> ___badModeMessage [
+
+	^ 'Must have exactly one of create/read/write/append mode and at most one plus'
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO class >> ___binaryModeOf___: aMode [
+
+	"The binary open() mode -- 'rb', 'wb', 'ab' or 'xb', with a '+' -- that a
+	FileIO mode asks for, parsed as _io_FileIO___init___impl parses it
+	(Modules/_io/fileio.c:327-373), in its own words: one of r, w, a and x, at
+	most one +, any number of b, and no other letter."
+
+	| access plus |
+
+	access := ''.
+	plus := ''.
+	aMode @env0:do: [:character |
+		('rwaxb+' @env0:includes: character) ifFalse: [
+			^ ValueError ___signal___: (self ___invalidModeMessageFor: aMode)].
+		('rwax' @env0:includes: character) ifTrue: [
+			access := access @env0:copyWith: character].
+		character @env0:= $+ ifTrue: [plus := plus @env0:copyWith: character].
+		(access @env0:size @env0:> 1 @env0:or: [plus @env0:size @env0:> 1]) ifTrue: [
+			^ ValueError ___signal___: self ___badModeMessage]].
+	access @env0:isEmpty ifTrue: [^ ValueError ___signal___: self ___badModeMessage].
+	^ access @env0:, 'b' @env0:, plus
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO class >> ___checkDescriptorToOpen___: aDescriptor named: aName [
+
+	"fileio.c:470-497: a descriptor fstat finds not open is EBADF, any other
+	failure of fstat is tolerated, and a directory is EISDIR, naming the file as
+	it was given."
+
+	| status |
+
+	status := (os instance) ___fstatOrErrno___: aDescriptor.
+	status @env0:= 9 ifTrue: [^ (os instance) ___signalErrno: 9].
+	((status @env0:isKindOf: GsFileStat) @env0:and: [status @env0:isDirectory]) ifTrue: [
+		^ (os instance) ___signalErrno: 21 filename: aName]
+
+]
+
+{ #category : 'Grail-Opening' }
 FileIO class >> ___closedFileMessage [
 	"CPython's raw file says it without a full stop (Modules/_io/fileio.c:588)."
 
@@ -73,6 +121,26 @@ FileIO class >> ___construct___: fileArg mode: modeArg [
 ]
 
 { #category : 'Grail-Opening' }
+FileIO class >> ___descriptorIn___: aFile [
+
+	"The descriptor ``io.FileIO(file)'' is made over, or nil when file is a path
+	to open (fileio.c:279-291): an int, or a bool, which warns as os's
+	descriptor arguments do.  An int no C int holds is no descriptor, so the
+	path conversion refuses it, and a negative one is refused here."
+
+	| descriptor |
+
+	((aFile @env0:isKindOf: Integer) @env0:or: [aFile @env0:isKindOf: Boolean]) ifFalse: [^ nil].
+	descriptor := [(os instance) ___fileDescriptorArgument___: aFile]
+		@env0:on: OverflowError
+		do: [:error | error @env0:return: nil].
+	descriptor == nil ifTrue: [^ nil].
+	descriptor @env0:< 0 ifTrue: [^ ValueError ___signal___: self ___negativeDescriptorMessage].
+	^ descriptor
+
+]
+
+{ #category : 'Grail-Opening' }
 FileIO class >> ___fdOwners___ [
 	"descriptor -> the Grail file whose fileno() handed it out, this session.
 	Per session, as the descriptors are: they belong to this gem's process."
@@ -86,6 +154,26 @@ FileIO class >> ___fdOwners___ [
 { #category : 'Grail-Opening' }
 FileIO class >> ___filenoUnavailableMessage [
 	^ 'fileno() is unavailable for this file'
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO class >> ___fileOver___: aDescriptor [
+
+	"What a file over aDescriptor reads and writes through: the GsFile under the
+	open Grail file whose fileno() handed it out, so that the two share a
+	position as two files over one descriptor do, or else a DescriptorFile."
+
+	(self ___isOpenOwnedDescriptor___: aDescriptor) ifTrue: [
+		^ (self ___fdOwners___ @env0:at: aDescriptor) @env0:dynamicInstVarAt: #_gsfile].
+	^ DescriptorFile @env0:on: aDescriptor
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO class >> ___invalidModeMessageFor: aMode [
+
+	^ 'invalid mode: ' @env0:, aMode
 
 ]
 
@@ -122,6 +210,13 @@ FileIO class >> ___nativeEncoding___: anEncoding errors: anErrors [
 		@env0:or: [(e @env0:= 'latin-9') @env0:or: [(e @env0:= 'latin9') @env0:or: [e @env0:= 'l9']]]]])
 			ifTrue: [^ 'iso-8859-15'].
 	^ nil
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO class >> ___negativeDescriptorMessage [
+
+	^ 'negative file descriptor'
 
 ]
 
@@ -364,7 +459,7 @@ FileIO class >> ___openDescriptor___: fd mode: mode binary: isBinary readable: i
 	| owner gsfile inst |
 	(fd isKindOf: SmallInteger) ifFalse: [
 		^ OverflowError ___signal___: 'Python int too large to convert to C int'].
-	fd @env0:< 0 ifTrue: [^ ValueError ___signal___: 'negative file descriptor'].
+	fd @env0:< 0 ifTrue: [^ ValueError ___signal___: self ___negativeDescriptorMessage].
 	owner := self ___fdOwners___ @env0:at: fd ifAbsent: [nil].
 	(owner ~~ nil
 		@env0:and: [(owner @env0:dynamicInstVarAt: #_closed) ~~ true
@@ -465,25 +560,11 @@ FileIO class >> __new__: fileArg _: modeArg [
 
 { #category : 'Grail-Opening' }
 FileIO class >> _new: posArgs kw: kwArgs [
-	"``io.FileIO(name, mode='r', closefd=True, opener=None)'' in its varargs form,
-	which is also the form a keyword call arrives in.
 
-	closefd/opener are ACCEPTED AND IGNORED rather than rejected: Grail's FileIO
-	owns its GsFile unconditionally (there are no integer file descriptors to
-	borrow -- ___open___ raises TypeError for one), so closefd=True is the only
-	behaviour available and is the default.  Rejecting the name outright would
-	fail calls that merely pass the default explicitly."
+	"``io.FileIO(file, mode='r', closefd=True, opener=None)'' in its varargs
+	form, which is also the form a keyword call arrives in."
 
-	| n file mode |
-	n := posArgs @env0:size.
-	(n @env0:< 1 @env0:or: [n @env0:> 4]) ifTrue: [
-		TypeError ___signal___: 'FileIO() takes 1 to 4 positional arguments'].
-	file := posArgs @env0:at: 1.
-	mode := n @env0:>= 2 ifTrue: [posArgs @env0:at: 2] ifFalse: [
-		(kwArgs == nil @env0:or: [kwArgs == None])
-			ifTrue: ['r']
-			ifFalse: [kwArgs @env0:at: 'mode' ifAbsent: ['r']]].
-	^ self ___construct___: file mode: mode
+	^ self @env0:new ___openInto___: posArgs kw: kwArgs
 
 ]
 
@@ -624,9 +705,12 @@ FileIO >> ___numberOfClosedDescriptor___ [
 ]
 
 { #category : 'Grail-Opening' }
-FileIO >> ___openInto___: fileArg mode: modeArg [
-	"Open ``fileArg'' and initialise SELF from it -- the instance-side half of the
-	FileIO constructor.
+FileIO >> ___openInto___: positional kw: keywords [
+
+	"``io.FileIO(file, mode='r', closefd=True, opener=None)'' opened into SELF,
+	its arguments bound and refused as Argument Clinic does it
+	(Modules/_io/clinic/fileio.c.h): a mode is a str, and closefd is taken by
+	its truth.  The opener is bound and not called.
 
 	Instance-side on purpose: the SUBCLASS path cannot allocate.  A Python
 	``class UnseekableIO(io.FileIO)'' is allocated by ClassDefAst's general
@@ -634,25 +718,101 @@ FileIO >> ___openInto___: fileArg mode: modeArg [
 	instance and needs it initialised in place -- so both routes end here rather
 	than one of them answering a fresh object the other would throw away."
 
-	| mode normalised opened |
-	mode := (modeArg == nil @env0:or: [modeArg == None]) ifTrue: ['r'] ifFalse: [modeArg].
-	(mode isKindOf: CharacterCollection) ifFalse: [
-		TypeError ___signal___: 'FileIO() argument ''mode'' must be str'].
-	(mode @env0:includes: $t) ifTrue: [
-		"CPython: io.FileIO(p, 'rt') is a ValueError.  FileIO is a RAW byte
-		 stream; text is TextIOWrapper's job."
-		ValueError ___signal___: ('invalid mode: ' @env0:, mode)].
-	"``r'' -> ``rb''.  ___open___ parses either and owns the rest of the
-	 validation (exactly one of r/w/x/a, no stray letters), so there is one
-	 definition of what a mode string means."
-	normalised := (mode @env0:includes: $b) ifTrue: [mode] ifFalse: [mode @env0:, 'b'].
-	opened := FileIO ___open___: fileArg mode: normalised encoding: nil.
+	| arguments mode closefd |
+
+	arguments := TypeError @env0:___argumentsOf___: (positional @env0:ifNil: [#()])
+		keywords: keywords
+		named: #('file' 'mode' 'closefd' 'opener')
+		positionalOnly: 0
+		required: 1
+		for: 'FileIO'.
+	mode := (arguments @env0:at: 2) == nil
+		ifTrue: ['r']
+		ifFalse: [TypeError @env0:___requireStr___: (arguments @env0:at: 2) argument: 'mode' of: 'FileIO'].
+	closefd := (arguments @env0:at: 3) == nil @env0:or: [(arguments @env0:at: 3) ___isTruthy___].
+	^ self ___openInto___: (arguments @env0:at: 1) mode: mode closefd: closefd
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO >> ___openInto___: fileArg mode: modeArg [
+
+	"``io.FileIO(file, mode)'' opened into SELF -- see ___openInto___:kw:."
+
+	^ self ___openInto___: { fileArg. modeArg } kw: nil
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO >> ___openInto___: aFile mode: aMode closefd: aClosefd [
+
+	"Open aFile -- a path, or a descriptor -- into SELF, refusing what is wrong
+	in _io_FileIO___init___impl's order (fileio.c:279-405): the descriptor, then
+	a path that is none (os.fspath's TypeError), then the mode, before anything
+	is opened."
+
+	| descriptor binaryMode |
+
+	descriptor := FileIO ___descriptorIn___: aFile.
+	descriptor == nil ifTrue: [(os instance) fspath: aFile].
+	binaryMode := FileIO ___binaryModeOf___: aMode.
+	descriptor == nil ifTrue: [^ self ___openPath___: aFile mode: binaryMode closefd: aClosefd].
+	^ self ___openOver___: descriptor named: aFile mode: binaryMode closefd: aClosefd
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO >> ___openOver___: aDescriptor named: aName mode: aBinaryMode closefd: aClosefd [
+
+	"SELF made a file over aDescriptor, which the caller holds, as fileio.c makes
+	one: the mode says what SELF may do and is not checked against the
+	descriptor, whose size is not known up front.  The name is set as an
+	attribute, so that a subclass's __setattr__ sees it; one it refuses leaves
+	the descriptor open, as it is the caller's (fileio.c:507-513)."
+
+	| reads plus |
+
+	FileIO ___checkDescriptorToOpen___: aDescriptor named: aName.
+	reads := aBinaryMode @env0:first @env0:= $r.
+	plus := aBinaryMode @env0:last @env0:= $+.
+	self ___initGsFile___: (FileIO ___fileOver___: aDescriptor)
+		name: aName
+		mode: aBinaryMode
+		readable: (reads @env0:or: [plus])
+		writable: (reads @env0:not @env0:or: [plus]).
+	self @env0:dynamicInstVarAt: #_streamOnly put: true.
+	aClosefd ifFalse: [self @env0:dynamicInstVarAt: #_closefd put: false].
+	self ___renormaliseMode___.
+	self __setattr__: 'name' _: aName.
+	^ self
+
+]
+
+{ #category : 'Grail-Opening' }
+FileIO >> ___openPath___: aPath mode: aBinaryMode closefd: aClosefd [
+
+	"SELF made a file over the one at aPath, which open() opens.  A name SELF's
+	__setattr__ refuses closes the file again, as fileio.c does with a
+	descriptor it opened itself."
+
+	| opened |
+
+	opened := FileIO
+		___open___: aPath
+		mode: aBinaryMode
+		encoding: nil
+		errors: nil
+		newline: nil
+		closefd: aClosefd.
 	self ___initGsFile___: (opened @env0:dynamicInstVarAt: #_gsfile)
 		name: (opened @env0:dynamicInstVarAt: #_name)
 		mode: (opened @env0:dynamicInstVarAt: #_mode)
 		readable: (opened @env0:dynamicInstVarAt: #_readable)
 		writable: (opened @env0:dynamicInstVarAt: #_writable).
-	^ self ___renormaliseMode___
+	self ___renormaliseMode___.
+	[self __setattr__: 'name' _: (opened @env0:dynamicInstVarAt: #_name)]
+		@env0:ifCurtailed: [(opened @env0:dynamicInstVarAt: #_gsfile) @env0:close].
+	^ self
 
 ]
 
@@ -667,9 +827,9 @@ FileIO >> ___optionalAttribute___: aName [
 
 { #category : 'Grail-Attribute Access' }
 FileIO >> ___readOnlyAttributeNames___ [
-	"mode and closed are getsets with no setter on CPython's FileIO."
+	"mode, closed and closefd are getsets with no setter on CPython's FileIO."
 
-	^ #('closed' 'mode')
+	^ #('closed' 'closefd' 'mode')
 
 ]
 
@@ -923,6 +1083,16 @@ FileIO >> close [
 { #category : 'Grail-State' }
 FileIO >> closed [
 	^ (self @env0:dynamicInstVarAt: #_closed)
+
+]
+
+{ #category : 'Grail-State' }
+FileIO >> closefd [
+
+	"Whether close() closes the descriptor too (fileio_get_closefd,
+	Modules/_io/fileio.c:1284)."
+
+	^ (self @env0:dynamicInstVarAt: #_closefd) ~~ false
 
 ]
 
