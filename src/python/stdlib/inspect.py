@@ -919,6 +919,14 @@ def _signature_get_user_defined_method(cls, method_name):
     meth = getattr(cls, method_name, None)
     if meth is None:
         return None
+    # A CLASS standing as the method -- ``__call__ = dict'' on a metaclass -- is
+    # user-defined in CPython's sense, since it is none of the builtin slot or
+    # method kinds (_NonUserDefinedCallables).  Its signature is the class's:
+    # dict has none, so signature() of a class called through it is that
+    # ValueError, as CPython's is (test_dataclasses
+    # test_docstring_with_no_signature, gh-103449).
+    if isinstance(meth, type):
+        return meth
     for attr in ('__func__', '__wrapped__'):
         inner = getattr(meth, attr, None)
         if inner is not None:
@@ -979,6 +987,10 @@ def _signature_from_class(cls, **kwargs):
     ``class Plain: def __init__(self, a, b=2)``.
     """
     call = _signature_get_user_defined_method(type(cls), '__call__')
+    if isinstance(call, type):
+        # Nothing binds a class to the class being called -- it has no
+        # __get__ -- so its own signature is the whole of it.
+        return signature(call, **kwargs)
     if call is not None:
         return _drop_leading_parameter(signature(call, **kwargs))
     new = _signature_get_user_defined_method(cls, '__new__')
