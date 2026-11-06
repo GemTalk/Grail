@@ -1161,12 +1161,16 @@ PyDateTime >> ___localTimezone___ [
 	for the host zone as it is AT THIS INSTANT, so a value either side of
 	a DST transition converts with the offset actually in force then.
 
-	The name comes from time.tzname, choosing the DST entry when the
-	offset at this instant differs from the zone's standard offset --
-	Grail's struct_time carries no tm_zone/tm_gmtoff to read it from
-	(test_astimezone_default_eastern wants '-0500 EST' and '-0400 EDT')."
+	The name is the tm_zone of time.localtime() at this instant, as
+	_local_timezone reads it, so a zone whose names changed over the years
+	names each instant as it was named then: Kyiv was MSK in January 1984 and
+	is EEST every summer now (test_email test_utils test_variable_tzname).
+	It used to be time.tzname's entry, standard or DST, chosen by comparing
+	the offset with today's standard offset; that is still the answer when
+	localtime's offset is not the one computed below (a spring-forward gap),
+	so name and offset never disagree."
 
-	| ts off names stdOff nm myoff |
+	| ts off local nm myoff |
 	"CPython reaches this on a naive receiver, or explicitly via
 	``self.replace(tzinfo=None)._local_timezone()''.  Treat an offset of
 	None as naive rather than sending ___totalMicros___ to it, so a
@@ -1194,13 +1198,10 @@ PyDateTime >> ___localTimezone___ [
 		ifTrue: [((self ___naiveEpochMicros___) @env0:// 1000000) @env0:- ts]
 		ifFalse: [(PyDateTime ___localEpochAt___: ts) @env0:- ts].
 	PyDateTime ___ensureSessionTimeZone___.
-	stdOff := TimeZone @env0:current @env0:secondsFromGmt.
-	names := time instance @env0:dynamicInstVarAt: #tzname.
-	nm := nil.
-	names @env0:isNil ifFalse: [
-		nm := off @env0:= stdOff
-			ifTrue: [names __getitem__: 0]
-			ifFalse: [names __getitem__: 1]].
+	local := time instance localtime: ts.
+	nm := (local ___pyAttrLoad___: #tm_gmtoff) @env0:= off
+		ifTrue: [local ___pyAttrLoad___: #tm_zone]
+		ifFalse: [self ___tznameEntryFor___: off].
 	^ PyTimezone
 		__new__: (PyTimedelta @env0:___fromTotalMicros___: off @env0:* 1000000)
 		_: nm
@@ -1338,6 +1339,22 @@ PyDateTime >> ___pyDayOfWeek___ [
 		monthNumber: (self @env0:dynamicInstVarAt: #_month)
 		year: (self @env0:dynamicInstVarAt: #_year)) @env0:dayOfWeek.
 	^ dow @env0:= 1 ifTrue: [6] ifFalse: [dow @env0:- 2]
+
+]
+
+{ #category : 'Grail-Private' }
+PyDateTime >> ___tznameEntryFor___: anOffset [
+
+	"time.tzname's standard entry when anOffset is the zone's standard
+	offset, its DST entry otherwise, or nil when time has no tzname."
+
+	| names |
+
+	names := time instance @env0:dynamicInstVarAt: #tzname.
+	names @env0:isNil ifTrue: [^ nil].
+	^ anOffset @env0:= TimeZone @env0:current @env0:secondsFromGmt
+		ifTrue: [names __getitem__: 0]
+		ifFalse: [names __getitem__: 1]
 
 ]
 

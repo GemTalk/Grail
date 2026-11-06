@@ -1251,8 +1251,18 @@ class BufferedWriter(_BufferedIOMixin):
         return self.raw.writable()
 
     def write(self, b):
-        if isinstance(b, str):
-            raise TypeError("can't write str to binary stream")
+        # GRAIL ADAPTATION: io.BufferedWriter IS this class in Grail, so it
+        # takes what C's takes, a buffer (Modules/_io/bufferedio.c,
+        # _io__Buffered_write's ``Py_buffer''), and writes its bytes: anything
+        # else is PyObject_GetBuffer's TypeError, and an array('i') is its
+        # bytes, not its items.  This method refused only a str, so
+        # ``gzip.GzipFile(...).write([])'' wrote nothing and raised nothing
+        # (test_gzip test_write_incompatible_type).
+        try:
+            data = memoryview(b).tobytes()
+        except TypeError:
+            raise TypeError("a bytes-like object is required, not '%s'"
+                            % type(b).__name__) from None
         with self._write_lock:
             if self.closed:
                 raise ValueError("write to closed file")
@@ -1263,7 +1273,7 @@ class BufferedWriter(_BufferedIOMixin):
                 # raise BlockingIOError with characters_written == 0.)
                 self._flush_unlocked()
             before = len(self._write_buf)
-            self._write_buf.extend(b)
+            self._write_buf.extend(data)
             written = len(self._write_buf) - before
             if len(self._write_buf) > self.buffer_size:
                 try:

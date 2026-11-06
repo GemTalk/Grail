@@ -149,7 +149,7 @@ jobs:
         run: python3 scripts/sync_scope_status.py --check
 
   test-main:
-    name: test-main ${{ matrix.arm }} (${{ matrix.shard }})
+    name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
@@ -176,20 +176,15 @@ jobs:
         # run_tests.sh) -- measured, the heaviest shard goes from 96% of the
         # cap to 75%.
         #
-        # SIXTEEN partitions now, one runner each (#1872).  A shard is one
-        # session, about one CPU, and took 22 of a job's 29 minutes as two
-        # shards side by side -- so more cores per runner buy nothing, more
-        # runners do.  Shard 0's job also runs the suites run_tests.sh runs
-        # after the shards; the other fifteen stop at the shards
-        # (GRAIL_TEST_SHARDS_ONLY=1), since those suites need one run per arm.
+        # Four runners of two shards each keeps the runner count where it was
+        # while every session compiles half as much.  `name` gives
+        # collision-free artifact names (matrix.shards contains a space).
         #
         # WHICH CLASSES a shard runs is GrailShardPlan's call: whole classes,
         # longest first, by the measured times in
         # tests/scripts/shard_timings.txt (#1911).  Partitioned by a class-name
-        # hash, the shard jobs ranged 3.8-13.5 minutes.  Shard 0's job does
-        # about 170s of other work after its shard (the suites above), so
-        # GRAIL_TEST_SHARD0_RESERVE_S plans that much less shard work for it;
-        # every leg sets the same value, so all 32 compute the same plan.
+        # hash, the shard jobs ranged 3.8-13.5 minutes.  Every leg computes the
+        # same plan from the same file.
         # Refresh the timings from a green run's logs with
         # scripts/refresh_shard_timings.py.
         #
@@ -206,11 +201,15 @@ jobs:
         # ran in a separate workflow (ir-flag-on.yml, #1148) that nothing
         # required -- it ran in the merge queue, and the queue did not wait
         # for it.
-        arm: [ir, text]
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
         include:
-          - { arm: ir,   ircodegen: "" }
-          - { arm: text, ircodegen: "0" }
+          - { arm: ir,   ircodegen: "",  name: a, shards: "0 1" }
+          - { arm: ir,   ircodegen: "",  name: b, shards: "2 3" }
+          - { arm: ir,   ircodegen: "",  name: c, shards: "4 5" }
+          - { arm: ir,   ircodegen: "",  name: d, shards: "6 7" }
+          - { arm: text, ircodegen: "0", name: a, shards: "0 1" }
+          - { arm: text, ircodegen: "0", name: b, shards: "2 3" }
+          - { arm: text, ircodegen: "0", name: c, shards: "4 5" }
+          - { arm: text, ircodegen: "0", name: d, shards: "6 7" }
     # --shm-size lifts the container's default 64 MB /dev/shm so GemStone's
     # shared page cache fits. GEMSTONE/PATH come from the image ENV.
     container:
@@ -243,7 +242,7 @@ jobs:
       # first (checkout wrote it as root).  Everything runs in one shell, so no
       # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
       # they're dropped with `env -u`).
-      - name: install + run SUnit shard ${{ matrix.shard }} of 16, ${{ matrix.arm }} arm (as non-root 'ci')
+      - name: install + run SUnit shards ${{ matrix.shards }}, ${{ matrix.arm }} arm (as non-root 'ci')
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
@@ -252,10 +251,7 @@ jobs:
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            GRAIL_TEST_WORKERS=16 \
-            GRAIL_TEST_SHARDS="${{ matrix.shard }}" \
-            GRAIL_TEST_SHARDS_ONLY="${{ matrix.shard == 0 && '0' || '1' }}" \
-            GRAIL_TEST_SHARD0_RESERVE_S=170 \
+            GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
             GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
@@ -357,7 +353,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # Per-leg name: matrix jobs must not collide on artifact names.
-          name: grail-ci-logs-${{ matrix.arm }}-shard-${{ matrix.shard }}
+          name: grail-ci-logs-${{ matrix.arm }}-shards-${{ matrix.name }}
           if-no-files-found: ignore
           retention-days: 7
           # .out logs + stone/gem logs; the extent is deliberately excluded.

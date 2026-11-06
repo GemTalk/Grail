@@ -2191,15 +2191,15 @@ CallAst >> ___emitIRBareEvalExecOn___: aBuilder [
 	is an emit and not machinery.
 
 	The shape test guarantees a NameAst eval/exec, one positional, no keywords,
-	and a #topLevelDef or #method scope.  Module scope and a comprehension
-	cannot reach here: step 0c's other arm prints ___globalsViewReceiverExpr___
-	with the comprehension's own targets, which this path has no twin for.  A
-	comprehension is kept out by #bareRewrite, which refuses every scope but
-	#topLevelDef and #method; module scope is kept out by
-	___irIsBareEvalExecRewrite___ itself, which answers false where the parent
-	chain holds no def, lambda or comprehension."
+	and an innermost non-comprehension scope that is a def or a lambda
+	(___irSnapshotScopeIsAFunction___).  A comprehension INSIDE such a def
+	reaches here and needs nothing extra: the snapshot appends its targets, as
+	the text's does.  A comprehension at module scope cannot: step 0c's other
+	arm prints ___globalsViewReceiverExpr___ with the comprehension's own
+	targets, which this path has no twin for, and module scope outside one is
+	kept out by ___irIsBareEvalExecRewrite___ itself."
 
-	| builtinsInst argVal scope |
+	| argVal scope |
 	argVal := (arguments at: 1) ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
 	scope := aBuilder
@@ -2673,9 +2673,10 @@ CallAst >> ___emitIRScopeNamespaceOn___: aBuilder [
 	function's locals snapshot in function scope, the live module view at
 	module scope.  Those are the only two of its five cases the IR path
 	spells; the shape tests that reach this (#localsSnapshot, #globalsView,
-	#dirOfScope) each exclude a class body and a comprehension already, so
-	this method needs no test for them -- it must not be called from a shape
-	that admits one."
+	#dirOfScope) each exclude a class body and a MODULE-scope comprehension
+	already, so this method needs no test for them -- it must not be called
+	from a shape that admits one.  A comprehension inside a FUNCTION is the
+	snapshot arm, which appends its targets."
 
 	^ CallAst functionBeingCompiled notNil
 		ifTrue: [self ___emitIRLocalsSnapshotOn___: aBuilder]
@@ -2768,9 +2769,14 @@ CallAst >> ___emitIRSuperZeroOn___: aBuilder [
 	where <classRead> is ``((<Mod> @env0:___instance___) @env1:<ClassName>)'',
 	wrapped in ``@env1:___grailClassCellValueForSuper___'' when the class's
 	``__class__'' cell can be rebound (classCellRebindable, the compile-context
-	flag ClassDefAst set before any method source was generated).  The
-	argument-0 deletion guard is absent by construction: ___irSuperShape___
-	admits only a method's own receiver, which no ``del'' can nil.
+	flag ClassDefAst set before any method source was generated).
+
+	The proxy is only ONE of four arms inside the probe, as it is in the text:
+	a def with no positional parameter raises ``no arguments''; a def with NO
+	ENCLOSING CLASS raises ``arg[0] deleted'' or ``__class__ cell not found''
+	(the text's no-class arm, which ___irSuperShape___ admits since the
+	`CallAst:super-noClass' refusal went); a def nested in a method tests its
+	own argument 0 before building the proxy.
 
 	The compile-time side effects of the text branch -- classNeedsClassCell:
 	and ___recordClassCellMethod___, which ClassDefAst reads to inject
@@ -2812,6 +2818,42 @@ CallAst >> ___emitIRSuperZeroOn___: aBuilder [
 							send: #'___noArguments___' to: (aBuilder globalNamed: #Super)
 							with: { } env: 1)]
 					ifFalse: [
+				CallAst classBeingCompiled isNil
+					ifTrue: [
+						"PRECONDITIONS 2 AND 3 WITH NO CLASS AT ALL -- ``def h(x):
+						 super()'' at module scope, or in a def nested in one.  The
+						 text's second precondition arm, send for send:
+
+						     (<arg0> == nil
+						         ifTrue: [Super @env1:___argZeroDeleted___]
+						         ifFalse: [Super @env1:___noClassCell___])
+
+						 There is no proxy to build: nothing in scope is a class, so
+						 the call can only raise, and WHICH message is the run-time
+						 question -- a ``del'' of the first parameter (DeleteAst's
+						 ``x := nil'') outranks the missing cell, as in CPython.
+						 The test reads argument 0 by its PYTHON name, not by
+						 ___superArgZeroGuardName___'s Smalltalk spelling: the
+						 builder registers a parameter's leaf under the Python name
+						 and only NAMES the leaf after its transport
+						 (``___self___'' for a parameter called self), so asking
+						 for the transport spelling raised ``no local named
+						 #___self___'' on ``def f(self): super()'' -- the trap
+						 ___emitIRLocalsSnapshotOn___: records for reserved names.
+						 ___receiverParamName___ is not nil here: that case is the
+						 arm above."
+						aBuilder
+							if: (aBuilder
+								send: #== to: (aBuilder localVar:
+									CallAst functionBeingCompiled ___receiverParamName___ asSymbol)
+								with: { aBuilder nilLit } env: 0)
+							then: [aBuilder add: (aBuilder
+								send: #'___argZeroDeleted___' to: (aBuilder globalNamed: #Super)
+								with: { } env: 1)]
+							else: [aBuilder add: (aBuilder
+								send: #'___noClassCell___' to: (aBuilder globalNamed: #Super)
+								with: { } env: 1)]]
+					ifFalse: [
 				"CPython's precondition 2: a ``del'' of the enclosing def's first
 				 parameter makes super() raise rather than bind.  Only a def
 				 NESTED in a method can be in that state -- a method's own first
@@ -2833,7 +2875,7 @@ CallAst >> ___emitIRSuperZeroOn___: aBuilder [
 							then: [aBuilder add: (aBuilder
 								send: #'___argZeroDeleted___' to: (aBuilder globalNamed: #Super)
 								with: { } env: 1)]
-							else: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]]]]
+							else: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]]]]]
 			else: [
 				aBuilder add: (aBuilder
 					send: #value:value: to: (aBuilder var: supLeaf)
@@ -3669,48 +3711,6 @@ CallAst >> ___irArityMismatchName___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
-CallAst >> ___irBareRewriteScopeSpellable___ [
-	"Can ___emitIRBareEvalExecOn___: spell step 0c's rewrite for THIS scope?
-
-	It used to be ``#topLevelDef or #method'' -- the two ___irEvalScopeShape___
-	names -- which also refused a bare eval inside a NESTED def, and that was
-	one scope too many.  printSmalltalkOn: emits the SAME rewrite there:
-	measured on ``def f(): def inner(): x = 20; return eval('x + 1')'', the
-	generated text is character for character the top-level def's shape,
-	``(builtins) _eval: { src. (builtins) ___evalScopeFor___: self locals:
-	((builtins) ___buildLocals___: { { 'x'. x } }) } kw: nil''.  Step 0c's
-	first arm claims both -- its test is ``functionBeingCompiled notNil'' --
-	and ___emitIRLocalsSnapshotOn___: reads the SAME
-	``CallAst functionBeingCompiled'', which inside a nested block emit is the
-	nested def itself.  So the snapshot gathers that def's own names with no
-	change at all.
-
-	WHAT STAYS REFUSED is a scope whose locals the snapshot cannot build: a
-	COMPREHENSION, whose targets step 0c prints through
-	___globalsViewReceiverExpr___ instead, and a CLASS BODY, which is not a
-	namespace the snapshot models.  Both are named here rather than inferred
-	from the shape symbol, because #nested lumps all three together and only
-	the comprehension and the class body are actually unspellable.
-
-	A LAMBDA cannot reach this at all -- it holds an expression, and step 0c's
-	rewrite is a statement-level one -- but it is admitted by the same rule it
-	would take if it could, since a lambda's own scope is a def's."
-
-	| kinds |
-	kinds := self ___irEvalScopeKinds___.
-	kinds isEmpty ifTrue: [^ false].
-	"The INNERMOST scope must be a def or a lambda.  A #class first means the
-	call sits directly in a class BODY, which is not a namespace the snapshot
-	models; a #class further out is just the class a METHOD belongs to, and
-	that case was always admitted (___irEvalScopeShape___'s #method)."
-	((kinds at: 1) == #def or: [(kinds at: 1) == #lambda]) ifFalse: [^ false].
-	"A COMPREHENSION anywhere: step 0c prints its targets through
-	___globalsViewReceiverExpr___, which this path has no twin for."
-	^ (kinds anySatisfy: [:k | k == #comprehension]) not
-
-]
-
-{ #category : 'Grail-IR Codegen' }
 CallAst >> ___irCallShape___ [
 	"The printSmalltalkOn: branch this call takes, as a Symbol, walking the SAME
 	probes in the SAME order the text dispatcher does -- or nil when the text
@@ -3779,29 +3779,37 @@ CallAst >> ___irCallShapeUnguarded___ [
 		    scope is the comprehension's own targets;
 		  * at MODULE scope outside a comprehension locals() IS globals(),
 		    which #globalsView above already emits -- so that case is admitted
-		    there rather than here."
+		    there rather than here.
+		A comprehension in a FUNCTION is not among them, and used to be refused
+		as if it were (`CallAst:frameSensitive-locals' / `-vars'): the text
+		takes the plain function snapshot there too, and that snapshot appends
+		the enclosing comprehensions' targets (PEP 709 inlines the
+		comprehension, so CPython's locals() shows both).
+		___emitIRLocalsSnapshotOn___: appends the same names, read through
+		the clause block's temps."
 		((function id = #'locals' or: [function id = #'vars'])
 			and: [arguments isEmpty
 			and: [keywords isEmpty
 			and: [CallAst inClassBodyValueEmit not
 			and: [CallAst functionBeingCompiled notNil
-			and: [self ___enclosingComprehensionTargetNames___ isEmpty]]]]])
+				or: [self ___irSnapshotScopeIsAFunction___]]]]])
 				ifTrue: [^ #localsSnapshot].
 		"Bare ``dir()'' (cut 85): the text's step-0b' rewrite, which is
 		___dirOfNamespace___: applied to whatever printLocalsCallOn: would
 		print here.  So this admits EXACTLY the two scopes cut 83 and cut 84
-		taught the IR path to spell -- a function body, and module scope --
-		and refuses the other three of that method's five cases (class body,
-		and a comprehension in either scope) for the same reasons those cuts
-		refuse them.  ``dir(x)'' is an ordinary builtins call and takes a
-		different route entirely."
+		taught the IR path to spell -- a function body (a comprehension inside
+		one included, as #localsSnapshot now admits it), and module scope --
+		and refuses the other cases (class body, and a comprehension at module
+		scope) for the same reasons those cuts refuse them.  ``dir(x)'' is an
+		ordinary builtins call and takes a different route entirely."
 		(function id = #'dir'
 			and: [arguments isEmpty
 			and: [keywords isEmpty
 			and: [CallAst inClassBodyValueEmit not
-			and: [self ___enclosingComprehensionTargetNames___ isEmpty
-			and: [CallAst functionBeingCompiled notNil
-				or: [ModuleAst compilingDoitScope isNil
+			and: [(CallAst functionBeingCompiled notNil
+					or: [self ___irSnapshotScopeIsAFunction___])
+				or: [self ___enclosingComprehensionTargetNames___ isEmpty
+					and: [ModuleAst compilingDoitScope isNil
 					and: [CallAst moduleClassBeingCompiled notNil]]]]]]])
 				ifTrue: [^ #dirOfScope].
 		"locals/vars/dir/eval/exec/super have rewrite semantics the text
@@ -4046,7 +4054,7 @@ CallAst >> ___irEvalExecRefusalReason___ [
 	| shape |
 	shape := self ___irEvalScopeShape___.
 	(self ___irIsBareEvalExecRewrite___
-		and: [self ___irBareRewriteScopeSpellable___ not])
+		and: [self ___irSnapshotScopeIsAFunction___ not])
 			ifTrue: [^ #bareRewrite].
 	^ nil
 
@@ -4233,10 +4241,14 @@ CallAst >> ___irRefusalDetail___: localSet [
 			about: the shape now ACCEPTS, so a method that reaches this walk
 			refused somewhere else entirely, and naming argument 0 would send
 			the next reader after a cut that is already made."
-			arguments isEmpty ifTrue: [
-				keywords isEmpty ifFalse: [^ #'CallAst:super-keywords'].
+			"NO `super-keywords' OR `super-noClass' ROW ANY MORE: both shapes
+			compile.  A keyword super() is the ordinary call on both paths (see
+			___irSuperStaysOnText___), so if it refuses it refuses for an
+			ordinary reason and falls to the rows below; a classless zero-argument
+			super() is ___irSuperShape___'s #superZero, the text's precondition
+			arms.  What is left to refuse is a doit."
+			(arguments isEmpty and: [keywords isEmpty]) ifTrue: [
 				self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
-				CallAst classBeingCompiled isNil ifTrue: [^ #'CallAst:super-noClass'].
 				CallAst moduleClassBeingCompiled isNil
 					ifTrue: [^ #'CallAst:super-doitScopeClass'].
 				^ #'CallAst:super-other'].
@@ -4286,6 +4298,76 @@ CallAst >> ___irShadowProbeTempSymbol___ [
 		(p isKindOf: CallAst) ifTrue: [depth := depth + 1].
 		p := p parent].
 	^ ('___bs' , depth printString , '___') asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+CallAst >> ___irSnapshotScopeIsAFunction___ [
+	"Is the scope a locals snapshot would describe HERE a function's -- read off
+	the parent chain, so the eligibility probe and the emit agree?
+
+	Two families ask it.  ___emitIRBareEvalExecOn___: (step 0c's rewrite) and
+	the bare ``locals()'' / ``vars()'' / ``dir()'' shapes, which all hand the
+	same ___emitIRLocalsSnapshotOn___: to the builtin.  The shapes used to test
+	only ``CallAst functionBeingCompiled notNil'', a compile-context read that
+	does not describe this def while the eligibility probe walks it (the trap
+	___irEvalScopeKinds___ records).  A plain locals() in a def got past that
+	anyway -- #globalsView's module-scope arm takes it in the probe, and the
+	emit, with the context set, picks #localsSnapshot -- but #globalsView
+	declines a call inside a comprehension, so that one refused
+	(`CallAst:frameSensitive-locals' / `-vars' / `-dir') although the emit
+	spells it.  Measured: adding this test is the whole of what admits it.
+	This answers the same in both frames.
+
+	THE ORIGINAL QUESTION, for eval/exec -- can ___emitIRBareEvalExecOn___:
+	spell step 0c's rewrite for THIS scope?
+
+	It used to be ``#topLevelDef or #method'' -- the two ___irEvalScopeShape___
+	names -- which also refused a bare eval inside a NESTED def, and that was
+	one scope too many.  printSmalltalkOn: emits the SAME rewrite there:
+	measured on ``def f(): def inner(): x = 20; return eval('x + 1')'', the
+	generated text is character for character the top-level def's shape,
+	``(builtins) _eval: { src. (builtins) ___evalScopeFor___: self locals:
+	((builtins) ___buildLocals___: { { 'x'. x } }) } kw: nil''.  Step 0c's
+	first arm claims both -- its test is ``functionBeingCompiled notNil'' --
+	and ___emitIRLocalsSnapshotOn___: reads the SAME
+	``CallAst functionBeingCompiled'', which inside a nested block emit is the
+	nested def itself.  So the snapshot gathers that def's own names with no
+	change at all.
+
+	A COMPREHENSION IN A DEF IS NOW ADMITTED.  It used to refuse
+	(`CallAst:frameSensitive-eval-bareRewrite') on the belief that step 0c
+	prints a comprehension's targets through a different helper.  It does so
+	only at MODULE scope, where there is no function to snapshot.  Inside a
+	def it takes the same first arm and the same printFunctionLocalsSnapshotOn:,
+	which appends the targets of every comprehension the call sits in --
+	PEP 709's inlined scope -- after the def's own names.
+	___emitIRLocalsSnapshotOn___: appends the same names in the same order,
+	each read through ``localVar:'', which resolves to the clause block's temp
+	because ComprehensionAst binds the targets with ``withLocals:do:''.  So
+	``def f(xs): return [eval('x') for x in xs]'' is the existing emit
+	unchanged.
+
+	WHAT STAYS REFUSED is a scope whose locals the snapshot cannot build: a
+	comprehension at MODULE scope, whose targets step 0c prints through
+	___globalsViewReceiverExpr___, and a CLASS BODY, which is not a namespace
+	the snapshot models (bucket P3).
+
+	A LAMBDA cannot reach this at all -- it holds an expression, and step 0c's
+	rewrite is a statement-level one -- but it is admitted by the same rule it
+	would take if it could, since a lambda's own scope is a def's."
+
+	| kinds |
+	"Comprehensions are skipped: they are inlined into whatever encloses them,
+	and the question is what THAT is."
+	kinds := self ___irEvalScopeKinds___ reject: [:k | k == #comprehension].
+	kinds isEmpty ifTrue: [^ false].
+	"The innermost NON-comprehension scope must be a def or a lambda.  A #class
+	first means the call sits directly in a class BODY (or in a comprehension
+	in one), which is not a namespace the snapshot models; a #class further out
+	is just the class a METHOD belongs to, and that case was always admitted
+	(___irEvalScopeShape___'s #method)."
+	^ (kinds at: 1) == #def or: [(kinds at: 1) == #lambda]
 
 ]
 
@@ -4367,8 +4449,23 @@ CallAst >> ___irSuperShape___ [
 	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ nil].
 	keywords isEmpty ifFalse: [^ nil].
 	self ___superNameIsShadowed___ ifTrue: [^ nil].
-	CallAst classBeingCompiled isNil ifTrue: [^ nil].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
+	"A ZERO-ARGUMENT super() WITH NO CLASS -- ``def h(x): return super()'' at
+	module scope.  CPython compiles it and raises at the call; the text's two
+	precondition arms (no positional parameter, then argument 0 deleted / no
+	__class__ cell) spell exactly that, and ___emitIRSuperZeroOn___: now emits
+	both inside the same shadow probe.  This used to answer nil and the
+	refusal walk named it `CallAst:super-noClass'.
+
+	Both arms need a def to ask for its parameters, which every call the IR
+	path emits sits in: the seam only ever compiles a def's body.  The parent
+	chain says so independently of the compile context, so a call outside
+	any def -- not an IR emit -- still answers nil."
+	CallAst classBeingCompiled isNil ifTrue: [
+		^ (arguments isEmpty
+			and: [self ___irEvalScopeKinds___ includes: #def])
+				ifTrue: [#superZero]
+				ifFalse: [nil]].
 	arguments isEmpty ifTrue: [^ #superZero].
 	(arguments size = 2 and: [(arguments at: 1) isKindOf: NameAst]) ifTrue: [
 		"A method-local class is admitted only when the first argument names
@@ -4399,7 +4496,9 @@ CallAst >> ___irSuperStaysOnText___ [
 	   otherwise.  Falling through instead emits the generic builtin call,
 	   whose message is ``super(): no arguments'': a WRONG message, measured, by
 	   SuperPreconditionErrorsTestCase in the flag-on suite.  So a zero-argument
-	   super the shapes decline keeps refusing, whatever declined it.
+	   super the shapes decline keeps refusing, whatever declined it.  Those
+	   no-class arms are themselves emitted now (___irSuperShape___'s classless
+	   #superZero), so what the shapes still decline is a doit's super().
 
 	2. ``super(Other, obj)'' inside a METHOD-LOCAL class, where ``Other'' is a
 	   bare name that is not the class being compiled.  The text carries on into
@@ -4419,7 +4518,16 @@ CallAst >> ___irSuperStaysOnText___ [
 	test_shadowed_local -- ``class super:'' in the enclosing method, then a
 	method-local class calling ``super()'' -- is that shape."
 	self ___superNameIsShadowed___ ifTrue: [^ false].
-	arguments isEmpty ifTrue: [^ true].
+	"ZERO POSITIONALS AND NO KEYWORDS.  A keyword -- ``super(x=1)'' -- is not
+	the rewrite: every one of printSmalltalkOn:'s zero-argument arms tests
+	``keywords isEmpty'', so the text emits the ordinary call and the builtin
+	raises CPython's ``super() takes no keyword arguments''.  This used to
+	claim it anyway, through ``arguments isEmpty'' alone, and the walk named
+	it `CallAst:super-keywords'; the ordinary call is what both paths emit
+	now.  (``super(**{})'' is the same shape on both paths and so raises where
+	CPython, seeing no keywords, binds a proxy -- a text divergence, not one
+	this path introduces.)"
+	(arguments isEmpty and: [keywords isEmpty]) ifTrue: [^ true].
 	"REASON 2 IS GONE: the emit no longer assumes the first argument names
 	the class being compiled.  It takes the cell only for a method-local
 	class naming ITSELF, and otherwise falls through to the module-instance

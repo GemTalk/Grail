@@ -49,7 +49,7 @@ redistributed under the same Python Software Foundation License Version 2.
 | `src/python/stdlib/test/support/warnings_helper.py` | `Lib/test/support/warnings_helper.py` | **Trimmed** to class-based context managers over the `warnings` shim; `import_deprecated` appended verbatim from 3.14.4 |
 | `src/python/stdlib/test/support/os_helper.py` | `Lib/test/support/os_helper.py` | **Trimmed** to the names the curated set imports (`TESTFN`, `unlink`, `temp_dir`, `create_empty_file`), and Windows retry loops left out. The unicode/undecodable/unencodable TESTFN variants, `can_symlink`, `skip_unless_symlink` and `make_bad_fd` are appended verbatim from 3.14.4; `TESTFN` itself stays Grail's fixed name |
 | `src/python/stdlib/test/support/{ast,bytecode,hypothesis,i18n,pty,strace}_helper.py`, `support/venv.py`, `support/_hypothesis_stubs/` | `Lib/test/support/` | Verbatim from 3.14.4 |
-| `src/python/stdlib/test/fork_wait.py`, `lock_tests.py` | `Lib/test/` | Verbatim from 3.14.4 (sibling helpers of test modules) |
+| `src/python/stdlib/test/fork_wait.py`, `lock_tests.py`, `testcodec.py` | `Lib/test/` | Verbatim from 3.14.4 (sibling helpers of test modules) |
 | `src/python/stdlib/test/mathdata/math_testcases.txt`, `cmath_testcases.txt` | `Lib/test/mathdata/*.txt` | Verbatim (pure test-vector data for `test_math`) |
 | `src/python/stdlib/textwrap.py` | `Lib/textwrap.py` | Verbatim (replaces Grail's earlier reduced port; enabled by the LEGB scope fix and while-else semantics) |
 | `src/python/stdlib/calendar.py` | `Lib/calendar.py` | Verbatim from 3.14.4. Replaces Grail's earlier subset, which had no Calendar, TextCalendar, HTMLCalendar, firstweekday or main |

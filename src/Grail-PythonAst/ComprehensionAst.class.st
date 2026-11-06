@@ -323,7 +323,7 @@ ComprehensionAst class >> ___emitIRTracebackHandlerFor___: iterNode on: aBuilder
 
 { #category : 'Grail-IR Codegen' }
 ComprehensionAst class >> ___emitIRUnpack___: aTarget source: aSourceBlock on: aBuilder [
-	"___emitUnpack___:from:on:'s no-star shapes: a Name leaf stores the source
+	"___emitUnpack___:from:on:'s shapes: a Name leaf stores the source
 	(its leaf is the clause's block temp, bound by withLocals:do:); a nested
 	tuple / list reads its elements off ``((src) __getitem__: i)'', the
 	subscript re-evaluated per leaf.  aSourceBlock answers a FRESH node each
@@ -351,12 +351,12 @@ ComprehensionAst class >> ___emitIRUnpack___: aTarget source: aSourceBlock on: a
 			send: #'__setattr__:_:' to: recv
 			with: { aBuilder obj: aTarget ___mangledAttr___ asString.
 				aSourceBlock value })].
-	aTarget elts doWithIndex: [:elt :i |
-		self ___emitIRUnpack___: elt
-			source: [aBuilder
-				send: #'__getitem__:' to: aSourceBlock value
-				with: { aBuilder obj: i - 1 }]
-			on: aBuilder]
+	"A tuple / list: one read per element, the star arm included, shared with
+	the for-loop (AbstractNode >> ___emitIRSequenceElementsOf___:source:on:do:)
+	because ___emitUnpack___:from:on: and ForAst's text spell the same sends.
+	Each leaf -- the starred element's value for the star -- recurses here."
+	aTarget ___emitIRSequenceElementsOf___: aTarget source: aSourceBlock on: aBuilder
+		do: [:leaf :src | self ___emitIRUnpack___: leaf source: src on: aBuilder]
 
 ]
 
@@ -539,11 +539,10 @@ ComprehensionAst class >> ___irReadsOf___: generators parts: partNodes into: aSe
 { #category : 'Grail-IR Codegen' }
 ComprehensionAst class >> ___irRefusal___: generators [
 	"Why the IR path cannot emit these for-clauses (a census Symbol), or nil
-	when it can: every clause synchronous, every target a Store-context Name
-	or a tuple / list nest of them with no star -- the shapes
-	___emitIRGenerators___:... binds.  The text's subscript / attribute /
-	star target stores (___emitTargetStore___:, the star slice of
-	___emitUnpack___:) are not emitted yet.  The iterables and filters are
+	when it can: every target one ___irTargetShapeOk___: admits -- the
+	shapes ___emitIRGenerators___:... binds, which since the star cut are
+	every target the text's ___emitTargetStore___: / ___emitUnpack___: emit.
+	The iterables and filters are
 	judged by the caller with the right scope set; this is only about the
 	clause structure.  Guarded: eligibility never raises."
 
@@ -589,12 +588,21 @@ ComprehensionAst class >> ___irTargetNames___: generators [
 
 { #category : 'Grail-IR Codegen' }
 ComprehensionAst class >> ___irTargetRefusal___: aTarget [
-	"The census label for a target shape ___irTargetShapeOk___: declined."
+	"The census label for a target shape ___irTargetShapeOk___: declined.
 
-	(aTarget isKindOf: StarredAst) ifTrue: [^ #'Comprehension:starTarget'].
+	`Comprehension:starTarget' is retired with the refusal it named: a starred
+	ELEMENT is admitted.  What remains are the two star shapes the parser
+	already rejects as SyntaxErrors -- a bare ``for *a in x'' and two stars in
+	one tuple -- labelled for what they are rather than for the old cut."
+
+	(aTarget isKindOf: StarredAst) ifTrue: [^ #'Comprehension:bareStarTarget'].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
+		((aTarget elts ifNil: [#()]) select: [:e | e isKindOf: StarredAst]) size > 1
+			ifTrue: [^ #'Comprehension:target-starCount'].
 		(aTarget elts ifNil: [#()]) do: [:e |
-			(self ___irTargetShapeOk___: e) ifFalse: [^ self ___irTargetRefusal___: e]].
+			| leaf |
+			leaf := (e isKindOf: StarredAst) ifTrue: [e value] ifFalse: [e].
+			(self ___irTargetShapeOk___: leaf) ifFalse: [^ self ___irTargetRefusal___: leaf]].
 		^ #'Comprehension:target-other'].
 	^ ('Comprehension:target-' , aTarget class name asString) asSymbol
 
@@ -603,7 +611,7 @@ ComprehensionAst class >> ___irTargetRefusal___: aTarget [
 { #category : 'Grail-IR Codegen' }
 ComprehensionAst class >> ___irTargetShapeOk___: aTarget [
 	"A Store-context Name, a SUBSCRIPT or ATTRIBUTE store, or a tuple / list
-	nest of those (no star).
+	nest of those with AT MOST ONE starred element per level.
 
 	A comprehension's for-target is a full ASSIGNMENT target, not just a
 	name -- ___emitTargetStore___: says so and has emitted all three shapes
@@ -619,7 +627,23 @@ ComprehensionAst class >> ___irTargetShapeOk___: aTarget [
 		ifTrue: [^ aTarget ctx isKindOf: StoreAst].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
 		aTarget elts isNil ifTrue: [^ false].
-		^ aTarget elts allSatisfy: [:e | self ___irTargetShapeOk___: e]].
+		"THE STAR IS ADMITTED (`Comprehension:starTarget' is gone).
+		``[b for a, *b in pairs]'' is CPython-legal and the text has always
+		emitted it -- ___emitUnpack___:from:on:'s star slice -- while this
+		test refused it as a send the IR did not make.  It is the for-loop's
+		slice shape, so the clause now emits it with the loop's own code
+		(AbstractNode >> ___emitIRSequenceElementsOf___:source:on:do:).
+
+		One star per level is Python's rule; the parser raises the SyntaxError
+		for two, so the count here is a guard, not a refusal anyone meets.  A
+		bare ``for *a in x'' is a SyntaxError too and never reaches this: the
+		star is only ever an ELEMENT.  What it wraps is any target this test
+		admits -- a name, a store, or a nested tuple (``*(b, c)'')."
+		(aTarget elts select: [:e | e isKindOf: StarredAst]) size > 1 ifTrue: [^ false].
+		^ aTarget elts allSatisfy: [:e |
+			(e isKindOf: StarredAst)
+				ifTrue: [self ___irTargetShapeOk___: e value]
+				ifFalse: [self ___irTargetShapeOk___: e]]].
 	^ false
 
 ]
@@ -636,6 +660,9 @@ ComprehensionAst class >> ___irTargetStoreReadsEligible___: aTarget locals: aLoc
 			and: [aTarget slice ___irEligibleValueLocals___: aLocals]].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
 		^ aTarget value ___irEligibleValueLocals___: aLocals].
+	"A starred element stores through whatever it wraps: ``*d[k]''."
+	(aTarget isKindOf: StarredAst) ifTrue: [
+		^ self ___irTargetStoreReadsEligible___: aTarget value locals: aLocals].
 	((aTarget isKindOf: TupleAst) or: [aTarget isKindOf: ListAst]) ifTrue: [
 		^ (aTarget elts ifNil: [#()]) allSatisfy: [:e |
 			self ___irTargetStoreReadsEligible___: e locals: aLocals]].

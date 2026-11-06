@@ -102,11 +102,11 @@ os class >> ___fdCallouts [
 	fixed three-argument declaration would hand open() a garbage mode.
 
 	The key is VERSIONED, and bumped when a callout is added (v2: fsync, v3:
-	times and sysconf), so a session that cached the older table does not
-	answer nil for the new one."
+	times and sysconf, v4: uname), so a session that cached the older table
+	does not answer nil for the new one."
 
 	^ SessionTemps @env0:current
-		@env0:at: #'Grail_os_fd_callouts_v3'
+		@env0:at: #'Grail_os_fd_callouts_v4'
 		ifAbsentPut: [ | lib d |
 			lib := CLibrary @env0:named: self ___libcName.
 			d := SymbolKeyValueDictionary @env0:new.
@@ -148,6 +148,8 @@ os class >> ___fdCallouts [
 				result: #'int64' args: #(#'ptr')).
 			d @env0:at: #sysconf put: (CCallout @env0:library: lib name: 'sysconf'
 				result: #'int64' args: #(#'int32')).
+			d @env0:at: #uname put: (CCallout @env0:library: lib name: 'uname'
+				result: #'int32' args: #(#'ptr')).
 			d]
 
 ]
@@ -365,6 +367,18 @@ os class >> ___strerrorCallout [
 os class >> ___symlinkNotCreatedMessage: path [
 
 	^ 'Cannot create symbolic link: ' @env0:, path @env0:printString
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+os class >> ___utsnameFieldLength [
+
+	"The size of each name in a struct utsname: _SYS_NAMELEN on Darwin
+	(<sys/utsname.h>), _UTSNAME_LENGTH in glibc (<bits/utsname.h>)."
+
+	^ self ___isDarwin
+		ifTrue: [256]
+		ifFalse: [65]
 
 ]
 
@@ -1031,6 +1045,18 @@ os >> ___makedirsOf___: path [
 		ifTrue: [self ___makedirsOf___: head].
 	(osPath isdir: path) ifFalse: [self mkdir: path].
 	^ None
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+os >> ___nameIn___: aStruct at: anOffset [
+
+	"The NUL-terminated name at anOffset in aStruct, decoded as a filesystem
+	name is."
+
+	^ self fsdecode: (aStruct
+		@env0:byteArrayFrom: anOffset
+		numBytes: (aStruct @env0:stringFrom: anOffset) @env0:size)
 
 ]
 
@@ -2574,6 +2600,7 @@ os >> initialize [
 	PyStatResult has no st_flags, which is Linux CPython's answer too."
 	self @env0:at: #stat_result put: PyStatResult.
 	self @env0:at: #times_result put: PyTimesResult.
+	self @env0:at: #uname_result put: PyUnameResult.
 	"Pre-store fsdecode as a BoundMethod so ``from os import
 	fsdecode'' (werkzeug's file_storage) reads the callable
 	directly via the ImportFromAst __pyAttrLoad path."
@@ -3020,6 +3047,25 @@ os >> times [
 	^ PyTimesResult
 		@env0:___sequence___: ((#(0 8 16 24) @env0:collect: [:offset | (process @env0:int64At: offset) @env0:/ ticks])
 			@env0:, { elapsed @env0:/ ticks })
+		named: nil
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+os >> uname [
+
+	"os.uname() (Modules/posixmodule.c, os_uname_impl): the five names uname(2)
+	fills in, each decoded as a filesystem name, in a posix.uname_result.
+	Grail had no os.uname, so CPython's platform.uname() could not run."
+
+	| names length |
+
+	names := CByteArray @env0:gcMalloc: 6 * 256.
+	self ___libc: #uname with: { names }.
+	length := self @env0:class ___utsnameFieldLength.
+	^ PyUnameResult
+		@env0:___sequence___: ((0 @env0:to: 4) @env0:collect: [:index |
+			self ___nameIn___: names at: index * length])
 		named: nil
 
 ]
