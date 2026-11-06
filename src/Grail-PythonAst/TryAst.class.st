@@ -214,7 +214,12 @@ TryAst >> ___emitIRExceptType___: aTypeNode on: aBuilder [
 	implement it.  Left-folded in source order, as the text prints it."
 
 	| v |
-	(aTypeNode isKindOf: TupleAst) ifFalse: [
+	"``except ():'' -- an EMPTY tuple has nothing to join, and CPython's
+	matcher, handed no classes, matches nothing.  The tuple VALUE does exactly
+	that: tuple >> handles: answers whether any element handles, which for no
+	elements is false -- the same run-time object ``except excs:'' gets for
+	``excs = ()''."
+	((aTypeNode isKindOf: TupleAst) and: [aTypeNode elts notEmpty]) ifFalse: [
 		^ aTypeNode ___emitIRValueOn___: aBuilder].
 	v := self ___emitIRExceptElement___: aTypeNode elts first on: aBuilder.
 	2 to: aTypeNode elts size do: [:i |
@@ -335,7 +340,14 @@ TryAst >> ___emitIRHandlerBlockFor___: h token: aTokenOrNil answersFalse: answer
 					(self ___catchTargetUnbindsALocal___: n asSymbol) ifTrue: [
 						aBuilder add: (aBuilder
 							assign: (aBuilder leafFor: n asSymbol)
-							from: aBuilder nilLit)]].
+							from: aBuilder nilLit)].
+					"A MODULE-bound target is unbound the way ``del'' unbinds a
+					 module name -- see the text emit."
+					(self ___catchTargetUnbindsAModuleName___: n asSymbol) ifTrue: [
+						aBuilder add: (aBuilder
+							send: #removeDynamicInstVar:
+							to: (self ___emitIRModuleReceiverOn___: aBuilder)
+							with: { aBuilder obj: n asSymbol } env: 0)]].
 				aBuilder add: (aBuilder
 					send: #'___exitHandler___' to: base with: { } env: 0).
 				aBuilder add: (aBuilder
@@ -665,6 +677,20 @@ TryAst >> ___indentOf___: aLine [
 ]
 
 { #category : 'Grail-IR Codegen' }
+TryAst >> ___irCatchTargetEligible___: aName locals: localNames [
+	"May ``except E as aName'' be emitted?  A body local, or a name whose store
+	routes to the MODULE -- ``global e'' -- which the handler stores through
+	___emitIRModuleScopeStoreOf___:from:on: and unbinds with
+	removeDynamicInstVar:, ImportAst's rule for the same question.  The parser
+	normally records a global-declared as-name among the body's variables as
+	well, so the second arm is what keeps the answer right when it does not."
+
+	(localNames includes: aName asString) ifTrue: [^ true].
+	^ self ___nameStoreRoutesToModule___: aName asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 TryAst >> ___irEligibleStatementLocals___: localNames [
 	"try with any number of except clauses (typed, ``except (A, B)'' tuples, or
 	bare; optionally ``as name'' binding a local; never ``except*''), an
@@ -700,7 +726,8 @@ TryAst >> ___irEligibleStatementLocals___: localNames [
 				has one; guarded anyway rather than assumed."
 				(h isStar == true and: [h type isNil]) ifTrue: [^ false].
 				h name ifNotNil: [:n |
-					(localNames includes: n asString) ifFalse: [^ false]].
+					(self ___irCatchTargetEligible___: n locals: localNames)
+						ifFalse: [^ false]].
 				((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
 					ifFalse: [^ false].
 				(h body ___irEligibleStatementsWithLocals___: localNames)
@@ -760,9 +787,10 @@ TryAst >> ___irExceptTypeEligible___: aTypeNode locals: localNames [
 	tuple of them (non-empty; the text joins the classes into a GemStone
 	ExceptionSet with #, and so does the IR emit)."
 
-	(aTypeNode isKindOf: TupleAst) ifFalse: [
+	"An empty tuple is emitted as the tuple value (see ___emitIRExceptType___:on:),
+	so it is judged as one."
+	((aTypeNode isKindOf: TupleAst) and: [aTypeNode elts notEmpty]) ifFalse: [
 		^ aTypeNode ___irEligibleValueLocals___: localNames].
-	aTypeNode elts isEmpty ifTrue: [^ false].
 	^ aTypeNode elts allSatisfy: [:e | e ___irEligibleValueLocals___: localNames]
 
 ]
@@ -877,7 +905,7 @@ TryAst >> ___irRefusalDetail___: localSet [
 				ifFalse: [self ___irExceptTypeEligible___: t locals: localSet])
 					ifFalse: [^ #'shape:TryAst-exceptType']].
 		h name ifNotNil: [:n |
-			(localSet includes: n asString)
+			(self ___irCatchTargetEligible___: n locals: localSet)
 				ifFalse: [^ #'shape:TryAst-asTargetNotLocal']].
 		((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
 			ifFalse: [^ #'shape:TryAst-handlerBodyShape'].
@@ -1326,7 +1354,12 @@ TryAst >> printSmalltalkOn: aStream [
 				  try: ... / except json.decoder.JSONDecodeError: ...
 				fail on the success path when the name did not resolve."
 				aStream nextPutAll: '(PyLazyExceptSelector @env0:on: [BaseException @env1:___pyExceptType___: '.
-				(handler type isKindOf: TupleAst)
+				"``except ():'' is legal and catches nothing; an EMPTY tuple has no
+				classes to join, and the join below printed ``()'' -- a Smalltalk
+				CompileError that took the whole module down.  It takes the
+				single-value branch instead: the tuple VALUE, whose handles:
+				answers false for no elements, which is CPython's match."
+				((handler type isKindOf: TupleAst) and: [handler type elts notEmpty])
 					ifTrue: [
 						"``except (A, B):`` — emit a GemStone ExceptionSet
 						(classes joined with #,) rather than a Python tuple;
@@ -1426,7 +1459,18 @@ TryAst >> printSmalltalkOn: aStream [
 			 A read after the handler already raises UnboundLocalError through
 			 the ifNil: guard NameAst emits, which is what CPython does too."
 			(self ___catchTargetUnbindsALocal___: n asSymbol) ifTrue: [
-				aStream nextPutAll: n asString; nextPutAll: ' := nil. ']].
+				aStream nextPutAll: (NameAst ___transportIdentifierFor___: n); nextPutAll: ' := nil. '].
+			"A ``global''-declared target is a MODULE binding, and PEP 3110's
+			 ``del'' removes it from the module, exactly as an explicit ``del
+			 e'' of a global does (DeleteAst's removeDynamicInstVar:).  It was
+			 left bound, so ``'e' in globals()'' after the handler answered
+			 True where CPython answers False."
+			(self ___catchTargetUnbindsAModuleName___: n asSymbol) ifTrue: [
+				aStream
+					nextPutAll: self ___moduleStoreReceiverExpr___;
+					nextPutAll: ' @env0:removeDynamicInstVar: #''';
+					nextPutAll: n asString;
+					nextPutAll: '''. ']].
 		aStream nextPutAll: 'BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]'.
 		"Answer ``false'' so a handler that RAN can never be mistaken for a body
 		that fell through -- otherwise the else would fire off whatever the
