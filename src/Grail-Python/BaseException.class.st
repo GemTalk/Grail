@@ -2258,7 +2258,7 @@ BaseException class >> ___liveFrameCodeFor___: aClass name: aName [
 		 see it -- same reason BoundMethod passes environmentId: 1 here."
 		((c @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___'
 			environmentId: 1) ~~ nil) ifTrue: [
-				tbl := [c @env1:___methodCodeTable___]
+				tbl := [c @env1:___grailMethodCodeTable___]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				tbl isNil ifFalse: [
 					code := [tbl @env0:at: aName otherwise: nil]
