@@ -1,0 +1,77 @@
+! P3.1 spike: every raw-Smalltalk construct shape the class-build emitter writes,
+! built through PyMethodIRBuilder exactly as a P3.2 IR backend would, then run
+! next to the same text compiled from source.  Nothing is committed.
+! Needs an installed Grail:  topaz -l -S experiments/ir/16_class_build_constructs.tpz
+login
+iferr 1 where
+run
+| cls b meth src textMeth ir txt out |
+out := WriteStream on: String new.
+cls := Object subclass: 'P31Spike' instVarNames: #() classVars: #() classInstVars: #()
+  poolDictionaries: #() inDictionary: nil options: #().
+"THE TEXT, shaped like a class build: an outer real block with temps sent
+@env0:value, a nil-guard ifTrue: opened in it, a parenthesised-condition
+ifTrue:ifFalse:, a cascade, literal and brace arrays, a nested brace array, a
+Python global (___tuple___ / ___importlib___ resolve through the compile symbol
+list), a perform:env:withArguments:, an env-1 send, a real one-arg block that
+assigns the OUTER block's temp, and a string literal carrying an embedded
+newline and a doubled quote."
+src := 'spike
+^ [| X ___t_1 ___hdrBases___ |
+X := nil.
+X == nil ifTrue: [
+X := (___importlib___ @env0:yourself).
+(X @env0:isBehavior) ifTrue: [___hdrBases___ := 1] ifFalse: [___hdrBases___ := 2].
+].
+___t_1 := (KeyValueDictionary @env0:new) @env0:at: #a put: #( #''b'' c ); @env0:at: ''k'' put: {{''x''. ''y''}}; @env0:yourself.
+X := { X. ___t_1. #(). [:v | ___hdrBases___ := v]. (___tuple___ perform: #withAll: env: 0 withArguments: {{''p''. ''q''}}). ''a''''b
+c'' }.
+((X @env0:at: 4) @env0:value: 7).
+{ ___hdrBases___. (X @env0:at: 1) @env0:name. ((X @env0:at: 2) @env0:at: #a). ((X @env0:at: 2) @env0:at: ''k''). (X @env0:at: 3). (X @env0:at: 5) @env1:__len__. (X @env0:at: 6) }
+] @env0:value'.
+textMeth := cls compileMethod: src dictionaries: importlib ___grailCompileSymbolList___
+  category: 'spike' environmentId: 1.
+txt := textMeth _executeInContext: cls new.
+
+b := PyMethodIRBuilder class: cls selector: #spikeIR env: 1.
+b add: (b return: (b send: #value
+  to: (b blockWithTemps: #(#X #'___t_1' #'___hdrBases___') do: [:tmps | | X t1 hdr |
+    X := tmps at: 1. t1 := tmps at: 2. hdr := tmps at: 3.
+    b add: (b assign: X from: b nilLit).
+    b if: (b send: #== to: (b var: X) with: { b nilLit } env: 0) then: [
+      b add: (b assign: X from: (b send: #yourself to: (b globalNamed: #'___importlib___') with: #() env: 0)).
+      b if: (b send: #isBehavior to: (b var: X) with: #() env: 0)
+        then: [b add: (b assign: hdr from: (b obj: 1))]
+        else: [b add: (b assign: hdr from: (b obj: 2))]].
+    b add: (b assign: t1 from: (b cascade: (b send: #new to: (b globalNamed: #KeyValueDictionary) with: #() env: 0)
+      specs: {
+        { #at:put:. { b obj: #a. b obj: #(#b #c) }. 0 }.
+        { #at:put:. { b obj: 'k'. b arrayOf: { b arrayOf: { b obj: 'x'. b obj: 'y' } } }. 0 }.
+        { #yourself. #(). 0 } })).
+    b add: (b assign: X from: (b arrayOf: {
+      b var: X. b var: t1. b obj: #().
+      b blockWithArg: #v do: [:vLeaf | b add: (b assign: hdr from: (b var: vLeaf))].
+      b send: #perform:env:withArguments: to: (b globalNamed: #'___tuple___')
+        with: { b obj: #withAll:. b obj: 0. b arrayOf: { b arrayOf: { b obj: 'p'. b obj: 'q' } } } env: 0.
+      b obj: 'a''b' , (String with: Character lf) , 'c' })).
+    b add: (b send: #value: to: (b send: #at: to: (b var: X) with: { b obj: 4 } env: 0) with: { b obj: 7 } env: 0).
+    b add: (b arrayOf: {
+      b var: hdr.
+      b send: #name to: (b send: #at: to: (b var: X) with: { b obj: 1 } env: 0) with: #() env: 0.
+      b send: #at: to: (b send: #at: to: (b var: X) with: { b obj: 2 } env: 0) with: { b obj: #a } env: 0.
+      b send: #at: to: (b send: #at: to: (b var: X) with: { b obj: 2 } env: 0) with: { b obj: 'k' } env: 0.
+      b send: #at: to: (b var: X) with: { b obj: 3 } env: 0.
+      b send: #'__len__' to: (b send: #at: to: (b var: X) with: { b obj: 5 } env: 0) with: #() env: 1.
+      b send: #at: to: (b var: X) with: { b obj: 6 } env: 0 })])
+  with: #() env: 0)).
+meth := b generatedMethod.
+ir := meth _executeInContext: cls new.
+out nextPutAll: 'TEXT|' , txt printString; lf;
+    nextPutAll: 'IR  |' , ir printString; lf;
+    nextPutAll: 'SAME|' , (txt printString = ir printString) printString; lf;
+    nextPutAll: 'IRSTRINGS|' , (meth literals select: [:l | (l isKindOf: CharacterCollection) and: [l isSymbol not]]) size printString;
+    nextPutAll: '|TEXTSTRINGS|' , (textMeth literals select: [:l | (l isKindOf: CharacterCollection) and: [l isSymbol not]]) size printString; lf.
+out contents
+%
+logout
+exit
