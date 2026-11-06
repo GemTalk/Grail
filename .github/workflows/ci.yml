@@ -201,15 +201,30 @@ jobs:
         # ran in a separate workflow (ir-flag-on.yml, #1148) that nothing
         # required -- it ran in the merge queue, and the queue did not wait
         # for it.
+        #
+        # THE TEXT ARM IS SKIPPED ON pull_request, and still gated where it
+        # counts: merge_group (plus schedule and workflow_dispatch) runs both
+        # arms, and the queue requires ci-complete, so nothing lands without a
+        # green text arm.  A PR push runs the ir arm alone -- half the runners
+        # per push.  What that gives up is EARLY notice: a text-only break now
+        # surfaces as a queue ejection rather than a red PR.  Measured over
+        # Sep 23 - Nov 6 2026, text-only codegen breaks were rare (one
+        # confirmed: fix/random-cpython, "a BoundMethod does not understand
+        # #___instance___"), and that one came from vendoring random.py, not
+        # from a codegen edit -- so do not narrow this further with a paths:
+        # filter on Grail-PythonAst; it would have missed it.
+        #
+        # A job-level `if:` cannot see `matrix`, and an `include` entry naming
+        # an arm the dimension lacks is ADDED as a new job rather than dropped,
+        # so the arm list itself is computed from the event and the flag value
+        # is derived from the arm (GRAIL_IR_CODEGEN in the steps below).
+        arm: ${{ github.event_name == 'pull_request' && fromJSON('["ir"]') || fromJSON('["ir", "text"]') }}
+        name: [a, b, c, d]
         include:
-          - { arm: ir,   ircodegen: "",  name: a, shards: "0 1" }
-          - { arm: ir,   ircodegen: "",  name: b, shards: "2 3" }
-          - { arm: ir,   ircodegen: "",  name: c, shards: "4 5" }
-          - { arm: ir,   ircodegen: "",  name: d, shards: "6 7" }
-          - { arm: text, ircodegen: "0", name: a, shards: "0 1" }
-          - { arm: text, ircodegen: "0", name: b, shards: "2 3" }
-          - { arm: text, ircodegen: "0", name: c, shards: "4 5" }
-          - { arm: text, ircodegen: "0", name: d, shards: "6 7" }
+          - { name: a, shards: "0 1" }
+          - { name: b, shards: "2 3" }
+          - { name: c, shards: "4 5" }
+          - { name: d, shards: "6 7" }
     # --shm-size lifts the container's default 64 MB /dev/shm so GemStone's
     # shared page cache fits. GEMSTONE/PATH come from the image ENV.
     container:
@@ -252,7 +267,7 @@ jobs:
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
-            GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
+            GRAIL_IR_CODEGEN="${{ matrix.arm == 'text' && '0' || '' }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
@@ -327,7 +342,7 @@ jobs:
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
+            GRAIL_IR_CODEGEN="${{ matrix.arm == 'text' && '0' || '' }}" \
             ARM="${{ matrix.arm }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
