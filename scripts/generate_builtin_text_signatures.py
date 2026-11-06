@@ -29,6 +29,10 @@ TARGET = os.path.join(HERE, "..", "src", "python", "stdlib", "_grail_text_signat
 CALLABLE_KINDS = (types.BuiltinFunctionType, types.MethodDescriptorType,
                   types.WrapperDescriptorType, types.ClassMethodDescriptorType)
 SINGLETON_TYPES = (type(None), type(Ellipsis), type(NotImplemented))
+DESCRIPTOR_TYPES = (types.WrapperDescriptorType, types.MethodWrapperType,
+                    types.MethodDescriptorType, types.ClassMethodDescriptorType,
+                    types.BuiltinFunctionType, types.GetSetDescriptorType,
+                    types.MemberDescriptorType, types.MethodType, types.FunctionType)
 
 
 def entries():
@@ -54,6 +58,15 @@ def entries():
             attribute = getattr(value, name)
             if isinstance(attribute, CALLABLE_KINDS):
                 table['%s.%s' % (value.__qualname__, name)] = attribute.__text_signature__
+    # The types of the callables and descriptors themselves, which builtins
+    # does not name either: ``object.__init__.__get__'' is a method-wrapper
+    # whose qualname is ``wrapper_descriptor.__get__''.  Their methods only:
+    # the types have no text, and CPython's signature() of one is not the
+    # ValueError a None here would make it.
+    for value in DESCRIPTOR_TYPES:
+        for attribute in vars(value).values():
+            if isinstance(attribute, CALLABLE_KINDS):
+                table[attribute.__qualname__] = attribute.__text_signature__
     return table
 
 
