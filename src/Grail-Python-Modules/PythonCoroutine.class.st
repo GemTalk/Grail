@@ -125,9 +125,15 @@ PythonCoroutine class >> ___unpackNormalize___: anObject [
 	list __new__: follows __iter__ with the legacy __getitem__ walk as its
 	own fallback, so every unpackable shape lands in one branch or the
 	other.  Emitted with @env0: -- this is a codegen runtime helper, like
-	___grailAiter___: beside it."
+	___grailAiter___: beside it.
 
-	(anObject @env0:isKindOf: SequenceableCollection) ifTrue: [^ anObject].
+	A sequence a Python class gave an __iter__ of its own is materialised
+	too, as unpack_iterable takes every list or tuple subclass by its
+	iterator (Object >> ___grailIteratesItsOwnWay___)."
+
+	((anObject @env0:isKindOf: SequenceableCollection)
+		and: [(anObject @env1:___grailIteratesItsOwnWay___) not])
+			ifTrue: [^ anObject].
 	^ list @env1:__new__: anObject
 
 ]
