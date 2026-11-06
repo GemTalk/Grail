@@ -67,12 +67,46 @@ permissions:
   contents: read
 
 jobs:
+  # A merge-queue build whose group GitHub has since rebuilt or dropped is
+  # STALE: the queue deleted its gh-readonly-queue/... branch, and nothing will
+  # read its result.  The per-ref concurrency group above never cancels one,
+  # because each rebuild gets a new ref, so stale builds sat in the queue for
+  # runners -- measured 2026-11-06: 12 of 17 waiting merge_group runs, each
+  # wanting a full test matrix and starving other GemTalk repositories' jobs.
+  # This job runs first and cancels the run if its branch is gone, so a stale
+  # build costs one small job instead of the matrix.  Any other API failure
+  # leaves the run alone.
+  queue-current:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Cancel this run if its merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/${GITHUB_REF#refs/}" 2>&1) && exit 0
+          if ! printf '%s' "$out" | grep -q 'HTTP 404'; then
+            echo "could not check ${GITHUB_REF} (${out}); running anyway"
+            exit 0
+          fi
+          echo "${GITHUB_REF} is gone: this merge group is stale, cancelling the run"
+          gh run cancel "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY"
+          # The cancel takes effect asynchronously; fail if it has not by now,
+          # so the matrix still never starts.
+          sleep 120
+          exit 1
+
   # Self-tests for the shell tooling CI itself depends on -- no container, no
   # stone, ~seconds.  The conformance gate decides whether a scoreboard delta is
   # a regression, so a bug in it can turn a real regression into a green run;
   # that makes it worth checking on every push even though the conformance
   # measurement itself is nightly.
   scripts:
+    needs: [queue-current]
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
@@ -150,6 +184,7 @@ jobs:
 
   test-main:
     name: test-main ${{ matrix.arm }} (${{ matrix.shard }})
+    needs: [queue-current]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     strategy:
