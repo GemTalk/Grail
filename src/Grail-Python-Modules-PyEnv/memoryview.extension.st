@@ -656,21 +656,24 @@ memoryview >> ___writableWindow___ [
 
 { #category : 'Grail-Private' }
 memoryview >> ___writableWindowIfNone: aBlock [
-	"{ source bytes. byte offset. byte length } for a caller that writes into
-	this view's memory in bulk -- os.readinto, which _pyio.FileIO reads through,
-	and FileIO.readinto -- or aBlock's value for a view that cannot be written
-	that way.  The LIVE source, never the copy ___viewBytes___ answers for a
-	slice, so the write lands where the view points."
+	"{ target. byte offset. byte length } for a caller that writes into this
+	view's memory in bulk with replaceFrom:to:with:startingAt: -- os.readinto,
+	which _pyio.FileIO reads through, and FileIO.readinto -- or aBlock's value
+	for a read-only or non-contiguous view.  The target is the LIVE source,
+	never the copy ___viewBytes___ answers for a slice, so the write lands where
+	the view points."
 
 	| bytes |
 	bytes := self ___sourceBytes___.
-	"Refused for a source that is not a ByteArray even when it is writable: its
-	bytes here are a COPY, so a bulk write into them would vanish.  Such a view
-	is written one byte at a time, through __setitem__."
 	(((self @env0:dynamicInstVarAt: #'readonly') @env0:= true)
-		@env0:or: [((self @env0:dynamicInstVarAt: #'_obj') isKindOf: ByteArray) @env0:not
-		@env0:or: [self ___isContiguous___ @env0:not]])
+		@env0:or: [self ___isContiguous___ @env0:not])
 		ifTrue: [^ aBlock @env0:value].
+	"A source that is not a ByteArray -- an array.array -- renders its bytes
+	here as a COPY, so a bulk write into them would vanish.  Such a view is
+	written through a 'B' view over the same bytes, which takes the bulk write
+	one byte at a time (memoryview >> replaceFrom:to:with:startingAt:)."
+	((self @env0:dynamicInstVarAt: #'_obj') isKindOf: ByteArray) ifFalse: [
+		^ { self cast: 'B'. 0. self @env0:dynamicInstVarAt: #'_length' }].
 	^ { bytes.
 		self @env0:dynamicInstVarAt: #'_offset'.
 		self @env0:dynamicInstVarAt: #'_length' }

@@ -993,3 +993,13 @@ test.test_unpack_ex
 #
 #   extcall   1t OK
 test.test_extcall
+
+# --- Codecs (added 2026-11-06): the charmap codec ---
+#
+# test_charmapcodec is CPython 3.14.4's, vendored verbatim (identical in
+# 3.14.8), with the testcodec.py codec it registers through a search
+# function: decoding and encoding through a charmap codec, the encodings
+# package's lookup scheme.  It passes as vendored.  Measured on Darwin arm64:
+#
+#   charmapcodec   4t OK
+test.test_charmapcodec
