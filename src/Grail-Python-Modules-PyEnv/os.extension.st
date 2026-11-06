@@ -1642,14 +1642,17 @@ os >> ___writableWindowOf: aBuffer [
 
 { #category : 'Grail-File Descriptors' }
 os >> ___writableWindowOf: aBuffer argument: aPosition [
-	"{ bytes. offset. length } -- where a read into aBuffer must write: a
-	bytearray, or a memoryview over one.  Anything else is refused as readinto()'s
-	argument at aPosition, as CPython's w* conversion refuses it."
+	"{ target. offset. length } -- where a read into aBuffer must write: a
+	bytearray, a writable memoryview, or an array.array, through a view over it
+	(the test BytesIO >> ___capacityOf: makes).  Anything else is refused as
+	readinto()'s argument at aPosition, as CPython's w* conversion refuses it."
 
 	| refusal |
 	refusal := [TypeError ___signal___: (self @env0:class ___readWriteBufferMessageFor: aPosition given: aBuffer)].
 	(aBuffer @env0:isKindOf: memoryview) ifTrue: [^ aBuffer ___writableWindowIfNone: refusal].
 	(aBuffer @env0:isKindOf: bytearray) ifTrue: [^ { aBuffer. 0. aBuffer @env0:size }].
+	(aBuffer ___respondsTo___: #'_grail_set_byte:_:') ifTrue: [
+		^ (memoryview __new__: aBuffer) ___writableWindowIfNone: refusal].
 	^ refusal @env0:value
 
 ]
@@ -2797,8 +2800,8 @@ os >> read: fd _: size [
 
 { #category : 'Grail-File Descriptors' }
 os >> readinto: fd _: aBuffer [
-	"os.readinto(fd, buffer) -- read into a writable buffer (a bytearray, or a
-	memoryview over one), answering how many bytes arrived.  _pyio.FileIO reads
+	"os.readinto(fd, buffer) -- read into a writable buffer (a bytearray, a
+	memoryview, or an array.array), answering how many bytes arrived.  _pyio.FileIO reads
 	this way, into a memoryview SLICE of its result, so the bytes land at the
 	view's own offset in the source."
 

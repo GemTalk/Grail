@@ -81,3 +81,17 @@ memoryview >> asByteArray [
 	^ ByteArray @env0:withAll: (self @env1:___viewBytes___)
 
 ]
+
+{ #category : 'Grail-Converting' }
+memoryview >> replaceFrom: aStart to: aStop with: someBytes startingAt: aFirstIndex [
+
+	"The bulk write of the Smalltalk side of the buffer protocol, as a ByteArray
+	takes one, for a 'B' view whose memory is no ByteArray: an array.array's.
+	Each byte goes through __setitem__, which hands it to the array's own write
+	hook, because the bytes asByteArray answers for such a view are a copy (see
+	___writableWindowIfNone:)."
+
+	aStart to: aStop do: [:position |
+		self @env1:__setitem__: position - 1 _: (someBytes at: aFirstIndex + position - aStart)]
+
+]
