@@ -11041,6 +11041,26 @@ Object >> ___grailIsUnhashableBuiltin___ [
 
 ]
 
+{ #category : 'Grail-Convenience Methods' }
+Object >> ___grailIteratesItsOwnWay___ [
+
+	"Whether a Python class has given this sequence an __iter__ of its own.  Then
+	unpacking it has to iterate, as CPython's unpack_iterable takes every list
+	or tuple that is not exactly one by its iterator: platform's uname_result
+	is a tuple of five that iterates six values.  An exact list or tuple is
+	answered first, as it is what nearly every unpacking unpacks."
+
+	| sequenceClass owner |
+
+	sequenceClass := self @env0:class.
+	(sequenceClass == OrderedCollection
+		@env0:or: [sequenceClass == tuple @env0:or: [sequenceClass == Array]])
+			@env0:ifTrue: [^ false].
+	owner := sequenceClass @env0:whichClassIncludesSelector: #'__iter__' environmentId: 1.
+	^ owner ~~ nil @env0:and: [owner ___grailIsPythonClass___]
+
+]
+
 { #category : 'Grail-Attribute Access' }
 Object >> ___grailLayoutBase___ [
 	"The receiver class, or the nearest ancestor that adds instance layout:
@@ -18776,7 +18796,8 @@ Object >> ___unpackCheck___: nBefore star: hasStar after: nAfter [
 	the values taken from its iterator (___unpackByIteration___:star:after:).
 
 	A sequence is read by size, as CPython's list and tuple specialisations
-	read it.  Only an EXACT list or tuple says how many values it had --
+	read it -- unless a Python class gave it an __iter__ of its own, which is
+	then what yields the values (___grailIteratesItsOwnWay___).  Only an EXACT list or tuple says how many values it had --
 	``too many values to unpack (expected 2, got 3)''; a str, a range or a
 	list subclass says just ``(expected 2)'', as CPython's does.
 
@@ -18788,6 +18809,8 @@ Object >> ___unpackCheck___: nBefore star: hasStar after: nAfter [
 	| sz needed cls |
 	(self @env0:isKindOf: SequenceableCollection)
 		@env0:ifFalse: [^ self ___unpackByIteration___: nBefore star: hasStar after: nAfter].
+	self ___grailIteratesItsOwnWay___
+		@env0:ifTrue: [^ self ___unpackByIteration___: nBefore star: hasStar after: nAfter].
 	(hasStar @env0:and: [(self @env0:class == OrderedCollection) @env0:not])
 		@env0:ifTrue: [
 			^ (list @env1:__new__: self) ___unpackCheck___: nBefore star: hasStar after: nAfter].
