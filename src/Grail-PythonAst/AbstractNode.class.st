@@ -174,6 +174,19 @@ AbstractNode class >> ___mangle___: aName forClass: aClassName [
 ]
 
 { #category : 'Grail-code generation' }
+AbstractNode class >> ___sourceFilename___ [
+	"This code object's ``co_filename'': the module's real path when one is
+	known (CallAst >> sourcePath, set for the duration of
+	___buildModuleClass:name:), else the ``<grail>'' placeholder that file-less
+	code -- exec, eval, the REPL doit path -- keeps.  The one answer every
+	PyCode emitter writes (emitSourceFilenameLiteralOn:, and the class build's
+	``string:'')."
+
+	^ CallAst sourcePath ifNil: ['<grail>'] ifNotNil: [:p | p asString]
+
+]
+
+{ #category : 'Grail-code generation' }
 AbstractNode class >> emitSourceFilenameLiteralOn: aStream [
 	"Write the Smalltalk string literal for this code object's ``co_filename'':
 	the module's real path when one is known (CallAst >> sourcePath, set for the
@@ -189,15 +202,10 @@ AbstractNode class >> emitSourceFilenameLiteralOn: aStream [
 	literal early and produce uncompilable generated code, so quotes are
 	doubled -- the same escaping the other string-literal emitters do."
 
-	| p |
-	p := CallAst sourcePath.
 	aStream nextPut: $'.
-	p isNil
-		ifTrue: [aStream nextPutAll: '<grail>']
-		ifFalse: [
-			p asString do: [:c |
-				c == $' ifTrue: [aStream nextPut: $'].
-				aStream nextPut: c]].
+	self ___sourceFilename___ do: [:c |
+		c == $' ifTrue: [aStream nextPut: $'].
+		aStream nextPut: c].
 	aStream nextPut: $'
 
 ]
@@ -947,6 +955,15 @@ AbstractNode >> ___descendantsDo___: aBlock [
 
 { #category : 'Grail-Annotations' }
 AbstractNode >> ___emitAnnotateBlockOn___: aStream [
+	"___emitAnnotateBlockWith___: as text on aStream, for the module body, which
+	is not written through a ClassBuildEmitter."
+
+	self ___emitAnnotateBlockWith___: (ClassBuildTextEmitter on: aStream)
+
+]
+
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitAnnotateBlockWith___: e [
 	"The PEP 649 annotate function of this module or class: a block taking
 	(positional-array, kwargs-dict) -- Grail's shape for a block used as a
 	Python callable -- and answering an ORDERED PyDict of the scope's annotated
@@ -962,13 +979,16 @@ AbstractNode >> ___emitAnnotateBlockOn___: aStream [
 	top of the body, so one inside an if, a loop, a try, a with or a match was
 	never in the dict at all, executed or not."
 
-	aStream nextPutAll: '[:___annArgs___ :___annKw___ | | ___annotations___ | ___annotations___ := PyDict @env0:new.'.
-	self ___scopeAnnotations___ do: [:annotation |
-		aStream space.
-		(self ___recordsExecutionOf___: annotation)
-			ifTrue: [self ___emitRecordedAnnotateEntryOf___: annotation on: aStream]
-			ifFalse: [annotation ___emitAnnotateEntryOn___: aStream]].
-	aStream nextPutAll: ' ___annotations___]'
+	e blockWithArgs: #('___annArgs___' '___annKw___') temps: #('___annotations___') do: [
+		e statementWithoutNewline: [
+			e assign: '___annotations___' from: [e send: #new env: 0 to: [e var: 'PyDict']]].
+		self ___scopeAnnotations___ do: [:annotation |
+			e space.
+			(self ___recordsExecutionOf___: annotation)
+				ifTrue: [self ___emitRecordedAnnotateEntryOf___: annotation on: e]
+				ifFalse: [annotation ___emitAnnotateEntryOn___: e]].
+		e space.
+		e var: '___annotations___']
 
 ]
 
@@ -1082,12 +1102,31 @@ AbstractNode >> ___emitCurPosStore___: aLiteralString on: aStream [
 ]
 
 { #category : 'Grail-Annotations' }
-AbstractNode >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+AbstractNode >> ___emitExecutionIncludes___: anAnnotation on: e [
+	"``<record> @env0:includes: <n>'': did anAnnotation run?"
+
+	e send: #'includes:' env: 0
+		to: [self ___emitExecutionRecordExpressionOn___: e]
+		with: {[e integer: (self ___executionIndexOf___: anAnnotation)]}
+
+]
+
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitExecutionRecordExpressionOn___: e [
+	"The set of the numbers of this scope's annotations that ran.  Only a scope
+	that records executions (a module, a class) has one."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-Annotations' }
+AbstractNode >> ___emitExecutionRecordOf___: anAnnotation on: e [
 	"Emit what records that anAnnotation, an annotated name below this node,
 	ran.  The scope does that, so a node that is not one asks its parent: the
 	scope is the nearest module, class or def above."
 
-	parent ifNotNil: [:enclosing | enclosing ___emitExecutionRecordOf___: anAnnotation on: aStream]
+	parent ifNotNil: [:enclosing | enclosing ___emitExecutionRecordOf___: anAnnotation on: e]
 
 ]
 
@@ -1599,6 +1638,23 @@ AbstractNode >> ___emitModuleStampOn___: aStream [
 
 ]
 
+{ #category : 'Grail-codegen helpers' }
+AbstractNode >> ___emitModuleStoreReceiverOn___: e [
+	"The receiver of a module dynamic-instVar store / delete.  Inside the
+	module body's initialize and top-level defs, ``self'' IS the module
+	instance; inside a user class METHOD it is the Python instance, so the
+	store must reach the module singleton explicitly -- the case that arises
+	when a method declares ``global x'' (previously a CompileError: the guard
+	bailed on classBeingCompiled and the bare temp had been stripped).
+	CallAst >> ___emitIRModuleStoreReceiverOn___: is the IR builder's copy of
+	this decision."
+
+	^ CallAst classBeingCompiled notNil
+		ifTrue: [e send: #'___instance___' env: 0 to: [e var: CallAst moduleClassBeingCompiled name]]
+		ifFalse: [e var: 'self']
+
+]
+
 { #category : 'Grail-traceback' }
 AbstractNode >> ___emitPythonPragmaOn___: aStream [
 	"Write the ``<grailPython>'' pragma that MARKS a compiled method as generated
@@ -1634,42 +1690,33 @@ AbstractNode >> ___emitPythonPragmaOn___: aStream [
 ]
 
 { #category : 'Grail-Annotations' }
-AbstractNode >> ___emitRecordedAnnotateEntryOf___: anAnnotation on: aStream [
+AbstractNode >> ___emitRecordedAnnotateEntryOf___: anAnnotation on: e [
 	"anAnnotation's entry in this scope's annotate function, made only if its
 	execution was recorded."
 
-	aStream
-		nextPutAll: '(';
-		nextPutAll: self ___executionRecordExpression___;
-		nextPutAll: ' @env0:includes: ';
-		nextPutAll: (self ___executionIndexOf___: anAnnotation) printString;
-		nextPutAll: ') ifTrue: ['.
-	anAnnotation ___emitAnnotateEntryOn___: aStream.
-	aStream nextPutAll: '].'
+	e statementWithoutNewline: [
+		e
+			ifTrue: [e paren: [self ___emitExecutionIncludes___: anAnnotation on: e]]
+			do: [anAnnotation ___emitAnnotateEntryOn___: e]]
 
 ]
 
 { #category : 'Grail-Annotations' }
-AbstractNode >> ___emitRecordingExecutionOf___: anAnnotation on: aStream [
+AbstractNode >> ___emitRecordingExecutionOf___: anAnnotation on: e [
 	"Add anAnnotation's number to this scope's execution record -- after
 	testing for it, so a run that finds it recorded already writes nothing.
 	That is an app's re-run over committed globals, where the record outlives
 	the run (module >> ___storeAnnotate___:, docs/App_Namespaces_Design.md
 	§5.2)."
 
-	| record index |
-	record := self ___executionRecordExpression___.
-	index := (self ___executionIndexOf___: anAnnotation) printString.
-	aStream
-		nextPutAll: ' (';
-		nextPutAll: record;
-		nextPutAll: ' @env0:includes: ';
-		nextPutAll: index;
-		nextPutAll: ') ifFalse: [';
-		nextPutAll: record;
-		nextPutAll: ' @env0:add: ';
-		nextPutAll: index;
-		nextPutAll: '].'
+	e space.
+	e statementWithoutNewline: [
+		e
+			ifFalse: [e paren: [self ___emitExecutionIncludes___: anAnnotation on: e]]
+			do: [
+				e send: #'add:' env: 0
+					to: [self ___emitExecutionRecordExpressionOn___: e]
+					with: {[e integer: (self ___executionIndexOf___: anAnnotation)]}]]
 
 ]
 
@@ -2938,17 +2985,13 @@ AbstractNode >> ___markFragmentPositions___ [
 
 { #category : 'Grail-codegen helpers' }
 AbstractNode >> ___moduleStoreReceiverExpr___ [
-	"Smalltalk receiver expression for a module dynamic-instVar store /
-	delete.  Inside the module body's initialize and top-level defs,
-	``self'' IS the module instance; inside a user class METHOD it is
-	the Python instance, so the store must reach the module singleton
-	explicitly -- the case that arises when a method declares
-	``global x'' (previously a CompileError: the guard bailed on
-	classBeingCompiled and the bare temp had been stripped)."
+	"___emitModuleStoreReceiverOn___: as Smalltalk source, for the text
+	emitters that splice it into a statement."
 
-	^ CallAst classBeingCompiled notNil
-		ifTrue: [CallAst moduleClassBeingCompiled name , ' @env0:___instance___']
-		ifFalse: ['self']
+	| s |
+	s := WriteStream on: String new.
+	self ___emitModuleStoreReceiverOn___: (ClassBuildTextEmitter on: s).
+	^ s contents
 
 ]
 

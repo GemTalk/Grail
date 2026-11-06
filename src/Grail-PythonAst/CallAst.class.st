@@ -114,6 +114,24 @@ CallAst class >> ___compileContextSnapshot___ [
 
 ]
 
+{ #category : 'Grail-Class Body' }
+CallAst class >> ___emitEnclosingClassRead___: aRead on: e [
+	"Write the expression ___enclosingClassRead___ answered aRead for, through
+	e, a ClassBuildEmitter.  For a method-local class this also registers the
+	name in the ENCLOSING class's captured set, so its ClassDefAst emits the
+	matching cell store -- the write and the registration go together."
+
+	(aRead at: 1) == #module ifTrue: [
+		^ e paren: [
+			e send: (aRead at: 2) env: 1
+				to: [e paren: [e send: #'___instance___' env: 0 to: [e var: (aRead at: 3)]]]]].
+	(aRead at: 3) add: (aRead at: 2) asSymbol.
+	^ e paren: [
+		e send: #'___classCell___:' env: 1 to: [e var: 'self']
+			with: {[e symbol: '___cell_' , (aRead at: 2) asString , '___']}]
+
+]
+
 { #category : 'Grail-other' }
 CallAst class >> ___emitFreeVariableRead___: aSymbol parent: aNode on: aStream [
 	"Emit the read of free variable aSymbol as it resolves AT aNode -- by
@@ -160,6 +178,31 @@ CallAst class >> ___emitsInlineInClassBuild___ [
 		(node isKindOf: ClassDefAst) ifTrue: [^ false].
 		node := node parent].
 	^ false
+
+]
+
+{ #category : 'Grail-Class Body' }
+CallAst class >> ___enclosingClassRead___ [
+	"How the class enclosing the class body being emitted is read, or nil when
+	there is none -- printEnclosingClassOn:'s decision, asked before anything
+	is written:  ``{#module. <read selector>. <module class name>}'' for a
+	module-scope class (a module attribute), ``{#cell. <class name>. <captured
+	set>}'' for a method-local one (its closure cell).  Nothing is registered
+	until ___emitEnclosingClassRead___:on: writes it."
+
+	| ctx clsName |
+	ctx := self enclosingClassContext.
+	ctx == nil ifTrue: [^ nil].
+	clsName := ctx at: 1.
+	clsName == nil ifTrue: [^ nil].
+	(ctx at: 2) == true ifTrue: [
+		self moduleClassBeingCompiled == nil ifTrue: [^ nil].
+		^ {#module.
+			(CallAst ___moduleClassReadSelector___: clsName asString) asSymbol.
+			self moduleClassBeingCompiled name}].
+	"Method-local: reached through the cell that holds the class object."
+	(ctx at: 3) == nil ifTrue: [^ nil].
+	^ {#cell. clsName. ctx at: 3}
 
 ]
 
@@ -1712,34 +1755,14 @@ CallAst class >> printEnclosingClassOn: aStream [
 	also sets classNeedsClassCell and registers a captured name, and at the point
 	this runs both of those slots belong to the INNER class, so it would flag the
 	wrong class on both counts.  Answers false when there is no enclosing class,
-	so the caller can fall through."
+	so the caller can fall through.  Text on aStream; the class build asks
+	___enclosingClassRead___ and writes through its emitter."
 
-	| ctx clsName |
-	ctx := self enclosingClassContext.
-	ctx == nil ifTrue: [^ false].
-	clsName := ctx at: 1.
-	clsName == nil ifTrue: [^ false].
-	(ctx at: 2) == true
-		ifTrue: [
-			self moduleClassBeingCompiled == nil ifTrue: [^ false].
-			aStream
-				nextPutAll: '((';
-				nextPutAll: self moduleClassBeingCompiled name;
-				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: (CallAst ___moduleClassReadSelector___: clsName asString);
-				nextPutAll: ')'.
-			^ true]
-		ifFalse: [
-			"Method-local: reached through the cell that holds the class object.
-			Register the name in the ENCLOSING class's captured set so its
-			ClassDefAst emits the matching store."
-			(ctx at: 3) == nil ifTrue: [^ false].
-			(ctx at: 3) add: clsName asSymbol.
-			aStream
-				nextPutAll: '(self @env1:___classCell___: #''___cell_';
-				nextPutAll: clsName asString;
-				nextPutAll: '___'')'.
-			^ true]
+	| read |
+	read := self ___enclosingClassRead___.
+	read ifNil: [^ false].
+	self ___emitEnclosingClassRead___: read on: (ClassBuildTextEmitter on: aStream).
+	^ true
 
 ]
 

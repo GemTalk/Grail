@@ -507,13 +507,6 @@ ClassBuildTextEmitter >> terminatedBraceArray: elementBlocks [
 
 ]
 
-{ #category : 'Grail-children' }
-ClassBuildTextEmitter >> unrouted: aOneArgBlock [
-
-	^ aOneArgBlock value: stream
-
-]
-
 { #category : 'Grail-expressions' }
 ClassBuildTextEmitter >> var: aName [
 

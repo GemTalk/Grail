@@ -35,12 +35,12 @@ guard -- so they are a stack rather than a block argument.  Both backends keep
 the stack and refuse a close that does not match the open; ``depth'' and
 ``assertDepth:'' let an emit check that it closed what it opened.
 
-ESCAPES.  Two operations hand the construct to something else:
-``expressionNode:'' / ``parenthesizedNode:'' / ``statementNode:'' embed a
-CHILD AST node, which has its own text and IR emitters; ``unrouted:'' hands
-the text stream to a ClassDefAst helper that has not been moved onto this
-protocol yet.  Every ``unrouted:'' is a place an IR backend cannot follow, and
-the list of them is the remaining work.
+ONE ESCAPE.  ``expressionNode:'' / ``parenthesizedNode:'' / ``statementNode:''
+embed a CHILD AST node, which has its own text and IR emitters.  Nothing else
+hands the text stream out: every helper the class build calls -- the per-class
+tables, the header, the closure cells, the class-body ``if'', the decorator
+chains, the annotate function -- writes through this protocol too (P3.1's
+second PR retired the ``unrouted:'' escape that stood in for them).
 
 BLOCKS.  ``block:'' and ``blockWithArgs:temps:do:'' are real block LITERALS
 (not sent ``value'' -- a closure cell, a default's thunk, the annotate
@@ -449,16 +449,6 @@ ClassBuildEmitter >> symbolPairArray: pairs [
 { #category : 'Grail-expressions' }
 ClassBuildEmitter >> terminatedBraceArray: elementBlocks [
 	"braceArray: in the spelling with every element terminated, ``{ a. b. }''."
-
-	^ self subclassResponsibility
-
-]
-
-{ #category : 'Grail-children' }
-ClassBuildEmitter >> unrouted: aOneArgBlock [
-	"Hand the TEXT stream to a ClassDefAst helper not yet written through this
-	protocol.  The text backend evaluates aOneArgBlock with its stream; an IR
-	backend cannot, which is what makes each send of this a to-do."
 
 	^ self subclassResponsibility
 
