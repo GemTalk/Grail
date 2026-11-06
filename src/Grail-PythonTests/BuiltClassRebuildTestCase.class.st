@@ -68,6 +68,7 @@ BuiltClassRebuildTestCase >> setUp [
 BuiltClassRebuildTestCase >> tearDown [
 	[GsFile removeServerFile: path] on: Error do: [:e | ].
 	(importlib @env1:modules) removeKey: #'grail_built_class_rebuild' ifAbsent: [].
+	(importlib @env1:modules) removeKey: #'use_reload' ifAbsent: [].
 	self ___forgetCanonicalModule___: 'grail_built_class_rebuild'.
 	snapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
@@ -121,6 +122,35 @@ BuiltClassRebuildTestCase >> testARebuildRunsTheNewSource [
 	"The control: the second load is a rebuild from v2, not a bind of v1."
 
 	self assert: (after @env1:___pyAttrLoad___: #VERSION) equals: 2
+
+]
+
+{ #category : 'Grail-Tests' }
+BuiltClassRebuildTestCase >> testAReloadKeepsTheClasses [
+	"``importlib.reload(module)'' is a rebuild too: it ran the body without
+	marking it the module's body, so a call building a class had no module to
+	key it by, and every reload minted new ones (#1974).  Reloaded back to v1,
+	the namedtuple and the type() class are the ones the module had."
+
+	| pair built driver f src reloaded |
+	pair := after @env1:___pyAttrLoad___: #Pair.
+	built := after @env1:___pyAttrLoad___: #Built.
+	src := (GsFile openReadOnServer:
+		importlib grailDir , '/tests/python/built_class_rebuild/v1.py') contents.
+	f := GsFile openWriteOnServer: path.
+	f nextPutAll: src.
+	f close.
+	(importlib @env1:modules) removeKey: #'use_reload' ifAbsent: [].
+	driver := importlib
+		loadModuleFromPath: importlib grailDir , '/tests/python/use_reload.py'
+		name: 'use_reload'.
+	reloaded := driver @env1:reload_mod: after.
+	self assert: reloaded == after.
+	self assert: (reloaded @env1:___pyAttrLoad___: #VERSION) equals: 1.
+	self assert: (reloaded @env1:___pyAttrLoad___: #Pair) == pair.
+	self assert: (reloaded @env1:___pyAttrLoad___: #Built) == built.
+	self assert: (self repr: (pair @env1:___pyAttrLoad___: #'_fields'))
+		equals: '(''left'', ''right'')'
 
 ]
 

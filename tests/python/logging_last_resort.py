@@ -96,7 +96,9 @@ def _named_logger():
     lg.warning('x %d', 3)
     lg.info('below')
     lg.error('y')
-    return logging.root.handlers
+    # A copy: _unconfigured puts root's saved handlers back into this same
+    # list, so the list itself would report them, not what the body left.
+    return list(logging.root.handlers)
 
 
 check('a_named_logger_falls_back_to_last_resort', _unconfigured(_named_logger),

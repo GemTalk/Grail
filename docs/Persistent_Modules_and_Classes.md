@@ -448,10 +448,9 @@ followed a source edit:
   the body stopped claiming is forgotten, not refused. A module deployed by a
   Grail that recorded no such key is matched through its committed instance's
   old globals instead (`___previousBuiltClass___:module:parent:`), so the first
-  upgrade keeps the class as well. Still new on every
-  rebuild: a class statement inside a function other than namedtuple's, and
-  any class built during `importlib.reload`, which does not mark a module body
-  as running.
+  upgrade keeps the class as well. `importlib.reload` keeps them too: it runs
+  the body as the initializing module, as a load does (#1974). Still new on
+  every rebuild: a class statement inside a function other than namedtuple's.
 
 - **a float or int subclass** — `class PF(float)`, `class PI(int)`, and an
   enum mixed with either (`class Size(float, Enum)`). Float and Integer are
@@ -472,8 +471,9 @@ followed a source edit:
   stranding stored members (#1950). It now claims the creation as `type()`
   does, so the class is reused under the key `module.Name()`, and keeps the
   previous build's member objects by name as the class-syntax builder does
-  (`___grailKeepPreviousMember:named:in:`). A StrEnum's members are strings,
-  which cannot take another's state, and stay new; its class is kept.
+  (`___grailKeepPreviousMember:named:in:`). That includes a StrEnum's
+  members, which are pointer-format (`AbstractPyStr`), and a `str` or `bytes`
+  mixin's, which are byte-format and take the new member's contents (#1974).
 
 Details and the failure table are in the history log, §B.
 
