@@ -42,9 +42,21 @@ class ObjectIsAStr(UnicodeDecodeError):
         self.object = 'x'
 
 
+class ClaimsToBeAnEncodeError(str):
+    __class__ = UnicodeEncodeError
+
+
+class ClaimsToBeADecodeError(Exception):
+    __class__ = UnicodeDecodeError
+
+
 HANDLERS = ['ignore', 'replace', 'xmlcharrefreplace', 'backslashreplace',
             'namereplace', 'surrogateescape', 'surrogatepass']
-ODD_NAME = ('' if __name__ == '__main__' else __name__ + '.') + 'Odd'
+MODULE_PREFIX = '' if __name__ == '__main__' else __name__ + '.'
+ODD_NAME = MODULE_PREFIX + 'Odd'
+
+
+NOT_AN_ERROR = "TypeError: don't know how to handle %s in error callback"
 
 
 def handled(name, exc):
@@ -69,6 +81,9 @@ r['a_handler_refuses_what_is_not_a_unicode_error'] = [handled(name, 42) for name
 r['a_handler_refuses_a_bare_unicode_error'] = [handled(name, UnicodeError('ouch')) for name in HANDLERS]
 r['a_refused_type_is_named_with_its_module'] = handled('ignore', Odd()) == (
     "TypeError: don't know how to handle %s in error callback" % ODD_NAME)
+r['a_class_claiming_to_be_an_error_is_not_one'] = [
+    handled(name, kind()) == NOT_AN_ERROR % (MODULE_PREFIX + kind.__qualname__)
+    for kind in (ClaimsToBeAnEncodeError, ClaimsToBeADecodeError) for name in HANDLERS]
 r['the_encode_only_handlers_refuse_a_decode_or_translate_error'] = [
     handled(name, exc) for name in ('xmlcharrefreplace', 'namereplace')
     for exc in (decoding(b'\xff', 0, 1), translating('あ', 0, 1))]
@@ -109,8 +124,6 @@ r['surrogatepass_raises_the_error_for_any_other_codec'] = [
     handled('surrogatepass', encoding('\ud800', 0, 1, codec)) for codec in (
         'ascii', 'utf-16-xx', 'utf-7')]
 
-NOT_AN_ERROR = "TypeError: don't know how to handle %s in error callback"
-
 EXPECTED = {
     'strict_raises_only_an_exception': [
         'TypeError: codec must pass exception instance',
@@ -118,6 +131,7 @@ EXPECTED = {
     'a_handler_refuses_what_is_not_a_unicode_error': [NOT_AN_ERROR % 'int'] * 7,
     'a_handler_refuses_a_bare_unicode_error': [NOT_AN_ERROR % 'UnicodeError'] * 7,
     'a_refused_type_is_named_with_its_module': True,
+    'a_class_claiming_to_be_an_error_is_not_one': [True] * 14,
     'the_encode_only_handlers_refuse_a_decode_or_translate_error': [
         NOT_AN_ERROR % 'UnicodeDecodeError', NOT_AN_ERROR % 'UnicodeTranslateError'] * 2,
     'the_surrogate_handlers_refuse_a_translate_error': [NOT_AN_ERROR % 'UnicodeTranslateError'] * 2,

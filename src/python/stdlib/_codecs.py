@@ -1364,6 +1364,13 @@ def utf_8_sig_decode(input, errors='strict', final=False):
 # here is what makes ``codecs.strict_errors`` -- which is just
 # ``lookup_error('strict')`` -- resolvable at ``import codecs`` time.
 
+def _is_error(exc, kinds):
+    """Whether exc's real type is one of kinds, as PyObject_TypeCheck asks
+    (Python/codecs.c:682-687): isinstance() would take a __class__ that
+    only claims one."""
+    return issubclass(type(exc), kinds)
+
+
 def _wrong_exception_type(exc):
     """The TypeError a handler raises for an exception it does not handle
     (wrong_exception_type, Python/codecs.c:675-679), naming its type fully
@@ -1392,16 +1399,16 @@ def _unicode_error_params(exc, as_bytes):
 
 def strict_errors(exc):
     """'strict' -- raise the exception passed (PyCodec_StrictErrors)."""
-    if isinstance(exc, BaseException):
+    if _is_error(exc, BaseException):
         raise exc
     raise TypeError('codec must pass exception instance')
 
 
 def ignore_errors(exc):
     """'ignore' -- drop the offending run (PyCodec_IgnoreErrors)."""
-    if isinstance(exc, (UnicodeEncodeError, UnicodeTranslateError)):
+    if _is_error(exc, (UnicodeEncodeError, UnicodeTranslateError)):
         _obj, _start, end = _unicode_error_params(exc, False)
-    elif isinstance(exc, UnicodeDecodeError):
+    elif _is_error(exc, UnicodeDecodeError):
         _obj, _start, end = _unicode_error_params(exc, True)
     else:
         raise _wrong_exception_type(exc)
@@ -1412,13 +1419,13 @@ def replace_errors(exc):
     """'replace' -- a '?' for each character an encode could not encode, one
     U+FFFD for the bytes a decode could not decode, and one for each
     character a translation could not translate (PyCodec_ReplaceErrors)."""
-    if isinstance(exc, UnicodeEncodeError):
+    if _is_error(exc, UnicodeEncodeError):
         _obj, start, end = _unicode_error_params(exc, False)
         return ('?' * max(0, end - start), end)
-    if isinstance(exc, UnicodeDecodeError):
+    if _is_error(exc, UnicodeDecodeError):
         _obj, _start, end = _unicode_error_params(exc, True)
         return ('�', end)
-    if isinstance(exc, UnicodeTranslateError):
+    if _is_error(exc, UnicodeTranslateError):
         _obj, start, end = _unicode_error_params(exc, False)
         return ('�' * max(0, end - start), end)
     raise _wrong_exception_type(exc)
@@ -1427,7 +1434,7 @@ def replace_errors(exc):
 def xmlcharrefreplace_errors(exc):
     """'xmlcharrefreplace' -- encode only; &#NNN; per unencodable character
     (PyCodec_XMLCharRefReplaceErrors)."""
-    if not isinstance(exc, UnicodeEncodeError):
+    if not _is_error(exc, UnicodeEncodeError):
         raise _wrong_exception_type(exc)
     obj, start, end = _unicode_error_params(exc, False)
     return (''.join(['&#%d;' % ord(ch) for ch in obj[start:end]]), end)
@@ -1436,10 +1443,10 @@ def xmlcharrefreplace_errors(exc):
 def backslashreplace_errors(exc):
     """'backslashreplace' -- \\xNN / \\uNNNN / \\UNNNNNNNN escapes of the
     characters, or \\xNN of the bytes (PyCodec_BackslashReplaceErrors)."""
-    if isinstance(exc, (UnicodeEncodeError, UnicodeTranslateError)):
+    if _is_error(exc, (UnicodeEncodeError, UnicodeTranslateError)):
         obj, start, end = _unicode_error_params(exc, False)
         return (''.join([_backslash_escape(ch) for ch in obj[start:end]]), end)
-    if isinstance(exc, UnicodeDecodeError):
+    if _is_error(exc, UnicodeDecodeError):
         obj, start, end = _unicode_error_params(exc, True)
         return (''.join(['\\x%02x' % byte for byte in obj[start:end]]), end)
     raise _wrong_exception_type(exc)
@@ -1449,7 +1456,7 @@ def namereplace_errors(exc):
     """'namereplace' -- encode only; \\N{NAME} for a character that has a
     name and the backslash escape for one that has not, a lone surrogate
     among them (PyCodec_NameReplaceErrors)."""
-    if not isinstance(exc, UnicodeEncodeError):
+    if not _is_error(exc, UnicodeEncodeError):
         raise _wrong_exception_type(exc)
     obj, start, end = _unicode_error_params(exc, False)
     import unicodedata
@@ -1475,7 +1482,7 @@ def surrogateescape_errors(exc):
     U+DC80..U+DCFF back into its byte; a decode escapes up to four
     undecodable bytes at a time, each as U+DC00+byte, and refuses an ASCII
     one.  Anything else raises the error it was called for."""
-    if isinstance(exc, UnicodeEncodeError):
+    if _is_error(exc, UnicodeEncodeError):
         obj, start, end = _unicode_error_params(exc, False)
         out = bytearray()
         for ch in obj[start:end]:
@@ -1484,7 +1491,7 @@ def surrogateescape_errors(exc):
                 raise exc
             out.append(point - 0xDC00)
         return (bytes(out), end)
-    if isinstance(exc, UnicodeDecodeError):
+    if _is_error(exc, UnicodeDecodeError):
         obj, start, end = _unicode_error_params(exc, True)
         escaped = []
         for byte in obj[start:min(end, start + 4)]:
@@ -1547,7 +1554,7 @@ def surrogatepass_errors(exc):
     """'surrogatepass' (PyCodec_SurrogatePassErrors): a lone surrogate
     passes through a UTF as its code unit would, one at a time when
     decoding.  Anything else raises the error it was called for."""
-    if isinstance(exc, UnicodeEncodeError):
+    if _is_error(exc, UnicodeEncodeError):
         found = _surrogatepass_codec(exc)
         if found is None:
             raise exc
@@ -1559,7 +1566,7 @@ def surrogatepass_errors(exc):
                 raise exc
             out.append(_surrogate_bytes(point, found[0]))
         return (b''.join(out), end)
-    if isinstance(exc, UnicodeDecodeError):
+    if _is_error(exc, UnicodeDecodeError):
         found = _surrogatepass_codec(exc)
         if found is None:
             raise exc

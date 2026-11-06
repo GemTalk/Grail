@@ -21,6 +21,6 @@ TheBuiltinErrorHandlersAreCPythonsTestCase >> testEachHandlerTakesOnlyTheErrorsI
 		name: 'the_builtin_error_handlers_are_cpythons'.
 	self
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '16 checks, 0 disagreeing [], keys match: True'
+		equals: '17 checks, 0 disagreeing [], keys match: True'
 
 ]
