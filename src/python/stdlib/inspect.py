@@ -1211,6 +1211,16 @@ def _signature_from_builtins_table(obj, kind, skip_bound_arg):
         # keeping its receiver, which rlcompleter completes as ``None.__bool__(''.
         owner = {each.__name__: each for each in
                  (type(None), type(Ellipsis), type(NotImplemented))}.get(head)
+    if owner is None:
+        # Nor the types of the callables and descriptors, whose methods the
+        # table holds as well: ``object.__init__.__get__'' is a method-wrapper
+        # named ``wrapper_descriptor.__get__'', (instance, owner=None, /).
+        owner = {each.__name__: each for each in
+                 (_types.WrapperDescriptorType, _types.MethodWrapperType,
+                  _types.MethodDescriptorType, _types.ClassMethodDescriptorType,
+                  _types.BuiltinFunctionType, _types.GetSetDescriptorType,
+                  _types.MemberDescriptorType, _types.MethodType,
+                  _types.FunctionType)}.get(head)
     if owner is None or (head == name and owner is not obj):
         return None
     text = TEXT_SIGNATURES[name]
