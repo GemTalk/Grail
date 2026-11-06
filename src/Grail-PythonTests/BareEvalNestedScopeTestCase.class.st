@@ -105,7 +105,8 @@ BareEvalNestedScopeTestCase >> testTheBareRewriteRowsAreGone [
 
 	Two wrong versions of this predicate answered every value above correctly:
 	one RAISED in the eligibility probe (GemStone has no ``noneSatisfy:''), so
-	six defs fell back to text with right answers and a `body:probeError' row;
+	six defs fell back to text with right answers and a `body:probeError' row
+	(`invariant:body-probeRaised' since P1.3);
 	the other rejected a class anywhere in the chain, regressing the
 	plain-method shape and leaving one bareRewrite row behind.  A probe error
 	is not a fallback the stats can see either, so the census is the instrument.
@@ -122,8 +123,8 @@ BareEvalNestedScopeTestCase >> testTheBareRewriteRowsAreGone [
 	self assert: bare = 0
 		description: 'a bare eval/exec in a nested scope still refuses: '
 			, counts printString.
-	self assert: ((counts at: #'body:probeError' ifAbsent: [0])
-		+ (counts at: #'cm:body:probeError' ifAbsent: [0])) = 0
+	self assert: ((counts at: #'invariant:body-probeRaised' ifAbsent: [0])
+		+ (counts at: #'cm:invariant:body-probeRaised' ifAbsent: [0])) = 0
 		description: 'the eligibility probe RAISED -- correct answers, no IR: '
 			, counts printString
 

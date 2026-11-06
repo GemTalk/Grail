@@ -105,12 +105,18 @@ ClassInClassBodyTestCase >> testAPerCallNestedClassIsEligible [
 	| counts |
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
 	counts := self ___censusCountsForFixture___.
-	self assert: (counts at: #'method:classInClassBody' ifAbsent: [0]) = 0
-		description: 'a nested class method still refuses as '
-			, 'method:classInClassBody: ' , counts printString.
-	self assert: (counts at: #'cm:method:classInClassBody' ifAbsent: [0]) = 0
-		description: 'a nested class method still refuses as '
-			, 'cm:method:classInClassBody: ' , counts printString.
+	"The row this pinned is an INVARIANT now (P1.3): with an enclosing class,
+	the static-chain and reaches-a-def tests are complementary, so the exit is
+	``invariant:method-noEnclosingClass''.  Checked under its new name, and
+	the census must hold no invariant row at all."
+	self assert: (counts at: #'invariant:method-noEnclosingClass' ifAbsent: [0]) = 0
+		description: 'a nested class method refuses as '
+			, 'invariant:method-noEnclosingClass: ' , counts printString.
+	self assert: (counts at: #'cm:invariant:method-noEnclosingClass' ifAbsent: [0]) = 0
+		description: 'a nested class method refuses as '
+			, 'cm:invariant:method-noEnclosingClass: ' , counts printString.
+	self assert: (counts keys select: [:k | AbstractNode ___irIsInvariantReason___: k]) isEmpty
+		description: 'an invariant row in the census: ' , counts printString.
 	#('per_call_nesting' 'per_call_is_per_call' 'per_call_inherits') do: [:k |
 		self assert: ((self ___irResults___ @env1:__getitem__: k) = true)
 			description: 'under forced IR: ' , k]

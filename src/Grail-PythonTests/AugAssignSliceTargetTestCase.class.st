@@ -145,7 +145,11 @@ AugAssignSliceTargetTestCase >> testTheRefusalRowIsGone [
 	| counts present |
 	counts := self ___censusCountsForForcedIRLoad___.
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
-	present := #('AugAssignAst:target-SubscriptAst-slice' 'cm:AugAssignAst:target-SubscriptAst-slice') select: [:row |
+	"The slice row itself is gone from the code (P1.3: it named an admitted
+	shape); a subscript target that refuses now says -receiver.  Both
+	spellings are checked."
+	present := #('AugAssignAst:target-SubscriptAst-slice' 'cm:AugAssignAst:target-SubscriptAst-slice'
+		'AugAssignAst:target-SubscriptAst-receiver' 'cm:AugAssignAst:target-SubscriptAst-receiver') select: [:row |
 		(counts at: row asSymbol otherwise: 0) > 0].
 	self assert: present isEmpty
 		description: 'the refusal this cut lifts is still in the census: '

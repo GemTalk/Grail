@@ -120,11 +120,13 @@ NonlocalThroughClassCellTestCase >> testADeleteThroughTheCellIsEmittableAndUnbin
 	ambient flag, the control (cut reverted) PASSED this test."
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
 	counts := self ___censusCountsForFixture___.
-	self assert: (counts at: #'cm:DeleteAst:name' ifAbsent: [0]) = 0
-		description: 'the class method still refuses as cm:DeleteAst:name: '
+	"`DeleteAst:name' is an INVARIANT since P1.3 (every ``del name'' spelling
+	has an admitted branch), spelled ``invariant:DeleteAst-name''."
+	self assert: (counts at: #'cm:invariant:DeleteAst-name' ifAbsent: [0]) = 0
+		description: 'the class method still refuses as cm:invariant:DeleteAst-name: '
 			, counts printString.
-	self assert: (counts at: #'DeleteAst:name' ifAbsent: [0]) = 0
-		description: 'a top-level def still refuses as DeleteAst:name: '
+	self assert: (counts at: #'invariant:DeleteAst-name' ifAbsent: [0]) = 0
+		description: 'a top-level def still refuses as invariant:DeleteAst-name: '
 			, counts printString.
 	results := self ___irModule___ @env1:___pyAttrLoad___: #'r'.
 	expected := self ___irModule___ @env1:___pyAttrLoad___: #'EXPECTED'.
