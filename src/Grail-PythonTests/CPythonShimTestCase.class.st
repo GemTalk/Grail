@@ -2595,10 +2595,19 @@ CPythonShimTestCase >> testDuringCallDoRestoresDepthAndReturnsValue [
 	scripts/probe_handler_recursion.gs).  So an escape now SKIPS the
 	decrement and the guard repairs it instead.  The contract this test
 	holds to is the one that matters -- sweeping resumes -- not the
-	mechanism, so it asserts the guard directly."
+	mechanism, so it asserts the guard directly.
+
+	On a shim of its OWN, not the session's.  The guard judges a call by the
+	entry recorded for the outermost one, and the session's singleton carries
+	whatever an earlier test left there -- a callDepth drifted negative, an
+	entry recorded at another depth or on a generator's forked process -- so
+	which shard this test landed in decided whether it passed: in CI's shard 4
+	of 16, as the plan stood on 2026-11-06, it failed in both arms for two of
+	the merge queue's groups and passed for the others.  The counter and the
+	entry are all the guard reads, and a fresh shim starts with neither."
 
 	| shim |
-	shim := CPythonShim current.
+	shim := CPythonShim basicNew.
 	self assert: (shim ___duringCallDo: [42]) equals: 42.
 	self assert: shim ___betweenShimCalls.
 	"Nested use unwinds cleanly."
