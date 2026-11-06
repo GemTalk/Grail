@@ -1186,6 +1186,25 @@ AbstractNode >> ___emitIRElementsArrayOn___: aBuilder elts: aCollection starRuns
 ]
 
 { #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRForLengthLess___: anInteger source: aSourceBlock on: aBuilder [
+	"``((src __len__) @env0:- N)'' -- the arithmetic the text's star shape uses
+	to index from the end.  An env-0 SmallInteger subtraction on the Python
+	``__len__'', exactly as printSmalltalkOn: spells it; N is emitted even when
+	it is 0, because the text emits ``- 0'' for a trailing star and this
+	reproduces the sends rather than simplifying them.
+
+	Lifted from ForAst with ___emitIRSequenceElementsOf___:source:on:do:, its
+	one caller, which the comprehension clause now shares."
+
+	^ aBuilder
+		send: #'-'
+		to: (aBuilder send: #'__len__' to: aSourceBlock value with: { })
+		with: { aBuilder obj: anInteger }
+		env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AbstractNode >> ___emitIRFreeVariableRead___: aSymbol parent: aNode on: aBuilder [
 	"The IR twin of ___emitFreeVariableRead___:parent:on:, and deliberately the
 	same trick: build a NameAst AT THE RESOLUTION POINT and let it emit itself.
@@ -1319,6 +1338,70 @@ AbstractNode >> ___emitIRModuleStoreOf___: aNode to: aNameAst on: aBuilder [
 		to: (self ___emitIRModuleReceiverOn___: aBuilder)
 		with: { aBuilder obj: aNameAst id asSymbol. aNode }
 		env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRSequenceElementsOf___: aTarget source: aSourceBlock on: aBuilder do: aLeafBlock [
+	"The per-element reads of a tuple / list TARGET in the shape the text's
+	FOR-LOOP and COMPREHENSION unpacks share (ForAst's emitUnpackOn: and
+	ComprehensionAst class >> ___emitUnpack___:from:on:), handed one at a time
+	to aLeafBlock as ``leaf'' and ``source block'':
+
+	    a   := (src __getitem__: 0).
+	    mid := (list @env1:__new__:
+	              (src __getitem__: (slice @env1:__new__: 1 _: ((src __len__) @env0:- 1)))).
+	    z   := (src __getitem__: ((src __len__) @env0:- 1)).
+
+	An element BEFORE the star (or with none) takes its own index; the star
+	takes the slice from nBefore to ``len - nAfter'' and hands over the
+	STARRED node's value as its leaf; an element AFTER it takes ``len - k''
+	for its distance k from the end.  The two text emitters spell that
+	distance differently (``nAfter - (i - starIdx - 1)'' and ``n - i + 1'')
+	and agree on its value.
+
+	NOT the assignment's shape (___emitIRUnpack___:from:holder:on:), which
+	reads through ``___unpackCheck___:star:after:'' and ``___getslice___'':
+	ForAst >> ___emitIRForUnpack___:source:on: says why these loops copy their
+	text instead.
+
+	ONE COPY FOR BOTH CALLERS.  The star arm was ForAst's alone until the
+	comprehension clause admitted a starred target
+	(`Comprehension:starTarget'); a second spelling of the same sends would be
+	two rules that must not drift.  aSourceBlock answers a FRESH node on each
+	call (IR nodes cannot be shared between sends), and so does each block
+	handed to aLeafBlock; how a leaf is stored is the caller's."
+
+	| elts starIdx nBefore nAfter |
+	elts := aTarget elts.
+	starIdx := elts findFirst: [:e | e isKindOf: StarredAst].
+	nBefore := starIdx = 0 ifTrue: [elts size] ifFalse: [starIdx - 1].
+	nAfter := starIdx = 0 ifTrue: [0] ifFalse: [elts size - starIdx].
+	elts doWithIndex: [:elt :i |
+		(starIdx = 0 or: [i < starIdx])
+			ifTrue: [
+				aLeafBlock value: elt value: [aBuilder
+					send: #'__getitem__:' to: aSourceBlock value
+					with: { aBuilder obj: i - 1 }]]
+			ifFalse: [
+				i = starIdx
+					ifTrue: [
+						aLeafBlock value: elt value value: [aBuilder
+							send: #'__new__:' to: (aBuilder globalNamed: #list)
+							with: { aBuilder
+								send: #'__getitem__:' to: aSourceBlock value
+								with: { aBuilder
+									send: #'__new__:_:' to: (aBuilder globalNamed: #slice)
+									with: { aBuilder obj: nBefore.
+										self ___emitIRForLengthLess___: nAfter
+											source: aSourceBlock on: aBuilder }
+									env: 1 } }
+							env: 1]]
+					ifFalse: [
+						aLeafBlock value: elt value: [aBuilder
+							send: #'__getitem__:' to: aSourceBlock value
+							with: { self ___emitIRForLengthLess___: nAfter - (i - starIdx - 1)
+								source: aSourceBlock on: aBuilder }]]]]
 
 ]
 
