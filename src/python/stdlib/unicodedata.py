@@ -122,21 +122,28 @@ def lookup(name):
     return chr(cp)
 
 
-def name(chr_, default=None):
+def name(chr_, *default):
     """Name of a character, ValueError if it has none.
 
     Unassigned code points and control characters have no name -- their
     ALIASES are not names, so ``name(chr(0))'' raises here exactly as it
     does in CPython even though ``lookup('NULL')'' succeeds.
+
+    A default given, None too, is the answer for a character without a name
+    (unicodedata_UCD_name_impl, Modules/unicodedata.c:1613-1645): it is CPython's
+    positional-only ``default=<unrepresentable>'', so only its absence
+    raises.
     """
+    if len(default) > 1:
+        raise TypeError('name expected at most 2 arguments, got %d' % (1 + len(default)))
     if len(chr_) != 1:
         raise TypeError('name() argument 1 must be a unicode character, '
                         'not str')
     import unicode_names
     found = unicode_names.name_for_codepoint(ord(chr_))
     if found is None:
-        if default is not None:
-            return default
+        if default:
+            return default[0]
         raise ValueError('no such name')
     return found
 

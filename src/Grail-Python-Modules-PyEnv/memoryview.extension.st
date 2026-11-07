@@ -1,6 +1,13 @@
 Extension { #name : 'memoryview' }
 
 { #category : 'Grail-Instance Creation' }
+memoryview class >> ___asksWritable___: someFlags [
+
+	^ (someFlags @env0:bitAnd: 1) @env0:= 1
+
+]
+
+{ #category : 'Grail-Instance Creation' }
 memoryview class >> ___builtinExporters___ [
 	"The classes whose __buffer__ and __release_buffer__ are the builtin
 	ones, not a Python class's: bytes, bytearray and memoryview."
@@ -85,6 +92,13 @@ memoryview class >> ___notThisObjectsBufferMessage [
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+memoryview class >> ___notWritableMessage [
+
+	^ 'Object is not writable.'
+
+]
+
 { #category : 'Grail-Instance Creation' }
 memoryview class >> ___over___: anObject format: fmt [
 	"A view over the WHOLE of anObject, reinterpreted as ``fmt'' items."
@@ -154,15 +168,28 @@ memoryview class >> ___over___: anObject format: fmt offset: anOffset length: aL
 
 { #category : 'Grail-Instance Creation' }
 memoryview class >> ___overExported___: anExporter [
-	"memoryview(x) for an x whose __buffer__ is its own: the view it answers,
-	re-exported, remembering x and that view, so that releasing this one hands
-	that same view to x's __release_buffer__ (the buffer wrapper of
-	Objects/typeobject.c)."
+	"memoryview(x) for an x whose __buffer__ is its own, asked for as
+	PyMemoryView_FromObject asks: with PyBUF_FULL_RO (284), read-only and with
+	everything else a view may need.  It handed __buffer__ 0."
+
+	^ self ___overExported___: anExporter flags: 284
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> ___overExported___: anExporter flags: someFlags [
+	"The view x's own __buffer__ answers when handed someFlags, re-exported,
+	remembering x and that view, so that releasing this one hands that same view
+	to x's __release_buffer__ (the buffer wrapper of Objects/typeobject.c).  A
+	WRITABLE request it answers with a read-only view is memory_getbuf's
+	BufferError."
 
 	| exported view |
-	exported := anExporter @env1:__buffer__: 0.
+	exported := anExporter @env1:__buffer__: someFlags.
 	(exported isKindOf: memoryview) ifFalse: [
 		^ TypeError ___signal___: '__buffer__ returned non-memoryview object'].
+	((self ___asksWritable___: someFlags) and: [(exported @env0:dynamicInstVarAt: #'readonly') == true]) ifTrue: [
+		^ BufferError ___signal___: self ___underlyingNotWritableMessage].
 	view := exported ___reexport___.
 	view @env0:dynamicInstVarAt: #'_exporter' put: anExporter.
 	view @env0:dynamicInstVarAt: #'_exported' put: exported.
@@ -195,6 +222,31 @@ memoryview class >> ___overForeign___: anObject [
 memoryview class >> ___restrictedMessage [
 
 	^ 'cannot create new view on restricted memoryview'
+
+]
+
+{ #category : 'Grail-Error Messages' }
+memoryview class >> ___underlyingNotWritableMessage [
+
+	^ 'memoryview: underlying buffer is not writable'
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> __from_flags: positional kw: keywords [
+
+	"``memoryview._from_flags(object, flags)'' with either argument by name,
+	bound and refused as Argument Clinic binds them."
+
+	| arguments |
+
+	arguments := TypeError @env0:___argumentsOf___: (positional @env0:ifNil: [#()])
+		keywords: keywords
+		named: #('object' 'flags')
+		positionalOnly: 0
+		required: 2
+		for: '_from_flags'.
+	^ self _from_flags: (arguments @env0:at: 1) _: (arguments @env0:at: 2)
 
 ]
 
@@ -236,6 +288,30 @@ memoryview class >> __new__: anObject [
 	when the view is released -- see release."
 	(self ___definesPythonHook___: #'__release_buffer__:' for: anObject) ifTrue: [
 		view @env0:dynamicInstVarAt: #'_exporter' put: anObject].
+	^ view
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> _from_flags: anObject _: someFlags [
+
+	"memoryview._from_flags(object, flags) (Objects/memoryobject.c:1023-1036): a
+	view over object asked for with exactly these PyBUF_* flags, as
+	PyMemoryView_FromObjectAndFlags asks.  A __buffer__ of object's own is handed
+	them, and a builtin buffer that is read-only refuses WRITABLE as its
+	bf_getbuffer does (PyBuffer_FillInfo).  test_buffer test_buffer_flags."
+
+	| flags view |
+
+	flags := (os instance) ___asCInt: someFlags.
+	(self ___definesPythonHook___: #'__buffer__:' for: anObject) ifTrue: [
+		^ self ___overExported___: anObject flags: flags].
+	view := self __new__: anObject.
+	((self ___asksWritable___: flags) and: [(view @env0:dynamicInstVarAt: #'readonly') == true]) ifTrue: [
+		view release.
+		^ BufferError ___signal___: ((anObject isKindOf: memoryview)
+			ifTrue: [self ___underlyingNotWritableMessage]
+			ifFalse: [self ___notWritableMessage])].
 	^ view
 
 ]
@@ -584,7 +660,8 @@ memoryview >> ___sourceBytes___ [
 		do: [:ex |
 			ex @env0:return:
 				(TypeError ___signal___:
-					'memoryview: a bytes-like object is required')]
+					'memoryview: a bytes-like object is required, not '''
+						@env0:, (bytes ___pyTypeNameOf___: o) @env0:asString @env0:, '''')]
 
 ]
 

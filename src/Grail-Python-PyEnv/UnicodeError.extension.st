@@ -1,5 +1,168 @@
 Extension { #name : 'UnicodeError' }
 
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___allocateForNew: someArguments kw: keywords [
+	"CPython's BaseException_new, for an explicit ``UnicodeEncodeError.__new__(cls,
+	...)'' (BaseException class >> ___excStaticNew:kw:): the arguments are kept
+	unchecked, since only __init__ parses them, so ``klass.__new__(klass)''
+	builds an instance (test_exceptions test_unicode_errors_no_object)."
+
+	| instance |
+
+	instance := self ___new___.
+	instance @env0:___newArgs___: someArguments.
+	^ instance
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___argumentCountMessageFor: anArity given: aCount [
+	^ 'function takes exactly ' @env0:, anArity @env0:printString @env0:, ' arguments ('
+		@env0:, aCount @env0:printString @env0:, ' given)'
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___bytesLikeMessageFor: anObject [
+	^ 'a bytes-like object is required, not ''' @env0:, (bytes ___pyTypeNameOf___: anObject) @env0:asString @env0:, ''''
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___check___: someArguments count: anArity [
+
+	someArguments @env0:size @env0:= anArity ifFalse: [
+		^ TypeError ___signal___: (self ___argumentCountMessageFor: anArity given: someArguments @env0:size)]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___checkBytesLike___: anObject [
+	"anObject as UnicodeDecodeError_init takes its object: anything with the
+	buffer protocol, which ___normalizedObject___: then copies into bytes."
+
+	((anObject @env0:isKindOf: ByteArray) or: [anObject @env0:isKindOf: memoryview]) ifFalse: [
+		^ TypeError ___signal___: (self ___bytesLikeMessageFor: anObject)]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___checkConstructorArguments___: someArguments [
+	"UnicodeError itself takes any arguments, as BaseException does."
+
+	^ self
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___checkPosition___: anObject [
+	"anObject as PyArg_ParseTuple's ``n'' takes it: what __index__ answers, in
+	a Py_ssize_t."
+
+	| position |
+
+	position := anObject ___asIndex___.
+	(position @env0:between: -9223372036854775808 and: 9223372036854775807) ifFalse: [
+		^ OverflowError ___signal___: self ___positionTooLargeMessage]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___checkStr___: someArguments at: anIndex [
+	"The argument at anIndex as PyArg_ParseTuple's ``U'' takes it: a str."
+
+	| argument |
+
+	argument := someArguments @env0:at: anIndex.
+	argument @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: (self ___strMessageFor: argument at: anIndex)]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___classForArgs___: positional [
+	"The class built for these arguments, once the class's own __init__ would
+	take them.  CPython's UnicodeEncodeError, UnicodeDecodeError and
+	UnicodeTranslateError parse their arguments in tp_init
+	(Objects/exceptions.c), so a subclass with an __init__ of its own is
+	not checked here."
+
+	self ___initializesAsBuiltIn___ ifTrue: [
+		self ___checkConstructorArguments___: (positional @env0:isNil ifTrue: [#()] ifFalse: [positional])].
+	^ super ___classForArgs___: positional
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___definesInit___ [
+	"Whether the receiver's own Python methods include an __init__, of any
+	arity."
+
+	^ (self @env0:methodDictForEnv: 1) @env0:keys @env0:anySatisfy: [:selector |
+		(selector @env0:beginsWith: '__init__') or: [selector @env0:= #'___init__:kw:']]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___initializesAsBuiltIn___ [
+	"Whether the __init__ the receiver's instances run is the built-in one: no
+	class a class statement or type() made, from the receiver up to the
+	built-in exceptions, defines its own.  BaseException class >>
+	___hasUserInit___ cannot say it: Grail's Exception defines __init__ too."
+
+	| class |
+
+	class := self.
+	[class ___grailIsPythonClass___] whileTrue: [
+		class ___definesInit___ ifTrue: [^ false].
+		class := class @env0:superclass].
+	^ true
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___namesAClassOfMine___: anObject [
+	"Whether anObject is the receiver or one of its subclasses."
+
+	^ (anObject @env0:isKindOf: Behavior)
+		and: [anObject == self or: [anObject @env0:inheritsFrom: self]]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___positionTooLargeMessage [
+	^ 'Python int too large to convert to C ssize_t'
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> ___strMessageFor: anObject at: anIndex [
+	^ 'argument ' @env0:, anIndex @env0:printString @env0:, ' must be str, not '
+		@env0:, (TypeError @env0:___badArgumentNameOf___: anObject)
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> __new__ [
+	"``UnicodeEncodeError()'': built as any other count of arguments is, so
+	they are checked -- see ___classForArgs___:."
+
+	^ self _new: #() kw: nil
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError class >> __new__: anArgument [
+	"``UnicodeEncodeError(x)'': built as any other count of arguments is, so
+	it is checked -- see ___classForArgs___:.  Unless x is the receiver or a
+	subclass of it: ``E ___new___: E'', Grail's own way to allocate one from
+	Smalltalk, arrives as this same send, and keeps building one unchecked."
+
+	(self ___namesAClassOfMine___: anArgument) ifTrue: [^ super __new__: anArgument].
+	^ self _new: { anArgument } kw: nil
+
+]
+
 { #category : 'Grail-Python Attribute Access' }
 UnicodeError >> ___args___: anArray [
 	"Normalise args as BaseException does, then keep each constructor argument
@@ -93,6 +256,21 @@ UnicodeError >> ___hasFields___ [
 	a bare message were not, and their str is the message."
 
 	^ self args @env0:size @env0:= self @env0:___fieldNames___ @env0:size
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError >> ___init__: positional kw: kwargs [
+	"CPython's UnicodeEncodeError, UnicodeDecodeError and UnicodeTranslateError
+	parse their arguments in tp_init (Objects/exceptions.c), however it is
+	reached: building a subclass, or ``UnicodeEncodeError.__init__(self, ...)''
+	called explicitly.  Keywords are refused first, as BaseException_init
+	refuses them."
+
+	((kwargs @env0:notNil) and: [kwargs @env0:notEmpty]) ifFalse: [
+		self @env0:class ___checkConstructorArguments___:
+			(positional @env0:isNil ifTrue: [#()] ifFalse: [positional @env0:asArray])].
+	^ super ___init__: positional kw: kwargs
 
 ]
 
@@ -199,6 +377,23 @@ UnicodeError >> ___unicodeErrorArg___: anIndex [
 	^ (a @env0:size @env0:>= anIndex)
 		ifTrue: [a @env0:at: anIndex]
 		ifFalse: [nil]
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError >> __init__ [
+	"``UnicodeEncodeError.__init__(self)'' -- see ___init__:kw:."
+
+	^ self ___init__: #() kw: nil
+
+]
+
+{ #category : 'Grail-Initialization' }
+UnicodeError >> __init__: anArgument [
+	"``UnicodeEncodeError.__init__(self, x)'' -- see ___init__:kw:.  nil is the
+	no-argument sentinel, as for BaseException >> __init__:."
+
+	^ self ___init__: (anArgument @env0:isNil ifTrue: [#()] ifFalse: [{ anArgument }]) kw: nil
 
 ]
 
