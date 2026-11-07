@@ -235,6 +235,43 @@ def lookup_error(name):
     return handler
 
 
+# The handlers _unregister_error refuses: codecs_builtin_error_handlers in
+# CPython's Python/codecs.c:22-26.
+_builtin_error_handlers = (
+    'strict', 'ignore', 'replace',
+    'xmlcharrefreplace', 'backslashreplace', 'namereplace',
+    'surrogatepass', 'surrogateescape',
+)
+
+
+def _unregister_error(errors, /):
+    """Un-register the specified error handler for the error handling `errors'.
+
+Only custom error handlers can be un-registered. An exception is raised
+if the error handling is a built-in one (e.g., 'strict'), or if an error
+occurs.
+
+Otherwise, this returns True if a custom handler has been successfully
+un-registered, and False if no custom handler for the specified error
+handling exists."""
+    # _codecs__unregister_error_impl and _PyCodec_UnregisterError
+    # (Modules/_codecsmodule.c:985-1007, Python/codecs.c:638-650).  The
+    # argument is Argument Clinic's ``str'': a str without NUL, refused as
+    # _PyArg_BadArgument words it (Python/getargs.c:621-629), None by name.
+    if not isinstance(errors, str):
+        refused = 'None' if errors is None else type(errors).__name__
+        raise TypeError('_unregister_error() argument must be str, not ' + refused)
+    if '\x00' in errors:
+        raise ValueError('embedded null character')
+    if errors in _builtin_error_handlers:
+        raise ValueError(
+            "cannot un-register built-in error handler '%s'" % errors)
+    if errors not in _error_registry:
+        return False
+    del _error_registry[errors]
+    return True
+
+
 def _make_unicode_error(cls, encoding, obj, start, end, reason):
     """Build a UnicodeEncodeError / UnicodeDecodeError carrying the five
     CPython attributes.  Grail's exception classes keep positional args but do

@@ -6153,9 +6153,12 @@ importlib class >> ___kernelMultipleBases___ [
 	than one base, each with all of them.  A Smalltalk class has the first as its
 	superclass; the others are registered as a class statement would register
 	them.  io.UnsupportedOperation is (OSError, ValueError), as
-	Modules/_io/_iomodule.c:659 builds it."
+	Modules/_io/_iomodule.c:659 builds it, and ExceptionGroup is
+	(BaseExceptionGroup, Exception), as Objects/exceptions.c:1779-1793 builds it."
 
-	^ { UnsupportedOperation -> { OSError. ValueError } }
+	^ {
+		UnsupportedOperation -> { OSError. ValueError }.
+		ExceptionGroup -> { BaseExceptionGroup. Exception } }
 
 ]
 

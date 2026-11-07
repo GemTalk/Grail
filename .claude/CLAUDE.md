@@ -459,7 +459,7 @@ scripts/refresh_shard_timings.py <run-id>   # or a given CI run
 ```
 
 Use CI's numbers, not a local run's (`--local` exists, but the gate's
-wall-clock is CI's). The script prints the 16-shard plan the new file gives;
+wall-clock is CI's). The script prints the 8-shard plan the new file gives;
 commit the file when that beats the current one. Each shard also prints a
 `GRAIL_SHARD_PLAN` line; `run_tests.sh` fails if shards ran different
 partitions, or if all of them ran here and did not run the whole suite.

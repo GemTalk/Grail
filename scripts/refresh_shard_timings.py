@@ -29,7 +29,7 @@ until the next refresh, and GrailShardPlan costs them by test count meanwhile,
 so nothing is ever dropped from a run.
 
 After writing, it prints the plan the file gives for --workers shards
-(default 16, with --reserve seconds on shard 0, default the CI value) so a
+(default 8, with --reserve seconds on shard 0, default the CI value) so a
 refresh can be judged before it is committed.  This preview ignores the
 order-of-classes effects a real run has, so treat it as a forecast.
 """
@@ -116,7 +116,7 @@ def main():
     ap.add_argument("runs", nargs="*", help="CI run id(s); default the latest 3 green merge-queue runs")
     ap.add_argument("--local", action="store_true", help="read out/shard_*.out of a local run")
     ap.add_argument("--logs", nargs="+", metavar="DIR", help="read shard logs under these directories, one run each")
-    ap.add_argument("--workers", type=int, default=16, help="preview the plan for this many shards")
+    ap.add_argument("--workers", type=int, default=8, help="preview the plan for this many shards")
     ap.add_argument("--reserve", type=int, default=None, help="preview reserve on shard 0, seconds")
     ap.add_argument("--dry-run", action="store_true", help="print the preview, do not write the file")
     args = ap.parse_args()

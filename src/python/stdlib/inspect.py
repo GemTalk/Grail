@@ -609,7 +609,7 @@ _KINDS = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD,
           Parameter.VAR_KEYWORD)
 
 
-def formatannotation(annotation, base_module=None):
+def formatannotation(annotation, base_module=None, *, quote_annotation_strings=True):
     """Render an annotation as CPython does in a signature string.
 
     A class prints as its NAME (``int``, not ``<class 'int'>``); anything else
@@ -619,7 +619,15 @@ def formatannotation(annotation, base_module=None):
     Grail maps some builtins to a method handle rather than a class, so the
     test is "does it have a __name__" rather than isinstance(x, type): ``str``
     is a BoundMethod here and would otherwise have printed as its repr.
+
+    A string prints bare when quote_annotation_strings is false, and a
+    ForwardRef -- an annotation naming something undefined, as annotationlib's
+    FORWARDREF format leaves it -- prints as the name it refers to, as CPython
+    3.14's does: a dataclass's docstring reads ``C(x:undef)'', not
+    ``C(x:ForwardRef('undef', ...))'' (test_dataclasses TestDocString).
     """
+    if not quote_annotation_strings and isinstance(annotation, str):
+        return annotation
     # CPython's first rule: a typing construct prints as its repr with the
     # ``typing.`` prefixes dropped -- ``int | None``, ``List[int]``.  It has to
     # come before the __name__ test, since a union answers __name__ 'Union'.
@@ -641,6 +649,9 @@ def formatannotation(annotation, base_module=None):
             if module in ('builtins', base_module) or not isinstance(module, str):
                 return qual
             return module + '.' + qual
+    from annotationlib import ForwardRef
+    if isinstance(annotation, ForwardRef):
+        return annotation.__forward_arg__
     name = getattr(annotation, '__name__', None)
     if isinstance(name, str):
         return name
@@ -919,6 +930,14 @@ def _signature_get_user_defined_method(cls, method_name):
     meth = getattr(cls, method_name, None)
     if meth is None:
         return None
+    # A CLASS standing as the method -- ``__call__ = dict'' on a metaclass -- is
+    # user-defined in CPython's sense, since it is none of the builtin slot or
+    # method kinds (_NonUserDefinedCallables).  Its signature is the class's:
+    # dict has none, so signature() of a class called through it is that
+    # ValueError, as CPython's is (test_dataclasses
+    # test_docstring_with_no_signature, gh-103449).
+    if isinstance(meth, type):
+        return meth
     for attr in ('__func__', '__wrapped__'):
         inner = getattr(meth, attr, None)
         if inner is not None:
@@ -979,6 +998,10 @@ def _signature_from_class(cls, **kwargs):
     ``class Plain: def __init__(self, a, b=2)``.
     """
     call = _signature_get_user_defined_method(type(cls), '__call__')
+    if isinstance(call, type):
+        # Nothing binds a class to the class being called -- it has no
+        # __get__ -- so its own signature is the whole of it.
+        return signature(call, **kwargs)
     if call is not None:
         return _drop_leading_parameter(signature(call, **kwargs))
     new = _signature_get_user_defined_method(cls, '__new__')
@@ -2836,3 +2859,31 @@ def getclasstree(classes, unique=False):
         if parent not in classes:
             roots.append(parent)
     return walktree(roots, children, None)
+
+
+# CPython 3.14.4's BufferFlags, verbatim: the PyBUF_* flags a __buffer__
+# method is handed (PEP 688), which test_buffer and any exporter written for
+# 3.12+ read as ``inspect.BufferFlags.WRITABLE''.
+import enum
+
+
+class BufferFlags(enum.IntFlag):
+    SIMPLE = 0x0
+    WRITABLE = 0x1
+    FORMAT = 0x4
+    ND = 0x8
+    STRIDES = 0x10 | ND
+    C_CONTIGUOUS = 0x20 | STRIDES
+    F_CONTIGUOUS = 0x40 | STRIDES
+    ANY_CONTIGUOUS = 0x80 | STRIDES
+    INDIRECT = 0x100 | STRIDES
+    CONTIG = ND | WRITABLE
+    CONTIG_RO = ND
+    STRIDED = STRIDES | WRITABLE
+    STRIDED_RO = STRIDES
+    RECORDS = STRIDES | WRITABLE | FORMAT
+    RECORDS_RO = STRIDES | FORMAT
+    FULL = INDIRECT | WRITABLE | FORMAT
+    FULL_RO = INDIRECT | FORMAT
+    READ = 0x100
+    WRITE = 0x200

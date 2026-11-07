@@ -75,6 +75,19 @@ NamedExprAst >> ___emitIRValueOn___: aBuilder [
 	whose answer is the value put -- exactly what the text parenthesises."
 
 	| v |
+	"``nonlocal x; (x := v)'' in a method of a METHOD-LOCAL class: the setter
+	cell, as AssignAst >> ___emitIRClassCellStoreOn___:name: writes it -- and
+	the setter block answers what it stored, so the send IS the walrus's value.
+	Asked before the leaf, as the assignment asks it."
+	self ___irClassCellTargetName___ ifNotNil: [:nm |
+		| setter |
+		CallAst addCapturedWriteName: nm.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: self.
+		setter := aBuilder
+			send: #'___classCellSetter___:' to: aBuilder selfNode
+			with: { aBuilder obj: ('___cellSetter_' , nm asString , '___') asSymbol } env: 1.
+		^ aBuilder send: #value: to: setter with: { v } env: 0].
 	v := value ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
 	(aBuilder leafFor: target id asSymbol) ifNotNil: [:leaf | ^ aBuilder assign: leaf from: v].
@@ -113,12 +126,50 @@ NamedExprAst >> ___emitSmalltalkOn___: aStream [
 	assignment, and those needed the same wrapping for the same reason --
 	unparenthesised, the send would swallow whatever followed it."
 	aStream nextPut: $(.
+	"``nonlocal x; (x := v)'' in a method of a METHOD-LOCAL class writes the
+	enclosing function's local through the setter cell ClassDefAst emits --
+	AssignAst's class-cell branch.  The bare ``x := v'' below named an
+	undeclared temp, so the method failed to compile and every call raised
+	``Grail could not compile this method''.  The setter block answers the
+	value it stored, so the send is the walrus's value."
+	self ___irClassCellTargetName___ ifNotNil: [:nm |
+		CallAst addCapturedWriteName: nm.
+		aStream
+			nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+			nextPutAll: nm;
+			nextPutAll: '___'') value: (';
+			nextPutAll: rhs contents;
+			nextPutAll: '))'.
+		^ self].
 	(target isKindOf: NameAst)
 		ifTrue: [self emitNameStoreOn: aStream target: target rhs: rhs contents]
 		ifFalse: [
 			target printSmalltalkOn: aStream.
 			aStream nextPutAll: ' := '; nextPutAll: rhs contents].
 	aStream nextPut: $).
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+NamedExprAst >> ___irClassCellTargetName___ [
+	"The target's name when this walrus writes an enclosing function's local
+	from inside a method-local class's method, else nil -- the guard of
+	AssignAst's and AugAssignAst's class-cell branches.
+
+	A walrus, unlike an assignment, can also sit in a class statement's
+	decorators or keywords (``@d := deco'', ``class C(metaclass=(m := M))''),
+	which evaluate in the scope ENCLOSING the class statement and are emitted
+	under inDecoratorEmit: there ``d'' is the enclosing function's own local,
+	not a cell, so the guard stands down as it does for inBasesEmit."
+
+	^ ((target isKindOf: NameAst)
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [CallAst inDecoratorEmit ~~ true
+		and: [target ___enclosingFunctionLocalBeyondClass___: target id]]]]])
+			ifTrue: [target id]
+			ifFalse: [nil]
 
 ]
 
@@ -147,9 +198,12 @@ NamedExprAst >> ___irRefusalDetail___: localSet [
 NamedExprAst >> ___irWalrusStoreKind___: localNames [
 	"#local for a body-local / parameter target (the text's ``(x := v)''),
 	#module for a module-scope store target (the text's dynamicInstVarAt:put:,
-	which answers the value), nil for the class-body branches (cut 69)."
+	which answers the value), #classCell for an enclosing function's local
+	written from a method-local class's method (the setter cell), nil for the
+	class-body branches (cut 69)."
 
 	(target isKindOf: NameAst) ifFalse: [^ nil].
+	self ___irClassCellTargetName___ notNil ifTrue: [^ #classCell].
 	(localNames includes: target id asString) ifTrue: [^ #local].
 	(self isModuleScopeStoreTarget: target) ifTrue: [^ #module].
 	^ nil

@@ -2258,9 +2258,23 @@ NameAst >> ___irNonLocalLoadKind___: localNames [
 			and: [(id asSymbol == #'__class__'
 				and: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']) not])
 		ifTrue: [nil] ifFalse: [
-		id asSymbol == #'__class__' ifTrue: [self ___irDunderClassLoadKind___] ifFalse: [
-		id asSymbol == #'type' ifTrue: [self ___irTypeLoadKind___] ifFalse: [
-		id asSymbol == #'super' ifTrue: [self ___irSuperLoadKind___] ifFalse: [
+		"The four special spellings below each have a branch of their own in
+		the text, and each stands that branch down in some contexts -- where
+		the text then resolves the name like any other.  Those fall-throughs are
+		___irSpecialNameFallsThrough___, and they take the ordinary resolution
+		(___irOrdinaryLoadKind___) exactly as the text's dispatcher does."
+		id asSymbol == #'__class__' ifTrue: [
+			self ___irDunderClassLoadKind___ ifNil: [
+				self ___irSpecialNameFallsThrough___
+					ifTrue: [self ___irOrdinaryLoadKind___] ifFalse: [nil]]] ifFalse: [
+		id asSymbol == #'type' ifTrue: [
+			self ___irTypeLoadKind___ ifNil: [
+				self ___irSpecialNameFallsThrough___
+					ifTrue: [self ___irOrdinaryLoadKind___] ifFalse: [nil]]] ifFalse: [
+		id asSymbol == #'super' ifTrue: [
+			self ___irSuperLoadKind___ ifNil: [
+				self ___irSpecialNameFallsThrough___
+					ifTrue: [self ___irOrdinaryLoadKind___] ifFalse: [nil]]] ifFalse: [
 		(FunctionDefAst isSmalltalkReservedIdentifier: id asString)
 			ifTrue: [
 				"A reserved-name load THAT READS THROUGH THE CLASS CELL is a
@@ -2275,19 +2289,33 @@ NameAst >> ___irNonLocalLoadKind___: localNames [
 				 captured by a method-local class's __new__ (``class B1(self.
 				 basetype): def __new__(cls, v): ... self.basetype.__new__ ...'',
 				 which test_bytes and datetimetester are full of)."
-				self ___readsThroughClassCell___ ifTrue: [#classCell] ifFalse: [nil]]
-			ifFalse: [
-		self isFastPathBuiltinName ifTrue: [#builtinValue] ifFalse: [
-		CallAst classBeingCompiled notNil ifTrue: [self ___irClassContextLoadKind___] ifFalse: [
-		CallAst moduleClassBeingCompiled isNil ifTrue: [nil] ifFalse: [
-		((self isModuleVariableName: id)
-			or: [CallAst moduleFunctionNames notNil
-				and: [CallAst moduleFunctionNames includes: id]])
-			ifTrue: [#module]
-			ifFalse: [
-				(NameAst isResolvableSymbol: id asSymbol)
-					ifTrue: [#global] ifFalse: [#module]]]]]]]]]]]
+				self ___readsThroughClassCell___
+					ifTrue: [#classCell]
+					ifFalse: [
+						self ___irSpecialNameFallsThrough___
+							ifTrue: [self ___irOrdinaryLoadKind___] ifFalse: [nil]]]
+			ifFalse: [self ___irOrdinaryLoadKind___]]]]]]
 		on: Error do: [:ex | nil]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+NameAst >> ___irOrdinaryLoadKind___ [
+	"The load kind of a name no special-spelling branch claims -- the tail of
+	printSmalltalkOn:'s dispatcher: a builtin function read as a value (the
+	BoundMethod wrap), the class-context resolution inside a method, and in a
+	module def the module-instance load (a module variable or top-level def, or
+	a late-bound free name) or the bare resolvable global.  nil with no module
+	class (a doit)."
+
+	self isFastPathBuiltinName ifTrue: [^ #builtinValue].
+	CallAst classBeingCompiled notNil ifTrue: [^ self ___irClassContextLoadKind___].
+	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
+	((self isModuleVariableName: id)
+		or: [CallAst moduleFunctionNames notNil
+			and: [CallAst moduleFunctionNames includes: id]])
+		ifTrue: [^ #module].
+	^ (NameAst isResolvableSymbol: id asSymbol) ifTrue: [#global] ifFalse: [#module]
 
 ]
 
@@ -2303,27 +2331,66 @@ NameAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 NameAst >> ___irRefusalDetail___: localSet [
 	"___irNonLocalLoadKind___:'s nil exits, told apart for the census."
 
+	"A special spelling whose own branch refused and that the text does NOT
+	then resolve as an ordinary name (___irSpecialNameFallsThrough___) is named
+	for its spelling; one that falls through refused in the ordinary
+	resolution, and is named by the rows below it."
 	id asSymbol == #'super' ifTrue: [
 		(self ___declaredInEnclosingFunction___: #'super')
 			ifTrue: [^ #'NameAst:super-declaredInFunction'].
-		(self isModuleVariableName: #'super') ifTrue: [^ #'NameAst:super-moduleBinds'].
-		^ #'NameAst:super-other'].
+		self ___irSpecialNameFallsThrough___ ifFalse: [^ #'NameAst:super-other']].
 	id asSymbol == #'__class__' ifTrue: [
-		CallAst classBeingCompiled isNil ifTrue: [^ #'NameAst:__class__-noClass'].
-
-		^ #'NameAst:__class__-other'].
-	id asSymbol == #'type' ifTrue: [^ #'NameAst:type-other'].
+		self ___irSpecialNameFallsThrough___ ifFalse: [^ #'NameAst:__class__-other']].
 	"MIRRORS ___irNonLocalLoadKind___:'s order: the reserved-name test stands
 	down for a read that goes through the class cell, so such a read must fall
 	through to the #classCell row below rather than be named for its spelling."
 	((FunctionDefAst isSmalltalkReservedIdentifier: id asString)
-		and: [self ___readsThroughClassCell___ not])
+		and: [self ___readsThroughClassCell___ not
+		and: [self ___irSpecialNameFallsThrough___ not]])
 			ifTrue: [^ #'NameAst:reservedIdentifier'].
 	CallAst classBeingCompiled notNil ifTrue: [
 		self ___readsThroughClassCell___ ifTrue: [^ #'NameAst:classCell'].
 		^ #'NameAst:classContextOther'].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'NameAst:noModule'].
 	^ #'NameAst:other'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+NameAst >> ___irSpecialNameFallsThrough___ [
+	"For a load of one of the specially-spelled names -- ``__class__'',
+	``type'', ``super'', a Smalltalk reserved identifier -- whose own branch
+	answered nil: does the TEXT then resolve it as an ordinary name?  Each is
+	the condition under which the text's special branch stands down and its
+	dispatcher reaches the ordinary module / class-context read:
+
+	* ``__class__'' with NO class being compiled: a module-level def.  CPython
+	  compiles it as a global read, NameError unless the module binds it
+	  (module >> ___globalAt___:otherwise: says why the module object's own
+	  __class__ is not a global).  A class-body value emit or a ``global
+	  __class__'' in a method keep refusing (P3).
+	* ``type'' whenever the fast-path branch does not claim it -- a module (or
+	  class-cell) binding shadows the builtin.
+	* ``super'' when the MODULE binds it (``class super: ...''); an enclosing
+	  function's own ``super'' that is not read through the class cell keeps
+	  refusing (the transport rename).
+	* a reserved identifier (``nil = 3'' at module level) when it is a module
+	  variable no enclosing function binds -- the module-instance load under
+	  the Python name.  A reserved-named parameter or local is a local, answered
+	  before any of this; a free one bound nowhere keeps refusing."
+
+	| sym |
+	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	sym := id asSymbol.
+	sym == #'__class__' ifTrue: [
+		^ CallAst classBeingCompiled isNil
+			and: [CallAst inClassBodyValueEmit ~~ true]].
+	sym == #'type' ifTrue: [^ true].
+	sym == #'super' ifTrue: [
+		^ (self ___declaredInEnclosingFunction___: #'super') not
+			and: [self isModuleVariableName: #'super']].
+	^ (self isModuleVariableName: id)
+		and: [(self ___declaredInEnclosingFunction___: sym) not]
 
 ]
 
