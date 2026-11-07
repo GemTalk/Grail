@@ -67,12 +67,55 @@ permissions:
   contents: read
 
 jobs:
+  # A merge-queue build whose group GitHub has since rebuilt or dropped is
+  # STALE: the queue deleted its gh-readonly-queue/... branch, and nothing will
+  # read its result.  The per-ref concurrency group above never cancels one,
+  # because each rebuild gets a new ref, so stale builds sat in the queue for
+  # runners -- measured 2026-11-06: 12 of 17 waiting merge_group runs, each
+  # wanting a full test matrix and starving other GemTalk repositories' jobs.
+  # This job runs first and cancels the run if its branch is gone, so a stale
+  # build that has not started costs two small jobs (this one and ci-complete,
+  # which runs even on a cancelled run) instead of the matrix.  Any other API
+  # answer leaves the run alone; scripts/cancel_stale_merge_group.sh has the
+  # rules.
+  #
+  # That only catches a group that went stale BEFORE its run started.  The
+  # usual stale build is a group behind one that failed: it started alongside
+  # that group and passed this job long before its branch was deleted.  So
+  # each test-main shard checks again as its first step, and the first one of
+  # a stale run to get a runner cancels the rest.
+  #
+  # Merge queue only: on pull_request, schedule and workflow_dispatch the job
+  # is SKIPPED, so it costs no runner, and the jobs that need it run anyway
+  # because their `if:` accepts a skipped queue-current.  Their default
+  # `success()` would skip them too, and ci-complete would then fail.
+  queue-current:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    # A job-level block REPLACES the workflow's, so contents: read (for the
+    # checkout and the ref lookup) has to be restated beside actions: write.
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/cancel_stale_merge_group.sh
+          sparse-checkout-cone-mode: false
+      - name: Cancel this run if its merge group is gone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/cancel_stale_merge_group.sh
+
   # Self-tests for the shell tooling CI itself depends on -- no container, no
   # stone, ~seconds.  The conformance gate decides whether a scoreboard delta is
   # a regression, so a bug in it can turn a real regression into a green run;
   # that makes it worth checking on every push even though the conformance
   # measurement itself is nightly.
   scripts:
+    needs: [queue-current]
+    if: ${{ !cancelled() && needs.queue-current.result != 'failure' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:
@@ -82,6 +125,12 @@ jobs:
           fetch-depth: 0
       - name: cpython regression-gate self-test
         run: tests/scripts/test_regression_gate.sh
+
+      # A false "stale" verdict cancels a LIVE merge group and ejects its PRs
+      # from the queue, and the merge queue is the only place the script runs
+      # for real -- so its rules are checked here, against a fake curl.
+      - name: cancel_stale_merge_group self-test
+        run: tests/scripts/test_cancel_stale_merge_group.sh
 
       # A Grail release is installed over an existing one, and the Rowan in a
       # user's database cannot apply every kind of removal on that upgrade --
@@ -150,8 +199,16 @@ jobs:
 
   test-main:
     name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
+    needs: [queue-current]
+    if: ${{ !cancelled() && needs.queue-current.result != 'failure' }}
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    # actions: write lets a shard cancel a stale run (the first step after
+    # checkout).  A job-level block REPLACES the workflow's, so contents: read
+    # has to be restated beside it.
+    permissions:
+      actions: write
+      contents: read
     strategy:
       # Don't let one shard's failure cancel the others -- we want them all.
       fail-fast: false
@@ -237,6 +294,15 @@ jobs:
         password: ${{ secrets.GEMSTONE_CONTAINER_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+
+      # queue-current only sees groups that were already gone when the run
+      # started; see its comment.  The container has curl but no gh, which is
+      # why the script uses curl.
+      - name: Cancel this run if its merge group is gone
+        if: github.event_name == 'merge_group'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/cancel_stale_merge_group.sh
 
       # A gem that fails a VM assertion (UTL_GUARANTEE) prints its C stack
       # through $GEMSTONE/bin/pstack, which needs gdb -- and the image has
