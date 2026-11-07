@@ -609,7 +609,7 @@ _KINDS = (Parameter.POSITIONAL_ONLY, Parameter.POSITIONAL_OR_KEYWORD,
           Parameter.VAR_KEYWORD)
 
 
-def formatannotation(annotation, base_module=None):
+def formatannotation(annotation, base_module=None, *, quote_annotation_strings=True):
     """Render an annotation as CPython does in a signature string.
 
     A class prints as its NAME (``int``, not ``<class 'int'>``); anything else
@@ -619,7 +619,15 @@ def formatannotation(annotation, base_module=None):
     Grail maps some builtins to a method handle rather than a class, so the
     test is "does it have a __name__" rather than isinstance(x, type): ``str``
     is a BoundMethod here and would otherwise have printed as its repr.
+
+    A string prints bare when quote_annotation_strings is false, and a
+    ForwardRef -- an annotation naming something undefined, as annotationlib's
+    FORWARDREF format leaves it -- prints as the name it refers to, as CPython
+    3.14's does: a dataclass's docstring reads ``C(x:undef)'', not
+    ``C(x:ForwardRef('undef', ...))'' (test_dataclasses TestDocString).
     """
+    if not quote_annotation_strings and isinstance(annotation, str):
+        return annotation
     # CPython's first rule: a typing construct prints as its repr with the
     # ``typing.`` prefixes dropped -- ``int | None``, ``List[int]``.  It has to
     # come before the __name__ test, since a union answers __name__ 'Union'.
@@ -641,6 +649,9 @@ def formatannotation(annotation, base_module=None):
             if module in ('builtins', base_module) or not isinstance(module, str):
                 return qual
             return module + '.' + qual
+    from annotationlib import ForwardRef
+    if isinstance(annotation, ForwardRef):
+        return annotation.__forward_arg__
     name = getattr(annotation, '__name__', None)
     if isinstance(name, str):
         return name
