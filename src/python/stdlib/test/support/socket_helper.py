@@ -153,14 +153,23 @@ def skip_unless_bind_unix_socket(test):
     if _bind_nix_socket_error is None:
         from .os_helper import TESTFN, unlink
         path = TESTFN + "can_bind_unix_socket"
-        with socket.socket(socket.AF_UNIX) as sock:
-            try:
-                sock.bind(path)
-                _bind_nix_socket_error = False
-            except OSError as e:
-                _bind_nix_socket_error = e
-            finally:
-                unlink(path)
+        # GRAIL ADAPTATION: Grail's socket names AF_UNIX, but GemStone's
+        # sockets cannot make one, and socket() raises OSError.  CPython makes
+        # the socket outside the try, so that error escaped the decorator and
+        # failed the whole test module's import; it is a reason to skip.
+        try:
+            sock = socket.socket(socket.AF_UNIX)
+        except OSError as e:
+            _bind_nix_socket_error = e
+        else:
+            with sock:
+                try:
+                    sock.bind(path)
+                    _bind_nix_socket_error = False
+                except OSError as e:
+                    _bind_nix_socket_error = e
+                finally:
+                    unlink(path)
     if _bind_nix_socket_error:
         msg = 'Requires a functional unix bind(): %s' % _bind_nix_socket_error
         return unittest.skip(msg)(test)
