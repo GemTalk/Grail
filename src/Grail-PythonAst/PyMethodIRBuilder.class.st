@@ -23,13 +23,26 @@ Class {
 		'instVarsResolvedFor',
 		'deferredClassHelpers',
 		'classHelpersInstalledFor',
-		'sendCensus'
+		'sendCensus',
+		'instVarLeaves',
+		'classHelpers',
+		'markerNode',
+		'defId'
 	]
 }
 
 { #category : 'instance creation' }
 PyMethodIRBuilder class >> class: aClass selector: aSelector env: anEnvId [
 	^ self new initClass: aClass selector: aSelector env: anEnvId
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder class >> defIdLiteralPrefix [
+	"The prefix of the string literal an IR class method carries its def id
+	under (see defId:).  importlib ___irDefIdOf___: reads it back."
+
+	^ '___grailIRDef___:'
 
 ]
 
@@ -115,7 +128,7 @@ PyMethodIRBuilder >> ___emitPythonIdentityMarker___ [
 
 	| leaf |
 	leaf := self tempNamed: #'___grailPython___'.
-	self add: (self assign: leaf from: self trueLit).
+	markerNode := self add: (self assign: leaf from: self trueLit).
 	^ self
 
 ]
@@ -127,13 +140,61 @@ PyMethodIRBuilder >> ___installDeferredClassHelpersOn___: aClass [
 	enclosing def -- the same lifetime the class itself has, and the same
 	lifetime the text path pays for the whole method."
 
-	deferredClassHelpers ifNotNil: [
-		deferredClassHelpers do: [:entry |
+	"An ORDINARY build's helpers went onto the class it was built for, and are
+	recorded in classHelpers; regenerated onto another class they have to go
+	there too (P2.1's regenerate API)."
+	(deferredClassHelpers ifNil: [classHelpers]) ifNotNil: [:helpers |
+		helpers do: [:entry |
 			self ___compileClassHelper___: (entry at: 1) source: (entry at: 2) on: aClass.
 			(entry at: 3) ifTrue: [
 				self ___compileClassHelper___: (entry at: 1) source: (entry at: 2) on: aClass class]]].
 	classHelpersInstalledFor := aClass.
 	^ self
+
+]
+
+{ #category : 'generation' }
+PyMethodIRBuilder >> ___irGenerateFor___: aClass [
+	"Generate the already-built IR for aClass and answer the GsNMethod WITHOUT
+	installing it anywhere -- the regenerate API's core (P2.1), for a consumer
+	that installs the method itself (under another selector, or as a session
+	method) or not at all (UnboundMethod's special-receiver form, which only
+	runs it).
+
+	What of a finished IR method depends on the class it is generated for is
+	exactly three things, and this rewrites all three:
+
+	  * the method node's ``inClass'' (methNode class:);
+	  * every named-instVar leaf's OFFSET, resolved by NAME against aClass --
+	    every leaf, not only the deferred ones, since an ordinary build
+	    resolved its leaves against the class it was built for.  (No emitter
+	    makes such a leaf today: instVarNamed: has no sender since slots
+	    became per-class layout POSITIONS read through accessor sends,
+	    docs/Instance_Attribute_Indexed_Slots.md.  The rewrite is kept so a
+	    leaf, if one comes back, cannot carry one class's offset to another.);
+	  * a class statement's compiled-text helper, which the method SENDS to its
+	    receiver: aClass must reach it, or this raises rather than answer a
+	    method whose class statement DNUs.  Not installed here -- a consumer
+	    that installs calls ___irRegenerateOn___:, which files the helpers.
+
+	Nothing else in the tree names a class.  super() reads the DEFINING class
+	through the module instance by name, globals are literal associations off
+	the symbol list, and the position map is SmallIntegers, so a method
+	generated for another class still answers as the def it came from."
+
+	targetClass := aClass.
+	methNode class: aClass.
+	self ___resolveDeferredInstVarsOn___: aClass.
+	classHelpers ifNotNil: [
+		classHelpers do: [:entry |
+			| receiver |
+			receiver := (entry at: 3) ifTrue: [aClass class] ifFalse: [aClass].
+			(receiver whichClassIncludesSelector: (entry at: 1) environmentId: env) isNil
+				ifTrue: [
+					Error signal: 'PyMethodIRBuilder: ' , aClass name asString
+						, ' cannot reach the class-statement helper '
+						, (entry at: 1) printString]]].
+	^ self generatedMethod
 
 ]
 
@@ -167,6 +228,12 @@ PyMethodIRBuilder >> ___irNoteClassHelper___: aSelector source: aString classSid
 	(ClassDefAst >> ___irRunsWithClassReceiver___, #1424) -- where its send
 	will look for it."
 
+	"Every helper is RECORDED, whichever way it is installed: a regeneration
+	onto another class (___irGenerateFor___:) has to find the class statement's
+	helper where the method will look for it, and an ordinary build compiled
+	it only onto the class it was built for."
+	classHelpers isNil ifTrue: [classHelpers := OrderedCollection new].
+	classHelpers add: (Array with: aSelector with: aString with: aBoolean).
 	deferredInstVars isNil ifTrue: [
 		self ___compileClassHelper___: aSelector source: aString on: targetClass.
 		aBoolean ifTrue: [
@@ -213,6 +280,20 @@ PyMethodIRBuilder >> ___irRegenerateOn___: aClass [
 
 ]
 
+{ #category : 'building' }
+PyMethodIRBuilder >> ___noteInstVarLeaf___: aLeaf named: aSymbol [
+	"Remember aLeaf under its instVar name and answer it, so a regeneration can
+	rewrite its offset for another class (___resolveInstVarLeavesOn___:).
+	Every leaf, in a list rather than keyed by name: the local table is swapped
+	out around a parameter default (withoutLocalsDo:), so one name can be given
+	two leaves, and each of them has to be rewritten."
+
+	instVarLeaves isNil ifTrue: [instVarLeaves := OrderedCollection new].
+	instVarLeaves add: aSymbol -> aLeaf.
+	^ aLeaf
+
+]
+
 { #category : 'generation' }
 PyMethodIRBuilder >> ___resolveDeferredInstVarsOn___: aClass [
 	"Rewrite every deferred named-instVar leaf (see deferInstVars) to aClass's
@@ -226,7 +307,7 @@ PyMethodIRBuilder >> ___resolveDeferredInstVarsOn___: aClass [
 	the inherited slot has no instVar to resolve to."
 
 	| names |
-	deferredInstVars isNil ifTrue: [^ self].
+	deferredInstVars isNil ifTrue: [^ self ___resolveInstVarLeavesOn___: aClass].
 	names := aClass allInstVarNames.
 	deferredInstVars keysAndValuesDo: [:sym :leaf |
 		| idx |
@@ -235,7 +316,32 @@ PyMethodIRBuilder >> ___resolveDeferredInstVarsOn___: aClass [
 			Error signal: 'PyMethodIRBuilder: ' , aClass name asString
 				, ' has no instVar named ' , sym printString].
 		leaf instanceVariable: sym ivOffset: idx].
+	self ___resolveInstVarLeavesOn___: aClass.
 	instVarsResolvedFor := aClass.
+	^ self
+
+]
+
+{ #category : 'generation' }
+PyMethodIRBuilder >> ___resolveInstVarLeavesOn___: aClass [
+	"Rewrite EVERY named-instVar leaf this build made to aClass's own offset
+	for its name.  ___resolveDeferredInstVarsOn___: rewrites the deferred ones
+	(a shared build's stand-in has no slots); an ordinary build resolved its
+	leaves against the class it was built for, and a regeneration onto a class
+	with another layout -- a subclass whose base declares slots of its own, a
+	Smalltalk class under @smalltalk_class -- must not inherit those offsets.
+	A name aClass does not carry raises, as a deferred one does."
+
+	| names |
+	instVarLeaves isNil ifTrue: [^ self].
+	names := aClass allInstVarNames.
+	instVarLeaves do: [:assoc |
+		| idx |
+		idx := names indexOf: assoc key.
+		idx = 0 ifTrue: [
+			Error signal: 'PyMethodIRBuilder: ' , aClass name asString
+				, ' has no instVar named ' , assoc key printString].
+		assoc value instanceVariable: assoc key ivOffset: idx].
 	^ self
 
 ]
@@ -432,6 +538,16 @@ PyMethodIRBuilder >> atNode: aNode [
 				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 				ex return: nil].
 	^ self
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> attachedSource [
+	"The Python source slice attached to the method (sourceString:fileName:line:)
+	-- the generated method's sourceString up to its position-map trailer -- or
+	nil when none was attached."
+
+	^ attachedSource
 
 ]
 
@@ -641,6 +757,17 @@ PyMethodIRBuilder >> cascade: rcvrNode specs: sendSpecs [
 
 ]
 
+{ #category : 'accessing' }
+PyMethodIRBuilder >> classHelpers [
+	"Every class-statement helper this build noted, as { selector. text
+	source. alsoOnTheMetaclass } -- installed now for an ordinary build,
+	deferred for a shared one, and recorded either way (see
+	___irNoteClassHelper___:source:classSide:)."
+
+	^ classHelpers ifNil: [#()]
+
+]
+
 { #category : 'private' }
 PyMethodIRBuilder >> commitPendingPosition [
 	"Append the armed entry to the position map, once."
@@ -700,6 +827,44 @@ PyMethodIRBuilder >> deferInstVars [
 	a method already generated is unaffected."
 
 	deferredInstVars isNil ifTrue: [deferredInstVars := IdentityKeyValueDictionary new].
+	^ self
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> defId [
+	"The class-method registration id this build was made for (importlib
+	___irDefIdFor___:inClass:name:classSide:), or nil for a build that has
+	none (a module-level def, a doit)."
+
+	^ defId
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> defId: aString [
+	"Record the def's registration id IN THE METHOD: the identity marker's
+	store becomes ``___grailPython___'' is assigned the string ___grailIRDef___:<id> instead
+	of true.
+
+	This is what lets a method be rebuilt from its Python source in a later
+	session (importlib ___irRebuildBuilderFor___:): the id is deterministic and
+	self-identifying -- module, class offset, def offset, name, side -- and,
+	being in the tree, it is in every method regenerated from it too, so a copy
+	the MI merge made onto another class names the same def as the original.
+	A per-class table could not follow such a copy, whose inClass is the class
+	it was copied to.
+
+	The marker's VALUE is read by nothing else (___isIRPythonMethod___: tests
+	the temp's NAME), so a string costs one literal slot and changes no
+	behaviour.  Set before generation; a method already generated keeps what it
+	had."
+
+	defId := aString.
+	markerNode isNil ifTrue: [^ self].
+	markerNode
+		dest: (self leafFor: #'___grailPython___')
+		source: (GsComLiteralNode newString: self class defIdLiteralPrefix , aString asString).
 	^ self
 
 ]
@@ -1064,11 +1229,11 @@ PyMethodIRBuilder >> instVarNamed: aSymbol [
 			instanceVariable: aSymbol ivOffset: 1.
 		deferredInstVars at: aSymbol put: leaf.
 		locals at: aSymbol put: leaf.
-		^ leaf].
+		^ self ___noteInstVarLeaf___: leaf named: aSymbol].
 	leaf := GsComVarLeaf new
 		instanceVariable: aSymbol ivOffset: idx.
 	locals at: aSymbol put: leaf.
-	^ leaf
+	^ self ___noteInstVarLeaf___: leaf named: aSymbol
 
 ]
 
@@ -1250,6 +1415,14 @@ PyMethodIRBuilder >> returnNone [
 	"Python ``return'' with no value / a fall-off-the-end return: ^ None."
 
 	^ self return: (self globalNamed: #None)
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> selector [
+	"The selector of the method being built."
+
+	^ methNode selector
 
 ]
 

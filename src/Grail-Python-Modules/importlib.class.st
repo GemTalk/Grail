@@ -513,6 +513,9 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 	identity.  Shared by loadModuleFromPath: and reload:."
 
 	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture previousMethods |
+	"The module's classes are about to be made anew: release the builders the
+	previous build cached for them (___irBuilderCache___)."
+	self ___irBuilderCacheForgetModule___: moduleName.
 	"Collect declared variable names from the module body"
 	variables := moduleAst body variables.
 	variableNames := variables asArray.
@@ -5086,6 +5089,148 @@ importlib class >> ___installTransientGlobals___: aNames on: aModuleClass [
 
 ]
 
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCache___ [
+	"The session cache of IR builders, keyed by the GsNMethod each one
+	generated (P2.1): GsNMethod -> PyMethodIRBuilder.  What lets a consumer
+	that copies a method onto another class REGENERATE it there instead of
+	recompiling a text twin.
+
+	BOUNDED TWO WAYS.  The values are SOFT (IdentityKeySoftValueDictionary): a
+	builder holds a whole node tree, nothing else holds it once its method is
+	installed, and the in-memory GC clears least-recently-used soft references
+	when temporary object memory runs high, so the cache can never be what runs
+	a session out of memory.  And it holds at most ___irBuilderCacheLimit___
+	entries, the oldest dropped first (___irCacheBuilder___:forMethod:).  A
+	builder that is gone is not an error: the miss rebuilds it from the
+	method's Python source (___irRebuildBuilderFor___:).
+
+	RELEASED WITH THE CLASS.  A module's rebuild drops its entries
+	(___irBuilderCacheForgetModule___:), since its classes are made anew;
+	resetSessionForReinstall drops them all.  Session-only, like everything
+	that holds node trees: soft references cannot be committed at all."
+
+	^ SessionTemps current at: #'___grailIRBuilderCache___' ifAbsent: [
+		SessionTemps current at: #'___grailIRBuilderCache___'
+			put: IdentityKeySoftValueDictionary new]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheForgetModule___: aModuleName [
+	"Drop every cached builder made for a def of aModuleName -- its module is
+	being rebuilt, so the classes those builders generated for are about to be
+	replaced, and an entry keyed by one of their methods could only ever keep
+	the old class alive."
+
+	| cache order prefix victims |
+	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
+	cache isNil ifTrue: [^ self].
+	prefix := aModuleName asString , '|'.
+	victims := OrderedCollection new.
+	cache keysAndValuesDo: [:meth :builder |
+		| id |
+		id := builder isNil ifTrue: [nil] ifFalse: [builder defId].
+		(id isNil
+			or: [id size > prefix size
+				and: [(id copyFrom: 1 to: prefix size) = prefix]])
+			ifTrue: [victims add: meth]].
+	victims do: [:meth | cache removeKey: meth ifAbsent: []].
+	order := SessionTemps current at: #'___grailIRBuilderCacheOrder___' otherwise: nil.
+	order ifNotNil: [order removeAllSuchThat: [:meth | (cache includesKey: meth) not]].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheLimit___ [
+	"How many builders ___irBuilderCache___ keeps: GRAIL_IR_BUILDER_CACHE when
+	it is set to a number, else 1024.  0 turns caching off, which makes every
+	regeneration a rebuild from source -- the setting the rebuild tests use to
+	prove a miss works.  Read once per session.
+
+	WHY 1024.  A builder is a whole node tree: _pydecimal's 214 class methods
+	held 6.97 MB of temporary object memory, 32.6 KB each, so the default caps
+	the cache near 33 MB -- the last several modules a session built, which is
+	where a merge's providers usually are.  A miss is not an error, it costs a
+	rebuild: about one class emit (2.2 s for _pydecimal's Decimal, all 118 of
+	its methods; a few ms for a small class)."
+
+	^ SessionTemps current at: #'___grailIRBuilderCacheLimit___' ifAbsent: [
+		| raw n |
+		raw := System gemEnvironmentVariable: 'GRAIL_IR_BUILDER_CACHE'.
+		n := [raw isNil ifTrue: [nil] ifFalse: [Integer fromString: raw]]
+			on: Error do: [:ex | ex return: nil].
+		(n isNil or: [n < 0]) ifTrue: [n := 1024].
+		SessionTemps current at: #'___grailIRBuilderCacheLimit___' put: n.
+		n]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheLimit: anInteger [
+	"Set this session's cache limit (tests); nil re-reads the environment."
+
+	anInteger isNil
+		ifTrue: [SessionTemps current removeKey: #'___grailIRBuilderCacheLimit___' ifAbsent: []]
+		ifFalse: [SessionTemps current at: #'___grailIRBuilderCacheLimit___' put: anInteger].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheReset___ [
+	"Empty the builder cache.  Every later regeneration rebuilds from source
+	until the cache fills again."
+
+	SessionTemps current removeKey: #'___grailIRBuilderCache___' ifAbsent: [].
+	SessionTemps current removeKey: #'___grailIRBuilderCacheOrder___' ifAbsent: [].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderForMethod___: aMethod [
+	"A builder that can generate aMethod's IR for any class, or nil: the cached
+	one, else one rebuilt from the method's Python source.  nil for a text-
+	compiled method and for an IR method with no def id to rebuild from (a
+	module-level def, a doit, or a class method of a class built before ids
+	were recorded) -- the consumer then keeps its text route."
+
+	| builder |
+	aMethod isNil ifTrue: [^ nil].
+	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ nil].
+	builder := self ___irBuilderCache___ at: aMethod otherwise: nil.
+	builder notNil ifTrue: [^ builder].
+	^ self ___irRebuildBuilderFor___: aMethod
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCacheBuilder___: aBuilder forMethod: aMethod [
+	"Remember that aBuilder generated aMethod, dropping the oldest quarter of
+	the entries when the cache is full."
+
+	| cache order limit |
+	(aBuilder isNil or: [aMethod isNil]) ifTrue: [^ self].
+	limit := self ___irBuilderCacheLimit___.
+	limit = 0 ifTrue: [^ self].
+	cache := self ___irBuilderCache___.
+	order := SessionTemps current at: #'___grailIRBuilderCacheOrder___' ifAbsent: [
+		SessionTemps current at: #'___grailIRBuilderCacheOrder___' put: OrderedCollection new].
+	(cache includesKey: aMethod) ifFalse: [
+		cache size >= limit ifTrue: [
+			| drop |
+			drop := (limit // 4) max: 1.
+			[drop > 0 and: [order notEmpty]] whileTrue: [
+				cache removeKey: order removeFirst ifAbsent: [].
+				drop := drop - 1]].
+		order addLast: aMethod].
+	cache at: aMethod put: aBuilder.
+	^ self
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irCensus___ [
 	"The census so far: #counts (reason Symbol -> def count), #examples
@@ -5532,6 +5677,29 @@ importlib class >> ___irDefIdFor___: aDef inClass: aClassDefAst name: aName clas
 
 ]
 
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irDefIdOf___: aMethod [
+	"The class-method registration id an IR method carries in its identity
+	marker (PyMethodIRBuilder >> defId:) -- ``<module>|<classOffset>|
+	<defOffset>|<name>|<side>'' -- or nil when it carries none."
+
+	| prefix found |
+	aMethod isNil ifTrue: [^ nil].
+	prefix := (PythonAst at: #PyMethodIRBuilder) defIdLiteralPrefix.
+	found := [aMethod literals
+		detect: [:lit |
+			(lit isKindOf: String)
+				and: [(lit isKindOf: Symbol) not
+				and: [lit size > prefix size
+				and: [(lit at: 1) == $_
+				and: [(lit copyFrom: 1 to: prefix size) = prefix]]]]]
+		ifNone: [nil]]
+			on: Error do: [:ex | ex return: nil].
+	found isNil ifTrue: [^ nil].
+	^ found copyFrom: prefix size + 1 to: found size
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irDefTable___ [
 	"Session-side registry of class-body defs awaiting an IR build: id ->
@@ -5577,6 +5745,99 @@ importlib class >> ___irForgetClassDefIds___: aClassDefAst [
 
 ]
 
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irHarvestDefsFor___: anId from: aModuleAst name: aModuleName moduleClass: aModuleClass [
+	"Re-run the class-body emit that registered anId -- the module-level
+	statement holding its class, under the compile context a module build sets
+	up -- and answer what it registered: id -> { the FunctionDefAst. the
+	compile-context snapshot }, for every IR-eligible def of every class in
+	that statement.  The generated TEXT is thrown away.
+
+	This is the context a rebuild needs and a small per-class record could
+	not give: a class-body def is emitted under some fifty compile-context
+	keys (the class's function, property, slot and captured-name sets, the
+	module's variable, function, class and import names, the class-cell
+	flags, ...), and the text twin's generation sets some of them as it goes.
+	Re-running the emit that set them the first time reproduces them exactly,
+	and the deterministic id finds the def again.
+
+	Nothing persistent is written.  The emit's own registries are session
+	temps (the def table, the per-class id map, the text-twin notes) and it
+	releases what it does not hand on; this takes the def-table entries it
+	added and puts back any entry that was there before under the same id (a
+	load of that very module may be in flight)."
+
+	| table before stmt classOff saved temps result savedIR savedCensus harvested |
+	table := self ___irDefTable___.
+	before := IdentityKeyValueDictionary new.
+	table keysAndValuesDo: [:k :v | before at: k put: v].
+	classOff := Integer fromString: ((anId subStrings: '|') at: 2).
+	stmt := aModuleAst body body
+		detect: [:s |
+			(s beginPosition ifNil: [0]) <= classOff
+				and: [classOff <= (s endPosition ifNil: [0])]]
+		ifNone: [nil].
+	stmt isNil ifTrue: [^ nil].
+	temps := SessionTemps current.
+	saved := temps at: #'GrailCompileContext' otherwise: nil.
+	savedIR := { temps at: #'___grailIRCodegenEnabled___' otherwise: nil.
+		temps at: #'___grailIRCodegenChecked___' otherwise: nil }.
+	savedCensus := temps at: #'___grailIRCensusOn___' otherwise: nil.
+	"A fresh context, as a module build starts with: nothing an enclosing
+	compile left in it may leak into the emit."
+	temps at: #'GrailCompileContext' put: KeyValueDictionary new.
+	"The def is IR -- that is why it is being rebuilt -- so the seam must
+	register it whatever this session's flag now says, and a census running
+	must not count the emit a second time."
+	self ___irCodegenForce___: true.
+	temps removeKey: #'___grailIRCensusOn___' ifAbsent: [].
+	result := [
+		CallAst sourcePath: aModuleAst path.
+		CallAst moduleClassBeingCompiled: aModuleClass.
+		CallAst moduleNameBeingCompiled: aModuleName.
+		CallAst moduleFunctionNames: (IdentitySet withAll:
+			((aModuleAst body body select: [:s | s isKindOf: FunctionDefAst])
+				collect: [:s | s name asSymbol])).
+		CallAst moduleVariableNames: aModuleAst body variables.
+		CallAst moduleClassNames: (IdentitySet withAll:
+			((aModuleAst body body select: [:s | s isKindOf: ClassDefAst])
+				collect: [:s | s name asSymbol])).
+		CallAst moduleImportNames: (aModuleAst body ___importBoundNamesInto___: IdentitySet new).
+		CallAst futureAnnotations: aModuleAst ___hasFutureAnnotations___.
+		CallAst moduleBodyBeingCompiled: true.
+		[| ws |
+		ws := PrettyWriteStream on: Unicode7 new.
+		ws markStartOfMethod.
+		stmt printSmalltalkOn: ws]
+			on: CompileWarning do: [:ex | ex resume].
+		harvested := IdentityKeyValueDictionary new.
+		table keysAndValuesDo: [:k :v |
+			((before includesKey: k) not or: [(before at: k) ~~ v])
+				ifTrue: [harvested at: k put: v]].
+		harvested]
+		ensure: [
+			| t |
+			"Everything the emit added goes; everything that was there before is
+			put back, including an entry the emit's own release
+			(___irForgetClassDefIds___:) removed because it shared an id."
+			t := self ___irDefTable___.
+			t keys do: [:k | (before includesKey: k) ifFalse: [t removeKey: k ifAbsent: []]].
+			before keysAndValuesDo: [:k :v | t at: k put: v].
+			saved isNil
+				ifTrue: [temps removeKey: #'GrailCompileContext' ifAbsent: []]
+				ifFalse: [temps at: #'GrailCompileContext' put: saved].
+			(savedIR at: 2) isNil
+				ifTrue: [
+					temps removeKey: #'___grailIRCodegenEnabled___' ifAbsent: [].
+					temps removeKey: #'___grailIRCodegenChecked___' ifAbsent: []]
+				ifFalse: [
+					temps at: #'___grailIRCodegenEnabled___' put: (savedIR at: 1).
+					temps at: #'___grailIRCodegenChecked___' put: (savedIR at: 2)].
+			savedCensus isNil ifFalse: [temps at: #'___grailIRCensusOn___' put: savedCensus]].
+	^ result
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irInstallDef: anId on: aClass or: aSource category: aCategory [
 	"The class-method seam's RUNTIME half.  ClassDefAst emits, in place of
@@ -5589,7 +5850,7 @@ importlib class >> ___irInstallDef: anId on: aClass or: aSource category: aCateg
 	compiles exactly as it always did.  The same counters as the module seam
 	record the outcome (___irStats___)."
 
-	| entry ok shared |
+	| entry ok shared builder |
 	"A METHOD-LOCAL class's method had its IR built at emit time (cut 79): the
 	memo holds the builder, and generating from it gives THIS class its own
 	method.  The memo is NOT released -- this statement runs again on the next
@@ -5598,7 +5859,13 @@ importlib class >> ___irInstallDef: anId on: aClass or: aSource category: aCateg
 	shared := self ___irSharedMethodTable___ at: anId otherwise: nil.
 	(shared notNil and: [self ___irCodegenEnabled___]) ifTrue: [
 		(self ___irRegenerateMethod___: (shared at: 2) selector: (shared at: 1)
-			on: aClass category: aCategory) ifTrue: [^ aClass]].
+			on: aClass category: aCategory) ifTrue: [
+				"The memo already holds the builder; caching it under this class's
+				method costs an entry, and lets a copy of the method be
+				regenerated too (___irRegenerate___:onto:category:)."
+				self ___irCacheBuilder___: (shared at: 2)
+					forMethod: (aClass compiledMethodAt: (shared at: 1) environmentId: 1 otherwise: nil).
+				^ aClass]].
 	entry := self ___irRegisteredDef___: anId.
 	"Release the registration now: a class-build statement runs once per
 	execution of the module body, and holding every def AST and context
@@ -5608,8 +5875,22 @@ importlib class >> ___irInstallDef: anId on: aClass or: aSource category: aCateg
 	entry notNil ifTrue: [self ___irDefTable___ removeKey: anId ifAbsent: []].
 	ok := false.
 	(entry notNil and: [self ___irCodegenEnabled___]) ifTrue: [
+		"Built as a REUSABLE builder (P2.1) -- instVar offsets and class-statement
+		helpers deferred, exactly as a method-local class's shared build -- and
+		then generated for aClass.  The method that lands is the one
+		___installIRMethodOn___:category: installed, but the builder survives
+		it, in the session cache, carrying the def id in the method; so a
+		consumer copying this method onto another class can regenerate it there
+		(___irRegenerate___:onto:category:) instead of recompiling its text
+		twin."
 		ok := [CallAst ___withCompileContext___: (entry at: 2) do: [
-				(entry at: 1) ___installIRMethodOn___: aClass category: aCategory.
+				| meth |
+				builder := (entry at: 1) ___irBuilderFor___: aClass.
+				builder defId: anId asString.
+				meth := builder ___irRegenerateOn___: aClass.
+				[aClass addCategory: aCategory environmentId: 1] on: Error do: [:ex | ex return: nil].
+				aClass moveMethod: builder selector toCategory: aCategory environmentId: 1.
+				self ___irCacheBuilder___: builder forMethod: meth.
 				true]]
 			on: Error do: [:ex |
 				self ___irNoteFallback___: (entry at: 1) error: ex.
@@ -5618,6 +5899,28 @@ importlib class >> ___irInstallDef: anId on: aClass or: aSource category: aCateg
 		self ___irNoteCompiled___: (entry at: 1).
 		^ aClass].
 	^ aClass @env1:___compileMethod: aSource category: aCategory
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irMethodFor___: aMethod on: aClass [
+	"aMethod -- an IR-built Python method -- generated for aClass and NOT
+	installed anywhere, or nil.  For the consumers that install the method
+	themselves (a session method under a ``___grailDirect'' selector) or only
+	run it (UnboundMethod's special-receiver form, which needs a method
+	compiled against SmallInteger, Character, ... and must leave that class's
+	dictionary alone).  nil when the method is not IR, cannot be rebuilt, or
+	does not fit aClass (an instVar it reads that aClass lacks, a class
+	statement whose helper aClass cannot reach): the consumer keeps its text
+	route for those."
+
+	| builder |
+	builder := self ___irBuilderForMethod___: aMethod.
+	builder isNil ifTrue: [^ nil].
+	^ [builder ___irGenerateFor___: aClass]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
 
 ]
 
@@ -5682,6 +5985,146 @@ importlib class >> ___irPurgeDefTableForModule___: aModuleName [
 		(((entry at: 2) at: #'moduleNameBeingCompiled' otherwise: nil) asString = modName)
 			ifTrue: [victims add: id]].
 	victims do: [:id | table removeKey: id ifAbsent: []]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irRebuildBuilderFor___: aMethod [
+	"A builder for aMethod made afresh from its def's Python source, or nil.
+	The cache-miss half of ___irBuilderForMethod___: -- a builder evicted, or
+	one built in another session (a deployed class's methods, whose builders
+	never existed in this one).
+
+	From the method's def id (___irDefIdOf___:) it finds the module, reads and
+	parses its source as a load does, re-runs the class's emit for the compile
+	context (___irHarvestDefsFor___:from:name:moduleClass:) and builds every
+	IR def of that class against the shared stand-in, deferring instVar offsets
+	and class-statement helpers exactly as a method-local class's shared build
+	does -- which is what makes the result generate for any class.  Each
+	sibling whose method is still on the class is cached too: a consumer that
+	copies one method of a class usually copies the rest.
+
+	REFUSES rather than guess.  nil when the module's recorded source hash
+	disagrees with the file (a tracked module), when the re-parsed def's text
+	is not the text the method was built from, or on any error."
+
+	| id parts modName side inst modClass path ast harvested home thisClass result |
+	id := self ___irDefIdOf___: aMethod.
+	id isNil ifTrue: [^ nil].
+	parts := id subStrings: '|'.
+	parts size = 5 ifFalse: [^ nil].
+	modName := parts at: 1.
+	side := parts at: 5.
+	^ [
+		inst := self ___canonicalModules___ at: modName otherwise: nil.
+		inst isNil ifTrue: [inst := (self @env1:modules) at: modName ifAbsent: [nil]].
+		inst isNil ifTrue: [^ nil].
+		modClass := inst class.
+		path := [inst dynamicInstVarAt: #'__file__'] on: Error do: [:ex | ex return: nil].
+		(path isNil or: [path == None]) ifTrue: [path := self @env1:___moduleNameToPath___: modName].
+		path isNil ifTrue: [^ nil].
+		path := path asString.
+		(GsFile existsOnServer: path) == true ifFalse: [^ nil].
+		(self ___isTrackedModule___: modName) ifTrue: [
+			(self ___sourceHashNowOf___: modName) = (self ___canonicalModuleHashes___ at: modName otherwise: nil)
+				ifFalse: [^ nil]].
+		ast := (self ___compilingFile___: path do: [
+				ModuleAst parseSource: (self ___sourceStringForPath___: path)])
+			path: path;
+			yourself.
+		ast name: modName.
+		ast useTempsForBlock: false.
+		ast setParent: nil.
+		self expandStarImports: ast.
+		harvested := self ___irHarvestDefsFor___: id from: ast name: modName moduleClass: modClass.
+		harvested isNil ifTrue: [^ nil].
+		home := aMethod inClass.
+		thisClass := home isMeta ifTrue: [home thisClass] ifFalse: [home].
+		result := nil.
+		harvested keysAndValuesDo: [:k :entry |
+			| kparts |
+			kparts := k asString subStrings: '|'.
+			(kparts size = 5 and: [(kparts at: 2) = (parts at: 2)]) ifTrue: [
+				| builder |
+				builder := [CallAst ___withCompileContext___: (entry at: 2) do: [
+						(entry at: 1) ___irBuilderFor___: ((kparts at: 5) = 'c'
+							ifTrue: [self ___irShareStandInClass___ class]
+							ifFalse: [self ___irShareStandInClass___])]]
+					on: Error do: [:ex |
+						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+						ex return: nil].
+				builder notNil ifTrue: [
+					| sel owner sib |
+					builder defId: k asString.
+					sel := builder selector.
+					k asString = id
+						ifTrue: [
+							(self ___irRebuiltSourceOf___: builder matches: aMethod)
+								ifTrue: [
+									result := builder.
+									self ___irCacheBuilder___: builder forMethod: aMethod]]
+						ifFalse: [
+							owner := (kparts at: 5) = 'c' ifTrue: [thisClass class] ifFalse: [thisClass].
+							sib := owner compiledMethodAt: sel environmentId: 1 otherwise: nil.
+							((self ___irDefIdOf___: sib) = k asString
+								and: [self ___irRebuiltSourceOf___: builder matches: sib])
+								ifTrue: [self ___irCacheBuilder___: builder forMethod: sib]]]]].
+		result]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irRebuiltSourceOf___: aBuilder matches: aMethod [
+	"Whether aBuilder, rebuilt from the def's source on disk, was built from
+	the same Python aMethod was: the attached source slice is compared byte
+	for byte, the position map trailer excluded.  The module hash already
+	vouches for a tracked module; this also covers an untracked one, and is
+	the check that the def id found the same def."
+
+	| mine theirs |
+	aMethod isNil ifTrue: [^ false].
+	mine := aBuilder attachedSource.
+	theirs := [aMethod sourceString] on: Error do: [:ex | ex return: nil].
+	(mine isNil or: [theirs isNil]) ifTrue: [^ false].
+	theirs size < mine size ifTrue: [^ false].
+	^ (theirs copyFrom: 1 to: mine size) = mine
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irRegenerate___: aMethod onto: aClass category: aCategory [
+	"Regenerate aMethod -- an IR-built Python method of some class -- for aClass
+	and install it in aClass's env-1 dictionary under its own selector and
+	aCategory; answer the new GsNMethod, or nil (not IR, cannot be rebuilt,
+	does not fit aClass), in which case nothing was installed and the consumer
+	keeps its text route.
+
+	The regenerate API P2.2's consumers move onto: the MI merge and the enum
+	gap-fill copying a base's method onto the class being built,
+	@smalltalk_class moving a temporary class's defs onto a Smalltalk class.
+	The new method gets aClass as its inClass and aClass's instVar offsets,
+	and carries the same def id, so it can itself be regenerated later.
+
+	Category as ___irRegenerateMethod___:selector:on:category: sets it: the
+	runtime tells a def from a class-body value by category."
+
+	| builder meth sel |
+	builder := self ___irBuilderForMethod___: aMethod.
+	builder isNil ifTrue: [^ nil].
+	sel := aMethod selector.
+	meth := [builder ___irRegenerateOn___: aClass]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	meth isNil ifTrue: [^ nil].
+	[aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
+	[aClass moveMethod: sel toCategory: aCategory environmentId: 1]
+		on: Error do: [:e | e return: nil].
+	self ___irCacheBuilder___: builder forMethod: meth.
+	^ meth
 
 ]
 
@@ -5770,6 +6213,8 @@ importlib class >> ___irRegisterDef: aDef forClass: aClassDefAst name: aName cla
 			table := self ___irDefTable___.
 			table at: id put: { aDef. CallAst ___compileContextSnapshot___ }]
 		ifFalse: [
+			"The id goes into the method too (PyMethodIRBuilder >> defId:)."
+			builder defId: id asString.
 			self ___irSharedMethodTable___ at: id
 				put: { aDef ___irSelector___ asSymbol. builder }].
 	ids := self ___irClassDefIdsFor___: aClassDefAst.
@@ -11330,6 +11775,8 @@ importlib class >> resetSessionForReinstall [
 	st @env0:removeKey: #'GrailFastOverrideHolders' ifAbsent: [].
 	st @env0:removeKey: #'GrailPinHolder' ifAbsent: [].
 	st @env0:removeKey: #'GrailRecordedDispatchersInstalled' ifAbsent: [].
+	"6. And the IR builders: they were built by the old codegen."
+	self ___irBuilderCacheReset___.
 	^ toEvict @env0:size
 
 ]
