@@ -395,6 +395,48 @@ parse-bound: 300 runs took 229–242 ms on both paths.
 * the module-statement emitter coverage P4 audits. This script covered
   only the statements above.
 
+## The class-build emitter interface (P3.1)
+
+`ClassDefAst >> printSmalltalkRuntimeWith:` writes a class statement's build
+through a `ClassBuildEmitter`; `ClassBuildTextEmitter` is the text backend and
+P3.2 adds the IR one. Each operation is a Smalltalk construct, and every
+`e unrouted:` left in it is a helper not yet written through the interface.
+
+**The text backend must not change a byte.** `trace_diff/` checks that:
+
+```bash
+./install.sh                                          # unmodified code
+experiments/ir/trace_diff/run_trace.sh /tmp/p3/base   # ~20 min, both arms
+# ... change the emitter, ./install.sh ...
+experiments/ir/trace_diff/run_trace.sh /tmp/p3/after
+experiments/ir/trace_diff/compare.py /tmp/p3/base /tmp/p3/after
+```
+
+It dumps `GRAIL_CODEGEN_TRACE_DIR` for the stdlib list (`stdlib_modules.txt`,
+the one `census_stdlib.tpz` imports) and the CPython test manifest, on the IR
+arm and on `GRAIL_IR_CODEGEN=0`, and compares every `.tpz` byte for byte and
+every `.ir` with its per-session `objId:`s removed. Both arms, because a def
+built through IR is not in the `.tpz`, so a class inside such a def is only
+dumped by the text arm. Each session forgets the canonical registries in its
+own transaction first; otherwise a deployed module warm-binds and is dumped
+as nothing. The `.ir` is UTF-8, UTF-16 or UTF-32 depending on the widest
+character in it. When P3.1 landed: 2,412 `.tpz` files, 848 MB, 0 bytes
+different.
+
+**Can the interface express every construct?** Yes:
+`16_class_build_constructs.tpz` builds each construct shape the class build
+writes through `PyMethodIRBuilder` and gets the same result as the text,
+including `[ | X | ... ] @env0:value`, the nil guard, the cascade and nested
+brace arrays.
+
+**String slots per class build.** `trace_diff/slots.py <root>/ir` counts
+string literals per compiled method and per class-build statement. It does
+not merge equal literals the way the compiler does, so it gives an upper
+bound. The largest class build on either corpus is 1,820, far under 8,192, so
+P3.2 does not need to split a class across methods. Only a whole module body
+is over the limit: test.test_typing's `initialize` counts 8,489 here and 5,157
+real slots (P0.7). That is a P4 problem.
+
 ## Not yet explored
 
 * `GsComPathNode` — deliberately skipped: it addresses fixed instVar offsets,

@@ -1,0 +1,40 @@
+! Trace-dump driver for P3.1's byte-identity harness.
+! env: TRACE_LIST (module list file), TRACE_SHARD, TRACE_NSHARDS,
+!      GRAIL_CODEGEN_TRACE_DIR (where importlib writes <module>.tpz/.ir)
+login
+set compile_env: 0
+run
+| out names ok fail all file line shard nShards path env |
+out := GsFile stdout.
+env := [:k :d | (System gemEnvironmentVariable: k) ifNil: [d]].
+path := env value: 'TRACE_LIST' value: nil.
+shard := (env value: 'TRACE_SHARD' value: '0') asNumber.
+nShards := (env value: 'TRACE_NSHARDS' value: '1') asNumber.
+out nextPutAll: 'TRACEDIR|' , (importlib ___codegenTraceDir___ ifNil: ['NONE']) , '|IR|' , importlib ___irCodegenEnabled___ printString; lf.
+"Every import must COMPILE: forget, in this session only, everything a
+committed deployment would let an import warm-bind.  Never committed."
+importlib ___canonicalRegistryRestore___: ((Array new: 8 withAll: IdentitySet new)
+  at: 5 put: PythonModules keys asIdentitySet; yourself).
+out nextPutAll: 'CANONICAL|' , importlib ___canonicalModules___ size printString , '|LOADED|' , (importlib @env1:modules) size printString; lf.
+all := OrderedCollection new.
+file := GsFile openReadOnServer: path.
+[(line := file nextLine) isNil] whileFalse: [
+  line := line trimSeparators.
+  (line isEmpty or: [(line at: 1) == $#]) ifFalse: [all add: line]].
+file close.
+names := OrderedCollection new.
+1 to: all size do: [:i | ((i - 1) \\ nShards) = shard ifTrue: [names add: (all at: i)]].
+ok := 0. fail := 0.
+names do: [:n |
+  [((Python at: #builtins) @env1:instance) @env1:___import__: { n } kw: nil. ok := ok + 1.
+   out nextPutAll: 'IMPORTED|' , n; lf]
+    on: Error, BaseException do: [:ex |
+      fail := fail + 1.
+      out nextPutAll: 'IMPORTFAIL|' , n , '|' , ([ex messageText copyFrom: 1 to: (ex messageText size min: 160)] on: Error do: [:e | ex class name asString]); lf.
+      ex return: nil]].
+out nextPutAll: 'DONE|OK|' , ok printString , '|FAIL|' , fail printString; lf.
+System abortTransaction.
+^ 'done'
+%
+logout
+exit
