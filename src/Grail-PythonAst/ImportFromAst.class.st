@@ -89,9 +89,17 @@ ImportFromAst >> ___emitIRStatementOn___: aBuilder [
 					send: #'___importFrom___:' to: imported
 					with: { aBuilder obj: attrName asSymbol } env: 1].
 		aBuilder atNode: self.
-		aBuilder add: (aBuilder
-			assign: (aBuilder leafFor: (self boundNameFor: alias) asSymbol)
-			from: v)].
+		"Where the binding lands is ImportAst's rule, asked the same way: a
+		``global''-declared name binds the MODULE (``global _Unparser; from
+		_ast_unparse import Unparser as _Unparser'', ast.unparse), anything
+		else the local leaf."
+		(self ___nameStoreRoutesToModule___: (self boundNameFor: alias))
+			ifTrue: [aBuilder add: (self
+				___emitIRModuleScopeStoreOf___: (self boundNameFor: alias)
+				from: v on: aBuilder)]
+			ifFalse: [aBuilder add: (aBuilder
+				assign: (aBuilder leafFor: (self boundNameFor: alias) asSymbol)
+				from: v)]].
 	^ self
 
 ]
@@ -141,7 +149,14 @@ ImportFromAst >> ___irEligibleStatementLocals___: localNames [
 	___importArgsSourceFor___: -- which only the text emit does."
 	self ___isRelativeInDoit___ ifTrue: [^ false].
 	(names isNil or: [names isEmpty]) ifTrue: [^ false].
-	(self ___irBoundNames___ allSatisfy: [:n | localNames includes: n])
+	"A bound name need not be a LOCAL: ``global n; from m import x as n''
+	binds the module, through the store every other module-bound binding form
+	takes -- ImportAst's rule, the one the emit asks too.  It was the only
+	reason ImportFromAst refused in the corpus (ast.unparse, random.Random.seed,
+	test_types SubinterpreterTests.setUpClass, all ``shape:ImportFromAst'')."
+	(self ___irBoundNames___ allSatisfy: [:n |
+		(localNames includes: n)
+			or: [self ___nameStoreRoutesToModule___: n asSymbol]])
 		ifFalse: [^ false].
 	^ [self resolvedModuleName notNil] on: Error do: [:ex | false]
 

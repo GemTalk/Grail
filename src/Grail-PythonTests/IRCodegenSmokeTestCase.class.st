@@ -371,15 +371,26 @@ IRCodegenSmokeTestCase >> testIRPathWasActuallyTaken [
 			class method, netting +1 from 642.  Together the answer is 643, and
 			the second merge will fire this assertion to say so.
 
+			Cut ``P1.2 calls, super and comprehension targets'': 643 -> **645**,
+			and it read 646 first.  The +2 is lv_in_comprehension and
+			d_in_comprehension, the two top-level defs whose locals() / dir()
+			sat in a comprehension (`CallAst:frameSensitive-locals' / `-dir').
+			The third, transient one was text_caller: its opt-out was the
+			nested bare ``super()'' the type-alias note calls durable, and the
+			same cut emits the classless super() raises, so the premise
+			assertion fired a FOURTH time.  The opt-out is now a method-local
+			class whose body holds a walrus (`classDef:walrus', a P3 shape),
+			and the count went back to 645.
+
 			The number is exact on purpose -- it is what makes a silently dead
 			seam visible.  Expect to re-measure whenever a cut moves
 			eligibility or the fixture grows, and record the split rather than
 			just the total.  Note it fails in the FLAG-OFF suite, because this
 			test forces the flag: a stale pin looks alarming and is not a
 			defect."
-			self assert: (stats at: #compiled) equals: 643
+			self assert: (stats at: #compiled) equals: 645
 				description: 'IR compiled count was ' , (stats at: #compiled) printString
-					, ', expected 643']
+					, ', expected 645']
 		ifFalse: [
 			self deny: importlib ___irCodegenEnabled___
 				description: 'IR reported enabled with no platform support'.

@@ -136,7 +136,7 @@ BareEvalExecScopeTestCase >> testTheBareRewriteIsNowEligible [
 	`-bareRewrite' rows.  With the cut: 12 compiled, 5 eligible, and three
 	`-bareRewrite' sites left.
 
-	THE NUMBER HERE HAS BEEN 0, THEN 3, AND IS NOW 1 -- and each move was a
+	THE NUMBER HERE HAS BEEN 0, THEN 3, THEN 1, AND IS NOW 0 -- and each move was a
 	different cut narrowing a refusal rather than anything about this fixture
 	changing.
 
@@ -152,6 +152,13 @@ BareEvalExecScopeTestCase >> testTheBareRewriteIsNowEligible [
 	COMPREHENSION at the bottom of the fixture, ``[eval('c') for c in ...]'',
 	whose targets step 0c prints through a different helper; that one is a real
 	gap and refuses under its own name.
+
+	It is 0 since the P1.2 call/comprehension cut, which found that the
+	``different helper'' is used only at MODULE scope.  Inside a def step 0c
+	takes the same function snapshot, and that snapshot appends the enclosing
+	comprehensions' targets -- which ___emitIRLocalsSnapshotOn___: already
+	did too.  So the last site was spellable all along as well, and compiled
+	reads one higher.
 
 	Nothing about this fixture's eligibility moved across any of it except
 	upward: compiled read 12 before the bare-rewrite cut and 14 after, and
@@ -170,12 +177,12 @@ BareEvalExecScopeTestCase >> testTheBareRewriteIsNowEligible [
 		+ (counts at: #'cm:CallAst:frameSensitive-eval-bareRewrite' ifAbsent: [0])
 		+ (counts at: #'CallAst:frameSensitive-exec-bareRewrite' ifAbsent: [0])
 		+ (counts at: #'cm:CallAst:frameSensitive-exec-bareRewrite' ifAbsent: [0]).
-	self assert: bare = 1
-		description: 'the bare rewrite refuses somewhere new -- the ONE '
-			, 'comprehension site is expected and nothing else: ' , bare printString
+	self assert: bare = 0
+		description: 'the bare rewrite refuses again -- every site in this '
+			, 'fixture, the comprehension included, is spellable: ' , bare printString
 			, ' of ' , counts printString.
-	self assert: (counts at: #'compiled' ifAbsent: [0]) >= 14
-		description: 'fewer top-level defs compiled than the cut measured (14): '
+	self assert: (counts at: #'compiled' ifAbsent: [0]) >= 15
+		description: 'fewer top-level defs compiled than the cut measured (15): '
 			, counts printString.
 	self assert: (counts at: #'cm:eligible' ifAbsent: [0]) >= 5
 		description: 'Holder''s bare-eval methods are not IR-eligible: '

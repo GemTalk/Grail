@@ -195,7 +195,10 @@ DeleteAst >> ___irEligibleStatementLocals___: localNames [
 	stays on text and its guard.  In a module def none of the text's other
 	name branches (module-scope, class-body, the ``__class__'' cell) apply."
 
-	self deletedTargets isEmpty ifTrue: [^ false].
+	"``del ()'' and ``del []'' are legal and delete nothing -- an empty target
+	list, which CPython compiles to no instruction at all.  The emit's loop
+	then adds no statement, which is the text's empty output too.  Refusing it
+	was the census's ``DeleteAst:target'' (test_grammar test_del_stmt)."
 	^ self deletedTargets allSatisfy: [:t |
 		((t isKindOf: SubscriptAst)
 			and: [(t value ___irEligibleValueLocals___: localNames)

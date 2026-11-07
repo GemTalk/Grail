@@ -97,7 +97,7 @@ AssignAst >> ___emitIRChainOn___: aBuilder [
 	tuple-unpack emitter reading the chain temp."
 
 	| chainLeaf v |
-	chainLeaf := (aBuilder leafFor: #'___chain___') ifNil: [aBuilder tempNamed: #'___chain___'].
+	chainLeaf := self ___irChainLeafOn___: aBuilder.
 	v := value ___emitIRValueOn___: aBuilder.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: chainLeaf from: v).
@@ -117,6 +117,15 @@ AssignAst >> ___emitIRChainOn___: aBuilder [
 				ifFalse: [aBuilder add: (aBuilder
 					assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))]].
 		(t isKindOf: AttributeAst) ifTrue: [
+			t ___irIsClassChangeTarget___
+				ifTrue: [
+					| recv |
+					recv := t value ___emitIRValueOn___: aBuilder.
+					aBuilder atNode: t.
+					aBuilder add: (aBuilder
+						send: #'___pyChangeClassOf:to:' to: (aBuilder globalNamed: #object)
+						with: { recv. aBuilder var: chainLeaf } env: 1)]
+				ifFalse: [
 			((t value isKindOf: NameAst) and: [t value ___irIsSelfReceiver___])
 				ifTrue: [
 					aBuilder atNode: t.
@@ -138,7 +147,7 @@ AssignAst >> ___emitIRChainOn___: aBuilder [
 					aBuilder atNode: t.
 					aBuilder add: (aBuilder
 						send: #'__setattr__:_:' to: recv
-						with: { aBuilder obj: t ___mangledAttr___ asString. aBuilder var: chainLeaf })]].
+						with: { aBuilder obj: t ___mangledAttr___ asString. aBuilder var: chainLeaf })]]].
 		(t isKindOf: SubscriptAst) ifTrue: [
 			| obj idx |
 			obj := t value ___emitIRValueOn___: aBuilder.
@@ -207,7 +216,7 @@ AssignAst >> ___emitIRReleaseStoredValueOn___: aBuilder [
 	then kept o alive past ``o = None'' (test_slice's test_cycle)."
 
 	self ___storeOrderIsObservable___ ifFalse: [^ self].
-	aBuilder add: (aBuilder assign: (aBuilder leafFor: #'___chain___') from: aBuilder nilLit)
+	aBuilder add: (aBuilder assign: (self ___irChainLeafOn___: aBuilder) from: aBuilder nilLit)
 
 ]
 
@@ -266,13 +275,13 @@ AssignAst >> ___emitIRStatementOn___: aBuilder [
 		send.  The target travels as an ARGUMENT: GemStone's changeClassTo:
 		refuses an object that is self on the stack, which is why the text does
 		not spell it ``(obj) __setattr__: '__class__' _: (X)''.  A self
-		receiver never reaches here (___irAttributeStoreTarget___: refuses it)
-		because self is on the stack whatever the spelling.
+		reference takes the text's default path instead -- the __setattr__
+		below -- because self is on the stack whatever the spelling.
 
 		Tested FIRST, before the slot branch below, as the text tests it: no
 		__slots__ entry is ever named ``__class__'', so the order is the text's
 		rather than a precedence this path needs."
-		(tgt attr asString = '__class__') ifTrue: [
+		tgt ___irIsClassChangeTarget___ ifTrue: [
 			v := self ___emitIRStoredValueOn___: aBuilder.
 			objV := tgt value ___emitIRValueOn___: aBuilder.
 			aBuilder atNode: self.
@@ -324,7 +333,7 @@ AssignAst >> ___emitIRStoredValueOn___: aBuilder [
 	| v chainLeaf |
 	v := value ___emitIRValueOn___: aBuilder.
 	self ___storeOrderIsObservable___ ifFalse: [^ v].
-	chainLeaf := (aBuilder leafFor: #'___chain___') ifNil: [aBuilder tempNamed: #'___chain___'].
+	chainLeaf := self ___irChainLeafOn___: aBuilder.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder assign: chainLeaf from: v).
 	^ aBuilder var: chainLeaf
@@ -351,14 +360,14 @@ AssignAst >> ___irAttributeStoreTarget___: localNames [
 	reproduces that spelling (___emitIRChangeClassOn___:target:), so the shape
 	is admitted here.
 
-	A SELF receiver still refuses, for the reason the text records: ``self''
-	is on the stack however it is spelled, so the argument form cannot rescue
-	it and the text keeps it on the default path.  The two corpus sites are
-	both foreign receivers -- werkzeug's Response.force_type and test_super's
+	A SELF receiver is admitted too, and takes the text's default path --
+	``self @env1:__setattr__: '__class__' _: (X)'' -- for the reason the text
+	records: ``self'' is on the stack however it is spelled, so the argument
+	form cannot rescue it.  It used to refuse, which was the census's
+	``AssignAst:target-AttributeAst'' (test_descr's A.__del__, ``self.__class__
+	= O'').  The two foreign-receiver corpus sites are werkzeug's
+	Response.force_type and test_super's
 	test___class___modification_multithreaded."
-	tgt attr asString = '__class__' ifTrue: [
-		((tgt value isKindOf: NameAst)
-			and: [CallAst isSelfReference: tgt value id]) ifTrue: [^ nil]].
 	(tgt value ___irEligibleValueLocals___: localNames) ifFalse: [^ nil].
 	^ tgt
 
@@ -366,12 +375,36 @@ AssignAst >> ___irAttributeStoreTarget___: localNames [
 
 { #category : 'Grail-IR Codegen' }
 AssignAst >> ___irChainEligible___: localNames [
-	"``a = b = c = value'' (cut 63): every target takes an emitted chain branch
-	and the chain temp's name is free."
+	"``a = b = c = value'' (cut 63): every target takes an emitted chain branch.
+	The chain temp's name need not be free: ___irChainLeafOn___: picks one that
+	is (that was ``AssignAst:chained-holder'')."
 
 	targets size > 1 ifFalse: [^ false].
-	(localNames includes: '___chain___') ifTrue: [^ false].
 	^ targets allSatisfy: [:t | (self ___irChainTargetKind___: t locals: localNames) notNil]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AssignAst >> ___irChainLeafOn___: aBuilder [
+	"The method (or closure) temp that holds a chained or value-first store's
+	value -- the text's block temp ``___chain___''.
+
+	Registered under a key no Python name can spell, so a user local that
+	happens to be called ``___chain___'' is never mistaken for it: the old
+	``leafFor: #'___chain___''' found the USER's temp and the chain clobbered
+	it, which is why a def with such a local refused
+	(``AssignAst:chained-holder'').  The temp's own name is the first of
+	``___chain___'', ``___chain_2___'', ... that no registered local holds."
+
+	| key n leafName |
+	key := #'___chain___ (helper)'.
+	(aBuilder leafFor: key) ifNotNil: [:leaf | ^ leaf].
+	leafName := #'___chain___'.
+	n := 1.
+	[(aBuilder leafFor: leafName) notNil] whileTrue: [
+		n := n + 1.
+		leafName := ('___chain_' , n printString , '___') asSymbol].
+	^ aBuilder tempNamed: key leafName: leafName
 
 ]
 
@@ -383,9 +416,9 @@ AssignAst >> ___irChainTargetKind___: aTarget locals: localNames [
 	bound to the MODULE -- ``global n'' or a module-level chain -- stored
 	through ___emitIRModuleStoreOf___:to:on:; the class-body-runtime and
 	closure-cell stores still stay on text), #attrSelf,
-	#attrForeign (a receiver that is an emittable value; the ``__class__''
-	type change stays on text), #subscript, #unpack (a tuple / list target the
-	unpack emitter handles, from the chain temp)."
+	#attrForeign (a receiver that is an emittable value), #subscript, #unpack (a tuple / list target the
+	unpack emitter handles, from the chain temp), #attrClass (``o.__class__'',
+	the type change)."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
 		((aTarget ctx) isKindOf: StoreAst) ifFalse: [^ nil].
@@ -415,7 +448,12 @@ AssignAst >> ___irChainTargetKind___: aTarget locals: localNames [
 		(localNames includes: aTarget id asString) ifFalse: [^ nil].
 		^ #local].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
-		aTarget attr asString = '__class__' ifTrue: [^ nil].
+		"``a = o.__class__ = X'': the type change, as the single target makes
+		it; a self reference's ``__class__'' falls through to the self branch,
+		the text's default path."
+		aTarget ___irIsClassChangeTarget___ ifTrue: [
+			^ (aTarget value ___irEligibleValueLocals___: localNames)
+				ifTrue: [#attrClass] ifFalse: [nil]].
 		((aTarget value isKindOf: NameAst) and: [aTarget value ___irIsSelfReceiver___])
 			ifTrue: [^ #attrSelf].
 		^ (aTarget value ___irEligibleValueLocals___: localNames) ifTrue: [#attrForeign] ifFalse: [nil]].
@@ -538,7 +576,6 @@ AssignAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 { #category : 'Grail-IR Codegen' }
 AssignAst >> ___irRefusalDetail___: localSet [
 	targets size > 1 ifTrue: [
-		(localSet includes: '___chain___') ifTrue: [^ #'AssignAst:chained-holder'].
 		targets do: [:t |
 			(self ___irChainTargetKind___: t locals: localSet) isNil
 				ifTrue: [^ ('AssignAst:chained-target-' , t class name asString) asSymbol]].
@@ -654,6 +691,23 @@ AssignAst >> ___storeOrderIsObservable___ [
 
 	value ___evaluationIsInert___ ifTrue: [^ false].
 	^ (targets first ___storeOperands___ allSatisfy: [:each | each ___evaluationIsInert___]) not
+
+]
+
+{ #category : 'Grail-code generation' }
+AssignAst >> ___textChainTempName___ [
+	"The block temp the text's chained and value-first stores bind the value
+	to: ``___chain___'', or -- when an enclosing function has a Python local of
+	that name, which the block temp would shadow -- the first free
+	``___chain_N___''.  The IR twin is ___irChainLeafOn___:."
+
+	| name n |
+	name := '___chain___'.
+	n := 1.
+	[self ___pythonLocalInEnclosingFunctions___: name asSymbol] whileTrue: [
+		n := n + 1.
+		name := '___chain_' , n printString , '___'].
+	^ name
 
 ]
 
@@ -873,7 +927,7 @@ AssignAst >> printSmalltalkOn: aStream [
 	statement.  Handle the chain by binding `value` to a temp once,
 	then assigning each target from that temp."
 
-	| tgt |
+	| tgt chain |
 	targets size = 1 ifTrue: [
 		tgt := targets first.
 		(((tgt isKindOf: AttributeAst) or: [tgt isKindOf: SubscriptAst])
@@ -1013,11 +1067,25 @@ AssignAst >> printSmalltalkOn: aStream [
 		aStream nextPut: $..
 		^self
 	].
-	"Chained assignment: `a = b = c = value` — bind once, assign to each."
-	aStream nextPutAll: '[| ___chain___ | ___chain___ := '.
+	"Chained assignment: `a = b = c = value` — bind once, assign to each.
+	The temp is ___textChainTempName___, not a fixed ``___chain___'': a
+	block temp of that name SHADOWED a user local of the same name, so
+	``___chain___ = 1'' as one of the targets bound the temp, not the local."
+	chain := self ___textChainTempName___.
+	aStream nextPutAll: '[| ' , chain , ' | ' , chain , ' := '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: '. '.
 	targets do: [:eachTgt |
+		"``a = o.__class__ = X'' is the in-place type change, as the single
+		target's is (printSmalltalkAttributeStoreOn:target:).  Through
+		__setattr__ it changed what ``o.__class__'' reads and left ``type(o)''
+		the old class."
+		((eachTgt isKindOf: AttributeAst) and: [eachTgt ___irIsClassChangeTarget___])
+			ifTrue: [
+				aStream nextPutAll: '___object___ @env1:___pyChangeClassOf: ('.
+				eachTgt value printSmalltalkWithParenthesisOn: aStream.
+				aStream nextPutAll: ') to: ' , chain , '. ']
+			ifFalse: [
 		(eachTgt isKindOf: AttributeAst) ifTrue: [
 			"Chained ``...X = rest = value'' attribute store: the same
 			routing as the single target (printSmalltalkAttributeStoreOn:)
@@ -1039,24 +1107,24 @@ AssignAst >> printSmalltalkOn: aStream [
 					dynamic-instVar storage (as before)."
 					(CallAst ___inferredSlotAccessorFor___: eachTgt value attr: eachTgt ___mangledAttr___)
 						ifNotNil: [:acc |
-							aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ___chain___. ']
+							aStream nextPutAll: 'self '; nextPutAll: acc; nextPutAll: ': ' , chain , '. ']
 						ifNil: [
 							aStream
 								nextPutAll: 'self @env1:__setattr__: ''';
 								nextPutAll: eachTgt ___mangledAttr___;
-								nextPutAll: ''' _: ___chain___. ']
+								nextPutAll: ''' _: ' , chain , '. ']
 				]
 				ifFalse: [
 					eachTgt value printSmalltalkWithParenthesisOn: aStream.
 					aStream nextPutAll: ' @env1:__setattr__: '''; nextPutAll: eachTgt ___mangledAttr___;
-						nextPutAll: ''' _: ___chain___. '
+						nextPutAll: ''' _: ' , chain , '. '
 				]
 		] ifFalse: [
 			(eachTgt isKindOf: SubscriptAst) ifTrue: [
 				eachTgt value printSmalltalkWithParenthesisOn: aStream.
 				aStream nextPutAll: ' __setitem__: '.
 				eachTgt slice printSmalltalkWithParenthesisOn: aStream.
-				aStream nextPutAll: ' _: ___chain___. '
+				aStream nextPutAll: ' _: ' , chain , '. '
 			] ifFalse: [
 				((eachTgt isKindOf: TupleAst) or: [eachTgt isKindOf: ListAst]) ifTrue: [
 					"Chained tuple-unpack target (``ka, va = ta = expr'',
@@ -1069,7 +1137,7 @@ AssignAst >> printSmalltalkOn: aStream [
 					emit a *-unpack TypeError signal into the left-hand
 					side)."
 					self emitTupleElementStoreOn: aStream target: eachTgt
-						holder: '___chain___' indexExpr: nil directRhs: '___chain___'
+						holder: chain indexExpr: nil directRhs: chain
 				] ifFalse: [
 				"Plain NameAst."
 				((eachTgt isKindOf: NameAst)
@@ -1077,7 +1145,7 @@ AssignAst >> printSmalltalkOn: aStream [
 					ifTrue: [
 						aStream nextPutAll: self ___moduleStoreReceiverExpr___; nextPutAll: ' @env0:dynamicInstVarAt: #''';
 							nextPutAll: eachTgt id;
-							nextPutAll: ''' put: ___chain___. '
+							nextPutAll: ''' put: ' , chain , '. '
 					]
 					ifFalse: [
 						"Chained twin of the single-target class-body runtime
@@ -1088,16 +1156,16 @@ AssignAst >> printSmalltalkOn: aStream [
 								aStream nextPutAll: CallAst classBodyRuntimeClass;
 									nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 									nextPutAll: eachTgt id;
-									nextPutAll: ''' put: ___chain___. '
+									nextPutAll: ''' put: ' , chain , '. '
 							]
 							ifFalse: [
 								eachTgt printSmalltalkOn: aStream.
-								aStream nextPutAll: ' := ___chain___. '
+								aStream nextPutAll: ' := ' , chain , '. '
 							]
 					]
 				]
 			]
-		]
+		]]
 	].
 	aStream nextPutAll: '] @env0:value.'.
 
@@ -1141,10 +1209,12 @@ AssignAst >> printSmalltalkValueFirstStoreOn: aStream [
 	chained assignment binds it, and the store is the one a plain value takes,
 	reading the temp."
 
-	aStream nextPutAll: '[| ___chain___ | ___chain___ := '.
+	| chain |
+	chain := self ___textChainTempName___.
+	aStream nextPutAll: '[| ' , chain , ' | ' , chain , ' := '.
 	value printSmalltalkWithParenthesisOn: aStream.
 	aStream nextPutAll: '. '.
-	(self ___storeOfTemp___: '___chain___') printSmalltalkOn: aStream.
+	(self ___storeOfTemp___: chain) printSmalltalkOn: aStream.
 	aStream nextPutAll: '] @env0:value.'
 
 ]

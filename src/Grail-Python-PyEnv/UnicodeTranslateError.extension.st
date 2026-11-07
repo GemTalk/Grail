@@ -1,5 +1,18 @@
 Extension { #name : 'UnicodeTranslateError' }
 
+{ #category : 'Grail-Initialization' }
+UnicodeTranslateError class >> ___checkConstructorArguments___: someArguments [
+	"PyArg_ParseTuple's ``UnnU'' in UnicodeTranslateError_init
+	(Objects/exceptions.c:3873-3892): object, start, end, reason."
+
+	self ___check___: someArguments count: 4.
+	self ___checkStr___: someArguments at: 1.
+	self ___checkPosition___: (someArguments @env0:at: 2).
+	self ___checkPosition___: (someArguments @env0:at: 3).
+	self ___checkStr___: someArguments at: 4
+
+]
+
 { #category : 'Grail-Python Protocol' }
 UnicodeTranslateError >> __str__ [
 	"CPython's UnicodeTranslateError_str (Objects/exceptions.c:3890-3942): the

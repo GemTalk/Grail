@@ -1,5 +1,19 @@
 Extension { #name : 'UnicodeEncodeError' }
 
+{ #category : 'Grail-Initialization' }
+UnicodeEncodeError class >> ___checkConstructorArguments___: someArguments [
+	"PyArg_ParseTuple's ``UUnnU'' in UnicodeEncodeError_init
+	(Objects/exceptions.c:3644-3666): encoding, object, start, end, reason."
+
+	self ___check___: someArguments count: 5.
+	self ___checkStr___: someArguments at: 1.
+	self ___checkStr___: someArguments at: 2.
+	self ___checkPosition___: (someArguments @env0:at: 3).
+	self ___checkPosition___: (someArguments @env0:at: 4).
+	self ___checkStr___: someArguments at: 5
+
+]
+
 { #category : 'Grail-Python Protocol' }
 UnicodeEncodeError >> __str__ [
 	"CPython's UnicodeEncodeError_str (Objects/exceptions.c:3663-3723):

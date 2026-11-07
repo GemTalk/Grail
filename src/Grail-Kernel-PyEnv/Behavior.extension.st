@@ -427,6 +427,27 @@ Behavior >> ___grailInstallClassSideForwarders___ [
 
 ]
 
+{ #category : 'Grail-Python Metadata' }
+Behavior >> ___grailMethodCodeTable___ [
+
+	"The class's ___methodCodeTable___, built once a session for each compiling of
+	it.  The accessor ClassDefAst emits answers a NEW dictionary of new code
+	objects on every call, so ``f.__code__ is f.__code__'' was false and a
+	frame's f_code was never its function's __code__ (test_sys test_getframe).
+	Keyed by the accessor itself, so a class a re-import rebuilt is read afresh."
+
+	| owner accessor memo |
+
+	owner := self @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___' environmentId: 1.
+	owner == nil ifTrue: [^ nil].
+	accessor := owner @env0:compiledMethodAt: #'___methodCodeTable___' environmentId: 1 otherwise: nil.
+	memo := SessionTemps @env0:current
+		@env0:at: #'GrailMethodCodeTables'
+		ifAbsentPut: [IdentityKeyValueDictionary @env0:new].
+	^ memo @env0:at: accessor ifAbsentPut: [self @env0:perform: #'___methodCodeTable___' env: 1]
+
+]
+
 { #category : 'Grail-Reflection' }
 Behavior >> ___grailOwnsPythonDef___: aSym family: family forwarders: includeForwarders [
 	"Does the receiver's OWN env-1 method dictionary hold aSym, or a
