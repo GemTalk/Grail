@@ -1,5 +1,20 @@
 Extension { #name : 'UnicodeDecodeError' }
 
+{ #category : 'Grail-Initialization' }
+UnicodeDecodeError class >> ___checkConstructorArguments___: someArguments [
+	"PyArg_ParseTuple's ``UOnnU'' in UnicodeDecodeError_init
+	(Objects/exceptions.c:3751-3789), then the object's buffer: encoding,
+	object, start, end, reason."
+
+	self ___check___: someArguments count: 5.
+	self ___checkStr___: someArguments at: 1.
+	self ___checkPosition___: (someArguments @env0:at: 3).
+	self ___checkPosition___: (someArguments @env0:at: 4).
+	self ___checkStr___: someArguments at: 5.
+	self ___checkBytesLike___: (someArguments @env0:at: 2)
+
+]
+
 { #category : 'Grail-Python Protocol' }
 UnicodeDecodeError >> __str__ [
 	"CPython's UnicodeDecodeError_str (Objects/exceptions.c:3786-3836), in the
