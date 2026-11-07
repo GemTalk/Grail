@@ -1401,107 +1401,221 @@ def utf_8_sig_decode(input, errors='strict', final=False):
 # here is what makes ``codecs.strict_errors`` -- which is just
 # ``lookup_error('strict')`` -- resolvable at ``import codecs`` time.
 
-def _error_span(exc):
-    """(object, start, end) for either direction of Unicode error."""
+def _is_error(exc, kinds):
+    """Whether exc's real type is one of kinds, as PyObject_TypeCheck asks
+    (Python/codecs.c:682-687): isinstance() would take a __class__ that
+    only claims one."""
+    return issubclass(type(exc), kinds)
+
+
+def _wrong_exception_type(exc):
+    """The TypeError a handler raises for an exception it does not handle
+    (wrong_exception_type, Python/codecs.c:675-679), naming its type fully
+    qualified, as %T does: without the module for builtins and __main__."""
+    kind = type(exc)
+    module = getattr(kind, '__module__', None)
+    name = kind.__qualname__
+    if isinstance(module, str) and module not in ('builtins', '__main__'):
+        name = module + '.' + name
+    return TypeError("don't know how to handle %s in error callback" % name)
+
+
+def _unicode_error_params(exc, as_bytes):
+    """(object, start, end) of a Unicode error, as _PyUnicodeError_GetParams
+    reads them (Objects/exceptions.c:3310-3359): the object must be bytes
+    for a decode error and a str for the others, and start and end are the
+    attributes, which read clipped to it."""
     obj = getattr(exc, 'object', None)
-    start = getattr(exc, 'start', None)
-    end = getattr(exc, 'end', None)
-    if obj is None or start is None or end is None:
-        args = getattr(exc, 'args', ())
-        if len(args) >= 4:
-            obj, start, end = args[1], args[2], args[3]
-        else:
-            raise TypeError('not a Unicode error with position information')
-    return (obj, start, end)
+    if obj is None:
+        raise TypeError("UnicodeError 'object' attribute is not set")
+    if not isinstance(obj, bytes if as_bytes else str):
+        raise TypeError("UnicodeError 'object' attribute must be a %s"
+                        % ('bytes' if as_bytes else 'string'))
+    return (obj, exc.start, exc.end)
 
 
 def strict_errors(exc):
-    """'strict' -- re-raise, which is the default policy everywhere."""
-    raise exc
+    """'strict' -- raise the exception passed (PyCodec_StrictErrors)."""
+    if _is_error(exc, BaseException):
+        raise exc
+    raise TypeError('codec must pass exception instance')
 
 
 def ignore_errors(exc):
-    """'ignore' -- drop the offending run entirely."""
-    _obj, _start, end = _error_span(exc)
+    """'ignore' -- drop the offending run (PyCodec_IgnoreErrors)."""
+    if _is_error(exc, (UnicodeEncodeError, UnicodeTranslateError)):
+        _obj, _start, end = _unicode_error_params(exc, False)
+    elif _is_error(exc, UnicodeDecodeError):
+        _obj, _start, end = _unicode_error_params(exc, True)
+    else:
+        raise _wrong_exception_type(exc)
     return ('', end)
 
 
 def replace_errors(exc):
-    """'replace' -- U+FFFD on decode, '?' on encode, per CPython."""
-    obj, start, end = _error_span(exc)
-    if isinstance(exc, UnicodeEncodeError):
-        return ('?' * (end - start), end)
-    return ('\ufffd', end)
+    """'replace' -- a '?' for each character an encode could not encode, one
+    U+FFFD for the bytes a decode could not decode, and one for each
+    character a translation could not translate (PyCodec_ReplaceErrors)."""
+    if _is_error(exc, UnicodeEncodeError):
+        _obj, start, end = _unicode_error_params(exc, False)
+        return ('?' * max(0, end - start), end)
+    if _is_error(exc, UnicodeDecodeError):
+        _obj, _start, end = _unicode_error_params(exc, True)
+        return ('�', end)
+    if _is_error(exc, UnicodeTranslateError):
+        _obj, start, end = _unicode_error_params(exc, False)
+        return ('�' * max(0, end - start), end)
+    raise _wrong_exception_type(exc)
 
 
 def xmlcharrefreplace_errors(exc):
-    """'xmlcharrefreplace' -- encode only; &#NNN; per unencodable char."""
-    obj, start, end = _error_span(exc)
-    if not isinstance(exc, UnicodeEncodeError):
-        raise TypeError('xmlcharrefreplace handler is for encoding only')
+    """'xmlcharrefreplace' -- encode only; &#NNN; per unencodable character
+    (PyCodec_XMLCharRefReplaceErrors)."""
+    if not _is_error(exc, UnicodeEncodeError):
+        raise _wrong_exception_type(exc)
+    obj, start, end = _unicode_error_params(exc, False)
     return (''.join(['&#%d;' % ord(ch) for ch in obj[start:end]]), end)
 
 
 def backslashreplace_errors(exc):
-    """'backslashreplace' -- \\xNN / \\uNNNN escapes, both directions."""
-    obj, start, end = _error_span(exc)
-    if isinstance(exc, UnicodeEncodeError):
+    """'backslashreplace' -- \\xNN / \\uNNNN / \\UNNNNNNNN escapes of the
+    characters, or \\xNN of the bytes (PyCodec_BackslashReplaceErrors)."""
+    if _is_error(exc, (UnicodeEncodeError, UnicodeTranslateError)):
+        obj, start, end = _unicode_error_params(exc, False)
         return (''.join([_backslash_escape(ch) for ch in obj[start:end]]), end)
-    return (''.join(['\\x%02x' % byte for byte in obj[start:end]]), end)
+    if _is_error(exc, UnicodeDecodeError):
+        obj, start, end = _unicode_error_params(exc, True)
+        return (''.join(['\\x%02x' % byte for byte in obj[start:end]]), end)
+    raise _wrong_exception_type(exc)
 
 
 def namereplace_errors(exc):
-    """'namereplace' -- CPython emits \\N{NAME}; Grail has no Unicode name
-    database, so this degrades to the backslash escape rather than being
-    absent.  The distinction only shows in the exact escape text."""
-    obj, start, end = _error_span(exc)
-    if not isinstance(exc, UnicodeEncodeError):
-        raise TypeError('namereplace handler is for encoding only')
-    return (''.join([_backslash_escape(ch) for ch in obj[start:end]]), end)
+    """'namereplace' -- encode only; \\N{NAME} for a character that has a
+    name and the backslash escape for one that has not, a lone surrogate
+    among them (PyCodec_NameReplaceErrors)."""
+    if not _is_error(exc, UnicodeEncodeError):
+        raise _wrong_exception_type(exc)
+    obj, start, end = _unicode_error_params(exc, False)
+    import unicodedata
+    out = []
+    for ch in obj[start:end]:
+        out.append(_character_name_escape(ch, unicodedata))
+    return (''.join(out), end)
+
+
+def _character_name_escape(ch, unicodedata):
+    """\\N{NAME} for a character that has a name, its backslash escape for
+    one that has not."""
+    if 0xD800 <= ord(ch) <= 0xDFFF:
+        return _backslash_escape(ch)
+    try:
+        return '\\N{%s}' % unicodedata.name(ch)
+    except ValueError:
+        return _backslash_escape(ch)
 
 
 def surrogateescape_errors(exc):
-    """PEP 383 -- an undecodable byte becomes U+DC00+byte and back again."""
-    obj, start, end = _error_span(exc)
-    if isinstance(exc, UnicodeEncodeError):
+    """PEP 383 (PyCodec_SurrogateEscapeErrors): an encode turns each
+    U+DC80..U+DCFF back into its byte; a decode escapes up to four
+    undecodable bytes at a time, each as U+DC00+byte, and refuses an ASCII
+    one.  Anything else raises the error it was called for."""
+    if _is_error(exc, UnicodeEncodeError):
+        obj, start, end = _unicode_error_params(exc, False)
         out = bytearray()
         for ch in obj[start:end]:
             point = ord(ch)
-            if 0xDC80 <= point <= 0xDCFF:
-                out.append(point - 0xDC00)
-            else:
+            if not 0xDC80 <= point <= 0xDCFF:
                 raise exc
+            out.append(point - 0xDC00)
         return (bytes(out), end)
-    escaped = []
-    for byte in obj[start:end]:
-        one = _surrogate_escape_char(byte)
-        if one is None:
+    if _is_error(exc, UnicodeDecodeError):
+        obj, start, end = _unicode_error_params(exc, True)
+        escaped = []
+        for byte in obj[start:min(end, start + 4)]:
+            if byte < 0x80:
+                break
+            escaped.append(_surrogate_escape_char(byte))
+        if not escaped:
             raise exc
-        escaped.append(one)
-    return (''.join(escaped), end)
+        return (''.join(escaped), start + len(escaped))
+    raise _wrong_exception_type(exc)
+
+
+def _surrogatepass_codec(exc):
+    """(codec, bytes a surrogate takes) for the UTF an error names, as
+    get_standard_encoding reads the name (Python/codecs.c:1157-1215), or
+    None for any other codec.  A UTF without a byte order is the machine's,
+    little-endian on every machine Grail runs on."""
+    encoding = exc.encoding
+    if not isinstance(encoding, str):
+        raise TypeError("UnicodeError 'encoding' attribute must be a string")
+    if encoding[:3].lower() != 'utf':
+        return None
+    rest = encoding[3:]
+    if rest[:1] in ('-', '_'):
+        rest = rest[1:]
+    if rest == '8':
+        return ('utf-8', 3)
+    for digits, width in (('16', 2), ('32', 4)):
+        if rest[:2] != digits:
+            continue
+        order = rest[2:]
+        if order == '':
+            return ('utf-%s-le' % digits, width)
+        if order[:1] in ('-', '_'):
+            order = order[1:]
+        if order.lower() in ('be', 'le'):
+            return ('utf-%s-%s' % (digits, order.lower()), width)
+        return None
+    return None
+
+
+def _surrogate_bytes(point, codec):
+    """A surrogate as surrogatepass writes it in codec."""
+    if codec == 'utf-8':
+        return bytes((0xE0 | (point >> 12), 0x80 | ((point >> 6) & 0x3F), 0x80 | (point & 0x3F)))
+    width = 2 if codec.startswith('utf-16') else 4
+    return point.to_bytes(width, 'big' if codec.endswith('be') else 'little')
+
+
+def _surrogate_point(unit, codec):
+    """The code point surrogatepass reads from one unit of codec, or 0."""
+    if codec == 'utf-8':
+        if (unit[0] & 0xF0) == 0xE0 and (unit[1] & 0xC0) == 0x80 and (unit[2] & 0xC0) == 0x80:
+            return ((unit[0] & 0x0F) << 12) + ((unit[1] & 0x3F) << 6) + (unit[2] & 0x3F)
+        return 0
+    return int.from_bytes(unit, 'big' if codec.endswith('be') else 'little')
 
 
 def surrogatepass_errors(exc):
-    """Let lone surrogates through as their raw UTF-8 encoding."""
-    obj, start, end = _error_span(exc)
-    if isinstance(exc, UnicodeEncodeError):
-        out = bytearray()
+    """'surrogatepass' (PyCodec_SurrogatePassErrors): a lone surrogate
+    passes through a UTF as its code unit would, one at a time when
+    decoding.  Anything else raises the error it was called for."""
+    if _is_error(exc, UnicodeEncodeError):
+        found = _surrogatepass_codec(exc)
+        if found is None:
+            raise exc
+        obj, start, end = _unicode_error_params(exc, False)
+        out = []
         for ch in obj[start:end]:
             point = ord(ch)
-            if not (0xD800 <= point <= 0xDFFF):
+            if not 0xD800 <= point <= 0xDFFF:
                 raise exc
-            out.append(0xE0 | (point >> 12))
-            out.append(0x80 | ((point >> 6) & 0x3F))
-            out.append(0x80 | (point & 0x3F))
-        return (bytes(out), end)
-    data = obj[start:end]
-    if len(data) < 3:
-        raise exc
-    point = (((data[0] & 0x0F) << 12) | ((data[1] & 0x3F) << 6)
-             | (data[2] & 0x3F))
-    if not (0xD800 <= point <= 0xDFFF):
-        raise exc
-    return (chr(point), start + 3)
+            out.append(_surrogate_bytes(point, found[0]))
+        return (b''.join(out), end)
+    if _is_error(exc, UnicodeDecodeError):
+        found = _surrogatepass_codec(exc)
+        if found is None:
+            raise exc
+        codec, width = found
+        obj, start, _end = _unicode_error_params(exc, True)
+        point = 0
+        if len(obj) - start >= width:
+            point = _surrogate_point(obj[start:start + width], codec)
+        if not 0xD800 <= point <= 0xDFFF:
+            raise exc
+        return (_lone_surrogate(point), start + width)
+    raise _wrong_exception_type(exc)
 
 
 register_error('strict', strict_errors)
