@@ -234,6 +234,20 @@ AttributeAst >> ___irEligibleValueLocals___: localNames [
 ]
 
 { #category : 'Grail-IR Codegen' }
+AttributeAst >> ___irIsClassChangeTarget___ [
+	"Is this STORE target ``o.__class__'' with a receiver that is not a self
+	reference -- the in-place type change every store form emits as ``object
+	___pyChangeClassOf: o to: v'' rather than a __setattr__?  The text's own
+	test (AssignAst >> printSmalltalkAttributeStoreOn:target:, AbstractNode >>
+	emitTupleElementStoreOn:...): a self reference is on the stack however it
+	is spelled, so it keeps the default __setattr__ path."
+
+	attr asString = '__class__' ifFalse: [^ false].
+	^ ((value isKindOf: NameAst) and: [CallAst isSelfReference: value id]) not
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AttributeAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 	value ___irReadLocalNamesInto___: aSet locals: localSet.
 	^ self

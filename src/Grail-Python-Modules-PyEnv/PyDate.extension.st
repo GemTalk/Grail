@@ -758,6 +758,11 @@ PyDate >> strftime: format [
 	"A date has no sub-second component, but CPython still expands %f --
 	to all zeros."
 	pre := time @env0:___substituteMicroseconds___: pre _: 0.
+	pre := time
+		@env0:___normalizingCenturyOf___: pre
+		year: (self @env0:dynamicInstVarAt: #_year)
+		month: (self @env0:dynamicInstVarAt: #_month)
+		day: (self @env0:dynamicInstVarAt: #_day).
 	^ time instance strftime: pre _: self timetuple
 
 ]

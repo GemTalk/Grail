@@ -184,7 +184,6 @@ requires_IEEE_754 = _PassthroughDecorator()
 requires_docstrings = _PassthroughDecorator()
 requires_resource = _PassthroughDecorator()
 requires_mac_ver = _PassthroughDecorator()
-run_with_locale = _PassthroughDecorator()
 bigmemtest = _PassthroughDecorator()
 bigaddrspacetest = _PassthroughDecorator()
 thread_unsafe = _PassthroughDecorator()
@@ -261,6 +260,46 @@ def run_with_tz(tz):
         inner.__doc__ = func.__doc__
         return inner
     return decorator
+
+
+# GRAIL: run_with_locale is CPython 3.14.4's, a context manager that also
+# decorates.  It was a passthrough decorator, so ``with run_with_locale(...)''
+# (test_strptime) failed, and a decorated test ran in whatever locale the
+# session had.  Grail's setlocale takes only 'C', 'POSIX' and '', so a test
+# naming other locales and no '' is skipped, as on a CPython host without them.
+# Decorator/context manager for running a code in a different locale,
+# correctly resetting it afterwards.
+
+@contextlib.contextmanager
+def run_with_locale(catstr, *locales):
+    try:
+        import locale
+        category = getattr(locale, catstr)
+        orig_locale = locale.setlocale(category)
+    except AttributeError:
+        # if the test author gives us an invalid category string
+        raise
+    except Exception:
+        # cannot retrieve original locale, so do nothing
+        locale = orig_locale = None
+        if '' not in locales:
+            raise unittest.SkipTest('no locales')
+    else:
+        for loc in locales:
+            try:
+                locale.setlocale(category, loc)
+                break
+            except locale.Error:
+                pass
+        else:
+            if '' not in locales:
+                raise unittest.SkipTest(f'no locales {locales}')
+
+    try:
+        yield
+    finally:
+        if locale and orig_locale:
+            locale.setlocale(category, orig_locale)
 
 
 def run_with_locales(catstr, *locales):
@@ -1859,6 +1898,7 @@ def get_attribute(obj, name):
         return attribute
 
 
+_buggy_ucrt = None
 def skip_if_buggy_ucrt_strfptime(test):
     """
     Skip decorator for tests that use buggy strptime/strftime
