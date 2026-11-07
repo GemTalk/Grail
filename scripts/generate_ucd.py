@@ -14,7 +14,9 @@ bidirectional class, canonical combining class and decomposition, stored as
 run-length ranges or sparse entries; the FULL NFD and NFKD expansion of each
 code point that has one, read from CPython's normalize (for 3.2.0 these are
 not what decomposition() reports -- CPython applies the Unicode normalization
-corrections); and the canonical COMPOSITION pairs.
+corrections); the canonical COMPOSITION pairs; and east_asian_width,
+mirrored, decimal, digit and numeric, the last three as sparse entries of
+the code points that have a value (numeric stored as the float's repr).
 The pairs are derived rather than read: a canonical two-character
 decomposition is a primary composite only if CPython's own NFC rebuilds it,
 which folds the composition exclusions in without a separate table.  Hangul
@@ -79,6 +81,16 @@ def runs(func):
     return ';'.join(out)
 
 
+def values(func, form):
+    """Sparse ``point:value;`` for the code points func gives a value."""
+    out = []
+    for point in range(MAX):
+        value = func(chr(point), None)
+        if value is not None:
+            out.append('%X:%s' % (point, form(value)))
+    return ';'.join(out)
+
+
 def generate(UCD):
     category = runs(UCD.category)
     bidi = runs(UCD.bidirectional)
@@ -134,6 +146,11 @@ def generate(UCD):
         'NFD': ';'.join(nfd),
         'NFKD': ';'.join(nfkd),
         'COMPOSITION': ';'.join(pairs),
+        'EAST_ASIAN_WIDTH': runs(UCD.east_asian_width),
+        'MIRRORED': runs(UCD.mirrored),
+        'DECIMAL': values(UCD.decimal, str),
+        'DIGIT': values(UCD.digit, str),
+        'NUMERIC': values(UCD.numeric, repr),
     }
 
 
@@ -144,10 +161,17 @@ def verify(tables, UCD):
     interesting = []
     for point in range(MAX):
         ch = chr(point)
-        for name in ('category', 'bidirectional', 'combining', 'decomposition'):
+        for name in ('category', 'bidirectional', 'combining', 'decomposition',
+                     'east_asian_width', 'mirrored'):
             want = getattr(UCD, name)(ch)
             got = getattr(db, name)(ch)
             if want != got:
+                sys.exit('MISMATCH %s(U+%04X): CPython %r, generated %r'
+                         % (name, point, want, got))
+        for name in ('decimal', 'digit', 'numeric'):
+            want = getattr(UCD, name)(ch, None)
+            got = getattr(db, name)(ch, None)
+            if want != got or type(want) is not type(got):
                 sys.exit('MISMATCH %s(U+%04X): CPython %r, generated %r'
                          % (name, point, want, got))
         if (UCD.decomposition(ch) or UCD.combining(ch)
@@ -192,8 +216,9 @@ HEADER = '''\
 # ``%(source)s`` is; see both files for what is stored and why.
 #
 # Verified against CPython before writing: every code point for category,
-# bidirectional, combining and decomposition, and %(checked)d code points plus
-# 20000 random strings in all four normalization forms.
+# bidirectional, combining, decomposition, east_asian_width, mirrored,
+# decimal, digit and numeric, and %(checked)d code points plus 20000 random
+# strings in all four normalization forms.
 
 '''
 
@@ -223,7 +248,8 @@ def write(tables, checked, out, source):
                           'source': source})
         f.write('VERSION = %r\n' % tables['VERSION'])
         for key in ('CATEGORY', 'BIDI', 'COMBINING', 'NORM_COMBINING',
-                    'DECOMPOSITION', 'NFD', 'NFKD', 'COMPOSITION'):
+                    'DECOMPOSITION', 'NFD', 'NFKD', 'COMPOSITION',
+                    'EAST_ASIAN_WIDTH', 'MIRRORED', 'DECIMAL', 'DIGIT', 'NUMERIC'):
             f.write('%s = (\n' % key)
             for part in chunks(tables[key]):
                 f.write('    %r,\n' % part)

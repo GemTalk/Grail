@@ -6,11 +6,10 @@
 #   * REAL, over tables generated from CPython's own database by
 #     scripts/generate_ucd.py and verified against it on every code point
 #     (_ucd_current.py, read by _ucd.Database): category, bidirectional,
-#     combining, decomposition, normalize and is_normalized, and
-#     unidata_version.  Likewise ``ucd_3_2_0'' below, for stringprep/IDNA.
+#     combining, decomposition, east_asian_width, mirrored, decimal, digit,
+#     numeric, normalize and is_normalized, and unidata_version.  Likewise
+#     ``ucd_3_2_0'' below, for stringprep/IDNA.
 #   * REAL, from the generated name tables: lookup and name.
-#   * STILL STUBS: east_asian_width (always 'N'); mirrored, decimal, digit
-#     and numeric are absent.
 #
 # normalize used to return its argument unchanged.  That silently disabled
 # urllib.parse's _checknetloc (bpo-36742: a netloc character that NFKC-
@@ -57,8 +56,23 @@ def decomposition(ch):
 
 
 def east_asian_width(ch):
-    """East Asian Width — Grail returns 'N' (narrow / neutral) always."""
-    return 'N'
+    return _current().east_asian_width(ch)
+
+
+def mirrored(ch):
+    return _current().mirrored(ch)
+
+
+def decimal(ch, *default):
+    return _current().decimal(ch, *default)
+
+
+def digit(ch, *default):
+    return _current().digit(ch, *default)
+
+
+def numeric(ch, *default):
+    return _current().numeric(ch, *default)
 
 
 # Names come from ``unicode_names'' (src/smalltalk/Python/unicode_names.gs),
@@ -163,6 +177,21 @@ class _UCD_3_2_0:
 
     def decomposition(self, ch):
         return self._db().decomposition(ch)
+
+    def east_asian_width(self, ch):
+        return self._db().east_asian_width(ch)
+
+    def mirrored(self, ch):
+        return self._db().mirrored(ch)
+
+    def decimal(self, ch, *default):
+        return self._db().decimal(ch, *default)
+
+    def digit(self, ch, *default):
+        return self._db().digit(ch, *default)
+
+    def numeric(self, ch, *default):
+        return self._db().numeric(ch, *default)
 
     def normalize(self, form, unistr):
         return self._db().normalize(form, unistr)
