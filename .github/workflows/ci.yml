@@ -183,7 +183,7 @@ jobs:
         run: python3 scripts/sync_scope_status.py --check
 
   test-main:
-    name: test-main ${{ matrix.arm }} (${{ matrix.shard }})
+    name: test-main ${{ matrix.arm }} (${{ matrix.name }}, ${{ matrix.shards }})
     needs: [queue-current]
     runs-on: ubuntu-22.04
     timeout-minutes: 45
@@ -211,20 +211,15 @@ jobs:
         # run_tests.sh) -- measured, the heaviest shard goes from 96% of the
         # cap to 75%.
         #
-        # SIXTEEN partitions now, one runner each (#1872).  A shard is one
-        # session, about one CPU, and took 22 of a job's 29 minutes as two
-        # shards side by side -- so more cores per runner buy nothing, more
-        # runners do.  Shard 0's job also runs the suites run_tests.sh runs
-        # after the shards; the other fifteen stop at the shards
-        # (GRAIL_TEST_SHARDS_ONLY=1), since those suites need one run per arm.
+        # Four runners of two shards each keeps the runner count where it was
+        # while every session compiles half as much.  `name` gives
+        # collision-free artifact names (matrix.shards contains a space).
         #
         # WHICH CLASSES a shard runs is GrailShardPlan's call: whole classes,
         # longest first, by the measured times in
         # tests/scripts/shard_timings.txt (#1911).  Partitioned by a class-name
-        # hash, the shard jobs ranged 3.8-13.5 minutes.  Shard 0's job does
-        # about 170s of other work after its shard (the suites above), so
-        # GRAIL_TEST_SHARD0_RESERVE_S plans that much less shard work for it;
-        # every leg sets the same value, so all 32 compute the same plan.
+        # hash, the shard jobs ranged 3.8-13.5 minutes.  Every leg computes the
+        # same plan from the same file.
         # Refresh the timings from a green run's logs with
         # scripts/refresh_shard_timings.py.
         #
@@ -241,11 +236,30 @@ jobs:
         # ran in a separate workflow (ir-flag-on.yml, #1148) that nothing
         # required -- it ran in the merge queue, and the queue did not wait
         # for it.
-        arm: [ir, text]
-        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        #
+        # THE TEXT ARM IS SKIPPED ON pull_request, and still gated where it
+        # counts: merge_group (plus schedule and workflow_dispatch) runs both
+        # arms, and the queue requires ci-complete, so nothing lands without a
+        # green text arm.  A PR push runs the ir arm alone -- half the runners
+        # per push.  What that gives up is EARLY notice: a text-only break now
+        # surfaces as a queue ejection rather than a red PR.  Measured over
+        # Sep 23 - Nov 6 2026, text-only codegen breaks were rare (one
+        # confirmed: fix/random-cpython, "a BoundMethod does not understand
+        # #___instance___"), and that one came from vendoring random.py, not
+        # from a codegen edit -- so do not narrow this further with a paths:
+        # filter on Grail-PythonAst; it would have missed it.
+        #
+        # A job-level `if:` cannot see `matrix`, and an `include` entry naming
+        # an arm the dimension lacks is ADDED as a new job rather than dropped,
+        # so the arm list itself is computed from the event and the flag value
+        # is derived from the arm (GRAIL_IR_CODEGEN in the steps below).
+        arm: ${{ github.event_name == 'pull_request' && fromJSON('["ir"]') || fromJSON('["ir", "text"]') }}
+        name: [a, b, c, d]
         include:
-          - { arm: ir,   ircodegen: "" }
-          - { arm: text, ircodegen: "0" }
+          - { name: a, shards: "0 1" }
+          - { name: b, shards: "2 3" }
+          - { name: c, shards: "4 5" }
+          - { name: d, shards: "6 7" }
     # --shm-size lifts the container's default 64 MB /dev/shm so GemStone's
     # shared page cache fits. GEMSTONE/PATH come from the image ENV.
     container:
@@ -278,7 +292,7 @@ jobs:
       # first (checkout wrote it as root).  Everything runs in one shell, so no
       # $GITHUB_ENV hand-off is needed (and ci can't write those root files, so
       # they're dropped with `env -u`).
-      - name: install + run SUnit shard ${{ matrix.shard }} of 16, ${{ matrix.arm }} arm (as non-root 'ci')
+      - name: install + run SUnit shards ${{ matrix.shards }}, ${{ matrix.arm }} arm (as non-root 'ci')
         run: |
           chown -R ci:ci "$GITHUB_WORKSPACE"
           runuser -u ci -- env -u GITHUB_ENV -u GITHUB_PATH \
@@ -287,11 +301,8 @@ jobs:
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            GRAIL_TEST_WORKERS=16 \
-            GRAIL_TEST_SHARDS="${{ matrix.shard }}" \
-            GRAIL_TEST_SHARDS_ONLY="${{ matrix.shard == 0 && '0' || '1' }}" \
-            GRAIL_TEST_SHARD0_RESERVE_S=170 \
-            GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
+            GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
+            GRAIL_IR_CODEGEN="${{ matrix.arm == 'text' && '0' || '' }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"
@@ -366,7 +377,7 @@ jobs:
             GEMSTONE_NAME=gs64stone \
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            GRAIL_IR_CODEGEN="${{ matrix.ircodegen }}" \
+            GRAIL_IR_CODEGEN="${{ matrix.arm == 'text' && '0' || '' }}" \
             ARM="${{ matrix.arm }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
@@ -392,7 +403,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           # Per-leg name: matrix jobs must not collide on artifact names.
-          name: grail-ci-logs-${{ matrix.arm }}-shard-${{ matrix.shard }}
+          name: grail-ci-logs-${{ matrix.arm }}-shards-${{ matrix.name }}
           if-no-files-found: ignore
           retention-days: 7
           # .out logs + stone/gem logs; the extent is deliberately excluded.

@@ -123,19 +123,22 @@ def text_caller():
     # family, then a TYPE ALIAS until the cut that gave TypeAliasAst its IR
     # protocol -- the tripwire firing a third time.
     #
-    # It is now a nested def holding a bare ``super()'', which refuses the
-    # ENCLOSING def as #'CallAst:super-noClass'.  Chosen for durability rather
-    # than convenience: a ``super()'' with no enclosing class is a RuntimeError
-    # in CPython, so there is no version of the migration that makes it
-    # ELIGIBLE -- making it "work" would mean answering a super where CPython
-    # raises.  The other still-refusing shapes were measured and rejected: a
-    # set-display ``*''-unpack raises at RUN time on both paths (the text does
-    # not support it either), ``async for'' compiled, and a class nested in a
-    # class body refuses only the INNER method, leaving this def eligible.
+    # It was then a nested def holding a bare ``super()'', refusing the
+    # enclosing def as #'CallAst:super-noClass' -- chosen as "durable" because
+    # a classless super() can never answer a super.  That reasoning was wrong:
+    # the IR path does not have to make it WORK, only raise what CPython
+    # raises, and the P1.2 call/super cut emits exactly the text's
+    # precondition arms.  The tripwire fired a fourth time.  (The other shapes
+    # measured and rejected then: a set-display ``*''-unpack raises at RUN
+    # time on both paths, ``async for'' compiled, and a class nested in a class
+    # body refuses only the INNER method, leaving this def eligible.)
     #
-    # The nested def is never called, so the shape is inert.
-    def _text_caller_optout():
-        return super()
+    # It is now a METHOD-LOCAL CLASS whose body holds a walrus, which refuses
+    # the enclosing def as #'classDef:walrus'.  That is a class-body shape
+    # (bucket P3, the method-local class transport), so it is a future cut like
+    # every other -- when P3 lands, replace it again; the assertion will say so.
+    class _TextCallerOptOut:
+        _w = (_v := 0)
     import traceback
     try:
         ir_raiser()
@@ -4043,7 +4046,8 @@ class LvHolder:
 
 
 def lv_in_comprehension(xs):
-    """A comprehension is its own scope, so this stays on the TEXT path.
+    """A comprehension in a def: compiled by the IR path since the P1.2
+    call/comprehension cut (it was refused as `CallAst:frameSensitive-locals').
 
     The expected value is MEASURED, not reasoned: PEP 709 inlines a list
     comprehension at function scope from 3.12 on, so locals() inside it reports
@@ -4145,7 +4149,8 @@ def d_reserved_param(nil, true):
 
 
 def d_in_comprehension(xs):
-    """A comprehension is its own scope: stays on the TEXT path.
+    """A comprehension in a def: compiled by the IR path since the P1.2
+    call/comprehension cut (it was refused as `CallAst:frameSensitive-dir').
 
     MEASURED, not reasoned, for the same reason lv_in_comprehension is: PEP 709
     inlines the comprehension at function scope, so dir() inside it reports the

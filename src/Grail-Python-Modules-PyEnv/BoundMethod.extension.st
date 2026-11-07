@@ -695,7 +695,7 @@ BoundMethod >> ___methodCodeForClass___: aClass name: aName [
 	aClass == nil ifTrue: [^ nil].
 	(self ___methodLookupChainFor___: aClass) @env0:do: [:c |
 		((c @env0:class @env0:whichClassIncludesSelector: #'___methodCodeTable___' environmentId: 1) ~~ nil) ifTrue: [
-			tbl := c ___methodCodeTable___.
+			tbl := c ___grailMethodCodeTable___.
 			v := tbl @env0:at: aName otherwise: nil.
 			v == nil ifFalse: [^ v]]].
 	^ nil

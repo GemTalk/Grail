@@ -449,6 +449,14 @@ module >> ___globalAt___: aSym otherwise: aBlock [
 	still performs, and the dict it caches is the dynamic instVar found above;
 	so is the one a ``from __future__ import annotations'' module stores."
 	aSym == #'__annotations__' ifTrue: [^ aBlock @env0:value].
+	"``__class__'' is an ATTRIBUTE of every module object -- ``m.__class__''
+	is the module type -- and never a GLOBAL: ``def f(): return __class__'' at
+	module level is a NameError in CPython, and so is ``globals()
+	['__class__']''.  The unary probe below found the env-1 ``__class__''
+	every object answers and handed the module's type back as the global's
+	value.  A module that BINDS the name stores a dynamic instVar, found at the
+	top, so only the inherited accessor is excluded."
+	aSym == #'__class__' ifTrue: [^ aBlock @env0:value].
 	cls := self @env0:class.
 	s := aSym @env0:asString.
 	"Value-attribute accessors (the ``__name__'' / ``__doc__'' / …

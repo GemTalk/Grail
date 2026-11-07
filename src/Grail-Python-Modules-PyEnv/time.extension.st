@@ -1,5 +1,180 @@
 Extension { #name : 'time' }
 
+{ #category : 'Grail-Formatting' }
+time class >> ___dayOfMonthOutOfRangeMessage [
+	^ 'day of month out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___dayOfWeekOutOfRangeMessage [
+	^ 'day of week out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___dayOfYearOutOfRangeMessage [
+	^ 'day of year out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___hourOutOfRangeMessage [
+	^ 'hour out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___illegalTimeTupleMessage [
+	^ 'strftime(): illegal time tuple argument'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___intAboveMaximumMessage [
+	^ 'signed integer is greater than maximum'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___intBelowMinimumMessage [
+	^ 'signed integer is less than minimum'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___minuteOutOfRangeMessage [
+	^ 'minute out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___monthOutOfRangeMessage [
+	^ 'month out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___secondsOutOfRangeMessage [
+	^ 'seconds out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___strftimeCallout [
+
+	"strftime(3).  A CCallout wraps per-process C state, so it lives in
+	SessionTemps, as os's callouts do."
+
+	^ SessionTemps @env0:current
+		@env0:at: #'Grail_time_strftime_callout'
+		ifAbsentPut: [
+			CCallout
+				@env0:library: (CLibrary @env0:named: os ___libcName)
+				name: 'strftime'
+				result: #'uint64'
+				args: #(#'ptr' #'uint64' #'ptr' #'ptr')]
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___strftimeFormatMessageFor: aFormat [
+	^ 'strftime() argument 1 must be str, not '
+		@env0:, (TypeError @env0:___badArgumentNameOf___: aFormat)
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___timeTupleRequiredMessage [
+	^ 'Tuple or struct_time argument required'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time class >> ___yearOutOfRangeMessage [
+	^ 'year out of range'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___check___: aField from: aMinimum to: aMaximum message: aMessage [
+
+	(aField @env0:between: aMinimum and: aMaximum) ifFalse: [^ ValueError ___signal___: aMessage]
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___checkedStructTmFields___: someFields [
+
+	"someFields as checktm checks them (Modules/timemodule.c:679-748), each in
+	turn: a month, a day of the month or a day of the year of 0 taken as the
+	first, and any field out of its range refused."
+
+	| fields |
+
+	fields := someFields @env0:copy.
+	(fields @env0:at: 5) @env0:= -1 ifTrue: [fields @env0:at: 5 put: 0].
+	self ___check___: (fields @env0:at: 5) from: 0 to: 11 message: time ___monthOutOfRangeMessage.
+	(fields @env0:at: 4) @env0:= 0 ifTrue: [fields @env0:at: 4 put: 1].
+	self ___check___: (fields @env0:at: 4) from: 1 to: 31 message: time ___dayOfMonthOutOfRangeMessage.
+	self ___check___: (fields @env0:at: 3) from: 0 to: 23 message: time ___hourOutOfRangeMessage.
+	self ___check___: (fields @env0:at: 2) from: 0 to: 59 message: time ___minuteOutOfRangeMessage.
+	self ___check___: (fields @env0:at: 1) from: 0 to: 61 message: time ___secondsOutOfRangeMessage.
+	self ___check___: (fields @env0:at: 7) from: 0 to: 6 message: time ___dayOfWeekOutOfRangeMessage.
+	(fields @env0:at: 8) @env0:= -1 ifTrue: [fields @env0:at: 8 put: 0].
+	self ___check___: (fields @env0:at: 8) from: 0 to: 365 message: time ___dayOfYearOutOfRangeMessage.
+	fields @env0:at: 9 put: (((fields @env0:at: 9) @env0:max: -1) @env0:min: 1).
+	^ fields
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___cIntField___: anObject [
+
+	"anObject as PyArg_ParseTuple's ``i'' converts a time tuple's field
+	(Python/getargs.c, convertsimple): an int, or what __index__ answers, that a
+	C int holds."
+
+	| value |
+
+	value := anObject ___asIndex___.
+	value @env0:> 2147483647 ifTrue: [^ OverflowError ___signal___: time ___intAboveMaximumMessage].
+	value @env0:< -2147483648 ifTrue: [^ OverflowError ___signal___: time ___intBelowMinimumMessage].
+	^ value
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___endOfAsciiRunIn___: someCodePoints from: anIndex [
+
+	"The index just past the run of ASCII code points -- 1 to 127, no NUL --
+	that starts at anIndex."
+
+	| index |
+
+	index := anIndex.
+	[index @env0:<= someCodePoints @env0:size
+		@env0:and: [(someCodePoints @env0:at: index) @env0:between: 1 and: 127]]
+			@env0:whileTrue: [index := index @env0:+ 1].
+	^ index
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___endOfLiteralRunIn___: someCodePoints from: anIndex [
+
+	"The index of the next % at or after anIndex, or just past the end."
+
+	| index |
+
+	index := anIndex.
+	[index @env0:<= someCodePoints @env0:size
+		@env0:and: [(someCodePoints @env0:at: index) @env0:~= 37]]
+			@env0:whileTrue: [index := index @env0:+ 1].
+	^ index
+
+]
+
 { #category : 'Grail-Private' }
 time >> ___isoWeek1Monday___: y [
 	"Ordinal (GemStone Date>>asDays epoch -- any fixed epoch works since
@@ -251,6 +426,57 @@ time >> ___refreshTimezoneGlobals___ [
 
 ]
 
+{ #category : 'Grail-Formatting' }
+time >> ___strftimeRun___: someCodePoints with: aStructTm [
+
+	"One run of ASCII characters of a format formatted by strftime(3), in a
+	buffer grown until it holds the result, as time_strftime1 grows it
+	(Modules/timemodule.c:784-866): until 256 bytes for each byte of the run,
+	past which an empty answer is taken to be the answer.  CPython calls
+	wcsftime where it has one; strftime's bytes read as UTF-8 answer the same
+	in the C locale."
+
+	| format size buffer length |
+
+	format := CByteArray @env0:withAll: (ByteArray @env0:withAll: someCodePoints) nullTerminate: true.
+	size := 1024.
+	[buffer := CByteArray @env0:gcMalloc: size.
+	length := time ___strftimeCallout @env0:callWith: { buffer. size. format. aStructTm }.
+	length @env0:= 0 @env0:and: [size @env0:< (256 @env0:* someCodePoints @env0:size)]]
+		@env0:whileTrue: [size := size @env0:* 2].
+	^ (buffer @env0:byteArrayFrom: 0 numBytes: length) decode: 'utf-8' _: 'surrogateescape'
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___strftimeRunsOf___: someCodePoints with: aStructTm [
+
+	"The format's runs of ASCII formatted by strftime(3), and what follows each
+	up to the next % kept as it stands, as time_strftime splits the format
+	(Modules/timemodule.c:912-962)."
+
+	| result start stop |
+
+	result := Unicode7 @env0:new.
+	stop := 1.
+	[stop @env0:<= someCodePoints @env0:size] @env0:whileTrue: [
+		start := stop.
+		stop := self ___endOfAsciiRunIn___: someCodePoints from: start.
+		stop @env0:> start ifTrue: [
+			result := PyStrSurrogate
+				@env0:___appending___: (self
+					___strftimeRun___: (someCodePoints @env0:copyFrom: start to: stop @env0:- 1)
+					with: aStructTm) @env0:___pyCodePoints___
+				to: result].
+		start := stop.
+		stop := self ___endOfLiteralRunIn___: someCodePoints from: start.
+		result := PyStrSurrogate
+			@env0:___appending___: (someCodePoints @env0:copyFrom: start to: stop @env0:- 1)
+			to: result].
+	^ result
+
+]
+
 { #category : 'Grail-Private' }
 time >> ___structTimeLocalFromDateTime___: dt [
 	"Local struct_time — uses DateTime's session-zone accessors, and
@@ -362,6 +588,54 @@ time >> ___structTimeYear___: year _month: mon _day: day _hour: hour _minute: mi
 		doy.
 		isdst
 	}
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___structTm___: someFields zone: aZoneName offset: anOffset [
+
+	"A struct tm holding someFields -- its nine ints, in the order Darwin's and
+	glibc's both lay them out -- then tm_gmtoff and a pointer to aZoneName, or
+	NULL when there is none."
+
+	| structTm |
+
+	structTm := CByteArray @env0:gcMalloc: 56.
+	someFields @env0:doWithIndex: [:field :index |
+		structTm @env0:int32At: index @env0:- 1 @env0:* 4 put: field].
+	structTm @env0:int64At: 40 put: anOffset.
+	aZoneName @env0:isNil ifFalse: [structTm @env0:pointerAt: 48 put: aZoneName].
+	^ structTm
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___structTmFields___: aTimeTuple [
+
+	"The nine fields of a struct tm -- tm_sec first -- that gettmarg makes of a
+	time tuple (Modules/timemodule.c:611-676): nine ints, the year less 1900,
+	the month and the day of the year counted from 0, and Sunday as day 0 of
+	the week.  The week day is a C remainder, so a day below -1 stays negative
+	for checktm to refuse."
+
+	| values year |
+
+	(aTimeTuple isKindOf: tuple) ifFalse: [^ TypeError ___signal___: time ___timeTupleRequiredMessage].
+	aTimeTuple __len__ @env0:= 9 ifFalse: [^ TypeError ___signal___: time ___illegalTimeTupleMessage].
+	values := (0 @env0:to: 8) @env0:collect: [:index | self ___cIntField___: (aTimeTuple __getitem__: index)].
+	year := values @env0:at: 1.
+	year @env0:< (-2147483648 @env0:+ 1900) ifTrue: [
+		^ OverflowError ___signal___: time ___yearOutOfRangeMessage].
+	^ {
+		values @env0:at: 6.
+		values @env0:at: 5.
+		values @env0:at: 4.
+		values @env0:at: 3.
+		(values @env0:at: 2) @env0:- 1.
+		year @env0:- 1900.
+		((values @env0:at: 7) @env0:+ 1) @env0:rem: 7.
+		(values @env0:at: 8) @env0:- 1.
+		values @env0:at: 9 }
 
 ]
 
@@ -640,6 +914,37 @@ time >> ___zeroPad4___: n [
 	s := n @env0:printString.
 	[s @env0:size @env0:< 4] @env0:whileTrue: [s := '0' @env0:, s].
 	^ s
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___zoneNameOf___: aTimeTuple [
+
+	"tm_zone as strftime(3) reads it: a struct_time's, as UTF-8 bytes ending in
+	NUL, or nil -- a NULL pointer -- for any other tuple or a struct_time whose
+	zone is None (Modules/timemodule.c:641-664)."
+
+	| zone |
+
+	(aTimeTuple @env0:class == struct_time) ifFalse: [^ nil].
+	zone := aTimeTuple ___pyAttrLoad___: #tm_zone.
+	zone == None ifTrue: [^ nil].
+	^ CByteArray @env0:withAll: (zone encode: 'utf-8') nullTerminate: true
+
+]
+
+{ #category : 'Grail-Formatting' }
+time >> ___zoneOffsetOf___: aTimeTuple [
+
+	"tm_gmtoff: a struct_time's, or 0 for any other tuple or a struct_time
+	whose offset is None."
+
+	| offset |
+
+	(aTimeTuple @env0:class == struct_time) ifFalse: [^ 0].
+	offset := aTimeTuple ___pyAttrLoad___: #tm_gmtoff.
+	offset == None ifTrue: [^ 0].
+	^ offset ___asIndex___
 
 ]
 
@@ -971,79 +1276,26 @@ time >> strftime: format [
 ]
 
 { #category : 'Grail-Formatting' }
-time >> strftime: format _: structTime [
-	"Minimal strftime supporting the directives used by Werkzeug,
-	itsdangerous, and email.utils: %Y %m %d %H %M %S %y %j %p %a %A
-	%b %B %Z %% .  Anything else passes through literally — far less
-	than CPython but enough for HTTP-date / cookie expiration / log
-	timestamps."
+time >> strftime: format _: aTimeTuple [
 
-	| year mon day hour min sec wday yday stream src i ch buf |
-	year := structTime __getitem__: 0.
-	mon := structTime __getitem__: 1.
-	day := structTime __getitem__: 2.
-	hour := structTime __getitem__: 3.
-	min := structTime __getitem__: 4.
-	sec := structTime __getitem__: 5.
-	wday := structTime __getitem__: 6.
-	yday := structTime __getitem__: 7.
-	stream := WriteStream @env0:on: Unicode7 @env0:new.
-	src := format @env0:asString.
-	i := 1.
-	[i @env0:<= src @env0:size] @env0:whileTrue: [
-		ch := src @env0:at: i.
-		(ch @env0:= $%) ifTrue: [
-			i := i @env0:+ 1.
-			i @env0:<= src @env0:size ifTrue: [
-				ch := src @env0:at: i.
-				ch @env0:= $Y ifTrue: [
-					"Python's datetime %Y zero-pads the year to at least 4
-					digits (date(1,1,1).strftime('%Y') -> '0001')."
-					stream @env0:nextPutAll: (self ___zeroPad4___: year)].
-				ch @env0:= $F ifTrue: [
-					"ISO date %Y-%m-%d (C99)."
-					stream @env0:nextPutAll: (self ___zeroPad4___: year).
-					stream @env0:nextPut: $-.
-					stream @env0:nextPutAll: (self ___zeroPad2___: mon).
-					stream @env0:nextPut: $-.
-					stream @env0:nextPutAll: (self ___zeroPad2___: day)].
-				ch @env0:= $C ifTrue: [
-					"Century, zero-padded to 2 digits (C99)."
-					stream @env0:nextPutAll: (self ___zeroPad2___: (year @env0:// 100))].
-				ch @env0:= $G ifTrue: [
-					"ISO 8601 year (can differ from %Y near year boundaries --
-					the first/last few days of a calendar year can belong to
-					an ISO week of the adjacent year), zero-padded like %Y."
-					stream @env0:nextPutAll:
-						(self ___zeroPad4___: (self ___isoYear___: year month: mon day: day))].
-				ch @env0:= $y ifTrue: [
-					buf := (year @env0:rem: 100) @env0:printString.
-					buf @env0:size @env0:< 2 ifTrue: [stream @env0:nextPut: $0].
-					stream @env0:nextPutAll: buf].
-				ch @env0:= $m ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: mon)].
-				ch @env0:= $d ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: day)].
-				ch @env0:= $H ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: hour)].
-				ch @env0:= $M ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: min)].
-				ch @env0:= $S ifTrue: [stream @env0:nextPutAll: (self ___zeroPad2___: sec)].
-				ch @env0:= $j ifTrue: [
-					buf := yday @env0:printString.
-					[buf @env0:size @env0:< 3] @env0:whileTrue: [buf := '0' @env0:, buf].
-					stream @env0:nextPutAll: buf].
-				ch @env0:= $p ifTrue: [stream @env0:nextPutAll: (hour @env0:< 12 ifTrue: ['AM'] ifFalse: ['PM'])].
-				ch @env0:= $a ifTrue: [stream @env0:nextPutAll: (self ___wdayAbbrev___: wday)].
-				ch @env0:= $A ifTrue: [stream @env0:nextPutAll: (self ___wdayName___: wday)].
-				ch @env0:= $b ifTrue: [stream @env0:nextPutAll: (self ___monthAbbrev___: mon)].
-				ch @env0:= $B ifTrue: [stream @env0:nextPutAll: (self ___monthName___: mon)].
-				ch @env0:= $Z ifTrue: [stream @env0:nextPutAll: 'UTC'].
-				ch @env0:= $% ifTrue: [stream @env0:nextPut: $%].
-			].
-			i := i @env0:+ 1
-		] ifFalse: [
-			stream @env0:nextPut: ch.
-			i := i @env0:+ 1
-		]
-	].
-	^ stream @env0:contents
+	"time.strftime(format, t) (Modules/timemodule.c, time_strftime): t made a
+	struct tm as gettmarg makes it and checked as checktm checks it, and each
+	run of ASCII characters in format formatted by the C library's
+	strftime(3), so that every directive -- %c, %x, %U, %z and the platform's
+	own -- answers what CPython's answers on the same machine.  Grail had its
+	own formatter for fifteen directives and answered nothing for the rest:
+	``%c'' was the empty string."
+
+	| zone structTm |
+
+	format @env0:___isPyStr___ ifFalse: [
+		^ TypeError ___signal___: (time ___strftimeFormatMessageFor: format)].
+	zone := self ___zoneNameOf___: aTimeTuple.
+	structTm := self
+		___structTm___: (self ___checkedStructTmFields___: (self ___structTmFields___: aTimeTuple))
+		zone: zone
+		offset: (self ___zoneOffsetOf___: aTimeTuple).
+	^ self ___strftimeRunsOf___: format @env0:___pyCodePoints___ with: structTm
 
 ]
 

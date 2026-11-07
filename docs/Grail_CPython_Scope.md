@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 69 | 11 | 10 | 90 |
+| P1 | 71 | 9 | 10 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
 | P3 | 30 | 3 | 23 | 56 |
 | P4 | 25 | 4 | 46 | 75 |
-| **In-scope** | **154** | **18** | **83** | **255** |
+| **In-scope** | **156** | **16** | **83** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **172 are wired into the harness** (P1 80 · P2 30 · P3 33 · P4 29) and **154 of those score OK**.
+Of the 255 in-scope modules, **172 are wired into the harness** (P1 80 · P2 30 · P3 33 · P4 29) and **156 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,12 +136,12 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 78 | 4447 | 445 | 3907 | 10% |
+| P1 | 80 | 4448 | 445 | 3914 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
-| P3 | 32 | 4213 | 554 | 3629 | 13% |
+| P3 | 32 | 4213 | 554 | 3636 | 13% |
 | P4 | 46 | 3781 | 146 | 3620 | 4% |
-| other | 23 | 1177 | 267 | 885 | 23% |
-| **all** | **210** | **17915** | **1970** | **15780** | **11%** |
+| other | 23 | 1177 | 267 | 890 | 23% |
+| **all** | **212** | **17916** | **1970** | **15799** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12.
 <!-- /test-tally -->
@@ -212,7 +212,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_exception_hierarchy` | Built-in exception hierarchy (language). |
 | ✅ | `test_exception_variations` | try/except/finally variations (language). |
 | ❗ | `test_exceptions` | Exceptions (language). |
-| ❗ | `test_extcall` | Extended call syntax */** (language). |
+| ✅ | `test_extcall` | Extended call syntax */** (language). |
 | ✅ | `test_float` | float — core type (in harness). |
 | ✅ | `test_flufl` | barry_as_FLUFL __future__ (language). |
 | ✅ | `test_format` | str formatting / format() (language). |
@@ -271,7 +271,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_unary` | Unary operators (language). |
 | ✅ | `test_unicode_identifiers` | Unicode identifier support (language). |
 | ✅ | `test_unpack` | Sequence unpacking (language). |
-| ❗ | `test_unpack_ex` | Extended (starred) unpacking (language). |
+| ✅ | `test_unpack_ex` | Extended (starred) unpacking (language). |
 | ✅ | `test_utf8source` | UTF-8 source files (parser). |
 | ✅ | `test_with` | with statement / context managers (language). |
 | ✅ | `test_yield_from` | yield from (language). |
@@ -776,7 +776,7 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**28 of the 210 rows on the committed board are not OK.**
+**25 of the 212 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
@@ -784,13 +784,11 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_buffer` ERROR, 95 tests: 2 failed, 2 errors, 80 skipped
 - `test.test_multibytecodec` ERROR, 36 tests: 0 failed, 1 errors, 2 skipped
 - `test.test_str` ERROR, 138 tests: 1 failed, 1 errors, 11 skipped
-- `test.test_signal` ERROR, 57 tests: 1 failed, 2 errors, 43 skipped
-- `test.test_sys` ERROR, 97 tests: 1 failed, 8 errors, 60 skipped
-- `test.test_fileio` ERROR, 99 tests: 0 failed, 4 errors, 3 skipped
+- `test.test_signal` ERROR, 57 tests: 0 failed, 2 errors, 43 skipped
+- `test.test_sys` ERROR, 97 tests: 3 failed, 6 errors, 60 skipped
+- `test.test_fileio` ERROR, 99 tests: 0 failed, 3 errors, 3 skipped
 - `test.test_exceptions` ERROR, 107 tests: 6 failed, 3 errors, 30 skipped
-- `test.test_descr` ERROR, 162 tests: 36 failed, 16 errors, 12 skipped
-- `test.test_filecmp` ERROR, 16 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_rlcompleter` FAIL, 8 tests: 1 failed, 0 errors, 0 skipped
+- `test.test_descr` ERROR, 162 tests: 34 failed, 15 errors, 12 skipped
 - `test.test_plistlib` ERROR, 70 tests: 0 failed, 1 errors, 5 skipped
 - `test.test_gzip` FAIL, 75 tests: 2 failed, 0 errors, 9 skipped
 - `test.test_email.test__header_value_parser` ERROR, 380 tests: 0 failed, 8 errors, 0 skipped
@@ -800,14 +798,13 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_utils` FAIL, 22 tests: 1 failed, 0 errors, 1 skipped
 - `test.test_patma` ERROR, 328 tests: 6 failed, 1 errors, 0 skipped
 - `test.test_grammar` ERROR, 75 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_fstring` ERROR, 90 tests: 7 failed, 1 errors, 4 skipped
+- `test.test_fstring` ERROR, 90 tests: 4 failed, 1 errors, 4 skipped
 - `test.test_types` ERROR, 129 tests: 6 failed, 7 errors, 3 skipped
 - `test.test_type_annotations` FAIL, 46 tests: 2 failed, 0 errors, 1 skipped
-- `test.test_structseq` FAIL, 25 tests: 1 failed, 0 errors, 1 skipped
-- `test.test_dataclasses` ERROR, 280 tests: 16 failed, 6 errors, 2 skipped
+- `test.test_dataclasses` ERROR, 280 tests: 9 failed, 6 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_charmapcodec`, `test_extcall`, `test_unpack_ex`.
+Wired, but not on the board until the next nightly measures them: `test_charmapcodec`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list

@@ -57,6 +57,23 @@ Class {
 	#category : 'Grail-Modules'
 }
 
+{ #category : 'Grail-Instance Creation' }
+PyStrSurrogate class >> ___appending___: someCodePoints to: aStr [
+
+	"aStr with someCodePoints after it, as a PyStrSurrogate once one of them is
+	a lone surrogate, which no Character holds."
+
+	| result |
+
+	result := aStr.
+	someCodePoints do: [:codePoint |
+		((codePoint between: 16rD800 and: 16rDFFF) and: [(result isKindOf: PyStrSurrogate) not])
+			ifTrue: [result := self ___onPrefix___: result].
+		result addCodePoint: codePoint].
+	^ result
+
+]
+
 { #category : 'Grail-Shared' }
 PyStrSurrogate class >> ___compare___: a with: b [
 	"Three-way lexicographic comparison of two Python str-likes by CODE POINT
