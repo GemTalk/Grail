@@ -1472,7 +1472,11 @@ UnboundMethod >> ___tableEntryFor___: aClass table: aTableSelector [
 		(each @env0:class @env0:includesSelector: aTableSelector
 			environmentId: 1) ifTrue: [
 				| tbl v |
-				tbl := [each @env0:perform: aTableSelector env: 1]
+				"The code table through its per-session memo, so a method's
+				 __code__ is the same object each time it is asked for."
+				tbl := [aTableSelector == #'___methodCodeTable___'
+						ifTrue: [each ___grailMethodCodeTable___]
+						ifFalse: [each @env0:perform: aTableSelector env: 1]]
 					@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 				"Stop at a table that HAS the name, even with a nil entry: that
 				 is how the doc table records an undocumented def, so an
