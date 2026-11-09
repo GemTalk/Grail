@@ -249,7 +249,16 @@ class MethodType(metaclass=_MethodTypeMeta):
         return self.__func__(self.__self__, *args, **kwargs)
 
     def __repr__(self):
-        return '<bound method of %r>' % (self.__self__,)
+        # method_repr (Objects/classobject.c): the function's __qualname__, or
+        # its __name__ when it has no __qualname__, printed only if it is a
+        # str -- '?' otherwise.
+        missing = object()
+        name = getattr(self.__func__, '__qualname__', missing)
+        if name is missing:
+            name = getattr(self.__func__, '__name__', missing)
+        if not isinstance(name, str):
+            name = '?'
+        return '<bound method %s of %r>' % (name, self.__self__)
 
 
 MethodType.__name__ = MethodType.__qualname__ = 'method'

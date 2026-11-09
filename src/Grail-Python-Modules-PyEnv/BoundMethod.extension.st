@@ -367,6 +367,27 @@ BoundMethod class >> receiver: aReceiver selector: aSymbol everyCallTo: aVarargs
 
 ]
 
+{ #category : 'Grail-Printing' }
+BoundMethod >> ___boundMethodReprName___ [
+	"The name a bound method's repr prints, read from its function as
+	method_repr reads it (Objects/classobject.c): its __qualname__, else its
+	__name__, else ``?'', each only when it is a str.  A function names the
+	class that defines it; any other callable types.MethodType bound names
+	itself, or nothing."
+
+	| function |
+
+	function := [self __func__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	function @env0:isNil ifTrue: [
+		^ [self __qualname__ @env0:asString] @env0:on: AbstractException do: [:ex | ex @env0:return: '?']].
+	#(#'__qualname__' #'__name__') @env0:do: [:attribute | | name |
+		name := [function @env1:___pyAttrLoad___: attribute]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(name @env0:notNil and: [name @env0:___isPyStr___]) ifTrue: [^ name @env0:asString]].
+	^ '?'
+
+]
+
 { #category : 'Grail-Python protocol' }
 BoundMethod >> ___call__: positional kw: keywords [
 	"``f.__call__(*args, **kw)'' for every arity but one, and with keywords:
@@ -462,6 +483,24 @@ BoundMethod >> ___compiledAnnotations___ [
 		ifTrue: [receiver]
 		ifFalse: [receiver @env0:class].
 	^ self ___methodAnnotationsForClass___: cls name: selector @env0:asString
+
+]
+
+{ #category : 'Grail-Attribute Access' }
+BoundMethod >> ___functionQualnameOver___: aClass [
+	"The bound function's own __qualname__ -- which names the class that defines
+	it -- when aClass is one a class statement made and the function answers a
+	qualified name, or nil.  A built-in's function lives on a Smalltalk class
+	with no Python name, so only a Python class's is asked."
+
+	| qualname |
+
+	(aClass @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1) ifFalse: [^ nil].
+	qualname := [self __func__ @env1:__qualname__]
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	((qualname @env0:isKindOf: CharacterCollection) and: [qualname @env0:includes: $.])
+		ifFalse: [^ nil].
+	^ qualname @env0:asUnicodeString
 
 ]
 
@@ -1872,17 +1911,18 @@ BoundMethod >> __qualname__ [
 		"Python classes only: a built-in's function is implemented on a Smalltalk
 		class with no Python name -- str.lower would read
 		CharacterCollection.lower."
-		fq := ((receiver @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1)
-				or: [receiver @env0:isMeta
-					and: [receiver @env0:thisClass @env0:includesSelector: #'___pyDefinedClass___' environmentId: 1]])
-			ifTrue: [[self __func__ @env1:__qualname__]
-				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]]
-			ifFalse: [nil].
-		((fq @env0:isKindOf: CharacterCollection)
-			and: [fq @env0:includes: $.])
-			ifTrue: [^ fq @env0:asUnicodeString].
+		fq := self ___functionQualnameOver___: ((receiver @env0:isMeta)
+			ifTrue: [receiver @env0:thisClass]
+			ifFalse: [receiver]).
+		fq @env0:isNil ifFalse: [^ fq].
 		^ ((self ___receiverQualname___) @env0:, '.' @env0:, n) @env0:asUnicodeString].
 	(receiver @env0:isKindOf: module) ifTrue: [^ self __name__].
+	"An instance's method is named by the class that DEFINES it too, when a
+	class statement made that class: ``Derived().method'' of an inherited
+	``Base.method'' is ``Base.method'' in CPython, whose bound method answers
+	its function's __qualname__ (test_descr test_bound_method_repr)."
+	fq := self ___functionQualnameOver___: (receiver @env0:class).
+	fq @env0:isNil ifFalse: [^ fq].
 	owner := self ___receiverTypeName___.
 	owner isNil ifTrue: [^ self __name__].
 	^ (owner @env0:, '.' @env0:, n) @env0:asUnicodeString
@@ -1956,7 +1996,7 @@ BoundMethod >> __repr__ [
 				@env0:, ' object at 0x'
 				@env0:, (receiver @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
 				@env0:, '>') @env0:asUnicodeString]].
-	^ ('<bound method ' @env0:, q @env0:, ' of ' @env0:,
+	^ ('<bound method ' @env0:, self ___boundMethodReprName___ @env0:, ' of ' @env0:,
 		(receiver @env1:__repr__) @env0:asString
 		@env0:, '>') @env0:asUnicodeString
 

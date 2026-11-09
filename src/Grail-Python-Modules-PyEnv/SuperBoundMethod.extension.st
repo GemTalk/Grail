@@ -10,6 +10,28 @@ SuperBoundMethod class >> obj: anObj resolver: aResolver selector: aSym [
 
 ]
 
+{ #category : 'Grail-Printing' }
+SuperBoundMethod >> ___reprName___ [
+	"``Owner.name'', where Owner is the Python class whose method the
+	resolver finds for some arity, or the attribute's name when it finds
+	none."
+
+	| name |
+
+	name := selector @env0:asString.
+	0 @env0:to: 4 do: [:arity | | pair method owner |
+		pair := [resolver @env0:value: arity value: true]
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+		(pair @env0:notNil and: [(pair @env0:at: 1) @env0:isKindOf: GsNMethod]) ifTrue: [
+			method := pair @env0:at: 1.
+			owner := method @env0:inClass.
+			owner @env0:isMeta ifTrue: [owner := owner @env0:thisClass].
+			^ [(owner @env1:__qualname__) @env0:asString @env0:, '.' @env0:, name]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: name]]].
+	^ name
+
+]
+
 { #category : 'Grail-Comparison' }
 SuperBoundMethod >> __eq__: other [
 	"``super(C, e).__reduce__ == e.__reduce__''.
@@ -87,6 +109,19 @@ SuperBoundMethod >> __get__: anInstance _: anOwner [
 { #category : 'Grail-Comparison' }
 SuperBoundMethod >> __ne__: other [
 	^ (self __eq__: other) @env0:not
+
+]
+
+{ #category : 'Grail-Printing' }
+SuperBoundMethod >> __repr__ [
+	"What super() answers is the parent's bound method, and CPython prints it
+	so, named by the function super() finds (method_repr,
+	Objects/classobject.c): ``<bound method Base.method of <Derived object at
+	0x...>>''.  The class that defines it is the one the resolver's lookup
+	finds; a lookup that finds none prints the attribute alone."
+
+	^ ('<bound method ' @env0:, self ___reprName___ @env0:, ' of '
+		@env0:, (obj @env1:__repr__) @env0:asString @env0:, '>') @env0:asUnicodeString
 
 ]
 
