@@ -297,6 +297,285 @@ def _call_error_handler(errors, exc):
     return result
 
 
+# ------------------------------- a registered handler, for str.encode / decode
+#
+# str.encode and bytes.decode are Smalltalk codecs, and they implement the
+# built-in handlers themselves.  Any other name is one codecs.register_error
+# registered, and CPython calls it for every error the codec meets, then
+# resumes where it says: unicode_encode_call_errorhandler and
+# unicode_decode_call_errorhandler_writer (Objects/unicodeobject.c:7327-7376,
+# 4544-4637).  The Smalltalk codecs hand such a name here, for the codecs
+# they implement natively.  A codec written in Python calls
+# _call_error_handler itself.
+
+_ENCODE_ANSWER = 'encoding error handler must return (str/bytes, int) tuple'
+_DECODE_ANSWER = 'decoding error handler must return (str, int) tuple'
+_SSIZE_LIMIT = 2 ** 63
+
+
+class _Encoder:
+    """One of the codecs str.encode implements, as its CPython encoder meets
+    an error: unicode_encode_ucs1 for ascii and latin-1 (unicodeobject.c),
+    utf8_encoder (Objects/stringlib/codecs.h) and _PyUnicode_EncodeUTF16 /
+    _PyUnicode_EncodeUTF32 (unicodeobject.c:6129-6260, 6446-6600)."""
+
+    def __init__(self, name, codec, limit, collects, bom, unit):
+        self.name = name            # the codec an error names
+        self.codec = codec          # the codec each run is encoded with
+        self.limit = limit          # the first code point it cannot encode
+        self.collects = collects    # one error spans a run of them
+        self.bom = bom
+        self.unit = unit            # the bytes a code unit takes
+
+    def cannot_encode(self, point):
+        if self.limit is None:
+            return 0xD800 <= point <= 0xDFFF
+        return point >= self.limit
+
+    def reason(self):
+        if self.limit is None:
+            return 'surrogates not allowed'
+        return 'ordinal not in range(%d)' % self.limit
+
+    def encodes_in_replacement(self, point):
+        """Whether a str replacement may hold point: what this codec
+        encodes, and only ASCII for the UTFs."""
+        if self.limit is None:
+            return point < 128
+        return point < self.limit
+
+    def replacement_bytes(self, replacement, text, start, end):
+        """The bytes a handler's replacement puts in the output.  Bytes are
+        taken as they are, in whole code units; a str only if every
+        character of it may be in one.  Anything else raises the error the
+        handler was called for."""
+        if isinstance(replacement, bytes):
+            if len(replacement) % self.unit:
+                raise UnicodeEncodeError(self.name, text, start, end, self.reason())
+            return replacement
+        for char in replacement:
+            if not self.encodes_in_replacement(ord(char)):
+                raise UnicodeEncodeError(self.name, text, start, end, self.reason())
+        return replacement.encode(self.codec)
+
+
+class _Latin9Encoder(_Encoder):
+    """iso-8859-15, which CPython encodes with its charmap codec
+    (Lib/encodings/iso8859_15.py, and charmap_encoding_error in
+    unicodeobject.c): latin-1 with eight of its characters replaced by
+    eight others, an error naming 'charmap'."""
+
+    REPLACED = frozenset((0xA4, 0xA6, 0xA8, 0xB4, 0xB8, 0xBC, 0xBD, 0xBE))
+    ADDED = frozenset((0x20AC, 0x160, 0x161, 0x17D, 0x17E, 0x152, 0x153, 0x178))
+
+    def cannot_encode(self, point):
+        if point < 256:
+            return point in self.REPLACED
+        return point not in self.ADDED
+
+    def reason(self):
+        return 'character maps to <undefined>'
+
+    def encodes_in_replacement(self, point):
+        return not self.cannot_encode(point)
+
+
+_ASCII_ENCODER = _Encoder('ascii', 'ascii', 128, True, b'', 1)
+_LATIN_1_ENCODER = _Encoder('latin-1', 'latin-1', 256, True, b'', 1)
+_UTF_8_ENCODER = _Encoder('utf-8', 'utf-8', None, True, b'', 1)
+_UTF_16_LE_ENCODER = _Encoder('utf-16-le', 'utf-16-le', None, False, b'', 2)
+_UTF_16_BE_ENCODER = _Encoder('utf-16-be', 'utf-16-be', None, False, b'', 2)
+_UTF_32_LE_ENCODER = _Encoder('utf-32-le', 'utf-32-le', None, False, b'', 4)
+_UTF_32_BE_ENCODER = _Encoder('utf-32-be', 'utf-32-be', None, False, b'', 4)
+_LATIN_9_ENCODER = _Latin9Encoder('charmap', 'iso-8859-15', None, True, b'', 1)
+
+_ENCODERS = {
+    'ascii': _ASCII_ENCODER, 'us-ascii': _ASCII_ENCODER,
+    'latin-1': _LATIN_1_ENCODER, 'latin1': _LATIN_1_ENCODER,
+    'iso-8859-1': _LATIN_1_ENCODER, 'iso8859-1': _LATIN_1_ENCODER,
+    'utf-8': _UTF_8_ENCODER, 'utf8': _UTF_8_ENCODER,
+    # The byte order a BOM announces is the machine's, little-endian on
+    # every machine Grail runs on, as str.encode writes it.
+    'utf-16': _Encoder('utf-16', 'utf-16-le', None, False, b'\xff\xfe', 2),
+    'utf-16-le': _UTF_16_LE_ENCODER, 'utf-16le': _UTF_16_LE_ENCODER,
+    'utf-16-be': _UTF_16_BE_ENCODER, 'utf-16be': _UTF_16_BE_ENCODER,
+    'utf-32': _Encoder('utf-32', 'utf-32-le', None, False, b'\xff\xfe\x00\x00', 4),
+    'utf-32-le': _UTF_32_LE_ENCODER, 'utf-32le': _UTF_32_LE_ENCODER,
+    'utf-32-be': _UTF_32_BE_ENCODER, 'utf-32be': _UTF_32_BE_ENCODER,
+    'iso-8859-15': _LATIN_9_ENCODER, 'iso8859-15': _LATIN_9_ENCODER,
+    'latin-9': _LATIN_9_ENCODER, 'latin9': _LATIN_9_ENCODER, 'l9': _LATIN_9_ENCODER,
+}
+
+# The codecs bytes.decode implements that can fail; latin-1 cannot.
+_DECODERS = frozenset((
+    'ascii', 'us-ascii', 'utf-8', 'utf8',
+    'utf-16', 'utf-16-le', 'utf-16le', 'utf-16-be', 'utf-16be',
+    'utf-32', 'utf-32-le', 'utf-32le', 'utf-32-be', 'utf-32be',
+    'unicode-escape', 'raw-unicode-escape',
+))
+
+
+def _codec_key(encoding):
+    return encoding.lower().replace('_', '-')
+
+
+def _handler_position(position):
+    """A handler's position as PyArg_ParseTuple's ``n'' takes it: what
+    __index__ answers, in a Py_ssize_t (Python/getargs.c)."""
+    import operator
+    position = operator.index(position)
+    if not -_SSIZE_LIMIT <= position < _SSIZE_LIMIT:
+        raise OverflowError('Python int too large to convert to C ssize_t')
+    return position
+
+
+def _resume_position(position, size):
+    """Where the codec resumes: a negative position counts from the end, and
+    one outside the input is refused."""
+    if position < 0:
+        position = size + position
+    if not 0 <= position <= size:
+        raise IndexError('position %d from error handler out of bounds' % position)
+    return position
+
+
+def _encode_answer(answer, size):
+    """(replacement, resume position) from what an encode handler answered:
+    a 2-tuple whose position converts first, then a str or bytes
+    replacement."""
+    if not isinstance(answer, tuple) or len(answer) != 2:
+        raise TypeError(_ENCODE_ANSWER)
+    replacement, position = answer
+    position = _handler_position(position)
+    if not isinstance(replacement, (str, bytes)):
+        raise TypeError(_ENCODE_ANSWER)
+    return replacement, _resume_position(position, size)
+
+
+def _decode_answer(answer):
+    """(replacement, position) from what a decode handler answered: a
+    2-tuple of a str and a position."""
+    if not isinstance(answer, tuple) or len(answer) != 2 or not isinstance(answer[0], str):
+        raise TypeError(_DECODE_ANSWER)
+    return answer[0], _handler_position(answer[1])
+
+
+def _decoded_object(exc):
+    """The input a decode goes on in once a handler has returned: what
+    exc.object holds then, which must be bytes."""
+    source = exc.object
+    if not isinstance(source, bytes):
+        raise TypeError("UnicodeError 'object' attribute must be a bytes")
+    return source
+
+
+def _encode_calling_handler(text, encoding, errors):
+    """text encoded by str.encode's own ``encoding'', calling the handler
+    registered as ``errors'' for each error, or None for a codec str.encode
+    does not implement.  The handler is looked up at the first error, as
+    CPython looks it up."""
+    encoder = _ENCODERS.get(_codec_key(encoding))
+    if encoder is None:
+        return None
+    try:
+        return encoder.bom + text.encode(encoder.codec)
+    except UnicodeEncodeError:
+        pass
+    points = [ord(char) for char in text]
+    size = len(points)
+    out = [encoder.bom]
+    handler = None
+    pos = 0
+    while pos < size:
+        start = pos
+        while start < size and not encoder.cannot_encode(points[start]):
+            start += 1
+        if start > pos:
+            out.append(text[pos:start].encode(encoder.codec))
+        if start == size:
+            break
+        end = start + 1
+        if encoder.collects:
+            while end < size and encoder.cannot_encode(points[end]):
+                end += 1
+        if handler is None:
+            handler = lookup_error(errors)
+        replacement, pos = _encode_answer(
+            handler(UnicodeEncodeError(encoder.name, text, start, end, encoder.reason())), size)
+        out.append(encoder.replacement_bytes(replacement, text, start, end))
+    return b''.join(out)
+
+
+def _decoding_start(encoding, data):
+    """(the codec that decodes data past its BOM, where that begins).  The
+    BOM is read once: a decode resumed after an error is not the start of a
+    stream."""
+    if encoding == 'utf-16':
+        if data[:2] == b'\xfe\xff':
+            return ('utf-16-be', 2)
+        return ('utf-16-le', 2 if data[:2] == b'\xff\xfe' else 0)
+    if encoding == 'utf-32':
+        if data[:4] == b'\x00\x00\xfe\xff':
+            return ('utf-32-be', 4)
+        return ('utf-32-le', 4 if data[:4] == b'\xff\xfe\x00\x00' else 0)
+    return (encoding, 0)
+
+
+def _decoded_up_to_error(chunk, codec):
+    """(what chunk decodes to before its first error, that error as
+    (encoding, start, end, reason) or None).
+
+    A decoder may report a later error first -- Grail's utf-32 reports
+    truncated data before an earlier code point out of range -- so what
+    precedes the error is decoded again until it decodes."""
+    error_found = None
+    stop = len(chunk)
+    while True:
+        try:
+            return (chunk[:stop].decode(codec), error_found)
+        except UnicodeDecodeError as error:
+            if error.start is None or error.end is None:
+                raise
+            error_found = (error.encoding, error.start, error.end, error.reason)
+            stop = error.start
+
+
+def _decode_calling_handler(data, encoding, errors):
+    """data decoded by bytes.decode's own ``encoding'', calling the handler
+    registered as ``errors'' for each error, or None for a codec bytes.decode
+    does not implement.
+
+    Each error is found by decoding the rest strictly, which reports where
+    it is and why.  The handler may replace exc.object: the decode goes on
+    in what it holds then, as CPython's does."""
+    key = _codec_key(encoding)
+    if key not in _DECODERS:
+        return None
+    source = bytes(data)
+    try:
+        return source.decode(key)
+    except UnicodeDecodeError:
+        pass
+    codec, pos = _decoding_start(key, source)
+    out = []
+    handler = None
+    while True:
+        text, error = _decoded_up_to_error(source[pos:], codec)
+        out.append(text)
+        if error is None:
+            break
+        name, start, end, reason = error
+        start, end = pos + start, pos + end
+        if handler is None:
+            handler = lookup_error(errors)
+        exc = UnicodeDecodeError(name, source, start, end, reason)
+        replacement, position = _decode_answer(handler(exc))
+        source = _decoded_object(exc)
+        out.append(replacement)
+        pos = _resume_position(position, len(source))
+    return ''.join(out)
+
+
 # ------------------------------------------------------- charmap primitives
 #
 # webencodings builds its "replacement" and "x-user-defined" codecs entirely
@@ -921,16 +1200,19 @@ def _lone_surrogate(point):
 
 
 def _utf7_error(errors, data, start, end, reason):
-    """Apply a decode policy to data[start:end], answering (text, resume)."""
+    """Apply a decode policy to data[start:end], answering (text, resume,
+    the input to resume in).  A registered handler may replace exc.object,
+    and the decode goes on in what it holds then, as CPython's does
+    (unicode_decode_call_errorhandler_writer, Objects/unicodeobject.c)."""
     exc = _make_unicode_error(UnicodeDecodeError, 'utf7', data, start, end, reason)
     if errors == 'strict':
         raise exc
     if errors == 'ignore':
-        return ('', end)
+        return ('', end, data)
     if errors == 'replace':
-        return ('\ufffd', end)
+        return ('\ufffd', end, data)
     if errors == 'backslashreplace':
-        return (''.join('\\x%02x' % b for b in data[start:end]), end)
+        return (''.join('\\x%02x' % b for b in data[start:end]), end, data)
     if errors == 'surrogateescape':
         out = []
         for b in data[start:end]:
@@ -938,11 +1220,10 @@ def _utf7_error(errors, data, start, end, reason):
             if escaped is None:
                 raise exc
             out.append(escaped)
-        return (''.join(out), end)
-    replacement, position = _call_error_handler(errors, exc)
-    if position < 0:
-        position = len(data) + position
-    return (replacement, position)
+        return (''.join(out), end, data)
+    replacement, position = _decode_answer(lookup_error(errors)(exc))
+    source = _decoded_object(exc)
+    return (replacement, _resume_position(position, len(source)), source)
 
 
 def utf_7_decode(input, errors='strict', final=False):
@@ -1038,13 +1319,15 @@ def utf_7_decode(input, errors='strict', final=False):
             index += 1
             error = 'unexpected special character'
         if error is not None:
-            text, index = _utf7_error(errors, data, start, index, error)
+            text, index, data = _utf7_error(errors, data, start, index, error)
+            length = len(data)
             out.append(text)
     if in_shift and final:
         in_shift = False
         if surrogate or bits >= 6 or (bits > 0 and buffer != 0):
-            text, resume = _utf7_error(errors, data, start, length,
-                                       'unterminated shift sequence')
+            text, resume, data = _utf7_error(errors, data, start, length,
+                                             'unterminated shift sequence')
+            length = len(data)
             out.append(text)
             if resume < length:
                 rest, _ = utf_7_decode(data[resume:], errors, final)

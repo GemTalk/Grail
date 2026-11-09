@@ -3062,6 +3062,13 @@ CharacterCollection >> encode: encoding _: errors [
 	enc := encoding @env0:asLowercase.
 	size := self @env0:size.
 
+	"A handler codecs.register_error registered is called at each error, and
+	the encode resumes where it says, as CPython's does.  _codecs answers None
+	for a codec it leaves to the branches below."
+	((Python @env0:at: #importlib) @env0:___namesARegisteredHandler___: policy) ifTrue: [ | encoded |
+		encoded := (Python @env0:at: #importlib) @env0:___encode___: self as: enc callingHandler: policy.
+		encoded == None ifFalse: [^ encoded]].
+
 	"unicode_escape: backslash-escape control and non-ASCII characters,
 	yielding ASCII bytes (django.utils.log uses it).
 

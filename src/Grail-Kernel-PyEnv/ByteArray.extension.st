@@ -2985,6 +2985,12 @@ ByteArray >> decode: encoding _: errors [
 	(name == encoding and: [policy == errors]) ifFalse: [^ self decode: name _: policy].
 	enc := (encoding @env0:asLowercase)
 		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
+	"A handler codecs.register_error registered is called at each error, and
+	the decode resumes where it says, as CPython's does.  _codecs answers None
+	for a codec it leaves to the rest of this method."
+	((Python @env0:at: #importlib) @env0:___namesARegisteredHandler___: policy) ifTrue: [ | decoded |
+		decoded := (Python @env0:at: #importlib) @env0:___decode___: self as: enc callingHandler: policy.
+		decoded == None ifFalse: [^ decoded]].
 	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
 		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
 	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
