@@ -1017,3 +1017,17 @@ test.test_charmapcodec
 #
 #   stat   22t OK (14 skipped)
 test.test_stat
+
+# --- Codecs (added 2026-11-09): error-handler callbacks ---
+#
+# test_codeccallbacks is CPython 3.14.4's, vendored verbatim (identical in
+# 3.14.8): handlers that codecs.register_error registers, called by every
+# codec at each error, with the answers they may give and the positions they
+# may resume at; and the built-in handlers' own answers.  It needs #2209
+# (str.encode and bytes.decode call a registered handler).  One test fails:
+# test_mutating_decode_handler_unicode_escape, because unicode-escape warns
+# about the input it was given, not the one the handler left in exc.object.
+# Measured on Darwin arm64:
+#
+#   codeccallbacks   43t FAIL (1 failure)
+test.test_codeccallbacks

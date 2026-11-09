@@ -29,9 +29,9 @@ Where the in-scope tiers stand:
 |------|------:|----------:|-------------:|------:|
 | P1 | 71 | 9 | 10 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
-| P3 | 30 | 3 | 23 | 56 |
+| P3 | 30 | 4 | 22 | 56 |
 | P4 | 25 | 4 | 46 | 75 |
-| **In-scope** | **156** | **16** | **83** | **255** |
+| **In-scope** | **156** | **17** | **82** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **172 are wired into the harness** (P1 80 · P2 30 · P3 33 · P4 29) and **156 of those score OK**.
+Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **156 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -331,7 +331,7 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ✅ | `test_bufio` | Buffered I/O layer — in-scope for StringIO/BytesIO; real-file backing is OS. *(edge — see below)* |
 | ✅ | `test_calendar` | calendar — pure Python. |
 | ❗ | `test_charmapcodec` | charmap codec — pure text codec. |
-|  | `test_codeccallbacks` | Codec error-handler callbacks — pure. |
+| ❗ | `test_codeccallbacks` | Codec error-handler callbacks — pure. |
 | ✅ | `test_codecs` | codecs core — encode/decode registry (pure). |
 | ✅ | `test_colorsys` | colorsys — pure color-space math. |
 | ✅ | `test_configparser` | configparser (INI) — pure Python. |
@@ -804,7 +804,7 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_dataclasses` ERROR, 280 tests: 9 failed, 6 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
 
-Wired, but not on the board until the next nightly measures them: `test_charmapcodec`, `test_stat`.
+Wired, but not on the board until the next nightly measures them: `test_charmapcodec`, `test_codeccallbacks`, `test_stat`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
