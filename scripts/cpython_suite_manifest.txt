@@ -1024,10 +1024,11 @@ test.test_stat
 # 3.14.8): handlers that codecs.register_error registers, called by every
 # codec at each error, with the answers they may give and the positions they
 # may resume at; and the built-in handlers' own answers.  It needs #2209
-# (str.encode and bytes.decode call a registered handler).  One test fails:
-# test_mutating_decode_handler_unicode_escape, because unicode-escape warns
-# about the input it was given, not the one the handler left in exc.object.
-# Measured on Darwin arm64:
+# (str.encode and bytes.decode call a registered handler).  It joined with
+# one failure, test_mutating_decode_handler_unicode_escape: unicode-escape
+# warned about the input it was given, not the one the handler left in
+# exc.object.  It now warns about what it decoded (2026-11-10).  Measured on
+# Darwin arm64:
 #
-#   codeccallbacks   43t FAIL (1 failure)
+#   codeccallbacks   43t OK
 test.test_codeccallbacks
