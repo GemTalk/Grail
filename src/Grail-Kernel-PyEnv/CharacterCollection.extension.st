@@ -139,10 +139,16 @@ CharacterCollection class >> ___percentOperandIsMapping___: args forBytes: forBy
 	instance inherits PythonInstance's, a builtin function's BoundMethod
 	subscripts as a PEP 585 pass-through, and a module is a SymbolDictionary.
 	None of those is a mapping to CPython: object>>___hasOwnGetitem___
-	excludes them."
+	excludes them.
+
+	``A str'' is every str Grail has (___isPyStr___), as PyUnicode_Check is
+	(PyUnicode_Format, Objects/unicodeobject.c:15555).  Asking for a
+	CharacterCollection took a str holding a lone surrogate for a mapping, so
+	``'abc' % '\ud800''' answered 'abc' where CPython raises ``not all
+	arguments converted''."
 
 	(args @env0:isKindOf: Array) ifTrue: [^ false].
-	(args @env0:isKindOf: CharacterCollection) ifTrue: [^ false].
+	args @env0:___isPyStr___ ifTrue: [^ false].
 	(forBytes @env0:and: [args @env0:isKindOf: ByteArray]) ifTrue: [^ false].
 	^ args ___hasOwnGetitem___
 
@@ -2376,7 +2382,7 @@ CharacterCollection >> __mod__: args [
 	sign handling is shared with the str.format() engine
 	(builtins>>___printfConvert___:...)."
 
-	| stream src n i ch isMap argSeq argIdx bi nextArg |
+	| stream src n i ch isMap argSeq argIdx bi nextArg pieces |
 	src := self @env0:asString.
 	n := src @env0:size.
 	stream := AppendStream @env0:on: Unicode7 @env0:new.
@@ -2419,7 +2425,7 @@ CharacterCollection >> __mod__: args [
 			stream @env0:nextPut: ch.
 			i := i @env0:+ 1
 		] ifTrue: [
-			| key flags width precision conv value |
+			| key flags width precision conv value field |
 			i := i @env0:+ 1.
 			i @env0:> n ifTrue: [
 				ValueError ___signal___: 'incomplete format'
@@ -2535,8 +2541,19 @@ CharacterCollection >> __mod__: args [
 						__getitem__ also honours __missing__ and defaultdict."
 						value := args @env1:__getitem__: key]
 					ifFalse: [value := nextArg @env0:value].
-				stream @env0:nextPutAll: (bi ___printfConvert___: value conv: conv
-					flags: flags width: width precision: precision)
+				field := bi ___printfConvert___: value conv: conv
+					flags: flags width: width precision: precision.
+				field @env0:___pyPlainStr___
+					ifNil: [
+						"A %s or %c field holding a lone surrogate, which no
+						Character can: the rest of the result is assembled out
+						of code points, as str.format assembles it
+						(___formatPositional___:kw:depth:auto:)."
+						pieces @env0:isNil ifTrue: [pieces := OrderedCollection @env0:new].
+						pieces @env0:add: stream @env0:contents.
+						pieces @env0:add: field.
+						stream := AppendStream @env0:on: Unicode7 @env0:new]
+					ifNotNil: [:plainField | stream @env0:nextPutAll: plainField]
 			]
 		]
 	].
@@ -2551,7 +2568,9 @@ CharacterCollection >> __mod__: args [
 	(isMap @env0:not @env0:and: [argIdx @env0:<= argSeq @env0:size]) ifTrue: [
 		TypeError ___signal___:
 			'not all arguments converted during string formatting'].
-	^ stream @env0:contents
+	pieces @env0:isNil ifTrue: [^ stream @env0:contents].
+	pieces @env0:add: stream @env0:contents.
+	^ PyStrSurrogate @env0:___fromCodePoints___: (self ___codePointsOfAll___: pieces)
 
 ]
 
