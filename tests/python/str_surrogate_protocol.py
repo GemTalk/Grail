@@ -20,10 +20,10 @@ assertions are all on ``repr`` or on booleans, never on printing the character
 itself: writing a lone surrogate to a UTF-8 stream raises in CPython too.
 
 KNOWN GAPS, deliberately not asserted here because Grail does not yet do them
-and asserting the CPython answer would just fail: ``'%s' % s`` (the printf
-engine works in CharacterCollections), and the case/whitespace methods on a
-surrogate receiver (``s.upper()``, ``s.strip()``).  Both raise a catchable
-NotImplementedError in Grail rather than answering wrongly.
+and asserting the CPython answer would just fail: the case/whitespace methods
+on a surrogate receiver (``s.upper()``, ``s.strip()``).  Both raise a
+catchable NotImplementedError in Grail rather than answering wrongly.
+``'%s' % s`` was one too; percent_formats_a_lone_surrogate.py covers it now.
 """
 
 S = '\ud800'            # a lone high surrogate

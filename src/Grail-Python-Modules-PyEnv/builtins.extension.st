@@ -3662,14 +3662,22 @@ builtins >> ___printfCharBody___: value [
 	that Python ``except'' cannot catch, so ``'%c' % -1'' aborted the whole
 	module instead of raising OverflowError (test_format test_str_format).
 	The other shapes fell through to ``value asString'', which turned
-	``'%c' % 3.14'' into ``3.14'' -- four characters from a %c."
+	``'%c' % 3.14'' into ``3.14'' -- four characters from a %c.
 
-	| iv |
-	(value isKindOf: CharacterCollection) ifTrue: [
-		value @env0:size @env0:= 1 ifTrue: [^ value @env0:asString].
+	Both shapes come down to a code point, as in CPython's formatchar
+	(Objects/unicodeobject.c:14991-15026), and chr() builds the character, so
+	a lone surrogate is a %c like any other: chr() answers it as a
+	PyStrSurrogate.  Building it here as a Character was an UNCATCHABLE
+	OutOfRange for ``'%c' % 0xd800'', and a one-character str holding a
+	surrogate, which is not a CharacterCollection, was refused as not a str."
+
+	| iv codePoints |
+	value @env0:___isPyStr___ ifTrue: [
+		codePoints := value @env0:___pyCodePoints___.
+		codePoints @env0:size @env0:= 1 ifTrue: [^ self chr: codePoints @env0:first].
 		TypeError ___signal___:
 			('%c requires an int or a unicode character, not a string of length '
-				@env0:, value @env0:size @env0:printString)].
+				@env0:, codePoints @env0:size @env0:printString)].
 	iv := nil.
 	(value isKindOf: Integer) ifTrue: [iv := value]
 	ifFalse: [
@@ -3684,7 +3692,7 @@ builtins >> ___printfCharBody___: value [
 			@env0:, (bytes ___pyQualifiedTypeNameOf___: value))].
 	((iv @env0:>= 0) @env0:and: [iv @env0:<= 16r10FFFF]) ifFalse: [
 		OverflowError ___signal___: '%c arg not in range(0x110000)'].
-	^ String @env0:with: (Character @env0:codePoint: iv @env0:asInteger)
+	^ self chr: iv
 
 ]
 
@@ -3738,8 +3746,12 @@ builtins >> ___printfConvert___: value conv: conv flags: flags width: width prec
 
 		``str __new__:'' rather than ``value __str__'' so a str SUBCLASS coerces
 		down to a plain str exactly as str() does -- it IS what str() does now
-		that the builtins>>str: fast path is gone."
-		conv @env0:= $s ifTrue: [body := (str __new__: value) @env0:asString].
+		that the builtins>>str: fast path is gone.
+
+		The str itself, not its asString: a str holding a lone surrogate has no
+		Smalltalk string (PyStrSurrogate >> asString refuses), and every other
+		one is made a Smalltalk string by ___formatPadBody___ below."
+		conv @env0:= $s ifTrue: [body := str __new__: value].
 		conv @env0:= $r ifTrue: [body := (self repr: value) @env0:asString].
 		conv @env0:= $a ifTrue: [body := (self ascii: value) @env0:asString].
 		conv @env0:= $c ifTrue: [body := self ___printfCharBody___: value].
@@ -3747,6 +3759,11 @@ builtins >> ___printfConvert___: value conv: conv flags: flags width: width prec
 		(conv @env0:~= $c @env0:and: [
 			precision ~~ nil @env0:and: [body @env0:size @env0:> precision]]) ifTrue: [
 			body := body @env0:copyFrom: 1 to: precision].
+		"Precision and width count code points, as for any str
+		(unicode_format_arg_output, Objects/unicodeobject.c:15326-15475), so a
+		body holding a lone surrogate is sliced and padded by its own class."
+		body @env0:___pyPlainStr___ ifNil: [
+			^ body @env0:___paddedTo: width leftAligned: leftAlign].
 		align := leftAlign ifTrue: [$<] ifFalse: [$>].
 		^ self ___formatPadBody___: body fill: (Character @env0:space)
 			align: align width: width signLength: 0].

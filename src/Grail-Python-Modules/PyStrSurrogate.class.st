@@ -397,6 +397,19 @@ PyStrSurrogate >> ___orderAgainst___: other op: opName code: which [
 ]
 
 { #category : 'Grail-Placeholders' }
+PyStrSurrogate >> ___paddedTo: aWidth leftAligned: isLeftAligned [
+	"This string padded with spaces to aWidth code points, on the right when
+	left-aligned: the width of a %s or %c field.  str.ljust and str.rjust pad
+	exactly so, and answer through placeholders here."
+
+	^ self
+		___viaPlaceholders___: (isLeftAligned ifTrue: [#ljust] ifFalse: [#rjust])
+		positional: { aWidth }
+		kw: nil
+
+]
+
+{ #category : 'Grail-Placeholders' }
 PyStrSurrogate >> ___placeholderMapFor___: operands [
 	"Surrogate code point -> placeholder, one placeholder per distinct
 	surrogate, each a plane-16 private-use code point that no operand holds.
