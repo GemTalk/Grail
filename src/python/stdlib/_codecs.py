@@ -543,27 +543,39 @@ def _decoded_up_to_error(chunk, codec):
 def _decode_calling_handler(data, encoding, errors):
     """data decoded by bytes.decode's own ``encoding'', calling the handler
     registered as ``errors'' for each error, or None for a codec bytes.decode
-    does not implement.
-
-    Each error is found by decoding the rest strictly, which reports where
-    it is and why.  The handler may replace exc.object: the decode goes on
-    in what it holds then, as CPython's does."""
+    does not implement."""
     key = _codec_key(encoding)
     if key not in _DECODERS:
         return None
+    return _decoding_with_handler(data, key, errors)[0]
+
+
+def _decoding_with_handler(data, key, errors):
+    """(data decoded by the codec ``key'' names, calling the handler
+    registered as ``errors'' for each error, the stretches of input it
+    decoded, in order).
+
+    Each error is found by decoding the rest strictly, which reports where
+    it is and why.  The handler may replace exc.object: the decode goes on
+    in what it holds then, as CPython's does -- which is why the stretches
+    are answered too, for the escape codecs to warn about what was really
+    decoded."""
     source = bytes(data)
     try:
-        return source.decode(key)
+        return (source.decode(key), [source])
     except UnicodeDecodeError:
         pass
     codec, pos = _decoding_start(key, source)
     out = []
+    decoded = []
     handler = None
     while True:
         text, error = _decoded_up_to_error(source[pos:], codec)
         out.append(text)
         if error is None:
+            decoded.append(source[pos:])
             break
+        decoded.append(source[pos:pos + error[1]])
         name, start, end, reason = error
         start, end = pos + start, pos + end
         if handler is None:
@@ -573,7 +585,7 @@ def _decode_calling_handler(data, encoding, errors):
         source = _decoded_object(exc)
         out.append(replacement)
         pos = _resume_position(position, len(source))
-    return ''.join(out)
+    return (''.join(out), decoded)
 
 
 # ------------------------------------------------------- charmap primitives
@@ -1650,15 +1662,36 @@ def unicode_escape_decode(input, errors='strict', final=True):
     # Only the OUTERMOST call warns.  bytes.decode with an errors argument
     # consults the codec registry, which for unicode-escape comes straight
     # back here -- so a direct call nests one level and warned twice.
+    #
+    # A handler codecs.register_error registered may replace the input it is
+    # shown, and the warning is about the first invalid escape the decode
+    # really met, in what it decoded: _PyUnicode_DecodeUnicodeEscapeInternal2
+    # notes it as it goes, and _PyUnicode_DecodeUnicodeEscapeStateful warns
+    # (Objects/unicodeobject.c:6635-6882, 6885-6921).  So such a decode is
+    # made here, where the stretches it decoded can be seen.
     global _unicode_escape_depth
     _unicode_escape_depth += 1
     try:
-        result = data.decode('unicode-escape', errors)
+        if not isinstance(errors, str) or errors in _builtin_error_handlers:
+            result = data.decode('unicode-escape', errors)
+            decoded = [data]
+        else:
+            result, decoded = _decoding_with_handler(data, 'unicode-escape', errors)
     finally:
         _unicode_escape_depth -= 1
-    if _unicode_escape_depth == 0 and 0x5C in data:
-        _warn_invalid_escape(_first_invalid_unicode_escape(data))
+    if _unicode_escape_depth == 0:
+        _warn_invalid_escape(_first_invalid_escape_in(decoded))
     return (result, len(data))
+
+
+def _first_invalid_escape_in(stretches):
+    """The first invalid escape of the first stretch of input that has one."""
+    for stretch in stretches:
+        if 0x5C in stretch:
+            first = _first_invalid_unicode_escape(stretch)
+            if first is not None:
+                return first
+    return None
 
 
 def utf_8_sig_encode(input, errors='strict'):
