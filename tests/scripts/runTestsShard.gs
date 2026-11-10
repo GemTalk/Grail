@@ -45,7 +45,7 @@ escape hatch: it simply skips the deploy."
 level 1
 run
 | out numWorkers idx full shard result leaves plan
-  groups order shardT0 shardOf |
+  groups order shardT0 shardOf codeIndex codeKB codePeakKB codeCapKB |
 out := GsFile stdout.
 out nextPutAll:'topaz -l  processId = ' , System gemProcessId asString ; lf .
 numWorkers := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
@@ -133,6 +133,18 @@ ALL skipped has no leaves, which is why this walks the classes, not the leaves."
 "One GRAIL_CLASS_TIME|<shard>|<class>|<ms>|<tests> line per class, always:
 it is what scripts/refresh_shard_timings.sh reads, from CI's uploaded logs, to
 rewrite tests/scripts/shard_timings.txt."
+"The code region is capped apart from the object memory GRAIL_SHARD_MEM
+measures (GEM_TEMPOBJ_CODE_SIZE, set beside GEM_TEMPOBJ_CACHE_SIZE): it holds
+the code of every doit the shard compiles and, on Linux x86_64 only, their
+native code.  A CI text-arm shard died of it on 2026-11-07 (run 42327784296,
+`native code space full' at its 149th class of 161) while the same shard
+passed on a Mac, which generates no native code.  The gem's own statistic is
+sampled after each class, because code is collected as it goes and the peak,
+not the end, is what meets the cap."
+codeIndex := System cacheStatisticsDescriptionForGem indexOf: 'CodeCacheSizeKBytes'.
+codeKB := [(System gemCacheStatisticsForSessionId: System session) at: codeIndex].
+codeCapKB := (System gemConfigurationAt: #GEM_TEMPOBJ_CODE_SIZE) // 1024.
+codePeakKB := 0.
 result := GrailTestResult new.
 shardT0 := System _timeMs.
 [order do: [:key | | t0 |
@@ -141,7 +153,8 @@ shardT0 := System _timeMs.
   out nextPutAll: 'GRAIL_CLASS_TIME|'; nextPutAll: idx printString;
     nextPutAll: '|'; nextPutAll: key;
     nextPutAll: '|'; nextPutAll: (System _timeMs - t0) printString;
-    nextPutAll: '|'; nextPutAll: (groups at: key) tests size printString; cr]]
+    nextPutAll: '|'; nextPutAll: (groups at: key) tests size printString; cr.
+  codePeakKB := codePeakKB max: codeKB value]]
   ensure: [TestResource resetResources: shard resources].
 "ms= is UNCONDITIONAL.  Without it the gate reports only its slowest JOB, and a
 job is two shards run concurrently -- so a skew shows up as a number nothing in
@@ -156,6 +169,11 @@ precisely because nothing reported the number.  Now it is in the uploaded log."
 out nextPutAll: 'GRAIL_SHARD_MEM|idx='; nextPutAll: idx printString;
   nextPutAll: '|usedMB='; nextPutAll: ((System _tempObjSpaceUsed / 1048576) rounded) printString;
   nextPutAll: '|pct='; nextPutAll: (System _tempObjSpacePercentUsed) printString; lf.
+out nextPutAll: 'GRAIL_SHARD_CODE|idx='; nextPutAll: idx printString;
+  nextPutAll: '|peakKB='; nextPutAll: codePeakKB printString;
+  nextPutAll: '|endKB='; nextPutAll: codeKB value printString;
+  nextPutAll: '|capKB='; nextPutAll: codeCapKB printString;
+  nextPutAll: '|pct='; nextPutAll: (codePeakKB * 100 // codeCapKB) printString; lf.
 out nextPutAll: 'GRAIL_SHARD_RESULT|idx='; nextPutAll: idx printString;
   nextPutAll: '|workers='; nextPutAll: numWorkers printString;
   nextPutAll: '|ms='; nextPutAll: (System _timeMs - shardT0) printString;

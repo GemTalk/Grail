@@ -278,6 +278,8 @@ launch_gate_summary
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
 SHARD_MS=""
+SHARD_TEMP=""
+SHARD_CODE=""
 PLAN_MS=""
 DIGESTS=""
 SUITE_TESTS=""
@@ -301,6 +303,17 @@ for i in $SHARDS; do
   # numbers a skewed phase gives no clue which shard to move work off.
   ms=$(echo "$line" | sed -n -E 's/.*\|ms=([0-9]+)\|.*/\1/p')
   [ -n "$ms" ] && SHARD_MS="$SHARD_MS $i=$((ms / 1000))s"
+  # Per-shard memory, against each of the two caps in TOPAZ_CFG: temporary
+  # object memory (GRAIL_SHARD_MEM, at the end) and the code region
+  # (GRAIL_SHARD_CODE, its peak).  Printed in the job log, so CI's numbers can
+  # be read without downloading the shard logs.
+  temp=$(grep '^GRAIL_SHARD_MEM|' "$f" 2>/dev/null | head -1)
+  [ -n "$temp" ] && SHARD_TEMP="$SHARD_TEMP $i=$(echo "$temp" | sed -n -E 's/.*\|usedMB=([0-9]+)\|pct=([0-9]+).*/\1MB\/\2%/p')"
+  code=$(grep '^GRAIL_SHARD_CODE|' "$f" 2>/dev/null | head -1)
+  if [ -n "$code" ]; then
+    peak=$(echo "$code" | sed -n -E 's/.*\|peakKB=([0-9]+)\|.*/\1/p')
+    SHARD_CODE="$SHARD_CODE $i=$((peak / 1024))MB/$(echo "$code" | sed -n -E 's/.*\|pct=([0-9]+).*/\1/p')%"
+  fi
   # The partition each shard ran (GrailShardPlan): its digest, its planned
   # seconds and the size of the WHOLE suite as that shard saw it.  Checked
   # below: every shard must have run the same partition, and when all of them
@@ -344,6 +357,8 @@ printf '%s' "$SKIPS" | grep -v '^$' || true
 printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0))"
 [ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
 [ -n "$PLAN_MS" ] && printf 'TIMING | %-26s |%s\n' "  planned (shard_timings)" "$PLAN_MS"
+[ -n "$SHARD_TEMP" ] && printf 'MEMORY | %-26s |%s\n' "temp objects, by shard" "$SHARD_TEMP"
+[ -n "$SHARD_CODE" ] && printf 'MEMORY | %-26s |%s\n' "code region peak, by shard" "$SHARD_CODE"
 # EVERY TEST EXACTLY ONCE.  The shards never talk to each other: each builds
 # the same GrailShardPlan and runs its own part, so the only way a test can run
 # twice or not at all is for two shards to have built DIFFERENT plans (a
