@@ -29,9 +29,9 @@ Where the in-scope tiers stand:
 |------|------:|----------:|-------------:|------:|
 | P1 | 71 | 9 | 10 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
-| P3 | 30 | 4 | 22 | 56 |
-| P4 | 25 | 4 | 46 | 75 |
-| **In-scope** | **156** | **17** | **82** | **255** |
+| P3 | 32 | 2 | 22 | 56 |
+| P4 | 27 | 2 | 46 | 75 |
+| **In-scope** | **160** | **13** | **82** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **156 of those score OK**.
+Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **160 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,14 +136,14 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 80 | 4448 | 445 | 3914 | 10% |
+| P1 | 80 | 4448 | 445 | 3917 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
-| P3 | 32 | 4213 | 554 | 3636 | 13% |
-| P4 | 46 | 3781 | 146 | 3620 | 4% |
-| other | 23 | 1177 | 267 | 890 | 23% |
-| **all** | **212** | **17916** | **1970** | **15799** | **11%** |
+| P3 | 34 | 4260 | 555 | 3685 | 13% |
+| P4 | 46 | 3781 | 146 | 3623 | 4% |
+| other | 24 | 1199 | 282 | 903 | 24% |
+| **all** | **215** | **17985** | **1986** | **15867** | **11%** |
 
-OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12.
+OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12 · `test_stat` 15 of 22.
 <!-- /test-tally -->
 
 Most of the heavy skips are CPython's own, not Grail's. A module that tests a C
@@ -330,8 +330,8 @@ Larger pure-Python stdlib. Mostly implementable; a few need modest runtime suppo
 | ✅ | `test_binascii` | binascii encodings — pure semantics. |
 | ✅ | `test_bufio` | Buffered I/O layer — in-scope for StringIO/BytesIO; real-file backing is OS. *(edge — see below)* |
 | ✅ | `test_calendar` | calendar — pure Python. |
-| ❗ | `test_charmapcodec` | charmap codec — pure text codec. |
-| ❗ | `test_codeccallbacks` | Codec error-handler callbacks — pure. |
+| ✅ | `test_charmapcodec` | charmap codec — pure text codec. |
+| ✅ | `test_codeccallbacks` | Codec error-handler callbacks — pure. |
 | ✅ | `test_codecs` | codecs core — encode/decode registry (pure). |
 | ✅ | `test_colorsys` | colorsys — pure color-space math. |
 | ✅ | `test_configparser` | configparser (INI) — pure Python. |
@@ -419,12 +419,12 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_mimetypes` | mimetypes — pure lookup tables (web stack). |
 |  | `test_minidom` | xml.dom.minidom (vendored xml). |
 |  | `test_modulefinder` | modulefinder — static import graph analysis (tooling). *(edge — see below)* |
-| ❗ | `test_multibytecodec` | Multibyte codec engine — C-backed CJK; low priority. *(edge — see below)* |
+| ✅ | `test_multibytecodec` | Multibyte codec engine — C-backed CJK; low priority. *(edge — see below)* |
 | ✅ | `test_netrc` | netrc — pure parser (net-config). |
 | ✅ | `test_nturl2path` | nturl2path — url<->path conversion (pure). |
 |  | `test_pkg` | Package import semantics — import system. *(edge — see below)* |
 |  | `test_pkgutil` | pkgutil — package discovery utilities. |
-| ❗ | `test_plistlib` | plistlib — pure XML/binary plist parsing (Apple format). *(edge — see below)* |
+| ✅ | `test_plistlib` | plistlib — pure XML/binary plist parsing (Apple format). *(edge — see below)* |
 |  | `test_poplib` | poplib — POP3 client (net stack). |
 | ✅ | `test_pulldom` | xml.dom.pulldom (vendored xml). |
 |  | `test_pyclbr` | pyclbr — Python class browser (source parsing tool). *(edge — see below)* |
@@ -776,35 +776,29 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**25 of the 212 rows on the committed board are not OK.**
+**21 of the 215 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
 - `test.test_c_locale_coercion` SKIP, 8 tests: 0 failed, 0 errors, 8 skipped
-- `test.test_buffer` ERROR, 95 tests: 2 failed, 2 errors, 80 skipped
-- `test.test_multibytecodec` ERROR, 36 tests: 0 failed, 1 errors, 2 skipped
+- `test.test_buffer` ERROR, 95 tests: 2 failed, 1 errors, 80 skipped
 - `test.test_str` ERROR, 138 tests: 1 failed, 1 errors, 11 skipped
 - `test.test_signal` ERROR, 57 tests: 0 failed, 2 errors, 43 skipped
-- `test.test_sys` ERROR, 97 tests: 3 failed, 6 errors, 60 skipped
-- `test.test_fileio` ERROR, 99 tests: 0 failed, 3 errors, 3 skipped
+- `test.test_sys` ERROR, 97 tests: 2 failed, 6 errors, 60 skipped
 - `test.test_exceptions` ERROR, 107 tests: 6 failed, 3 errors, 30 skipped
-- `test.test_descr` ERROR, 162 tests: 34 failed, 15 errors, 12 skipped
-- `test.test_plistlib` ERROR, 70 tests: 0 failed, 1 errors, 5 skipped
-- `test.test_gzip` FAIL, 75 tests: 2 failed, 0 errors, 9 skipped
+- `test.test_descr` ERROR, 162 tests: 32 failed, 15 errors, 12 skipped
+- `test.test_gzip` FAIL, 75 tests: 1 failed, 0 errors, 9 skipped
 - `test.test_email.test__header_value_parser` ERROR, 380 tests: 0 failed, 8 errors, 0 skipped
 - `test.test_email.test_generator` ERROR, 73 tests: 0 failed, 1 errors, 0 skipped
 - `test.test_email.test_headerregistry` ERROR, 192 tests: 0 failed, 2 errors, 0 skipped
 - `test.test_email.test_parser` ERROR, 8 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_email.test_utils` FAIL, 22 tests: 1 failed, 0 errors, 1 skipped
 - `test.test_patma` ERROR, 328 tests: 6 failed, 1 errors, 0 skipped
 - `test.test_grammar` ERROR, 75 tests: 0 failed, 1 errors, 0 skipped
 - `test.test_fstring` ERROR, 90 tests: 4 failed, 1 errors, 4 skipped
-- `test.test_types` ERROR, 129 tests: 6 failed, 7 errors, 3 skipped
+- `test.test_types` ERROR, 129 tests: 5 failed, 7 errors, 3 skipped
 - `test.test_type_annotations` FAIL, 46 tests: 2 failed, 0 errors, 1 skipped
-- `test.test_dataclasses` ERROR, 280 tests: 9 failed, 6 errors, 2 skipped
+- `test.test_dataclasses` ERROR, 280 tests: 6 failed, 6 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
-
-Wired, but not on the board until the next nightly measures them: `test_charmapcodec`, `test_codeccallbacks`, `test_stat`.
 <!-- /not-ok-rows -->
 
 Every phase-4 module is green, including the eight this section used to list
