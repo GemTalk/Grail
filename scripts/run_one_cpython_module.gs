@@ -98,6 +98,14 @@ emit := [:st :tt :ff :ee :ss :dd |
 "Layer 2: any catchable Smalltalk error escaping the harness itself ->
  STERROR (not a crash)."
 [
+  "Start the module as CPython's own runners do.  ``python -m test'' and
+   ``python -m unittest'' put the working directory at sys.path[0], and so does
+   Grail's launcher for -m.  Without it, sys.path held only $PYTHONPATH, a venv
+   and the Grail user site, so on a machine with none of the three (every CI
+   runner) it was EMPTY, and test_grammar's test_selectors, which reads
+   sys.path[0], raised IndexError there and passed on a developer's machine."
+  importlib @env1:___installCwdDir___.
+
   "Load the scoring helper (pulls the parent 'test' package + unittest)."
   harnessMod := importlib
     loadModuleFromPath: (importlib @env1:___moduleNameToPath___: 'test._grail_harness')
