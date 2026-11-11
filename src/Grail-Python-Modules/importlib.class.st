@@ -1959,6 +1959,45 @@ importlib class >> ___claimModuleInit___: aName [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___classAttrBinding___: aSelector ofClass: aClass comesAfter: aSource [
+
+	"Does aClass read the class attribute aSelector from a class its MRO puts
+	AFTER aSource?  Then aSource's own binding is the one CPython reads, and
+	the value pass of ___mergeSecondaryBases___:bases:resolved: copies it.
+
+	That pass used to skip a value whenever aClass's metaclass answered the
+	name at all.  In the diamond
+
+	    class A: x = 'A'
+	    class B(A): pass
+	    class C(A): x = 'C'
+	    class D(B, C): pass
+
+	D's metaclass answers x through B, from A, so C's value was never copied
+	and D.x read 'A' where CPython reads 'C' (#1769).  itsdangerous is that
+	shape, which is how Flask sessions met it.  ___metaChainProvides___:
+	forClass:mergingFrom: asks the MRO the same way for the class-side
+	METHODS (#1479).
+
+	Only for a binding a class written in Python owns: the linearization is
+	exact only for those (___primaryChainProvides___:forClass:mergingFrom:
+	says why).  And never for a dunder, which a class keeps per class, as
+	Object >> ___secondaryBaseAttr___:name: found."
+
+	| owner linearization sourceIndex |
+
+	(self @env1:___grailIsDunderName___: aSelector) ifTrue: [^ false].
+	owner := aClass class whichClassIncludesSelector: aSelector environmentId: 1.
+	(owner notNil and: [owner isMeta]) ifFalse: [^ false].
+	(owner thisClass includesSelector: #'___pyDefinedClass___' environmentId: 1)
+		ifFalse: [^ false].
+	linearization := [self ___mroOf___: aClass] on: Error do: [:error | error return: #()].
+	sourceIndex := linearization indexOf: aSource.
+	^ sourceIndex > 0 and: [(linearization indexOf: owner thisClass) > sourceIndex]
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___classAttrValueSeenFrom___: aBase upTo: aWalker name: aSym [
 	"The value of class attribute aSym as PYTHON'S MRO SEES IT FROM aBase --
 	the class actually named in the class header of the class being merged --
@@ -7401,16 +7440,20 @@ importlib class >> ___mergeSecondaryBases___: aClass bases: secondaryBases resol
 					``class TestGenerator(TestGeneratorBase, TestEmailBase)'' ran
 					under compat32 instead of the mixin's policy.default.  Not for
 					an ancestor the storage base shares: C3 puts that after the
-					storage base, whose own binding then wins."
+					storage base, whose own binding then wins.  It is copied, too,
+					when the binding aClass would read comes from a class the MRO
+					puts after this base: then this base's value is the one C3
+					reads (#1769, ___classAttrBinding___:ofClass:comesAfter:)."
 					(cat == #'Grail-Class Attrs'
 						and: [(sel asString includes: $:) not
 						and: [(kernelSlots includes: sel) not
 						and: [sel ~~ #'__module__'
 						and: [sel ~~ #'___dynInstVars___'
 						and: [(aClass class whichClassIncludesSelector: sel environmentId: 1) isNil
+							or: [(self ___classAttrBinding___: sel ofClass: aClass comesAfter: walker)
 							or: [overrideMode
 								and: [walker ~~ storageBase
-								and: [(storageBase inheritsFrom: walker) not]]]]]]]]) ifTrue: [
+								and: [(storageBase inheritsFrom: walker) not]]]]]]]]]) ifTrue: [
 						| v holder |
 						"Read the value AS SEEN FROM ``base'' -- the class actually
 						named in the class header -- not from ``walker'', which is
