@@ -530,7 +530,17 @@ BytesIO >> getbuffer [
 	tell a view still in use from a ``getbuffer().nbytes'' already thrown
 	away, so refusing would break the common case.  A write that GROWS the
 	stream replaces the buffer, leaving an older view on the old bytes --
-	the state CPython's BufferError exists to prevent."
+	the state CPython's BufferError exists to prevent.
+
+	Telling the two apart is possible, but only a mark-sweep can do it: a
+	weakly held view dies at a mark-sweep and never at a scavenge.  Measured
+	on 4.0.0.a5, Darwin arm64, 2026-11-11: about 20 ms with 73 MB of live
+	temporary objects, 50 ms with 230 MB.  Werkzeug's send_file and Django's
+	FileResponse both size a BytesIO with ``getbuffer().nbytes'' and close
+	it when the response ends, so each such response would pay one at close.
+	bytearray has the same choice, at a worse price (bytearray>>size:).  The
+	tests this leaves failing are listed in docs/Grail_CPython_Scope.md,
+	under Refcount/GC timing."
 
 	| view |
 	self _checkOpen.

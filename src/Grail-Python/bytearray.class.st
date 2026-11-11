@@ -63,6 +63,15 @@ bytearray >> size: anInteger [
 	materialisation of its iterable -- see ___beginBufferExport___ for why a
 	join that mutates its own separator otherwise answers silently wrong.
 
+	A memoryview over a bytearray registers NO export, although CPython
+	refuses a resize while one is alive.  Grail keeps no refcount, so it
+	cannot tell a live view from a dropped one without a mark-sweep (20 to
+	50 ms; BytesIO>>getbuffer has the measurement).  asyncio's
+	StreamReader.read() and readexactly() take
+	``bytes(memoryview(self._buffer)[:n])'' and then ``del self._buffer[:n]''
+	on every call, so registering the view would make every such call either
+	raise BufferError or pay a mark-sweep.
+
 	The check is a SessionTemps lookup and only when the registry exists at
 	all, so an ordinary resize pays one nil test."
 

@@ -17,8 +17,12 @@ tests that prompted this, while quietly lying about the one property the type
 exists to provide.
 
 The fixed METADATA (format, itemsize, nbytes, shape) is captured at construction.
-That is not a shortcut: CPython forbids resizing an object while a view over it
-is exported, so the length cannot change under a live view.
+CPython can do that because it forbids resizing an object while a view over it
+is exported.  Grail does not refuse that resize (bytearray>>size: says why), so
+a view keeps the length it was built with: after ``bytearray.clear()' a view
+taken before it still reports its old nbytes, and reading it raises the kernel's
+OffsetError, which Python code cannot catch.  CPython raises BufferError at the
+clear instead.
 
 Scope, stated rather than discovered later:
   * ONE-DIMENSIONAL only.  ndim is always 1; CPython's multi-dimensional views
