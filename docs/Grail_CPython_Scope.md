@@ -655,6 +655,25 @@ GemStone uses mark-sweep GC (no refcounting, so no deterministic __del__) and co
 | `test_weakref` | weakref — refcount/GC-driven reclamation. |
 | `test_weakset` | WeakSet — weakref-based. |
 
+The same refcount dependence decides ten tests inside two wired modules. They
+check that an object refuses a resize with `BufferError` while a `memoryview`
+of it is alive:
+
+- `test_memoryio`: `test_getbuffer`, `test_getbuffer_empty`,
+  `test_write_concurrent_export` and `test_writelines_concurrent_export`, each
+  in `PyBytesIOTest` and `CBytesIOTest`;
+- `test_buffer`: `TestPythonBufferProtocol.test_release_saves_reference_no_subclassing`
+  and `test_release_buffer_with_exception_set`.
+
+Without a refcount, Grail can tell a view still in use from a dropped one only
+by running a mark-sweep, which takes about 20 ms with 73 MB of live temporary objects and 50 ms with 230 MB
+(measured 2026-11-11). Ordinary code drops views and then resizes:
+`asyncio.StreamReader.read()` and `readexactly()` do so on every call, and
+Werkzeug's `send_file` and Django's `FileResponse` do so once per in-memory
+response. Each of those would either raise `BufferError` or pay a mark-sweep,
+so the refusal is left unmodelled. `bytearray>>size:` and `BytesIO>>getbuffer`
+carry the details.
+
 ### Hardware / OS-platform specific  ·  18 modules
 
 Bound to a specific OS/CPU/toolchain (Windows, macOS, Android, Solaris/BSD poll flavors).
