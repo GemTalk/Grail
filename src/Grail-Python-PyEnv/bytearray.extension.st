@@ -45,6 +45,9 @@ bytearray >> ___bytesFind___: rawSub _: start _: end [
 	lo := start. hi := end.
 	(lo @env0:== None) ifTrue: [lo := 0].
 	(hi @env0:== None) ifTrue: [hi := size].
+	"Through __index__ before the env-0 comparisons below, which on anything
+	else are an uncatchable error (a str bound, or an object with __index__)."
+	lo := lo ___asSliceIndex___. hi := hi ___asSliceIndex___.
 	lo @env0:< 0 ifTrue: [lo := (size @env0:+ lo) @env0:max: 0].
 	hi @env0:< 0 ifTrue: [hi := (size @env0:+ hi) @env0:max: 0].
 	"Clamp only hi to size: a start past the end must miss (an empty sub

@@ -6902,12 +6902,13 @@ Object >> ___asIndex___ [
 
 { #category : 'Grail-Numeric Protocol' }
 Object >> ___asIndexOrNil___ [
-	"___asIndex___ for an OPTIONAL bound: nil and the Python None singleton
-	pass through untouched (an unset slice bound), everything else coerces."
+	"A subscript's OPTIONAL slice bound: nil and the Python None singleton
+	pass through untouched (an unset bound), everything else is a slice index
+	(___asSliceIndex___)."
 
 	self @env0:isNil ifTrue: [^ nil].
 	(self @env0:== None) ifTrue: [^ self].
-	^ self ___asIndex___
+	^ self ___asSliceIndex___
 
 ]
 
@@ -6933,6 +6934,20 @@ Object >> ___asRepeatCount___ [
 ]
 
 { #category : 'Grail-Numeric Protocol' }
+Object >> ___asRequiredSliceIndex___ [
+
+	"This object as a start or stop that may not be None: CPython's
+	_PyEval_SliceIndexNotNone (Python/ceval.c:3098), the converter of
+	list.index, tuple.index and memoryview.index.  As ___asSliceIndex___, with
+	None refused like any other non-index."
+
+	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
+		^ TypeError ___signal___: TypeError @env0:___requiredSliceIndexMessage___].
+	^ self ___asIndex___
+
+]
+
+{ #category : 'Grail-Numeric Protocol' }
 Object >> ___asSizeOr: aDefault [
 	"This object as a size argument that may be None -- Argument Clinic's
 	``Py_ssize_t(accept={int, NoneType})'', _Py_convert_optional_to_ssize_t:
@@ -6943,6 +6958,22 @@ Object >> ___asSizeOr: aDefault [
 	(self @env0:isNil or: [self == None]) ifTrue: [^ aDefault].
 	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
 		^ TypeError ___signal___: (TypeError @env0:___integerOrNoneMessageFor: self)].
+	^ self ___asIndex___
+
+]
+
+{ #category : 'Grail-Numeric Protocol' }
+Object >> ___asSliceIndex___ [
+
+	"This object as a slice bound: CPython's _PyEval_SliceIndex
+	(Python/ceval.c:3076).  An int or an __index__ object answers its int;
+	anything else raises the TypeError every slice bound raises, which names
+	no type -- not the ``cannot be interpreted as an integer'' one ___asIndex___
+	raises for operator.index.  None is a legal bound whose meaning depends on
+	the bound, so a caller resolves it before sending this."
+
+	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
+		^ TypeError ___signal___: TypeError @env0:___sliceIndexMessage___].
 	^ self ___asIndex___
 
 ]

@@ -133,7 +133,7 @@ tuple >> ___getslice___: lower _: upper _: step [
 	___asIndexOrNil___ leaves an unset bound alone."
 	lwr := lower ___asIndexOrNil___.
 	upr := upper ___asIndexOrNil___.
-	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asIndex___].
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asSliceIndex___].
 	lwr := (lwr @env0:== None) ifTrue: [nil] ifFalse: [lwr].
 	upr := (upr @env0:== None) ifTrue: [nil] ifFalse: [upr].
 	st @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].

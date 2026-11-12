@@ -54,11 +54,11 @@ slice >> ___unpackedSlice___ [
 	((plain value: self start) and: [(plain value: self stop)
 		and: [plain value: self step]]) ifTrue: [^ self].
 	^ slice @env0:___newStart: ((plain value: self start)
-			ifTrue: [self start] ifFalse: [bytes ___coerceIndex___: self start])
+			ifTrue: [self start] ifFalse: [self start ___asSliceIndex___])
 		stop: ((plain value: self stop)
-			ifTrue: [self stop] ifFalse: [bytes ___coerceIndex___: self stop])
+			ifTrue: [self stop] ifFalse: [self stop ___asSliceIndex___])
 		step: ((plain value: self step)
-			ifTrue: [self step] ifFalse: [bytes ___coerceIndex___: self step])
+			ifTrue: [self step] ifFalse: [self step ___asSliceIndex___])
 
 ]
 
@@ -169,7 +169,7 @@ slice >> indices: length [
 	omitted bound (range>>__getitem__: now routes such slices here); treat nil
 	as None so ``r[2:8]'' -- step omitted -- normalizes instead of trying to
 	coerce nil to an integer."
-	st := (self step @env0:isNil or: [self step @env0:= None]) ifTrue: [1] ifFalse: [bytes ___coerceIndex___: self step].
+	st := (self step @env0:isNil or: [self step @env0:= None]) ifTrue: [1] ifFalse: [self step ___asSliceIndex___].
 	(st @env0:= 0) ifTrue: [
 		ValueError ___signal___: 'slice step cannot be zero'
 	].
@@ -181,8 +181,8 @@ slice >> indices: length [
 	(len @env0:< 0) ifTrue: [
 		ValueError ___signal___: 'length should not be negative'
 	].
-	rawStart := (self start @env0:isNil or: [self start @env0:= None]) ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self start].
-	rawStop := (self stop @env0:isNil or: [self stop @env0:= None]) ifTrue: [None] ifFalse: [bytes ___coerceIndex___: self stop].
+	rawStart := (self start @env0:isNil or: [self start @env0:= None]) ifTrue: [None] ifFalse: [self start ___asSliceIndex___].
+	rawStop := (self stop @env0:isNil or: [self stop @env0:= None]) ifTrue: [None] ifFalse: [self stop ___asSliceIndex___].
 	lo := rawStart @env0:= None
 		ifTrue: [st @env0:> 0 ifTrue: [0] ifFalse: [len @env0:- 1]]
 		ifFalse: [rawStart @env0:< 0
