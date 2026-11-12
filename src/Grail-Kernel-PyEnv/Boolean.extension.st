@@ -433,13 +433,14 @@ Boolean >> __divmod__: other [
 
 { #category : 'Grail-Documentation' }
 Boolean >> __doc__ [
-	"Return documentation string for bool type."
 
-	^ 'bool(x) -> bool
+	"An instance's docstring is its type's, as in CPython, where an instance
+	finds ``__doc__'' in its type's dict: builtin types answer CPython's
+	text (Object >> ___builtinTypeDocstring___), and an instance of a Python
+	subclass answers its own class's docstring or None.  This answered a
+	hand-written copy of bool's text, which had drifted from CPython's."
 
-Returns True when the argument x is true, False otherwise.
-The builtins True and False are the only two instances of the class bool.
-The class bool is a subclass of the class int, and cannot be subclassed.' @env0:asUnicodeString
+	^ self __class__ __doc__
 
 ]
 

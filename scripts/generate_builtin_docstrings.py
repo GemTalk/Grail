@@ -40,6 +40,32 @@ NAMES = [
     'setattr', 'sorted', 'sum', 'type', 'vars', 'zip',
 ]
 
+# Grail's builtin TYPES: every name ``dir(builtins)'' binds to a type inside Grail
+# (all of CPython's but ``__loader__'').  Kernel-backed and Smalltalk-defined
+# types have no class statement, so nothing captured a docstring for them, and
+# ``int.__doc__'' answered object's (#1724).  Spelled out for NAMES's reason.
+TYPE_NAMES = [
+    'ArithmeticError', 'AssertionError', 'AttributeError', 'BaseException',
+    'BaseExceptionGroup', 'BlockingIOError', 'BrokenPipeError', 'BufferError', 'BytesWarning',
+    'ChildProcessError', 'ConnectionAbortedError', 'ConnectionError', 'ConnectionRefusedError',
+    'ConnectionResetError', 'DeprecationWarning', 'EOFError', 'EncodingWarning',
+    'EnvironmentError', 'Exception', 'ExceptionGroup', 'FileExistsError', 'FileNotFoundError',
+    'FloatingPointError', 'FutureWarning', 'GeneratorExit', 'IOError', 'ImportError',
+    'ImportWarning', 'IndentationError', 'IndexError', 'InterruptedError', 'IsADirectoryError',
+    'KeyError', 'KeyboardInterrupt', 'LookupError', 'MemoryError', 'ModuleNotFoundError',
+    'NameError', 'NotADirectoryError', 'NotImplementedError', 'OSError', 'OverflowError',
+    'PendingDeprecationWarning', 'PermissionError', 'ProcessLookupError',
+    'PythonFinalizationError', 'RecursionError', 'ReferenceError', 'ResourceWarning',
+    'RuntimeError', 'RuntimeWarning', 'StopAsyncIteration', 'StopIteration', 'SyntaxError',
+    'SyntaxWarning', 'SystemError', 'SystemExit', 'TabError', 'TimeoutError', 'TypeError',
+    'UnboundLocalError', 'UnicodeDecodeError', 'UnicodeEncodeError', 'UnicodeError',
+    'UnicodeTranslateError', 'UnicodeWarning', 'UserWarning', 'ValueError', 'Warning',
+    'ZeroDivisionError', '_IncompleteInputError', 'bool', 'bytearray', 'bytes', 'classmethod',
+    'complex', 'dict', 'enumerate', 'filter', 'float', 'frozenset', 'int', 'list', 'map',
+    'memoryview', 'object', 'property', 'range', 'reversed', 'set', 'slice', 'staticmethod',
+    'str', 'super', 'tuple', 'type', 'zip',
+]
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
 from tonel_methods import Method, set_methods  # noqa: E402
@@ -50,8 +76,8 @@ from tonel_methods import Method, set_methods  # noqa: E402
 # functools.update_wrapper copied that None onto every wrapper built around a builtin. So the
 # table is declared for the ``builtins'' module class (as functools hand-declares
 # ___methodSignatureTable___ for cmp_to_key), and BoundMethod >> __doc__ finds it through the
-# ordinary superclass walk. Builtin TYPES (dict, list, str, the exceptions) are not here; their
-# __doc__ resolves through the class.
+# ordinary superclass walk. Builtin TYPES (dict, list, str, the exceptions) are a table of their
+# own, ___typeDocTable___, which Object >> __doc__ reads for a class with no docstring of its own.
 OUT = ROOT / 'src/Grail-Python-Modules-PyEnv/builtins.extension.st'
 
 SOURCE_HEAD = """___methodDocTable___
@@ -64,6 +90,13 @@ SOURCE_HEAD = """___methodDocTable___
 SOURCE_TAIL = """
 		@env0:yourself)
 """
+
+TYPE_SOURCE_HEAD = """___typeDocTable___
+	"CPython's ``__doc__'' for each builtin type, keyed by the name, and None
+	for a type CPython gives none.  Read by Object >> ___builtinTypeDocstring___.
+	GENERATED -- see the file header."
+
+	^ ((KeyValueDictionary @env0:new)"""
 
 
 def smalltalk_string(s):
@@ -92,9 +125,20 @@ def main():
             continue
         entries.append(f"\n\t\t@env0:at: '{name}' put: {smalltalk_string(doc)};")
 
+    missing = [n for n in TYPE_NAMES if not isinstance(getattr(builtins, n, None), type)]
+    if missing:
+        sys.exit(f'not builtin types in this interpreter: {missing}')
+    type_entries = []
+    for name in TYPE_NAMES:
+        doc = getattr(builtins, name).__doc__
+        value = smalltalk_string(doc) if doc else 'None'
+        type_entries.append(f"\n\t\t@env0:at: '{name}' put: {value};")
+
     set_methods(str(OUT), 'builtins', [
-        Method(meta=True, category='Grail-Docstrings', source=SOURCE_HEAD + ''.join(entries) + SOURCE_TAIL)])
-    print(f'wrote {OUT} with {len(entries)} docstrings'
+        Method(meta=True, category='Grail-Docstrings', source=SOURCE_HEAD + ''.join(entries) + SOURCE_TAIL),
+        Method(meta=True, category='Grail-Docstrings',
+               source=TYPE_SOURCE_HEAD + ''.join(type_entries) + SOURCE_TAIL)])
+    print(f'wrote {OUT} with {len(entries)} function and {len(type_entries)} type docstrings'
           + (f' (no docstring in CPython, skipped: {skipped})' if skipped else ''))
 
 
