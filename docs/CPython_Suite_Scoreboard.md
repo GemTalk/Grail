@@ -213,7 +213,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_email.test_policy | OK | 33 | 0 | 0 | 0 |  |
 | test.test_email.test_utils | OK | 22 | 0 | 0 | 1 |  |
 | test.test_patma | ERROR | 328 | 6 | 1 | 0 |  |
-| test.test_grammar | ERROR | 75 | 0 | 1 | 0 |  |
+| test.test_grammar | OK | 75 | 0 | 0 | 0 |  |
 | test.test_fstring | ERROR | 90 | 4 | 1 | 4 |  |
 | test.test_type_aliases | OK | 30 | 0 | 0 | 0 |  |
 | test.test_type_params | OK | 108 | 0 | 0 | 0 |  |
