@@ -115,6 +115,22 @@ ExecBlock >> ___setKwDefaults___: value [
 ]
 
 { #category : 'Grail-Attribute Access' }
+ExecBlock >> ___signalNoAttribute___: name [
+
+	"CPython's AttributeError for a function without the attribute name, on a
+	read and on a delete alike (PyObject_GenericGetAttr and its setter,
+	Objects/object.c:1920): ``'function' object has no attribute 'name''',
+	carrying the name and the function as ``name'' and ``obj''.  A lambda or a
+	nested def is an ExecBlock, and its misses used to name the Smalltalk class
+	on a read and say only the name on a delete, with neither attribute set."
+
+	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError')
+		@env0:___signalMissing___: name
+		on: self
+
+]
+
+{ #category : 'Grail-Attribute Access' }
 ExecBlock >> __annotate__ [
 	"``func.__annotate__'' — PEP 649's annotation-computing function, a
 	one-argument callable taking a Format and answering the annotation
@@ -257,8 +273,7 @@ ExecBlock >> __delattr__: name [
 	(name @env0:asSymbol == #'__annotations__') ifTrue: [^ self ___deleteAnnotations___].
 	((ExecBlock @env0:___pyAttrsClass___) @env0:removeAt: self attr: name)
 		ifTrue: [^ ExecBlock @env0:___pyNone___].
-	^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError') ___signal___:
-		(name @env0:asString)
+	^ self ___signalNoAttribute___: name
 
 ]
 
@@ -342,10 +357,7 @@ ExecBlock >> __getattr__: name [
 
 	| value |
 	value := (ExecBlock @env0:___pyAttrsClass___) @env0:at: self attr: name.
-	value == nil ifTrue: [
-		^ (System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #'AttributeError') ___signal___:
-			('ExecBlock object has no attribute ''' @env0:, name @env0:asString @env0:, '''')
-	].
+	value == nil ifTrue: [^ self ___signalNoAttribute___: name].
 	^ value
 
 ]

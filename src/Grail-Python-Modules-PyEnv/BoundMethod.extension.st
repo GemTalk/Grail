@@ -1439,7 +1439,14 @@ BoundMethod >> __delattr__: name [
 		name @env0:asSymbol == #'__annotations__' ifTrue: [
 			BoundMethod @env0:___deleteAnnotationsOf___: self.
 			^ ExecBlock @env0:___pyNone___].
-		^ super @env1:__delattr__: name].
+		"A function's delete miss carries its name and the function, as CPython's
+		does (Objects/object.c:1920); the inherited delete leaves them unset, which
+		is right for a plain instance, whose CPython miss carries neither."
+		^ [super @env1:__delattr__: name]
+			@env0:on: AttributeError
+			do: [:ex |
+				AttributeError @env0:___stampContextOn___: ex name: name obj: self.
+				ex @env0:pass]].
 	name @env0:asSymbol == #'__class__' ifTrue: [
 		TypeError ___signal___: 'can''t delete __class__ attribute'].
 	((BoundMethod @env0:___methodDescriptorNames___) @env0:includes: name @env0:asSymbol)
