@@ -722,6 +722,166 @@ PyRawSocket >> ___setLinger___: value on: sock [
 
 ]
 
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketGetsockopt___: level _: optname [
+	| sock entry raw |
+	sock := self @env0:___ensureOpen.
+	entry := PyRawSocket @env0:___gsOptionFor: level opt: optname.
+	entry @env0:isNil ifTrue: [
+		^ OSError ___signal___: '[Errno 92] Protocol not available'].
+	raw := sock @env0:option: (entry @env0:at: 1).
+	raw @env0:isNil ifTrue: [^ 0].
+	(entry @env0:at: 2) @env0:= #bool ifTrue: [
+		^ raw == true ifTrue: [1] ifFalse: [0]].
+	^ raw
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketListen___: backlog [
+	| sock |
+	sock := self @env0:___ensureOpen.
+	(sock @env0:makeListener: backlog) @env0:isNil ifTrue: [
+		^ self @env0:___fail: 'listen failed'].
+	^ None
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketRecv___: bufsize _: flags [
+	"Read up to bufsize bytes.  An empty result is EOF, as in CPython."
+
+	^ self ___recvBytes___: bufsize
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketRecvfrom___: bufsize _: flags [
+	^ self ___recvfromBytes___: bufsize
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketRecvfromInto___: buffer _: nbytes _: flags [
+	"``(nbytes, address)'', the datagram read into buffer."
+
+	| want res data n |
+	self @env0:___ensureOpen.
+	want := self ___intoCount___: nbytes for: buffer what: 'recvfrom_into'.
+	res := self ___recvfromBytes___: want.
+	data := res @env0:at: 1.
+	n := data @env0:size.
+	1 @env0:to: n do: [:i | buffer @env0:at: i put: (data @env0:at: i)].
+	^ tuple @env0:withAll: { n . res @env0:at: 2 }
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketRecvInto___: buffer _: nbytes [
+	^ self ___socketRecvInto___: buffer _: nbytes _: 0
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketRecvInto___: buffer _: nbytes _: flags [
+	"Read straight into a bytearray/memoryview, answering the count.  This
+	is what makefile()'s buffered reader uses, so it matters for throughput.
+	The three-argument form is the one ssl.SSLSocket reaches through
+	``super().recv_into(buffer, nbytes, flags)''."
+
+	| want n data |
+	self @env0:___ensureOpen.
+	want := self ___intoCount___: nbytes for: buffer what: 'recv_into'.
+	want @env0:= 0 ifTrue: [^ 0].
+	data := self ___recvBytes___: want.
+	n := data @env0:size.
+	1 @env0:to: n do: [:i | buffer @env0:at: i put: (data @env0:at: i)].
+	^ n
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketSend___: data _: flags [
+	"Write what fits, answering the count -- a short write is legal here.
+
+	A NON-BLOCKING socket whose send buffer is full raises BlockingIOError
+	rather than writing nothing: ``send'' returning 0 is indistinguishable from
+	a socket that took no bytes for some other reason, and asyncio's sock_sendall
+	decides whether to wait for writability from that exception.  The readiness
+	probe FAILS OPEN -- if GsSocket cannot answer writeWillNotBlock the write is
+	attempted as before -- because refusing a send that would have worked is the
+	worse error of the two.
+
+	``sendall'' is deliberately not given the same guard: its loop reports a
+	full buffer through GsSocket's own failure path, and a partial ``sendall''
+	has no way to report how much it wrote anyway (which is why asyncio uses
+	``send'')."
+
+	| sock ba n |
+	sock := self @env0:___ensureOpen.
+	self ___isNonBlocking___ ifTrue: [
+		([sock @env0:writeWillNotBlock] @env0:on: Error
+			do: [:e | e @env0:return: true]) == false ifTrue: [
+				^ self ___notReadyNow___].
+		"ONE write, of what fits.  GsSocket >> write:from: loops until every byte
+		is out and suspends the green thread between tries, so a non-blocking
+		send of 8K into a buffer with 1K of room blocked -- and with a peer that
+		was not reading, it blocked for good (test_ssl test_nonblocking_send).
+		The primitive answers the count written, true for EINTR (retry), nil for
+		an error, and anything else for EAGAIN."
+		ba := self @env0:___toByteArray: data.
+		ba @env0:isEmpty ifTrue: [^ 0].
+		[n := sock @env0:_write: ba startingAt: 1 ofSize: ba @env0:size.
+		 n == true] @env0:whileTrue.
+		n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
+		(n @env0:isKindOf: SmallInteger) ifFalse: [^ self ___notReadyNow___].
+		^ n].
+	ba := self @env0:___toByteArray: data.
+	n := sock @env0:write: ba @env0:size from: ba.
+	n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
+	^ n
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketSendall___: data _: flags [
+	"Loop until everything is written; answer None."
+
+	| sock ba size total n |
+	sock := self @env0:___ensureOpen.
+	ba := self @env0:___toByteArray: data.
+	size := ba @env0:size.
+	total := 0.
+	[total @env0:< size] @env0:whileTrue: [
+		n := sock @env0:write: (size @env0:- total) from: ba startingAt: total @env0:+ 1.
+		n @env0:isNil ifTrue: [^ self @env0:___fail: 'sendall failed'].
+		total := total @env0:+ n].
+	^ None
+
+]
+
+{ #category : 'Grail-Private' }
+PyRawSocket >> ___socketSendto___: data _: flags _: address [
+	"Send one datagram to (host, port), answering the byte count.  On a stream
+	socket with no peer it is ENOTCONN, which Darwin answers too -- GsSocket
+	instead signals its own error, which no Python handler sees as OSError."
+
+	| sock ba host port |
+	sock := self @env0:___ensureOpen.
+	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
+		^ self ___notConnected___].
+	ba := self @env0:___toByteArray: data.
+	host := (address @env0:at: 1) @env0:asString.
+	port := address @env0:at: 2.
+	(sock @env0:sendUdp: (self @env0:___toRawString: ba)
+		flags: (flags @env0:ifNil: [0])
+		toHost: host
+		port: port) @env0:isNil ifTrue: [
+			^ self @env0:___fail: 'sendto failed'].
+	^ ba @env0:size
+
+]
+
 { #category : 'Grail-Constructors' }
 PyRawSocket >> __init__ [
 	^ self __init__: 2 _: 1 _: 0
@@ -1144,16 +1304,8 @@ PyRawSocket >> getsockname [
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> getsockopt: level _: optname [
-	| sock entry raw |
-	sock := self @env0:___ensureOpen.
-	entry := PyRawSocket @env0:___gsOptionFor: level opt: optname.
-	entry @env0:isNil ifTrue: [
-		^ OSError ___signal___: '[Errno 92] Protocol not available'].
-	raw := sock @env0:option: (entry @env0:at: 1).
-	raw @env0:isNil ifTrue: [^ 0].
-	(entry @env0:at: 2) @env0:= #bool ifTrue: [
-		^ raw == true ifTrue: [1] ifFalse: [0]].
-	^ raw
+
+	^ self ___socketGetsockopt___: level _: optname
 
 ]
 
@@ -1162,7 +1314,7 @@ PyRawSocket >> getsockopt: level _: optname _: buflen [
 	"The buffer form returns bytes; only the int options are meaningful here."
 
 	| v ba |
-	v := self getsockopt: level _: optname.
+	v := self ___socketGetsockopt___: level _: optname.
 	ba := ByteArray @env0:new: buflen.
 	1 @env0:to: (buflen @env0:min: 4) do: [:i |
 		ba @env0:at: i put: ((v @env0:bitShift: (i @env0:- 1) @env0:* -8) @env0:bitAnd: 255)].
@@ -1178,17 +1330,14 @@ PyRawSocket >> gettimeout [
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> listen [
-	^ self listen: 128
+	^ self ___socketListen___: 128
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> listen: backlog [
-	| sock |
-	sock := self @env0:___ensureOpen.
-	(sock @env0:makeListener: backlog) @env0:isNil ifTrue: [
-		^ self @env0:___fail: 'listen failed'].
-	^ None
+
+	^ self ___socketListen___: backlog
 
 ]
 
@@ -1200,84 +1349,66 @@ PyRawSocket >> proto [
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recv_into: buffer [
-	^ self recv_into: buffer _: 0
+	^ self ___socketRecvInto___: buffer _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recv_into: buffer _: nbytes [
-	^ self recv_into: buffer _: nbytes _: 0
+
+	^ self ___socketRecvInto___: buffer _: nbytes
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recv_into: buffer _: nbytes _: flags [
-	"Read straight into a bytearray/memoryview, answering the count.  This
-	is what makefile()'s buffered reader uses, so it matters for throughput.
-	The three-argument form is the one ssl.SSLSocket reaches through
-	``super().recv_into(buffer, nbytes, flags)''."
 
-	| want n data |
-	self @env0:___ensureOpen.
-	want := self ___intoCount___: nbytes for: buffer what: 'recv_into'.
-	want @env0:= 0 ifTrue: [^ 0].
-	data := self ___recvBytes___: want.
-	n := data @env0:size.
-	1 @env0:to: n do: [:i | buffer @env0:at: i put: (data @env0:at: i)].
-	^ n
+	^ self ___socketRecvInto___: buffer _: nbytes _: flags
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recv: bufsize [
-	^ self recv: bufsize _: 0
+	^ self ___socketRecv___: bufsize _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recv: bufsize _: flags [
-	"Read up to bufsize bytes.  An empty result is EOF, as in CPython."
 
-	^ self ___recvBytes___: bufsize
+	^ self ___socketRecv___: bufsize _: flags
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recvfrom_into: buffer [
-	^ self recvfrom_into: buffer _: 0 _: 0
+	^ self ___socketRecvfromInto___: buffer _: 0 _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recvfrom_into: buffer _: nbytes [
-	^ self recvfrom_into: buffer _: nbytes _: 0
+	^ self ___socketRecvfromInto___: buffer _: nbytes _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recvfrom_into: buffer _: nbytes _: flags [
-	"``(nbytes, address)'', the datagram read into buffer."
 
-	| want res data n |
-	self @env0:___ensureOpen.
-	want := self ___intoCount___: nbytes for: buffer what: 'recvfrom_into'.
-	res := self ___recvfromBytes___: want.
-	data := res @env0:at: 1.
-	n := data @env0:size.
-	1 @env0:to: n do: [:i | buffer @env0:at: i put: (data @env0:at: i)].
-	^ tuple @env0:withAll: { n . res @env0:at: 2 }
+	^ self ___socketRecvfromInto___: buffer _: nbytes _: flags
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recvfrom: bufsize [
-	^ self recvfrom: bufsize _: 0
+	^ self ___socketRecvfrom___: bufsize _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> recvfrom: bufsize _: flags [
-	^ self ___recvfromBytes___: bufsize
+
+	^ self ___socketRecvfrom___: bufsize _: flags
 
 ]
 
@@ -1290,73 +1421,27 @@ PyRawSocket >> recvmsg: bufsize [
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> send: data [
-	^ self send: data _: 0
+	^ self ___socketSend___: data _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> send: data _: flags [
-	"Write what fits, answering the count -- a short write is legal here.
 
-	A NON-BLOCKING socket whose send buffer is full raises BlockingIOError
-	rather than writing nothing: ``send'' returning 0 is indistinguishable from
-	a socket that took no bytes for some other reason, and asyncio's sock_sendall
-	decides whether to wait for writability from that exception.  The readiness
-	probe FAILS OPEN -- if GsSocket cannot answer writeWillNotBlock the write is
-	attempted as before -- because refusing a send that would have worked is the
-	worse error of the two.
-
-	``sendall'' is deliberately not given the same guard: its loop reports a
-	full buffer through GsSocket's own failure path, and a partial ``sendall''
-	has no way to report how much it wrote anyway (which is why asyncio uses
-	``send'')."
-
-	| sock ba n |
-	sock := self @env0:___ensureOpen.
-	self ___isNonBlocking___ ifTrue: [
-		([sock @env0:writeWillNotBlock] @env0:on: Error
-			do: [:e | e @env0:return: true]) == false ifTrue: [
-				^ self ___notReadyNow___].
-		"ONE write, of what fits.  GsSocket >> write:from: loops until every byte
-		is out and suspends the green thread between tries, so a non-blocking
-		send of 8K into a buffer with 1K of room blocked -- and with a peer that
-		was not reading, it blocked for good (test_ssl test_nonblocking_send).
-		The primitive answers the count written, true for EINTR (retry), nil for
-		an error, and anything else for EAGAIN."
-		ba := self @env0:___toByteArray: data.
-		ba @env0:isEmpty ifTrue: [^ 0].
-		[n := sock @env0:_write: ba startingAt: 1 ofSize: ba @env0:size.
-		 n == true] @env0:whileTrue.
-		n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
-		(n @env0:isKindOf: SmallInteger) ifFalse: [^ self ___notReadyNow___].
-		^ n].
-	ba := self @env0:___toByteArray: data.
-	n := sock @env0:write: ba @env0:size from: ba.
-	n @env0:isNil ifTrue: [^ self @env0:___fail: 'send failed'].
-	^ n
+	^ self ___socketSend___: data _: flags
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> sendall: data [
-	^ self sendall: data _: 0
+	^ self ___socketSendall___: data _: 0
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> sendall: data _: flags [
-	"Loop until everything is written; answer None."
 
-	| sock ba size total n |
-	sock := self @env0:___ensureOpen.
-	ba := self @env0:___toByteArray: data.
-	size := ba @env0:size.
-	total := 0.
-	[total @env0:< size] @env0:whileTrue: [
-		n := sock @env0:write: (size @env0:- total) from: ba startingAt: total @env0:+ 1.
-		n @env0:isNil ifTrue: [^ self @env0:___fail: 'sendall failed'].
-		total := total @env0:+ n].
-	^ None
+	^ self ___socketSendall___: data _: flags
 
 ]
 
@@ -1369,29 +1454,14 @@ PyRawSocket >> sendmsg: buffers [
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> sendto: data _: address [
-	^ self sendto: data _: 0 _: address
+	^ self ___socketSendto___: data _: 0 _: address
 
 ]
 
 { #category : 'Grail-Socket Protocol' }
 PyRawSocket >> sendto: data _: flags _: address [
-	"Send one datagram to (host, port), answering the byte count.  On a stream
-	socket with no peer it is ENOTCONN, which Darwin answers too -- GsSocket
-	instead signals its own error, which no Python handler sees as OSError."
 
-	| sock ba host port |
-	sock := self @env0:___ensureOpen.
-	(self type @env0:= 1 and: [self ___neverConnected___: sock]) ifTrue: [
-		^ self ___notConnected___].
-	ba := self @env0:___toByteArray: data.
-	host := (address @env0:at: 1) @env0:asString.
-	port := address @env0:at: 2.
-	(sock @env0:sendUdp: (self @env0:___toRawString: ba)
-		flags: (flags @env0:ifNil: [0])
-		toHost: host
-		port: port) @env0:isNil ifTrue: [
-			^ self @env0:___fail: 'sendto failed'].
-	^ ba @env0:size
+	^ self ___socketSendto___: data _: flags _: address
 
 ]
 

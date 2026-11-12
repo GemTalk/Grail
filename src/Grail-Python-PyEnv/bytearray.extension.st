@@ -30,6 +30,57 @@ bytearray class >> __new__ [
 
 ]
 
+{ #category : 'Grail-Private' }
+bytearray >> ___bytesFind___: rawSub _: start _: end [
+	"find(sub, start, end) → first index in [start, end) where ``sub``
+	matches, or -1.  Single-int ``sub`` searches for that byte value;
+	a sequence ``sub`` searches for the contiguous run."
+
+	| size lo hi subSize sub |
+	sub := self ___searchOperand___: rawSub.
+	size := self @env0:size.
+	"CPython bound handling (bytearray overrides find; bytes inherits the rest
+	of the search family and normalizes there): None == the default bound, and
+	a negative index counts from the end (size + i, floored at 0)."
+	lo := start. hi := end.
+	(lo @env0:== None) ifTrue: [lo := 0].
+	(hi @env0:== None) ifTrue: [hi := size].
+	lo @env0:< 0 ifTrue: [lo := (size @env0:+ lo) @env0:max: 0].
+	hi @env0:< 0 ifTrue: [hi := (size @env0:+ hi) @env0:max: 0].
+	"Clamp only hi to size: a start past the end must miss (an empty sub
+	included), so leave lo unclamped and let the ``lo > hi'' guards reject it."
+	hi := hi @env0:min: size.
+	"Single byte value (range-checked): linear scan."
+	(sub isKindOf: Integer) ifTrue: [
+		self ___checkByteValue___: sub.
+		lo @env0:+ 1 @env0:to: hi do: [:i |
+			(self @env0:at: i) @env0:= sub ifTrue: [
+				^ i @env0:- 1
+			]
+		].
+		^ -1
+	].
+	"Sub-sequence: O(n*m) scan.  ``sub`` is itself a bytes /
+	bytearray / sequence of ints."
+	subSize := sub @env0:size.
+	"Empty sub matches at lo, but only if lo is within the window (a start
+	past the end -- lo > hi -- misses)."
+	subSize @env0:= 0 ifTrue: [^ lo @env0:<= hi ifTrue: [lo] ifFalse: [-1]].
+	subSize @env0:> (hi @env0:- lo) ifTrue: [^ -1].
+	lo @env0:+ 1 @env0:to: hi @env0:- subSize @env0:+ 1 do: [:i |
+		| match |
+		match := true.
+		1 @env0:to: subSize do: [:j |
+			(self @env0:at: i @env0:+ j @env0:- 1) @env0:= (sub @env0:at: j) ifFalse: [
+				match := false
+			]
+		].
+		match ifTrue: [^ i @env0:- 1]
+	].
+	^ -1
+
+]
+
 { #category : 'Grail-Sequence Protocol' }
 bytearray >> ___bytesFrom: value [
 	"Materialize the right-hand side of a bytearray slice assignment into an
@@ -560,7 +611,7 @@ bytearray >> extend: iterable [
 bytearray >> find: sub [
 	"find(sub) → first index where sub occurs, or -1."
 
-	^ self find: sub _: 0 _: self @env0:size
+	^ self ___bytesFind___: sub _: 0 _: self @env0:size
 
 ]
 
@@ -568,58 +619,14 @@ bytearray >> find: sub [
 bytearray >> find: sub _: start [
 	"find(sub, start) → first index >= start where sub occurs, or -1."
 
-	^ self find: sub _: start _: self @env0:size
+	^ self ___bytesFind___: sub _: start _: self @env0:size
 
 ]
 
 { #category : 'Grail-Search Methods' }
 bytearray >> find: rawSub _: start _: end [
-	"find(sub, start, end) → first index in [start, end) where ``sub``
-	matches, or -1.  Single-int ``sub`` searches for that byte value;
-	a sequence ``sub`` searches for the contiguous run."
 
-	| size lo hi subSize sub |
-	sub := self ___searchOperand___: rawSub.
-	size := self @env0:size.
-	"CPython bound handling (bytearray overrides find; bytes inherits the rest
-	of the search family and normalizes there): None == the default bound, and
-	a negative index counts from the end (size + i, floored at 0)."
-	lo := start. hi := end.
-	(lo @env0:== None) ifTrue: [lo := 0].
-	(hi @env0:== None) ifTrue: [hi := size].
-	lo @env0:< 0 ifTrue: [lo := (size @env0:+ lo) @env0:max: 0].
-	hi @env0:< 0 ifTrue: [hi := (size @env0:+ hi) @env0:max: 0].
-	"Clamp only hi to size: a start past the end must miss (an empty sub
-	included), so leave lo unclamped and let the ``lo > hi'' guards reject it."
-	hi := hi @env0:min: size.
-	"Single byte value (range-checked): linear scan."
-	(sub isKindOf: Integer) ifTrue: [
-		self ___checkByteValue___: sub.
-		lo @env0:+ 1 @env0:to: hi do: [:i |
-			(self @env0:at: i) @env0:= sub ifTrue: [
-				^ i @env0:- 1
-			]
-		].
-		^ -1
-	].
-	"Sub-sequence: O(n*m) scan.  ``sub`` is itself a bytes /
-	bytearray / sequence of ints."
-	subSize := sub @env0:size.
-	"Empty sub matches at lo, but only if lo is within the window (a start
-	past the end -- lo > hi -- misses)."
-	subSize @env0:= 0 ifTrue: [^ lo @env0:<= hi ifTrue: [lo] ifFalse: [-1]].
-	subSize @env0:> (hi @env0:- lo) ifTrue: [^ -1].
-	lo @env0:+ 1 @env0:to: hi @env0:- subSize @env0:+ 1 do: [:i |
-		| match |
-		match := true.
-		1 @env0:to: subSize do: [:j |
-			(self @env0:at: i @env0:+ j @env0:- 1) @env0:= (sub @env0:at: j) ifFalse: [
-				match := false
-			]
-		].
-		match ifTrue: [^ i @env0:- 1]
-	].
-	^ -1
+	^ self ___bytesFind___: rawSub _: start _: end
 
 ]
 

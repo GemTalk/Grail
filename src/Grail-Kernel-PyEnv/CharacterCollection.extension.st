@@ -190,6 +190,31 @@ CharacterCollection class >> ___streamsAsTranslation___: aReplacement [
 
 ]
 
+{ #category : 'Grail-Private' }
+CharacterCollection class >> ___strMaketrans___: x _: y [
+	"str.maketrans(frm, to) -- two equal-length strings, character for
+	character.  The values are CODEPOINTS, as CPython's are, not one-character
+	strings; ``translate:'' accepts either."
+
+	| out xc yc |
+	"Both sides through ___pyCodePoints___: the table is keyed and valued by
+	CODE POINT, which is the one thing every str representation can supply --
+	``str.maketrans('\\udc80', 'x')'' used to raise ``maketrans arguments must
+	be strings'' about two strings."
+	xc := x @env0:___pyCodePoints___.
+	yc := y @env0:___pyCodePoints___.
+	(xc @env0:isNil @env0:or: [yc @env0:isNil]) ifTrue: [
+		^ TypeError ___signal___: 'maketrans arguments must be strings'].
+	(xc @env0:size @env0:= yc @env0:size) ifFalse: [
+		^ ValueError ___signal___:
+			'the first two maketrans arguments must have equal length'].
+	out := dict ___new___.
+	1 @env0:to: xc @env0:size do: [:i |
+		out @env0:at: (xc @env0:at: i) put: (yc @env0:at: i)].
+	^ out
+
+]
+
 { #category : 'Grail-Python protocol' }
 CharacterCollection class >> __getitem__: index [
 	"Covers Python str (Unicode7, Unicode16, Unicode32, ISOLatin,
@@ -518,26 +543,8 @@ CharacterCollection class >> maketrans: x [
 
 { #category : 'Grail-String Methods' }
 CharacterCollection class >> maketrans: x _: y [
-	"str.maketrans(frm, to) -- two equal-length strings, character for
-	character.  The values are CODEPOINTS, as CPython's are, not one-character
-	strings; ``translate:'' accepts either."
 
-	| out xc yc |
-	"Both sides through ___pyCodePoints___: the table is keyed and valued by
-	CODE POINT, which is the one thing every str representation can supply --
-	``str.maketrans('\\udc80', 'x')'' used to raise ``maketrans arguments must
-	be strings'' about two strings."
-	xc := x @env0:___pyCodePoints___.
-	yc := y @env0:___pyCodePoints___.
-	(xc @env0:isNil @env0:or: [yc @env0:isNil]) ifTrue: [
-		^ TypeError ___signal___: 'maketrans arguments must be strings'].
-	(xc @env0:size @env0:= yc @env0:size) ifFalse: [
-		^ ValueError ___signal___:
-			'the first two maketrans arguments must have equal length'].
-	out := dict ___new___.
-	1 @env0:to: xc @env0:size do: [:i |
-		out @env0:at: (xc @env0:at: i) put: (yc @env0:at: i)].
-	^ out
+	^ self ___strMaketrans___: x _: y
 
 ]
 
@@ -551,7 +558,7 @@ CharacterCollection class >> maketrans: x _: y _: z [
 	documented ``remove these characters'' idiom depends on."
 
 	| out zc |
-	out := self maketrans: x _: y.
+	out := self ___strMaketrans___: x _: y.
 	zc := z @env0:___pyCodePoints___.
 	zc @env0:isNil ifTrue: [
 		^ TypeError ___signal___: 'maketrans arguments must be strings'].
@@ -1962,6 +1969,271 @@ CharacterCollection >> ___splitlinesKeepends: keepends [
 
 ]
 
+{ #category : 'Grail-Private' }
+CharacterCollection >> ___strEncode___: encoding _: errors [
+	"Encode the receiver to bytes under ``encoding'', honoring ``errors'' --
+	see ___unencodable___:errors:message: for the policies.  UTF-8 is a real
+	multi-byte encoder (GemStone encodeAsUTF8); UTF-16 (BOM/LE/BE) is
+	supported; ascii and latin-1 / idna are single-byte."
+	| name policy enc size result info |
+	"Both must be str, checked first as Clinic checks them: a non-str
+	encoding reached asLowercase as an uncatchable MessageNotUnderstood
+	(test_str test_codecs_errors), and a non-str errors was accepted."
+	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'encode'.
+	policy := TypeError @env0:___requireStr___: errors argument: 'errors' of: 'encode'.
+	(name == encoding and: [policy == errors]) ifFalse: [^ self ___strEncode___: name _: policy].
+	enc := encoding @env0:asLowercase.
+	size := self @env0:size.
+
+	"A handler codecs.register_error registered is called at each error, and
+	the encode resumes where it says, as CPython's does.  _codecs answers None
+	for a codec it leaves to the branches below."
+	((Python @env0:at: #importlib) @env0:___namesARegisteredHandler___: policy) ifTrue: [ | encoded |
+		encoded := (Python @env0:at: #importlib) @env0:___encode___: self as: enc callingHandler: policy.
+		encoded == None ifFalse: [^ encoded]].
+
+	"unicode_escape: backslash-escape control and non-ASCII characters,
+	yielding ASCII bytes (django.utils.log uses it).
+
+	BOTH spellings.  bytes>>decode: normalises underscore to hyphen before it
+	dispatches, so ``b'x'.decode('unicode-escape')'' has always worked while
+	``s.encode('unicode-escape')'' -- the CANONICAL name, the one
+	codecs.lookup('unicode-escape').name answers and the one
+	encodings/unicode_escape.py registers -- raised LookupError.  The pair has
+	to accept the same names in both directions or a round trip through the
+	codec registry fails on the way out."
+	((enc @env0:= 'unicode_escape') @env0:or: [enc @env0:= 'unicode-escape']) ifTrue: [
+		| ws hexFor |
+		hexFor := [:cp :width | | h |
+			h := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
+			[h @env0:size @env0:< width] @env0:whileTrue: [h := '0' @env0:, h].
+			h].
+		ws := AppendStream @env0:on: String @env0:new.
+		1 @env0:to: size do: [:i | | ch cp |
+			ch := self @env0:at: i.
+			cp := ch @env0:codePoint.
+			cp @env0:= 92 ifTrue: [ws @env0:nextPutAll: '\\'] ifFalse: [
+			cp @env0:= 10 ifTrue: [ws @env0:nextPutAll: '\n'] ifFalse: [
+			cp @env0:= 13 ifTrue: [ws @env0:nextPutAll: '\r'] ifFalse: [
+			cp @env0:= 9 ifTrue: [ws @env0:nextPutAll: '\t'] ifFalse: [
+			((cp @env0:>= 32) and: [cp @env0:<= 126]) ifTrue: [ws @env0:nextPut: ch] ifFalse: [
+			cp @env0:< 256
+				ifTrue: [ws @env0:nextPutAll: '\x'. ws @env0:nextPutAll: (hexFor value: cp value: 2)]
+				ifFalse: [
+					"A SUPPLEMENTARY CODE POINT TAKES \\U AND EIGHT DIGITS.  This
+					branch emitted \\u for everything above 255, so U+1D120 came
+					out as ``\\u1d120'' -- a five-digit \\u, which is not an
+					escape any reader accepts: decoding it back gives U+1D12
+					followed by the character ``0''.  raw-unicode-escape beside
+					it has always chosen the width by the code point, and this
+					is the same rule."
+					cp @env0:< 16r10000
+						ifTrue: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]
+						ifFalse: [ws @env0:nextPutAll: '\U'. ws @env0:nextPutAll: (hexFor value: cp value: 8)]]]]]]]].
+		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)].
+
+	"UTF-8: real multi-byte encoder (GemStone)."
+	((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) ifTrue: [
+		| u8 |
+		u8 := self @env0:encodeAsUTF8.
+		result := bytes ___new___: u8 @env0:size.
+		1 @env0:to: u8 @env0:size do: [:i | result @env0:at: i put: (u8 @env0:at: i)].
+		^ result].
+
+	"UTF-16 family (utf-16 = BOM + little-endian, matching CPython)."
+	(enc @env0:= 'utf-16') ifTrue: [^ self ___pyEncodeUTF16___: true be: false].
+	((enc @env0:= 'utf-16-le') or: [enc @env0:= 'utf-16le']) ifTrue: [^ self ___pyEncodeUTF16___: false be: false].
+	((enc @env0:= 'utf-16-be') or: [enc @env0:= 'utf-16be']) ifTrue: [^ self ___pyEncodeUTF16___: false be: true].
+
+	"UTF-32 family, the same three shapes as UTF-16 above."
+	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [^ self ___pyEncodeUTF7___: errors].
+	(enc @env0:= 'utf-32') ifTrue: [^ self ___pyEncodeUTF32___: true be: false errors: errors].
+	((enc @env0:= 'utf-32-le') or: [enc @env0:= 'utf-32le']) ifTrue: [^ self ___pyEncodeUTF32___: false be: false errors: errors].
+	((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be']) ifTrue: [^ self ___pyEncodeUTF32___: false be: true errors: errors].
+
+	"Single-byte: ascii (<=127), latin-1 / iso-8859-1 (<=255).  ``idna'' used
+	to ride along as ascii, so a non-ASCII host could not be encoded; it now
+	reaches the registry, and the vendored encodings/idna.py, below."
+	((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii')
+		or: [(enc @env0:= 'latin1') or: [(enc @env0:= 'latin-1')
+		or: [enc @env0:= 'iso-8859-1']]]]) ifTrue: [
+		| max ws |
+		max := ((enc @env0:= 'ascii') or: [enc @env0:= 'us-ascii'])
+			ifTrue: [127] ifFalse: [255].
+		ws := AppendStream @env0:on: ByteArray @env0:new.
+		1 @env0:to: size do: [:i | | cv |
+			cv := (self @env0:at: i) @env0:codePoint.
+			cv @env0:> max
+				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cv
+					at: i
+					encoding: ((max @env0:= 127) ifTrue: ['ascii'] ifFalse: ['latin-1'])
+					errors: errors
+					reason: ((max @env0:= 127)
+						ifTrue: ['ordinal not in range(128)']
+						ifFalse: ['ordinal not in range(256)']))]
+				ifFalse: [ws @env0:nextPut: cv]].
+		^ bytes @env0:withAll: ws @env0:contents].
+
+	"iso-8859-15 (latin-9): latin-1 with 8 code points replaced -- U+20AC EURO
+	and 7 letters (Š š Ž ž Œ œ Ÿ) map to bytes A4/A6/A8/B4/B8/BC/BD/BE; the
+	latin-1 chars normally at those bytes (currency / broken-bar / diaeresis /
+	acute / cedilla / fractions) are NOT representable in latin-9.
+	test_bytes BytesTest.test_custom: bytes('€', 'iso8859-15') == b'\xa4'."
+	((enc @env0:= 'iso-8859-15') or: [(enc @env0:= 'iso8859-15')
+		or: [(enc @env0:= 'iso8859_15') or: [(enc @env0:= 'latin-9')
+		or: [(enc @env0:= 'latin9') or: [enc @env0:= 'l9']]]]]) ifTrue: [
+		| ws |
+		ws := WriteStream @env0:on: ByteArray @env0:new.
+		1 @env0:to: size do: [:i | | cp b |
+			cp := (self @env0:at: i) @env0:codePoint.
+			b := nil.
+			cp @env0:= 16r20AC ifTrue: [b := 16rA4].
+			cp @env0:= 16r0160 ifTrue: [b := 16rA6].
+			cp @env0:= 16r0161 ifTrue: [b := 16rA8].
+			cp @env0:= 16r017D ifTrue: [b := 16rB4].
+			cp @env0:= 16r017E ifTrue: [b := 16rB8].
+			cp @env0:= 16r0152 ifTrue: [b := 16rBC].
+			cp @env0:= 16r0153 ifTrue: [b := 16rBD].
+			cp @env0:= 16r0178 ifTrue: [b := 16rBE].
+			(b == nil and: [cp @env0:< 256]) ifTrue: [
+				(#(16rA4 16rA6 16rA8 16rB4 16rB8 16rBC 16rBD 16rBE) @env0:includes: cp)
+					ifFalse: [b := cp]].
+			b == nil
+				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp
+					at: i
+					encoding: 'charmap'
+					errors: errors
+					reason: 'character maps to <undefined>')]
+				ifFalse: [ws @env0:nextPut: b]].
+		^ bytes @env0:withAll: ws @env0:contents].
+
+	"raw-unicode-escape, the inverse of the bytes>>decode branch: a code point
+	below 256 is one Latin-1 byte, anything above becomes a LOWERCASE-hex
+	\uXXXX / \UXXXXXXXX escape.  Backslashes already in the string are NOT
+	doubled, which is what makes the codec lossy: encode of a backslash-u
+	literal and encode of the character it names collide."
+	((enc @env0:= 'raw-unicode-escape') or: [
+		enc @env0:= 'raw_unicode_escape']) ifTrue: [
+		| ws digits |
+		ws := WriteStream @env0:on: ByteArray @env0:new.
+		digits := '0123456789abcdef'.
+		1 @env0:to: size do: [:i | | cp width |
+			cp := (self @env0:at: i) @env0:codePoint.
+			cp @env0:< 256
+				ifTrue: [ws @env0:nextPut: cp]
+				ifFalse: [
+					width := cp @env0:< 16r10000 ifTrue: [4] ifFalse: [8].
+					ws @env0:nextPut: 92.
+					ws @env0:nextPut: (width @env0:= 4 ifTrue: [117] ifFalse: [85]).
+					"Emit the nibbles most-significant first, zero-padded to
+					the escape's fixed width."
+					width @env0:to: 1 by: -1 do: [:shift |
+						ws @env0:nextPut: (digits @env0:at:
+							(((cp @env0:bitShift: (shift @env0:- 1) @env0:* -4)
+								@env0:bitAnd: 15) @env0:+ 1)) @env0:codePoint]]].
+		^ bytes @env0:withAll: ws @env0:contents].
+
+	"A REGISTERED codec, before giving up -- see importlib class >>
+	___registeredCodecInfoFor___:.  CodecInfo.encode answers (bytes,
+	length), of which the caller wants the bytes."
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: enc selector: #'encode' with: self errors: errors.
+	info == nil ifFalse: [^ info].
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
+
+]
+
+{ #category : 'Grail-Private' }
+CharacterCollection >> ___strEndswith___: suffix [
+	"Test whether string ends with the specified suffix.  An empty suffix is
+	always a suffix (CPython) -- GemStone's endsWith: returns false for an
+	empty argument, so special-case it.
+
+	A TUPLE of suffixes is CPython's ``ends with ANY of these'' form; see
+	startswith: for why handing one to GemStone was an uncatchable error."
+
+	| plain |
+	(suffix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (suffix @env0:size) do: [:ti |
+			(self ___strEndswith___: (suffix @env0:at: ti)) ifTrue: [^ true]].
+		^ false].
+	suffix @env0:___isPyStr___ ifFalse: [
+		TypeError ___signal___:
+			('endswith first arg must be str or a tuple of str, not '
+				@env0:, (bytes ___pyTypeNameOf___: suffix))].
+	"See startswith: -- a suffix holding a surrogate cannot end a
+	surrogate-free string."
+	plain := suffix @env0:___pyPlainStr___.
+	plain @env0:== nil ifTrue: [^ false].
+	plain @env0:isEmpty ifTrue: [^ true].
+	^ self @env0:endsWith: plain
+
+]
+
+{ #category : 'Grail-Private' }
+CharacterCollection >> ___strEndswith___: suffix _: start _: end [
+	"str.endswith(suffix, start, end) -- test whether self[start:end] ends
+	with suffix (CPython None / negative-index clamping).  A window whose
+	start lies past its end matches nothing, not even an empty suffix --
+	``''.endswith('', 1, 0)'' is False -- which the clamped slice alone
+	cannot see; the slice still runs first so a bad suffix is refused."
+
+	| w |
+	((self ___boundedSlice___: start end: end) ___strEndswith___: suffix) ifFalse: [^ false].
+	w := self ___pyAdjust___: start end: end.
+	^ (w @env0:at: 1) @env0:<= (w @env0:at: 2)
+
+]
+
+{ #category : 'Grail-Private' }
+CharacterCollection >> ___strStartswith___: prefix [
+	"Test whether string starts with the specified prefix.  An empty prefix
+	is always a prefix (CPython) -- GemStone's beginsWith: returns false for
+	an empty argument, so special-case it.
+
+	A TUPLE of prefixes is CPython's ``starts with ANY of these'' form, and it
+	is not a rarity: difflib's _mdiff dispatches its whole line-pairing state
+	machine on ``s.startswith(('--?+', '--+', '- '))''.  bytes>>startswith:
+	already accepted one; str did not, and handed the tuple straight to
+	GemStone's beginsWith:, which answered an UNCATCHABLE ArgumentTypeError
+	(``expected a CharacterCollection'') that no Python ``except'' could see.
+	Each element is validated by the recursive single-prefix call, so a
+	non-str element raises the same TypeError CPython raises."
+
+	| plain |
+	(prefix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (prefix @env0:size) do: [:ti |
+			(self ___strStartswith___: (prefix @env0:at: ti)) ifTrue: [^ true]].
+		^ false].
+	prefix @env0:___isPyStr___ ifFalse: [
+		TypeError ___signal___:
+			('startswith first arg must be str or a tuple of str, not '
+				@env0:, (bytes ___pyTypeNameOf___: prefix))].
+	"A prefix holding a surrogate cannot begin a surrogate-free string, so
+	False is the answer -- and it is the only one available, since
+	beginsWith: cannot be handed one."
+	plain := prefix @env0:___pyPlainStr___.
+	plain @env0:== nil ifTrue: [^ false].
+	plain @env0:isEmpty ifTrue: [^ true].
+	^ self @env0:beginsWith: plain
+
+]
+
+{ #category : 'Grail-Private' }
+CharacterCollection >> ___strStartswith___: prefix _: start _: end [
+	"str.startswith(prefix, start, end) -- test whether self[start:end] starts
+	with prefix (CPython None / negative-index clamping).  A window whose
+	start lies past its end matches nothing, not even an empty prefix --
+	``''.startswith('', 1, 0)'' is False -- which the clamped slice alone
+	cannot see; the slice still runs first so a bad prefix is refused."
+
+	| w |
+	((self ___boundedSlice___: start end: end) ___strStartswith___: prefix) ifFalse: [^ false].
+	w := self ___pyAdjust___: start end: end.
+	^ (w @env0:at: 1) @env0:<= (w @env0:at: 2)
+
+]
+
 { #category : 'Grail-String Methods' }
 CharacterCollection >> ___unencodable___: cp at: anIndex encoding: encName errors: errors reason: aReason [
 	"The bytes an UN-ENCODABLE code point contributes to the output under
@@ -3051,7 +3323,7 @@ CharacterCollection >> count: sub _: start _: stop [
 CharacterCollection >> encode [
 	"``s.encode()`` with no args — Python default is 'utf-8'."
 
-	^ self encode: 'utf-8' _: 'strict'
+	^ self ___strEncode___: 'utf-8' _: 'strict'
 
 ]
 
@@ -3061,208 +3333,21 @@ CharacterCollection >> encode: encoding [
 	encode:_: for the full codec (utf-8 multi-byte, utf-16, ascii, latin-1,
 	idna, unicode_escape)."
 
-	^ self encode: encoding _: 'strict'
+	^ self ___strEncode___: encoding _: 'strict'
 
 ]
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> encode: encoding _: errors [
-	"Encode the receiver to bytes under ``encoding'', honoring ``errors'' --
-	see ___unencodable___:errors:message: for the policies.  UTF-8 is a real
-	multi-byte encoder (GemStone encodeAsUTF8); UTF-16 (BOM/LE/BE) is
-	supported; ascii and latin-1 / idna are single-byte."
-	| name policy enc size result info |
-	"Both must be str, checked first as Clinic checks them: a non-str
-	encoding reached asLowercase as an uncatchable MessageNotUnderstood
-	(test_str test_codecs_errors), and a non-str errors was accepted."
-	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'encode'.
-	policy := TypeError @env0:___requireStr___: errors argument: 'errors' of: 'encode'.
-	(name == encoding and: [policy == errors]) ifFalse: [^ self encode: name _: policy].
-	enc := encoding @env0:asLowercase.
-	size := self @env0:size.
 
-	"A handler codecs.register_error registered is called at each error, and
-	the encode resumes where it says, as CPython's does.  _codecs answers None
-	for a codec it leaves to the branches below."
-	((Python @env0:at: #importlib) @env0:___namesARegisteredHandler___: policy) ifTrue: [ | encoded |
-		encoded := (Python @env0:at: #importlib) @env0:___encode___: self as: enc callingHandler: policy.
-		encoded == None ifFalse: [^ encoded]].
-
-	"unicode_escape: backslash-escape control and non-ASCII characters,
-	yielding ASCII bytes (django.utils.log uses it).
-
-	BOTH spellings.  bytes>>decode: normalises underscore to hyphen before it
-	dispatches, so ``b'x'.decode('unicode-escape')'' has always worked while
-	``s.encode('unicode-escape')'' -- the CANONICAL name, the one
-	codecs.lookup('unicode-escape').name answers and the one
-	encodings/unicode_escape.py registers -- raised LookupError.  The pair has
-	to accept the same names in both directions or a round trip through the
-	codec registry fails on the way out."
-	((enc @env0:= 'unicode_escape') @env0:or: [enc @env0:= 'unicode-escape']) ifTrue: [
-		| ws hexFor |
-		hexFor := [:cp :width | | h |
-			h := (cp @env0:printStringRadix: 16 showRadix: false) @env0:asLowercase.
-			[h @env0:size @env0:< width] @env0:whileTrue: [h := '0' @env0:, h].
-			h].
-		ws := AppendStream @env0:on: String @env0:new.
-		1 @env0:to: size do: [:i | | ch cp |
-			ch := self @env0:at: i.
-			cp := ch @env0:codePoint.
-			cp @env0:= 92 ifTrue: [ws @env0:nextPutAll: '\\'] ifFalse: [
-			cp @env0:= 10 ifTrue: [ws @env0:nextPutAll: '\n'] ifFalse: [
-			cp @env0:= 13 ifTrue: [ws @env0:nextPutAll: '\r'] ifFalse: [
-			cp @env0:= 9 ifTrue: [ws @env0:nextPutAll: '\t'] ifFalse: [
-			((cp @env0:>= 32) and: [cp @env0:<= 126]) ifTrue: [ws @env0:nextPut: ch] ifFalse: [
-			cp @env0:< 256
-				ifTrue: [ws @env0:nextPutAll: '\x'. ws @env0:nextPutAll: (hexFor value: cp value: 2)]
-				ifFalse: [
-					"A SUPPLEMENTARY CODE POINT TAKES \\U AND EIGHT DIGITS.  This
-					branch emitted \\u for everything above 255, so U+1D120 came
-					out as ``\\u1d120'' -- a five-digit \\u, which is not an
-					escape any reader accepts: decoding it back gives U+1D12
-					followed by the character ``0''.  raw-unicode-escape beside
-					it has always chosen the width by the code point, and this
-					is the same rule."
-					cp @env0:< 16r10000
-						ifTrue: [ws @env0:nextPutAll: '\u'. ws @env0:nextPutAll: (hexFor value: cp value: 4)]
-						ifFalse: [ws @env0:nextPutAll: '\U'. ws @env0:nextPutAll: (hexFor value: cp value: 8)]]]]]]]].
-		^ bytes @env0:withAll: (ws @env0:contents @env0:asByteArray)].
-
-	"UTF-8: real multi-byte encoder (GemStone)."
-	((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) ifTrue: [
-		| u8 |
-		u8 := self @env0:encodeAsUTF8.
-		result := bytes ___new___: u8 @env0:size.
-		1 @env0:to: u8 @env0:size do: [:i | result @env0:at: i put: (u8 @env0:at: i)].
-		^ result].
-
-	"UTF-16 family (utf-16 = BOM + little-endian, matching CPython)."
-	(enc @env0:= 'utf-16') ifTrue: [^ self ___pyEncodeUTF16___: true be: false].
-	((enc @env0:= 'utf-16-le') or: [enc @env0:= 'utf-16le']) ifTrue: [^ self ___pyEncodeUTF16___: false be: false].
-	((enc @env0:= 'utf-16-be') or: [enc @env0:= 'utf-16be']) ifTrue: [^ self ___pyEncodeUTF16___: false be: true].
-
-	"UTF-32 family, the same three shapes as UTF-16 above."
-	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [^ self ___pyEncodeUTF7___: errors].
-	(enc @env0:= 'utf-32') ifTrue: [^ self ___pyEncodeUTF32___: true be: false errors: errors].
-	((enc @env0:= 'utf-32-le') or: [enc @env0:= 'utf-32le']) ifTrue: [^ self ___pyEncodeUTF32___: false be: false errors: errors].
-	((enc @env0:= 'utf-32-be') or: [enc @env0:= 'utf-32be']) ifTrue: [^ self ___pyEncodeUTF32___: false be: true errors: errors].
-
-	"Single-byte: ascii (<=127), latin-1 / iso-8859-1 (<=255).  ``idna'' used
-	to ride along as ascii, so a non-ASCII host could not be encoded; it now
-	reaches the registry, and the vendored encodings/idna.py, below."
-	((enc @env0:= 'ascii') or: [(enc @env0:= 'us-ascii')
-		or: [(enc @env0:= 'latin1') or: [(enc @env0:= 'latin-1')
-		or: [enc @env0:= 'iso-8859-1']]]]) ifTrue: [
-		| max ws |
-		max := ((enc @env0:= 'ascii') or: [enc @env0:= 'us-ascii'])
-			ifTrue: [127] ifFalse: [255].
-		ws := AppendStream @env0:on: ByteArray @env0:new.
-		1 @env0:to: size do: [:i | | cv |
-			cv := (self @env0:at: i) @env0:codePoint.
-			cv @env0:> max
-				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cv
-					at: i
-					encoding: ((max @env0:= 127) ifTrue: ['ascii'] ifFalse: ['latin-1'])
-					errors: errors
-					reason: ((max @env0:= 127)
-						ifTrue: ['ordinal not in range(128)']
-						ifFalse: ['ordinal not in range(256)']))]
-				ifFalse: [ws @env0:nextPut: cv]].
-		^ bytes @env0:withAll: ws @env0:contents].
-
-	"iso-8859-15 (latin-9): latin-1 with 8 code points replaced -- U+20AC EURO
-	and 7 letters (Š š Ž ž Œ œ Ÿ) map to bytes A4/A6/A8/B4/B8/BC/BD/BE; the
-	latin-1 chars normally at those bytes (currency / broken-bar / diaeresis /
-	acute / cedilla / fractions) are NOT representable in latin-9.
-	test_bytes BytesTest.test_custom: bytes('€', 'iso8859-15') == b'\xa4'."
-	((enc @env0:= 'iso-8859-15') or: [(enc @env0:= 'iso8859-15')
-		or: [(enc @env0:= 'iso8859_15') or: [(enc @env0:= 'latin-9')
-		or: [(enc @env0:= 'latin9') or: [enc @env0:= 'l9']]]]]) ifTrue: [
-		| ws |
-		ws := WriteStream @env0:on: ByteArray @env0:new.
-		1 @env0:to: size do: [:i | | cp b |
-			cp := (self @env0:at: i) @env0:codePoint.
-			b := nil.
-			cp @env0:= 16r20AC ifTrue: [b := 16rA4].
-			cp @env0:= 16r0160 ifTrue: [b := 16rA6].
-			cp @env0:= 16r0161 ifTrue: [b := 16rA8].
-			cp @env0:= 16r017D ifTrue: [b := 16rB4].
-			cp @env0:= 16r017E ifTrue: [b := 16rB8].
-			cp @env0:= 16r0152 ifTrue: [b := 16rBC].
-			cp @env0:= 16r0153 ifTrue: [b := 16rBD].
-			cp @env0:= 16r0178 ifTrue: [b := 16rBE].
-			(b == nil and: [cp @env0:< 256]) ifTrue: [
-				(#(16rA4 16rA6 16rA8 16rB4 16rB8 16rBC 16rBD 16rBE) @env0:includes: cp)
-					ifFalse: [b := cp]].
-			b == nil
-				ifTrue: [ws @env0:nextPutAll: (self ___unencodable___: cp
-					at: i
-					encoding: 'charmap'
-					errors: errors
-					reason: 'character maps to <undefined>')]
-				ifFalse: [ws @env0:nextPut: b]].
-		^ bytes @env0:withAll: ws @env0:contents].
-
-	"raw-unicode-escape, the inverse of the bytes>>decode branch: a code point
-	below 256 is one Latin-1 byte, anything above becomes a LOWERCASE-hex
-	\uXXXX / \UXXXXXXXX escape.  Backslashes already in the string are NOT
-	doubled, which is what makes the codec lossy: encode of a backslash-u
-	literal and encode of the character it names collide."
-	((enc @env0:= 'raw-unicode-escape') or: [
-		enc @env0:= 'raw_unicode_escape']) ifTrue: [
-		| ws digits |
-		ws := WriteStream @env0:on: ByteArray @env0:new.
-		digits := '0123456789abcdef'.
-		1 @env0:to: size do: [:i | | cp width |
-			cp := (self @env0:at: i) @env0:codePoint.
-			cp @env0:< 256
-				ifTrue: [ws @env0:nextPut: cp]
-				ifFalse: [
-					width := cp @env0:< 16r10000 ifTrue: [4] ifFalse: [8].
-					ws @env0:nextPut: 92.
-					ws @env0:nextPut: (width @env0:= 4 ifTrue: [117] ifFalse: [85]).
-					"Emit the nibbles most-significant first, zero-padded to
-					the escape's fixed width."
-					width @env0:to: 1 by: -1 do: [:shift |
-						ws @env0:nextPut: (digits @env0:at:
-							(((cp @env0:bitShift: (shift @env0:- 1) @env0:* -4)
-								@env0:bitAnd: 15) @env0:+ 1)) @env0:codePoint]]].
-		^ bytes @env0:withAll: ws @env0:contents].
-
-	"A REGISTERED codec, before giving up -- see importlib class >>
-	___registeredCodecInfoFor___:.  CodecInfo.encode answers (bytes,
-	length), of which the caller wants the bytes."
-	info := (Python @env0:at: #importlib)
-		@env0:___codecRoundTrip___: enc selector: #'encode' with: self errors: errors.
-	info == nil ifFalse: [^ info].
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding)
+	^ self ___strEncode___: encoding _: errors
 
 ]
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> endswith: suffix [
-	"Test whether string ends with the specified suffix.  An empty suffix is
-	always a suffix (CPython) -- GemStone's endsWith: returns false for an
-	empty argument, so special-case it.
 
-	A TUPLE of suffixes is CPython's ``ends with ANY of these'' form; see
-	startswith: for why handing one to GemStone was an uncatchable error."
-
-	| plain |
-	(suffix isKindOf: tuple) ifTrue: [
-		1 @env0:to: (suffix @env0:size) do: [:ti |
-			(self endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
-		^ false].
-	suffix @env0:___isPyStr___ ifFalse: [
-		TypeError ___signal___:
-			('endswith first arg must be str or a tuple of str, not '
-				@env0:, (bytes ___pyTypeNameOf___: suffix))].
-	"See startswith: -- a suffix holding a surrogate cannot end a
-	surrogate-free string."
-	plain := suffix @env0:___pyPlainStr___.
-	plain @env0:== nil ifTrue: [^ false].
-	plain @env0:isEmpty ifTrue: [^ true].
-	^ self @env0:endsWith: plain
+	^ self ___strEndswith___: suffix
 
 ]
 
@@ -3270,22 +3355,14 @@ CharacterCollection >> endswith: suffix [
 CharacterCollection >> endswith: suffix _: start [
 	"str.endswith(suffix, start) -- test self[start:]."
 
-	^ self endswith: suffix _: start _: None
+	^ self ___strEndswith___: suffix _: start _: None
 
 ]
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> endswith: suffix _: start _: end [
-	"str.endswith(suffix, start, end) -- test whether self[start:end] ends
-	with suffix (CPython None / negative-index clamping).  A window whose
-	start lies past its end matches nothing, not even an empty suffix --
-	``''.endswith('', 1, 0)'' is False -- which the clamped slice alone
-	cannot see; the slice still runs first so a bad suffix is refused."
 
-	| w |
-	((self ___boundedSlice___: start end: end) endswith: suffix) ifFalse: [^ false].
-	w := self ___pyAdjust___: start end: end.
-	^ (w @env0:at: 1) @env0:<= (w @env0:at: 2)
+	^ self ___strEndswith___: suffix _: start _: end
 
 ]
 
@@ -3946,35 +4023,8 @@ CharacterCollection >> splitlines: keepends [
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> startswith: prefix [
-	"Test whether string starts with the specified prefix.  An empty prefix
-	is always a prefix (CPython) -- GemStone's beginsWith: returns false for
-	an empty argument, so special-case it.
 
-	A TUPLE of prefixes is CPython's ``starts with ANY of these'' form, and it
-	is not a rarity: difflib's _mdiff dispatches its whole line-pairing state
-	machine on ``s.startswith(('--?+', '--+', '- '))''.  bytes>>startswith:
-	already accepted one; str did not, and handed the tuple straight to
-	GemStone's beginsWith:, which answered an UNCATCHABLE ArgumentTypeError
-	(``expected a CharacterCollection'') that no Python ``except'' could see.
-	Each element is validated by the recursive single-prefix call, so a
-	non-str element raises the same TypeError CPython raises."
-
-	| plain |
-	(prefix isKindOf: tuple) ifTrue: [
-		1 @env0:to: (prefix @env0:size) do: [:ti |
-			(self startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
-		^ false].
-	prefix @env0:___isPyStr___ ifFalse: [
-		TypeError ___signal___:
-			('startswith first arg must be str or a tuple of str, not '
-				@env0:, (bytes ___pyTypeNameOf___: prefix))].
-	"A prefix holding a surrogate cannot begin a surrogate-free string, so
-	False is the answer -- and it is the only one available, since
-	beginsWith: cannot be handed one."
-	plain := prefix @env0:___pyPlainStr___.
-	plain @env0:== nil ifTrue: [^ false].
-	plain @env0:isEmpty ifTrue: [^ true].
-	^ self @env0:beginsWith: plain
+	^ self ___strStartswith___: prefix
 
 ]
 
@@ -3982,22 +4032,14 @@ CharacterCollection >> startswith: prefix [
 CharacterCollection >> startswith: prefix _: start [
 	"str.startswith(prefix, start) -- test self[start:]."
 
-	^ self startswith: prefix _: start _: None
+	^ self ___strStartswith___: prefix _: start _: None
 
 ]
 
 { #category : 'Grail-String Methods' }
 CharacterCollection >> startswith: prefix _: start _: end [
-	"str.startswith(prefix, start, end) -- test whether self[start:end] starts
-	with prefix (CPython None / negative-index clamping).  A window whose
-	start lies past its end matches nothing, not even an empty prefix --
-	``''.startswith('', 1, 0)'' is False -- which the clamped slice alone
-	cannot see; the slice still runs first so a bad prefix is refused."
 
-	| w |
-	((self ___boundedSlice___: start end: end) startswith: prefix) ifFalse: [^ false].
-	w := self ___pyAdjust___: start end: end.
-	^ (w @env0:at: 1) @env0:<= (w @env0:at: 2)
+	^ self ___strStartswith___: prefix _: start _: end
 
 ]
 

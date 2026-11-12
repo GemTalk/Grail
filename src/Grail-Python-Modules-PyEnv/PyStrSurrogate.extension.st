@@ -84,6 +84,93 @@ PyStrSurrogate >> ___mapNonSurrogateRuns___: aSelector [
 
 ]
 
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___strEncode___: encoding _: errors [
+	"``surrogatepass'' emits the WTF-8 form (U+D800 -> ED A0 80), which is
+	what CPython answers.  ``surrogateescape'' undoes PEP 383's byte
+	smuggling.  ``strict'' raises.  Other handlers are not implemented rather
+	than approximated."
+
+	| e enc |
+	e := errors @env0:asString.
+	"A handler codecs.register_error registered is called at each error -- see
+	str's encode:_:.  A codec _codecs does not implement is the registry's,
+	whose codec calls the handler itself: the refusal at the end of this
+	method knows only the policies above."
+	(importlib @env0:___namesARegisteredHandler___: e) ifTrue: [ | encoded |
+		encoded := importlib @env0:___encode___: self as: encoding callingHandler: e.
+		encoded == None ifFalse: [^ encoded].
+		encoded := importlib
+			@env0:___codecRoundTrip___: encoding @env0:asString
+			selector: #'encode'
+			with: self
+			errors: e.
+		encoded == nil ifFalse: [^ encoded]].
+	"utf-8-sig IS utf-8 WITH ONE BOM IN FRONT, which is exactly how CPython's
+	codec is written (``codecs.utf_8_encode'' behind a BOM).  Handing it to
+	the branches below whole wrote a BOM per re-encoded fragment -- the
+	surrogateescape path put a SECOND one in the middle of the output -- and
+	named 'utf-8-sig' in the error, where CPython's names 'utf-8'."
+	enc := (encoding @env0:asString @env0:asLowercase)
+		@env0:select: [:c | (c @env0:= $-) @env0:not @env0:and: [(c @env0:= $_) @env0:not]].
+	enc @env0:= 'utf8sig' ifTrue: [
+		^ (bytes @env0:withAll: #(16rEF 16rBB 16rBF))
+			@env1:__add__: (self ___strEncode___: 'utf-8' _: errors)].
+	"``surrogatepass'' IS CODEC-SPECIFIC.  It used to answer the WTF-8 form
+	whatever the target was, so ``'\\udc80'.encode('utf-16-le',
+	'surrogatepass')'' came back as three UTF-8 bytes instead of the two
+	little-endian ones -- right for utf-8 by coincidence and wrong for every
+	other UTF.
+
+	Answers nil for a codec that has no surrogate form, which leaves the
+	utf-7 branch below to claim it (RFC 2152 encodes UTF-16 code units, so a
+	surrogate is ordinary there) and everything else to reach the refusal --
+	which is what CPython does for ascii and latin-1."
+	(e @env0:= 'surrogatepass') ifTrue: [ | ___sp |
+		___sp := self @env0:___surrogatePassBytes___: encoding.
+		___sp @env0:isNil ifFalse: [^ ___sp]].
+	(e @env0:= 'surrogateescape') ifTrue: [
+		^ self @env0:___surrogateEscapeBytes___: encoding].
+	"UTF-7 CARRIES a lone surrogate rather than refusing it.  RFC 2152
+	encodes UTF-16 code units, and a surrogate is a code unit like any
+	other, so CPython answers b'+2AA-' for U+D800 under plain ``strict''.
+	The refusal below is right for the codecs that cannot represent one --
+	utf-8, ascii, latin-1 -- and wrong for this one."
+	enc := encoding @env0:asString @env0:asLowercase.
+	"THE ESCAPE CODECS CARRY A SURROGATE TOO, under every handler including
+	``strict'': they are lossless text escapes, so
+	``'\\ud800'.encode('unicode-escape')'' is b'\\\\ud800' in CPython rather
+	than a refusal.  That is what lets a repr round-trip a string holding
+	one.  Beside utf-7 for the same reason: the refusal below is right for
+	the codecs that cannot represent a surrogate and wrong for those that
+	can."
+	((enc @env0:= 'unicode-escape') @env0:or: [(enc @env0:= 'unicode_escape')
+		@env0:or: [(enc @env0:= 'raw-unicode-escape')
+			@env0:or: [enc @env0:= 'raw_unicode_escape']]]) ifTrue: [
+		^ self @env0:___escapeBytes___: enc].
+	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [
+		^ bytes @env1:___utf7FromCodePoints___: self @env0:___codePoints___].
+	"THE FOUR SUBSTITUTING HANDLERS, which used to fall through to the
+	refusal below as though every one of them were ``strict''.
+
+	A plain str already honoured them -- ``'\xe4'.encode('ascii',
+	'replace')'' answers b'?' -- because CharacterCollection >>
+	___unencodable___:at:encoding:errors:reason: decides what an
+	un-encodable code point contributes.  A string carrying a LONE
+	SURROGATE never reached that: it is a PyStrSurrogate, and this method
+	refused outright once surrogatepass, surrogateescape and utf-7 had had
+	their turn.
+
+	So the handler worked or not depending on WHICH character could not be
+	encoded, which is not a distinction CPython makes."
+	(#('ignore' 'replace' 'xmlcharrefreplace' 'backslashreplace' 'namereplace')
+		@env0:includes: e) ifTrue: [
+			^ self ___substitutingEncode___: encoding errors: e].
+	^ self @env0:___signalSurrogateEncodeError___: encoding
+		at: (codePoints @env0:findFirst: [:cp | self @env0:___isSurrogate___: cp])
+
+]
+
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> ___substitutingEncode___: encoding errors: errors [
 	"Encode under one of the substituting handlers, by SUBSTITUTING TEXT and
@@ -457,101 +544,21 @@ PyStrSurrogate >> encode [
 	same error for the same reason; this is one of the few places the two
 	systems already agreed."
 
-	^ self @env1:encode: 'utf-8' _: 'strict'
+	^ self @env1:___strEncode___: 'utf-8' _: 'strict'
 
 ]
 
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> encode: encoding [
 
-	^ self @env1:encode: encoding _: 'strict'
+	^ self @env1:___strEncode___: encoding _: 'strict'
 
 ]
 
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> encode: encoding _: errors [
-	"``surrogatepass'' emits the WTF-8 form (U+D800 -> ED A0 80), which is
-	what CPython answers.  ``surrogateescape'' undoes PEP 383's byte
-	smuggling.  ``strict'' raises.  Other handlers are not implemented rather
-	than approximated."
 
-	| e enc |
-	e := errors @env0:asString.
-	"A handler codecs.register_error registered is called at each error -- see
-	str's encode:_:.  A codec _codecs does not implement is the registry's,
-	whose codec calls the handler itself: the refusal at the end of this
-	method knows only the policies above."
-	(importlib @env0:___namesARegisteredHandler___: e) ifTrue: [ | encoded |
-		encoded := importlib @env0:___encode___: self as: encoding callingHandler: e.
-		encoded == None ifFalse: [^ encoded].
-		encoded := importlib
-			@env0:___codecRoundTrip___: encoding @env0:asString
-			selector: #'encode'
-			with: self
-			errors: e.
-		encoded == nil ifFalse: [^ encoded]].
-	"utf-8-sig IS utf-8 WITH ONE BOM IN FRONT, which is exactly how CPython's
-	codec is written (``codecs.utf_8_encode'' behind a BOM).  Handing it to
-	the branches below whole wrote a BOM per re-encoded fragment -- the
-	surrogateescape path put a SECOND one in the middle of the output -- and
-	named 'utf-8-sig' in the error, where CPython's names 'utf-8'."
-	enc := (encoding @env0:asString @env0:asLowercase)
-		@env0:select: [:c | (c @env0:= $-) @env0:not @env0:and: [(c @env0:= $_) @env0:not]].
-	enc @env0:= 'utf8sig' ifTrue: [
-		^ (bytes @env0:withAll: #(16rEF 16rBB 16rBF))
-			@env1:__add__: (self encode: 'utf-8' _: errors)].
-	"``surrogatepass'' IS CODEC-SPECIFIC.  It used to answer the WTF-8 form
-	whatever the target was, so ``'\\udc80'.encode('utf-16-le',
-	'surrogatepass')'' came back as three UTF-8 bytes instead of the two
-	little-endian ones -- right for utf-8 by coincidence and wrong for every
-	other UTF.
-
-	Answers nil for a codec that has no surrogate form, which leaves the
-	utf-7 branch below to claim it (RFC 2152 encodes UTF-16 code units, so a
-	surrogate is ordinary there) and everything else to reach the refusal --
-	which is what CPython does for ascii and latin-1."
-	(e @env0:= 'surrogatepass') ifTrue: [ | ___sp |
-		___sp := self @env0:___surrogatePassBytes___: encoding.
-		___sp @env0:isNil ifFalse: [^ ___sp]].
-	(e @env0:= 'surrogateescape') ifTrue: [
-		^ self @env0:___surrogateEscapeBytes___: encoding].
-	"UTF-7 CARRIES a lone surrogate rather than refusing it.  RFC 2152
-	encodes UTF-16 code units, and a surrogate is a code unit like any
-	other, so CPython answers b'+2AA-' for U+D800 under plain ``strict''.
-	The refusal below is right for the codecs that cannot represent one --
-	utf-8, ascii, latin-1 -- and wrong for this one."
-	enc := encoding @env0:asString @env0:asLowercase.
-	"THE ESCAPE CODECS CARRY A SURROGATE TOO, under every handler including
-	``strict'': they are lossless text escapes, so
-	``'\\ud800'.encode('unicode-escape')'' is b'\\\\ud800' in CPython rather
-	than a refusal.  That is what lets a repr round-trip a string holding
-	one.  Beside utf-7 for the same reason: the refusal below is right for
-	the codecs that cannot represent a surrogate and wrong for those that
-	can."
-	((enc @env0:= 'unicode-escape') @env0:or: [(enc @env0:= 'unicode_escape')
-		@env0:or: [(enc @env0:= 'raw-unicode-escape')
-			@env0:or: [enc @env0:= 'raw_unicode_escape']]]) ifTrue: [
-		^ self @env0:___escapeBytes___: enc].
-	((enc @env0:= 'utf-7') or: [enc @env0:= 'utf7']) ifTrue: [
-		^ bytes @env1:___utf7FromCodePoints___: self @env0:___codePoints___].
-	"THE FOUR SUBSTITUTING HANDLERS, which used to fall through to the
-	refusal below as though every one of them were ``strict''.
-
-	A plain str already honoured them -- ``'\xe4'.encode('ascii',
-	'replace')'' answers b'?' -- because CharacterCollection >>
-	___unencodable___:at:encoding:errors:reason: decides what an
-	un-encodable code point contributes.  A string carrying a LONE
-	SURROGATE never reached that: it is a PyStrSurrogate, and this method
-	refused outright once surrogatepass, surrogateescape and utf-7 had had
-	their turn.
-
-	So the handler worked or not depending on WHICH character could not be
-	encoded, which is not a distinction CPython makes."
-	(#('ignore' 'replace' 'xmlcharrefreplace' 'backslashreplace' 'namereplace')
-		@env0:includes: e) ifTrue: [
-			^ self ___substitutingEncode___: encoding errors: e].
-	^ self @env0:___signalSurrogateEncodeError___: encoding
-		at: (codePoints @env0:findFirst: [:cp | self @env0:___isSurrogate___: cp])
+	^ self ___strEncode___: encoding _: errors
 
 ]
 

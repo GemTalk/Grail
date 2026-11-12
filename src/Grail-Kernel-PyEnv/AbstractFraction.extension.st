@@ -1,5 +1,61 @@
 Extension { #name : 'AbstractFraction' }
 
+{ #category : 'Grail-Private' }
+AbstractFraction >> ___fractionLimitDenominator___ [
+	"Find the closest rational with denominator at most 10**6 (default)."
+
+	^ self ___fractionLimitDenominator___: 1000000
+
+]
+
+{ #category : 'Grail-Private' }
+AbstractFraction >> ___fractionLimitDenominator___: maxDenominator [
+	"Find the closest rational with denominator at most maxDenominator.
+	Uses the continued fraction algorithm from CPython's fractions module."
+
+	| p0 q0 p1 q1 n d a q2 k bound1 bound2 temp newP1 diff1 diff2 |
+	maxDenominator ifNil: [ ^ self ___fractionLimitDenominator___ ].
+	(maxDenominator @env0:< 1) ifTrue: [
+		ValueError ___signal___: 'max_denominator should be at least 1'
+	].
+
+	"If denominator is already within limit, return self"
+	((self @env0:denominator) @env0:<= maxDenominator) ifTrue: [
+		^ self
+	].
+
+	p0 := 0. q0 := 1.
+	p1 := 1. q1 := 0.
+	n := self @env0:numerator.
+	d := self @env0:denominator.
+
+	"Continued fraction algorithm"
+	[true] @env0:whileTrue: [
+		a := n @env0:quo: d.
+		q2 := q0 @env0:+ (a @env0:* q1).
+		(q2 @env0:> maxDenominator) ifTrue: [
+			"Found the bound, now find best approximation"
+			k := (maxDenominator @env0:- q0) @env0:quo: q1.
+			bound1 := Fraction ___new___: Fraction _: (p0 @env0:+ (k @env0:* p1)) _: (q0 @env0:+ (k @env0:* q1)).
+			bound2 := Fraction ___new___: Fraction _: p1 _: q1.
+			"Return whichever is closer to self"
+			diff1 := (self @env0:- bound1) @env0:abs.
+			diff2 := (self @env0:- bound2) @env0:abs.
+			(diff2 @env0:<= diff1)
+				ifTrue: [ ^ bound2 ]
+				ifFalse: [ ^ bound1 ]
+		].
+		"Update convergents: p0, q0 become old p1, q1; compute new p1, q1"
+		newP1 := p0 @env0:+ (a @env0:* p1).
+		p0 := p1. q0 := q1. p1 := newP1. q1 := q2.
+		"Swap n and d for next iteration: n, d = d, n - a*d"
+		temp := d.
+		d := n @env0:- (a @env0:* temp).
+		n := temp.
+	].
+
+]
+
 { #category : 'Grail-Conversion' }
 AbstractFraction >> __bool__ [
 	"Return False for 0, True otherwise."
@@ -220,57 +276,15 @@ AbstractFraction >> is_integer [
 
 { #category : 'Grail-Fraction Methods' }
 AbstractFraction >> limit_denominator [
-	"Find the closest rational with denominator at most 10**6 (default)."
 
-	^ self limit_denominator: 1000000
+	^ self ___fractionLimitDenominator___
 
 ]
 
 { #category : 'Grail-Fraction Methods' }
 AbstractFraction >> limit_denominator: maxDenominator [
-	"Find the closest rational with denominator at most maxDenominator.
-	Uses the continued fraction algorithm from CPython's fractions module."
 
-	| p0 q0 p1 q1 n d a q2 k bound1 bound2 temp newP1 diff1 diff2 |
-	maxDenominator ifNil: [ ^ self limit_denominator ].
-	(maxDenominator @env0:< 1) ifTrue: [
-		ValueError ___signal___: 'max_denominator should be at least 1'
-	].
-
-	"If denominator is already within limit, return self"
-	((self @env0:denominator) @env0:<= maxDenominator) ifTrue: [
-		^ self
-	].
-
-	p0 := 0. q0 := 1.
-	p1 := 1. q1 := 0.
-	n := self @env0:numerator.
-	d := self @env0:denominator.
-
-	"Continued fraction algorithm"
-	[true] @env0:whileTrue: [
-		a := n @env0:quo: d.
-		q2 := q0 @env0:+ (a @env0:* q1).
-		(q2 @env0:> maxDenominator) ifTrue: [
-			"Found the bound, now find best approximation"
-			k := (maxDenominator @env0:- q0) @env0:quo: q1.
-			bound1 := Fraction ___new___: Fraction _: (p0 @env0:+ (k @env0:* p1)) _: (q0 @env0:+ (k @env0:* q1)).
-			bound2 := Fraction ___new___: Fraction _: p1 _: q1.
-			"Return whichever is closer to self"
-			diff1 := (self @env0:- bound1) @env0:abs.
-			diff2 := (self @env0:- bound2) @env0:abs.
-			(diff2 @env0:<= diff1)
-				ifTrue: [ ^ bound2 ]
-				ifFalse: [ ^ bound1 ]
-		].
-		"Update convergents: p0, q0 become old p1, q1; compute new p1, q1"
-		newP1 := p0 @env0:+ (a @env0:* p1).
-		p0 := p1. q0 := q1. p1 := newP1. q1 := q2.
-		"Swap n and d for next iteration: n, d = d, n - a*d"
-		temp := d.
-		d := n @env0:- (a @env0:* temp).
-		n := temp.
-	].
+	^ self ___fractionLimitDenominator___: maxDenominator
 
 ]
 

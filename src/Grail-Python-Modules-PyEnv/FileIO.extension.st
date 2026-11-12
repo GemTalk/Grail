@@ -632,6 +632,28 @@ FileIO >> ___ioReadline___: limit [
 ]
 
 { #category : 'Grail-Private' }
+FileIO >> ___ioReadlines___: aHint [
+	"readlines(hint): the lines up to the one that brings their total size to
+	hint; None, or a hint that is not positive, reads every one, as
+	IOBase.readlines does."
+
+	| hint out line total |
+	self _checkReadable.
+	hint := aHint == None ifTrue: [-1] ifFalse: [aHint ___asIndex___].
+	out := list ___new___.
+	total := 0.
+	[
+		line := self readline.
+		line @env0:isEmpty
+	] @env0:whileFalse: [
+		out append: line.
+		total := total @env0:+ line @env0:size.
+		(hint @env0:> 0 @env0:and: [total @env0:>= hint]) ifTrue: [^ out]].
+	^ out
+
+]
+
+{ #category : 'Grail-Private' }
 FileIO >> ___ioSeek___: pos whence: whence [
 	"seek(pos, whence=0): 0=set, 1=cur, 2=end.  Byte offsets."
 
@@ -1239,29 +1261,14 @@ FileIO >> readlines [
 	"Read all remaining lines into a list.  Goes through self readline
 	so the TextIOWrapper subclass inherits this unchanged."
 
-	^ self readlines: None
+	^ self ___ioReadlines___: None
 
 ]
 
 { #category : 'Grail-Reading' }
 FileIO >> readlines: aHint [
-	"readlines(hint): the lines up to the one that brings their total size to
-	hint; None, or a hint that is not positive, reads every one, as
-	IOBase.readlines does."
 
-	| hint out line total |
-	self _checkReadable.
-	hint := aHint == None ifTrue: [-1] ifFalse: [aHint ___asIndex___].
-	out := list ___new___.
-	total := 0.
-	[
-		line := self readline.
-		line @env0:isEmpty
-	] @env0:whileFalse: [
-		out append: line.
-		total := total @env0:+ line @env0:size.
-		(hint @env0:> 0 @env0:and: [total @env0:>= hint]) ifTrue: [^ out]].
-	^ out
+	^ self ___ioReadlines___: aHint
 
 ]
 

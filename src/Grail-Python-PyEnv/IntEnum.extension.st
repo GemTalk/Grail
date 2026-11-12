@@ -59,6 +59,15 @@ IntEnum class >> ___grailSetClassBoundary___: aBoundary [
 
 ]
 
+{ #category : 'Grail-Private' }
+IntEnum class >> ___intFromBytes___: bytesArg _: byteorder _: signed [
+	| raw |
+	raw := Integer @env0:perform: #'from_bytes:_:_:' env: 1
+		withArguments: { bytesArg. byteorder. signed }.
+	^ Enum ___grailLookupValue: self value: raw
+
+]
+
 { #category : 'Grail-Enum Metaclass' }
 IntEnum class >> ___methodDocTable___ [
 	"IntEnum is a SEPARATE metaclass root -- its Smalltalk chain is rooted at
@@ -253,16 +262,14 @@ IntEnum class >> from_bytes: bytesArg _: byteorder [
 	subclass and every arity, and answers the same member; this pair stays
 	because a reinstall cannot delete an env-1 method on 4.0.0.a5 (#1727)."
 
-	^ self from_bytes: bytesArg _: byteorder _: false
+	^ self ___intFromBytes___: bytesArg _: byteorder _: false
 
 ]
 
 { #category : 'Grail-Enum Metaclass' }
 IntEnum class >> from_bytes: bytesArg _: byteorder _: signed [
-	| raw |
-	raw := Integer @env0:perform: #'from_bytes:_:_:' env: 1
-		withArguments: { bytesArg. byteorder. signed }.
-	^ Enum ___grailLookupValue: self value: raw
+
+	^ self ___intFromBytes___: bytesArg _: byteorder _: signed
 
 ]
 

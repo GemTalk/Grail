@@ -325,6 +325,16 @@ Boolean >> ___and___: aBlock [
 
 ]
 
+{ #category : 'Grail-Private' }
+Boolean >> ___intToBytes___: length _: byteorder _: signed [
+
+	"``int.to_bytes(True)'' runs Integer's to_bytes on a Boolean, and that sends
+	this (#1393), so it is answered as the int the Boolean stands for."
+
+	^ (self ifTrue: [1] ifFalse: [0]) ___intToBytes___: length _: byteorder _: signed
+
+]
+
 { #category : 'Grail-Bridge' }
 Boolean >> ___isTruthy___ [
 	"Boolean is already a Smalltalk Boolean."

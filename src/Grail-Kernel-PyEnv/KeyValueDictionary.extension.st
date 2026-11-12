@@ -1,5 +1,58 @@
 Extension { #name : 'KeyValueDictionary' }
 
+{ #category : 'Grail-Private' }
+KeyValueDictionary class >> ___dictFromkeys___: iterable _: value [
+	"dict.fromkeys(iterable, value): a new mapping with keys from iterable,
+	each mapped to ``value''.  Mirrors CPython dict.fromkeys(cls, ...): build
+	the result via cls() -- honoring a user __new__ (which may return a
+	DIFFERENT type, e.g. ``class mydict(dict): __new__ -> UserDict'') and
+	__init__ -- then d[key] = value for each key via __setitem__ (so an
+	overriding __setitem__ fires, test_fromkeys' baddict2).
+
+	Grail's dict-subclass cls() (ClassDefAst instantiation) bypasses __new__ (a
+	documented limitation), so allocate through ___allocateInstance___ (which
+	DOES run a user __new__) and run __init__() only when __new__ yielded a
+	genuine cls instance -- CPython's type.__call__ skips __init__ when
+	__new__'s result isn't an instance of cls (test_fromkeys mydict/baddict3
+	return a foreign type; baddict1 __init__ raises; baddict4 __init__ fills)."
+
+	| result iter done |
+	result := self @env1:___allocateInstance___: #() kw: nil.
+	(result @env0:isKindOf: self) ifTrue: [
+		"object supplies a no-op ___init__:kw: so this resolves for every
+		class; a user __init__ runs with no args, as cls() would."
+		[result @env0:perform: #'___init__:kw:' env: 1
+			withArguments: (Array @env0:with: #() @env0:with: nil)]
+			@env0:on: MessageNotUnderstood do: [:ex | nil]].
+	"A string yields its 1-character SUBSTRINGS as keys, not Smalltalk
+	 Characters (CPython quirk: dict.fromkeys('abc') == {'a':v,'b':v,'c':v})."
+	((iterable isKindOf: CharacterCollection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			| s |
+			s := Unicode7 ___new___: 1.
+			s @env0:at: 1 put: (iterable @env0:at: i).
+			result @env1:__setitem__: s _: value
+		].
+		^ result
+	].
+	((iterable isKindOf: SequenceableCollection)
+		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
+		1 @env0:to: iterable @env0:size do: [:i |
+			result @env1:__setitem__: (iterable @env0:at: i) _: value
+		].
+		^ result
+	].
+	iter := iterable __iter__.
+	done := false.
+	[done] @env0:whileFalse: [
+		[result @env1:__setitem__: iter __next__ _: value]
+			@env0:on: StopIteration do: [:ex | done := true]
+	].
+	^ result
+
+]
+
 { #category : 'Grail-Initialization' }
 KeyValueDictionary class >> ___updateSeqPairAt___: idx from: element [
 	"Convert one dict-update sequence element to a (key, value) pair the way
@@ -236,60 +289,14 @@ KeyValueDictionary class >> fromkeys: iterable [
 	iterable, each mapped to None.  Used by re._parser to dedupe
 	a list while preserving insertion order (`list(dict.fromkeys(xs))`)."
 
-	^ self fromkeys: iterable _: None
+	^ self ___dictFromkeys___: iterable _: None
 
 ]
 
 { #category : 'Grail-Initialization' }
 KeyValueDictionary class >> fromkeys: iterable _: value [
-	"dict.fromkeys(iterable, value): a new mapping with keys from iterable,
-	each mapped to ``value''.  Mirrors CPython dict.fromkeys(cls, ...): build
-	the result via cls() -- honoring a user __new__ (which may return a
-	DIFFERENT type, e.g. ``class mydict(dict): __new__ -> UserDict'') and
-	__init__ -- then d[key] = value for each key via __setitem__ (so an
-	overriding __setitem__ fires, test_fromkeys' baddict2).
 
-	Grail's dict-subclass cls() (ClassDefAst instantiation) bypasses __new__ (a
-	documented limitation), so allocate through ___allocateInstance___ (which
-	DOES run a user __new__) and run __init__() only when __new__ yielded a
-	genuine cls instance -- CPython's type.__call__ skips __init__ when
-	__new__'s result isn't an instance of cls (test_fromkeys mydict/baddict3
-	return a foreign type; baddict1 __init__ raises; baddict4 __init__ fills)."
-
-	| result iter done |
-	result := self @env1:___allocateInstance___: #() kw: nil.
-	(result @env0:isKindOf: self) ifTrue: [
-		"object supplies a no-op ___init__:kw: so this resolves for every
-		class; a user __init__ runs with no args, as cls() would."
-		[result @env0:perform: #'___init__:kw:' env: 1
-			withArguments: (Array @env0:with: #() @env0:with: nil)]
-			@env0:on: MessageNotUnderstood do: [:ex | nil]].
-	"A string yields its 1-character SUBSTRINGS as keys, not Smalltalk
-	 Characters (CPython quirk: dict.fromkeys('abc') == {'a':v,'b':v,'c':v})."
-	((iterable isKindOf: CharacterCollection)
-		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
-		1 @env0:to: iterable @env0:size do: [:i |
-			| s |
-			s := Unicode7 ___new___: 1.
-			s @env0:at: 1 put: (iterable @env0:at: i).
-			result @env1:__setitem__: s _: value
-		].
-		^ result
-	].
-	((iterable isKindOf: SequenceableCollection)
-		and: [iterable ___iterIsPythonDefined___ not]) ifTrue: [
-		1 @env0:to: iterable @env0:size do: [:i |
-			result @env1:__setitem__: (iterable @env0:at: i) _: value
-		].
-		^ result
-	].
-	iter := iterable __iter__.
-	done := false.
-	[done] @env0:whileFalse: [
-		[result @env1:__setitem__: iter __next__ _: value]
-			@env0:on: StopIteration do: [:ex | done := true]
-	].
-	^ result
+	^ self ___dictFromkeys___: iterable _: value
 
 ]
 
@@ -305,6 +312,35 @@ KeyValueDictionary >> ___absentMarker___ [
 		m := Object @env0:new.
 		st @env0:at: #'Grail_dict_absentMarker' put: m].
 	^ m
+
+]
+
+{ #category : 'Grail-Private' }
+KeyValueDictionary >> ___dictGet___: key _: default [
+	"Return the value for key if key is in the dictionary, else default"
+
+	| hasKey |
+	hasKey := self @env0:includesKey: key.
+	hasKey ifFalse: [key ___requireHashableAsDictKey___].
+	hasKey ifTrue: [
+		^ self @env0:at: key
+	].
+	^ default
+
+]
+
+{ #category : 'Grail-Private' }
+KeyValueDictionary >> ___dictSetdefault___: key _: default [
+	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
+
+	| hasKey |
+	hasKey := self @env0:includesKey: key.
+	hasKey ifTrue: [
+		^ self @env0:at: key
+	].
+	key ___requireHashableAsDictKey___.
+	self @env0:at: key put: default.
+	^ default
 
 ]
 
@@ -935,21 +971,14 @@ KeyValueDictionary >> copy [
 { #category : 'Grail-Access Methods' }
 KeyValueDictionary >> get: key [
 	"Return the value for key if key is in the dictionary, else None"
-	^ self get: key _: None
+	^ self ___dictGet___: key _: None
 
 ]
 
 { #category : 'Grail-Access Methods' }
 KeyValueDictionary >> get: key _: default [
-	"Return the value for key if key is in the dictionary, else default"
 
-	| hasKey |
-	hasKey := self @env0:includesKey: key.
-	hasKey ifFalse: [key ___requireHashableAsDictKey___].
-	hasKey ifTrue: [
-		^ self @env0:at: key
-	].
-	^ default
+	^ self ___dictGet___: key _: default
 
 ]
 
@@ -1036,22 +1065,14 @@ KeyValueDictionary >> popitem [
 { #category : 'Grail-Mutation Methods' }
 KeyValueDictionary >> setdefault: key [
 	"If key is in the dictionary, return its value. If not, insert key with value None and return None"
-	^ self setdefault: key _: None
+	^ self ___dictSetdefault___: key _: None
 
 ]
 
 { #category : 'Grail-Mutation Methods' }
 KeyValueDictionary >> setdefault: key _: default [
-	"If key is in the dictionary, return its value. If not, insert key with value default and return default"
 
-	| hasKey |
-	hasKey := self @env0:includesKey: key.
-	hasKey ifTrue: [
-		^ self @env0:at: key
-	].
-	key ___requireHashableAsDictKey___.
-	self @env0:at: key put: default.
-	^ default
+	^ self ___dictSetdefault___: key _: default
 
 ]
 

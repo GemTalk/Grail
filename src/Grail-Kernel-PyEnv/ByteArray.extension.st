@@ -784,6 +784,869 @@ ByteArray >> ___boundedSlice___: start end: end [
 
 ]
 
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesCenter___: width _: fillchar [
+	"bytes.center(width, fillbyte) -- centered, padded with the given fill."
+	| mySize result totalPadding leftPadding rightPadding fill |
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
+	fill := self ___byteValueOf___: fillchar.
+	totalPadding := width @env0:- mySize.
+	"CPython's split for an ODD margin: left = marg // 2 + (marg & width & 1),
+	so when margin AND width are both odd the extra byte goes LEFT.
+	``b'ab'.center(7, b'*')'' is b'***ab**', not b'**ab***' -- which is what
+	this answered, and the str side answered the same way."
+	leftPadding := (totalPadding @env0:// 2)
+		@env0:+ ((totalPadding @env0:bitAnd: width) @env0:bitAnd: 1).
+	rightPadding := totalPadding @env0:- leftPadding.
+	"``self class'', not ``bytes'': a bytearray answers a bytearray, as upper
+	and the slice already do.  Hardcoding bytes made these three the odd ones
+	out (see docs/Issues.md on the wider inconsistency)."
+	result := (self @env0:class) ___new___: width.
+	1 @env0:to: leftPadding do: [:i | result @env0:at: i put: fill].
+	1 @env0:to: mySize do: [:i | result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)].
+	1 @env0:to: rightPadding do: [:i | result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: fill].
+	^ result
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesCount___: rawSub [
+	"Count non-overlapping occurrences of sub"
+	| subSize mySize count i sub |
+	sub := self ___searchOperand___: rawSub.
+
+	"sub must be bytes or integer"
+	(sub isKindOf: Integer) ifTrue: [
+		"Count occurrences of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
+		count := 0.
+		mySize := self @env0:size.
+		1 @env0:to: mySize do: [:idx |
+			| byte |
+			byte := self @env0:at: idx.
+			(byte @env0:= sub) ifTrue: [
+				count := count @env0:+ 1
+			]
+		].
+		^ count
+	].
+
+	"sub must be a bytes-like object (bytes / bytearray / subclasses) or an int"
+	(sub isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: 'argument should be bytes or integer'
+	].
+
+	subSize := sub @env0:size.
+	mySize := self @env0:size.
+
+	"Empty sub matches between every position (CPython: len+1)."
+	(subSize == 0) ifTrue: [
+		^ mySize @env0:+ 1
+	].
+
+	count := 0.
+	i := 1.
+
+	[i @env0:<= (mySize @env0:- (subSize @env0:- 1))] @env0:whileTrue: [
+		| match |
+		match := true.
+		1 @env0:to: subSize do: [:j |
+			| myByte subByte |
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			subByte := sub @env0:at: j.
+			(myByte @env0:= subByte) ifFalse: [
+				match := false
+			]
+		].
+		match ifTrue: [
+			count := count @env0:+ 1.
+			i := i @env0:+ subSize
+		] ifFalse: [
+			i := i @env0:+ 1
+		]
+	].
+
+	^ count
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesCount___: sub _: start _: end [
+	"bytes.count(sub, start, end) -- count within the [start, end)
+	slice, CPython clamping rules.  re._constants.PatternError builds
+	error line numbers with the 3-arg form on byte patterns."
+
+	| size s e |
+	size := self @env0:size.
+	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size.
+	"``> e'' (not ``>= e'') so an empty window (s = e) still yields the
+	one empty-substring match that count: returns for an empty slice."
+	s @env0:> e ifTrue: [^ 0].
+	^ (self @env0:copyFrom: s @env0:+ 1 to: e) ___bytesCount___: sub
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesDecode___: encoding [
+	"Decode bytes to string using specified encoding"
+
+	| name encodingStr info |
+	"A non-str encoding is Clinic's TypeError, checked first; it reached
+	asLowercase as an uncatchable MessageNotUnderstood.  A str subclass goes
+	on as the plain str it holds."
+	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
+	name == encoding ifFalse: [^ self ___bytesDecode___: name].
+	"Normalise the codec name before dispatching, as CPython does and as
+	str>>encode already did on this side of the pair.  Without it every
+	branch below was an EXACT match on a lowercase hyphenated spelling, so
+	``b'x'.decode('UTF-8')'' -- the spelling that appears verbatim in a MIME
+	or .mo Content-Type header -- raised LookupError while 'utf-8' worked.
+	Lowercase plus underscore-to-hyphen also subsumes the alias spellings
+	('utf_8', 'unicode_escape') without enumerating them per branch."
+	encodingStr := (encoding @env0:asLowercase)
+		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
+
+	"Support UTF-8.  Ill-formed input raises Python's catchable
+	UnicodeDecodeError, not GemStone's raw ArgumentError (which escapes
+	try/except -- CPython test_re's locale tests decode latin-1-laden
+	byte patterns and expect a Python exception)."
+	((encodingStr @env0:= 'utf-8') or: [
+		encodingStr @env0:= 'utf8'
+	]) ifTrue: [ | ___decoded |
+		___decoded := [self @env0:decodeFromUTF8]
+			@env0:on: ArgumentError
+			do: [:ex | self ___signalUTF8DecodeError___].
+		"decodeFromUTF8 is not a complete validator: it ACCEPTS an encoded
+		surrogate (ED A0..BF xx) once the result is already a wide string --
+		``b'\xf0\x90\xbf\xbf\xed\xb2\x80'' decoded to U+10FFF U+DC80, where
+		CPython raises 'invalid continuation byte' (test_codecs
+		test_lone_surrogates, the supplementary-before case).  A surrogate is
+		ill-formed UTF-8 whatever precedes it, so any ED A0..BF sends the
+		input to the re-scan, which reports it with CPython's span.  The
+		byte scan runs only when an ED is present at all."
+		(self @env0:includes: 16rED) ifTrue: [ | n |
+			n := self @env0:size.
+			1 @env0:to: n @env0:- 1 do: [:k |
+				((self @env0:at: k) @env0:= 16rED
+					@env0:and: [(self @env0:at: k @env0:+ 1) @env0:>= 16rA0])
+						ifTrue: [^ self ___signalUTF8DecodeError___]]].
+		^ ___decoded
+	].
+
+	"Support ASCII.  ``us-ascii'' is the same codec under the name that appears
+	in a MIME Content-Type header, and str>>encode already accepted it on the
+	way out -- difflib's HtmlDiff round-trips through
+	``.encode(charset, 'xmlcharrefreplace').decode(charset)'', so accepting the
+	spelling in only one direction made ``make_file(..., charset='us-ascii')''
+	a LookupError (test_difflib)."
+	((encodingStr @env0:= 'ascii') or: [encodingStr @env0:= 'us-ascii']) ifTrue: [
+		| result size |
+		size := self @env0:size.
+		result := Unicode7 ___new___: size.
+		1 @env0:to: size do: [:i |
+			| byte char |
+			byte := self @env0:at: i.
+			(byte @env0:> 127) ifTrue: [
+				"The five arguments CPython carries, not a bare message: the
+				position is known HERE and nowhere else, and it is what makes
+				the message say ``in position 1''.  See UnicodeDecodeError >>
+				__str__."
+				UnicodeDecodeError ___signalNew___:
+					{ 'ascii'. self. i @env0:- 1. i. 'ordinal not in range(128)' }
+					kw: nil
+			].
+			char := Character @env0:codePoint: byte.
+			result @env0:at: i put: char
+		].
+		^ result
+	].
+
+	"Support Latin-1.  ``iso-8859-1'' is the same codec under the name the
+	wire actually uses -- it is the default charset of a GNU .mo catalog
+	header -- and str>>encode already accepted it on the way out."
+	((encodingStr @env0:= 'latin-1') or: [
+		(encodingStr @env0:= 'latin1') or: [
+		(encodingStr @env0:= 'iso-8859-1') or: [
+		encodingStr @env0:= 'iso8859-1'
+	]]]) ifTrue: [
+		| result size |
+		size := self @env0:size.
+		result := Unicode7 ___new___: size.
+		1 @env0:to: size do: [:i |
+			| byte char |
+			byte := self @env0:at: i.
+			char := Character @env0:codePoint: byte.
+			result @env0:at: i put: char
+		].
+		^ result
+	].
+
+	"Support unicode-escape: interpret Python source-style backslash
+	escapes (n, t, r, b, f, v, a, hex xHH, uHHHH, UHHHHHHHH, octal ooo).
+	Non-backslash bytes pass through as Latin-1 code points."
+	((encodingStr @env0:= 'unicode-escape') or: [
+		encodingStr @env0:= 'unicode_escape'
+	]) ifTrue: [
+		^ self @env0:___decodeUnicodeEscape___
+	].
+
+	"raw-unicode-escape: Latin-1 EXCEPT that \uXXXX and \UXXXXXXXX name a
+	code point.  Unlike unicode-escape this leaves every other backslash
+	sequence alone -- \n stays backslash-n, and a DOUBLED backslash keeps
+	both, so b'\\u00e9' decodes to the six literal characters rather than to
+	e-acute.  test_builtin builds its Arabic-Indic digit cases with it."
+	((encodingStr @env0:= 'raw-unicode-escape') or: [
+		encodingStr @env0:= 'raw_unicode_escape'
+	]) ifTrue: [
+		^ self @env0:___decodeRawUnicodeEscape___
+	].
+
+	"UTF-16 (BOM-detected for plain 'utf-16', explicit for -le/-be) --
+	the inverse of str>>___pyEncodeUTF16___."
+	((encodingStr @env0:= 'utf-16') or: [(encodingStr @env0:= 'utf-16-le')
+		or: [(encodingStr @env0:= 'utf-16le') or: [(encodingStr @env0:= 'utf-16-be')
+		or: [encodingStr @env0:= 'utf-16be']]]]) ifTrue: [
+		^ self ___pyDecodeUTF16___: encodingStr].
+
+	"UTF-7 (RFC 2152), the inverse of bytes class >> ___utf7FromCodePoints___:."
+	((encodingStr @env0:= 'utf-7') or: [encodingStr @env0:= 'utf7']) ifTrue: [
+		^ self ___pyDecodeUTF7___].
+
+	"UTF-32, the inverse of str>>___pyEncodeUTF32___ and the same three
+	shapes: BOM-detected for plain 'utf-32', explicit for -le/-be."
+	((encodingStr @env0:= 'utf-32') or: [(encodingStr @env0:= 'utf-32-le')
+		or: [(encodingStr @env0:= 'utf-32le') or: [(encodingStr @env0:= 'utf-32-be')
+		or: [encodingStr @env0:= 'utf-32be']]]]) ifTrue: [
+		^ self ___pyDecodeUTF32___: encodingStr].
+
+	"``idna'' is NOT handled here: it reaches the registry below, and so the
+	vendored encodings/idna.py (RFC 3490 over nameprep, on the generated
+	Unicode 3.2.0 tables).  This used to be an ASCII-only shortcut that
+	refused any byte above 127 and could not decode an ``xn--'' label at
+	all; the real codec keeps an ASCII fast path of its own."
+
+	"iso-8859-15 (latin-9): the inverse of str>>encode's latin-9 branch --
+	latin-1 with 8 code points substituted.  encode has supported it since
+	test_bytes needed ``bytes('€', 'iso8859-15')''; decode did not, so a
+	round-trip raised LookupError on the way back."
+	((encodingStr @env0:= 'iso-8859-15') or: [(encodingStr @env0:= 'iso8859-15')
+		or: [(encodingStr @env0:= 'latin-9') or: [(encodingStr @env0:= 'latin9')
+		or: [encodingStr @env0:= 'l9']]]]) ifTrue: [
+		| result size map |
+		"byte -> code point for the 8 that differ from latin-1."
+		map := IdentityKeyValueDictionary @env0:new.
+		map @env0:at: 16rA4 put: 16r20AC; @env0:at: 16rA6 put: 16r0160;
+			@env0:at: 16rA8 put: 16r0161; @env0:at: 16rB4 put: 16r017D;
+			@env0:at: 16rB8 put: 16r017E; @env0:at: 16rBC put: 16r0152;
+			@env0:at: 16rBD put: 16r0153; @env0:at: 16rBE put: 16r0178.
+		size := self @env0:size.
+		result := Unicode7 ___new___: size.
+		1 @env0:to: size do: [:i |
+			| byte |
+			byte := self @env0:at: i.
+			result @env0:at: i put: (Character @env0:codePoint:
+				(map @env0:at: byte otherwise: byte))].
+		^ result
+	].
+
+	"A REGISTERED codec, before giving up -- see importlib class >>
+	___registeredCodecInfoFor___:.  CodecInfo.decode answers (str, length),
+	of which the caller wants the str."
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: encodingStr selector: #'decode' with: self
+		errors: 'strict' asWritten: encoding.
+	info == nil ifFalse: [^ info].
+
+	"Unsupported encoding, named AS THE CALLER WROTE IT.  bytes.decode
+	lowercases and hyphenates before it looks anything up, and reporting that
+	spelling back made the message describe Grail's normalisation rather than
+	the argument: ``b'x'.decode('exception_notes_test')'' answered ``unknown
+	encoding: exception-notes-test''.  CPython echoes the name unchanged, which
+	is what test_codecs' ExceptionNotesTest.test_codec_lookup_failure asserts
+	-- and the as-written name is already carried here for
+	___refuseNonTextCodec___, for the same reason."
+	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding @env0:asString)
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesDecode___: encoding _: errors [
+	"``bytes.decode(encoding, errors)`` 2-arg form.  For UTF-8 with
+	errors='ignore', invalid bytes are skipped; otherwise (strict, or a
+	non-UTF-8 codec) decode via the 1-arg form, which raises on ill-formed
+	input."
+
+	| name policy enc info |
+	"Both must be str, as Clinic checks them: see decode:."
+	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
+	policy := TypeError @env0:___requireStr___: errors argument: 'errors' of: 'decode'.
+	(name == encoding and: [policy == errors]) ifFalse: [^ self ___bytesDecode___: name _: policy].
+	enc := (encoding @env0:asLowercase)
+		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
+	"A handler codecs.register_error registered is called at each error, and
+	the decode resumes where it says, as CPython's does.  _codecs answers None
+	for a codec it leaves to the rest of this method."
+	((Python @env0:at: #importlib) @env0:___namesARegisteredHandler___: policy) ifTrue: [ | decoded |
+		decoded := (Python @env0:at: #importlib) @env0:___decode___: self as: enc callingHandler: policy.
+		decoded == None ifFalse: [^ decoded]].
+	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
+		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
+	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
+		^ self ___decodeSurrogateEscape___: enc].
+	"``surrogatepass'' DECODE, for the UTF families that can carry one.  The
+	strict decoders reject a surrogate -- correctly -- and there was no path
+	that did anything else, so every surrogatepass decode raised.  Answers
+	nil for a codec with no surrogate form, which leaves the rest of this
+	method to handle it as before."
+	(errors @env0:asString @env0:= 'surrogatepass') ifTrue: [ | ___sp |
+		___sp := self ___decodeSurrogatePass___: enc.
+		___sp @env0:isNil ifFalse: [^ ___sp]].
+	"A REGISTERED codec is consulted HERE rather than through the 1-arg
+	form below, because that form has no errors to pass: the fall-through
+	drops the policy and every codec then behaves as ``strict''.  A codec
+	that implements the policies itself -- as the utf-32 entry points in
+	_codecs do, through _handle_decode_error -- needs the argument to do
+	it with."
+	info := (Python @env0:at: #importlib)
+		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors
+		asWritten: encoding.
+	info == nil ifFalse: [^ info].
+	"THE SUBSTITUTING DECODE POLICIES, tried AFTER the registry above.
+
+	Order matters: a REGISTERED codec (punycode, and every encodings.*
+	module) implements its own policies and is only reachable through
+	___codecRoundTrip___.  Running this first sent such a decode into the
+	one-argument form below, which does not know those names at all --
+	``b'xn--w&'.decode('punycode', 'replace')'' became LookupError.
+
+	Original note follows.  Every builtin decoder here is written
+	to RAISE on ill-formed input, and the one-argument ``decode:'' it falls
+	through to below has no errors to consult -- so ``replace'', ``ignore''
+	and ``backslashreplace'' all behaved as ``strict'' for ascii, utf-16 and
+	utf-32, and for utf-8 everything but ``ignore''.  Nine of thirty
+	codec/handler pairs agreed with CPython.
+
+	Implemented by RE-ENTERING the strict decoder rather than by teaching
+	each decoder a policy: the strict decoders already report an accurate
+	[start, end) for the bytes they choked on, which is the only thing a
+	policy needs.  That also reproduces CPython's granularity for free --
+	one replacement per ERROR RANGE, so two bad bytes give two U+FFFD and a
+	truncated multi-byte sequence gives one."
+	(#('replace' 'ignore' 'backslashreplace') @env0:includes: errors @env0:asString)
+		ifTrue: [^ self ___decodeSubstituting___: enc errors: errors @env0:asString].
+	^ self ___bytesDecode___: encoding
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesEndswith___: suffix [
+	"Check if bytes ends with suffix"
+	| suffixClass suffixSize mySize offset |
+	suffixClass := suffix @env0:class.
+
+	"A tuple of suffixes: True if self ends with ANY of them (CPython).
+	Each element is validated by the recursive single-suffix call."
+	(suffix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (suffix @env0:size) do: [:ti |
+			(self ___bytesEndswith___: (suffix @env0:at: ti)) ifTrue: [^ true]].
+		^ false
+	].
+
+	"otherwise the suffix must be a single bytes-like object"
+	(suffix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('endswith first arg must be bytes or a tuple of bytes, not '
+			@env0:, (suffix @env0:class @env0:name @env0:asString))
+	].
+
+	suffixSize := suffix @env0:size.
+	mySize := self @env0:size.
+
+	"If suffix is longer, can't match"
+	(suffixSize @env0:> mySize) ifTrue: [
+		^ false
+	].
+
+	offset := mySize @env0:- (suffixSize).
+
+	"Compare each byte"
+	1 @env0:to: suffixSize do: [:i |
+		| myByte suffixByte |
+		myByte := self @env0:at: (offset @env0:+ i).
+		suffixByte := suffix @env0:at: i.
+		(myByte @env0:= suffixByte) ifFalse: [
+			^ false
+		]
+	].
+
+	^ true
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesEndswith___: suffix _: start _: end [
+	"bytes.endswith(suffix, start, end) -- tested against the [start, end)
+	slice."
+	^ (self ___boundedSlice___: start end: end) ___bytesEndswith___: suffix
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesExpandtabs___: tabsize [
+	"Expand tabs to spaces with given tabsize"
+	| result size column |
+	result := (self @env0:class) ___new___.
+	size := self @env0:size.
+	column := 0.
+
+	1 @env0:to: size do: [:i |
+		| byte |
+		byte := self @env0:at: i.
+
+		(byte == 9) ifTrue: [  "Tab"
+			| spaces |
+			spaces := tabsize @env0:- (column @env0:\\ tabsize).
+			1 @env0:to: spaces do: [:j |
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte @env0:at: 1 put: 32.
+				result := result @env0:, newByte
+			].
+			column := column @env0:+ spaces
+		] ifFalse: [
+			((byte == 10) or: [byte == 13]) ifTrue: [  "LF or CR both reset the column"
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte @env0:at: 1 put: byte.
+				result := result @env0:, newByte.
+				column := 0
+			] ifFalse: [
+				| newByte |
+				newByte := bytes ___new___: 1.
+				newByte @env0:at: 1 put: byte.
+				result := result @env0:, newByte.
+				column := column @env0:+ 1
+			]
+		]
+	].
+
+	^ result
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesFind___: rawSub [
+	"Find first occurrence of sub, return index or -1"
+	| subSize mySize i sub |
+	sub := self ___searchOperand___: rawSub.
+
+	"sub must be bytes or integer"
+	(sub isKindOf: Integer) ifTrue: [
+		"Find first occurrence of a single byte value (range-checked)."
+		self ___checkByteValue___: sub.
+		mySize := self @env0:size.
+		1 @env0:to: mySize do: [:idx |
+			| byte |
+			byte := self @env0:at: idx.
+			(byte @env0:= sub) ifTrue: [
+				^ idx @env0:- (1)  "Convert to 0-based"
+			]
+		].
+		^ -1
+	].
+
+	"sub must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sub isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: 'argument should be bytes, bytearray or int'
+	].
+
+	subSize := sub @env0:size.
+	mySize := self @env0:size.
+
+	"Empty sub always returns 0"
+	(subSize == 0) ifTrue: [
+		^ 0
+	].
+
+	i := 1.
+	[i @env0:<= (mySize @env0:- (subSize @env0:- 1))] @env0:whileTrue: [
+		| match |
+		match := true.
+		1 @env0:to: subSize do: [:j |
+			| myByte subByte |
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			subByte := sub @env0:at: j.
+			(myByte @env0:= subByte) ifFalse: [
+				match := false
+			]
+		].
+		match ifTrue: [
+			^ i @env0:- (1)  "Convert to 0-based"
+		].
+		i := i @env0:+ 1
+	].
+
+	^ -1
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesFind___: sub _: start _: end [
+	"bytes.find(sub, start, end) -- first 0-based index of sub within the
+	[start, end) slice (CPython negative-index clamping), else -1.  Reuses the
+	1-arg scan on the slice and offsets the hit back to an absolute index."
+	| size s e r |
+	size := self @env0:size.
+	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size.
+	"Do NOT clamp s to size: a start past the end must miss (empty sub
+	included) -- ``s > e'' then rejects it, since e <= size < s."
+	s @env0:> e ifTrue: [^ -1].
+	r := (self @env0:copyFrom: s @env0:+ 1 to: e) ___bytesFind___: sub.
+	^ (r @env0:= -1) ifTrue: [-1] ifFalse: [r @env0:+ s]
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesLjust___: width _: fillchar [
+	"bytes.ljust(width, fillbyte)."
+	| mySize result padding fill |
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
+	fill := self ___byteValueOf___: fillchar.
+	padding := width @env0:- mySize.
+	result := (self @env0:class) ___new___: width.
+	1 @env0:to: mySize do: [:i | result @env0:at: i put: (self @env0:at: i)].
+	1 @env0:to: padding do: [:i | result @env0:at: (mySize @env0:+ i) put: fill].
+	^ result
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesReplace___: old _: new [
+	"Replace all occurrences of old with new"
+	| oldClass newClass oldSize newSize mySize parts |
+	oldClass := old @env0:class.
+	newClass := new @env0:class.
+
+	"old and new must be bytes-like (bytes / bytearray / subclasses)"
+	(old isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: 'first argument must be bytes'
+	].
+	(new isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: 'second argument must be bytes'
+	].
+
+	oldSize := old @env0:size.
+	newSize := new @env0:size.
+	mySize := self @env0:size.
+
+	"Empty old: insert new at every gap (CPython interleave)."
+	(oldSize == 0) ifTrue: [
+		^ self ___replaceEmptyOld___: new count: -1
+	].
+
+	"Guard against a gigabyte-scale result before building it (OverflowError,
+	not an OOM VM crash): resultLen = mySize + occurrences * (newSize - oldSize)."
+	self ___checkReplaceResultLen___:
+		(mySize @env0:+ ((self count: old) @env0:* (newSize @env0:- oldSize))).
+
+	"Split by old, then join with new"
+	parts := self split: old.
+	^ self ___asReceiverClass___: (new join: parts)
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesRfind___: rawSub _: start _: end [
+	"bytes.rfind(sub, start, end) -- highest 0-based index of sub within
+	[start, end), or -1.  re._constants.PatternError computes error
+	column positions with it on byte patterns."
+
+	| size s e subSize i sub |
+	sub := self ___searchOperand___: rawSub.
+	size := self @env0:size.
+	s := start. e := end.
+	"CPython accepts None for start/end (== the default bound)."
+	(s @env0:== None) ifTrue: [s := 0].
+	(e @env0:== None) ifTrue: [e := size].
+	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
+	BEFORE the slice arithmetic below, which is env-0 and on a Python
+	object is an uncatchable MessageNotUnderstood.  None must be
+	resolved first: it is a legal bound here and has no __index__."
+	s := s ___asIndex___. e := e ___asIndex___.
+	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
+	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
+	e := e @env0:min: size.
+	subSize := (sub isKindOf: SmallInteger)
+		@env0:ifTrue: [1] @env0:ifFalse: [sub @env0:size].
+	i := e @env0:- subSize.
+	[i @env0:>= s] @env0:whileTrue: [
+		| match |
+		match := true.
+		(sub isKindOf: SmallInteger)
+			ifTrue: [match := (self @env0:at: i @env0:+ 1) @env0:= sub]
+			ifFalse: [
+				1 @env0:to: subSize do: [:j |
+					(self @env0:at: i @env0:+ j) @env0:= (sub @env0:at: j)
+						ifFalse: [match := false]]].
+		match ifTrue: [^ i].
+		i := i @env0:- 1].
+	^ -1
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesRjust___: width _: fillchar [
+	"bytes.rjust(width, fillbyte)."
+	| mySize result padding fill |
+	mySize := self @env0:size.
+	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
+	fill := self ___byteValueOf___: fillchar.
+	padding := width @env0:- mySize.
+	result := (self @env0:class) ___new___: width.
+	1 @env0:to: padding do: [:i | result @env0:at: i put: fill].
+	1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)].
+	^ result
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesRsplit___: rawSep _: maxsplit [
+	"Split from right with maximum number of splits.  A None separator splits
+	on runs of ASCII whitespace, from the right (honoring maxsplit)."
+	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize cap sep |
+	(rawSep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
+	sep := self ___searchOperand___: rawSep.
+	sepClass := sep @env0:class.
+
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: 'sep must be bytes'
+	].
+
+	sepSize := sep @env0:size.
+	mySize := self @env0:size.
+
+	"Empty separator not allowed"
+	(sepSize == 0) ifTrue: [
+		ValueError ___signal___: 'empty separator'
+	].
+
+	"A negative maxsplit means UNLIMITED, but it cannot be delegated to
+	split(): with an overlapping separator the two disagree
+	(b'abbbc'.rsplit(b'bb') is [b'ab', b'c'], split() gives [b'a', b'bc']),
+	so scan right-to-left here with no split cap."
+	cap := maxsplit @env0:< 0 ifTrue: [mySize @env0:+ 1] ifFalse: [maxsplit].
+
+	"Find all separator positions from right to left"
+	positions := list ___new___.
+	i := mySize @env0:- (sepSize @env0:- 1).
+	
+	[i @env0:>= 1] @env0:whileTrue: [
+		| match |
+		match := true.
+				1 @env0:to: sepSize do: [:j |
+			| myByte sepByte |
+			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+			sepByte := sep @env0:at: j.
+			(myByte @env0:= sepByte) ifFalse: [
+				match := false
+			]
+		].
+		match ifTrue: [
+			positions append: i.
+			"Matches must not OVERLAP (CPython scans for disjoint separators):
+			skip the whole separator, or 'a////b'.rsplit('//', 2) would record
+			adjacent starts 14 and 13 and then build a negative-length part."
+			i := i @env0:- sepSize
+		] ifFalse: [
+			i := i @env0:- 1
+		].
+		"Nothing beyond the first maxsplit (rightmost) separators can matter."
+		(positions @env0:size @env0:>= cap) ifTrue: [i := 0]
+	].
+
+	"Limit to maxsplit splits (take first maxsplit positions since we collected from right)"
+	actualSplits := positions @env0:size.
+	(actualSplits @env0:> cap) ifTrue: [
+		| newPositions |
+		newPositions := list ___new___.
+		1 @env0:to: cap do: [:idx |
+			newPositions append: (positions @env0:at: idx)
+		].
+		positions := newPositions
+	].
+
+	"Build parts from right to left"
+	parts := list ___new___.
+	lastEnd := mySize @env0:+ 1.
+	
+	1 @env0:to: positions @env0:size do: [:idx |
+		| pos part partSize |
+		pos := positions @env0:at: idx.
+		partSize := lastEnd @env0:- (pos @env0:+ sepSize).
+		part := (self @env0:class) ___new___: partSize.
+		1 @env0:to: partSize do: [:j |
+			part @env0:at: j put: (self @env0:at: (pos @env0:+ (sepSize @env0:+ (j @env0:- (1)))))
+		].
+		parts @env0:addFirst: part.
+		lastEnd := pos
+	].
+
+	"Add first part (everything before first split position)"
+	firstPartSize := lastEnd @env0:- (1).
+	firstPart := (self @env0:class) ___new___: firstPartSize.
+	1 @env0:to: firstPartSize do: [:j |
+		firstPart @env0:at: j put: (self @env0:at: j)
+	].
+	parts @env0:addFirst: firstPart.
+
+	^ parts
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesSplit___: rawSep [
+	"Split bytes by separator, return list of bytes.  A ``None'' separator
+	(``b.split(None)'') splits on runs of ASCII whitespace."
+	| sepClass sepSize mySize parts currentPart i sep |
+	"None is the whitespace-split sentinel, checked BEFORE operand resolution
+	(which requires a bytes-like or an int)."
+	(rawSep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
+	sep := self ___searchOperand___: rawSep.
+	sepClass := sep @env0:class.
+
+	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
+	(sep isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: 'sep must be bytes'
+	].
+
+	sepSize := sep @env0:size.
+	mySize := self @env0:size.
+
+	"Empty separator not allowed"
+	(sepSize == 0) ifTrue: [
+		ValueError ___signal___: 'empty separator'
+	].
+
+	parts := list ___new___.
+	currentPart := (self @env0:class) ___new___.
+	i := 1.
+
+	[i @env0:<= mySize] @env0:whileTrue: [
+		| match |
+		match := true.
+
+		"Check if separator matches at current position"
+		((i @env0:+ (sepSize @env0:- (1))) @env0:<= mySize) ifTrue: [
+			1 @env0:to: sepSize do: [:j |
+				| myByte sepByte |
+				myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
+				sepByte := sep @env0:at: j.
+				(myByte @env0:= sepByte) ifFalse: [
+					match := false
+				]
+			]
+		] ifFalse: [
+			match := false
+		].
+
+		match ifTrue: [
+			"Found separator - add current part to list"
+			parts append: currentPart.
+			currentPart := (self @env0:class) ___new___.
+			i := i @env0:+ sepSize
+		] ifFalse: [
+			"Add byte to current part"
+			| byte newByte |
+			byte := self @env0:at: i.
+			newByte := bytes ___new___: 1.
+			newByte @env0:at: 1 put: byte.
+			currentPart := currentPart @env0:, newByte.
+			i := i @env0:+ 1
+		]
+	].
+
+	"Add final part"
+	parts append: currentPart.
+
+	^ parts
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesStartswith___: prefix [
+	"Check if bytes starts with prefix"
+	| prefixClass prefixSize mySize |
+	prefixClass := prefix @env0:class.
+
+	"A tuple of prefixes: True if self starts with ANY of them (CPython).
+	Each element is validated by the recursive single-prefix call, so a
+	non-bytes-like element raises the same TypeError."
+	(prefix isKindOf: tuple) ifTrue: [
+		1 @env0:to: (prefix @env0:size) do: [:ti |
+			(self ___bytesStartswith___: (prefix @env0:at: ti)) ifTrue: [^ true]].
+		^ false
+	].
+
+	"otherwise the prefix must be a single bytes-like object"
+	(prefix isKindOf: bytes) ifFalse: [
+		TypeError ___signal___: ('startswith first arg must be bytes or a tuple of bytes, not '
+			@env0:, (prefix @env0:class @env0:name @env0:asString))
+	].
+
+	prefixSize := prefix @env0:size.
+	mySize := self @env0:size.
+
+	"If prefix is longer, can't match"
+	(prefixSize @env0:> mySize) ifTrue: [
+		^ false
+	].
+
+	"Compare each byte"
+	1 @env0:to: prefixSize do: [:i |
+		| myByte prefixByte |
+		myByte := self @env0:at: i.
+		prefixByte := prefix @env0:at: i.
+		(myByte @env0:= prefixByte) ifFalse: [
+			^ false
+		]
+	].
+
+	^ true
+
+]
+
+{ #category : 'Grail-Private' }
+ByteArray >> ___bytesStartswith___: prefix _: start _: end [
+	"bytes.startswith(prefix, start, end) -- tested against the [start, end)
+	slice."
+	^ (self ___boundedSlice___: start end: end) ___bytesStartswith___: prefix
+
+]
+
 { #category : 'Grail-Padding Methods' }
 ByteArray >> ___byteValueOf___: aFill [
 	"The single byte value of a center/ljust/rjust fill argument.  CPython
@@ -2655,94 +3518,21 @@ ByteArray >> capitalize [
 ByteArray >> center: width [
 	"bytes.center(width) -- centered in a field of the given width, padded
 	with spaces.  center(width, fillbyte) supplies a different fill."
-	^ self center: width _: self ___spaceByteString___
+	^ self ___bytesCenter___: width _: self ___spaceByteString___
 
 ]
 
 { #category : 'Grail-Padding Methods' }
 ByteArray >> center: width _: fillchar [
-	"bytes.center(width, fillbyte) -- centered, padded with the given fill."
-	| mySize result totalPadding leftPadding rightPadding fill |
-	mySize := self @env0:size.
-	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
-	fill := self ___byteValueOf___: fillchar.
-	totalPadding := width @env0:- mySize.
-	"CPython's split for an ODD margin: left = marg // 2 + (marg & width & 1),
-	so when margin AND width are both odd the extra byte goes LEFT.
-	``b'ab'.center(7, b'*')'' is b'***ab**', not b'**ab***' -- which is what
-	this answered, and the str side answered the same way."
-	leftPadding := (totalPadding @env0:// 2)
-		@env0:+ ((totalPadding @env0:bitAnd: width) @env0:bitAnd: 1).
-	rightPadding := totalPadding @env0:- leftPadding.
-	"``self class'', not ``bytes'': a bytearray answers a bytearray, as upper
-	and the slice already do.  Hardcoding bytes made these three the odd ones
-	out (see docs/Issues.md on the wider inconsistency)."
-	result := (self @env0:class) ___new___: width.
-	1 @env0:to: leftPadding do: [:i | result @env0:at: i put: fill].
-	1 @env0:to: mySize do: [:i | result @env0:at: (leftPadding @env0:+ i) put: (self @env0:at: i)].
-	1 @env0:to: rightPadding do: [:i | result @env0:at: (leftPadding @env0:+ (mySize @env0:+ i)) put: fill].
-	^ result
+
+	^ self ___bytesCenter___: width _: fillchar
 
 ]
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> count: rawSub [
-	"Count non-overlapping occurrences of sub"
-	| subSize mySize count i sub |
-	sub := self ___searchOperand___: rawSub.
 
-	"sub must be bytes or integer"
-	(sub isKindOf: Integer) ifTrue: [
-		"Count occurrences of a single byte value (range-checked)."
-		self ___checkByteValue___: sub.
-		count := 0.
-		mySize := self @env0:size.
-		1 @env0:to: mySize do: [:idx |
-			| byte |
-			byte := self @env0:at: idx.
-			(byte @env0:= sub) ifTrue: [
-				count := count @env0:+ 1
-			]
-		].
-		^ count
-	].
-
-	"sub must be a bytes-like object (bytes / bytearray / subclasses) or an int"
-	(sub isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'argument should be bytes or integer'
-	].
-
-	subSize := sub @env0:size.
-	mySize := self @env0:size.
-
-	"Empty sub matches between every position (CPython: len+1)."
-	(subSize == 0) ifTrue: [
-		^ mySize @env0:+ 1
-	].
-
-	count := 0.
-	i := 1.
-
-	[i @env0:<= (mySize @env0:- (subSize @env0:- 1))] @env0:whileTrue: [
-		| match |
-		match := true.
-		1 @env0:to: subSize do: [:j |
-			| myByte subByte |
-			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
-			subByte := sub @env0:at: j.
-			(myByte @env0:= subByte) ifFalse: [
-				match := false
-			]
-		].
-		match ifTrue: [
-			count := count @env0:+ 1.
-			i := i @env0:+ subSize
-		] ifFalse: [
-			i := i @env0:+ 1
-		]
-	].
-
-	^ count
+	^ self ___bytesCount___: rawSub
 
 ]
 
@@ -2750,492 +3540,91 @@ ByteArray >> count: rawSub [
 ByteArray >> count: sub _: start [
 	"bytes.count(sub, start) -- bounded from start (0-based)."
 
-	^ self count: sub _: start _: self @env0:size
+	^ self ___bytesCount___: sub _: start _: self @env0:size
 
 ]
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> count: sub _: start _: end [
-	"bytes.count(sub, start, end) -- count within the [start, end)
-	slice, CPython clamping rules.  re._constants.PatternError builds
-	error line numbers with the 3-arg form on byte patterns."
 
-	| size s e |
-	size := self @env0:size.
-	s := start. e := end.
-	"CPython accepts None for start/end (== the default bound)."
-	(s @env0:== None) ifTrue: [s := 0].
-	(e @env0:== None) ifTrue: [e := size].
-	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
-	BEFORE the slice arithmetic below, which is env-0 and on a Python
-	object is an uncatchable MessageNotUnderstood.  None must be
-	resolved first: it is a legal bound here and has no __index__."
-	s := s ___asIndex___. e := e ___asIndex___.
-	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
-	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
-	e := e @env0:min: size.
-	"``> e'' (not ``>= e'') so an empty window (s = e) still yields the
-	one empty-substring match that count: returns for an empty slice."
-	s @env0:> e ifTrue: [^ 0].
-	^ (self @env0:copyFrom: s @env0:+ 1 to: e) count: sub
+	^ self ___bytesCount___: sub _: start _: end
 
 ]
 
 { #category : 'Grail-Encoding/Decoding' }
 ByteArray >> decode [
 	"Decode bytes to string using UTF-8"
-	^ self decode: 'utf-8'
+	^ self ___bytesDecode___: 'utf-8'
 
 ]
 
 { #category : 'Grail-Encoding/Decoding' }
 ByteArray >> decode: encoding [
-	"Decode bytes to string using specified encoding"
 
-	| name encodingStr info |
-	"A non-str encoding is Clinic's TypeError, checked first; it reached
-	asLowercase as an uncatchable MessageNotUnderstood.  A str subclass goes
-	on as the plain str it holds."
-	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
-	name == encoding ifFalse: [^ self decode: name].
-	"Normalise the codec name before dispatching, as CPython does and as
-	str>>encode already did on this side of the pair.  Without it every
-	branch below was an EXACT match on a lowercase hyphenated spelling, so
-	``b'x'.decode('UTF-8')'' -- the spelling that appears verbatim in a MIME
-	or .mo Content-Type header -- raised LookupError while 'utf-8' worked.
-	Lowercase plus underscore-to-hyphen also subsumes the alias spellings
-	('utf_8', 'unicode_escape') without enumerating them per branch."
-	encodingStr := (encoding @env0:asLowercase)
-		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
-
-	"Support UTF-8.  Ill-formed input raises Python's catchable
-	UnicodeDecodeError, not GemStone's raw ArgumentError (which escapes
-	try/except -- CPython test_re's locale tests decode latin-1-laden
-	byte patterns and expect a Python exception)."
-	((encodingStr @env0:= 'utf-8') or: [
-		encodingStr @env0:= 'utf8'
-	]) ifTrue: [ | ___decoded |
-		___decoded := [self @env0:decodeFromUTF8]
-			@env0:on: ArgumentError
-			do: [:ex | self ___signalUTF8DecodeError___].
-		"decodeFromUTF8 is not a complete validator: it ACCEPTS an encoded
-		surrogate (ED A0..BF xx) once the result is already a wide string --
-		``b'\xf0\x90\xbf\xbf\xed\xb2\x80'' decoded to U+10FFF U+DC80, where
-		CPython raises 'invalid continuation byte' (test_codecs
-		test_lone_surrogates, the supplementary-before case).  A surrogate is
-		ill-formed UTF-8 whatever precedes it, so any ED A0..BF sends the
-		input to the re-scan, which reports it with CPython's span.  The
-		byte scan runs only when an ED is present at all."
-		(self @env0:includes: 16rED) ifTrue: [ | n |
-			n := self @env0:size.
-			1 @env0:to: n @env0:- 1 do: [:k |
-				((self @env0:at: k) @env0:= 16rED
-					@env0:and: [(self @env0:at: k @env0:+ 1) @env0:>= 16rA0])
-						ifTrue: [^ self ___signalUTF8DecodeError___]]].
-		^ ___decoded
-	].
-
-	"Support ASCII.  ``us-ascii'' is the same codec under the name that appears
-	in a MIME Content-Type header, and str>>encode already accepted it on the
-	way out -- difflib's HtmlDiff round-trips through
-	``.encode(charset, 'xmlcharrefreplace').decode(charset)'', so accepting the
-	spelling in only one direction made ``make_file(..., charset='us-ascii')''
-	a LookupError (test_difflib)."
-	((encodingStr @env0:= 'ascii') or: [encodingStr @env0:= 'us-ascii']) ifTrue: [
-		| result size |
-		size := self @env0:size.
-		result := Unicode7 ___new___: size.
-		1 @env0:to: size do: [:i |
-			| byte char |
-			byte := self @env0:at: i.
-			(byte @env0:> 127) ifTrue: [
-				"The five arguments CPython carries, not a bare message: the
-				position is known HERE and nowhere else, and it is what makes
-				the message say ``in position 1''.  See UnicodeDecodeError >>
-				__str__."
-				UnicodeDecodeError ___signalNew___:
-					{ 'ascii'. self. i @env0:- 1. i. 'ordinal not in range(128)' }
-					kw: nil
-			].
-			char := Character @env0:codePoint: byte.
-			result @env0:at: i put: char
-		].
-		^ result
-	].
-
-	"Support Latin-1.  ``iso-8859-1'' is the same codec under the name the
-	wire actually uses -- it is the default charset of a GNU .mo catalog
-	header -- and str>>encode already accepted it on the way out."
-	((encodingStr @env0:= 'latin-1') or: [
-		(encodingStr @env0:= 'latin1') or: [
-		(encodingStr @env0:= 'iso-8859-1') or: [
-		encodingStr @env0:= 'iso8859-1'
-	]]]) ifTrue: [
-		| result size |
-		size := self @env0:size.
-		result := Unicode7 ___new___: size.
-		1 @env0:to: size do: [:i |
-			| byte char |
-			byte := self @env0:at: i.
-			char := Character @env0:codePoint: byte.
-			result @env0:at: i put: char
-		].
-		^ result
-	].
-
-	"Support unicode-escape: interpret Python source-style backslash
-	escapes (n, t, r, b, f, v, a, hex xHH, uHHHH, UHHHHHHHH, octal ooo).
-	Non-backslash bytes pass through as Latin-1 code points."
-	((encodingStr @env0:= 'unicode-escape') or: [
-		encodingStr @env0:= 'unicode_escape'
-	]) ifTrue: [
-		^ self @env0:___decodeUnicodeEscape___
-	].
-
-	"raw-unicode-escape: Latin-1 EXCEPT that \uXXXX and \UXXXXXXXX name a
-	code point.  Unlike unicode-escape this leaves every other backslash
-	sequence alone -- \n stays backslash-n, and a DOUBLED backslash keeps
-	both, so b'\\u00e9' decodes to the six literal characters rather than to
-	e-acute.  test_builtin builds its Arabic-Indic digit cases with it."
-	((encodingStr @env0:= 'raw-unicode-escape') or: [
-		encodingStr @env0:= 'raw_unicode_escape'
-	]) ifTrue: [
-		^ self @env0:___decodeRawUnicodeEscape___
-	].
-
-	"UTF-16 (BOM-detected for plain 'utf-16', explicit for -le/-be) --
-	the inverse of str>>___pyEncodeUTF16___."
-	((encodingStr @env0:= 'utf-16') or: [(encodingStr @env0:= 'utf-16-le')
-		or: [(encodingStr @env0:= 'utf-16le') or: [(encodingStr @env0:= 'utf-16-be')
-		or: [encodingStr @env0:= 'utf-16be']]]]) ifTrue: [
-		^ self ___pyDecodeUTF16___: encodingStr].
-
-	"UTF-7 (RFC 2152), the inverse of bytes class >> ___utf7FromCodePoints___:."
-	((encodingStr @env0:= 'utf-7') or: [encodingStr @env0:= 'utf7']) ifTrue: [
-		^ self ___pyDecodeUTF7___].
-
-	"UTF-32, the inverse of str>>___pyEncodeUTF32___ and the same three
-	shapes: BOM-detected for plain 'utf-32', explicit for -le/-be."
-	((encodingStr @env0:= 'utf-32') or: [(encodingStr @env0:= 'utf-32-le')
-		or: [(encodingStr @env0:= 'utf-32le') or: [(encodingStr @env0:= 'utf-32-be')
-		or: [encodingStr @env0:= 'utf-32be']]]]) ifTrue: [
-		^ self ___pyDecodeUTF32___: encodingStr].
-
-	"``idna'' is NOT handled here: it reaches the registry below, and so the
-	vendored encodings/idna.py (RFC 3490 over nameprep, on the generated
-	Unicode 3.2.0 tables).  This used to be an ASCII-only shortcut that
-	refused any byte above 127 and could not decode an ``xn--'' label at
-	all; the real codec keeps an ASCII fast path of its own."
-
-	"iso-8859-15 (latin-9): the inverse of str>>encode's latin-9 branch --
-	latin-1 with 8 code points substituted.  encode has supported it since
-	test_bytes needed ``bytes('€', 'iso8859-15')''; decode did not, so a
-	round-trip raised LookupError on the way back."
-	((encodingStr @env0:= 'iso-8859-15') or: [(encodingStr @env0:= 'iso8859-15')
-		or: [(encodingStr @env0:= 'latin-9') or: [(encodingStr @env0:= 'latin9')
-		or: [encodingStr @env0:= 'l9']]]]) ifTrue: [
-		| result size map |
-		"byte -> code point for the 8 that differ from latin-1."
-		map := IdentityKeyValueDictionary @env0:new.
-		map @env0:at: 16rA4 put: 16r20AC; @env0:at: 16rA6 put: 16r0160;
-			@env0:at: 16rA8 put: 16r0161; @env0:at: 16rB4 put: 16r017D;
-			@env0:at: 16rB8 put: 16r017E; @env0:at: 16rBC put: 16r0152;
-			@env0:at: 16rBD put: 16r0153; @env0:at: 16rBE put: 16r0178.
-		size := self @env0:size.
-		result := Unicode7 ___new___: size.
-		1 @env0:to: size do: [:i |
-			| byte |
-			byte := self @env0:at: i.
-			result @env0:at: i put: (Character @env0:codePoint:
-				(map @env0:at: byte otherwise: byte))].
-		^ result
-	].
-
-	"A REGISTERED codec, before giving up -- see importlib class >>
-	___registeredCodecInfoFor___:.  CodecInfo.decode answers (str, length),
-	of which the caller wants the str."
-	info := (Python @env0:at: #importlib)
-		@env0:___codecRoundTrip___: encodingStr selector: #'decode' with: self
-		errors: 'strict' asWritten: encoding.
-	info == nil ifFalse: [^ info].
-
-	"Unsupported encoding, named AS THE CALLER WROTE IT.  bytes.decode
-	lowercases and hyphenates before it looks anything up, and reporting that
-	spelling back made the message describe Grail's normalisation rather than
-	the argument: ``b'x'.decode('exception_notes_test')'' answered ``unknown
-	encoding: exception-notes-test''.  CPython echoes the name unchanged, which
-	is what test_codecs' ExceptionNotesTest.test_codec_lookup_failure asserts
-	-- and the as-written name is already carried here for
-	___refuseNonTextCodec___, for the same reason."
-	LookupError ___signal___: ('unknown encoding: ' @env0:, encoding @env0:asString)
+	^ self ___bytesDecode___: encoding
 
 ]
 
 { #category : 'Grail-Encoding/Decoding' }
 ByteArray >> decode: encoding _: errors [
-	"``bytes.decode(encoding, errors)`` 2-arg form.  For UTF-8 with
-	errors='ignore', invalid bytes are skipped; otherwise (strict, or a
-	non-UTF-8 codec) decode via the 1-arg form, which raises on ill-formed
-	input."
 
-	| name policy enc info |
-	"Both must be str, as Clinic checks them: see decode:."
-	name := TypeError @env0:___requireStr___: encoding argument: 'encoding' of: 'decode'.
-	policy := TypeError @env0:___requireStr___: errors argument: 'errors' of: 'decode'.
-	(name == encoding and: [policy == errors]) ifFalse: [^ self decode: name _: policy].
-	enc := (encoding @env0:asLowercase)
-		@env0:collect: [:c | (c @env0:= $_) ifTrue: [$-] ifFalse: [c]].
-	"A handler codecs.register_error registered is called at each error, and
-	the decode resumes where it says, as CPython's does.  _codecs answers None
-	for a codec it leaves to the rest of this method."
-	((Python @env0:at: #importlib) @env0:___namesARegisteredHandler___: policy) ifTrue: [ | decoded |
-		decoded := (Python @env0:at: #importlib) @env0:___decode___: self as: enc callingHandler: policy.
-		decoded == None ifFalse: [^ decoded]].
-	(((enc @env0:= 'utf-8') or: [enc @env0:= 'utf8']) and: [errors @env0:= 'ignore'])
-		ifTrue: [^ self ___pyDecodeUTF8Ignore___].
-	(errors @env0:asString @env0:= 'surrogateescape') ifTrue: [
-		^ self ___decodeSurrogateEscape___: enc].
-	"``surrogatepass'' DECODE, for the UTF families that can carry one.  The
-	strict decoders reject a surrogate -- correctly -- and there was no path
-	that did anything else, so every surrogatepass decode raised.  Answers
-	nil for a codec with no surrogate form, which leaves the rest of this
-	method to handle it as before."
-	(errors @env0:asString @env0:= 'surrogatepass') ifTrue: [ | ___sp |
-		___sp := self ___decodeSurrogatePass___: enc.
-		___sp @env0:isNil ifFalse: [^ ___sp]].
-	"A REGISTERED codec is consulted HERE rather than through the 1-arg
-	form below, because that form has no errors to pass: the fall-through
-	drops the policy and every codec then behaves as ``strict''.  A codec
-	that implements the policies itself -- as the utf-32 entry points in
-	_codecs do, through _handle_decode_error -- needs the argument to do
-	it with."
-	info := (Python @env0:at: #importlib)
-		@env0:___codecRoundTrip___: enc selector: #'decode' with: self errors: errors
-		asWritten: encoding.
-	info == nil ifFalse: [^ info].
-	"THE SUBSTITUTING DECODE POLICIES, tried AFTER the registry above.
-
-	Order matters: a REGISTERED codec (punycode, and every encodings.*
-	module) implements its own policies and is only reachable through
-	___codecRoundTrip___.  Running this first sent such a decode into the
-	one-argument form below, which does not know those names at all --
-	``b'xn--w&'.decode('punycode', 'replace')'' became LookupError.
-
-	Original note follows.  Every builtin decoder here is written
-	to RAISE on ill-formed input, and the one-argument ``decode:'' it falls
-	through to below has no errors to consult -- so ``replace'', ``ignore''
-	and ``backslashreplace'' all behaved as ``strict'' for ascii, utf-16 and
-	utf-32, and for utf-8 everything but ``ignore''.  Nine of thirty
-	codec/handler pairs agreed with CPython.
-
-	Implemented by RE-ENTERING the strict decoder rather than by teaching
-	each decoder a policy: the strict decoders already report an accurate
-	[start, end) for the bytes they choked on, which is the only thing a
-	policy needs.  That also reproduces CPython's granularity for free --
-	one replacement per ERROR RANGE, so two bad bytes give two U+FFFD and a
-	truncated multi-byte sequence gives one."
-	(#('replace' 'ignore' 'backslashreplace') @env0:includes: errors @env0:asString)
-		ifTrue: [^ self ___decodeSubstituting___: enc errors: errors @env0:asString].
-	^ self decode: encoding
+	^ self ___bytesDecode___: encoding _: errors
 
 ]
 
 { #category : 'Grail-Prefix/Suffix Methods' }
 ByteArray >> endswith: suffix [
-	"Check if bytes ends with suffix"
-	| suffixClass suffixSize mySize offset |
-	suffixClass := suffix @env0:class.
 
-	"A tuple of suffixes: True if self ends with ANY of them (CPython).
-	Each element is validated by the recursive single-suffix call."
-	(suffix isKindOf: tuple) ifTrue: [
-		1 @env0:to: (suffix @env0:size) do: [:ti |
-			(self endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
-		^ false
-	].
-
-	"otherwise the suffix must be a single bytes-like object"
-	(suffix isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('endswith first arg must be bytes or a tuple of bytes, not '
-			@env0:, (suffix @env0:class @env0:name @env0:asString))
-	].
-
-	suffixSize := suffix @env0:size.
-	mySize := self @env0:size.
-
-	"If suffix is longer, can't match"
-	(suffixSize @env0:> mySize) ifTrue: [
-		^ false
-	].
-
-	offset := mySize @env0:- (suffixSize).
-
-	"Compare each byte"
-	1 @env0:to: suffixSize do: [:i |
-		| myByte suffixByte |
-		myByte := self @env0:at: (offset @env0:+ i).
-		suffixByte := suffix @env0:at: i.
-		(myByte @env0:= suffixByte) ifFalse: [
-			^ false
-		]
-	].
-
-	^ true
+	^ self ___bytesEndswith___: suffix
 
 ]
 
 { #category : 'Grail-Prefix/Suffix Methods' }
 ByteArray >> endswith: suffix _: start [
 	"bytes.endswith(suffix, start)."
-	^ self endswith: suffix _: start _: self @env0:size
+	^ self ___bytesEndswith___: suffix _: start _: self @env0:size
 
 ]
 
 { #category : 'Grail-Prefix/Suffix Methods' }
 ByteArray >> endswith: suffix _: start _: end [
-	"bytes.endswith(suffix, start, end) -- tested against the [start, end)
-	slice."
-	^ (self ___boundedSlice___: start end: end) endswith: suffix
+
+	^ self ___bytesEndswith___: suffix _: start _: end
 
 ]
 
 { #category : 'Grail-String-like Methods' }
 ByteArray >> expandtabs [
 	"Expand tabs to spaces (default tabsize=8)"
-	^ self expandtabs: 8
+	^ self ___bytesExpandtabs___: 8
 
 ]
 
 { #category : 'Grail-String-like Methods' }
 ByteArray >> expandtabs: tabsize [
-	"Expand tabs to spaces with given tabsize"
-	| result size column |
-	result := (self @env0:class) ___new___.
-	size := self @env0:size.
-	column := 0.
 
-	1 @env0:to: size do: [:i |
-		| byte |
-		byte := self @env0:at: i.
-
-		(byte == 9) ifTrue: [  "Tab"
-			| spaces |
-			spaces := tabsize @env0:- (column @env0:\\ tabsize).
-			1 @env0:to: spaces do: [:j |
-				| newByte |
-				newByte := bytes ___new___: 1.
-				newByte @env0:at: 1 put: 32.
-				result := result @env0:, newByte
-			].
-			column := column @env0:+ spaces
-		] ifFalse: [
-			((byte == 10) or: [byte == 13]) ifTrue: [  "LF or CR both reset the column"
-				| newByte |
-				newByte := bytes ___new___: 1.
-				newByte @env0:at: 1 put: byte.
-				result := result @env0:, newByte.
-				column := 0
-			] ifFalse: [
-				| newByte |
-				newByte := bytes ___new___: 1.
-				newByte @env0:at: 1 put: byte.
-				result := result @env0:, newByte.
-				column := column @env0:+ 1
-			]
-		]
-	].
-
-	^ result
+	^ self ___bytesExpandtabs___: tabsize
 
 ]
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> find: rawSub [
-	"Find first occurrence of sub, return index or -1"
-	| subSize mySize i sub |
-	sub := self ___searchOperand___: rawSub.
 
-	"sub must be bytes or integer"
-	(sub isKindOf: Integer) ifTrue: [
-		"Find first occurrence of a single byte value (range-checked)."
-		self ___checkByteValue___: sub.
-		mySize := self @env0:size.
-		1 @env0:to: mySize do: [:idx |
-			| byte |
-			byte := self @env0:at: idx.
-			(byte @env0:= sub) ifTrue: [
-				^ idx @env0:- (1)  "Convert to 0-based"
-			]
-		].
-		^ -1
-	].
-
-	"sub must be a bytes-like object (bytes / bytearray / subclasses)"
-	(sub isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'argument should be bytes, bytearray or int'
-	].
-
-	subSize := sub @env0:size.
-	mySize := self @env0:size.
-
-	"Empty sub always returns 0"
-	(subSize == 0) ifTrue: [
-		^ 0
-	].
-
-	i := 1.
-	[i @env0:<= (mySize @env0:- (subSize @env0:- 1))] @env0:whileTrue: [
-		| match |
-		match := true.
-		1 @env0:to: subSize do: [:j |
-			| myByte subByte |
-			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
-			subByte := sub @env0:at: j.
-			(myByte @env0:= subByte) ifFalse: [
-				match := false
-			]
-		].
-		match ifTrue: [
-			^ i @env0:- (1)  "Convert to 0-based"
-		].
-		i := i @env0:+ 1
-	].
-
-	^ -1
+	^ self ___bytesFind___: rawSub
 
 ]
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> find: sub _: start [
 	"bytes.find(sub, start) -- first index >= start, else -1."
-	^ self find: sub _: start _: self @env0:size
+	^ self ___bytesFind___: sub _: start _: self @env0:size
 
 ]
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> find: sub _: start _: end [
-	"bytes.find(sub, start, end) -- first 0-based index of sub within the
-	[start, end) slice (CPython negative-index clamping), else -1.  Reuses the
-	1-arg scan on the slice and offsets the hit back to an absolute index."
-	| size s e r |
-	size := self @env0:size.
-	s := start. e := end.
-	"CPython accepts None for start/end (== the default bound)."
-	(s @env0:== None) ifTrue: [s := 0].
-	(e @env0:== None) ifTrue: [e := size].
-	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
-	BEFORE the slice arithmetic below, which is env-0 and on a Python
-	object is an uncatchable MessageNotUnderstood.  None must be
-	resolved first: it is a legal bound here and has no __index__."
-	s := s ___asIndex___. e := e ___asIndex___.
-	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
-	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
-	e := e @env0:min: size.
-	"Do NOT clamp s to size: a start past the end must miss (empty sub
-	included) -- ``s > e'' then rejects it, since e <= size < s."
-	s @env0:> e ifTrue: [^ -1].
-	r := (self @env0:copyFrom: s @env0:+ 1 to: e) find: sub.
-	^ (r @env0:= -1) ifTrue: [-1] ifFalse: [r @env0:+ s]
+
+	^ self ___bytesFind___: sub _: start _: end
 
 ]
 
@@ -3652,22 +4041,14 @@ ByteArray >> join: iterable [
 ByteArray >> ljust: width [
 	"bytes.ljust(width) -- left-justified in a field of the given width,
 	padded with spaces.  ljust(width, fillbyte) supplies a different fill."
-	^ self ljust: width _: self ___spaceByteString___
+	^ self ___bytesLjust___: width _: self ___spaceByteString___
 
 ]
 
 { #category : 'Grail-String-like Methods' }
 ByteArray >> ljust: width _: fillchar [
-	"bytes.ljust(width, fillbyte)."
-	| mySize result padding fill |
-	mySize := self @env0:size.
-	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
-	fill := self ___byteValueOf___: fillchar.
-	padding := width @env0:- mySize.
-	result := (self @env0:class) ___new___: width.
-	1 @env0:to: mySize do: [:i | result @env0:at: i put: (self @env0:at: i)].
-	1 @env0:to: padding do: [:i | result @env0:at: (mySize @env0:+ i) put: fill].
-	^ result
+
+	^ self ___bytesLjust___: width _: fillchar
 
 ]
 
@@ -3841,36 +4222,8 @@ ByteArray >> removesuffix: suffix [
 
 { #category : 'Grail-String-like Methods' }
 ByteArray >> replace: old _: new [
-	"Replace all occurrences of old with new"
-	| oldClass newClass oldSize newSize mySize parts |
-	oldClass := old @env0:class.
-	newClass := new @env0:class.
 
-	"old and new must be bytes-like (bytes / bytearray / subclasses)"
-	(old isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'first argument must be bytes'
-	].
-	(new isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'second argument must be bytes'
-	].
-
-	oldSize := old @env0:size.
-	newSize := new @env0:size.
-	mySize := self @env0:size.
-
-	"Empty old: insert new at every gap (CPython interleave)."
-	(oldSize == 0) ifTrue: [
-		^ self ___replaceEmptyOld___: new count: -1
-	].
-
-	"Guard against a gigabyte-scale result before building it (OverflowError,
-	not an OOM VM crash): resultLen = mySize + occurrences * (newSize - oldSize)."
-	self ___checkReplaceResultLen___:
-		(mySize @env0:+ ((self count: old) @env0:* (newSize @env0:- oldSize))).
-
-	"Split by old, then join with new"
-	parts := self split: old.
-	^ self ___asReceiverClass___: (new join: parts)
+	^ self ___bytesReplace___: old _: new
 
 ]
 
@@ -3880,7 +4233,7 @@ ByteArray >> replace: old _: new _: count [
 	occurrences (count < 0 = all, count = 0 = none).  Splitting at the first
 	``count'' separators then joining with ``new'' performs exactly ``count''
 	replacements."
-	(count @env0:< 0) ifTrue: [^ self replace: old _: new].
+	(count @env0:< 0) ifTrue: [^ self ___bytesReplace___: old _: new].
 	(count @env0:= 0) ifTrue: [^ self @env0:copy].
 	(old isKindOf: bytes) ifFalse: [TypeError ___signal___: 'first argument must be bytes'].
 	(new isKindOf: bytes) ifFalse: [TypeError ___signal___: 'second argument must be bytes'].
@@ -3952,46 +4305,14 @@ ByteArray >> rfind: rawSub [
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> rfind: sub _: start [
-	^ self rfind: sub _: start _: self @env0:size
+	^ self ___bytesRfind___: sub _: start _: self @env0:size
 
 ]
 
 { #category : 'Grail-Search Methods' }
 ByteArray >> rfind: rawSub _: start _: end [
-	"bytes.rfind(sub, start, end) -- highest 0-based index of sub within
-	[start, end), or -1.  re._constants.PatternError computes error
-	column positions with it on byte patterns."
 
-	| size s e subSize i sub |
-	sub := self ___searchOperand___: rawSub.
-	size := self @env0:size.
-	s := start. e := end.
-	"CPython accepts None for start/end (== the default bound)."
-	(s @env0:== None) ifTrue: [s := 0].
-	(e @env0:== None) ifTrue: [e := size].
-	"Coerced through __index__ (PEP 357) AFTER the None defaulting and
-	BEFORE the slice arithmetic below, which is env-0 and on a Python
-	object is an uncatchable MessageNotUnderstood.  None must be
-	resolved first: it is a legal bound here and has no __index__."
-	s := s ___asIndex___. e := e ___asIndex___.
-	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
-	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
-	e := e @env0:min: size.
-	subSize := (sub isKindOf: SmallInteger)
-		@env0:ifTrue: [1] @env0:ifFalse: [sub @env0:size].
-	i := e @env0:- subSize.
-	[i @env0:>= s] @env0:whileTrue: [
-		| match |
-		match := true.
-		(sub isKindOf: SmallInteger)
-			ifTrue: [match := (self @env0:at: i @env0:+ 1) @env0:= sub]
-			ifFalse: [
-				1 @env0:to: subSize do: [:j |
-					(self @env0:at: i @env0:+ j) @env0:= (sub @env0:at: j)
-						ifFalse: [match := false]]].
-		match ifTrue: [^ i].
-		i := i @env0:- 1].
-	^ -1
+	^ self ___bytesRfind___: rawSub _: start _: end
 
 ]
 
@@ -4031,22 +4352,14 @@ ByteArray >> rindex: sub _: start _: end [
 ByteArray >> rjust: width [
 	"bytes.rjust(width) -- right-justified in a field of the given width,
 	padded with spaces.  rjust(width, fillbyte) supplies a different fill."
-	^ self rjust: width _: self ___spaceByteString___
+	^ self ___bytesRjust___: width _: self ___spaceByteString___
 
 ]
 
 { #category : 'Grail-Padding Methods' }
 ByteArray >> rjust: width _: fillchar [
-	"bytes.rjust(width, fillbyte)."
-	| mySize result padding fill |
-	mySize := self @env0:size.
-	(width @env0:<= mySize) ifTrue: [^ self @env0:copy].
-	fill := self ___byteValueOf___: fillchar.
-	padding := width @env0:- mySize.
-	result := (self @env0:class) ___new___: width.
-	1 @env0:to: padding do: [:i | result @env0:at: i put: fill].
-	1 @env0:to: mySize do: [:i | result @env0:at: (padding @env0:+ i) put: (self @env0:at: i)].
-	^ result
+
+	^ self ___bytesRjust___: width _: fillchar
 
 ]
 
@@ -4099,102 +4412,14 @@ ByteArray >> rsplit: sep [
 	"bytes.rsplit(sep) -- unlimited split, scanning from the RIGHT.  Not the
 	same as split(): with an overlapping separator the two disagree
 	(b'abbbc'.rsplit(b'bb') is [b'ab', b'c'], split() gives [b'a', b'bc'])."
-	^ self rsplit: sep _: -1
+	^ self ___bytesRsplit___: sep _: -1
 
 ]
 
 { #category : 'Grail-Splitting Methods' }
 ByteArray >> rsplit: rawSep _: maxsplit [
-	"Split from right with maximum number of splits.  A None separator splits
-	on runs of ASCII whitespace, from the right (honoring maxsplit)."
-	| sepClass sepSize mySize parts positions i actualSplits lastEnd firstPart firstPartSize cap sep |
-	(rawSep @env0:== None) ifTrue: [^ self ___rsplitWhitespace___: maxsplit].
-	sep := self ___searchOperand___: rawSep.
-	sepClass := sep @env0:class.
 
-	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
-	(sep isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'sep must be bytes'
-	].
-
-	sepSize := sep @env0:size.
-	mySize := self @env0:size.
-
-	"Empty separator not allowed"
-	(sepSize == 0) ifTrue: [
-		ValueError ___signal___: 'empty separator'
-	].
-
-	"A negative maxsplit means UNLIMITED, but it cannot be delegated to
-	split(): with an overlapping separator the two disagree
-	(b'abbbc'.rsplit(b'bb') is [b'ab', b'c'], split() gives [b'a', b'bc']),
-	so scan right-to-left here with no split cap."
-	cap := maxsplit @env0:< 0 ifTrue: [mySize @env0:+ 1] ifFalse: [maxsplit].
-
-	"Find all separator positions from right to left"
-	positions := list ___new___.
-	i := mySize @env0:- (sepSize @env0:- 1).
-	
-	[i @env0:>= 1] @env0:whileTrue: [
-		| match |
-		match := true.
-				1 @env0:to: sepSize do: [:j |
-			| myByte sepByte |
-			myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
-			sepByte := sep @env0:at: j.
-			(myByte @env0:= sepByte) ifFalse: [
-				match := false
-			]
-		].
-		match ifTrue: [
-			positions append: i.
-			"Matches must not OVERLAP (CPython scans for disjoint separators):
-			skip the whole separator, or 'a////b'.rsplit('//', 2) would record
-			adjacent starts 14 and 13 and then build a negative-length part."
-			i := i @env0:- sepSize
-		] ifFalse: [
-			i := i @env0:- 1
-		].
-		"Nothing beyond the first maxsplit (rightmost) separators can matter."
-		(positions @env0:size @env0:>= cap) ifTrue: [i := 0]
-	].
-
-	"Limit to maxsplit splits (take first maxsplit positions since we collected from right)"
-	actualSplits := positions @env0:size.
-	(actualSplits @env0:> cap) ifTrue: [
-		| newPositions |
-		newPositions := list ___new___.
-		1 @env0:to: cap do: [:idx |
-			newPositions append: (positions @env0:at: idx)
-		].
-		positions := newPositions
-	].
-
-	"Build parts from right to left"
-	parts := list ___new___.
-	lastEnd := mySize @env0:+ 1.
-	
-	1 @env0:to: positions @env0:size do: [:idx |
-		| pos part partSize |
-		pos := positions @env0:at: idx.
-		partSize := lastEnd @env0:- (pos @env0:+ sepSize).
-		part := (self @env0:class) ___new___: partSize.
-		1 @env0:to: partSize do: [:j |
-			part @env0:at: j put: (self @env0:at: (pos @env0:+ (sepSize @env0:+ (j @env0:- (1)))))
-		].
-		parts @env0:addFirst: part.
-		lastEnd := pos
-	].
-
-	"Add first part (everything before first split position)"
-	firstPartSize := lastEnd @env0:- (1).
-	firstPart := (self @env0:class) ___new___: firstPartSize.
-	1 @env0:to: firstPartSize do: [:j |
-		firstPart @env0:at: j put: (self @env0:at: j)
-	].
-	parts @env0:addFirst: firstPart.
-
-	^ parts
+	^ self ___bytesRsplit___: rawSep _: maxsplit
 
 ]
 
@@ -4266,70 +4491,8 @@ ByteArray >> split [
 
 { #category : 'Grail-String-like Methods' }
 ByteArray >> split: rawSep [
-	"Split bytes by separator, return list of bytes.  A ``None'' separator
-	(``b.split(None)'') splits on runs of ASCII whitespace."
-	| sepClass sepSize mySize parts currentPart i sep |
-	"None is the whitespace-split sentinel, checked BEFORE operand resolution
-	(which requires a bytes-like or an int)."
-	(rawSep @env0:== None) ifTrue: [^ self ___splitWhitespace___].
-	sep := self ___searchOperand___: rawSep.
-	sepClass := sep @env0:class.
 
-	"sep must be a bytes-like object (bytes / bytearray / subclasses)"
-	(sep isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: 'sep must be bytes'
-	].
-
-	sepSize := sep @env0:size.
-	mySize := self @env0:size.
-
-	"Empty separator not allowed"
-	(sepSize == 0) ifTrue: [
-		ValueError ___signal___: 'empty separator'
-	].
-
-	parts := list ___new___.
-	currentPart := (self @env0:class) ___new___.
-	i := 1.
-
-	[i @env0:<= mySize] @env0:whileTrue: [
-		| match |
-		match := true.
-
-		"Check if separator matches at current position"
-		((i @env0:+ (sepSize @env0:- (1))) @env0:<= mySize) ifTrue: [
-			1 @env0:to: sepSize do: [:j |
-				| myByte sepByte |
-				myByte := self @env0:at: (i @env0:+ (j @env0:- (1))).
-				sepByte := sep @env0:at: j.
-				(myByte @env0:= sepByte) ifFalse: [
-					match := false
-				]
-			]
-		] ifFalse: [
-			match := false
-		].
-
-		match ifTrue: [
-			"Found separator - add current part to list"
-			parts append: currentPart.
-			currentPart := (self @env0:class) ___new___.
-			i := i @env0:+ sepSize
-		] ifFalse: [
-			"Add byte to current part"
-			| byte newByte |
-			byte := self @env0:at: i.
-			newByte := bytes ___new___: 1.
-			newByte @env0:at: 1 put: byte.
-			currentPart := currentPart @env0:, newByte.
-			i := i @env0:+ 1
-		]
-	].
-
-	"Add final part"
-	parts append: currentPart.
-
-	^ parts
+	^ self ___bytesSplit___: rawSep
 
 ]
 
@@ -4357,7 +4520,7 @@ ByteArray >> split: rawSep _: maxsplit [
 
 	"If maxsplit is -1 or < 0, do unlimited split"
 	(maxsplit @env0:< 0) ifTrue: [
-		^ self split: sep
+		^ self ___bytesSplit___: sep
 	].
 
 	parts := list ___new___.
@@ -4494,59 +4657,22 @@ ByteArray >> splitlines: keepends [
 
 { #category : 'Grail-Prefix/Suffix Methods' }
 ByteArray >> startswith: prefix [
-	"Check if bytes starts with prefix"
-	| prefixClass prefixSize mySize |
-	prefixClass := prefix @env0:class.
 
-	"A tuple of prefixes: True if self starts with ANY of them (CPython).
-	Each element is validated by the recursive single-prefix call, so a
-	non-bytes-like element raises the same TypeError."
-	(prefix isKindOf: tuple) ifTrue: [
-		1 @env0:to: (prefix @env0:size) do: [:ti |
-			(self startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
-		^ false
-	].
-
-	"otherwise the prefix must be a single bytes-like object"
-	(prefix isKindOf: bytes) ifFalse: [
-		TypeError ___signal___: ('startswith first arg must be bytes or a tuple of bytes, not '
-			@env0:, (prefix @env0:class @env0:name @env0:asString))
-	].
-
-	prefixSize := prefix @env0:size.
-	mySize := self @env0:size.
-
-	"If prefix is longer, can't match"
-	(prefixSize @env0:> mySize) ifTrue: [
-		^ false
-	].
-
-	"Compare each byte"
-	1 @env0:to: prefixSize do: [:i |
-		| myByte prefixByte |
-		myByte := self @env0:at: i.
-		prefixByte := prefix @env0:at: i.
-		(myByte @env0:= prefixByte) ifFalse: [
-			^ false
-		]
-	].
-
-	^ true
+	^ self ___bytesStartswith___: prefix
 
 ]
 
 { #category : 'Grail-Prefix/Suffix Methods' }
 ByteArray >> startswith: prefix _: start [
 	"bytes.startswith(prefix, start)."
-	^ self startswith: prefix _: start _: self @env0:size
+	^ self ___bytesStartswith___: prefix _: start _: self @env0:size
 
 ]
 
 { #category : 'Grail-Prefix/Suffix Methods' }
 ByteArray >> startswith: prefix _: start _: end [
-	"bytes.startswith(prefix, start, end) -- tested against the [start, end)
-	slice."
-	^ (self ___boundedSlice___: start end: end) startswith: prefix
+
+	^ self ___bytesStartswith___: prefix _: start _: end
 
 ]
 
