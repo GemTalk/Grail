@@ -668,7 +668,7 @@ CharacterCollection >> ___boundedSlice___: start end: end [
 	BEFORE the slice arithmetic below, which is env-0 and on a Python
 	object is an uncatchable MessageNotUnderstood.  None must be
 	resolved first: it is a legal bound here and has no __index__."
-	s := s ___asIndex___. e := e ___asIndex___.
+	s := s ___asSliceIndex___. e := e ___asSliceIndex___.
 	s @env0:< 0 ifTrue: [s := (size @env0:+ s) @env0:max: 0].
 	e @env0:< 0 ifTrue: [e := (size @env0:+ e) @env0:max: 0].
 	e := e @env0:min: size. s := s @env0:min: size.
@@ -1325,9 +1325,9 @@ CharacterCollection >> ___pyAdjust___: start end: end [
 	| n s e |
 	n := self @env0:size.
 	s := (start == nil or: [start == None])
-		ifTrue: [0] ifFalse: [start ___asIndex___].
+		ifTrue: [0] ifFalse: [start ___asSliceIndex___].
 	e := (end == nil or: [end == None])
-		ifTrue: [n] ifFalse: [end ___asIndex___].
+		ifTrue: [n] ifFalse: [end ___asSliceIndex___].
 	e @env0:> n
 		ifTrue: [e := n]
 		ifFalse: [e @env0:< 0 ifTrue: [e := (e @env0:+ n) @env0:max: 0]].

@@ -72,7 +72,7 @@ SequenceableCollection >> ___getslice___: lower _: upper _: step [
 	test_getslice / test_subscript)."
 	lwr := lower ___asIndexOrNil___.
 	upr := upper ___asIndexOrNil___.
-	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asIndex___].
+	st := ((step @env0:== None) or: [step @env0:isNil]) ifTrue: [1] ifFalse: [step ___asSliceIndex___].
 	lwr := (lwr @env0:== None) ifTrue: [nil] ifFalse: [lwr].
 	upr := (upr @env0:== None) ifTrue: [nil] ifFalse: [upr].
 	"The size AFTER the bounds' __index__ has run: it may resize self
@@ -198,7 +198,7 @@ SequenceableCollection >> ___pyIndex___: value from: pStart to: pStop [
 	uncatchable MessageNotUnderstood.  One coercion here serves list.index
 	and tuple.index at all three arities, which is why the arity methods
 	above pass their arguments through untouched."
-	lo := pStart ___asIndex___.  hi := pStop ___asIndex___.
+	lo := pStart ___asRequiredSliceIndex___.  hi := pStop ___asRequiredSliceIndex___.
 	(lo @env0:< 0) ifTrue: [lo := lo @env0:+ n.  (lo @env0:< 0) ifTrue: [lo := 0]].
 	(lo @env0:> n) ifTrue: [lo := n].
 	(hi @env0:< 0) ifTrue: [hi := hi @env0:+ n.  (hi @env0:< 0) ifTrue: [hi := 0]].
