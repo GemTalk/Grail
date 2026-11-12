@@ -30,6 +30,61 @@ PyStrSurrogate class >> ___translate___: aStr table: table [
 
 ]
 
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___adjustedStart___: start end: end length: length [
+
+	"start and end clamped as ADJUST_INDICES clamps them
+	(Objects/unicodeobject.c:9668), None standing for 0 and length as the
+	slice_index converter has it."
+
+	| first last |
+
+	first := start == None ifTrue: [0] ifFalse: [start ___asIndex___].
+	last := end == None ifTrue: [length] ifFalse: [end ___asIndex___].
+	last @env0:> length
+		ifTrue: [last := length]
+		ifFalse: [last @env0:< 0 ifTrue: [last := (last @env0:+ length) @env0:max: 0]].
+	first @env0:< 0 ifTrue: [first := (first @env0:+ length) @env0:max: 0].
+	^ Array @env0:with: first with: last
+
+]
+
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___affix___: anAffix start: start end: end atEnd: atEnd [
+
+	"str.startswith and str.endswith, the tuple of affixes and the optional
+	bounds included: unicode_startswith_impl and unicode_endswith_impl
+	(Objects/unicodeobject.c:13633, 13689).
+
+	A prefix that is itself surrogate-free is a perfectly ordinary question to
+	ask of a surrogate string -- ``name.startswith('/tmp')'' on a
+	surrogateescape'd path -- and it used to raise, because the whole str
+	surface below the implemented handful fell to the DNU refusal.  So did
+	every call that gave a start or an end."
+
+	(anAffix @env0:isKindOf: tuple) ifFalse: [
+		^ self
+			___tailmatch___: (self ___requireAffix___: anAffix atEnd: atEnd)
+			start: start
+			end: end
+			atEnd: atEnd].
+	1 @env0:to: anAffix @env0:size do: [:index |
+		(self
+			___tailmatch___: (self ___requireTupleAffix___: (anAffix @env0:at: index) atEnd: atEnd)
+			start: start
+			end: end
+			atEnd: atEnd) ifTrue: [^ true]].
+	^ false
+
+]
+
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___affixMethodName___: atEnd [
+
+	^ atEnd ifTrue: ['endswith'] ifFalse: ['startswith']
+
+]
+
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> ___bindsUnboundCallOf___: anUnboundMethod [
 	"``str.islower(s)'' for a lone-surrogate s.  str's compiled methods read
@@ -84,6 +139,31 @@ PyStrSurrogate >> ___mapNonSurrogateRuns___: aSelector [
 
 ]
 
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___requireAffix___: anAffix atEnd: atEnd [
+
+	"anAffix when it is a str, otherwise CPython's TypeError for it."
+
+	anAffix @env0:___isPyStr___ ifTrue: [^ anAffix].
+	^ TypeError ___signal___:
+		(self ___affixMethodName___: atEnd) @env0:, ' first arg must be str or a tuple of str, not '
+			@env0:, anAffix ___pyTypeNameForError___
+
+]
+
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___requireTupleAffix___: anAffix atEnd: atEnd [
+
+	"anAffix, an element of a tuple of affixes, when it is a str, otherwise
+	CPython's TypeError for it."
+
+	anAffix @env0:___isPyStr___ ifTrue: [^ anAffix].
+	^ TypeError ___signal___:
+		'tuple for ' @env0:, (self ___affixMethodName___: atEnd) @env0:, ' must only contain str, not '
+			@env0:, anAffix ___pyTypeNameForError___
+
+]
+
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> ___substitutingEncode___: encoding errors: errors [
 	"Encode under one of the substituting handlers, by SUBSTITUTING TEXT and
@@ -130,6 +210,28 @@ PyStrSurrogate >> ___substitutingEncode___: encoding errors: errors [
 					@env0:do: [:b | out @env0:nextPut: (Character @env0:codePoint: b)]]
 			ifFalse: [out @env0:nextPut: (Character @env0:codePoint: cp)]].
 	^ out @env0:contents @env1:encode: encoding _: errors
+
+]
+
+{ #category : 'Grail-Private' }
+PyStrSurrogate >> ___tailmatch___: aStr start: start end: end atEnd: atEnd [
+
+	"Whether aStr is at the end of self[start:end] when atEnd, at its start
+	otherwise: CPython's tailmatch (Objects/unicodeobject.c:9953).  The length
+	test comes before anything is compared, so a start past the end fails even
+	for the empty string."
+
+	| affixCodePoints bounds last offset |
+
+	affixCodePoints := aStr @env0:___pyCodePoints___.
+	bounds := self ___adjustedStart___: start end: end length: codePoints @env0:size.
+	last := (bounds @env0:at: 2) @env0:- affixCodePoints @env0:size.
+	last @env0:< (bounds @env0:at: 1) ifTrue: [^ false].
+	offset := atEnd ifTrue: [last] ifFalse: [bounds @env0:at: 1].
+	1 @env0:to: affixCodePoints @env0:size do: [:index |
+		(codePoints @env0:at: offset @env0:+ index) @env0:= (affixCodePoints @env0:at: index)
+			ifFalse: [^ false]].
+	^ true
 
 ]
 
@@ -557,26 +659,22 @@ PyStrSurrogate >> encode: encoding _: errors [
 
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> endswith: suffix [
-	"str.endswith, including the tuple form -- see startswith:."
 
-	| cps sub n m ok |
-	(suffix @env0:isKindOf: tuple) ifTrue: [
-		1 @env0:to: (suffix @env0:size) do: [:ti |
-			(self @env1:endswith: (suffix @env0:at: ti)) ifTrue: [^ true]].
-		^ false].
-	suffix @env0:___isPyStr___ ifFalse: [
-		^ TypeError ___signal___:
-			'endswith first arg must be str or a tuple of str'].
-	cps := self @env0:___pyCodePoints___.
-	sub := suffix @env0:___pyCodePoints___.
-	n := cps @env0:size.
-	m := sub @env0:size.
-	m @env0:> n ifTrue: [^ false].
-	ok := true.
-	1 @env0:to: m do: [:k |
-		((cps @env0:at: n @env0:- m @env0:+ k) @env0:= (sub @env0:at: k))
-			ifFalse: [ok := false]].
-	^ ok
+	^ self ___affix___: suffix start: None end: None atEnd: true
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> endswith: suffix _: start [
+
+	^ self ___affix___: suffix start: start end: None atEnd: true
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> endswith: suffix _: start _: end [
+
+	^ self ___affix___: suffix start: start end: end atEnd: true
 
 ]
 
@@ -589,23 +687,22 @@ PyStrSurrogate >> lower [
 
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> startswith: prefix [
-	"str.startswith, including CPython's tuple-of-prefixes form.
 
-	A prefix that is itself surrogate-free is a perfectly ordinary question to
-	ask of a surrogate string -- ``name.startswith('/tmp')'' on a
-	surrogateescape'd path -- and it used to raise, because the whole str
-	surface below the implemented handful fell to the DNU refusal."
+	^ self ___affix___: prefix start: None end: None atEnd: false
 
-	| c |
-	(prefix @env0:isKindOf: tuple) ifTrue: [
-		1 @env0:to: (prefix @env0:size) do: [:ti |
-			(self @env1:startswith: (prefix @env0:at: ti)) ifTrue: [^ true]].
-		^ false].
-	prefix @env0:___isPyStr___ ifFalse: [
-		^ TypeError ___signal___:
-			'startswith first arg must be str or a tuple of str'].
-	c := PyStrSurrogate @env0:___indexOf___: prefix in: self from: 1.
-	^ c @env0:= 1
+]
+
+{ #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> startswith: prefix _: start [
+
+	^ self ___affix___: prefix start: start end: None atEnd: false
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> startswith: prefix _: start _: end [
+
+	^ self ___affix___: prefix start: start end: end atEnd: false
 
 ]
 
