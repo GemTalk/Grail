@@ -111,15 +111,18 @@ def lookup(name):
     name them at all.
 
     Every name ALIAS resolves too -- ``BYTE ORDER MARK'', ``BOM'', ``NBSP''
-    -- as in CPython.  Named SEQUENCES (``KEYCAP NUMBER SIGN'') do not, and
-    there Grail differs: CPython's lookup() answers the several characters
-    of a sequence, and only the \\N{} escape refuses them (#1562).
+    -- as in CPython, and so does every named SEQUENCE: ``KEYCAP NUMBER
+    SIGN'' answers its three characters (#1562).  Only lookup() answers a
+    sequence; the \\N{} escape refuses one, in CPython too.
     """
     import unicode_names
     cp = unicode_names.codepoint_for_name(name)
-    if cp is None:
+    if cp is not None:
+        return chr(cp)
+    sequence = unicode_names.sequence_for_name(name)
+    if sequence is None:
         raise KeyError("undefined character name '" + name + "'")
-    return chr(cp)
+    return sequence
 
 
 def name(chr_, *default):
