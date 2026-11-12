@@ -56,7 +56,7 @@ cd "$PROJECT_ROOT" || exit 1
 # The gate's own session settings (run_tests.sh's TOPAZ_CFG): a class must see
 # the memory and stack depth it sees there, or a difference would read as an
 # order dependence.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=600000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
 OUT="${GRAIL_ISOLATED_OUT:-$PROJECT_ROOT/out/isolated}"
 CLASS_TIMEOUT="${GRAIL_ISOLATED_CLASS_TIMEOUT:-1200}"
 
