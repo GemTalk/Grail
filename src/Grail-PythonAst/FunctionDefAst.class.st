@@ -2786,11 +2786,13 @@ FunctionDefAst >> ___irBodyLocalNames___ [
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irBodyReason___: localSet [
 	"The first refusing node in the body, named by ___irRefusalIn___:locals:.
-	Guarded: a census probe must never break a compile."
+	Guarded: a census probe must never break a compile.  Both fallbacks are
+	INVARIANTS (P1.3): a body the predicate refused with no refusing node is
+	the predicate and the walk drifting apart, and a raise is a Grail bug."
 
 	^ [(self ___irFirstRefusedIn___: body body locals: localSet)
-		ifNil: [#'body:unknown']]
-		on: Error do: [:ex | #'body:probeError']
+		ifNil: [#'invariant:body-unexplained']]
+		on: Error do: [:ex | #'invariant:body-probeRaised']
 
 ]
 
@@ -3287,11 +3289,13 @@ FunctionDefAst >> ___irIneligibilityReason___ [
 	or nil when it is eligible.  ___irEligible___ is ``isNil'' of this; the
 	census (importlib ___irCensus___) tallies the Symbols so the missing shapes
 	can be ranked by the number of real defs they block.  A body refusal names
-	the first refusing node (___irBodyReason___:): #'stmt:MatchAst' for a
-	statement shape the emitter lacks outright, #'value:ListCompAst' for an
-	expression inside an otherwise eligible statement, #'shape:CallAst' for a
-	node whose class is handled but whose particular form is not; #flow when
-	every node is emittable but the bound-before-read proof fails."
+	the first refusing node (___irBodyReason___:): the refusing node's own
+	detail for a handled class refusing one particular form
+	(#'nestedDef:leafNameCollision', #'TryAst-asTargetNotLocal'), the
+	default #'shape:<Class>' where a class names no detail.  A reason under
+	the ``invariant:'' prefix is one only a broken parser or compile-context
+	invariant, or a raising predicate, can produce (P1.3; AbstractNode class
+	>> ___irIsInvariantReason___:)."
 
 	| localSet |
 	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
@@ -3657,9 +3661,14 @@ FunctionDefAst >> ___irMethodLocalClassMethodReason___ [
 
 	  * no module class -- an exec/eval doit's class, which has no transport
 	    helper at all (``method:doitScopeClass'');
-	  * a class nested DIRECTLY inside another class body, emitted as a
-	    class-body VALUE rather than through a helper
-	    (``method:classInClassBody'').
+	  * a def with NO enclosing ClassDefAst at all
+	    (``invariant:method-noEnclosingClass'', P1.3).  This row used to be
+	    ``method:classInClassBody'', a class nested directly in another class
+	    body; the static-chain and reaches-a-def tests admitted every such
+	    chain (69 -> 1 -> 0).  Given an enclosing class those two tests are
+	    complementary -- no def or lambda above it, or one -- so the exit is
+	    taken only without one, and a method-mode def is judged only from its
+	    own class's method loops.  An INVARIANT, not a shape.
 
 	    THOSE TWO USED TO SHARE ONE ROW NAME, ``method:classNotAtModuleScope'',
 	    and that hid which of them the ranking was actually about: they are
@@ -3694,7 +3703,7 @@ FunctionDefAst >> ___irMethodLocalClassMethodReason___ [
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
 		or: [self ___irEnclosingClassChainIsStatic___
-		or: [self ___irEnclosingClassChainReachesADef___]]) ifFalse: [^ #'method:classInClassBody'].
+		or: [self ___irEnclosingClassChainReachesADef___]]) ifFalse: [^ #'invariant:method-noEnclosingClass'].
 	^ nil
 
 ]
@@ -3740,7 +3749,10 @@ FunctionDefAst >> ___irMethodModeReason___ [
 	metaclass, so none of the receiver conditions below apply.  The text's
 	static loop clears selfParameterName, so no name maps to the receiver."
 	self class == StaticFunctionDefAst ifTrue: [
-		CallAst selfParameterName isNil ifFalse: [^ #'method:staticWithReceiverName'].
+		"An INVARIANT (P1.3): ClassDefAst's static loop clears
+		selfParameterName before it judges, and it is the only loop that judges
+		a StaticFunctionDefAst."
+		CallAst selfParameterName isNil ifFalse: [^ #'invariant:method-staticWithReceiverName'].
 		^ self ___irMethodModeTailReason___].
 	"A def that declares NO parameter at all (``def m(*args)'',
 	``def __class_getitem__(*args, **kwargs)'' -- how the corpus spells a hook
@@ -3791,8 +3803,11 @@ FunctionDefAst >> ___irMethodModeReason___ [
 	the snapshot the seam takes carries the same name to the deferred build.
 	Refused only when the two disagree -- a def with no plain positional
 	parameter keeps the class-wide name, which is not this def's receiver."
+	"An INVARIANT (P1.3), not a shape: with a parameter, both the instance and
+	the classmethod loop of ClassDefAst set selfParameterName to exactly this
+	expression before judging, and the deferred build restores that snapshot."
 	CallAst selfParameterName == self allParameterNames first asSymbol
-		ifFalse: [^ #'method:receiverNameMismatch'].
+		ifFalse: [^ #'invariant:method-receiverNameMismatch'].
 	"A REBOUND receiver no longer refuses: the method carries it in a transport
 	temp and every receiver fast path stands down for the body
 	(___irSelfReboundName___, ___emitIRSelfTransportOn___:name:), which is the
@@ -3900,28 +3915,45 @@ FunctionDefAst >> ___irNestedBodyMentions___: aSymbol in: node [
 ]
 
 { #category : 'Grail-IR Codegen' }
-FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
-	"printDecoratorReceiverOn:deco:'s branches, in ITS order: a bare-name
+FunctionDefAst >> ___irNestedDecoratorRefusal___: deco locals: localNames [
+	"printDecoratorReceiverOn:deco:'s branches, in ITS order, as the census
+	row that refuses, or nil when the decorator is emittable.  A bare-name
 	decorator (the parser records those as Symbols) that names a class-body
 	sibling is refused (the class-attribute load is not emitted here); a
 	module variable no local shadows loads through the module instance
-	(___decoratorNameIsModuleGlobal___:); otherwise the bare
-	identifier -- an enclosing local, or a resolvable global -- unless a doit
-	would need the runtime NameError lookup.  An expression decorator is judged
-	as a value of the enclosing scope."
+	(___decoratorNameIsModuleGlobal___:); otherwise the bare identifier -- an
+	enclosing local, or a resolvable global -- unless a doit would need the
+	runtime NameError lookup.  An expression decorator is judged as a value of
+	the enclosing scope.
 
-	(deco isKindOf: Symbol) ifFalse: [^ deco ___irEligibleValueLocals___: localNames].
+	This was ONE row, `nestedDef:decorator', and it lumped four causes with
+	four different owners (P1.3): an expression the IR cannot emit (a
+	pass-up), a class-body sibling (P3), a doit's runtime lookup (P5), and a
+	bare name nothing here can read -- an enclosing function's local beyond a
+	method-local class, which the text reads through the class cell, or a
+	class attribute named from inside a method, which CPython answers with
+	NameError."
+
+	(deco isKindOf: Symbol) ifFalse: [
+		^ (deco ___irEligibleValueLocals___: localNames)
+			ifTrue: [nil] ifFalse: [#'nestedDef:decorator-expr']].
 	(CallAst classBodyDecoratorScope notNil
-		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
-	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ true].
-	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
+		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol])
+			ifTrue: [^ #'nestedDef:decorator-classBodySibling'].
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ nil].
+	(self ___decoratorNameNeedsRuntimeLookup___: deco)
+		ifTrue: [^ #'nestedDef:decorator-doitLookup'].
 	"A name nothing static binds -- a star import, ``globals().update'', a
 	binding made at run time -- is the text's late module-name read
 	(___printDecoratorNameOn___:name:, #1517), which ___emitIRDecoratorValue___:on:
 	spells the same way (P1.2: one cause of nestedDef:decorator)."
-	(self ___decoratorNameIsUnboundInModule___: deco) ifTrue: [^ true].
-	(localNames includes: deco asString) ifTrue: [^ true].
-	^ NameAst isResolvableSymbol: deco asSymbol
+	(self ___decoratorNameIsUnboundInModule___: deco) ifTrue: [^ nil].
+	(localNames includes: deco asString) ifTrue: [^ nil].
+	(NameAst isResolvableSymbol: deco asSymbol) ifTrue: [^ nil].
+	^ (CallAst classBeingCompiled notNil
+		and: [self ___headerLocalBeyondClass___: deco asSymbol])
+			ifTrue: [#'nestedDef:decorator-classCell']
+			ifFalse: [#'nestedDef:decorator-unresolvedName']
 
 ]
 
@@ -3941,7 +3973,7 @@ FunctionDefAst >> ___irNestedDefReason___: localNames [
 	can.  Guarded: eligibility never raises."
 
 	^ [self ___irNestedDefReasonUnguarded___: localNames]
-		on: Error do: [:ex | #'nestedDef:probeError']
+		on: Error do: [:ex | #'invariant:nestedDef-probeRaised']
 
 ]
 
@@ -4030,7 +4062,9 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	of the ENCLOSING scope, where CPython evaluates them."
 	self hasAnnotations ifTrue: [
 		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
-	args isNil ifTrue: [^ #'nestedDef:noArgs'].
+	"No ``args isNil'' row (`nestedDef:noArgs', P1.3): the parser always builds
+	an ArgumentsAst, and a nil would raise on the next line inside
+	___irNestedDefReason___:'s guard, which names it as the invariant."
 	own := self ___irNestedOwnNames___.
 	"A parameter or body local spelled like a Smalltalk pseudo-variable no
 	longer refuses (cut 74): the closure's block temp is DECLARED under the
@@ -4095,8 +4129,8 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	(self ___irLambdaBelowHoldsBareSuper___: body)
 		ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
-		(self ___irNestedDecoratorEligible___: d locals: localNames)
-			ifFalse: [^ #'nestedDef:decorator']].
+		(self ___irNestedDecoratorRefusal___: d locals: localNames)
+			ifNotNil: [:r | ^ r]].
 	"A decorator that reads the def's own name has to be evaluated before the
 	def binds it; the text emit wraps the def to do that
 	(___printWithPreEvaluatedDecoratorsOn___:), and so does this one now
@@ -4342,25 +4376,33 @@ FunctionDefAst >> ___irReceiverParamName___ [
 
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irRefusalDetail___: localSet [
-	^ (self ___irNestedDefReason___: localSet) ifNil: [#'nestedDef:other']
+	"The predicate is this reason's isNil, so a nil here means the two drifted:
+	an INVARIANT (P1.3)."
+
+	^ (self ___irNestedDefReason___: localSet) ifNil: [#'invariant:nestedDef-noReason']
 
 ]
 
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irRefusalIn___: aNode locals: localSet [
 	"aNode -- a statement or a load-context expression -- refused.  A class with
-	no IR predicate of its own IS the missing shape (#'stmt:MatchAst',
-	#'value:ListCompAst').  A class that has one refused for something inside
-	it, so name the first refusing child instead; when no child refuses, the
-	node refused for its own form, and its ___irRefusalDetail___: says which
-	(#'CallAst:starArgs'; #'ForAst:else'), defaulting to #'shape:<Class>'."
+	no IR predicate of its own would be the missing shape, but every statement
+	class has one, and the expression classes that do not -- JoinedStrAst and
+	FormattedValueAst (built for ast.parse only) and RawSmalltalkAst (built by
+	the text emitters) -- never sit in a def body the IR judges; so that row is
+	an INVARIANT (#'invariant:stmt-<Class>' / #'invariant:value-<Class>',
+	P1.3) and guards a node class added without a predicate.  A class that has
+	one refused for something inside it, so name the first refusing child
+	instead; when no child refuses, the node refused for its own form, and its
+	___irRefusalDetail___: says which (#'CallAst:frameSensitive-globals',
+	#'shape:TryAst-exceptType'), defaulting to #'shape:<Class>'."
 
 	| isStmt owner prefix |
 	isStmt := aNode isKindOf: StatementAst.
 	owner := aNode class whichClassIncludesSelector: (isStmt
 		ifTrue: [#'___irEligibleStatementLocals___:']
 		ifFalse: [#'___irEligibleValueLocals___:']).
-	prefix := isStmt ifTrue: ['stmt:'] ifFalse: ['value:'].
+	prefix := isStmt ifTrue: ['invariant:stmt-'] ifFalse: ['invariant:value-'].
 	(owner isNil or: [owner == AbstractNode])
 		ifTrue: [^ (prefix , aNode class name asString) asSymbol].
 	(self ___irFirstRefusedChildOf___: aNode locals: localSet) ifNotNil: [:r | ^ r].
@@ -4457,7 +4499,7 @@ FunctionDefAst >> ___irSignatureReason___ [
 	eligibility never raises."
 
 	^ [self ___irDefaultsReason___]
-		on: Error do: [:ex | #'signature:other']
+		on: Error do: [:ex | #'invariant:signature-probeRaised']
 
 ]
 

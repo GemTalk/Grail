@@ -194,9 +194,14 @@ ConstantAst >> ___irEligibleValueLocals___: localNames [
 
 { #category : 'Grail-IR Codegen' }
 ConstantAst >> ___irRefusalDetail___: localSet [
-	(value isKindOf: PyStrSurrogate) ifTrue: [^ #'ConstantAst:surrogateStr'].
-	(value isKindOf: Symbol) ifTrue: [^ #'ConstantAst:Symbol'].
-	^ ('ConstantAst:' , value class name asString) asSymbol
+	"A PARSER INVARIANT (P1.3).  The predicate admits every value the parser
+	(and BinOpAst / USubAst's constant folding) puts in a ConstantAst --
+	bool, None, the Ellipsis marker, str and its surrogate form, bytes, int,
+	float, complex -- so what refuses is a value nothing builds: a Symbol other
+	than #'...', or some other class.  The old ``ConstantAst:surrogateStr''
+	row is gone with the refusal it named (cut 80)."
+
+	^ ('invariant:ConstantAst-' , value class name asString) asSymbol
 
 ]
 

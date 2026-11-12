@@ -319,12 +319,21 @@ DeleteAst >> ___irRefusalDetail___: localSet [
 	are different cuts -- one wants the class-body definitional store, the other
 	the class cell -- and a single row cannot say which the next cut is about."
 
+	"Only the class-body row is a shape (P3).  The other two are INVARIANTS
+	for a def body (P1.3).  ``del x'' makes x a local, and every non-local
+	spelling -- a ``global'', the ``nonlocal __class__'' cell, a ``nonlocal''
+	reached past a method-local class -- has an admitted branch in
+	___irNameTargetEligible___:locals:.  ``del ()'' is admitted (P1.2a), a
+	tuple or list target is flattened by deletedTargets, an attribute or
+	subscript whose pieces refuse is named by the walk first (a Del-context
+	target is walked through), and every other target class is the parser's
+	``cannot delete ...''."
 	self deletedTargets do: [:t |
 		(t isKindOf: NameAst) ifTrue: [
 			CallAst classBodyRuntimeClass notNil ifTrue: [^ #'DeleteAst:classBody'].
 			(self ___irNameTargetEligible___: t locals: localSet)
-				ifFalse: [^ #'DeleteAst:name']]].
-	^ #'DeleteAst:target'
+				ifFalse: [^ #'invariant:DeleteAst-name']]].
+	^ #'invariant:DeleteAst-target'
 
 ]
 

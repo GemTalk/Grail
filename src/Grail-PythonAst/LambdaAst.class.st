@@ -465,7 +465,7 @@ LambdaAst >> ___irLambdaReason___: localNames [
 	(``LambdaAst:...''), or nil when it can.  Guarded: eligibility never raises."
 
 	^ [self ___irLambdaReasonUnguarded___: localNames]
-		on: Error do: [:ex | #'LambdaAst:probeError']
+		on: Error do: [:ex | #'invariant:LambdaAst-probeRaised']
 
 ]
 
@@ -492,12 +492,14 @@ LambdaAst >> ___irLambdaReasonUnguarded___: localNames [
 	pseudo-variable, declared under the text's transport identifier; and (P1.2)
 	a walrus in the body, whose target is a block temp as the text declares
 	it, and a generator lambda, wrapped as the text wraps it.  Refused: an
-	``await'' in the body, and two parameters whose transport identifiers
+	async generator expression in the body (an ``await'' in a genexp), and two parameters whose transport identifiers
 	collide (``self'' and ``___self___'' -- the text fails to compile that
 	shape too, so there is no oracle to agree with)."
 
 	| own nestedLocals seed |
-	args isNil ifTrue: [^ #'LambdaAst:noArgs'].
+	"No ``args isNil'' row (`LambdaAst:noArgs', P1.3): the parser builds an
+	empty ArgumentsAst for ``lambda:'', and a nil would raise on the next line
+	inside ___irLambdaReason___:'s guard, which names it as the invariant."
 	"A WALRUS no longer refuses: its target is one of ___irOwnNames___, a block
 	temp of the lambda as in the text (LambdaAst:walrus is retired)."
 	own := self ___irOwnNames___.
@@ -512,10 +514,21 @@ LambdaAst >> ___irLambdaReasonUnguarded___: localNames [
 	"A GENERATOR lambda -- ``lambda: (yield 1)'', test_generators'
 	test_lambda_generator -- no longer refuses: the body is wrapped as the
 	text wraps it, ``PythonGenerator ___withBlock___: [:___gen___ | body]''
-	(___emitIRLambdaBlockOn___:).  An ``await'' in a lambda is a SyntaxError
-	the parser raises first; refused rather than wrapped if one ever arrives."
+	(___emitIRLambdaBlockOn___:).
+
+	What still refuses is an ``await'' with no ``yield'', and it is NOT the
+	SyntaxError this used to assume.  A bare await in a lambda, one in a
+	list / set / dict comprehension there, and one in a generator
+	expression's FIRST iterable are all ``'await' outside async function''
+	(or the async-comprehension error) in the parser.  What reaches here is
+	``lambda y: (await x for x in y)'' -- an ASYNC GENERATOR EXPRESSION in the
+	body, valid Python, which ___irBodyHasYieldOrAwait___: finds because it
+	descends into the genexp.  So the row is named for that
+	(`LambdaAst:awaitInGenexp'; it used to say `LambdaAst:yield', P1.3).  It
+	stays refused: the text path is the oracle, and it builds a plain
+	generator there where CPython builds an async_generator."
 	((self ___irBodyHasYieldOrAwait___: body)
-		and: [(self ___irBodyHasYield___: body) not]) ifTrue: [^ #'LambdaAst:yield'].
+		and: [(self ___irBodyHasYield___: body) not]) ifTrue: [^ #'LambdaAst:awaitInGenexp'].
 	(args defaults ifNil: [#()]) do: [:d |
 		(d ___irEligibleValueLocals___: localNames) ifFalse: [^ #'LambdaAst:defaultExpr']].
 	(args kw_defaults ifNil: [#()]) do: [:d |
@@ -610,7 +623,10 @@ LambdaAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 LambdaAst >> ___irRefusalDetail___: localSet [
-	^ (self ___irLambdaReason___: localSet) ifNil: [#'LambdaAst:other']
+	"The predicate is this reason's isNil, so a nil here means the two drifted:
+	an INVARIANT (P1.3)."
+
+	^ (self ___irLambdaReason___: localSet) ifNil: [#'invariant:LambdaAst-noReason']
 
 ]
 

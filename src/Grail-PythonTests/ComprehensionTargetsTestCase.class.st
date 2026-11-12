@@ -107,12 +107,18 @@ ComprehensionTargetsTestCase >> testTheSameTargetsCompileThroughIR [
 		self assert: ((results @env1:__getitem__: key) = true)
 			description: 'under forced IR: ' , key].
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
-	present := #('Comprehension:target-SubscriptAst'
-		'cm:Comprehension:target-SubscriptAst'
-		'Comprehension:target-AttributeAst'
-		'cm:Comprehension:target-AttributeAst'
-		'Comprehension:target-other') select: [:row |
-			(counts at: row asSymbol otherwise: 0) > 0].
+	"Since P1.3 every comprehension-clause refusal is a parser INVARIANT, so
+	these rows are spelled ``invariant:Comprehension-...'' and none of them,
+	nor any other invariant row, may appear."
+	present := (#('invariant:Comprehension-target-SubscriptAst'
+		'cm:invariant:Comprehension-target-SubscriptAst'
+		'invariant:Comprehension-target-AttributeAst'
+		'cm:invariant:Comprehension-target-AttributeAst'
+		'invariant:Comprehension-targetNoElts') select: [:row |
+			(counts at: row asSymbol otherwise: 0) > 0]) asOrderedCollection.
+	counts keysDo: [:k |
+		((AbstractNode ___irIsInvariantReason___: k)
+			and: [(present includes: k asString) not]) ifTrue: [present add: k asString]].
 	self assert: present isEmpty
 		description: 'a comprehension target refusal is still in the census: '
 			, (present collect: [:r | r , '=' ,

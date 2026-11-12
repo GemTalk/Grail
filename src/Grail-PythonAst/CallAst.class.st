@@ -4230,10 +4230,12 @@ CallAst >> ___irRefusalDetail___: localSet [
 			say -- and naming ``super'' would send the next reader after a cut
 			that is already made.  That is the lesson the argument-0 note below
 			records, applied one level up."
-			self ___irSuperStaysOnText___ ifFalse: [
-				CallAst classBeingCompiled isNil ifFalse: [
-					self ___superNameIsShadowed___ ifTrue: [
-						^ #'CallAst:super-shadowed']]].
+			"NO `super-shadowed' ROW ANY MORE (P1.3).  A shadowed ``super'' is not
+			the rewrite on either path -- ___irSuperStaysOnText___ answers false
+			for it first, and ___irCallShapeUnguarded___ takes the ordinary call
+			shapes -- so when such a call refuses it refuses for an ordinary
+			reason, and a row naming super sent its reader after a super cut
+			that does not exist.  It falls to `CallAst:other' below."
 			"NO ARGUMENT-0 TEST HERE ANY MORE.  It used to answer
 			`super-argZeroDeletable' whenever ___superArgZeroGuardName___ was
 			non-nil, mirroring a refusal ___irSuperShape___ has since dropped.
@@ -4247,13 +4249,19 @@ CallAst >> ___irRefusalDetail___: localSet [
 			ordinary reason and falls to the rows below; a classless zero-argument
 			super() is ___irSuperShape___'s #superZero, the text's precondition
 			arms.  What is left to refuse is a doit."
-			(arguments isEmpty and: [keywords isEmpty]) ifTrue: [
-				self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
-				CallAst moduleClassBeingCompiled isNil
-					ifTrue: [^ #'CallAst:super-doitScopeClass'].
-				^ #'CallAst:super-other'].
-			self ___irSuperStaysOnText___ ifTrue: [
-				^ #'CallAst:super-explicitNamesOtherClass']].
+			"An unshadowed zero-argument super() with a module class is
+			___irSuperShape___'s #superZero -- in a method always, and outside
+			one whenever the call sits in a def, which every call this walk
+			judges does -- so past the doit row only the shape probe's ``on:
+			Error'' guard can have refused it: an INVARIANT (P1.3).  The
+			`super-explicitNamesOtherClass' row that followed is gone: with
+			arguments or keywords ___irSuperStaysOnText___ answers false
+			(``REASON 2 IS GONE''), so it could not be reached."
+			((arguments isEmpty and: [keywords isEmpty])
+				and: [self ___superNameIsShadowed___ not]) ifTrue: [
+					CallAst moduleClassBeingCompiled isNil
+						ifTrue: [^ #'CallAst:super-doitScopeClass'].
+					^ #'invariant:CallAst-superZeroShape']].
 		"eval/exec name WHICH of the two conditions refused, because they are
 		different cuts: -bareRewrite wants the text's compile-time locals
 		injection spelled in IR, -nested wants the frame walk to find a block
@@ -4374,43 +4382,6 @@ CallAst >> ___irSnapshotScopeIsAFunction___ [
 { #category : 'Grail-IR Codegen' }
 CallAst >> ___irStampChild___ [
 	^ function
-
-]
-
-{ #category : 'Grail-IR Codegen' }
-CallAst >> ___irSuperScopeRefusal___ [
-	"WHICH non-module-scope shape this super() call sits in.
-
-	`classDefIsModuleScope' is one boolean answering for THREE different
-	shapes -- ClassDefAst>>isModuleScopeClassDef returns false when there is no
-	module class at all, when the class is nested in another class BODY, and
-	when it is nested in a function -- so the single census row
-	`CallAst:super-methodLocalClass' was named for the third while counting all
-	three.  That is the same conflation `method:classNotAtModuleScope' had
-	(split in #933, where the measurement showed the whole row was ONE shape
-	and a cut aimed at the other half would have retired nothing).  Told apart
-	here so the ranking says which cut to make.
-
-	Read from the PARENT CHAIN, as ___irEnclosingClassIsMethodLocal___ is, and
-	for the same reason: the compile-context boolean cannot tell the shapes
-	apart after the fact."
-
-	| node cls |
-	CallAst moduleClassBeingCompiled isNil
-		ifTrue: [^ #'CallAst:super-doitScopeClass'].
-	node := parent.
-	cls := nil.
-	[node notNil and: [cls isNil]] whileTrue: [
-		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
-	cls isNil ifTrue: [^ #'CallAst:super-noEnclosingClass'].
-	node := cls parent.
-	[node notNil] whileTrue: [
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-			ifTrue: [^ #'CallAst:super-methodLocalClass'].
-		(node isKindOf: ClassDefAst)
-			ifTrue: [^ #'CallAst:super-classInClassBody'].
-		node := node parent].
-	^ #'CallAst:super-methodLocalClass'
 
 ]
 

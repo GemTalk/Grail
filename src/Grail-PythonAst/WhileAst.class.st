@@ -165,7 +165,14 @@ WhileAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 WhileAst >> ___irRefusalDetail___: localSet [
-	^ #'WhileAst:other'
+	"Every other exit of the predicate is a child the walk names first -- the
+	test, a body or else statement -- so what is left is an INVARIANT (P1.3):
+	parseWhile wraps the body in a SuiteAst, and when it did the predicate and
+	the walk have drifted."
+
+	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst])
+		ifFalse: [^ #'invariant:WhileAst-bodyShape'].
+	^ #'invariant:WhileAst-noReason'
 
 ]
 
