@@ -1,6 +1,26 @@
 Extension { #name : 'os_Environ' }
 
 { #category : 'Grail-Private' }
+os_Environ >> ___environGet___: key _: default [
+	| v |
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
+	v == nil ifTrue: [^ default].
+	self ___note___: key.
+	^ v
+
+]
+
+{ #category : 'Grail-Private' }
+os_Environ >> ___environSetdefault___: key _: default [
+	| v |
+	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
+	v == nil ifFalse: [ self ___note___: key. ^ v ].
+	self __setitem__: key _: default.
+	^ default
+
+]
+
+{ #category : 'Grail-Private' }
 os_Environ >> ___knownNames___ [
 	"The names this session has touched — the only ones enumeration can
 	report.  See the class comment for why this list exists at all."
@@ -236,17 +256,14 @@ os_Environ >> copy [
 
 { #category : 'Grail-Access Methods' }
 os_Environ >> get: key [
-	^ self get: key _: None
+	^ self ___environGet___: key _: None
 
 ]
 
 { #category : 'Grail-Access Methods' }
 os_Environ >> get: key _: default [
-	| v |
-	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
-	v == nil ifTrue: [^ default].
-	self ___note___: key.
-	^ v
+
+	^ self ___environGet___: key _: default
 
 ]
 
@@ -305,17 +322,14 @@ os_Environ >> popitem [
 
 { #category : 'Grail-Access Methods' }
 os_Environ >> setdefault: key [
-	^ self setdefault: key _: ''
+	^ self ___environSetdefault___: key _: ''
 
 ]
 
 { #category : 'Grail-Access Methods' }
 os_Environ >> setdefault: key _: default [
-	| v |
-	v := os_Environ @env0:___envRawGet___: (key @env0:asString).
-	v == nil ifFalse: [ self ___note___: key. ^ v ].
-	self __setitem__: key _: default.
-	^ default
+
+	^ self ___environSetdefault___: key _: default
 
 ]
 

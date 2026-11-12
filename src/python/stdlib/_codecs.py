@@ -844,10 +844,14 @@ def _as_bytes(data):
     bytes for ``utf_8_decode(42)`` -- and would build bytes out of an
     iterable of ints too, so every decoder turned CPython's TypeError into
     plausible-looking output (test_codecs test_bad_decode_args, 76 codecs).
-    memoryview() is the buffer-protocol test, as in readbuffer_encode."""
-    if isinstance(data, bytes):
+    memoryview() is the buffer-protocol test, as in readbuffer_encode.
+
+    A bytes SUBCLASS is copied too: the decoders below call .decode() on what
+    this answers, and on a subclass that is the subclass's own decode(), which
+    CPython's C codecs never call (#1393)."""
+    if type(data) is bytes:
         return data
-    if isinstance(data, (bytearray, memoryview)):
+    if isinstance(data, (bytes, bytearray, memoryview)):
         return bytes(data)
     if isinstance(data, (str, int)):
         view = None

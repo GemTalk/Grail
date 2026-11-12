@@ -1,5 +1,27 @@
 Extension { #name : 'PyInstanceDict' }
 
+{ #category : 'Grail-Private' }
+PyInstanceDict >> ___dictGet___: key _: default [
+
+	"``dict.get(obj.__dict__, key)'' runs KeyValueDictionary's get: on this
+	mapping, and that sends this (#1393), so it is answered by this class's
+	own get."
+
+	^ self get: key _: default
+
+]
+
+{ #category : 'Grail-Private' }
+PyInstanceDict >> ___dictSetdefault___: key _: default [
+
+	"``dict.setdefault(obj.__dict__, key)'' runs KeyValueDictionary's
+	setdefault: on this mapping, and that sends this (#1393), so it is
+	answered by this class's own setdefault."
+
+	^ self setdefault: key _: default
+
+]
+
 { #category : 'Grail-Python-Protocol' }
 PyInstanceDict >> ___keysList___ [
 	"The keys as a list, in order -- what ``keys'' answered before it became a

@@ -24,6 +24,90 @@ PyDateTime class >> ___applyFoldProbe___: result at: secs micros: micros [
 
 ]
 
+{ #category : 'Grail-Private' }
+PyDateTime class >> ___datetimeCombine___: aDate _: aTime _: tz [
+	"datetime.combine(date, time, tzinfo) — the explicit-tzinfo form
+	(test_combine).  Allocates via ___allocateInstance___:kw: (not the
+	low-level ___fromFields___: bypass), so a subclass receiver yields a
+	subclass instance AND routes through a subclass-overridden __new__,
+	as in CPython.
+
+	The REAL type checks live HERE, not in the varargs _combine:kw:
+	entry: a fixed-arity call (``combine = datetime.combine;
+	combine(t, d)'', args reversed) reaches this 3-arg selector DIRECTLY
+	via BoundMethod>>value:value: -- which prefers a matching fixed-arity
+	selector over the varargs fallback -- bypassing whatever validation
+	only _combine:kw: performed.  A bare `aDate year' on a receiver of
+	the wrong type previously raised an uncatchable env-1
+	MessageNotUnderstood instead of Python's TypeError (test_combine).
+	A datetime is a date, so it is accepted too, as in CPython."
+
+	| tz2 |
+	(aDate @env0:isKindOf: PyDate) ifFalse: [
+		^ TypeError @env1:___signal___: 'date argument must be a date instance'].
+	(aTime @env0:isKindOf: PyTime) ifFalse: [
+		^ TypeError @env1:___signal___: 'time argument must be a time instance'].
+	(tz @env0:== None @env0:or: [tz @env0:isNil @env0:or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
+		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
+	^ self @env1:___allocateInstance___:
+		{ (aDate year). (aDate month). (aDate day).
+		  (aTime hour). (aTime minute). (aTime second).
+		  (aTime microsecond). tz2 } kw: nil
+
+]
+
+{ #category : 'Grail-Private' }
+PyDateTime class >> ___datetimeFromtimestamp___: ts _: tz [
+	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime.
+
+	NAIVE fromtimestamp(ts) converts the epoch instant to HOST-LOCAL wall
+	time in CPython -- it is NOT utcfromtimestamp.  Reading GMT components
+	is what made ``date.fromtimestamp(time.time())'' disagree with
+	``date.today()'' by a day for part of every day.  An explicit tz keeps
+	the GMT components (correct for timezone.utc; see now:)."
+
+	| tz2 |
+	(tz @env0:isNil or: [tz @env0:== None or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
+		^ TypeError ___signal___: 'fromtimestamp() argument 2 must be None or a datetime.tzinfo, not '
+			@env0:, tz @env0:class __name__].
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
+	tz2 @env0:isNil ifTrue: [self ___ensureSessionTimeZone___].
+	^ self ___fromTimestamp___: ts tz: tz2 gmt: tz2 @env0:notNil
+
+]
+
+{ #category : 'Grail-Private' }
+PyDateTime class >> ___datetimeNow___: tz [
+	"now() / now(tz) - current local or zone-tagged datetime.
+
+	NAIVE now() is the HOST-LOCAL wall clock, per CPython.  This used to
+	pull GMT components deliberately, ``so the wall clock is unaffected by
+	the gem's local timezone'' -- a defensible workaround while the gem's
+	timezone was GemStone's PST default no matter which host the gem ran
+	on.  ___ensureSessionTimeZone___ now aligns the session zone with the
+	OS, so the local accessors are the correct ones and naive now() finally
+	tracks the machine's clock.
+
+	An explicit tz keeps the previous GMT-components behaviour (correct for
+	timezone.utc, which is how Grail's callers use it; a genuine conversion
+	into an arbitrary offset is a separate piece of work)."
+
+	| dt micros tz2 |
+	(tz @env0:isNil or: [tz @env0:== None or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
+		^ TypeError ___signal___: 'tz argument must be None or of a tzinfo subclass'].
+	self ___ensureSessionTimeZone___.
+	dt := DateTime @env0:now.
+	micros := ((dt @env0:instVarAt: 3) @env0:\\ 1000) @env0:* 1000.
+	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
+	^ self
+		___fromDateTime___: dt
+		micros: micros
+		tz: tz2
+		gmt: tz2 @env0:notNil
+
+]
+
 { #category : 'Grail-Initialization' }
 PyDateTime class >> ___ensureSessionTimeZone___ [
 	"Align this SESSION's TimeZone with the host OS, once per session.
@@ -617,40 +701,14 @@ PyDateTime class >> _now: positional kw: kwargs [
 PyDateTime class >> combine: aDate _: aTime [
 	"datetime.combine(date, time) — merge fields; inherit time's tzinfo."
 
-	^ self combine: aDate _: aTime _: (aTime @env0:dynamicInstVarAt: #_tzinfo)
+	^ self ___datetimeCombine___: aDate _: aTime _: (aTime @env0:dynamicInstVarAt: #_tzinfo)
 
 ]
 
 { #category : 'Grail-Initialization' }
 PyDateTime class >> combine: aDate _: aTime _: tz [
-	"datetime.combine(date, time, tzinfo) — the explicit-tzinfo form
-	(test_combine).  Allocates via ___allocateInstance___:kw: (not the
-	low-level ___fromFields___: bypass), so a subclass receiver yields a
-	subclass instance AND routes through a subclass-overridden __new__,
-	as in CPython.
 
-	The REAL type checks live HERE, not in the varargs _combine:kw:
-	entry: a fixed-arity call (``combine = datetime.combine;
-	combine(t, d)'', args reversed) reaches this 3-arg selector DIRECTLY
-	via BoundMethod>>value:value: -- which prefers a matching fixed-arity
-	selector over the varargs fallback -- bypassing whatever validation
-	only _combine:kw: performed.  A bare `aDate year' on a receiver of
-	the wrong type previously raised an uncatchable env-1
-	MessageNotUnderstood instead of Python's TypeError (test_combine).
-	A datetime is a date, so it is accepted too, as in CPython."
-
-	| tz2 |
-	(aDate @env0:isKindOf: PyDate) ifFalse: [
-		^ TypeError @env1:___signal___: 'date argument must be a date instance'].
-	(aTime @env0:isKindOf: PyTime) ifFalse: [
-		^ TypeError @env1:___signal___: 'time argument must be a time instance'].
-	(tz @env0:== None @env0:or: [tz @env0:isNil @env0:or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
-		^ TypeError @env1:___signal___: 'tzinfo argument must be None or of a tzinfo subclass'].
-	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
-	^ self @env1:___allocateInstance___:
-		{ (aDate year). (aDate month). (aDate day).
-		  (aTime hour). (aTime minute). (aTime second).
-		  (aTime microsecond). tz2 } kw: nil
+	^ self ___datetimeCombine___: aDate _: aTime _: tz
 
 ]
 
@@ -764,27 +822,14 @@ PyDateTime class >> fromordinal: ordinal [
 
 { #category : 'Grail-Initialization' }
 PyDateTime class >> fromtimestamp: ts [
-	^ self fromtimestamp: ts _: nil
+	^ self ___datetimeFromtimestamp___: ts _: nil
 
 ]
 
 { #category : 'Grail-Initialization' }
 PyDateTime class >> fromtimestamp: ts _: tz [
-	"fromtimestamp(ts[, tz]) - Unix epoch seconds to PyDateTime.
 
-	NAIVE fromtimestamp(ts) converts the epoch instant to HOST-LOCAL wall
-	time in CPython -- it is NOT utcfromtimestamp.  Reading GMT components
-	is what made ``date.fromtimestamp(time.time())'' disagree with
-	``date.today()'' by a day for part of every day.  An explicit tz keeps
-	the GMT components (correct for timezone.utc; see now:)."
-
-	| tz2 |
-	(tz @env0:isNil or: [tz @env0:== None or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
-		^ TypeError ___signal___: 'fromtimestamp() argument 2 must be None or a datetime.tzinfo, not '
-			@env0:, tz @env0:class __name__].
-	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
-	tz2 @env0:isNil ifTrue: [self ___ensureSessionTimeZone___].
-	^ self ___fromTimestamp___: ts tz: tz2 gmt: tz2 @env0:notNil
+	^ self ___datetimeFromtimestamp___: ts _: tz
 
 ]
 
@@ -802,38 +847,14 @@ PyDateTime class >> min [
 
 { #category : 'Grail-Initialization' }
 PyDateTime class >> now [
-	^ self now: nil
+	^ self ___datetimeNow___: nil
 
 ]
 
 { #category : 'Grail-Initialization' }
 PyDateTime class >> now: tz [
-	"now() / now(tz) - current local or zone-tagged datetime.
 
-	NAIVE now() is the HOST-LOCAL wall clock, per CPython.  This used to
-	pull GMT components deliberately, ``so the wall clock is unaffected by
-	the gem's local timezone'' -- a defensible workaround while the gem's
-	timezone was GemStone's PST default no matter which host the gem ran
-	on.  ___ensureSessionTimeZone___ now aligns the session zone with the
-	OS, so the local accessors are the correct ones and naive now() finally
-	tracks the machine's clock.
-
-	An explicit tz keeps the previous GMT-components behaviour (correct for
-	timezone.utc, which is how Grail's callers use it; a genuine conversion
-	into an arbitrary offset is a separate piece of work)."
-
-	| dt micros tz2 |
-	(tz @env0:isNil or: [tz @env0:== None or: [tz @env0:isKindOf: PyTzinfo]]) ifFalse: [
-		^ TypeError ___signal___: 'tz argument must be None or of a tzinfo subclass'].
-	self ___ensureSessionTimeZone___.
-	dt := DateTime @env0:now.
-	micros := ((dt @env0:instVarAt: 3) @env0:\\ 1000) @env0:* 1000.
-	tz2 := tz == None ifTrue: [nil] ifFalse: [tz].
-	^ self
-		___fromDateTime___: dt
-		micros: micros
-		tz: tz2
-		gmt: tz2 @env0:notNil
+	^ self ___datetimeNow___: tz
 
 ]
 
