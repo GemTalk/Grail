@@ -37,12 +37,14 @@ PythonToken class >> type: aSymbol value: aString line: aLine position: aPositio
 ]
 
 { #category : 'Grail-accessing' }
-PythonToken >> beFormatSpec [
-	"This FSTRING token is the format spec of a replacement field, parsed by a
-	child parser (PythonParser >> ___fstringSpecExprFor:at:), where a brace
-	always opens a field rather than escaping one (isFormatSpec)."
+PythonToken >> beFormatSpecOf: aToken [
 
-	formatSpec := true
+	"This FSTRING token is the format spec of a replacement field of aToken,
+	parsed by a child parser (PythonParser >> ___fstringSpecExprFor:at:),
+	where a brace always opens a field rather than escaping one
+	(isFormatSpec).  It sits one level below aToken (formatSpecLevel)."
+
+	formatSpec := aToken formatSpecLevel + 1
 
 ]
 
@@ -133,6 +135,18 @@ PythonToken >> fieldStarts: aCollection [
 
 ]
 
+{ #category : 'Grail-accessing' }
+PythonToken >> formatSpecLevel [
+
+	"How deep this literal nests as a format spec: 0 for a literal that is not
+	one, 1 for the spec of one of its fields, 2 for the spec of a field of
+	that spec.  CPython refuses a field opened at level 3 (PythonParser class
+	>> maximumFieldNesting)."
+
+	^ formatSpec ifNil: [0]
+
+]
+
 { #category : 'Grail-testing' }
 PythonToken >> isAnyString [
 	"Whether this is a string literal of any kind -- str, bytes, f-string or
@@ -160,7 +174,7 @@ PythonToken >> isEndMarker [
 { #category : 'Grail-testing' }
 PythonToken >> isFormatSpec [
 
-	^ formatSpec == true
+	^ formatSpec notNil
 
 ]
 
