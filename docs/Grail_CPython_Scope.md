@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 71 | 9 | 10 | 90 |
+| P1 | 72 | 8 | 10 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
 | P3 | 32 | 2 | 22 | 56 |
 | P4 | 27 | 2 | 46 | 75 |
-| **In-scope** | **160** | **13** | **82** | **255** |
+| **In-scope** | **161** | **12** | **82** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **160 of those score OK**.
+Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **161 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,12 +136,12 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 80 | 4448 | 445 | 3917 | 10% |
+| P1 | 80 | 4448 | 445 | 3918 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
 | P3 | 34 | 4260 | 555 | 3685 | 13% |
 | P4 | 46 | 3781 | 146 | 3623 | 4% |
 | other | 24 | 1199 | 282 | 903 | 24% |
-| **all** | **215** | **17985** | **1986** | **15867** | **11%** |
+| **all** | **215** | **17985** | **1986** | **15868** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12 · `test_stat` 15 of 22.
 <!-- /test-tally -->
@@ -224,7 +224,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
 | ✅ | `test_global` | global statement (language). |
-| ❗ | `test_grammar` | Grammar (language). |
+| ✅ | `test_grammar` | Grammar (language). |
 | ✅ | `test_hash` | hash() protocol (language). |
 | ✅ | `test_index` | __index__ protocol (language). |
 | ✅ | `test_int` | int — core type (in harness). |
@@ -795,7 +795,7 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**21 of the 215 rows on the committed board are not OK.**
+**20 of the 215 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
@@ -812,7 +812,6 @@ in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 - `test.test_email.test_headerregistry` ERROR, 192 tests: 0 failed, 2 errors, 0 skipped
 - `test.test_email.test_parser` ERROR, 8 tests: 0 failed, 1 errors, 0 skipped
 - `test.test_patma` ERROR, 328 tests: 6 failed, 1 errors, 0 skipped
-- `test.test_grammar` ERROR, 75 tests: 0 failed, 1 errors, 0 skipped
 - `test.test_fstring` ERROR, 90 tests: 4 failed, 1 errors, 4 skipped
 - `test.test_types` ERROR, 129 tests: 5 failed, 7 errors, 3 skipped
 - `test.test_type_annotations` FAIL, 46 tests: 2 failed, 0 errors, 1 skipped
