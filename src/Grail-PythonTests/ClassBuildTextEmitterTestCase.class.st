@@ -16,6 +16,25 @@ ClassBuildTextEmitterTestCase >> ___lf___ [
 ]
 
 { #category : 'Grail-Helpers' }
+ClassBuildTextEmitterTestCase >> ___pythonAstSendersOf___: aSelector [
+	"``Class>>selector'' for every env-0 method of a class in the PythonAst
+	dictionary, either side, whose literal selectors include aSelector."
+
+	| dict found |
+	dict := System myUserProfile symbolList detect: [:d | d name == #PythonAst].
+	found := Set new.
+	dict do: [:v |
+		v isBehavior ifTrue: [
+			{v. v class} do: [:b |
+				(b methodDictForEnv: 0) ifNotNil: [:md |
+					md do: [:m |
+						(m _selectorPool includes: aSelector) ifTrue: [
+							found add: b name asString , '>>' , m selector asString]]]]]].
+	^ found
+
+]
+
+{ #category : 'Grail-Helpers' }
 ClassBuildTextEmitterTestCase >> ___textOf___: aOneArgBlock [
 	"What aOneArgBlock writes through a text emitter on a fresh codegen stream."
 
@@ -93,6 +112,59 @@ ClassBuildTextEmitterTestCase >> testCascadeAndBraces [
 ]
 
 { #category : 'Grail-Tests' }
+ClassBuildTextEmitterTestCase >> testDecoratorCallSpelling [
+	"A decorator call at its own line: the keywords and the argument each
+	start a line, so the text's line scan finds the decorator's position store
+	(FunctionDefAst >> printDecoratorCallOn:line:receiver:argument:)."
+
+	| lf tab |
+	lf := self ___lf___.
+	tab := String with: Character tab.
+	self assert: (self ___textOf___: [:e |
+			e sendOnNextLine: #'___pyCallValue___:kw:' env: 1 to: [e var: 'r']
+				with: {[e braceArrayOnNextLine: {[e var: 'a']}]. [e nilLiteral]}])
+		equals: 'r' , lf , tab , '@env1:___pyCallValue___: {' , lf , tab , 'a } kw: nil'.
+	self assert: (self ___textOf___: [:e |
+			e send: #'->' env: 0 to: [e paren: [e assign: '___curPos___' from: [e integer: 3]]]
+				with: {[e var: 'x']}])
+		equals: '(___curPos___ := 3) @env0:-> x'
+
+]
+
+{ #category : 'Grail-Tests' }
+ClassBuildTextEmitterTestCase >> testLiteralBlocksAndInlineConditionals [
+
+	| lf |
+	lf := self ___lf___.
+	self assert: (self ___textOf___: [:e | e block: [e var: 'x']]) equals: '[x]'.
+	self assert: (self ___textOf___: [:e |
+			e blockWithArgs: #('v') temps: #() do: [e assign: 'x' from: [e var: 'v']]])
+		equals: '[:v | x := v]'.
+	self assert: (self ___textOf___: [:e |
+			e blockWithArgs: #('a' 'k') temps: #('d') do: [
+				e statementWithoutNewline: [e assign: 'd' from: [e integer: 1]].
+				e space.
+				e var: 'd']])
+		equals: '[:a :k | | d | d := 1. d]'.
+	self assert: (self ___textOf___: [:e |
+			e statementWithoutNewline: [e ifTrue: [e var: 'c'] do: [e var: 'x']]])
+		equals: 'c ifTrue: [x].'.
+	self assert: (self ___textOf___: [:e |
+			e ifFalse: [e var: 'c'] do: [e var: 'x']])
+		equals: 'c ifFalse: [x]'.
+	self assert: (self ___textOf___: [:e |
+			e statement: [
+				e ifTrue: [e var: 'c']
+					do: [e newline. e statement: [e var: 'x']]
+					ifFalse: [e newline]]])
+		equals: 'c ifTrue: [' , lf , 'x.' , lf , '] ifFalse: [' , lf , '].' , lf.
+	self assert: (self ___textOf___: [:e |
+			e terminatedBraceArray: {[e var: 'a']. [e var: 'b']}])
+		equals: '{ a. b. }'
+
+]
+
+{ #category : 'Grail-Tests' }
 ClassBuildTextEmitterTestCase >> testLiteralSpellings [
 
 	self assert: (self ___textOf___: [:e | e string: 'it''s']) equals: '''it''''s'''.
@@ -137,6 +209,21 @@ ClassBuildTextEmitterTestCase >> testSends [
 ]
 
 { #category : 'Grail-Tests' }
+ClassBuildTextEmitterTestCase >> testStringIndentedByStreamKeepsTheOldSpelling [
+	"stringIndentedByStream: is emitStringLiteral:on:'s spelling, kept for the
+	generated text's sake: a newline inside it IS indented, unlike string:'s."
+
+	| s lf tab |
+	lf := self ___lf___.
+	tab := String with: Character tab.
+	s := PrettyWriteStream on: Unicode7 new.
+	s increaseIndent.
+	(ClassBuildTextEmitter on: s) stringIndentedByStream: 'a' , lf , 'b''c'.
+	self assert: s contents equals: '''a' , lf , tab , 'b''''c'''
+
+]
+
+{ #category : 'Grail-Tests' }
 ClassBuildTextEmitterTestCase >> testStringLiteralIsNotIndented [
 	"A method source carries its own newlines, and a class built inside an
 	indented statement must not have the stream's indentation spliced into
@@ -150,5 +237,24 @@ ClassBuildTextEmitterTestCase >> testStringLiteralIsNotIndented [
 	(ClassBuildTextEmitter on: s) statement: [
 		(ClassBuildTextEmitter on: s) string: 'a' , lf , 'b'].
 	self assert: s contents equals: lf , (String with: Character tab) , '''a' , lf , 'b''.' , lf
+
+]
+
+{ #category : 'Grail-Tests' }
+ClassBuildTextEmitterTestCase >> testTheClassBuildWritesOnlyThroughTheEmitter [
+	"Every helper the class build calls writes through the ClassBuildEmitter,
+	and the ``unrouted:'' escape that handed them the text stream is gone
+	(P3.1's second PR) -- so an IR backend can follow the whole build.  Pinned
+	both ways: the protocol does not have it, and no method in the PythonAst
+	dictionary sends it.  The control proves the scan sees a real send."
+
+	| control |
+	self deny: (ClassBuildEmitter canUnderstand: #unrouted:).
+	self deny: (ClassBuildTextEmitter canUnderstand: #unrouted:).
+	self assert: (self ___pythonAstSendersOf___: #unrouted:) isEmpty
+		description: (self ___pythonAstSendersOf___: #unrouted:) asArray printString.
+	control := self ___pythonAstSendersOf___: #'openValueBlockLine:'.
+	self assert: (control includes: 'ClassDefAst>>emitNestedClass:on:')
+		description: control asArray printString
 
 ]

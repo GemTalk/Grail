@@ -73,26 +73,38 @@ AnnAssignAst >> ___boundTargetNames___ [
 ]
 
 { #category : 'Grail-Annotations' }
-AnnAssignAst >> ___emitAnnotateEntryOn___: aStream [
+AnnAssignAst >> ___emitAnnotateEntryOn___: e [
 	"This name's entry in its scope's annotate function, evaluated in the format
-	the function was called with (PyAnnotate >> ___annotationValue___:source:format:)."
+	the function was called with (PyAnnotate >> ___annotationValue___:source:format:).
+	Written through e, a ClassBuildEmitter: the class build's annotate function
+	and the module body's (through AbstractNode >> ___emitAnnotateBlockOn___:)
+	both hold it."
 
-	aStream
-		nextPutAll: '___annotations___ @env0:at: ''';
-		nextPutAll: target id asString;
-		nextPutAll: ''' put: (PyAnnotate @env1:___annotationValue___: ['.
-	annotation printSmalltalkOn: aStream.
-	aStream nextPutAll: '] source: '.
-	self emitStringLiteral: annotation ___annotationSourceString___ on: aStream.
-	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1)).'
+	e statementWithoutNewline: [
+		e send: #'at:put:' env: 0 to: [e var: '___annotations___'] with: {
+			[e string: target id asString].
+			[e paren: [
+				e send: #'___annotationValue___:source:format:' env: 1 to: [e var: 'PyAnnotate'] with: {
+					[e block: [e expressionNode: annotation]].
+					[e stringIndentedByStream: annotation ___annotationSourceString___].
+					[e paren: [e send: #'at:' env: 0 to: [e var: '___annArgs___'] with: {[e integer: 1]}]]}]]}]
 
 ]
 
 { #category : 'Grail-Annotations' }
 AnnAssignAst >> ___emitExecutionRecordOn___: aStream [
+	"___emitExecutionRecordWith___: as text on aStream, for this node's own
+	printSmalltalkOn:."
+
+	self ___emitExecutionRecordWith___: (ClassBuildTextEmitter on: aStream)
+
+]
+
+{ #category : 'Grail-Annotations' }
+AnnAssignAst >> ___emitExecutionRecordWith___: e [
 	"Record that this annotation ran, where its scope keeps that record."
 
-	self ___isSimpleAnnotation___ ifTrue: [self ___emitExecutionRecordOf___: self on: aStream]
+	self ___isSimpleAnnotation___ ifTrue: [self ___emitExecutionRecordOf___: self on: e]
 
 ]
 

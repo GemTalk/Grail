@@ -1595,10 +1595,24 @@ ModuleAst >> ___emitDoitSlot___: aName in: aScope on: aStream with: anEmitBlock 
 ]
 
 { #category : 'Grail-Annotations' }
-ModuleAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+ModuleAst >> ___emitExecutionRecordExpressionOn___: e [
+	"The set of the numbers of the annotations that ran, where CPython keeps
+	it: the module's global ``__conditional_annotations__'', or the exec()
+	scope's slot of that name."
+
+	^ ModuleAst compilingDoitScope notNil
+		ifTrue: [e var: (NameAst doitScopeNameFor: #'__conditional_annotations__') asString]
+		ifFalse: [e paren: [
+			e send: #'dynamicInstVarAt:' env: 0 to: [e var: 'self']
+				with: {[e symbol: '__conditional_annotations__']}]]
+
+]
+
+{ #category : 'Grail-Annotations' }
+ModuleAst >> ___emitExecutionRecordOf___: anAnnotation on: e [
 
 	(self ___recordsExecutionOf___: anAnnotation) ifTrue: [
-		self ___emitRecordingExecutionOf___: anAnnotation on: aStream]
+		self ___emitRecordingExecutionOf___: anAnnotation on: e]
 
 ]
 
@@ -1653,18 +1667,6 @@ ModuleAst >> ___emitModuleAnnotationsOn___: aStream [
 	aStream nextPutAll: 'self @env0:___storeAnnotate___: '.
 	self ___emitAnnotateBlockOn___: aStream.
 	aStream nextPut: $.; lf
-
-]
-
-{ #category : 'Grail-Annotations' }
-ModuleAst >> ___executionRecordExpression___ [
-	"The set of the numbers of the annotations that ran, where CPython keeps
-	it: the module's global ``__conditional_annotations__'', or the exec()
-	scope's slot of that name."
-
-	^ ModuleAst compilingDoitScope notNil
-		ifTrue: [(NameAst doitScopeNameFor: #'__conditional_annotations__') asString]
-		ifFalse: ['(self @env0:dynamicInstVarAt: #''__conditional_annotations__'')']
 
 ]
 
