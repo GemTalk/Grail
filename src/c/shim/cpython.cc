@@ -70,6 +70,7 @@ static OopType grail_counted_perform(OopType r, const char *sel, const OopType *
    Smalltalk.  The profile above found ``at:'' to be 120 of the 219 crossings
    in one pydantic model_dump(). */
 #include "grail_digit_table.h"    /* generated Unicode Nd (decimal digit) ranges */
+#include "grail_alnum_table.h"    /* generated Unicode alphanumeric ranges (\w) */
 
 /* Binary-search a sorted GrailCasePair table; return mapped code or ch. */
 static unsigned int grail_case_lookup(const GrailCasePair *map, int len, unsigned int ch) {
@@ -7112,10 +7113,23 @@ extern "C" int _grail_unicode_isdecimal(Py_UCS4 ch) {
     return 0;
 }
 
+/* Py_UNICODE_ISALNUM -- what a regular expression's \w matches, with '_' --
+   by binary search over the generated range table (grail_alnum_table.h), which
+   is CPython's own str.isalnum().
+
+   This used to answer true for EVERY non-ASCII code point, so \w+ took an em
+   dash, a euro sign, a no-break space, U+2028 or an emoji as part of a word,
+   and \b saw no boundary beside one. */
 extern "C" int _grail_unicode_isalnum(Py_UCS4 ch) {
     if (ch < 128) return isalnum((int)ch);
-    /* For non-ASCII: treat as alphanumeric if > 127 (rough approximation) */
-    return 1;
+    int low = 0, high = grail_alnum_ranges_len - 1;
+    while (low <= high) {
+        int mid = low + (high - low) / 2;
+        if (ch < grail_alnum_ranges[mid][0]) high = mid - 1;
+        else if (ch > grail_alnum_ranges[mid][1]) low = mid + 1;
+        else return 1;
+    }
+    return 0;
 }
 
 /* ====================================================================
