@@ -4,11 +4,12 @@ Extension { #name : 'ClassBodyLocals' }
 ClassBodyLocals >> ___dictSetdefault___: key _: default [
 	"``vars().setdefault(name, x)'' -- an insertion, so it binds the class
 	attribute like any other.  An already-present key is answered untouched, so
-	no store happens and the class is not disturbed."
+	no store happens and the class is not disturbed.  Either way the answer is
+	what the mapping holds afterwards, as dict's is: __setitem__ answers None."
 
 	self ___grailClass___ @env0:isNil ifTrue: [^ super ___dictSetdefault___: key _: default].
-	(self @env0:includesKey: key) ifTrue: [^ self @env0:at: key].
-	^ self __setitem__: key _: default
+	(self @env0:includesKey: key) ifFalse: [self __setitem__: key _: default].
+	^ self @env0:at: key
 
 ]
 
