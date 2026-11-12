@@ -379,9 +379,9 @@ def _strip_exception_details(msg):
         start = i+1
     return msg[start: end]
 
-# GRAIL: CPython subclasses pdb.Pdb here, and Grail's pdb has no Pdb: its
-# set_trace() halts into GemStone's own debugger instead (src/python/stdlib/
-# pdb.py says why).  DocTestRunner.run() still builds one of these per run and
+# GRAIL: CPython subclasses pdb.Pdb here.  Grail's Pdb is only a constructor
+# and a set_trace() that halts into GemStone's own debugger (src/python/stdlib/
+# pdb.py says why), so there is nothing to inherit.  DocTestRunner.run() still builds one of these per run and
 # patches it in as pdb.set_trace, so keep that surface: restore the real stdout
 # for the debugger, as CPython's trace_dispatch does, and hand over to Grail's
 # set_trace.  There is no tracing to dispatch, so nothing else is needed.

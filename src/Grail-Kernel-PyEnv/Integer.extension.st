@@ -227,6 +227,64 @@ Integer class >> ___fromText: aString literal: anObject [
 
 ]
 
+{ #category : 'Grail-Private' }
+Integer class >> ___intFromBytes___: bytes _: byteorder _: signed [
+	"int.from_bytes(bytes, byteorder='big', *, signed=False)
+	Return the integer represented by the given array of bytes."
+
+	| bytesArray result isBigEndian isSigned negative |
+	"Extract bytes - assuming bytes is a Python bytes object or similar.
+	Python's bytes IS Smalltalk's ByteArray with the Python protocol
+	layered on (see Bytes.gs); bytearray subclasses it (Bytearray.gs).
+	Check against ByteArray directly, not the class named `bytes' --
+	that identifier is shadowed by this method's own `bytes' parameter.
+	The old check (`isKindOf: tuple') could never match an actual
+	bytes/bytearray argument, since neither subclasses tuple
+	(array.fromfile, test_system_transitions)."
+	bytesArray := self ___byteValuesOf: bytes.
+
+	isBigEndian := self ___isBigEndian___: byteorder.
+	isSigned := (signed == true) or: [signed == true].
+
+	"A signed value whose top bit is set is NEGATIVE.  It used to be assembled
+	unsigned and then have 2**(8n) subtracted, and 2**(8n) is one bit wider
+	than the widest n-byte value: at GemStone's LargeInteger ceiling (~130144
+	bits) it could not be built, and the kernel's NumericError (error 2503)
+	ended the process.  So a negative one is decoded as -(inverted + 1),
+	assembling the INVERTED bytes, which never exceeds the value's own width."
+	negative := isSigned and: [(bytesArray @env0:size) @env0:> 0
+		and: [((isBigEndian
+				ifTrue: [bytesArray @env0:first]
+				ifFalse: [bytesArray @env0:last]) @env0:bitAnd: 16r80) @env0:~= 0]].
+
+	"More bytes than GemStone's LargeInteger holds: the catchable OverflowError
+	Grail raises for that ceiling elsewhere (see ___pyShiftLeft___:), not the
+	kernel's uncatchable NumericError.  CPython has no ceiling and answers."
+	result := [ | acc |
+		acc := 0.
+		isBigEndian
+			ifTrue: [
+				bytesArray @env0:do: [:each |
+					acc := (acc @env0:bitShift: 8) @env0:bitOr:
+						(negative ifTrue: [255 @env0:- each] ifFalse: [each])]]
+			ifFalse: [
+				| shift |
+				shift := 0.
+				bytesArray @env0:do: [:each |
+					acc := acc @env0:bitOr:
+						((negative ifTrue: [255 @env0:- each] ifFalse: [each])
+							@env0:bitShift: shift).
+					shift := shift @env0:+ 8]].
+		negative
+			ifTrue: [(acc @env0:+ 1) @env0:negated]
+			ifFalse: [acc]]
+				@env0:on: NumericError
+				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity'].
+
+	^ result
+
+]
+
 { #category : 'Grail-Initialization' }
 Integer class >> ___invalidLiteral___: obj base: baseInt [
 	"Raise the exact ValueError CPython raises for an unparseable
@@ -734,7 +792,7 @@ Integer class >> from_bytes: theBytes [
 	Grail had only the two- and three-argument forms, so the default was
 	unreachable."
 
-	^ self from_bytes: theBytes _: 'big' _: false
+	^ self ___intFromBytes___: theBytes _: 'big' _: false
 
 ]
 
@@ -748,65 +806,14 @@ Integer class >> from_bytes: bytes _: byteorder [
 	``int.from_bytes(b, 'big')'' died in an uncatchable env-1 DNU on
 	Integer class -- the identical slip already fixed in to_bytes:_:."
 
-	^ self from_bytes: bytes _: byteorder _: false
+	^ self ___intFromBytes___: bytes _: byteorder _: false
 
 ]
 
 { #category : 'Grail-Class Methods' }
 Integer class >> from_bytes: bytes _: byteorder _: signed [
-	"int.from_bytes(bytes, byteorder='big', *, signed=False)
-	Return the integer represented by the given array of bytes."
 
-	| bytesArray result isBigEndian isSigned negative |
-	"Extract bytes - assuming bytes is a Python bytes object or similar.
-	Python's bytes IS Smalltalk's ByteArray with the Python protocol
-	layered on (see Bytes.gs); bytearray subclasses it (Bytearray.gs).
-	Check against ByteArray directly, not the class named `bytes' --
-	that identifier is shadowed by this method's own `bytes' parameter.
-	The old check (`isKindOf: tuple') could never match an actual
-	bytes/bytearray argument, since neither subclasses tuple
-	(array.fromfile, test_system_transitions)."
-	bytesArray := self ___byteValuesOf: bytes.
-
-	isBigEndian := self ___isBigEndian___: byteorder.
-	isSigned := (signed == true) or: [signed == true].
-
-	"A signed value whose top bit is set is NEGATIVE.  It used to be assembled
-	unsigned and then have 2**(8n) subtracted, and 2**(8n) is one bit wider
-	than the widest n-byte value: at GemStone's LargeInteger ceiling (~130144
-	bits) it could not be built, and the kernel's NumericError (error 2503)
-	ended the process.  So a negative one is decoded as -(inverted + 1),
-	assembling the INVERTED bytes, which never exceeds the value's own width."
-	negative := isSigned and: [(bytesArray @env0:size) @env0:> 0
-		and: [((isBigEndian
-				ifTrue: [bytesArray @env0:first]
-				ifFalse: [bytesArray @env0:last]) @env0:bitAnd: 16r80) @env0:~= 0]].
-
-	"More bytes than GemStone's LargeInteger holds: the catchable OverflowError
-	Grail raises for that ceiling elsewhere (see ___pyShiftLeft___:), not the
-	kernel's uncatchable NumericError.  CPython has no ceiling and answers."
-	result := [ | acc |
-		acc := 0.
-		isBigEndian
-			ifTrue: [
-				bytesArray @env0:do: [:each |
-					acc := (acc @env0:bitShift: 8) @env0:bitOr:
-						(negative ifTrue: [255 @env0:- each] ifFalse: [each])]]
-			ifFalse: [
-				| shift |
-				shift := 0.
-				bytesArray @env0:do: [:each |
-					acc := acc @env0:bitOr:
-						((negative ifTrue: [255 @env0:- each] ifFalse: [each])
-							@env0:bitShift: shift).
-					shift := shift @env0:+ 8]].
-		negative
-			ifTrue: [(acc @env0:+ 1) @env0:negated]
-			ifFalse: [acc]]
-				@env0:on: NumericError
-				do: [:ex | OverflowError ___signal___: 'result exceeds Grail integer capacity'].
-
-	^ result
+	^ self ___intFromBytes___: bytes _: byteorder _: signed
 
 ]
 
@@ -910,6 +917,49 @@ Integer >> ___floorQuotientOf___: aDividend by: aDivisor [
 		and: [(aDivisor @env0:isKindOf: Integer) and: [aDivisor @env0:= -1]])
 			ifTrue: [^ aDividend @env0:negated].
 	^ aDividend @env0:// aDivisor
+
+]
+
+{ #category : 'Grail-Private' }
+Integer >> ___intToBytes___: length _: byteorder _: signed [
+	"int.to_bytes(length, byteorder='big', *, signed=False)
+	Return an array of bytes representing an integer."
+
+	| numBytes isBigEndian isSigned val bytes |
+	numBytes := length.
+	isBigEndian := int ___isBigEndian___: byteorder.
+	isSigned := (signed == true) or: [signed == true].
+	val := self.
+
+	((val @env0:< 0) and: [isSigned @env0:not]) ifTrue: [
+		OverflowError ___signal___: 'can''t convert negative int to unsigned'].
+	(self ___fitsInBytes___: numBytes signed: isSigned) ifFalse: [
+		OverflowError ___signal___: 'int too big to convert'].
+	"No explicit two's complement for a negative value: GemStone's bitAnd: and
+	bitShift: already treat a negative integer as infinite two's complement
+	(-1 bitAnd: 255 is 255, -1 bitShift: -8 is -1), so the loop below writes
+	its bytes directly.  The old step added 2**(8n), which for a length at
+	GemStone's LargeInteger ceiling could not be built (error 2503, see
+	___fitsInBytes___:signed:)."
+
+	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
+	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython
+	answers ``b'*\\x00''' -- the same numbers, the wrong type, and a wrong type
+	that prints plausibly.  Anything that then indexed or concatenated the
+	result got a tuple and said so somewhere else entirely.
+
+	ByteArray is Grail's bytes; each element is already the 0..255 value the
+	loop computes."
+	bytes := ByteArray @env0:new: numBytes.
+	1 @env0:to: numBytes do: [:i |
+		| byteVal idx |
+		byteVal := (val @env0:bitAnd: 16rFF).
+		idx := isBigEndian
+			ifTrue: [(numBytes @env0:- (i @env0:- 1))]
+			ifFalse: [i].
+		bytes @env0:at: idx put: byteVal.
+		val := val @env0:bitShift: -8].
+	^ bytes
 
 ]
 
@@ -2092,7 +2142,7 @@ Integer >> to_bytes [
 	CPython's own ipaddress -- which writes ``self._ip.to_bytes(4)'' -- could
 	not run here."
 
-	^ self to_bytes: 1 _: 'big' _: false
+	^ self ___intToBytes___: 1 _: 'big' _: false
 
 ]
 
@@ -2100,7 +2150,7 @@ Integer >> to_bytes [
 Integer >> to_bytes: length [
 	"``(258).to_bytes(4)'' -- byteorder defaults to 'big'; see to_bytes."
 
-	^ self to_bytes: length _: 'big' _: false
+	^ self ___intToBytes___: length _: 'big' _: false
 
 ]
 
@@ -2112,49 +2162,13 @@ Integer >> to_bytes: length _: byteorder [
 	doesn't exist (Python-keyword style accidentally used instead
 	of Grail's ``_:'' convention)."
 
-	^ self to_bytes: length _: byteorder _: false
+	^ self ___intToBytes___: length _: byteorder _: false
 
 ]
 
 { #category : 'Grail-Integer Methods' }
 Integer >> to_bytes: length _: byteorder _: signed [
-	"int.to_bytes(length, byteorder='big', *, signed=False)
-	Return an array of bytes representing an integer."
 
-	| numBytes isBigEndian isSigned val bytes |
-	numBytes := length.
-	isBigEndian := int ___isBigEndian___: byteorder.
-	isSigned := (signed == true) or: [signed == true].
-	val := self.
-
-	((val @env0:< 0) and: [isSigned @env0:not]) ifTrue: [
-		OverflowError ___signal___: 'can''t convert negative int to unsigned'].
-	(self ___fitsInBytes___: numBytes signed: isSigned) ifFalse: [
-		OverflowError ___signal___: 'int too big to convert'].
-	"No explicit two's complement for a negative value: GemStone's bitAnd: and
-	bitShift: already treat a negative integer as infinite two's complement
-	(-1 bitAnd: 255 is 255, -1 bitShift: -8 is -1), so the loop below writes
-	its bytes directly.  The old step added 2**(8n), which for a length at
-	GemStone's LargeInteger ceiling could not be built (error 2503, see
-	___fitsInBytes___:signed:)."
-
-	"A BYTES OBJECT, not a tuple.  The method built a ``tuple'' of the byte
-	VALUES, so ``(42).to_bytes(2, 'little')'' answered ``(42, 0)'' where CPython
-	answers ``b'*\\x00''' -- the same numbers, the wrong type, and a wrong type
-	that prints plausibly.  Anything that then indexed or concatenated the
-	result got a tuple and said so somewhere else entirely.
-
-	ByteArray is Grail's bytes; each element is already the 0..255 value the
-	loop computes."
-	bytes := ByteArray @env0:new: numBytes.
-	1 @env0:to: numBytes do: [:i |
-		| byteVal idx |
-		byteVal := (val @env0:bitAnd: 16rFF).
-		idx := isBigEndian
-			ifTrue: [(numBytes @env0:- (i @env0:- 1))]
-			ifFalse: [i].
-		bytes @env0:at: idx put: byteVal.
-		val := val @env0:bitShift: -8].
-	^ bytes
+	^ self ___intToBytes___: length _: byteorder _: signed
 
 ]

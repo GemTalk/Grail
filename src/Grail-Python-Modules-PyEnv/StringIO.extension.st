@@ -290,6 +290,26 @@ StringIO >> ___ioReadline___: limit [
 ]
 
 { #category : 'Grail-Private' }
+StringIO >> ___ioReadlines___: aHint [
+	"readlines(hint=-1) -- IOBase's: the lines left, stopping after the one
+	that takes their total length past the hint when it is positive
+	(_io__IOBase_readlines_impl)."
+
+	| hint lines line total |
+	hint := aHint ___asSizeOr: -1.
+	self _checkOpen.
+	lines := list ___new___.
+	total := 0.
+	[line := self readline.
+	line __len__ @env0:= 0] @env0:whileFalse: [
+		lines append: line.
+		total := total @env0:+ line __len__.
+		(hint @env0:> 0 and: [total @env0:> hint]) ifTrue: [^ lines]].
+	^ lines
+
+]
+
+{ #category : 'Grail-Private' }
 StringIO >> ___ioSeek___: pos whence: whence [
 	"seek(pos, whence=0) -- both as ints through __index__, so a float is a
 	TypeError; an unknown whence and an absolute position before the start
@@ -771,27 +791,14 @@ StringIO >> readline: limit [
 
 { #category : 'Grail-Reading' }
 StringIO >> readlines [
-	^ self readlines: None
+	^ self ___ioReadlines___: None
 
 ]
 
 { #category : 'Grail-Reading' }
 StringIO >> readlines: aHint [
-	"readlines(hint=-1) -- IOBase's: the lines left, stopping after the one
-	that takes their total length past the hint when it is positive
-	(_io__IOBase_readlines_impl)."
 
-	| hint lines line total |
-	hint := aHint ___asSizeOr: -1.
-	self _checkOpen.
-	lines := list ___new___.
-	total := 0.
-	[line := self readline.
-	line __len__ @env0:= 0] @env0:whileFalse: [
-		lines append: line.
-		total := total @env0:+ line __len__.
-		(hint @env0:> 0 and: [total @env0:> hint]) ifTrue: [^ lines]].
-	^ lines
+	^ self ___ioReadlines___: aHint
 
 ]
 

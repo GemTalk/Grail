@@ -81,6 +81,29 @@ JSONDecoder >> ___init__: positional kw: kwargs [
 ]
 
 { #category : 'Grail-Private' }
+JSONDecoder >> ___jsonRawDecode___: s _: idx [
+	"(obj, end): the value that STARTS at idx, and the index just past it.
+	Unlike decode, no whitespace is skipped first and anything after the
+	value is ignored -- the streaming use."
+
+	| text state result |
+	(s isKindOf: CharacterCollection) ifFalse: [
+		^ TypeError ___signal___: 'first argument must be a string, not '
+			@env0:, s ___pyTypeNameForError___].
+	self ___requireScanner___.
+	idx @env0:< 0 ifTrue: [^ ValueError ___signal___: 'idx cannot be negative'].
+	text := s @env0:asString.
+	state := Array @env0:with: text with: idx @env0:+ 1 with: scanHooks with: scanStrict.
+	"The parser skips whitespace before a value; raw_decode must not."
+	(idx @env0:< text @env0:size
+		and: [#( 32 9 10 13 ) @env0:includes: (text @env0:at: idx @env0:+ 1) @env0:codePoint]) ifTrue: [
+			^ JSONDecodeError ___signalMsg___: 'Expecting value' doc: text pos: idx].
+	result := (json instance) _parseValue: state.
+	^ tuple @env0:withAll: { result. (state @env0:at: 2) @env0:- 1 }
+
+]
+
+{ #category : 'Grail-Private' }
 JSONDecoder >> ___requireScanner___ [
 	"CPython's decode and raw_decode use self.scan_once, which only
 	JSONDecoder.__init__ creates."
@@ -140,29 +163,13 @@ JSONDecoder >> decode: s [
 
 { #category : 'Grail-Decoding' }
 JSONDecoder >> raw_decode: s [
-	^ self raw_decode: s _: 0
+	^ self ___jsonRawDecode___: s _: 0
 
 ]
 
 { #category : 'Grail-Decoding' }
 JSONDecoder >> raw_decode: s _: idx [
-	"(obj, end): the value that STARTS at idx, and the index just past it.
-	Unlike decode, no whitespace is skipped first and anything after the
-	value is ignored -- the streaming use."
 
-	| text state result |
-	(s isKindOf: CharacterCollection) ifFalse: [
-		^ TypeError ___signal___: 'first argument must be a string, not '
-			@env0:, s ___pyTypeNameForError___].
-	self ___requireScanner___.
-	idx @env0:< 0 ifTrue: [^ ValueError ___signal___: 'idx cannot be negative'].
-	text := s @env0:asString.
-	state := Array @env0:with: text with: idx @env0:+ 1 with: scanHooks with: scanStrict.
-	"The parser skips whitespace before a value; raw_decode must not."
-	(idx @env0:< text @env0:size
-		and: [#( 32 9 10 13 ) @env0:includes: (text @env0:at: idx @env0:+ 1) @env0:codePoint]) ifTrue: [
-			^ JSONDecodeError ___signalMsg___: 'Expecting value' doc: text pos: idx].
-	result := (json instance) _parseValue: state.
-	^ tuple @env0:withAll: { result. (state @env0:at: 2) @env0:- 1 }
+	^ self ___jsonRawDecode___: s _: idx
 
 ]

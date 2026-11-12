@@ -1079,9 +1079,22 @@ static inline int _Py_IsDigit(Py_UCS4 ch) {
    made `\d` miss U+FF11 and Decimal('1' fullwidth) come back NaN. */
 #define Py_UNICODE_ISDECIMAL(ch) _grail_unicode_isdecimal(ch)
 
+/* CPython's whitespace, which is what a regular expression's \s matches: the
+   29 code points of _PyUnicode_IsWhitespace (Objects/unicodetype_db.h:6676,
+   bidirectional type WS, B or S, or category Zs), with its ASCII fast path
+   (_Py_ascii_whitespace, Objects/unicodeobject.c:470).  It was isspace() and
+   iswspace(): isspace() leaves out the four separators 0x1C-0x1F, and
+   iswspace() follows the C library's locale, so U+0085 was not whitespace on
+   a Mac and what else was depended on the machine. */
 static inline int Py_UNICODE_ISSPACE(Py_UCS4 ch) {
-    if (ch < 128) return isspace((unsigned char)ch);
-    return iswspace((wint_t)ch);
+    if (ch < 128) return (ch >= 0x09 && ch <= 0x0D) || (ch >= 0x1C && ch <= 0x20);
+    switch (ch) {
+    case 0x0085: case 0x00A0: case 0x1680: case 0x2028: case 0x2029:
+    case 0x202F: case 0x205F: case 0x3000:
+        return 1;
+    default:
+        return ch >= 0x2000 && ch <= 0x200A;
+    }
 }
 
 static inline int Py_UNICODE_ISLINEBREAK(Py_UCS4 ch) {

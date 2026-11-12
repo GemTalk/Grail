@@ -47,6 +47,17 @@ fi
 # Flask once each) to overflow the default 20%-of-cache code space.  Topaz
 # `-C` overrides take precedence over gem.conf.
 #
+# GEM_TEMPOBJ_CODE_SIZE is 600000 (600 MB, the most system.conf allows) because
+# 300000 ran out on CI.  The code region holds every method and doit a shard
+# compiles and, on Linux x86_64 only, their NATIVE code as well -- about
+# three times the Mac's figure, so a Mac never comes near the cap.  Text-arm
+# shard 2 died of it twice with the fatal "native code space full" (error
+# 4067; runs 42327784296 and 43130377566), and on every green run between
+# those two it peaked at 237-243 MB, 81% of the old cap (GRAIL_SHARD_CODE).
+# What tipped it over the second time was the MIX of classes GrailShardPlan
+# gave it: one new test class anywhere in the suite reshuffles the small
+# classes across shards, so any PR could trip it.
+#
 # CACHE_SIZE governs the whole temp-object cache (new + old gen + code).
 # It has been raised in step with the growing in-suite import surface to
 # avoid spurious markSweep-exhaustion ("VM temporary object memory is
@@ -126,7 +137,7 @@ fi
 # short of the regime that starts somewhere between 4032 and 6163.
 # run_cpython_suite.sh keeps 74000 -- a different corpus with different
 # evidence, and nothing measured here says anything about it.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=600000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
 
 EXIT=0
 

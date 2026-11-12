@@ -1,5 +1,17 @@
 Extension { #name : 'ClassBodyLocals' }
 
+{ #category : 'Grail-Private' }
+ClassBodyLocals >> ___dictSetdefault___: key _: default [
+	"``vars().setdefault(name, x)'' -- an insertion, so it binds the class
+	attribute like any other.  An already-present key is answered untouched, so
+	no store happens and the class is not disturbed."
+
+	self ___grailClass___ @env0:isNil ifTrue: [^ super ___dictSetdefault___: key _: default].
+	(self @env0:includesKey: key) ifTrue: [^ self @env0:at: key].
+	^ self __setitem__: key _: default
+
+]
+
 { #category : 'Grail-Class Namespace' }
 ClassBodyLocals >> ___grailBindClass___: aClass [
 	"Connect the writes, once the entries are seeded.  Until this runs every
@@ -142,13 +154,8 @@ ClassBodyLocals >> popitem [
 
 { #category : 'Grail-Python Protocol' }
 ClassBodyLocals >> setdefault: key _: default [
-	"``vars().setdefault(name, x)'' -- an insertion, so it binds the class
-	attribute like any other.  An already-present key is answered untouched, so
-	no store happens and the class is not disturbed."
 
-	self ___grailClass___ @env0:isNil ifTrue: [^ super setdefault: key _: default].
-	(self @env0:includesKey: key) ifTrue: [^ self @env0:at: key].
-	^ self __setitem__: key _: default
+	^ self ___dictSetdefault___: key _: default
 
 ]
 
