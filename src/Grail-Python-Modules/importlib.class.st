@@ -10897,7 +10897,7 @@ importlib class >> ___visibleMroOf___: aClass [
 				[c notNil] whileTrue: [
 					(exMro includesIdentical: c) ifFalse: [skip add: c].
 					c := c superclass]]].
-	^ out asArray
+	^ self ___withPythonOnlyBases___: out
 
 ]
 
@@ -11016,6 +11016,27 @@ importlib class >> ___withoutImplementationRoots___: aCollection for: aClass [
 			and: [each ~~ aClass])
 				ifFalse: [result add: each]].
 	^ Array withAll: result
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___withPythonOnlyBases___: aMro [
+
+	"aMro with the visible MRO of each class's Python-only base spliced in
+	after it (Object >> ___pythonOnlyBase___): ``bool.__mro__'' is
+	(bool, int, object), though Boolean's Smalltalk superclass is Object.
+	Reporting only, as ___visibleMroOf___: is."
+
+	| out |
+
+	out := OrderedCollection new.
+	aMro do: [:each | | base |
+		(out includesIdentical: each) ifFalse: [out add: each].
+		base := each ___pythonOnlyBase___.
+		base ifNotNil: [
+			(self ___visibleMroOf___: base) do: [:inherited |
+				(out includesIdentical: inherited) ifFalse: [out add: inherited]]]].
+	^ out asArray
 
 ]
 
