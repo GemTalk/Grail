@@ -1675,7 +1675,9 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 			question above is asked first -- the build walks into the class's
 			own scope -- and it is the ENCLOSING scope these expressions read."
 			preNodes := self ___irHeaderNodes___.
-			preValues := preNodes collect: [:n | n ___emitIRValueOn___: aBuilder].
+			preValues := OrderedCollection new.
+			self ___irHeaderNodesDo___: [:n | preValues add: (n ___emitIRValueOn___: aBuilder)].
+			preValues := preValues asArray.
 			sel := self ___irHelperSelector___: carried pre: preNodes notEmpty.
 			src := self ___irBuildClassHelper___: sel carrying: carried pre: preNodes on: aBuilder]
 		ifFalse: [
@@ -2391,8 +2393,8 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 							and: [(s targets at: 1) isKindOf: NameAst])
 							and: [s value isKindOf: ConstantAst])
 								ifFalse: [^ #'irHelper:assign']]]]].
-	(self ___irHeaderNodes___ allSatisfy: [:n | n ___irEligibleValueLocals___: localNames])
-		ifFalse: [^ #'irHelper:header'].
+	self ___irHeaderNodesDo___: [:n |
+		(n ___irEligibleValueLocals___: localNames) ifFalse: [^ #'irHelper:header']].
 	^ nil
 
 ]
@@ -2603,12 +2605,39 @@ ClassDefAst >> ___irHeaderNodes___ [
 
 	| nodes |
 	nodes := OrderedCollection new.
-	decorator_list isNil ifFalse: [decorator_list do: [:d | nodes add: d]].
-	bases isNil ifFalse: [
-		bases do: [:b |
-			nodes add: ((b isKindOf: StarredAst) ifTrue: [b value] ifFalse: [b])]].
-	keywords isNil ifFalse: [keywords do: [:k | nodes add: k value]].
+	self ___irHeaderNodesDo___: [:n | nodes add: n].
 	^ nodes asArray
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irHeaderNodesDo___: aBlock [
+	"Evaluate aBlock with each node of ___irHeaderNodes___, in that order, under
+	the flag the text's header emit sets for it (printClassHeaderOn: and the
+	decorator loop): ``inDecoratorEmit'' for a decorator or a keyword value,
+	``inBasesEmit'' for a base.  The flags say the expression evaluates in the
+	scope ENCLOSING the class statement, which is where the IR helper's caller
+	evaluates it; without them a walrus there (``@d := deco'') read its
+	target as the enclosing def's local seen from inside the class, a cell, and
+	raised ``free variable 'd' has no enclosing binding'' (NamedExprAst >>
+	___irClassCellTargetName___).  Restored on any exit."
+
+	| savedBases savedDeco |
+	savedBases := CallAst inBasesEmit.
+	savedDeco := CallAst inDecoratorEmit.
+	[CallAst inDecoratorEmit: true.
+	 decorator_list isNil ifFalse: [decorator_list do: [:d | aBlock value: d]].
+	 CallAst inDecoratorEmit: (savedDeco == true).
+	 CallAst inBasesEmit: true.
+	 bases isNil ifFalse: [
+		bases do: [:b |
+			aBlock value: ((b isKindOf: StarredAst) ifTrue: [b value] ifFalse: [b])]].
+	 CallAst inBasesEmit: (savedBases == true).
+	 CallAst inDecoratorEmit: true.
+	 keywords isNil ifFalse: [keywords do: [:k | aBlock value: k value]]]
+		ensure: [
+			CallAst inBasesEmit: (savedBases == true).
+			CallAst inDecoratorEmit: (savedDeco == true)]
 
 ]
 

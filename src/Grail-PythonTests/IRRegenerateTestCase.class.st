@@ -76,13 +76,22 @@ IRRegenerateTestCase >> ___fixturePath___ [
 
 { #category : 'Grail-Private' }
 IRRegenerateTestCase >> ___irMethodsOf___: aClass [
-	"Every IR-built method of aClass, both sides."
+	"Every IR-built CLASS METHOD of aClass, both sides.
+
+	Not a method-local class's helper (``___irClassDef_<n>_<C>___'').  Since
+	P3.2 it is built through IR too, so it carries the IR marker, but it is not
+	a def: it has no def id and no builder of its own in the cache.  It is
+	built, and regenerated onto another class, as part of the def whose class
+	statement it is (PyMethodIRBuilder >> classHelpers) --
+	testAnUninstalledMethodMustReachItsClassHelper covers that."
 
 	| out |
 	out := OrderedCollection new.
 	{ aClass. aClass class } do: [:c |
 		(c methodDictForEnv: 1) keysAndValuesDo: [:sel :meth |
-			(BaseException ___isIRPythonMethod___: meth) ifTrue: [out add: meth]]].
+			((BaseException ___isIRPythonMethod___: meth)
+				and: [(BaseException ___classBodyHelperClassNameFor___: sel) isNil])
+					ifTrue: [out add: meth]]].
 	^ out
 
 ]
