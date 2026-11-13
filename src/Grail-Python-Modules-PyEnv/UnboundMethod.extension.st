@@ -520,9 +520,13 @@ UnboundMethod >> ___codeForClass___: aClass [
 
 { #category : 'Grail-Python Metadata' }
 UnboundMethod >> ___docForClass___: aClass [
-	"This handle's selector in ___methodDocTable___, or nil."
+	"This handle's selector in ___methodDocTable___, or nil.  A builtin type's
+	method -- ``str.split'' -- is in no such table, and has CPython's docstring
+	in a generated one instead (Object >> ___builtinMethodDocstringFor:)."
 
-	^ self ___tableEntryFor___: aClass table: #'___methodDocTable___'
+	aClass == nil ifTrue: [^ nil].
+	^ (self ___tableEntryFor___: aClass table: #'___methodDocTable___')
+		ifNil: [aClass ___builtinMethodDocstringFor: selector @env0:asString]
 
 ]
 

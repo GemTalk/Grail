@@ -776,7 +776,9 @@ BoundMethod >> ___methodDocForClass___: aClass name: aName [
 		((c @env0:class @env0:whichClassIncludesSelector: #'___methodDocTable___' environmentId: 1) ~~ nil) ifTrue: [
 			tbl := c ___methodDocTable___.
 			(tbl @env0:includesKey: aName) ifTrue: [^ tbl @env0:at: aName]]].
-	^ nil
+	"No class statement documents it: a builtin type's method -- ``'a'.split'' --
+	has CPython's docstring in a generated table instead."
+	^ aClass ___builtinMethodDocstringFor: aName
 
 ]
 

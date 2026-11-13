@@ -7589,6 +7589,48 @@ Object >> ___buildSelectorFamily___: aString [
 ]
 
 { #category : 'Grail-Introspection' }
+Object >> ___builtinMethodDocstringFor: aName [
+
+	"CPython's docstring for the method aName that this class reaches in a
+	builtin type -- str.split, or bit_length for a subclass of int -- or nil.
+
+	It walks the Python MRO and stops at the first class that defines aName.  A
+	builtin type answers its generated docstring (builtins class >>
+	___methodDocTableFor_str___ and its siblings).  A Python class answers nil,
+	because its own ___methodDocTable___ has already answered for it: an
+	undocumented override is None, not its base's text."
+
+	| order |
+
+	order := [self __mro__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	order @env0:do: [:each | | table |
+		(each ___ownMethodDocTableIncludes: aName) ifTrue: [^ nil].
+		table := each ___builtinMethodDocTable___.
+		(table @env0:notNil and: [table @env0:includesKey: aName]) ifTrue: [^ table @env0:at: aName]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___builtinMethodDocTable___ [
+
+	"CPython's method docstrings for this class when it is one of the builtins
+	module's types and documents any, as generated into builtins class >>
+	___methodDocTableFor_str___ and its siblings; nil otherwise."
+
+	| builtinsClass name selector |
+
+	builtinsClass := Python @env0:at: #builtins.
+	name := [self __name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [^ nil].
+	selector := ('___methodDocTableFor_' @env0:, name @env0:asString @env0:, '___') @env0:asSymbol.
+	(builtinsClass @env0:class @env0:includesSelector: selector environmentId: 1) ifFalse: [^ nil].
+	^ builtinsClass @env0:perform: selector env: 1
+
+]
+
+{ #category : 'Grail-Introspection' }
 Object >> ___builtinTypeDocstring___ [
 
 	"CPython's docstring for this class when it is one of the builtins module's
@@ -14668,6 +14710,18 @@ Object >> ___ownChainOwnsAnyOf___: family orUnary: aSym from: aClass [
 		(self ___class___: walker owns: aSym family: family) ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___ownMethodDocTableIncludes: aName [
+
+	"Whether this class's own class-side ___methodDocTable___, the one ClassDefAst
+	compiles for a class statement, names aName."
+
+	(self @env0:class @env0:includesSelector: #'___methodDocTable___' environmentId: 1)
+		ifFalse: [^ false].
+	^ self ___methodDocTable___ @env0:includesKey: aName
 
 ]
 
