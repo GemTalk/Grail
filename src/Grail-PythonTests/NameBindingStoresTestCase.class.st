@@ -77,14 +77,16 @@ NameBindingStoresTestCase >> ___keysIn___: aModule [
 { #category : 'Grail-Private' }
 NameBindingStoresTestCase >> ___knownFallbacks___ [
 	"Fixture name -> how many of its defs the IR build still hands to text.
-	name_binding_stores: HeaderWalrus.m, whose ``@d := deco'' and
-	``metaclass=(mk := Meta)'' fail to build under IR with ``undefined symbol
-	d'' -- a gap older than this change; the text fallback gives CPython's
-	answer.  Pinned with =, so a fix shows up as a count to lower."
+	Pinned with =, so a fix shows up as a count to lower.
+
+	name_binding_stores held one until P3.2: HeaderWalrus.m, whose
+	``@d := deco'' and ``metaclass=(mk := Meta)'' failed to build under IR
+	with ``undefined symbol d'' (#2170).  Its classes' helpers are now built
+	through IR, and the header is evaluated by the enclosing IR method, which
+	binds the walrus target like any other.  A class whose body still takes
+	the text helper keeps #2170."
 
 	^ Dictionary new
-		at: 'name_binding_stores' put: 1;
-		yourself
 
 ]
 
