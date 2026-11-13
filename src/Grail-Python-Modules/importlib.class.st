@@ -2547,10 +2547,19 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 	not be keyed by the method's own selector (measured: the shared GsNMethod
 	answers under both keys and still reports its original selector)."
 
-	| meth md src target |
+	| meth md src target site isIR |
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
+	site := aPrefix isEmpty
+		ifTrue: [aCategory asString = 'Grail-MI-Inherited'
+			ifTrue: [aClass isMeta ifTrue: ['mi-class'] ifFalse: ['mi']]
+			ifFalse: ['enum']]
+		ifFalse: ['del-shadow'].
+	isIR := BaseException ___isIRPythonMethod___: meth.
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	self ___irCensusCopy___: site
+		route: (src isNil ifTrue: ['shared'] ifFalse: [isIR ifTrue: ['twin'] ifFalse: ['text']])
+		source: src.
 	src notNil ifTrue: [
 		src := self ___unshadowInstVarsIn___: src for: aClass.
 		"With the scope the original was compiled with: a method from exec'd
@@ -2599,6 +2608,11 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	self ___irCensusCopy___: ((aPrefix beginsWith: '___grailDirect') ifTrue: ['direct'] ifFalse: ['dispatch-shadow'])
+		route: (src isNil
+			ifTrue: ['shared']
+			ifFalse: [(BaseException ___isIRPythonMethod___: meth) ifTrue: ['twin'] ifFalse: ['text']])
+		source: src.
 	src notNil ifTrue: [
 		"With the original's scope, as ___copyMethod___:from:to:prefix:category:."
 		^ [aClass perform: #'___compileSessionMethod:category:scope:' env: 1
@@ -5317,12 +5331,21 @@ importlib class >> ___irBuilderForMethod___: aMethod [
 	module-level def, a doit, or a class method of a class built before ids
 	were recorded) -- the consumer then keeps its text route."
 
-	| builder |
+	| builder t0 |
 	aMethod isNil ifTrue: [^ nil].
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ nil].
 	builder := self ___irBuilderCache___ at: aMethod otherwise: nil.
 	builder notNil ifTrue: [^ builder].
-	^ self ___irRebuildBuilderFor___: aMethod
+	t0 := Time millisecondClockValue.
+	builder := self ___irRebuildBuilderFor___: aMethod.
+	"The census's cost row for a miss: how many rebuilds, and their time
+	(cpms:, milliseconds)."
+	self ___irCensusOn___ ifTrue: [
+		self ___irCensusCopy___: 'rebuild'
+			route: (builder isNil ifTrue: ['refused'] ifFalse: ['ok']) source: nil.
+		self ___irCensusNote___: #'cpms:rebuild' module: self ___irCensusModuleName___
+			def: 'rebuild' count: Time millisecondClockValue - t0].
+	^ builder
 
 ]
 
@@ -5400,6 +5423,32 @@ importlib class >> ___irCensusClassMethodsOf___: moduleAst name: aModuleName [
 					(inner isKindOf: FunctionDefAst) ifTrue: [
 						self ___irCensusNote___: #classMethod module: aModuleName
 							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil [
+	"One row for a method COPIED onto another class or selector (plan P2.2):
+	``cp:<site>:<route>'' counts the copies and ``cpb:<site>:<route>'' adds the
+	characters of Smalltalk source recompiled for them.  The site says which
+	consumer made the copy (mi, mi-class, enum, del-shadow, dispatch-shadow,
+	direct, special, st-class); the route says how:
+	  regen   regenerated from the method's IR builder (no text)
+	  shared  the same GsNMethod installed under the new key (no text)
+	  twin    an IR method recompiled from its ___irTextSources___ twin
+	  text    a text-compiled method recompiled from its own source
+	  none    nothing copied (no source, nothing to share)
+	The P2.2 exit gate is that ``twin'' reads zero.  A no-op unless the
+	census is on."
+
+	| m |
+	self ___irCensusOn___ ifFalse: [^ self].
+	m := self ___irCensusModuleName___.
+	self ___irCensusNote___: ('cp:' , aSite , ':' , aRoute) asSymbol
+		module: m def: aSite count: 1.
+	aSourceOrNil isNil ifFalse: [
+		self ___irCensusNote___: ('cpb:' , aSite , ':' , aRoute) asSymbol
+			module: m def: aSite count: aSourceOrNil size]
 
 ]
 

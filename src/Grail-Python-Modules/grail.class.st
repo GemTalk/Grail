@@ -28,6 +28,16 @@ grail class >> ___applySmallTalkClass: tempClass dictionary: dictName name: clas
 ]
 
 { #category : 'Grail-smalltalk_class' }
+grail class >> ___censusRouteOf___: aMethod source: aSourceOrNil [
+	"The P2.2 census route of one @smalltalk_class copy
+	(importlib ___irCensusCopy___:route:source:)."
+
+	aSourceOrNil isNil ifTrue: [^ 'none'].
+	^ (BaseException ___isIRPythonMethod___: aMethod) ifTrue: ['twin'] ifFalse: ['text']
+
+]
+
+{ #category : 'Grail-smalltalk_class' }
 grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 	"Copy all env-1 methods in category ''Grail-Class Methods'' from tempClass
 	(and its metaclass) onto targetClass (and its metaclass respectively).
@@ -46,6 +56,9 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 				is in the class-side ___irTextSources___ table."
 				src := importlib ___textSourceFor___: (tempClass compiledMethodAt: sel environmentId: 1)
 					in: tempClass selector: sel.
+				importlib ___irCensusCopy___: 'st-class'
+					route: (self ___censusRouteOf___: (tempClass compiledMethodAt: sel environmentId: 1) source: src)
+					source: src.
 				src notNil ifTrue: [
 					targetClass perform: #'___compileMethod:category:'
 						env: 1
@@ -64,6 +77,9 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 				@classmethod's sourceString is its Python, not Smalltalk."
 				src := importlib ___textSourceFor___: (tempClass class compiledMethodAt: sel environmentId: 1)
 					in: tempClass class selector: sel.
+				importlib ___irCensusCopy___: 'st-class'
+					route: (self ___censusRouteOf___: (tempClass class compiledMethodAt: sel environmentId: 1) source: src)
+					source: src.
 				src notNil ifTrue: [
 					targetClass class perform: #'___compileMethod:category:'
 						env: 1
