@@ -347,6 +347,1185 @@ raise a ValueError.
 ]
 
 { #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_BaseException___ [
+	"CPython's ``__doc__'' for each public method the builtin type BaseException defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'add_note' put: 'Add a note to the exception';
+		@env0:at: 'with_traceback' put: 'Set self.__traceback__ to tb and return self.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_bytearray___ [
+	"CPython's ``__doc__'' for each public method the builtin type bytearray defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'append' put: 'Append a single item to the end of the bytearray.
+
+  item
+    The item to be appended.';
+		@env0:at: 'capitalize' put: 'B.capitalize() -> copy of B
+
+Return a copy of B with only its first character capitalized (ASCII)
+and the rest lower-cased.';
+		@env0:at: 'center' put: 'Return a centered string of length width.
+
+Padding is done using the specified fill character.';
+		@env0:at: 'clear' put: 'Remove all items from the bytearray.';
+		@env0:at: 'copy' put: 'Return a copy of B.';
+		@env0:at: 'count' put: 'Return the number of non-overlapping occurrences of subsection ''sub'' in bytes B[start:end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.';
+		@env0:at: 'decode' put: 'Decode the bytearray using the codec registered for encoding.
+
+  encoding
+    The encoding with which to decode the bytearray.
+  errors
+    The error handling scheme to use for the handling of decoding
+    errors.  The default is ''strict'' meaning that decoding errors
+    raise a UnicodeDecodeError.  Other possible values are ''ignore''
+    and ''replace'' as well as any other name registered with
+    codecs.register_error that can handle UnicodeDecodeErrors.';
+		@env0:at: 'endswith' put: 'Return True if the bytearray ends with the specified suffix, False otherwise.
+
+  suffix
+    A bytes or a tuple of bytes to try.
+  start
+    Optional start position. Default: start of the bytearray.
+  end
+    Optional stop position. Default: end of the bytearray.';
+		@env0:at: 'expandtabs' put: 'Return a copy where all tab characters are expanded using spaces.
+
+If tabsize is not given, a tab size of 8 characters is assumed.';
+		@env0:at: 'extend' put: 'Append all the items from the iterator or sequence to the end of the bytearray.
+
+  iterable_of_ints
+    The iterable of items to append.';
+		@env0:at: 'find' put: 'Return the lowest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start:end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Return -1 on failure.';
+		@env0:at: 'fromhex' put: 'Create a bytearray object from a string of hexadecimal numbers.
+
+Spaces between two numbers are accepted.
+Example:
+    bytearray.fromhex(''B9 01EF'') -> bytearray(b''\\xb9\\x01\\xef'')';
+		@env0:at: 'hex' put: 'Create a string of hexadecimal numbers from a bytearray object.
+
+  sep
+    An optional single character or byte to separate hex bytes.
+  bytes_per_sep
+    How many bytes between separators.  Positive values count from
+    the right, negative values count from the left.
+
+Example:
+>>> value = bytearray([0xb9, 0x01, 0xef])
+>>> value.hex()
+''b901ef''
+>>> value.hex('':'')
+''b9:01:ef''
+>>> value.hex('':'', 2)
+''b9:01ef''
+>>> value.hex('':'', -2)
+''b901:ef''';
+		@env0:at: 'index' put: 'Return the lowest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start:end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Raise ValueError if the subsection is not found.';
+		@env0:at: 'insert' put: 'Insert a single item into the bytearray before the given index.
+
+  index
+    The index where the value is to be inserted.
+  item
+    The item to be inserted.';
+		@env0:at: 'isalnum' put: 'B.isalnum() -> bool
+
+Return True if all characters in B are alphanumeric
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'isalpha' put: 'B.isalpha() -> bool
+
+Return True if all characters in B are alphabetic
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'isascii' put: 'B.isascii() -> bool
+
+Return True if B is empty or all characters in B are ASCII,
+False otherwise.';
+		@env0:at: 'isdigit' put: 'B.isdigit() -> bool
+
+Return True if all characters in B are digits
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'islower' put: 'B.islower() -> bool
+
+Return True if all cased characters in B are lowercase and there is
+at least one cased character in B, False otherwise.';
+		@env0:at: 'isspace' put: 'B.isspace() -> bool
+
+Return True if all characters in B are whitespace
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'istitle' put: 'B.istitle() -> bool
+
+Return True if B is a titlecased string and there is at least one
+character in B, i.e. uppercase characters may only follow uncased
+characters and lowercase characters only cased ones. Return False
+otherwise.';
+		@env0:at: 'isupper' put: 'B.isupper() -> bool
+
+Return True if all cased characters in B are uppercase and there is
+at least one cased character in B, False otherwise.';
+		@env0:at: 'join' put: 'Concatenate any number of bytes/bytearray objects.
+
+The bytearray whose method is called is inserted in between each
+pair.
+
+The result is returned as a new bytearray object.';
+		@env0:at: 'ljust' put: 'Return a left-justified string of length width.
+
+Padding is done using the specified fill character.';
+		@env0:at: 'lower' put: 'B.lower() -> copy of B
+
+Return a copy of B with all ASCII characters converted to lowercase.';
+		@env0:at: 'lstrip' put: 'Strip leading bytes contained in the argument.
+
+If the argument is omitted or None, strip leading ASCII whitespace.';
+		@env0:at: 'maketrans' put: 'Return a translation table usable for the bytes or bytearray translate method.
+
+The returned table will be one where each byte in frm is mapped to
+the byte at the same position in to.
+
+The bytes objects frm and to must be of the same length.';
+		@env0:at: 'partition' put: 'Partition the bytearray into three parts using the given separator.
+
+This will search for the separator sep in the bytearray.  If the
+separator is found, returns a 3-tuple containing the part before the
+separator, the separator itself, and the part after it as new
+bytearray objects.
+
+If the separator is not found, returns a 3-tuple containing the copy
+of the original bytearray object and two empty bytearray objects.';
+		@env0:at: 'pop' put: 'Remove and return a single item from B.
+
+  index
+    The index from where to remove the item.
+    -1 (the default value) means remove the last item.
+
+If no index argument is given, will pop the last item.';
+		@env0:at: 'remove' put: 'Remove the first occurrence of a value in the bytearray.
+
+  value
+    The value to remove.';
+		@env0:at: 'removeprefix' put: 'Return a bytearray with the given prefix string removed if present.
+
+If the bytearray starts with the prefix string, return
+bytearray[len(prefix):].  Otherwise, return a copy of the original
+bytearray.';
+		@env0:at: 'removesuffix' put: 'Return a bytearray with the given suffix string removed if present.
+
+If the bytearray ends with the suffix string and that suffix is not
+empty, return bytearray[:-len(suffix)].  Otherwise, return a copy of
+the original bytearray.';
+		@env0:at: 'replace' put: 'Return a copy with all occurrences of substring old replaced by new.
+
+  count
+    Maximum number of occurrences to replace.
+    -1 (the default value) means replace all occurrences.
+
+If the optional argument count is given, only the first count occurrences are
+replaced.';
+		@env0:at: 'resize' put: 'Resize the internal buffer of bytearray to len.
+
+  size
+    New size to resize to.';
+		@env0:at: 'reverse' put: 'Reverse the order of the values in B in place.';
+		@env0:at: 'rfind' put: 'Return the highest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start:end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Return -1 on failure.';
+		@env0:at: 'rindex' put: 'Return the highest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start:end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Raise ValueError if the subsection is not found.';
+		@env0:at: 'rjust' put: 'Return a right-justified string of length width.
+
+Padding is done using the specified fill character.';
+		@env0:at: 'rpartition' put: 'Partition the bytearray into three parts using the given separator.
+
+This will search for the separator sep in the bytearray, starting at
+the end.  If the separator is found, returns a 3-tuple containing
+the part before the separator, the separator itself, and the part
+after it as new bytearray objects.
+
+If the separator is not found, returns a 3-tuple containing two
+empty bytearray objects and the copy of the original bytearray
+object.';
+		@env0:at: 'rsplit' put: 'Return a list of the sections in the bytearray, using sep as the delimiter.
+
+  sep
+    The delimiter according which to split the bytearray.
+    None (the default value) means split on ASCII whitespace
+    characters (space, tab, return, newline, formfeed, vertical tab).
+  maxsplit
+    Maximum number of splits to do.
+    -1 (the default value) means no limit.
+
+Splitting is done starting at the end of the bytearray and working
+to the front.';
+		@env0:at: 'rstrip' put: 'Strip trailing bytes contained in the argument.
+
+If the argument is omitted or None, strip trailing ASCII whitespace.';
+		@env0:at: 'split' put: 'Return a list of the sections in the bytearray, using sep as the delimiter.
+
+  sep
+    The delimiter according which to split the bytearray.
+    None (the default value) means split on ASCII whitespace
+    characters (space, tab, return, newline, formfeed, vertical tab).
+  maxsplit
+    Maximum number of splits to do.
+    -1 (the default value) means no limit.';
+		@env0:at: 'splitlines' put: 'Return a list of the lines in the bytearray, breaking at line boundaries.
+
+Line breaks are not included in the resulting list unless keepends
+is given and true.';
+		@env0:at: 'startswith' put: 'Return True if the bytearray starts with the specified prefix, False otherwise.
+
+  prefix
+    A bytes or a tuple of bytes to try.
+  start
+    Optional start position. Default: start of the bytearray.
+  end
+    Optional stop position. Default: end of the bytearray.';
+		@env0:at: 'strip' put: 'Strip leading and trailing bytes contained in the argument.
+
+If the argument is omitted or None, strip leading and trailing ASCII
+whitespace.';
+		@env0:at: 'swapcase' put: 'B.swapcase() -> copy of B
+
+Return a copy of B with uppercase ASCII characters converted
+to lowercase ASCII and vice versa.';
+		@env0:at: 'title' put: 'B.title() -> copy of B
+
+Return a titlecased version of B, i.e. ASCII words start with
+uppercase characters, all remaining cased characters have lowercase.';
+		@env0:at: 'translate' put: 'Return a copy with each character mapped by the given translation table.
+
+  table
+    Translation table, which must be a bytes object of length 256.
+
+All characters occurring in the optional argument delete are
+removed.  The remaining characters are mapped through the given
+translation table.';
+		@env0:at: 'upper' put: 'B.upper() -> copy of B
+
+Return a copy of B with all ASCII characters converted to uppercase.';
+		@env0:at: 'zfill' put: 'Pad a numeric string with zeros on the left, to fill a field of the given width.
+
+The original string is never truncated.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_bytes___ [
+	"CPython's ``__doc__'' for each public method the builtin type bytes defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'capitalize' put: 'B.capitalize() -> copy of B
+
+Return a copy of B with only its first character capitalized (ASCII)
+and the rest lower-cased.';
+		@env0:at: 'center' put: 'Return a centered string of length width.
+
+Padding is done using the specified fill character.';
+		@env0:at: 'count' put: 'Return the number of non-overlapping occurrences of subsection ''sub'' in bytes B[start:end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.';
+		@env0:at: 'decode' put: 'Decode the bytes using the codec registered for encoding.
+
+  encoding
+    The encoding with which to decode the bytes.
+  errors
+    The error handling scheme to use for the handling of decoding
+    errors.  The default is ''strict'' meaning that decoding errors
+    raise a UnicodeDecodeError.  Other possible values are ''ignore''
+    and ''replace'' as well as any other name registered with
+    codecs.register_error that can handle UnicodeDecodeErrors.';
+		@env0:at: 'endswith' put: 'Return True if the bytes ends with the specified suffix, False otherwise.
+
+  suffix
+    A bytes or a tuple of bytes to try.
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.';
+		@env0:at: 'expandtabs' put: 'Return a copy where all tab characters are expanded using spaces.
+
+If tabsize is not given, a tab size of 8 characters is assumed.';
+		@env0:at: 'find' put: 'Return the lowest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start,end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Return -1 on failure.';
+		@env0:at: 'fromhex' put: 'Create a bytes object from a string of hexadecimal numbers.
+
+Spaces between two numbers are accepted.
+Example: bytes.fromhex(''B9 01EF'') -> b''\\xb9\\x01\\xef''.';
+		@env0:at: 'hex' put: 'Create a string of hexadecimal numbers from a bytes object.
+
+  sep
+    An optional single character or byte to separate hex bytes.
+  bytes_per_sep
+    How many bytes between separators.  Positive values count from
+    the right, negative values count from the left.
+
+Example:
+>>> value = b''\xb9\x01\xef''
+>>> value.hex()
+''b901ef''
+>>> value.hex('':'')
+''b9:01:ef''
+>>> value.hex('':'', 2)
+''b9:01ef''
+>>> value.hex('':'', -2)
+''b901:ef''';
+		@env0:at: 'index' put: 'Return the lowest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start,end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Raise ValueError if the subsection is not found.';
+		@env0:at: 'isalnum' put: 'B.isalnum() -> bool
+
+Return True if all characters in B are alphanumeric
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'isalpha' put: 'B.isalpha() -> bool
+
+Return True if all characters in B are alphabetic
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'isascii' put: 'B.isascii() -> bool
+
+Return True if B is empty or all characters in B are ASCII,
+False otherwise.';
+		@env0:at: 'isdigit' put: 'B.isdigit() -> bool
+
+Return True if all characters in B are digits
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'islower' put: 'B.islower() -> bool
+
+Return True if all cased characters in B are lowercase and there is
+at least one cased character in B, False otherwise.';
+		@env0:at: 'isspace' put: 'B.isspace() -> bool
+
+Return True if all characters in B are whitespace
+and there is at least one character in B, False otherwise.';
+		@env0:at: 'istitle' put: 'B.istitle() -> bool
+
+Return True if B is a titlecased string and there is at least one
+character in B, i.e. uppercase characters may only follow uncased
+characters and lowercase characters only cased ones. Return False
+otherwise.';
+		@env0:at: 'isupper' put: 'B.isupper() -> bool
+
+Return True if all cased characters in B are uppercase and there is
+at least one cased character in B, False otherwise.';
+		@env0:at: 'join' put: 'Concatenate any number of bytes objects.
+
+The bytes whose method is called is inserted in between each pair.
+
+The result is returned as a new bytes object.
+
+Example: b''.''.join([b''ab'', b''pq'', b''rs'']) -> b''ab.pq.rs''.';
+		@env0:at: 'ljust' put: 'Return a left-justified string of length width.
+
+Padding is done using the specified fill character.';
+		@env0:at: 'lower' put: 'B.lower() -> copy of B
+
+Return a copy of B with all ASCII characters converted to lowercase.';
+		@env0:at: 'lstrip' put: 'Strip leading bytes contained in the argument.
+
+If the argument is omitted or None, strip leading  ASCII whitespace.';
+		@env0:at: 'maketrans' put: 'Return a translation table usable for the bytes or bytearray translate method.
+
+The returned table will be one where each byte in frm is mapped to
+the byte at the same position in to.
+
+The bytes objects frm and to must be of the same length.';
+		@env0:at: 'partition' put: 'Partition the bytes into three parts using the given separator.
+
+This will search for the separator sep in the bytes.  If the
+separator is found, returns a 3-tuple containing the part before the
+separator, the separator itself, and the part after it.
+
+If the separator is not found, returns a 3-tuple containing the
+original bytes object and two empty bytes objects.';
+		@env0:at: 'removeprefix' put: 'Return a bytes object with the given prefix string removed if present.
+
+If the bytes starts with the prefix string, return
+bytes[len(prefix):].  Otherwise, return a copy of the original
+bytes.';
+		@env0:at: 'removesuffix' put: 'Return a bytes object with the given suffix string removed if present.
+
+If the bytes ends with the suffix string and that suffix is not
+empty, return bytes[:-len(prefix)].  Otherwise, return a copy of the
+original bytes.';
+		@env0:at: 'replace' put: 'Return a copy with all occurrences of substring old replaced by new.
+
+  count
+    Maximum number of occurrences to replace.
+    -1 (the default value) means replace all occurrences.
+
+If the optional argument count is given, only the first count occurrences are
+replaced.';
+		@env0:at: 'rfind' put: 'Return the highest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start,end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Return -1 on failure.';
+		@env0:at: 'rindex' put: 'Return the highest index in B where subsection ''sub'' is found, such that ''sub'' is contained within B[start,end].
+
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.
+
+Raise ValueError if the subsection is not found.';
+		@env0:at: 'rjust' put: 'Return a right-justified string of length width.
+
+Padding is done using the specified fill character.';
+		@env0:at: 'rpartition' put: 'Partition the bytes into three parts using the given separator.
+
+This will search for the separator sep in the bytes, starting at the
+end.  If the separator is found, returns a 3-tuple containing the
+part before the separator, the separator itself, and the part after
+it.
+
+If the separator is not found, returns a 3-tuple containing two
+empty bytes objects and the original bytes object.';
+		@env0:at: 'rsplit' put: 'Return a list of the sections in the bytes, using sep as the delimiter.
+
+  sep
+    The delimiter according which to split the bytes.
+    None (the default value) means split on ASCII whitespace
+    characters (space, tab, return, newline, formfeed, vertical tab).
+  maxsplit
+    Maximum number of splits to do.
+    -1 (the default value) means no limit.
+
+Splitting is done starting at the end of the bytes and working to
+the front.';
+		@env0:at: 'rstrip' put: 'Strip trailing bytes contained in the argument.
+
+If the argument is omitted or None, strip trailing ASCII whitespace.';
+		@env0:at: 'split' put: 'Return a list of the sections in the bytes, using sep as the delimiter.
+
+  sep
+    The delimiter according which to split the bytes.
+    None (the default value) means split on ASCII whitespace
+    characters (space, tab, return, newline, formfeed, vertical tab).
+  maxsplit
+    Maximum number of splits to do.
+    -1 (the default value) means no limit.';
+		@env0:at: 'splitlines' put: 'Return a list of the lines in the bytes, breaking at line boundaries.
+
+Line breaks are not included in the resulting list unless keepends
+is given and true.';
+		@env0:at: 'startswith' put: 'Return True if the bytes starts with the specified prefix, False otherwise.
+
+  prefix
+    A bytes or a tuple of bytes to try.
+  start
+    Optional start position. Default: start of the bytes.
+  end
+    Optional stop position. Default: end of the bytes.';
+		@env0:at: 'strip' put: 'Strip leading and trailing bytes contained in the argument.
+
+If the argument is omitted or None, strip leading and trailing ASCII
+whitespace.';
+		@env0:at: 'swapcase' put: 'B.swapcase() -> copy of B
+
+Return a copy of B with uppercase ASCII characters converted
+to lowercase ASCII and vice versa.';
+		@env0:at: 'title' put: 'B.title() -> copy of B
+
+Return a titlecased version of B, i.e. ASCII words start with
+uppercase characters, all remaining cased characters have lowercase.';
+		@env0:at: 'translate' put: 'Return a copy with each character mapped by the given translation table.
+
+  table
+    Translation table, which must be a bytes object of length 256.
+
+All characters occurring in the optional argument delete are
+removed.  The remaining characters are mapped through the given
+translation table.';
+		@env0:at: 'upper' put: 'B.upper() -> copy of B
+
+Return a copy of B with all ASCII characters converted to uppercase.';
+		@env0:at: 'zfill' put: 'Pad a numeric string with zeros on the left, to fill a field of the given width.
+
+The original string is never truncated.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_complex___ [
+	"CPython's ``__doc__'' for each public method the builtin type complex defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'conjugate' put: 'Return the complex conjugate of its argument. (3-4j).conjugate() == 3+4j.';
+		@env0:at: 'from_number' put: 'Convert number to a complex floating-point number.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_dict___ [
+	"CPython's ``__doc__'' for each public method the builtin type dict defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'clear' put: 'Remove all items from the dict.';
+		@env0:at: 'copy' put: 'Return a shallow copy of the dict.';
+		@env0:at: 'fromkeys' put: 'Create a new dictionary with keys from iterable and values set to value.';
+		@env0:at: 'get' put: 'Return the value for key if key is in the dictionary, else default.';
+		@env0:at: 'items' put: 'Return a set-like object providing a view on the dict''s items.';
+		@env0:at: 'keys' put: 'Return a set-like object providing a view on the dict''s keys.';
+		@env0:at: 'pop' put: 'D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
+
+If the key is not found, return the default if given; otherwise,
+raise a KeyError.';
+		@env0:at: 'popitem' put: 'Remove and return a (key, value) pair as a 2-tuple.
+
+Pairs are returned in LIFO (last-in, first-out) order.
+Raises KeyError if the dict is empty.';
+		@env0:at: 'setdefault' put: 'Insert key with a value of default if key is not in the dictionary.
+
+Return the value for key if key is in the dictionary, else default.';
+		@env0:at: 'update' put: 'D.update([E, ]**F) -> None.  Update D from mapping/iterable E and F.
+If E is present and has a .keys() method, then does:  for k in E.keys(): D[k] = E[k]
+If E is present and lacks a .keys() method, then does:  for k, v in E: D[k] = v
+In either case, this is followed by: for k in F:  D[k] = F[k]';
+		@env0:at: 'values' put: 'Return an object providing a view on the dict''s values.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_float___ [
+	"CPython's ``__doc__'' for each public method the builtin type float defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'as_integer_ratio' put: 'Return a pair of integers, whose ratio is exactly equal to the original float.
+
+The ratio is in lowest terms and has a positive denominator.  Raise
+OverflowError on infinities and a ValueError on NaNs.
+
+>>> (10.0).as_integer_ratio()
+(10, 1)
+>>> (0.0).as_integer_ratio()
+(0, 1)
+>>> (-.25).as_integer_ratio()
+(-1, 4)';
+		@env0:at: 'conjugate' put: 'Return self, the complex conjugate of any float.';
+		@env0:at: 'from_number' put: 'Convert real number to a floating-point number.';
+		@env0:at: 'fromhex' put: 'Create a floating-point number from a hexadecimal string.
+
+>>> float.fromhex(''0x1.ffffp10'')
+2047.984375
+>>> float.fromhex(''-0x1p-1074'')
+-5e-324';
+		@env0:at: 'hex' put: 'Return a hexadecimal representation of a floating-point number.
+
+>>> (-0.1).hex()
+''-0x1.999999999999ap-4''
+>>> 3.14159.hex()
+''0x1.921f9f01b866ep+1''';
+		@env0:at: 'is_integer' put: 'Return True if the float is an integer.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_frozenset___ [
+	"CPython's ``__doc__'' for each public method the builtin type frozenset defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'copy' put: 'Return a shallow copy of a set.';
+		@env0:at: 'difference' put: 'Return a new set with elements in the set that are not in the others.';
+		@env0:at: 'intersection' put: 'Return a new set with elements common to the set and all others.';
+		@env0:at: 'isdisjoint' put: 'Return True if two sets have a null intersection.';
+		@env0:at: 'issubset' put: 'Report whether another set contains this set.';
+		@env0:at: 'issuperset' put: 'Report whether this set contains another set.';
+		@env0:at: 'symmetric_difference' put: 'Return a new set with elements in either the set or other but not both.';
+		@env0:at: 'union' put: 'Return a new set with elements from the set and all others.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_int___ [
+	"CPython's ``__doc__'' for each public method the builtin type int defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'as_integer_ratio' put: 'Return a pair of integers, whose ratio is equal to the original int.
+
+The ratio is in lowest terms and has a positive denominator.
+
+>>> (10).as_integer_ratio()
+(10, 1)
+>>> (-10).as_integer_ratio()
+(-10, 1)
+>>> (0).as_integer_ratio()
+(0, 1)';
+		@env0:at: 'bit_count' put: 'Number of ones in the binary representation of the absolute value of self.
+
+Also known as the population count.
+
+>>> bin(13)
+''0b1101''
+>>> (13).bit_count()
+3';
+		@env0:at: 'bit_length' put: 'Number of bits necessary to represent self in binary.
+
+>>> bin(37)
+''0b100101''
+>>> (37).bit_length()
+6';
+		@env0:at: 'conjugate' put: 'Returns self, the complex conjugate of any int.';
+		@env0:at: 'from_bytes' put: 'Return the integer represented by the given array of bytes.
+
+  bytes
+    Holds the array of bytes to convert.  The argument must either
+    support the buffer protocol or be an iterable object producing
+    bytes.  Bytes and bytearray are examples of built-in objects that
+    support the buffer protocol.
+  byteorder
+    The byte order used to represent the integer.  If byteorder is
+    ''big'', the most significant byte is at the beginning of the byte
+    array.  If byteorder is ''little'', the most significant byte is at
+    the end of the byte array.  To request the native byte order of
+    the host system, use sys.byteorder as the byte order value.
+    Default is to use ''big''.
+  signed
+    Indicates whether two''s complement is used to represent the
+    integer.';
+		@env0:at: 'is_integer' put: 'Returns True. Exists for duck type compatibility with float.is_integer.';
+		@env0:at: 'to_bytes' put: 'Return an array of bytes representing an integer.
+
+  length
+    Length of bytes object to use.  An OverflowError is raised if
+    the integer is not representable with the given number of bytes.
+    Default is length 1.
+  byteorder
+    The byte order used to represent the integer.  If byteorder is
+    ''big'', the most significant byte is at the beginning of the byte
+    array.  If byteorder is ''little'', the most significant byte is at
+    the end of the byte array.  To request the native byte order of
+    the host system, use sys.byteorder as the byte order value.
+    Default is to use ''big''.
+  signed
+    Determines whether two''s complement is used to represent the
+    integer.  If signed is False and a negative integer is given,
+    an OverflowError is raised.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_list___ [
+	"CPython's ``__doc__'' for each public method the builtin type list defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'append' put: 'Append object to the end of the list.';
+		@env0:at: 'clear' put: 'Remove all items from list.';
+		@env0:at: 'copy' put: 'Return a shallow copy of the list.';
+		@env0:at: 'count' put: 'Return number of occurrences of value.';
+		@env0:at: 'extend' put: 'Extend list by appending elements from the iterable.';
+		@env0:at: 'index' put: 'Return first index of value.
+
+Raises ValueError if the value is not present.';
+		@env0:at: 'insert' put: 'Insert object before index.';
+		@env0:at: 'pop' put: 'Remove and return item at index (default last).
+
+Raises IndexError if list is empty or index is out of range.';
+		@env0:at: 'remove' put: 'Remove first occurrence of value.
+
+Raises ValueError if the value is not present.';
+		@env0:at: 'reverse' put: 'Reverse *IN PLACE*.';
+		@env0:at: 'sort' put: 'Sort the list in ascending order and return None.
+
+The sort is in-place (i.e. the list itself is modified) and stable
+(i.e. the order of two equal elements is maintained).
+
+If a key function is given, apply it once to each list item and sort
+them, ascending or descending, according to their function values.
+
+The reverse flag can be set to sort in descending order.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_memoryview___ [
+	"CPython's ``__doc__'' for each public method the builtin type memoryview defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'cast' put: 'Cast a memoryview to a new format or shape.';
+		@env0:at: 'count' put: 'Count the number of occurrences of a value.';
+		@env0:at: 'hex' put: 'Return the data in the buffer as a str of hexadecimal numbers.
+
+  sep
+    An optional single character or byte to separate hex bytes.
+  bytes_per_sep
+    How many bytes between separators.  Positive values count from
+    the right, negative values count from the left.
+
+Example:
+>>> value = memoryview(b''\xb9\x01\xef'')
+>>> value.hex()
+''b901ef''
+>>> value.hex('':'')
+''b9:01:ef''
+>>> value.hex('':'', 2)
+''b9:01ef''
+>>> value.hex('':'', -2)
+''b901:ef''';
+		@env0:at: 'index' put: 'Return the index of the first occurrence of a value.
+
+Raises ValueError if the value is not present.';
+		@env0:at: 'release' put: 'Release the underlying buffer exposed by the memoryview object.';
+		@env0:at: 'tobytes' put: 'Return the data in the buffer as a byte string.
+
+Order can be {''C'', ''F'', ''A''}.  When order is ''C'' or ''F'', the data of
+the original array is converted to C or Fortran order.  For
+contiguous views, ''A'' returns an exact copy of the physical memory.
+In particular, in-memory Fortran order is preserved.  For
+non-contiguous views, the data is converted to C first.  order=None
+is the same as order=''C''.';
+		@env0:at: 'tolist' put: 'Return the data in the buffer as a list of elements.';
+		@env0:at: 'toreadonly' put: 'Return a readonly version of the memoryview.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_property___ [
+	"CPython's ``__doc__'' for each public method the builtin type property defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'deleter' put: 'Descriptor to obtain a copy of the property with a different deleter.';
+		@env0:at: 'getter' put: 'Descriptor to obtain a copy of the property with a different getter.';
+		@env0:at: 'setter' put: 'Descriptor to obtain a copy of the property with a different setter.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_range___ [
+	"CPython's ``__doc__'' for each public method the builtin type range defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'count' put: 'rangeobject.count(value) -> integer -- return number of occurrences of value';
+		@env0:at: 'index' put: 'rangeobject.index(value) -> integer -- return index of value.
+Raise ValueError if the value is not present.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_set___ [
+	"CPython's ``__doc__'' for each public method the builtin type set defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'add' put: 'Add an element to a set.
+
+This has no effect if the element is already present.';
+		@env0:at: 'clear' put: 'Remove all elements from this set.';
+		@env0:at: 'copy' put: 'Return a shallow copy of a set.';
+		@env0:at: 'difference' put: 'Return a new set with elements in the set that are not in the others.';
+		@env0:at: 'difference_update' put: 'Update the set, removing elements found in others.';
+		@env0:at: 'discard' put: 'Remove an element from a set if it is a member.
+
+Unlike set.remove(), the discard() method does not raise
+an exception when an element is missing from the set.';
+		@env0:at: 'intersection' put: 'Return a new set with elements common to the set and all others.';
+		@env0:at: 'intersection_update' put: 'Update the set, keeping only elements found in it and all others.';
+		@env0:at: 'isdisjoint' put: 'Return True if two sets have a null intersection.';
+		@env0:at: 'issubset' put: 'Report whether another set contains this set.';
+		@env0:at: 'issuperset' put: 'Report whether this set contains another set.';
+		@env0:at: 'pop' put: 'Remove and return an arbitrary set element.
+
+Raises KeyError if the set is empty.';
+		@env0:at: 'remove' put: 'Remove an element from a set; it must be a member.
+
+If the element is not a member, raise a KeyError.';
+		@env0:at: 'symmetric_difference' put: 'Return a new set with elements in either the set or other but not both.';
+		@env0:at: 'symmetric_difference_update' put: 'Update the set, keeping only elements found in either set, but not in both.';
+		@env0:at: 'union' put: 'Return a new set with elements from the set and all others.';
+		@env0:at: 'update' put: 'Update the set, adding elements from all others.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_slice___ [
+	"CPython's ``__doc__'' for each public method the builtin type slice defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'indices' put: 'S.indices(len) -> (start, stop, stride)
+
+Assuming a sequence of length len, calculate the start and stop
+indices, and the stride length of the extended slice described by
+S. Out of bounds indices are clipped in a manner consistent with the
+handling of normal slices.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_str___ [
+	"CPython's ``__doc__'' for each public method the builtin type str defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'capitalize' put: 'Return a capitalized version of the string.
+
+More specifically, make the first character have upper case and the
+rest lower case.';
+		@env0:at: 'casefold' put: 'Return a version of the string suitable for caseless comparisons.';
+		@env0:at: 'center' put: 'Return a centered string of length width.
+
+Padding is done using the specified fill character (default is
+a space).';
+		@env0:at: 'count' put: 'Return the number of non-overlapping occurrences of substring sub in string S[start:end].
+
+Optional arguments start and end are interpreted as in slice
+notation.';
+		@env0:at: 'encode' put: 'Encode the string using the codec registered for encoding.
+
+  encoding
+    The encoding in which to encode the string.
+  errors
+    The error handling scheme to use for encoding errors.
+    The default is ''strict'' meaning that encoding errors raise a
+    UnicodeEncodeError.  Other possible values are ''ignore'', ''replace''
+    and ''xmlcharrefreplace'' as well as any other name registered with
+    codecs.register_error that can handle UnicodeEncodeErrors.';
+		@env0:at: 'endswith' put: 'Return True if the string ends with the specified suffix, False otherwise.
+
+  suffix
+    A string or a tuple of strings to try.
+  start
+    Optional start position. Default: start of the string.
+  end
+    Optional stop position. Default: end of the string.';
+		@env0:at: 'expandtabs' put: 'Return a copy where all tab characters are expanded using spaces.
+
+If tabsize is not given, a tab size of 8 characters is assumed.';
+		@env0:at: 'find' put: 'Return the lowest index in S where substring sub is found, such that sub is contained within S[start:end].
+
+Optional arguments start and end are interpreted as in slice
+notation.  Return -1 on failure.';
+		@env0:at: 'format' put: 'Return a formatted version of the string, using substitutions from args and kwargs.
+The substitutions are identified by braces (''{'' and ''}'').';
+		@env0:at: 'format_map' put: 'Return a formatted version of the string, using substitutions from mapping.
+The substitutions are identified by braces (''{'' and ''}'').';
+		@env0:at: 'index' put: 'Return the lowest index in S where substring sub is found, such that sub is contained within S[start:end].
+
+Optional arguments start and end are interpreted as in slice
+notation.  Raises ValueError when the substring is not found.';
+		@env0:at: 'isalnum' put: 'Return True if the string is an alpha-numeric string, False otherwise.
+
+A string is alpha-numeric if all characters in the string are
+alpha-numeric and there is at least one character in the string.';
+		@env0:at: 'isalpha' put: 'Return True if the string is an alphabetic string, False otherwise.
+
+A string is alphabetic if all characters in the string are
+alphabetic and there is at least one character in the string.';
+		@env0:at: 'isascii' put: 'Return True if all characters in the string are ASCII, False otherwise.
+
+ASCII characters have code points in the range U+0000-U+007F.
+Empty string is ASCII too.';
+		@env0:at: 'isdecimal' put: 'Return True if the string is a decimal string, False otherwise.
+
+A string is a decimal string if all characters in the string are
+decimal and there is at least one character in the string.';
+		@env0:at: 'isdigit' put: 'Return True if the string is a digit string, False otherwise.
+
+A string is a digit string if all characters in the string are
+digits and there is at least one character in the string.';
+		@env0:at: 'isidentifier' put: 'Return True if the string is a valid Python identifier, False otherwise.
+
+Call keyword.iskeyword(s) to test whether string s is a reserved
+identifier, such as "def" or "class".';
+		@env0:at: 'islower' put: 'Return True if the string is a lowercase string, False otherwise.
+
+A string is lowercase if all cased characters in the string are
+lowercase and there is at least one cased character in the string.';
+		@env0:at: 'isnumeric' put: 'Return True if the string is a numeric string, False otherwise.
+
+A string is numeric if all characters in the string are numeric and
+there is at least one character in the string.';
+		@env0:at: 'isprintable' put: 'Return True if all characters in the string are printable, False otherwise.
+
+A character is printable if repr() may use it in its output.';
+		@env0:at: 'isspace' put: 'Return True if the string is a whitespace string, False otherwise.
+
+A string is whitespace if all characters in the string are
+whitespace and there is at least one character in the string.';
+		@env0:at: 'istitle' put: 'Return True if the string is a title-cased string, False otherwise.
+
+In a title-cased string, upper- and title-case characters may only
+follow uncased characters and lowercase characters only cased ones.';
+		@env0:at: 'isupper' put: 'Return True if the string is an uppercase string, False otherwise.
+
+A string is uppercase if all cased characters in the string are
+uppercase and there is at least one cased character in the string.';
+		@env0:at: 'join' put: 'Concatenate any number of strings.
+
+The string whose method is called is inserted in between each given
+string.  The result is returned as a new string.
+
+Example: ''.''.join([''ab'', ''pq'', ''rs'']) -> ''ab.pq.rs''';
+		@env0:at: 'ljust' put: 'Return a left-justified string of length width.
+
+Padding is done using the specified fill character (default is
+a space).';
+		@env0:at: 'lower' put: 'Return a copy of the string converted to lowercase.';
+		@env0:at: 'lstrip' put: 'Return a copy of the string with leading whitespace removed.
+
+If chars is given and not None, remove characters in chars instead.';
+		@env0:at: 'maketrans' put: 'Return a translation table usable for str.translate().
+
+If there is only one argument, it must be a dictionary mapping
+Unicode ordinals (integers) or characters to Unicode ordinals,
+strings or None.  Character keys will be then converted to ordinals.
+If there are two arguments, they must be strings of equal length,
+and in the resulting dictionary, each character in x will be mapped
+to the character at the same position in y.  If there is a third
+argument, it must be a string, whose characters will be mapped to
+None in the result.';
+		@env0:at: 'partition' put: 'Partition the string into three parts using the given separator.
+
+This will search for the separator in the string.  If the separator
+is found, returns a 3-tuple containing the part before the
+separator, the separator itself, and the part after it.
+
+If the separator is not found, returns a 3-tuple containing
+the original string and two empty strings.';
+		@env0:at: 'removeprefix' put: 'Return a str with the given prefix string removed if present.
+
+If the string starts with the prefix string, return
+string[len(prefix):].  Otherwise, return a copy of the original
+string.';
+		@env0:at: 'removesuffix' put: 'Return a str with the given suffix string removed if present.
+
+If the string ends with the suffix string and that suffix is not
+empty, return string[:-len(suffix)].  Otherwise, return a copy of
+the original string.';
+		@env0:at: 'replace' put: 'Return a copy with all occurrences of substring old replaced by new.
+
+  count
+    Maximum number of occurrences to replace.
+    -1 (the default value) means replace all occurrences.
+
+If the optional argument count is given, only the first count occurrences are
+replaced.';
+		@env0:at: 'rfind' put: 'Return the highest index in S where substring sub is found, such that sub is contained within S[start:end].
+
+Optional arguments start and end are interpreted as in slice
+notation.  Return -1 on failure.';
+		@env0:at: 'rindex' put: 'Return the highest index in S where substring sub is found, such that sub is contained within S[start:end].
+
+Optional arguments start and end are interpreted as in slice
+notation.  Raises ValueError when the substring is not found.';
+		@env0:at: 'rjust' put: 'Return a right-justified string of length width.
+
+Padding is done using the specified fill character (default is
+a space).';
+		@env0:at: 'rpartition' put: 'Partition the string into three parts using the given separator.
+
+This will search for the separator in the string, starting at the
+end.  If the separator is found, returns a 3-tuple containing the
+part before the separator, the separator itself, and the part after
+it.
+
+If the separator is not found, returns a 3-tuple containing two
+empty strings and the original string.';
+		@env0:at: 'rsplit' put: 'Return a list of the substrings in the string, using sep as the separator string.
+
+  sep
+    The separator used to split the string.
+
+    When set to None (the default value), will split on any
+    whitespace character (including \n \r \t \f and spaces) and
+    will discard empty strings from the result.
+  maxsplit
+    Maximum number of splits.
+    -1 (the default value) means no limit.
+
+Splitting starts at the end of the string and works to the front.';
+		@env0:at: 'rstrip' put: 'Return a copy of the string with trailing whitespace removed.
+
+If chars is given and not None, remove characters in chars instead.';
+		@env0:at: 'split' put: 'Return a list of the substrings in the string, using sep as the separator string.
+
+  sep
+    The separator used to split the string.
+
+    When set to None (the default value), will split on any
+    whitespace character (including \n \r \t \f and spaces) and
+    will discard empty strings from the result.
+  maxsplit
+    Maximum number of splits.
+    -1 (the default value) means no limit.
+
+Splitting starts at the front of the string and works to the end.
+
+Note, str.split() is mainly useful for data that has been
+intentionally delimited.  With natural text that includes
+punctuation, consider using the regular expression module.';
+		@env0:at: 'splitlines' put: 'Return a list of the lines in the string, breaking at line boundaries.
+
+Line breaks are not included in the resulting list unless keepends
+is given and true.';
+		@env0:at: 'startswith' put: 'Return True if the string starts with the specified prefix, False otherwise.
+
+  prefix
+    A string or a tuple of strings to try.
+  start
+    Optional start position. Default: start of the string.
+  end
+    Optional stop position. Default: end of the string.';
+		@env0:at: 'strip' put: 'Return a copy of the string with leading and trailing whitespace removed.
+
+If chars is given and not None, remove characters in chars instead.';
+		@env0:at: 'swapcase' put: 'Convert uppercase characters to lowercase and lowercase characters to uppercase.';
+		@env0:at: 'title' put: 'Return a version of the string where each word is titlecased.
+
+More specifically, words start with uppercased characters and all
+remaining cased characters have lower case.';
+		@env0:at: 'translate' put: 'Replace each character in the string using the given translation table.
+
+  table
+    Translation table, which must be a mapping of Unicode ordinals
+    to Unicode ordinals, strings, or None.
+
+The table must implement lookup/indexing via __getitem__, for
+instance a dictionary or list.  If this operation raises
+LookupError, the character is left untouched.  Characters mapped to
+None are deleted.';
+		@env0:at: 'upper' put: 'Return a copy of the string converted to uppercase.';
+		@env0:at: 'zfill' put: 'Pad a numeric string with zeros on the left, to fill a field of the given width.
+
+The string is never truncated.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_tuple___ [
+	"CPython's ``__doc__'' for each public method the builtin type tuple defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'count' put: 'Return number of occurrences of value.';
+		@env0:at: 'index' put: 'Return first index of value.
+
+Raises ValueError if the value is not present.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___methodDocTableFor_type___ [
+	"CPython's ``__doc__'' for each public method the builtin type type defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'mro' put: 'Return a type''s method resolution order.';
+		@env0:yourself)
+
+]
+
+{ #category : 'Grail-Docstrings' }
 builtins class >> ___typeDocTable___ [
 	"CPython's ``__doc__'' for each builtin type, keyed by the name, and None
 	for a type CPython gives none.  Read by Object >> ___builtinTypeDocstring___.
