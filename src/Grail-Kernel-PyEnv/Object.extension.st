@@ -8608,7 +8608,9 @@ Object >> ___classDict___ [
 			and: [(refused @env0:includes: nm) @env0:not
 			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]]) ifTrue: [
 			| um |
-			um := UnboundMethod definingClass: defCls selector: nm @env0:asSymbol.
+			um := UnboundMethod
+				definingClass: (self ___classDictHandleClassFor___: defCls)
+				selector: nm @env0:asSymbol.
 			"A declarative @property's getter is entered as the PROPERTY, the
 			same cached object a read off the class answers, so
 			``C.__dict__['p'] is C.p'' as in CPython.  It held the getter
@@ -8942,6 +8944,25 @@ Object >> ___classDict___ [
 			self ___grailIsPythonClass___ ifTrue: [
 				d := self ___grailInBodyOrder___: d names: d @env0:keys @env0:asArray headerFirst: false]].
 	^ d
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___classDictHandleClassFor___: anOwner [
+
+	"The class a method handle in this class's __dict__ is keyed by, for a
+	method anOwner's dictionary holds.  A builtin type lists a hidden
+	ancestor's methods as its own -- bytearray's count, hex and decode live on
+	ByteArray, which is bytes -- so its entry is this class's handle, the one
+	``bytearray.count'' answers, with this class as __objclass__.  Keyed by
+	anOwner it was bytes' handle: ``vars(bytearray)['hex'] is
+	vars(bytes)['hex']'', so doctest took it for a method already seen.  A
+	metaclass's method and a Python class's keep their owner."
+
+	anOwner @env0:isMeta ifTrue: [^ anOwner].
+	(self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) == nil
+		ifFalse: [^ anOwner].
+	^ self
 
 ]
 
