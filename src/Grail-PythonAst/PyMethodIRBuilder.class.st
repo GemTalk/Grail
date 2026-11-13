@@ -72,20 +72,36 @@ PyMethodIRBuilder class >> supportedOnThisPlatform [
 ]
 
 { #category : 'generation' }
-PyMethodIRBuilder >> ___compileClassHelper___: aSelector source: aString on: aClass [
+PyMethodIRBuilder >> ___compileClassHelper___: aSelector source: aStringOrBuilder on: aClass [
 	"File one class-statement helper onto aClass, env 1, and prove it landed.
+
+	The helper is either the class emit's TEXT, compiled here, or -- since P3.2
+	-- a PyMethodIRBuilder holding the same build as IR
+	(ClassDefAst >> ___irBuildClassHelper___:...), generated for aClass.  Both
+	land under the same category.
 
 	A compile failure has to RAISE rather than answer: the seam's handler turns
 	it into a fallback to the whole method's text, and the alternative is a
 	method whose class statement sends a selector nothing implements."
 
-	importlib ___irCensusOn___ ifTrue: [
-		importlib ___irCensusText: aString kind: 'classHelper'].
-	[aClass compileMethod: aString
-		dictionaries: importlib ___grailCompileSymbolList___
-		category: 'Grail-IR Class Helpers'
-		environmentId: 1]
-		on: CompileWarning do: [:ex | ex resume].
+	aStringOrBuilder isString
+		ifTrue: [
+			importlib ___irCensusOn___ ifTrue: [
+				importlib ___irCensusText: aStringOrBuilder kind: 'classHelper'].
+			[aClass compileMethod: aStringOrBuilder
+				dictionaries: importlib ___grailCompileSymbolList___
+				category: 'Grail-IR Class Helpers'
+				environmentId: 1]
+				on: CompileWarning do: [:ex | ex resume]]
+		ifFalse: [
+			"___irRegenerateOn___: generates the finished tree for aClass and
+			installs it under the helper's selector; the build names no class
+			but the one it is generated for, so one tree serves every class a
+			shared build installs it on."
+			aStringOrBuilder ___irRegenerateOn___: aClass.
+			[aClass addCategory: 'Grail-IR Class Helpers' environmentId: 1]
+				on: Error do: [:ex | ex return: nil].
+			aClass moveMethod: aSelector toCategory: 'Grail-IR Class Helpers' environmentId: 1].
 	(aClass includesSelector: aSelector environmentId: 1) ifFalse: [
 		Error signal: 'IR class helper did not compile: ' , aSelector asString].
 	^ self
@@ -226,7 +242,11 @@ PyMethodIRBuilder >> ___irNoteClassHelper___: aSelector source: aString classSid
 	"___irNoteClassHelper___:source:, also filing the helper on the METACLASS
 	when aBoolean says the enclosing def runs with the class as its receiver
 	(ClassDefAst >> ___irRunsWithClassReceiver___, #1424) -- where its send
-	will look for it."
+	will look for it.
+
+	aString may instead be the PyMethodIRBuilder of a helper built through IR
+	(P3.2); every path below treats the two alike, and
+	___compileClassHelper___:source:on: tells them apart."
 
 	"Every helper is RECORDED, whichever way it is installed: a regeneration
 	onto another class (___irGenerateFor___:) has to find the class statement's
@@ -765,6 +785,36 @@ PyMethodIRBuilder >> classHelpers [
 	___irNoteClassHelper___:source:classSide:)."
 
 	^ classHelpers ifNil: [#()]
+
+]
+
+{ #category : 'building' }
+PyMethodIRBuilder >> clearPosition [
+	"Forget the current Python position, and any armed map entry: the nodes
+	built next carry no source offset until the next at: / atNode:.  A step
+	point with no offset resolves to no Python line, so a frame paused there
+	is not reported as a Python frame -- what a class-statement helper wants
+	for the class-build machinery that runs outside the class body (CPython
+	runs it in __build_class__, with no class-body frame;
+	ClassBuildIREmitter)."
+
+	curOffset := nil.
+	pendingPos := nil.
+	^ self
+
+]
+
+{ #category : 'control' }
+PyMethodIRBuilder >> closeOpenBlock: aBlockNode [
+	"Close the block openBlockWithTemps: opened and answer it.  Refuses one that
+	is not the innermost open block, so a mismatched close fails where it
+	happened rather than appending statements to the wrong block."
+
+	blockStack last == aBlockNode ifFalse: [
+		^ Error signal: 'PyMethodIRBuilder: close of a block that is not the innermost'].
+	blockStack removeLast.
+	lexLevel := lexLevel - 1.
+	^ aBlockNode
 
 ]
 
@@ -1319,6 +1369,30 @@ PyMethodIRBuilder >> obj: anObject [
 	ByteArray, ...)."
 
 	^ self setSourcePosition: (GsComLiteralNode newObject: anObject)
+
+]
+
+{ #category : 'control' }
+PyMethodIRBuilder >> openBlockWithTemps: tempSymbols [
+	"Open a zero-argument GsComBlockNode declaring block TEMPS and leave it open:
+	statements added until the matching closeOpenBlock: go into it.  Answer
+	{ block. temp leaves }.  blockWithTemps:do: with the body's two ends apart --
+	the shape of ClassBuildEmitter's open/close pairs (the block a class is
+	built in, the canonical guard), whose bodies are hundreds of lines of the
+	emitter apart.  None of the temps is registered as a method local."
+
+	| blk leaves |
+	lexLevel := lexLevel + 1.
+	blk := GsComBlockNode new lexLevel: lexLevel.
+	self setSourcePosition: blk.
+	leaves := tempSymbols collect: [:sym |
+		| leaf |
+		leaf := GsComVarLeaf new
+			blockTemp: sym sourceLexLevel: lexLevel.
+		blk appendTemp: leaf.
+		leaf].
+	blockStack addLast: blk.
+	^ { blk. leaves }
 
 ]
 

@@ -5515,6 +5515,41 @@ importlib class >> ___irClassEmitIsForTransport___ [
 
 ]
 
+{ #category : 'Grail-IR Codegen' }
+importlib class >> ___irClassHelperIREnabled___ [
+	"Whether a method-local class's helper may be BUILT THROUGH IR (P3.2,
+	ClassDefAst >> ___irClassHelperTextReason___:) rather than compiled from its
+	text.  Asked only on the IR arm: the text arm has no helper at all.
+
+	On by default, read once per session from GRAIL_IR_CLASS_HELPER with the
+	same rule as GRAIL_IR_CODEGEN (___irCodegenFlagFor___: ``0'', ``false'',
+	``no'' and ``off'' turn it off).  Off, every helper is the compiled text it
+	was before P3.2 -- the A/B control the two backends are compared with.
+	___irClassHelperIRForce___: seeds it for a test; ___irCodegenEnabledInvalidate___
+	resets it."
+
+	| temps on |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRClassHelperChecked___')
+		ifTrue: [^ temps at: #'___grailIRClassHelperEnabled___' ifAbsent: [true]].
+	on := self ___irCodegenFlagFor___: (System gemEnvironmentVariable: 'GRAIL_IR_CLASS_HELPER').
+	temps at: #'___grailIRClassHelperEnabled___' put: on.
+	temps at: #'___grailIRClassHelperChecked___' put: true.
+	^ on
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+importlib class >> ___irClassHelperIRForce___: aBoolean [
+	"Seed ___irClassHelperIREnabled___ for a test, bypassing the env var."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRClassHelperEnabled___' put: aBoolean.
+	temps at: #'___grailIRClassHelperChecked___' put: true
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irClassSeamEnabled___ [
 	"Whether ClassDefAst's class-method seam (cut 36) may register a class-body
@@ -5583,6 +5618,8 @@ importlib class >> ___irCodegenEnabledInvalidate___ [
 	temps := SessionTemps current.
 	temps removeKey: #'___grailIRCodegenEnabled___' ifAbsent: [].
 	temps removeKey: #'___grailIRCodegenChecked___' ifAbsent: [].
+	temps removeKey: #'___grailIRClassHelperEnabled___' ifAbsent: [].
+	temps removeKey: #'___grailIRClassHelperChecked___' ifAbsent: [].
 
 ]
 
