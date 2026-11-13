@@ -5256,16 +5256,18 @@ importlib class >> ___irBuilderCache___ [
 	"The session cache of IR builders, keyed by the GsNMethod each one
 	generated (P2.1): GsNMethod -> PyMethodIRBuilder.  What lets a consumer
 	that copies a method onto another class REGENERATE it there instead of
-	recompiling a text twin.
+	recompiling a text twin.  One builder is usually the value of several
+	keys: the method it built and every copy regenerated from it (P2.2).
 
 	BOUNDED TWO WAYS.  The values are SOFT (IdentityKeySoftValueDictionary): a
 	builder holds a whole node tree, nothing else holds it once its method is
 	installed, and the in-memory GC clears least-recently-used soft references
 	when temporary object memory runs high, so the cache can never be what runs
 	a session out of memory.  And it holds at most ___irBuilderCacheLimit___
-	entries, the oldest dropped first (___irCacheBuilder___:forMethod:).  A
-	builder that is gone is not an error: the miss rebuilds it from the
-	method's Python source (___irRebuildBuilderFor___:).
+	BUILDERS, the least recently used dropped first, with every key that names
+	them (___irCacheBuilder___:forMethod:).  A builder that is gone is not an
+	error: the miss rebuilds it from the method's Python source
+	(___irRebuildBuilderFor___:).
 
 	RELEASED WITH THE CLASS.  A module's rebuild drops its entries
 	(___irBuilderCacheForgetModule___:), since its classes are made anew;
@@ -5279,28 +5281,58 @@ importlib class >> ___irBuilderCache___ [
 ]
 
 { #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheBuilderCount___ [
+	"How many distinct builders the cache holds now -- what its limit counts."
+
+	| live |
+	live := IdentitySet new.
+	self ___irBuilderCache___ keysAndValuesDo: [:meth :builder |
+		builder isNil ifFalse: [live add: builder]].
+	^ live size
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheDrop___: someBuilders [
+	"Remove someBuilders from the cache, under every key that names them, and
+	mark them as no longer cached (cacheTick nil)."
+
+	| cache doomed |
+	someBuilders isEmpty ifTrue: [^ self].
+	cache := self ___irBuilderCache___.
+	doomed := OrderedCollection new.
+	cache keysAndValuesDo: [:meth :builder |
+		(builder isNil or: [someBuilders includes: builder]) ifTrue: [doomed add: meth]].
+	doomed do: [:meth | cache removeKey: meth ifAbsent: []].
+	someBuilders do: [:b | b cacheTick: nil].
+	SessionTemps current at: #'___grailIRBuilderCacheCount___'
+		put: (((SessionTemps current at: #'___grailIRBuilderCacheCount___' otherwise: 0)
+			- someBuilders size) max: 0).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
 importlib class >> ___irBuilderCacheForgetModule___: aModuleName [
 	"Drop every cached builder made for a def of aModuleName -- its module is
 	being rebuilt, so the classes those builders generated for are about to be
 	replaced, and an entry keyed by one of their methods could only ever keep
 	the old class alive."
 
-	| cache order prefix victims |
+	| cache prefix victims |
 	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
 	cache isNil ifTrue: [^ self].
 	prefix := aModuleName asString , '|'.
-	victims := OrderedCollection new.
+	victims := IdentitySet new.
 	cache keysAndValuesDo: [:meth :builder |
 		| id |
 		id := builder isNil ifTrue: [nil] ifFalse: [builder defId].
-		(id isNil
-			or: [id size > prefix size
-				and: [(id copyFrom: 1 to: prefix size) = prefix]])
-			ifTrue: [victims add: meth]].
-	victims do: [:meth | cache removeKey: meth ifAbsent: []].
-	order := SessionTemps current at: #'___grailIRBuilderCacheOrder___' otherwise: nil.
-	order ifNotNil: [order removeAllSuchThat: [:meth | (cache includesKey: meth) not]].
-	^ self
+		(builder notNil
+			and: [id isNil
+				or: [id size > prefix size
+					and: [(id copyFrom: 1 to: prefix size) = prefix]]])
+			ifTrue: [victims add: builder]].
+	^ self ___irBuilderCacheDrop___: victims
 
 ]
 
@@ -5345,9 +5377,24 @@ importlib class >> ___irBuilderCacheReset___ [
 	"Empty the builder cache.  Every later regeneration rebuilds from source
 	until the cache fills again."
 
+	| cache |
+	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
+	cache isNil ifFalse: [
+		cache keysAndValuesDo: [:meth :builder | builder isNil ifFalse: [builder cacheTick: nil]]].
 	SessionTemps current removeKey: #'___grailIRBuilderCache___' ifAbsent: [].
-	SessionTemps current removeKey: #'___grailIRBuilderCacheOrder___' ifAbsent: [].
+	SessionTemps current removeKey: #'___grailIRBuilderCacheCount___' ifAbsent: [].
 	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheTick___ [
+	"The next value of the cache's use counter (___irCacheBuilder___:forMethod:)."
+
+	| t |
+	t := (SessionTemps current at: #'___grailIRBuilderCacheTick___' otherwise: 0) + 1.
+	SessionTemps current at: #'___grailIRBuilderCacheTick___' put: t.
+	^ t
 
 ]
 
@@ -5363,41 +5410,59 @@ importlib class >> ___irBuilderForMethod___: aMethod [
 	aMethod isNil ifTrue: [^ nil].
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ nil].
 	builder := self ___irBuilderCache___ at: aMethod otherwise: nil.
-	builder notNil ifTrue: [^ builder].
+	builder notNil ifTrue: [
+		builder cacheTick notNil ifTrue: [builder cacheTick: self ___irBuilderCacheTick___].
+		^ builder].
 	t0 := Time millisecondClockValue.
 	builder := self ___irRebuildBuilderFor___: aMethod.
 	"The census's cost row for a miss: how many rebuilds, and their time
 	(cpms:, milliseconds)."
 	self ___irCensusOn___ ifTrue: [
 		self ___irCensusCopy___: 'rebuild'
-			route: (builder isNil ifTrue: ['refused'] ifFalse: ['ok']) source: nil.
+			route: (builder isNil ifTrue: ['refused'] ifFalse: ['ok']) source: nil of: aMethod.
 		self ___irCensusNote___: #'cpms:rebuild' module: self ___irCensusModuleName___
-			def: 'rebuild' count: Time millisecondClockValue - t0].
+			def: ((self ___irDefIdOf___: aMethod) ifNil: ['?']) count: Time millisecondClockValue - t0].
 	^ builder
 
 ]
 
 { #category : 'Grail-IR Regeneration' }
 importlib class >> ___irCacheBuilder___: aBuilder forMethod: aMethod [
-	"Remember that aBuilder generated aMethod, dropping the oldest quarter of
-	the entries when the cache is full."
+	"Remember that aBuilder generated aMethod.  When the cache holds more than
+	___irBuilderCacheLimit___ BUILDERS, the least recently used quarter goes,
+	under every key that names them.
 
-	| cache order limit |
+	WHY BUILDERS, AND WHY RECENCY (P2.2).  The limit used to count keys, oldest
+	inserted dropped first.  Once the MI merge regenerates its copies, every
+	copy is a key of the builder it came from -- a class that takes
+	unittest.TestCase as a SECONDARY base adds some 65 -- so a few such
+	classes pushed TestCase's own builders out, and the next one rebuilt the
+	whole class from source: measured, TestCase was rebuilt 22 times
+	importing eight test modules, 22 of their 29.6 s of rebuilds.  Counting
+	builders makes copies free, and a hit refreshing a builder's use keeps a
+	popular base cached."
+
+	| cache limit count |
 	(aBuilder isNil or: [aMethod isNil]) ifTrue: [^ self].
 	limit := self ___irBuilderCacheLimit___.
 	limit = 0 ifTrue: [^ self].
 	cache := self ___irBuilderCache___.
-	order := SessionTemps current at: #'___grailIRBuilderCacheOrder___' ifAbsent: [
-		SessionTemps current at: #'___grailIRBuilderCacheOrder___' put: OrderedCollection new].
-	(cache includesKey: aMethod) ifFalse: [
-		cache size >= limit ifTrue: [
-			| drop |
-			drop := (limit // 4) max: 1.
-			[drop > 0 and: [order notEmpty]] whileTrue: [
-				cache removeKey: order removeFirst ifAbsent: [].
-				drop := drop - 1]].
-		order addLast: aMethod].
+	count := SessionTemps current at: #'___grailIRBuilderCacheCount___' otherwise: 0.
+	aBuilder cacheTick isNil ifTrue: [count := count + 1].
+	aBuilder cacheTick: self ___irBuilderCacheTick___.
 	cache at: aMethod put: aBuilder.
+	SessionTemps current at: #'___grailIRBuilderCacheCount___' put: count.
+	count > limit ifTrue: [
+		| live keep |
+		"Recount: a soft value the GC cleared took its builder with it."
+		live := IdentitySet new.
+		cache keysAndValuesDo: [:meth :builder | builder isNil ifFalse: [live add: builder]].
+		SessionTemps current at: #'___grailIRBuilderCacheCount___' put: live size.
+		live size > limit ifTrue: [
+			keep := limit - ((limit // 4) max: 1).
+			self ___irBuilderCacheDrop___: (IdentitySet withAll:
+				((live asSortedCollection: [:a :b | a cacheTick <= b cacheTick]) asArray
+					copyFrom: 1 to: live size - keep))]].
 	^ self
 
 ]

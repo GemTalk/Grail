@@ -145,6 +145,25 @@ IRMergeRegenerateTestCase >> testAMergeWithNoCacheAtAllStillRegenerates [
 ]
 
 { #category : 'Grail-Tests' }
+IRMergeRegenerateTestCase >> testCopiesDoNotPushABaseOutOfTheCache [
+	"The cache limit counts builders, and a copy is another key of the builder
+	it came from, so merging a base onto many classes does not evict the
+	base's builders: with room for only a few builders, the base module's
+	builders survive more keys than the limit and nothing is rebuilt."
+
+	| mod counts |
+	mod := self ___loadBaseThen___: [importlib ___irBuilderCacheLimit: 20].
+	counts := self ___copyCounts___.
+	self assert: (counts at: 'cp:mi:regen' ifAbsent: [0]) > 0.
+	self assert: (counts at: 'cp:rebuild:ok' ifAbsent: [0]) equals: 0.
+	self assert: importlib ___irBuilderCacheBuilderCount___ <= 20.
+	self assert: importlib ___irBuilderCache___ size > 20
+		description: 'fewer keys than the limit, so a key-counted cache would not have evicted either'.
+	self ___assertChecksPass___: mod
+
+]
+
+{ #category : 'Grail-Tests' }
 IRMergeRegenerateTestCase >> testMergedMethodsAreRegeneratedForTheClass [
 	"Every IR method the merge copied onto Built is an IR method whose class
 	is Built -- regenerated, not recompiled from text and not shared -- and

@@ -27,7 +27,8 @@ Class {
 		'instVarLeaves',
 		'classHelpers',
 		'markerNode',
-		'defId'
+		'defId',
+		'cacheTick'
 	]
 }
 
@@ -741,6 +742,22 @@ PyMethodIRBuilder >> break [
 	brk localBreak: loopStack last key.
 	brk argNode: self nilLit.
 	^ self add: brk
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> cacheTick [
+	"When importlib's builder cache last used this builder (a session counter),
+	or nil while it is not in the cache -- see importlib
+	___irCacheBuilder___:forMethod:, which evicts the least recently used."
+
+	^ cacheTick
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> cacheTick: anIntegerOrNil [
+	cacheTick := anIntegerOrNil
 
 ]
 
