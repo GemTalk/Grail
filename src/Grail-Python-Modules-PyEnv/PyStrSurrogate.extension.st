@@ -35,12 +35,13 @@ PyStrSurrogate >> ___adjustedStart___: start end: end length: length [
 
 	"start and end clamped as ADJUST_INDICES clamps them
 	(Objects/unicodeobject.c:9668), None standing for 0 and length as the
-	slice_index converter has it."
+	slice_index converter has it, and anything but an int or an __index__
+	object refused with that converter's TypeError (___asSliceIndex___)."
 
 	| first last |
 
-	first := start == None ifTrue: [0] ifFalse: [start ___asIndex___].
-	last := end == None ifTrue: [length] ifFalse: [end ___asIndex___].
+	first := start == None ifTrue: [0] ifFalse: [start ___asSliceIndex___].
+	last := end == None ifTrue: [length] ifFalse: [end ___asSliceIndex___].
 	last @env0:> length
 		ifTrue: [last := length]
 		ifFalse: [last @env0:< 0 ifTrue: [last := (last @env0:+ length) @env0:max: 0]].
