@@ -1966,26 +1966,35 @@ ByteArray >> ___decodeUTF8SurrogateEscape___ [
 ]
 
 { #category : 'Grail-Encoding/Decoding' }
+ByteArray >> ___hexSepByteOf: sep [
+
+	"The byte of a one-byte bytes separator, otherwise CPython's TypeError: a
+	bytearray or a memoryview is not a bytes object here (PyBytes_Check)."
+
+	((sep isKindOf: bytes) and: [(sep isKindOf: bytearray) not]) ifFalse: [
+		^ TypeError ___signal___: 'sep must be str or bytes.'].
+	^ sep @env0:at: 1
+
+]
+
+{ #category : 'Grail-Encoding/Decoding' }
 ByteArray >> ___hexSepCode___: sep [
-	"Resolve a hex() separator to its single ASCII code point (0..127).
-	CPython: None / any non-str-non-bytes -> TypeError; a separator that is
-	not exactly one character, or whose code point exceeds 127 -> ValueError."
+
+	"A hex() separator's single ASCII code point (0..127), checked in the order
+	CPython's _Py_strhex_impl checks it (Python/pystrhex.c:15-41): its len()
+	first, so an int or None raises len()'s own TypeError; then a length other
+	than 1; then the type, which a str or a bytes passes and a bytearray does
+	not; then the code point."
+
 	| code |
-	(sep @env0:== None) ifTrue: [
-		TypeError ___signal___: 'hex() argument must be str or bytes, not None'].
-	(sep isKindOf: CharacterCollection) ifTrue: [
-		(sep @env0:size @env0:= 1) ifFalse: [
-			ValueError ___signal___: 'sep must be length 1.'].
-		code := (sep @env0:at: 1) @env0:asInteger.
-		(code @env0:> 127) ifTrue: [ValueError ___signal___: 'sep must be ASCII.'].
-		^ code].
-	(sep isKindOf: bytes) ifTrue: [
-		(sep @env0:size @env0:= 1) ifFalse: [
-			ValueError ___signal___: 'sep must be length 1.'].
-		code := sep @env0:at: 1.
-		(code @env0:> 127) ifTrue: [ValueError ___signal___: 'sep must be ASCII.'].
-		^ code].
-	TypeError ___signal___: 'sep must be str or bytes.'
+
+	((builtins instance) len: sep) @env0:= 1 ifFalse: [
+		^ ValueError ___signal___: 'sep must be length 1.'].
+	code := sep @env0:___isPyStr___
+		ifTrue: [sep @env0:___pyCodePoints___ @env0:first]
+		ifFalse: [self ___hexSepByteOf: sep].
+	code @env0:> 127 ifTrue: [^ ValueError ___signal___: 'sep must be ASCII.'].
+	^ code
 
 ]
 
