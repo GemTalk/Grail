@@ -1025,6 +1025,16 @@ memoryview >> _cast: positional kw: keywords [
 ]
 
 { #category : 'Grail-Conversion' }
+memoryview >> _hex: positional kw: keywords [
+
+	"``mv.hex(sep=':', bytes_per_sep=2)'': bytes.hex's keywords, on this view's
+	bytes (see hex:_:)."
+
+	^ self tobytes @env1:_hex: positional kw: keywords
+
+]
+
+{ #category : 'Grail-Conversion' }
 memoryview >> cast: fmt [
 	"``mv.cast(fmt)'' -- reinterpret the SAME bytes as a different item type.
 
@@ -1096,6 +1106,27 @@ memoryview >> hex [
 	"``mv.hex()'' -- CPython's memoryview has it, exactly as bytes does."
 
 	^ (self tobytes) @env1:hex
+
+]
+
+{ #category : 'Grail-Conversion' }
+memoryview >> hex: sep [
+
+	"``mv.hex(':')'' (see hex:_:)."
+
+	^ self tobytes @env1:hex: sep
+
+]
+
+{ #category : 'Grail-Conversion' }
+memoryview >> hex: sep _: bytesPerSep [
+
+	"``mv.hex(':', 2)''.  CPython's memoryview.hex takes bytes.hex's separator
+	and group size (memoryview_hex_impl, Objects/memoryobject.c:2338) and
+	formats the view's bytes as a bytes object's are formatted; only the
+	zero-argument form existed here."
+
+	^ self tobytes @env1:hex: sep _: bytesPerSep
 
 ]
 
