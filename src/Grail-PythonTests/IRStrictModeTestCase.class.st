@@ -13,7 +13,8 @@ Pinned here:
   * the session tallies run_tests.sh reads (#sessionFallbacks,
     #sessionInvariants), which ___irStatsReset___ leaves alone;
   * tests/python/ir_strict_mode.py -- the shapes the census found falling
-    back (#2234, #2170) -- loads under strict mode with no fallback and
+    back (#2234, #2170, and a NUL in a __slots__ name) -- loads under
+    strict mode with no fallback and
     agrees with CPython (run the file directly).
 "
 Class {
@@ -162,6 +163,40 @@ IRStrictModeTestCase >> testFallbackRaisesInStrictMode [
 		description: msg.
 	"Recorded as well as raised."
 	self assert: (importlib ___irStats___ at: #fallbacks) = 1
+
+]
+
+{ #category : 'Grail-Tests - fixture' }
+IRStrictModeTestCase >> testFixtureAgreesWithCPythonUnderStrictIR [
+	| mod r table bad |
+	mod := self ___loadFixture___.
+	r := mod @env1:___pyAttrLoad___: #r.
+	table := mod @env1:___pyAttrLoad___: #EXPECTED.
+	bad := OrderedCollection new.
+	(table @env1:keys) asArray do: [:k |
+		| got want |
+		got := (r @env1:__getitem__: k) @env0:asString.
+		want := (table @env1:__getitem__: k) @env0:asString.
+		got = want ifFalse: [bad add: k asString , ': ' , got , ' vs ' , want]].
+	self assert: bad isEmpty
+		description: 'ir_strict_mode disagrees with CPython under strict IR: '
+			, bad asArray printString
+
+]
+
+{ #category : 'Grail-Tests - fixture' }
+IRStrictModeTestCase >> testFixtureFallsBackNowhere [
+	"Loading raises under strict mode if anything falls back; the counters
+	say the same thing without it, and that the fixture really went through
+	IR."
+
+	| stats |
+	self ___loadFixture___.
+	stats := importlib ___irStats___.
+	self assert: (stats at: #fallbacks) = 0
+		description: 'IR fell back to text: ' , (stats at: #fallbackLog) printString.
+	self assert: (stats at: #compiled) > 0
+		description: 'nothing in the fixture compiled through IR'
 
 ]
 

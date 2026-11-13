@@ -77,14 +77,13 @@ NameBindingStoresTestCase >> ___keysIn___: aModule [
 { #category : 'Grail-Private' }
 NameBindingStoresTestCase >> ___knownFallbacks___ [
 	"Fixture name -> how many of its defs the IR build still hands to text.
-	name_binding_stores: HeaderWalrus.m, whose ``@d := deco'' and
-	``metaclass=(mk := Meta)'' fail to build under IR with ``undefined symbol
-	d'' -- a gap older than this change; the text fallback gives CPython's
-	answer.  Pinned with =, so a fix shows up as a count to lower."
+	None now: name_binding_stores' HeaderWalrus.m, whose ``@d := deco'' and
+	``metaclass=(mk := Meta)'' failed to build under IR with ``undefined symbol
+	d'' (#2170), is REFUSED since P1.4 as ``classDef:headerWalrus''
+	(___knownRefusals___), so it never reaches the build.  Pinned with =, so a
+	new fallback shows up as a count."
 
 	^ Dictionary new
-		at: 'name_binding_stores' put: 1;
-		yourself
 
 ]
 
@@ -94,6 +93,22 @@ NameBindingStoresTestCase >> ___knownGrailIn___: aModule [
 	known := aModule @env1:___pyAttrLoad___: #'KNOWN_GRAIL'.
 	^ ((1 to: (known @env1:__len__)) collect: [:i |
 		(known @env1:__getitem__: i - 1) @env0:asString]) asSet
+
+]
+
+{ #category : 'Grail-Private' }
+NameBindingStoresTestCase >> ___knownRefusals___ [
+	"Fixture name -> the census rows its defs may still refuse under, each
+	owned by a later phase of the IR plan.  name_binding_stores'
+	HeaderWalrus.m binds an enclosing local with a walrus in a class header,
+	which the method-local class's text helper cannot reach
+	(``classDef:headerWalrus'', #2170): P3, which builds class statements
+	through IR, lifts it.  Counted with the compiled defs, so the fixture's
+	total still holds."
+
+	^ Dictionary new
+		at: 'name_binding_stores' put: #(#'cm:classDef:headerWalrus');
+		yourself
 
 ]
 
@@ -217,11 +232,15 @@ NameBindingStoresTestCase >> testNoDefInTheFixturesRefuses [
 				or: [(s includesString: 'signature:')
 				or: [(s includesString: 'nestedDef:')
 				or: [s includesString: 'classDef:']]]]]].
+		refusals := refusals reject: [:k |
+			(self ___knownRefusals___ at: assoc key ifAbsent: [#()]) includes: k].
 		self assert: refusals isEmpty
 			description: assoc key , ' still refuses: ' , refusals asArray printString.
 		self assert: (counts at: #fallback ifAbsent: [0]) = 0
 			description: assoc key , ': an eligible def fell back: ' , counts printString.
-		done := (counts at: #compiled ifAbsent: [0]) + (counts at: #'cm:eligible' ifAbsent: [0]).
+		done := (counts at: #compiled ifAbsent: [0]) + (counts at: #'cm:eligible' ifAbsent: [0])
+			+ ((self ___knownRefusals___ at: assoc key ifAbsent: [#()])
+				inject: 0 into: [:n :k | n + (counts at: k ifAbsent: [0])]).
 		self assert: done >= assoc value
 			description: assoc key , ': fewer defs compiled than the fixture holds ('
 				, assoc value printString , '): ' , counts printString]
