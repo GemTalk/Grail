@@ -874,9 +874,14 @@ Float >> __divmod__: other [
 
 { #category : 'Grail-Documentation' }
 Float >> __doc__ [
-	"Return documentation string for float type."
 
-	^ 'Convert a string or number to a floating-point number, if possible.' @env0:asUnicodeString
+	"An instance's docstring is its type's, as in CPython, where an instance
+	finds ``__doc__'' in its type's dict: builtin types answer CPython's
+	text (Object >> ___builtinTypeDocstring___), and an instance of a Python
+	subclass answers its own class's docstring or None.  This answered a
+	hand-written copy of float's text."
+
+	^ self __class__ __doc__
 
 ]
 

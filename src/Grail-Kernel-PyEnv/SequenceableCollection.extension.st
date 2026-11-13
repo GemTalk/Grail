@@ -273,9 +273,15 @@ SequenceableCollection >> __contains__: item [
 
 { #category : 'Grail-Other' }
 SequenceableCollection >> __doc__ [
-	"Return the docstring for SequenceableCollection."
 
-	^ 'Base class for sequences (list, tuple, etc.)'
+	"An instance's docstring is its type's, as in CPython, where an instance
+	finds ``__doc__'' in its type's dict: builtin types answer CPython's
+	text (Object >> ___builtinTypeDocstring___), and an instance of a Python
+	subclass answers its own class's docstring or None.  This answered
+	``Base class for sequences'' for every str, bytes and range, a text
+	CPython does not have."
+
+	^ self __class__ __doc__
 
 ]
 

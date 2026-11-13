@@ -441,12 +441,14 @@ OrderedCollection >> __dict__ [
 
 { #category : 'Grail-Other' }
 OrderedCollection >> __doc__ [
-	"Return the docstring for list."
 
-	^ 'Built-in mutable sequence.
+	"An instance's docstring is its type's, as in CPython, where an instance
+	finds ``__doc__'' in its type's dict: builtin types answer CPython's
+	text (Object >> ___builtinTypeDocstring___), and an instance of a Python
+	subclass answers its own class's docstring or None.  This answered a
+	hand-written copy of list's text, even for a subclass's instance."
 
-If no argument is given, the constructor creates a new empty list.
-The argument must be an iterable if specified.'
+	^ self __class__ __doc__
 
 ]
 

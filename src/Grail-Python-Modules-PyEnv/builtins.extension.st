@@ -346,6 +346,306 @@ raise a ValueError.
 
 ]
 
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___typeDocTable___ [
+	"CPython's ``__doc__'' for each builtin type, keyed by the name, and None
+	for a type CPython gives none.  Read by Object >> ___builtinTypeDocstring___.
+	GENERATED -- see the file header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'ArithmeticError' put: 'Base class for arithmetic errors.';
+		@env0:at: 'AssertionError' put: 'Assertion failed.';
+		@env0:at: 'AttributeError' put: 'Attribute not found.';
+		@env0:at: 'BaseException' put: 'Common base class for all exceptions';
+		@env0:at: 'BaseExceptionGroup' put: 'A combination of multiple unrelated exceptions.';
+		@env0:at: 'BlockingIOError' put: 'I/O operation would block.';
+		@env0:at: 'BrokenPipeError' put: 'Broken pipe.';
+		@env0:at: 'BufferError' put: 'Buffer error.';
+		@env0:at: 'BytesWarning' put: 'Base class for warnings about bytes and buffer related problems, mostly
+related to conversion from str or comparing to str.';
+		@env0:at: 'ChildProcessError' put: 'Child process error.';
+		@env0:at: 'ConnectionAbortedError' put: 'Connection aborted.';
+		@env0:at: 'ConnectionError' put: 'Connection error.';
+		@env0:at: 'ConnectionRefusedError' put: 'Connection refused.';
+		@env0:at: 'ConnectionResetError' put: 'Connection reset.';
+		@env0:at: 'DeprecationWarning' put: 'Base class for warnings about deprecated features.';
+		@env0:at: 'EOFError' put: 'Read beyond end of file.';
+		@env0:at: 'EncodingWarning' put: 'Base class for warnings about encodings.';
+		@env0:at: 'EnvironmentError' put: 'Base class for I/O related errors.';
+		@env0:at: 'Exception' put: 'Common base class for all non-exit exceptions.';
+		@env0:at: 'ExceptionGroup' put: None;
+		@env0:at: 'FileExistsError' put: 'File already exists.';
+		@env0:at: 'FileNotFoundError' put: 'File not found.';
+		@env0:at: 'FloatingPointError' put: 'Floating-point operation failed.';
+		@env0:at: 'FutureWarning' put: 'Base class for warnings about constructs that will change semantically
+in the future.';
+		@env0:at: 'GeneratorExit' put: 'Request that a generator exit.';
+		@env0:at: 'IOError' put: 'Base class for I/O related errors.';
+		@env0:at: 'ImportError' put: 'Import can''t find module, or can''t find name in module.';
+		@env0:at: 'ImportWarning' put: 'Base class for warnings about probable mistakes in module imports';
+		@env0:at: 'IndentationError' put: 'Improper indentation.';
+		@env0:at: 'IndexError' put: 'Sequence index out of range.';
+		@env0:at: 'InterruptedError' put: 'Interrupted by signal.';
+		@env0:at: 'IsADirectoryError' put: 'Operation doesn''t work on directories.';
+		@env0:at: 'KeyError' put: 'Mapping key not found.';
+		@env0:at: 'KeyboardInterrupt' put: 'Program interrupted by user.';
+		@env0:at: 'LookupError' put: 'Base class for lookup errors.';
+		@env0:at: 'MemoryError' put: 'Out of memory.';
+		@env0:at: 'ModuleNotFoundError' put: 'Module not found.';
+		@env0:at: 'NameError' put: 'Name not found globally.';
+		@env0:at: 'NotADirectoryError' put: 'Operation only works on directories.';
+		@env0:at: 'NotImplementedError' put: 'Method or function hasn''t been implemented yet.';
+		@env0:at: 'OSError' put: 'Base class for I/O related errors.';
+		@env0:at: 'OverflowError' put: 'Result too large to be represented.';
+		@env0:at: 'PendingDeprecationWarning' put: 'Base class for warnings about features which will be deprecated
+in the future.';
+		@env0:at: 'PermissionError' put: 'Not enough permissions.';
+		@env0:at: 'ProcessLookupError' put: 'Process not found.';
+		@env0:at: 'PythonFinalizationError' put: 'Operation blocked during Python finalization.';
+		@env0:at: 'RecursionError' put: 'Recursion limit exceeded.';
+		@env0:at: 'ReferenceError' put: 'Weak ref proxy used after referent went away.';
+		@env0:at: 'ResourceWarning' put: 'Base class for warnings about resource usage.';
+		@env0:at: 'RuntimeError' put: 'Unspecified run-time error.';
+		@env0:at: 'RuntimeWarning' put: 'Base class for warnings about dubious runtime behavior.';
+		@env0:at: 'StopAsyncIteration' put: 'Signal the end from iterator.__anext__().';
+		@env0:at: 'StopIteration' put: 'Signal the end from iterator.__next__().';
+		@env0:at: 'SyntaxError' put: 'Invalid syntax.';
+		@env0:at: 'SyntaxWarning' put: 'Base class for warnings about dubious syntax.';
+		@env0:at: 'SystemError' put: 'Internal error in the Python interpreter.
+
+Please report this to the Python maintainer, along with the traceback,
+the Python version, and the hardware/OS platform and version.';
+		@env0:at: 'SystemExit' put: 'Request to exit from the interpreter.';
+		@env0:at: 'TabError' put: 'Improper mixture of spaces and tabs.';
+		@env0:at: 'TimeoutError' put: 'Timeout expired.';
+		@env0:at: 'TypeError' put: 'Inappropriate argument type.';
+		@env0:at: 'UnboundLocalError' put: 'Local name referenced but not bound to a value.';
+		@env0:at: 'UnicodeDecodeError' put: 'Unicode decoding error.';
+		@env0:at: 'UnicodeEncodeError' put: 'Unicode encoding error.';
+		@env0:at: 'UnicodeError' put: 'Unicode related error.';
+		@env0:at: 'UnicodeTranslateError' put: 'Unicode translation error.';
+		@env0:at: 'UnicodeWarning' put: 'Base class for warnings about Unicode related problems, mostly
+related to conversion problems.';
+		@env0:at: 'UserWarning' put: 'Base class for warnings generated by user code.';
+		@env0:at: 'ValueError' put: 'Inappropriate argument value (of correct type).';
+		@env0:at: 'Warning' put: 'Base class for warning categories.';
+		@env0:at: 'ZeroDivisionError' put: 'Second argument to a division or modulo operation was zero.';
+		@env0:at: '_IncompleteInputError' put: 'incomplete input.';
+		@env0:at: 'bool' put: 'Returns True when the argument is true, False otherwise.
+The builtins True and False are the only two instances of the class bool.
+The class bool is a subclass of the class int, and cannot be subclassed.';
+		@env0:at: 'bytearray' put: 'bytearray(iterable_of_ints) -> bytearray
+bytearray(string, encoding[, errors]) -> bytearray
+bytearray(bytes_or_buffer) -> mutable copy of bytes_or_buffer
+bytearray(int) -> bytes array of size given by the parameter initialized with null bytes
+bytearray() -> empty bytes array
+
+Construct a mutable bytearray object from:
+  - an iterable yielding integers in range(256)
+  - a text string encoded using the specified encoding
+  - a bytes or a buffer object
+  - any object implementing the buffer API.
+  - an integer';
+		@env0:at: 'bytes' put: 'bytes(iterable_of_ints) -> bytes
+bytes(string, encoding[, errors]) -> bytes
+bytes(bytes_or_buffer) -> immutable copy of bytes_or_buffer
+bytes(int) -> bytes object of size given by the parameter initialized with null bytes
+bytes() -> empty bytes object
+
+Construct an immutable array of bytes from:
+  - an iterable yielding integers in range(256)
+  - a text string encoded using the specified encoding
+  - any object implementing the buffer API.
+  - an integer';
+		@env0:at: 'classmethod' put: 'Convert a function to be a class method.
+
+A class method receives the class as implicit first argument,
+just like an instance method receives the instance.
+To declare a class method, use this idiom:
+
+  class C:
+      @classmethod
+      def f(cls, arg1, arg2, argN):
+          ...
+
+It can be called either on the class (e.g. C.f()) or on an instance
+(e.g. C().f()).  The instance is ignored except for its class.
+If a class method is called for a derived class, the derived class
+object is passed as the implied first argument.
+
+Class methods are different than C++ or Java static methods.
+If you want those, see the staticmethod builtin.';
+		@env0:at: 'complex' put: 'Create a complex number from a string or numbers.
+
+If a string is given, parse it as a complex number.
+If a single number is given, convert it to a complex number.
+If the ''real'' or ''imag'' arguments are given, create a complex number
+with the specified real and imaginary components.';
+		@env0:at: 'dict' put: 'dict() -> new empty dictionary
+dict(mapping) -> new dictionary initialized from a mapping object''s
+    (key, value) pairs
+dict(iterable) -> new dictionary initialized as if via:
+    d = {}
+    for k, v in iterable:
+        d[k] = v
+dict(**kwargs) -> new dictionary initialized with the name=value pairs
+    in the keyword argument list.  For example:  dict(one=1, two=2)';
+		@env0:at: 'enumerate' put: 'Return an enumerate object.
+
+  iterable
+    an object supporting iteration
+
+The enumerate object yields pairs containing a count (from start, which
+defaults to zero) and a value yielded by the iterable argument.
+
+enumerate is useful for obtaining an indexed list:
+    (0, seq[0]), (1, seq[1]), (2, seq[2]), ...';
+		@env0:at: 'filter' put: 'Return an iterator yielding those items of iterable for which
+function(item) is true.  If function is None, return the items that
+are true.';
+		@env0:at: 'float' put: 'Convert a string or number to a floating-point number, if possible.';
+		@env0:at: 'frozenset' put: 'Build an immutable unordered collection of unique elements.';
+		@env0:at: 'int' put: 'int([x]) -> integer
+int(x, base=10) -> integer
+
+Convert a number or string to an integer, or return 0 if no arguments
+are given.  If x is a number, return x.__int__().  For floating-point
+numbers, this truncates towards zero.
+
+If x is not a number or if base is given, then x must be a string,
+bytes, or bytearray instance representing an integer literal in the
+given base.  The literal can be preceded by ''+'' or ''-'' and be surrounded
+by whitespace.  The base defaults to 10.  Valid bases are 0 and 2-36.
+Base 0 means to interpret the base from the string as an integer
+iteral.
+>>> int(''0b100'', base=0)
+4';
+		@env0:at: 'list' put: 'Built-in mutable sequence.
+
+If no argument is given, the constructor creates a new empty list.
+The argument must be an iterable if specified.';
+		@env0:at: 'map' put: 'Make an iterator that computes the function using arguments from
+each of the iterables.  Stops when the shortest iterable is exhausted.
+
+If strict is true and one of the arguments is exhausted before the
+others, raise a ValueError.';
+		@env0:at: 'memoryview' put: 'Create a new memoryview object which references the given object.';
+		@env0:at: 'object' put: 'The base class of the class hierarchy.
+
+When called, it accepts no arguments and returns a new featureless
+instance that has no instance attributes and cannot be given any.
+';
+		@env0:at: 'property' put: 'Property attribute.
+
+  fget
+    function to be used for getting an attribute value
+  fset
+    function to be used for setting an attribute value
+  fdel
+    function to be used for del''ing an attribute
+  doc
+    docstring
+
+Typical use is to define a managed attribute x:
+
+class C(object):
+    def getx(self): return self._x
+    def setx(self, value): self._x = value
+    def delx(self): del self._x
+    x = property(getx, setx, delx, "I''m the ''x'' property.")
+
+Decorators make defining new properties or modifying existing ones easy:
+
+class C(object):
+    @property
+    def x(self):
+        "I am the ''x'' property."
+        return self._x
+    @x.setter
+    def x(self, value):
+        self._x = value
+    @x.deleter
+    def x(self):
+        del self._x';
+		@env0:at: 'range' put: 'range(stop) -> range object
+range(start, stop[, step]) -> range object
+
+Return an object that produces a sequence of integers from start (inclusive)
+to stop (exclusive) by step.  range(i, j) produces i, i+1, i+2, ..., j-1.
+start defaults to 0, and stop is omitted!  range(4) produces 0, 1, 2, 3.
+These are exactly the valid indices for a list of 4 elements.
+When step is given, it specifies the increment (or decrement).';
+		@env0:at: 'reversed' put: 'Return a reverse iterator over the values of the given sequence.';
+		@env0:at: 'set' put: 'Build an unordered collection of unique elements.';
+		@env0:at: 'slice' put: 'slice(stop)
+slice(start, stop[, step])
+
+Create a slice object.
+
+This is used for extended slicing (e.g. a[0:10:2]).';
+		@env0:at: 'staticmethod' put: 'Convert a function to be a static method.
+
+A static method does not receive an implicit first argument.
+To declare a static method, use this idiom:
+
+     class C:
+         @staticmethod
+         def f(arg1, arg2, argN):
+             ...
+
+It can be called either on the class (e.g. C.f()) or on an instance
+(e.g. C().f()). Both the class and the instance are ignored, and
+neither is passed implicitly as the first argument to the method.
+
+Static methods in Python are similar to those found in Java or C++.
+For a more advanced concept, see the classmethod builtin.';
+		@env0:at: 'str' put: 'str(object='''') -> str
+str(bytes_or_buffer[, encoding[, errors]]) -> str
+
+Create a new string object from the given object. If encoding or
+errors is specified, then the object must expose a data buffer
+that will be decoded using the given encoding and error handler.
+Otherwise, returns the result of object.__str__() (if defined)
+or repr(object).
+encoding defaults to ''utf-8''.
+errors defaults to ''strict''.';
+		@env0:at: 'super' put: 'super() -> same as super(__class__, <first argument>)
+super(type) -> unbound super object
+super(type, obj) -> bound super object; requires isinstance(obj, type)
+super(type, type2) -> bound super object; requires
+    issubclass(type2, type)
+Typical use to call a cooperative superclass method:
+class C(B):
+    def meth(self, arg):
+        super().meth(arg)
+This works for class methods too:
+class C(B):
+    @classmethod
+    def cmeth(cls, arg):
+        super().cmeth(arg)
+';
+		@env0:at: 'tuple' put: 'Built-in immutable sequence.
+
+If no argument is given, the constructor returns an empty tuple.
+If iterable is specified the tuple is initialized from iterable''s items.
+
+If the argument is a tuple, the return value is the same object.';
+		@env0:at: 'type' put: 'type(object) -> the object''s type
+type(name, bases, dict, **kwds) -> a new type';
+		@env0:at: 'zip' put: 'The zip object yields n-length tuples, where n is the number of
+iterables passed as positional arguments to zip().  The i-th element
+in every tuple comes from the i-th iterable argument to zip().  This
+continues until the shortest argument is exhausted.
+
+If strict is true and one of the arguments is exhausted before the
+others, raise a ValueError.
+
+   >>> list(zip(''abcdefg'', range(3), range(4)))
+   [(''a'', 0, 0), (''b'', 1, 1), (''c'', 2, 2)]';
+		@env0:yourself)
+
+]
+
 { #category : 'Grail-Built-in Functions' }
 builtins >> ___abstractBases___: anObject [
 	"CPython's abstract_get_bases: the object's ``__bases__'' when it is a

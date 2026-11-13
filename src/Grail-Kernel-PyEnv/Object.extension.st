@@ -7588,6 +7588,27 @@ Object >> ___buildSelectorFamily___: aString [
 
 ]
 
+{ #category : 'Grail-Introspection' }
+Object >> ___builtinTypeDocstring___ [
+
+	"CPython's docstring for this class when it is one of the builtins module's
+	types -- None for the one CPython gives none -- or nil for any other class
+	(builtins class >> ___typeDocTable___, generated from CPython).
+
+	The name alone does not decide it: a class that type() builds may call
+	itself ``int''.  The builtins module's binding of the name must be this
+	very class."
+
+	| builtinsClass name |
+
+	builtinsClass := Python @env0:at: #builtins.
+	name := [self __name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [^ nil].
+	^ builtinsClass ___typeDocTable___ @env0:at: name @env0:asString otherwise: nil
+
+]
+
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___callTypeAttr___: aValue with: args [
 	"Call aValue, found on self's type, with args -- CPython's implicit
@@ -13430,6 +13451,17 @@ Object >> ___instanceDataDescriptorFor___: aName [
 				(self ___isDataDescriptorValue___: raw) ifTrue: [^ raw]]].
 		walker := walker @env0:superClass].
 	^ nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___isBuiltinsBindingOf: aName in: aBuiltinsClass [
+
+	"Whether the builtins module binds aName to this very object."
+
+	^ ([aBuiltinsClass @env1:instance ___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) == self
 
 ]
 
@@ -19472,6 +19504,10 @@ Object >> __doc__ [
 			own := [holder @env0:dynamicInstVarAt: #'__doc__']
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 			own @env0:notNil ifTrue: [^ own]].
+		"A BUILTIN type -- int, list, the exceptions -- has no class statement and
+		so no stored docstring, and answered object's below (#1724)."
+		own := self ___builtinTypeDocstring___.
+		own @env0:notNil ifTrue: [^ own].
 		^ 'The base class of the class hierarchy.
 
 When called, it accepts no arguments and returns a new featureless
