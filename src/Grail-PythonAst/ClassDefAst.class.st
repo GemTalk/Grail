@@ -5835,7 +5835,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 								flag-on sweep of cut 48).  The emission loop derives the same
 								key from each source's selector pattern (___irSelectorOfSource___:)."
 								(importlib ___irClassSeamEnabled___
-									and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+									and: [importlib ___irAdmits___: def])
 										ifTrue: [importlib ___irRegisterDef: def forClass: self
 											name: def ___irSelector___ asString]].
 						"Keyword-call companion for a simple-positional instance
@@ -5928,7 +5928,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
 					(importlib ___irClassSeamEnabled___
-						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+						and: [importlib ___irAdmits___: def])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
 								name: 'class>>' , def ___irSelector___ asString
 								classSide: true].
@@ -5966,7 +5966,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
 					(importlib ___irClassSeamEnabled___
-						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+						and: [importlib ___irAdmits___: def])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
 								name: 'class>>' , def ___irSelector___ asString
 								classSide: true].

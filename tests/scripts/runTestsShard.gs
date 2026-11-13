@@ -174,6 +174,22 @@ out nextPutAll: 'GRAIL_SHARD_CODE|idx='; nextPutAll: idx printString;
   nextPutAll: '|endKB='; nextPutAll: codeKB value printString;
   nextPutAll: '|capKB='; nextPutAll: codeCapKB printString;
   nextPutAll: '|pct='; nextPutAll: (codePeakKB * 100 // codeCapKB) printString; lf.
+"IR fallbacks across the WHOLE shard (P1.4).  In strict mode (GRAIL_IR_STRICT,
+which run_tests.sh turns on for the IR arm) a fallback raises in the test that
+met it, so this is the backstop for one a test caught and swallowed -- an
+``except Exception'' around an import, say.  The session tallies, not
+#fallbacks, which many IR tests reset to measure one import of their own.
+run_tests.sh fails a strict run whose shards report any."
+[| st |
+  st := importlib ___irStats___.
+  out nextPutAll: 'GRAIL_SHARD_IR|idx='; nextPutAll: idx printString;
+    nextPutAll: '|strict='; nextPutAll: (st at: #strict) printString;
+    nextPutAll: '|fallbacks='; nextPutAll: (st at: #sessionFallbacks) printString;
+    nextPutAll: '|invariants='; nextPutAll: (st at: #sessionInvariants) printString;
+    nextPutAll: '|lastError='; nextPutAll: (((st at: #lastError) ifNil: ['']) asString
+      collect: [:c | (c == Character lf or: [c == Character cr]) ifTrue: [$ ] ifFalse: [c]]); lf]
+  on: Error do: [:e | out nextPutAll: 'GRAIL_SHARD_IR|idx='; nextPutAll: idx printString;
+    nextPutAll: '|unreadable='; nextPutAll: e messageText asString; lf].
 out nextPutAll: 'GRAIL_SHARD_RESULT|idx='; nextPutAll: idx printString;
   nextPutAll: '|workers='; nextPutAll: numWorkers printString;
   nextPutAll: '|ms='; nextPutAll: (System _timeMs - shardT0) printString;
