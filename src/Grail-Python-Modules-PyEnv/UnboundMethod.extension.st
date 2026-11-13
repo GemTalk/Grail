@@ -942,6 +942,10 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 	``bytes.hex(1)'' raises TypeError; a ``def'' in a Python class body is a
 	plain function that checks nothing, so ``_C.f(2)'' just binds x = 2.
 
+	An IR-built method is not recompiled at all: its IR is generated again for
+	the receiver's class (importlib ___irMethodFor___:on:), and only a method
+	with no builder falls back to the text compile.
+
 	Cached per (method, receiver class) in SessionTemps.  The GsNMethod object
 	itself is the key, so an ``install.sh'' -- which replaces the method object --
 	invalidates the entry by construction, with no generation check to get wrong.
@@ -972,6 +976,23 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 			cache @env0:at: aMethod put: fresh.
 			fresh].
 	(per @env0:includesKey: aClass) ifTrue: [^ per @env0:at: aClass].
+	"An IR-built method is GENERATED for aClass from its IR builder (P2.2) --
+	the same tree with aClass as its inClass, which is all the primitive asks
+	of it -- under aMethod's own selector (a ``___grailOrig_'' shadow's too),
+	and, like the compile below, installed nowhere.  nil (no builder, or a
+	class statement whose helper aClass cannot reach) keeps the text route."
+	compiled := [((Python @env0:at: #importlib) @env0:___irCopiesRegenerate___)
+			ifTrue: [(Python @env0:at: #importlib)
+				@env0:___irMethodFor___: aMethod on: aClass as: aMethod @env0:selector]]
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	compiled == nil ifFalse: [
+		(Python @env0:at: #importlib) @env0:___irCensusCopy___: 'special' route: 'regen'
+			source: nil of: aMethod.
+		per @env0:at: aClass put: compiled.
+		self ___recordHome___: home ofRecompile: compiled.
+		^ compiled].
 	src := self ___methodSourceOrNil___: aMethod.
 	(Python @env0:at: #importlib) @env0:___irCensusCopy___: 'special'
 		route: (src == nil
@@ -979,7 +1000,7 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 			ifFalse: [([BaseException @env0:___isIRPythonMethod___: aMethod]
 					@env0:on: Error do: [:ex | ex @env0:return: false])
 				ifTrue: ['twin'] ifFalse: ['text']])
-		source: src.
+		source: src of: aMethod.
 	src == nil ifTrue: [^ nil].
 	"CompileWarning is RESUMED, not ignored.  It is a Notification, so an
 	``on: Error'' handler does not see it and its default action terminated the
