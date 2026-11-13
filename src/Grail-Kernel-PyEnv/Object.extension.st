@@ -7635,7 +7635,9 @@ Object >> ___builtinTypeDocstring___ [
 
 	"CPython's docstring for this class when it is one of the builtins module's
 	types -- None for the one CPython gives none -- or nil for any other class
-	(builtins class >> ___typeDocTable___, generated from CPython).
+	(builtins class >> ___typeDocTable___, generated from CPython).  A type the
+	types module names instead, such as code or NoneType, is looked up in a
+	table of its own.
 
 	The name alone does not decide it: a class that type() builds may call
 	itself ``int''.  The builtins module's binding of the name must be this
@@ -7646,7 +7648,8 @@ Object >> ___builtinTypeDocstring___ [
 	builtinsClass := Python @env0:at: #builtins.
 	name := [self __name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
-	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [^ nil].
+	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [
+		^ self ___typesModuleTypeDocstringNamed: name in: builtinsClass].
 	^ builtinsClass ___typeDocTable___ @env0:at: name @env0:asString otherwise: nil
 
 ]
@@ -18760,6 +18763,20 @@ Object >> ___typeReprString___ [
 	stream @env0:nextPutAll: qual.
 	stream @env0:nextPutAll: '''>'.
 	^ stream @env0:contents
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___typesModuleTypeDocstringNamed: aName in: aBuiltinsClass [
+
+	"CPython's docstring for a type the types module names and builtins does
+	not bind -- code, generator, NoneType -- when this class is one Grail
+	implements in Smalltalk, or nil (builtins class >> ___typesModuleDocTable___).
+	A Python class keeps its own docstring whatever its name, so a class
+	statement's ``class code'' is not taken for the code type."
+
+	(self ___respondsTo___: #'___dynInstVars___') ifTrue: [^ nil].
+	^ aBuiltinsClass ___typesModuleDocTable___ @env0:at: aName @env0:asString otherwise: nil
 
 ]
 

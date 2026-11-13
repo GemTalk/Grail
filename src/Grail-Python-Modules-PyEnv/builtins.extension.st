@@ -1825,6 +1825,59 @@ others, raise a ValueError.
 
 ]
 
+{ #category : 'Grail-Docstrings' }
+builtins class >> ___typesModuleDocTable___ [
+	"CPython's ``__doc__'' for each type the types module names that builtins
+	does not bind, keyed by the type's ``__name__'', and None for a type CPython
+	gives none.  Read by Object >> ___typesModuleTypeDocstringNamed:in:.
+	GENERATED -- see the file header."
+
+	^ ((KeyValueDictionary @env0:new)
+		@env0:at: 'async_generator' put: None;
+		@env0:at: 'cell' put: 'Create a new cell object.
+
+  contents
+    the contents of the cell. If not specified, the cell will be empty,
+    and further attempts to access its cell_contents attribute will
+    raise a ValueError.';
+		@env0:at: 'code' put: 'Create a code object.  Not for the faint of heart.';
+		@env0:at: 'coroutine' put: None;
+		@env0:at: 'ellipsis' put: 'The type of the Ellipsis singleton.';
+		@env0:at: 'frame' put: None;
+		@env0:at: 'function' put: 'Create a function object.
+
+  code
+    a code object
+  globals
+    the globals dictionary
+  name
+    a string that overrides the name from the code object
+  argdefs
+    a tuple that specifies the default argument values
+  closure
+    a tuple that supplies the bindings for free variables
+  kwdefaults
+    a dictionary that specifies the default keyword argument values';
+		@env0:at: 'generator' put: None;
+		@env0:at: 'GenericAlias' put: 'Represent a PEP 585 generic type
+
+For example, for t = list[int], t.__origin__ is list and t.__args__
+is (int,).';
+		@env0:at: 'mappingproxy' put: 'Read-only proxy of a mapping.';
+		@env0:at: 'method' put: 'Create a bound instance method object.';
+		@env0:at: 'module' put: 'Create a module object.
+
+The name must be a string; the optional doc argument can have any type.';
+		@env0:at: 'NoneType' put: 'The type of the None singleton.';
+		@env0:at: 'NotImplementedType' put: 'The type of the NotImplemented singleton.';
+		@env0:at: 'traceback' put: 'Create a new traceback object.';
+		@env0:at: 'Union' put: 'Represent a union type
+
+E.g. for int | str';
+		@env0:yourself)
+
+]
+
 { #category : 'Grail-Built-in Functions' }
 builtins >> ___abstractBases___: anObject [
 	"CPython's abstract_get_bases: the object's ``__bases__'' when it is a
