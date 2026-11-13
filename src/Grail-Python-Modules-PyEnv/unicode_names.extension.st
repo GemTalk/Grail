@@ -15,3 +15,12 @@ unicode_names >> name_for_codepoint: aCodePoint [
 	^ (unicode_names @env0:___nameForCodePoint: aCodePoint) @env0:ifNil: [None]
 
 ]
+
+{ #category : 'Grail-Unicode Names' }
+unicode_names >> sequence_for_name: aName [
+	"Python: unicode_names.sequence_for_name(name) -> str or None, the
+	characters of a Unicode named sequence."
+
+	^ (unicode_names @env0:___sequenceForName: aName) @env0:ifNil: [None]
+
+]

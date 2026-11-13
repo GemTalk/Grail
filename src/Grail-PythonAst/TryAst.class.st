@@ -882,15 +882,24 @@ TryAst >> ___irRefusalDetail___: localSet [
 	known local is a scope-collection problem.
 
 	Census only (FunctionDefAst>>___irRefusalIn___:locals:), so it changes no
-	generated code; it changes what the board says to work on next."
+	generated code; it changes what the board says to work on next.
+
+	Most of these exits are PARSER INVARIANTS and carry the ``invariant:''
+	prefix (P1.3): parseTry raises ``expected 'except' or 'finally' block''
+	for a try with neither, parses ``else'' only after handlers, raises for a
+	mixed or typeless ``except*'', and wraps every block in a SuiteAst.  The
+	final row is reached only if this method and the predicate drift apart.
+	What can fire on parsed source is an except type, an ``as'' target, or a
+	statement inside one of the blocks -- and the walk names a refusing
+	statement or type before this runs."
 
 	handlers isEmpty ifTrue: [
-		self ___irHasFinally___ ifFalse: [^ #'shape:TryAst-noHandlersNoFinally'].
+		self ___irHasFinally___ ifFalse: [^ #'invariant:TryAst-noHandlersNoFinally'].
 		(orelse isNil or: [orelse size = 0])
-			ifFalse: [^ #'shape:TryAst-elseWithoutExcept']].
+			ifFalse: [^ #'invariant:TryAst-elseWithoutExcept']].
 	((handlers allSatisfy: [:h | h isStar == true])
 		or: [handlers allSatisfy: [:h | h isStar ~~ true]])
-			ifFalse: [^ #'shape:TryAst-exceptStarMixed'].
+			ifFalse: [^ #'invariant:TryAst-exceptStarMixed'].
 	handlers do: [:h |
 		"``except*'' is emitted now (___emitIRExceptStarPartOn___:).  What is
 		still refused is a statement MIXING star and non-star clauses, which
@@ -898,7 +907,7 @@ TryAst >> ___irRefusalDetail___: localSet [
 		SyntaxError -- both named so a future parser change cannot make this row
 		reappear without saying which shape it is."
 		(h isStar == true and: [h type isNil])
-			ifTrue: [^ #'shape:TryAst-exceptStarNoType'].
+			ifTrue: [^ #'invariant:TryAst-exceptStarNoType'].
 		h type ifNotNil: [:t |
 			(h isStar == true
 				ifTrue: [t ___irEligibleValueLocals___: localSet]
@@ -908,24 +917,24 @@ TryAst >> ___irRefusalDetail___: localSet [
 			(self ___irCatchTargetEligible___: n locals: localSet)
 				ifFalse: [^ #'shape:TryAst-asTargetNotLocal']].
 		((h body isKindOf: BlockAst) or: [h body isKindOf: SuiteAst])
-			ifFalse: [^ #'shape:TryAst-handlerBodyShape'].
+			ifFalse: [^ #'invariant:TryAst-handlerBodyShape'].
 		(h body ___irEligibleStatementsWithLocals___: localSet)
 			ifFalse: [^ #'shape:TryAst-handlerBodyStatement']].
 	(orelse notNil and: [orelse size > 0]) ifTrue: [
 		((orelse isKindOf: BlockAst) or: [orelse isKindOf: SuiteAst])
-			ifFalse: [^ #'shape:TryAst-elseShape'].
+			ifFalse: [^ #'invariant:TryAst-elseShape'].
 		(orelse ___irEligibleStatementsWithLocals___: localSet)
 			ifFalse: [^ #'shape:TryAst-elseStatement']].
 	self ___irHasFinally___ ifTrue: [
 		((finalbody isKindOf: BlockAst) or: [finalbody isKindOf: SuiteAst])
-			ifFalse: [^ #'shape:TryAst-finallyShape'].
+			ifFalse: [^ #'invariant:TryAst-finallyShape'].
 		(finalbody ___irEligibleStatementsWithLocals___: localSet)
 			ifFalse: [^ #'shape:TryAst-finallyStatement']].
 	((body isKindOf: BlockAst) or: [body isKindOf: SuiteAst])
-		ifFalse: [^ #'shape:TryAst-bodyShape'].
+		ifFalse: [^ #'invariant:TryAst-bodyShape'].
 	(body ___irEligibleStatementsWithLocals___: localSet)
 		ifFalse: [^ #'shape:TryAst-bodyStatement'].
-	^ #'shape:TryAst-other'
+	^ #'invariant:TryAst-noReason'
 
 ]
 

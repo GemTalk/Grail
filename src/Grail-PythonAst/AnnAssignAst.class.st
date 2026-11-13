@@ -73,26 +73,38 @@ AnnAssignAst >> ___boundTargetNames___ [
 ]
 
 { #category : 'Grail-Annotations' }
-AnnAssignAst >> ___emitAnnotateEntryOn___: aStream [
+AnnAssignAst >> ___emitAnnotateEntryOn___: e [
 	"This name's entry in its scope's annotate function, evaluated in the format
-	the function was called with (PyAnnotate >> ___annotationValue___:source:format:)."
+	the function was called with (PyAnnotate >> ___annotationValue___:source:format:).
+	Written through e, a ClassBuildEmitter: the class build's annotate function
+	and the module body's (through AbstractNode >> ___emitAnnotateBlockOn___:)
+	both hold it."
 
-	aStream
-		nextPutAll: '___annotations___ @env0:at: ''';
-		nextPutAll: target id asString;
-		nextPutAll: ''' put: (PyAnnotate @env1:___annotationValue___: ['.
-	annotation printSmalltalkOn: aStream.
-	aStream nextPutAll: '] source: '.
-	self emitStringLiteral: annotation ___annotationSourceString___ on: aStream.
-	aStream nextPutAll: ' format: (___annArgs___ @env0:at: 1)).'
+	e statementWithoutNewline: [
+		e send: #'at:put:' env: 0 to: [e var: '___annotations___'] with: {
+			[e string: target id asString].
+			[e paren: [
+				e send: #'___annotationValue___:source:format:' env: 1 to: [e var: 'PyAnnotate'] with: {
+					[e block: [e expressionNode: annotation]].
+					[e stringIndentedByStream: annotation ___annotationSourceString___].
+					[e paren: [e send: #'at:' env: 0 to: [e var: '___annArgs___'] with: {[e integer: 1]}]]}]]}]
 
 ]
 
 { #category : 'Grail-Annotations' }
 AnnAssignAst >> ___emitExecutionRecordOn___: aStream [
+	"___emitExecutionRecordWith___: as text on aStream, for this node's own
+	printSmalltalkOn:."
+
+	self ___emitExecutionRecordWith___: (ClassBuildTextEmitter on: aStream)
+
+]
+
+{ #category : 'Grail-Annotations' }
+AnnAssignAst >> ___emitExecutionRecordWith___: e [
 	"Record that this annotation ran, where its scope keeps that record."
 
-	self ___isSimpleAnnotation___ ifTrue: [self ___emitExecutionRecordOf___: self on: aStream]
+	self ___isSimpleAnnotation___ ifTrue: [self ___emitExecutionRecordOf___: self on: e]
 
 ]
 
@@ -174,11 +186,20 @@ AnnAssignAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___irRefusalDetail___: localSet [
+	"An attribute target with a value is its AssignAst's, and says so.  The
+	other two exits are PARSER INVARIANTS for a def body (P1.3): a Name target
+	there is module-scope only under ``global x'', and ``global x; x: T = v''
+	is the parser's ``annotated name 'x' can't be global''; any other Name
+	target is a local, because the annotated assignment binds it (``nonlocal
+	x; x: T'' is ``can't be nonlocal''); and a target that is not a Name,
+	attribute or subscript is ``only single target ... can be annotated''.  A
+	subscript whose pieces refuse is named by the walk before this runs."
+
 	(value notNil and: [target isKindOf: AttributeAst]) ifTrue: [
 		^ self ___plainAssign___ ___irRefusalDetail___: localSet].
 	((target isKindOf: NameAst) and: [self isModuleScopeAnnTarget: target])
-		ifTrue: [^ #'AnnAssignAst:moduleTarget'].
-	^ #'AnnAssignAst:target'
+		ifTrue: [^ #'invariant:AnnAssignAst-moduleTarget'].
+	^ #'invariant:AnnAssignAst-target'
 
 ]
 

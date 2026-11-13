@@ -461,7 +461,7 @@ memoryview >> ___normaliseDownBound___: value default: aDefault length: n [
 
 	| v |
 	((value == nil) @env0:or: [value == None]) ifTrue: [^ aDefault].
-	v := value.
+	v := value ___asSliceIndex___.
 	v @env0:< 0 ifTrue: [v := v @env0:+ n].
 	v @env0:< 0 ifTrue: [^ -1].
 	v @env0:>= n ifTrue: [^ n @env0:- 1].
@@ -476,7 +476,7 @@ memoryview >> ___normaliseSliceBound___: value default: aDefault length: n [
 
 	| v |
 	((value == nil) @env0:or: [value == None]) ifTrue: [^ aDefault].
-	v := value.
+	v := value ___asSliceIndex___.
 	v @env0:< 0 ifTrue: [v := v @env0:+ n].
 	v @env0:< 0 ifTrue: [^ 0].
 	v @env0:> n ifTrue: [^ n].
@@ -605,9 +605,9 @@ memoryview >> ___sliceView___: aSlice [
 	 unary-method branch of the load, since the slot is not a dynamic instVar on
 	 that object -- so every ``mv[1:3]'' saw a step of ``aBoundMethod''."
 	step := aSlice @env1:step.
-	((step == nil) @env0:or: [step == None]) ifTrue: [step := 1].
-	(step isKindOf: Integer) ifFalse: [
-		TypeError ___signal___: 'slice indices must be integers or None or have an __index__ method'].
+	((step == nil) @env0:or: [step == None])
+		ifTrue: [step := 1]
+		ifFalse: [step := step ___asSliceIndex___].
 	step @env0:= 0 ifTrue: [ValueError ___signal___: 'slice step cannot be zero'].
 	step @env0:> 0
 		ifTrue: [
@@ -1125,8 +1125,8 @@ memoryview >> index: aValue _: aStart _: aStop [
 	ndim @env0:= 1 ifFalse: [
 		^ NotImplementedError ___signal___: 'multi-dimensional lookup is not implemented'].
 	n := self __len__.
-	start := aStart ___asIndex___.
-	stop := aStop ___asIndex___.
+	start := aStart ___asRequiredSliceIndex___.
+	stop := aStop ___asRequiredSliceIndex___.
 	start @env0:< 0 ifTrue: [start := start @env0:+ n @env0:max: 0].
 	stop @env0:< 0 ifTrue: [stop := stop @env0:+ n @env0:max: 0].
 	stop := stop @env0:min: n.

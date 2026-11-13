@@ -6902,12 +6902,13 @@ Object >> ___asIndex___ [
 
 { #category : 'Grail-Numeric Protocol' }
 Object >> ___asIndexOrNil___ [
-	"___asIndex___ for an OPTIONAL bound: nil and the Python None singleton
-	pass through untouched (an unset slice bound), everything else coerces."
+	"A subscript's OPTIONAL slice bound: nil and the Python None singleton
+	pass through untouched (an unset bound), everything else is a slice index
+	(___asSliceIndex___)."
 
 	self @env0:isNil ifTrue: [^ nil].
 	(self @env0:== None) ifTrue: [^ self].
-	^ self ___asIndex___
+	^ self ___asSliceIndex___
 
 ]
 
@@ -6933,6 +6934,20 @@ Object >> ___asRepeatCount___ [
 ]
 
 { #category : 'Grail-Numeric Protocol' }
+Object >> ___asRequiredSliceIndex___ [
+
+	"This object as a start or stop that may not be None: CPython's
+	_PyEval_SliceIndexNotNone (Python/ceval.c:3098), the converter of
+	list.index, tuple.index and memoryview.index.  As ___asSliceIndex___, with
+	None refused like any other non-index."
+
+	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
+		^ TypeError ___signal___: TypeError @env0:___requiredSliceIndexMessage___].
+	^ self ___asIndex___
+
+]
+
+{ #category : 'Grail-Numeric Protocol' }
 Object >> ___asSizeOr: aDefault [
 	"This object as a size argument that may be None -- Argument Clinic's
 	``Py_ssize_t(accept={int, NoneType})'', _Py_convert_optional_to_ssize_t:
@@ -6943,6 +6958,22 @@ Object >> ___asSizeOr: aDefault [
 	(self @env0:isNil or: [self == None]) ifTrue: [^ aDefault].
 	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
 		^ TypeError ___signal___: (TypeError @env0:___integerOrNoneMessageFor: self)].
+	^ self ___asIndex___
+
+]
+
+{ #category : 'Grail-Numeric Protocol' }
+Object >> ___asSliceIndex___ [
+
+	"This object as a slice bound: CPython's _PyEval_SliceIndex
+	(Python/ceval.c:3076).  An int or an __index__ object answers its int;
+	anything else raises the TypeError every slice bound raises, which names
+	no type -- not the ``cannot be interpreted as an integer'' one ___asIndex___
+	raises for operator.index.  None is a legal bound whose meaning depends on
+	the bound, so a caller resolves it before sending this."
+
+	((self isKindOf: Integer) or: [self ___hasIndexDunder___]) ifFalse: [
+		^ TypeError ___signal___: TypeError @env0:___sliceIndexMessage___].
 	^ self ___asIndex___
 
 ]
@@ -7554,6 +7585,27 @@ Object >> ___buildSelectorFamily___: aString [
 	family @env0:at: 6 put: (aString @env0:, ':_:_:_:_:_:') @env0:asSymbol.
 	family @env0:at: 7 put: ('_' @env0:, aString @env0:, ':kw:') @env0:asSymbol.
 	^ family
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___builtinTypeDocstring___ [
+
+	"CPython's docstring for this class when it is one of the builtins module's
+	types -- None for the one CPython gives none -- or nil for any other class
+	(builtins class >> ___typeDocTable___, generated from CPython).
+
+	The name alone does not decide it: a class that type() builds may call
+	itself ``int''.  The builtins module's binding of the name must be this
+	very class."
+
+	| builtinsClass name |
+
+	builtinsClass := Python @env0:at: #builtins.
+	name := [self __name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [^ nil].
+	^ builtinsClass ___typeDocTable___ @env0:at: name @env0:asString otherwise: nil
 
 ]
 
@@ -13399,6 +13451,17 @@ Object >> ___instanceDataDescriptorFor___: aName [
 				(self ___isDataDescriptorValue___: raw) ifTrue: [^ raw]]].
 		walker := walker @env0:superClass].
 	^ nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___isBuiltinsBindingOf: aName in: aBuiltinsClass [
+
+	"Whether the builtins module binds aName to this very object."
+
+	^ ([aBuiltinsClass @env1:instance ___pyAttrLoad___: aName @env0:asSymbol]
+		@env0:on: AbstractException
+		do: [:ex | ex @env0:return: nil]) == self
 
 ]
 
@@ -19441,6 +19504,10 @@ Object >> __doc__ [
 			own := [holder @env0:dynamicInstVarAt: #'__doc__']
 				@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 			own @env0:notNil ifTrue: [^ own]].
+		"A BUILTIN type -- int, list, the exceptions -- has no class statement and
+		so no stored docstring, and answered object's below (#1724)."
+		own := self ___builtinTypeDocstring___.
+		own @env0:notNil ifTrue: [^ own].
 		^ 'The base class of the class hierarchy.
 
 When called, it accepts no arguments and returns a new featureless

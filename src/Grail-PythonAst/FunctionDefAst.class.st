@@ -682,8 +682,20 @@ FunctionDefAst >> ___docString___ [
 
 ]
 
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___emitBoundMethodOf___: aClassName selector: aSelector on: e [
+	"``(BoundMethod receiver: <class> selector: #'<aSelector>')'' -- a
+	class-side method bound to its class, the base of a @staticmethod's
+	decorator chain."
+
+	e paren: [
+		e send: #'receiver:selector:' env: nil to: [e var: 'BoundMethod']
+			with: {[e var: aClassName]. [e symbol: aSelector]}]
+
+]
+
 { #category : 'Grail-Annotations' }
-FunctionDefAst >> ___emitExecutionRecordOf___: anAnnotation on: aStream [
+FunctionDefAst >> ___emitExecutionRecordOf___: anAnnotation on: e [
 	"Nothing records a def's own annotations: an annotation on a local
 	variable is never evaluated."
 
@@ -2446,6 +2458,18 @@ FunctionDefAst >> ___emitsBodySource___ [
 ]
 
 { #category : 'Grail-code generation' }
+FunctionDefAst >> ___emitUnboundMethodOf___: aClassBlock selector: aSelector on: e [
+	"``(UnboundMethod definingClass: <class> selector: #'<aSelector>')'' -- the
+	plain function a decorator chain's base hands its innermost decorator;
+	aClassBlock writes the class (the metaclass, for a class-side method)."
+
+	e paren: [
+		e send: #'definingClass:selector:' env: nil to: [e var: 'UnboundMethod']
+			with: {aClassBlock. [e symbol: aSelector]}]
+
+]
+
+{ #category : 'Grail-code generation' }
 FunctionDefAst >> ___enclosingDefDeclares___: funcAst named: aSymbol [
 	"True iff funcAst (a FunctionDef/Lambda) declares aSymbol as a
 	parameter or body local.  Mirrors NameAst's __functionDeclaresLocal:."
@@ -2786,11 +2810,13 @@ FunctionDefAst >> ___irBodyLocalNames___ [
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irBodyReason___: localSet [
 	"The first refusing node in the body, named by ___irRefusalIn___:locals:.
-	Guarded: a census probe must never break a compile."
+	Guarded: a census probe must never break a compile.  Both fallbacks are
+	INVARIANTS (P1.3): a body the predicate refused with no refusing node is
+	the predicate and the walk drifting apart, and a raise is a Grail bug."
 
 	^ [(self ___irFirstRefusedIn___: body body locals: localSet)
-		ifNil: [#'body:unknown']]
-		on: Error do: [:ex | #'body:probeError']
+		ifNil: [#'invariant:body-unexplained']]
+		on: Error do: [:ex | #'invariant:body-probeRaised']
 
 ]
 
@@ -3287,11 +3313,13 @@ FunctionDefAst >> ___irIneligibilityReason___ [
 	or nil when it is eligible.  ___irEligible___ is ``isNil'' of this; the
 	census (importlib ___irCensus___) tallies the Symbols so the missing shapes
 	can be ranked by the number of real defs they block.  A body refusal names
-	the first refusing node (___irBodyReason___:): #'stmt:MatchAst' for a
-	statement shape the emitter lacks outright, #'value:ListCompAst' for an
-	expression inside an otherwise eligible statement, #'shape:CallAst' for a
-	node whose class is handled but whose particular form is not; #flow when
-	every node is emittable but the bound-before-read proof fails."
+	the first refusing node (___irBodyReason___:): the refusing node's own
+	detail for a handled class refusing one particular form
+	(#'nestedDef:leafNameCollision', #'TryAst-asTargetNotLocal'), the
+	default #'shape:<Class>' where a class names no detail.  A reason under
+	the ``invariant:'' prefix is one only a broken parser or compile-context
+	invariant, or a raising predicate, can produce (P1.3; AbstractNode class
+	>> ___irIsInvariantReason___:)."
 
 	| localSet |
 	"Module-level defs only: compiled onto moduleClassBeingCompiled, not a
@@ -3657,9 +3685,14 @@ FunctionDefAst >> ___irMethodLocalClassMethodReason___ [
 
 	  * no module class -- an exec/eval doit's class, which has no transport
 	    helper at all (``method:doitScopeClass'');
-	  * a class nested DIRECTLY inside another class body, emitted as a
-	    class-body VALUE rather than through a helper
-	    (``method:classInClassBody'').
+	  * a def with NO enclosing ClassDefAst at all
+	    (``invariant:method-noEnclosingClass'', P1.3).  This row used to be
+	    ``method:classInClassBody'', a class nested directly in another class
+	    body; the static-chain and reaches-a-def tests admitted every such
+	    chain (69 -> 1 -> 0).  Given an enclosing class those two tests are
+	    complementary -- no def or lambda above it, or one -- so the exit is
+	    taken only without one, and a method-mode def is judged only from its
+	    own class's method loops.  An INVARIANT, not a shape.
 
 	    THOSE TWO USED TO SHARE ONE ROW NAME, ``method:classNotAtModuleScope'',
 	    and that hid which of them the ranking was actually about: they are
@@ -3694,7 +3727,7 @@ FunctionDefAst >> ___irMethodLocalClassMethodReason___ [
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ #'method:doitScopeClass'].
 	(self ___irEnclosingClassIsMethodLocal___
 		or: [self ___irEnclosingClassChainIsStatic___
-		or: [self ___irEnclosingClassChainReachesADef___]]) ifFalse: [^ #'method:classInClassBody'].
+		or: [self ___irEnclosingClassChainReachesADef___]]) ifFalse: [^ #'invariant:method-noEnclosingClass'].
 	^ nil
 
 ]
@@ -3740,7 +3773,10 @@ FunctionDefAst >> ___irMethodModeReason___ [
 	metaclass, so none of the receiver conditions below apply.  The text's
 	static loop clears selfParameterName, so no name maps to the receiver."
 	self class == StaticFunctionDefAst ifTrue: [
-		CallAst selfParameterName isNil ifFalse: [^ #'method:staticWithReceiverName'].
+		"An INVARIANT (P1.3): ClassDefAst's static loop clears
+		selfParameterName before it judges, and it is the only loop that judges
+		a StaticFunctionDefAst."
+		CallAst selfParameterName isNil ifFalse: [^ #'invariant:method-staticWithReceiverName'].
 		^ self ___irMethodModeTailReason___].
 	"A def that declares NO parameter at all (``def m(*args)'',
 	``def __class_getitem__(*args, **kwargs)'' -- how the corpus spells a hook
@@ -3791,8 +3827,11 @@ FunctionDefAst >> ___irMethodModeReason___ [
 	the snapshot the seam takes carries the same name to the deferred build.
 	Refused only when the two disagree -- a def with no plain positional
 	parameter keeps the class-wide name, which is not this def's receiver."
+	"An INVARIANT (P1.3), not a shape: with a parameter, both the instance and
+	the classmethod loop of ClassDefAst set selfParameterName to exactly this
+	expression before judging, and the deferred build restores that snapshot."
 	CallAst selfParameterName == self allParameterNames first asSymbol
-		ifFalse: [^ #'method:receiverNameMismatch'].
+		ifFalse: [^ #'invariant:method-receiverNameMismatch'].
 	"A REBOUND receiver no longer refuses: the method carries it in a transport
 	temp and every receiver fast path stands down for the body
 	(___irSelfReboundName___, ___emitIRSelfTransportOn___:name:), which is the
@@ -3900,28 +3939,45 @@ FunctionDefAst >> ___irNestedBodyMentions___: aSymbol in: node [
 ]
 
 { #category : 'Grail-IR Codegen' }
-FunctionDefAst >> ___irNestedDecoratorEligible___: deco locals: localNames [
-	"printDecoratorReceiverOn:deco:'s branches, in ITS order: a bare-name
+FunctionDefAst >> ___irNestedDecoratorRefusal___: deco locals: localNames [
+	"printDecoratorReceiverOn:deco:'s branches, in ITS order, as the census
+	row that refuses, or nil when the decorator is emittable.  A bare-name
 	decorator (the parser records those as Symbols) that names a class-body
 	sibling is refused (the class-attribute load is not emitted here); a
 	module variable no local shadows loads through the module instance
-	(___decoratorNameIsModuleGlobal___:); otherwise the bare
-	identifier -- an enclosing local, or a resolvable global -- unless a doit
-	would need the runtime NameError lookup.  An expression decorator is judged
-	as a value of the enclosing scope."
+	(___decoratorNameIsModuleGlobal___:); otherwise the bare identifier -- an
+	enclosing local, or a resolvable global -- unless a doit would need the
+	runtime NameError lookup.  An expression decorator is judged as a value of
+	the enclosing scope.
 
-	(deco isKindOf: Symbol) ifFalse: [^ deco ___irEligibleValueLocals___: localNames].
+	This was ONE row, `nestedDef:decorator', and it lumped four causes with
+	four different owners (P1.3): an expression the IR cannot emit (a
+	pass-up), a class-body sibling (P3), a doit's runtime lookup (P5), and a
+	bare name nothing here can read -- an enclosing function's local beyond a
+	method-local class, which the text reads through the class cell, or a
+	class attribute named from inside a method, which CPython answers with
+	NameError."
+
+	(deco isKindOf: Symbol) ifFalse: [
+		^ (deco ___irEligibleValueLocals___: localNames)
+			ifTrue: [nil] ifFalse: [#'nestedDef:decorator-expr']].
 	(CallAst classBodyDecoratorScope notNil
-		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol]) ifTrue: [^ false].
-	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ true].
-	(self ___decoratorNameNeedsRuntimeLookup___: deco) ifTrue: [^ false].
+		and: [CallAst classBodyDecoratorScope value includes: deco asSymbol])
+			ifTrue: [^ #'nestedDef:decorator-classBodySibling'].
+	(self ___decoratorNameIsModuleGlobal___: deco) ifTrue: [^ nil].
+	(self ___decoratorNameNeedsRuntimeLookup___: deco)
+		ifTrue: [^ #'nestedDef:decorator-doitLookup'].
 	"A name nothing static binds -- a star import, ``globals().update'', a
 	binding made at run time -- is the text's late module-name read
 	(___printDecoratorNameOn___:name:, #1517), which ___emitIRDecoratorValue___:on:
 	spells the same way (P1.2: one cause of nestedDef:decorator)."
-	(self ___decoratorNameIsUnboundInModule___: deco) ifTrue: [^ true].
-	(localNames includes: deco asString) ifTrue: [^ true].
-	^ NameAst isResolvableSymbol: deco asSymbol
+	(self ___decoratorNameIsUnboundInModule___: deco) ifTrue: [^ nil].
+	(localNames includes: deco asString) ifTrue: [^ nil].
+	(NameAst isResolvableSymbol: deco asSymbol) ifTrue: [^ nil].
+	^ (CallAst classBeingCompiled notNil
+		and: [self ___headerLocalBeyondClass___: deco asSymbol])
+			ifTrue: [#'nestedDef:decorator-classCell']
+			ifFalse: [#'nestedDef:decorator-unresolvedName']
 
 ]
 
@@ -3941,7 +3997,7 @@ FunctionDefAst >> ___irNestedDefReason___: localNames [
 	can.  Guarded: eligibility never raises."
 
 	^ [self ___irNestedDefReasonUnguarded___: localNames]
-		on: Error do: [:ex | #'nestedDef:probeError']
+		on: Error do: [:ex | #'invariant:nestedDef-probeRaised']
 
 ]
 
@@ -4030,7 +4086,9 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	of the ENCLOSING scope, where CPython evaluates them."
 	self hasAnnotations ifTrue: [
 		(self ___irAnnotationsEligible___: localNames) ifFalse: [^ #'nestedDef:annotationExpr']].
-	args isNil ifTrue: [^ #'nestedDef:noArgs'].
+	"No ``args isNil'' row (`nestedDef:noArgs', P1.3): the parser always builds
+	an ArgumentsAst, and a nil would raise on the next line inside
+	___irNestedDefReason___:'s guard, which names it as the invariant."
 	own := self ___irNestedOwnNames___.
 	"A parameter or body local spelled like a Smalltalk pseudo-variable no
 	longer refuses (cut 74): the closure's block temp is DECLARED under the
@@ -4095,8 +4153,8 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	(self ___irLambdaBelowHoldsBareSuper___: body)
 		ifTrue: [^ #'nestedDef:super'].
 	(decorator_list ifNil: [#()]) do: [:d |
-		(self ___irNestedDecoratorEligible___: d locals: localNames)
-			ifFalse: [^ #'nestedDef:decorator']].
+		(self ___irNestedDecoratorRefusal___: d locals: localNames)
+			ifNotNil: [:r | ^ r]].
 	"A decorator that reads the def's own name has to be evaluated before the
 	def binds it; the text emit wraps the def to do that
 	(___printWithPreEvaluatedDecoratorsOn___:), and so does this one now
@@ -4342,25 +4400,33 @@ FunctionDefAst >> ___irReceiverParamName___ [
 
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irRefusalDetail___: localSet [
-	^ (self ___irNestedDefReason___: localSet) ifNil: [#'nestedDef:other']
+	"The predicate is this reason's isNil, so a nil here means the two drifted:
+	an INVARIANT (P1.3)."
+
+	^ (self ___irNestedDefReason___: localSet) ifNil: [#'invariant:nestedDef-noReason']
 
 ]
 
 { #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___irRefusalIn___: aNode locals: localSet [
 	"aNode -- a statement or a load-context expression -- refused.  A class with
-	no IR predicate of its own IS the missing shape (#'stmt:MatchAst',
-	#'value:ListCompAst').  A class that has one refused for something inside
-	it, so name the first refusing child instead; when no child refuses, the
-	node refused for its own form, and its ___irRefusalDetail___: says which
-	(#'CallAst:starArgs'; #'ForAst:else'), defaulting to #'shape:<Class>'."
+	no IR predicate of its own would be the missing shape, but every statement
+	class has one, and the expression classes that do not -- JoinedStrAst and
+	FormattedValueAst (built for ast.parse only) and RawSmalltalkAst (built by
+	the text emitters) -- never sit in a def body the IR judges; so that row is
+	an INVARIANT (#'invariant:stmt-<Class>' / #'invariant:value-<Class>',
+	P1.3) and guards a node class added without a predicate.  A class that has
+	one refused for something inside it, so name the first refusing child
+	instead; when no child refuses, the node refused for its own form, and its
+	___irRefusalDetail___: says which (#'CallAst:frameSensitive-globals',
+	#'shape:TryAst-exceptType'), defaulting to #'shape:<Class>'."
 
 	| isStmt owner prefix |
 	isStmt := aNode isKindOf: StatementAst.
 	owner := aNode class whichClassIncludesSelector: (isStmt
 		ifTrue: [#'___irEligibleStatementLocals___:']
 		ifFalse: [#'___irEligibleValueLocals___:']).
-	prefix := isStmt ifTrue: ['stmt:'] ifFalse: ['value:'].
+	prefix := isStmt ifTrue: ['invariant:stmt-'] ifFalse: ['invariant:value-'].
 	(owner isNil or: [owner == AbstractNode])
 		ifTrue: [^ (prefix , aNode class name asString) asSymbol].
 	(self ___irFirstRefusedChildOf___: aNode locals: localSet) ifNotNil: [:r | ^ r].
@@ -4457,7 +4523,7 @@ FunctionDefAst >> ___irSignatureReason___ [
 	eligibility never raises."
 
 	^ [self ___irDefaultsReason___]
-		on: Error do: [:ex | #'signature:other']
+		on: Error do: [:ex | #'invariant:signature-probeRaised']
 
 ]
 
@@ -4987,6 +5053,15 @@ FunctionDefAst >> ___preEvaluatedDecoratorIndexOf___: deco [
 
 { #category : 'Grail-code generation' }
 FunctionDefAst >> ___printDecoratorNameOn___: aStream name: aSymbol [
+	"___printDecoratorNameWith___:name: as text on aStream, for the nested-def
+	emits, which are not written through a ClassBuildEmitter."
+
+	self ___printDecoratorNameWith___: (ClassBuildTextEmitter on: aStream) name: aSymbol
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___printDecoratorNameWith___: e name: aSymbol [
 	"Emit a BARE-NAME decorator (the parser records those as Symbols rather
 	than NameAsts) as the receiver of the decorator call.
 
@@ -5012,31 +5087,24 @@ FunctionDefAst >> ___printDecoratorNameOn___: aStream name: aSymbol [
 	(CallAst classBeingCompiled notNil
 		and: [self ___headerLocalBeyondClass___: aSymbol]) ifTrue: [
 			CallAst addCapturedClassName: aSymbol.
-			aStream
-				nextPutAll: '(self @env1:___classCell___: #''___cell_';
-				nextPutAll: aSymbol asString;
-				nextPutAll: '___'')'.
-			^ self].
+			^ e paren: [
+				e send: #'___classCell___:' env: 1 to: [e var: 'self']
+					with: {[e symbol: '___cell_' , aSymbol asString , '___']}]].
 	(self ___decoratorNameNeedsRuntimeLookup___: aSymbol) ifTrue: [
-		aStream
-			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
-			nextPutAll: aSymbol asString;
-			nextPutAll: ''')'.
-		^ self].
+		^ e paren: [
+			e send: #'___resolveBuiltinOrSignal___:' env: 0 to: [e var: 'NameError']
+				with: {[e string: aSymbol asString]}]].
 	"Compiled module code has the same hole (#1517): a name bound nowhere the
 	compiler can see -- undefined, or bound only at run time through
 	globals() -- made the WHOLE MODULE fail to compile.  It reads the module's
 	globals then builtins at run time instead, raising NameError on a miss,
 	which is NameAst's late module-name binding for an ordinary read."
 	(self ___decoratorNameIsUnboundInModule___: aSymbol) ifTrue: [
-		aStream
-			nextPutAll: '(';
-			nextPutAll: CallAst moduleClassBeingCompiled name;
-			nextPutAll: ' @env0:___instance___ @env1:___moduleAttrLoad___: #''';
-			nextPutAll: aSymbol asString;
-			nextPutAll: ''')'.
-		^ self].
-	aStream nextPutAll: aSymbol asString
+		^ e paren: [
+			e send: #'___moduleAttrLoad___:' env: 1
+				to: [e send: #'___instance___' env: 0 to: [e var: CallAst moduleClassBeingCompiled name]]
+				with: {[e symbol: aSymbol asString]}]].
+	e var: aSymbol asString
 
 ]
 
@@ -8678,6 +8746,16 @@ FunctionDefAst >> printBodyOn: aStream [
 
 { #category : 'Grail-code generation' }
 FunctionDefAst >> printDecoratorCallOn: aStream line: aLine receiver: receiverBlock argument: argumentBlock [
+	"printDecoratorCallWith:line:receiver:argument: as text on aStream, for the
+	nested-def emits; receiverBlock and argumentBlock write onto aStream."
+
+	self printDecoratorCallWith: (ClassBuildTextEmitter on: aStream) line: aLine
+		receiver: receiverBlock argument: argumentBlock
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> printDecoratorCallWith: e line: aLine receiver: receiverBlock argument: argumentBlock [
 	"One decorator's application, at the decorator's OWN line (#1406): CPython
 	evaluates ``@A'' at A's line and calls it there, so that is the line a
 	traceback through it -- and sys._getframe(1).f_lineno inside it -- reports.
@@ -8697,14 +8775,17 @@ FunctionDefAst >> printDecoratorCallOn: aStream line: aLine receiver: receiverBl
 	key and then its value, which is the one way to order two expressions
 	inside a Smalltalk expression."
 
-	aStream nextPutAll: '(((___curPos___ := '; nextPutAll: aLine printString; nextPutAll: ') @env0:-> ('.
-	receiverBlock value.
-	aStream nextPutAll: ')) @env0:value'; lf; tab;
-		nextPutAll: '@env1:___pyCallValue___: {'; lf; tab;
-		nextPutAll: '(('.
-	argumentBlock value.
-	aStream nextPutAll: ') @env0:-> (___curPos___ := '; nextPutAll: aLine printString;
-		nextPutAll: ')) @env0:key } kw: nil)'
+	| store |
+	store := [e paren: [e assign: '___curPos___' from: [e integer: aLine]]].
+	e paren: [
+		e sendOnNextLine: #'___pyCallValue___:kw:' env: 1
+			to: [e send: #value env: 0 to: [e paren: [
+				e send: #'->' env: 0 to: store with: {[e paren: receiverBlock]}]]]
+			with: {
+				[e braceArrayOnNextLine: {[
+					e send: #key env: 0 to: [e paren: [
+						e send: #'->' env: 0 to: [e paren: argumentBlock] with: {store}]]]}].
+				[e nilLiteral]}]
 
 ]
 
@@ -8743,6 +8824,15 @@ FunctionDefAst >> printDecoratorChainOn: aStream decorators: decoList index: i [
 
 { #category : 'Grail-code generation' }
 FunctionDefAst >> printDecoratorReceiverOn: aStream deco: deco [
+	"printDecoratorReceiverWith:deco: as text on aStream, for the nested-def
+	emits, which are not written through a ClassBuildEmitter."
+
+	self printDecoratorReceiverWith: (ClassBuildTextEmitter on: aStream) deco: deco
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> printDecoratorReceiverWith: e deco: deco [
 	"Emit the decorator expression as the receiver of a
 	___pyCallValue___:kw: send.  A bare-Symbol module-scope
 	decorator routes through ___moduleAttrLoad___ so the function
@@ -8750,8 +8840,7 @@ FunctionDefAst >> printDecoratorReceiverOn: aStream deco: deco [
 	(``module.deco_name'') falls through to its own emit."
 
 	(self ___preEvaluatedDecoratorIndexOf___: deco) ifNotNil: [:i |
-		aStream nextPutAll: '(___grailPreDeco___ @env0:at: '; print: i; nextPutAll: ')'.
-		^ self].
+		^ e paren: [e send: #'at:' env: 0 to: [e var: '___grailPreDeco___'] with: {[e integer: i]}]].
 
 	(deco isKindOf: Symbol) ifTrue: [
 		"A CLASS-BODY name used as the decorator itself -- ``@_deco'' naming a
@@ -8768,26 +8857,21 @@ FunctionDefAst >> printDecoratorReceiverOn: aStream deco: deco [
 		(CallAst classBodyDecoratorScope notNil
 			and: [CallAst classBodyDecoratorScope value includes: deco asSymbol])
 			ifTrue: [
-				aStream
-					nextPutAll: '(';
-					nextPutAll: CallAst classBodyDecoratorScope key;
-					nextPutAll: ' @env1:___pyAttrLoad___: #''';
-					nextPutAll: deco asString;
-					nextPutAll: ''')'.
-				^ self].
+				^ e paren: [
+					e send: #'___pyAttrLoad___:' env: 1 to: [e var: CallAst classBodyDecoratorScope key]
+						with: {[e symbol: deco asString]}]].
 		(self ___decoratorNameIsModuleGlobal___: deco)
 			ifTrue: [
-				aStream
-					nextPutAll: '((';
-					nextPutAll: CallAst moduleClassBeingCompiled name;
-					nextPutAll: ' @env0:___instance___) @env1:___moduleAttrLoad___: #''';
-					nextPutAll: deco asString;
-					nextPutAll: ''')'
+				e paren: [
+					e send: #'___moduleAttrLoad___:' env: 1
+						to: [e paren: [
+							e send: #'___instance___' env: 0 to: [e var: CallAst moduleClassBeingCompiled name]]]
+						with: {[e symbol: deco asString]}]
 			]
-			ifFalse: [self ___printDecoratorNameOn___: aStream name: deco].
+			ifFalse: [self ___printDecoratorNameWith___: e name: deco].
 		^ self
 	].
-	deco printSmalltalkWithParenthesisOn: aStream
+	e parenthesizedNode: deco
 
 ]
 
@@ -8811,7 +8895,7 @@ FunctionDefAst >> printDefaultsList: anArray on: aStream [
 ]
 
 { #category : 'Grail-code generation' }
-FunctionDefAst >> printMarkingDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames [
+FunctionDefAst >> printMarkingDecoratorsOn: e decorators: decoList className: aClassName siblingNames: siblingNames [
 	"Run a PROPERTY ACCESSOR's marking decorators -- @abstractmethod and the
 	like, which mark the function and hand the same one back -- for their
 	effect, WITHOUT the class-attribute store printMethodDecoratorsOn: makes.
@@ -8840,30 +8924,30 @@ FunctionDefAst >> printMarkingDecoratorsOn: aStream decorators: decoList classNa
 	CallAst classBodyDecoratorScope: aClassName -> siblingNames.
 	saved := CallAst inDecoratorEmit.
 	CallAst inDecoratorEmit: true.
-	[self
-		printMethodDecoratorChainOn: aStream
-		decorators: decoList
-		index: 1
-		className: aClassName
-		baseName: base]
-			ensure: [
-				CallAst classBodyDecoratorScope: nil.
-				CallAst inDecoratorEmit: saved].
-	aStream nextPutAll: '.'; lf
+	e statement: [
+		[self
+			printMethodDecoratorChainOn: e
+			decorators: decoList
+			index: 1
+			className: aClassName
+			baseName: base]
+				ensure: [
+					CallAst classBodyDecoratorScope: nil.
+					CallAst inDecoratorEmit: saved]]
 
 ]
 
 { #category : 'Grail-code generation' }
-FunctionDefAst >> printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName [
+FunctionDefAst >> printMethodDecoratorChainOn: e decorators: decoList index: i className: aClassName [
 	"The chain over the method compiled under this def's own name."
 
-	^ self printMethodDecoratorChainOn: aStream decorators: decoList index: i
+	^ self printMethodDecoratorChainOn: e decorators: decoList index: i
 		className: aClassName baseName: name
 
 ]
 
 { #category : 'Grail-code generation' }
-FunctionDefAst >> printMethodDecoratorChainOn: aStream decorators: decoList index: i className: aClassName baseName: baseName [
+FunctionDefAst >> printMethodDecoratorChainOn: e decorators: decoList index: i className: aClassName baseName: baseName [
 	"Nested decorator application A(B(...(the method)...)).  At the base case
 	emit an UnboundMethod naming the COMPILED method -- what CPython hands a
 	decorator, a plain function taking self first.
@@ -8882,31 +8966,15 @@ FunctionDefAst >> printMethodDecoratorChainOn: aStream decorators: decoList inde
 			___innermostDeclarativeWrapper___.  It wraps the same handle the
 			outermost-classmethod path uses: an UnboundMethod rooted at the
 			metaclass, which PyClassMethod >> __get__ binds to ``cls''."
-			aStream
-				nextPutAll: '(';
-				nextPutAll: wrapper;
-				nextPutAll: ' @env1:__new__: '.
-			wrapper == #'PyClassMethod'
-				ifTrue: [
-					aStream
-						nextPutAll: '(UnboundMethod definingClass: ';
-						nextPutAll: aClassName;
-						nextPutAll: ' @env0:class selector: #''']
-				ifFalse: [wrapper == #'PyStaticMethod'
-					ifTrue: [
-						aStream
-							nextPutAll: '(BoundMethod receiver: ';
-							nextPutAll: aClassName;
-							nextPutAll: ' selector: #''']
-					ifFalse: [
-						aStream
-							nextPutAll: '(UnboundMethod definingClass: ';
-							nextPutAll: aClassName;
-							nextPutAll: ' selector: #''']].
-			aStream
-				nextPutAll: baseName;
-				nextPutAll: '''))'.
-			^ self].
+			^ e paren: [
+				e send: #'__new__:' env: 1 to: [e var: wrapper] with: {[
+					wrapper == #'PyClassMethod'
+						ifTrue: [self ___emitUnboundMethodOf___: [e send: #class env: 0 to: [e var: aClassName]]
+							selector: baseName on: e]
+						ifFalse: [wrapper == #'PyStaticMethod'
+							ifTrue: [self ___emitBoundMethodOf___: aClassName selector: baseName on: e]
+							ifFalse: [self ___emitUnboundMethodOf___: [e var: aClassName]
+								selector: baseName on: e]]]}]].
 		"A @classmethod / @staticmethod def is compiled CLASS-side, so the
 		UnboundMethod form -- which resolves instance-side -- names nothing and
 		the decorator dies on the first call.  Hand those a BoundMethod on the
@@ -8925,58 +8993,40 @@ FunctionDefAst >> printMethodDecoratorChainOn: aStream decorators: decoList inde
 				CPython passes (cls, x) where Grail passed (x).  An UnboundMethod
 				rooted at the METAclass is the unbound form: called with
 				(cls, ...) it performs the class-side selector on cls."
-				aStream
-					nextPutAll: '(UnboundMethod definingClass: ';
-					nextPutAll: aClassName;
-					nextPutAll: ' @env0:class selector: #''';
-					nextPutAll: baseName;
-					nextPutAll: ''')']
+				self ___emitUnboundMethodOf___: [e send: #class env: 0 to: [e var: aClassName]]
+					selector: baseName on: e]
 			ifFalse: [self ___decoratorBaseIsClassSide___
 			ifTrue: [
 				"@staticmethod: the receiver is ignored, so a BoundMethod on the
 				class is the right shape already."
-				aStream
-					nextPutAll: '(BoundMethod receiver: ';
-					nextPutAll: aClassName;
-					nextPutAll: ' selector: #''';
-					nextPutAll: baseName;
-					nextPutAll: ''')']
+				self ___emitBoundMethodOf___: aClassName selector: baseName on: e]
 			ifFalse: [
-				aStream
-					nextPutAll: '(UnboundMethod definingClass: ';
-					nextPutAll: aClassName;
-					nextPutAll: ' selector: #''';
-					nextPutAll: baseName;
-					nextPutAll: ''')']].
+				self ___emitUnboundMethodOf___: [e var: aClassName] selector: baseName on: e]].
 		^ self].
 	"At the decorator's own line (#1406) -- the class statement's was used."
-	^ self ___mapDecorator___: (self ___decoratorNodeFor___: decoList index: i) on: aStream do: [
+	^ e mapDecorator: (self ___decoratorNodeFor___: decoList index: i) of: self do: [
+		| inner |
+		inner := [self
+			printMethodDecoratorChainOn: e
+			decorators: decoList
+			index: i + 1
+			className: aClassName
+			baseName: baseName].
 		(self ___curPosStoreAvailable___ ifTrue: [self ___decoratorLineFor___: decoList index: i])
 			ifNil: [
-				aStream nextPutAll: '(('.
-				self printDecoratorReceiverOn: aStream deco: (decoList at: i).
-				aStream nextPutAll: ') @env1:___pyCallValue___: { '.
-				self
-					printMethodDecoratorChainOn: aStream
-					decorators: decoList
-					index: i + 1
-					className: aClassName
-					baseName: baseName.
-				aStream nextPutAll: ' } kw: nil)']
+				e paren: [
+					e send: #'___pyCallValue___:kw:' env: 1
+						to: [e paren: [self printDecoratorReceiverWith: e deco: (decoList at: i)]]
+						with: {[e braceArray: {inner}]. [e nilLiteral]}]]
 			ifNotNil: [:___line |
-				self printDecoratorCallOn: aStream line: ___line
-					receiver: [self printDecoratorReceiverOn: aStream deco: (decoList at: i)]
-					argument: [self
-						printMethodDecoratorChainOn: aStream
-						decorators: decoList
-						index: i + 1
-						className: aClassName
-						baseName: baseName]]]
+				self printDecoratorCallWith: e line: ___line
+					receiver: [self printDecoratorReceiverWith: e deco: (decoList at: i)]
+					argument: inner]]
 
 ]
 
 { #category : 'Grail-code generation' }
-FunctionDefAst >> printMethodDecoratorsOn: aStream decorators: decoList className: aClassName siblingNames: siblingNames [
+FunctionDefAst >> printMethodDecoratorsOn: e decorators: decoList className: aClassName siblingNames: siblingNames [
 	| ___savedDecoEmit___ |
 	"Rebind a decorated class-body method: ``Cls.m = A(B(Cls.m))''.
 
@@ -9005,11 +9055,6 @@ FunctionDefAst >> printMethodDecoratorsOn: aStream decorators: decoList classNam
 	CPython.  It used to be applied inside ``on: AbstractException do:'',
 	leaving the compiled method silently undecorated (issue #1369)."
 
-	aStream
-		nextPutAll: aClassName;
-		nextPutAll: ' @env1:___classHolderAttrStore___: #''';
-		nextPutAll: name;
-		nextPutAll: ''' put: '.
 	"A decorator may name a SIBLING def -- ``@t.register(int)''.  Announce the
 	class-body namespace for the duration of the chain so NameAst resolves such
 	a name off the class rather than the module; see
@@ -9037,29 +9082,26 @@ FunctionDefAst >> printMethodDecoratorsOn: aStream decorators: decoList classNam
 	descriptor over the result -- classmethod(deco(m)), CPython's order.
 	PyClassMethod already answers __get__, which the class-attribute read
 	paths honour, so the class gets bound on every access shape."
-	(self ___decoratorBaseIsClassMethod___
-		and: [self ___classMethodIsOutermost___])
-		ifTrue: [aStream nextPutAll: '(PyClassMethod @env1:__new__: '].
-	[self
-		printMethodDecoratorChainOn: aStream
-		decorators: decoList
-		index: 1
-		className: aClassName]
-			ensure: [
-				CallAst classBodyDecoratorScope: nil.
-				CallAst inDecoratorEmit: ___savedDecoEmit___].
-	(self ___decoratorBaseIsClassMethod___
-		and: [self ___classMethodIsOutermost___])
-		ifTrue: [aStream nextPutAll: ')'].
-	aStream nextPutAll: '.'; lf.
+	e statement: [
+		e send: #'___classHolderAttrStore___:put:' env: 1 to: [e var: aClassName] with: {
+			[e symbol: name].
+			[| chain |
+			chain := [[self
+				printMethodDecoratorChainOn: e
+				decorators: decoList
+				index: 1
+				className: aClassName]
+					ensure: [
+						CallAst classBodyDecoratorScope: nil.
+						CallAst inDecoratorEmit: ___savedDecoEmit___]].
+			(self ___decoratorBaseIsClassMethod___
+				and: [self ___classMethodIsOutermost___])
+				ifTrue: [e paren: [e send: #'__new__:' env: 1 to: [e var: 'PyClassMethod'] with: {chain}]]
+				ifFalse: [chain value]]}].
 	"The namespace a metaclass is handed must hold the DECORATED object; see
 	object class >> ___grailNsRebind___:."
-	aStream
-		nextPutAll: aClassName;
-		nextPutAll: ' @env1:___grailNsRebind___: ''';
-		nextPutAll: name;
-		nextPutAll: '''.';
-		lf
+	e statement: [
+		e send: #'___grailNsRebind___:' env: 1 to: [e var: aClassName] with: {[e string: name]}]
 
 ]
 
@@ -9347,7 +9389,7 @@ FunctionDefAst >> printPositionalUnpackingOn: aStream paramNames: paramNames pos
 ]
 
 { #category : 'Grail-code generation' }
-FunctionDefAst >> printPropertyAccessorOn: aStream className: aClassName siblingNames: siblingNames baseName: baseName [
+FunctionDefAst >> printPropertyAccessorOn: e className: aClassName siblingNames: siblingNames baseName: baseName [
 	"The callable this def contributes to a DECORATED property's
 	``property(fget, fset, fdel)'': its decorator chain over the method
 	compiled as baseName, or -- an accessor with no decorator of its own --
@@ -9362,7 +9404,7 @@ FunctionDefAst >> printPropertyAccessorOn: aStream className: aClassName sibling
 	savedDecoEmit := CallAst inDecoratorEmit.
 	CallAst inDecoratorEmit: true.
 	[self
-		printMethodDecoratorChainOn: aStream
+		printMethodDecoratorChainOn: e
 		decorators: self applicableMethodDecorators
 		index: 1
 		className: aClassName

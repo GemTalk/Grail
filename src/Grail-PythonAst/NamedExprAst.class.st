@@ -189,7 +189,9 @@ NamedExprAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 NamedExprAst >> ___irRefusalDetail___: localSet [
-	(target isKindOf: NameAst) ifFalse: [^ ('NamedExprAst:target-' , target class name asString) asSymbol].
+	"A non-Name target is the parser's ``cannot use assignment expressions
+	with ...'': an INVARIANT (P1.3)."
+	(target isKindOf: NameAst) ifFalse: [^ ('invariant:NamedExprAst-target-' , target class name asString) asSymbol].
 	^ #'NamedExprAst:scope'
 
 ]

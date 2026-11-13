@@ -367,7 +367,9 @@ AbstractLocationNode >> sourceLine [
 		i := string indexOf: lf startingAt: i + 1.
 	].
 	j := string indexOf: lf startingAt: i + 1.
-	j == 0 ifTrue: [j := string size].
+	"The last line of a source with no trailing newline ends at the source's
+	end, so the copy below stops at its last character, not one short (#1982)."
+	j == 0 ifTrue: [j := string size + 1].
 	^string copyFrom: i + 1 to: j - 1
 
 ]

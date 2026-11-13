@@ -456,9 +456,16 @@ AugAssignAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 AugAssignAst >> ___irRefusalDetail___: localSet [
-	self ___irSelectorPair___ isNil ifTrue: [^ #'AugAssignAst:operator'].
-	((target isKindOf: SubscriptAst) and: [target slice isKindOf: SliceAst])
-		ifTrue: [^ #'AugAssignAst:target-SubscriptAst-slice'].
+	"Every BinOp class prints a ``__x__:'' selector, so a nil selector pair is
+	a broken invariant, not a shape (P1.3).
+
+	There is no slice row any more.  ``AugAssignAst:target-SubscriptAst-slice''
+	named a shape that has been admitted since cut 62 -- a slice index is
+	___irComplexTargetShape___'s #subscript like any other -- so a subscript
+	target refuses only when its receiver or index does, which is what the
+	-receiver row says."
+
+	self ___irSelectorPair___ isNil ifTrue: [^ #'invariant:AugAssignAst-operator'].
 	((target isKindOf: AttributeAst) or: [target isKindOf: SubscriptAst])
 		ifTrue: [^ ('AugAssignAst:target-' , target class name asString , '-receiver') asSymbol].
 	^ ('AugAssignAst:target-' , target class name asString) asSymbol

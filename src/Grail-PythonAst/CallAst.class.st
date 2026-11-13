@@ -114,6 +114,24 @@ CallAst class >> ___compileContextSnapshot___ [
 
 ]
 
+{ #category : 'Grail-Class Body' }
+CallAst class >> ___emitEnclosingClassRead___: aRead on: e [
+	"Write the expression ___enclosingClassRead___ answered aRead for, through
+	e, a ClassBuildEmitter.  For a method-local class this also registers the
+	name in the ENCLOSING class's captured set, so its ClassDefAst emits the
+	matching cell store -- the write and the registration go together."
+
+	(aRead at: 1) == #module ifTrue: [
+		^ e paren: [
+			e send: (aRead at: 2) env: 1
+				to: [e paren: [e send: #'___instance___' env: 0 to: [e var: (aRead at: 3)]]]]].
+	(aRead at: 3) add: (aRead at: 2) asSymbol.
+	^ e paren: [
+		e send: #'___classCell___:' env: 1 to: [e var: 'self']
+			with: {[e symbol: '___cell_' , (aRead at: 2) asString , '___']}]
+
+]
+
 { #category : 'Grail-other' }
 CallAst class >> ___emitFreeVariableRead___: aSymbol parent: aNode on: aStream [
 	"Emit the read of free variable aSymbol as it resolves AT aNode -- by
@@ -160,6 +178,31 @@ CallAst class >> ___emitsInlineInClassBuild___ [
 		(node isKindOf: ClassDefAst) ifTrue: [^ false].
 		node := node parent].
 	^ false
+
+]
+
+{ #category : 'Grail-Class Body' }
+CallAst class >> ___enclosingClassRead___ [
+	"How the class enclosing the class body being emitted is read, or nil when
+	there is none -- printEnclosingClassOn:'s decision, asked before anything
+	is written:  ``{#module. <read selector>. <module class name>}'' for a
+	module-scope class (a module attribute), ``{#cell. <class name>. <captured
+	set>}'' for a method-local one (its closure cell).  Nothing is registered
+	until ___emitEnclosingClassRead___:on: writes it."
+
+	| ctx clsName |
+	ctx := self enclosingClassContext.
+	ctx == nil ifTrue: [^ nil].
+	clsName := ctx at: 1.
+	clsName == nil ifTrue: [^ nil].
+	(ctx at: 2) == true ifTrue: [
+		self moduleClassBeingCompiled == nil ifTrue: [^ nil].
+		^ {#module.
+			(CallAst ___moduleClassReadSelector___: clsName asString) asSymbol.
+			self moduleClassBeingCompiled name}].
+	"Method-local: reached through the cell that holds the class object."
+	(ctx at: 3) == nil ifTrue: [^ nil].
+	^ {#cell. clsName. ctx at: 3}
 
 ]
 
@@ -1712,34 +1755,14 @@ CallAst class >> printEnclosingClassOn: aStream [
 	also sets classNeedsClassCell and registers a captured name, and at the point
 	this runs both of those slots belong to the INNER class, so it would flag the
 	wrong class on both counts.  Answers false when there is no enclosing class,
-	so the caller can fall through."
+	so the caller can fall through.  Text on aStream; the class build asks
+	___enclosingClassRead___ and writes through its emitter."
 
-	| ctx clsName |
-	ctx := self enclosingClassContext.
-	ctx == nil ifTrue: [^ false].
-	clsName := ctx at: 1.
-	clsName == nil ifTrue: [^ false].
-	(ctx at: 2) == true
-		ifTrue: [
-			self moduleClassBeingCompiled == nil ifTrue: [^ false].
-			aStream
-				nextPutAll: '((';
-				nextPutAll: self moduleClassBeingCompiled name;
-				nextPutAll: ' @env0:___instance___) @env1:';
-				nextPutAll: (CallAst ___moduleClassReadSelector___: clsName asString);
-				nextPutAll: ')'.
-			^ true]
-		ifFalse: [
-			"Method-local: reached through the cell that holds the class object.
-			Register the name in the ENCLOSING class's captured set so its
-			ClassDefAst emits the matching store."
-			(ctx at: 3) == nil ifTrue: [^ false].
-			(ctx at: 3) add: clsName asSymbol.
-			aStream
-				nextPutAll: '(self @env1:___classCell___: #''___cell_';
-				nextPutAll: clsName asString;
-				nextPutAll: '___'')'.
-			^ true]
+	| read |
+	read := self ___enclosingClassRead___.
+	read ifNil: [^ false].
+	self ___emitEnclosingClassRead___: read on: (ClassBuildTextEmitter on: aStream).
+	^ true
 
 ]
 
@@ -4230,10 +4253,12 @@ CallAst >> ___irRefusalDetail___: localSet [
 			say -- and naming ``super'' would send the next reader after a cut
 			that is already made.  That is the lesson the argument-0 note below
 			records, applied one level up."
-			self ___irSuperStaysOnText___ ifFalse: [
-				CallAst classBeingCompiled isNil ifFalse: [
-					self ___superNameIsShadowed___ ifTrue: [
-						^ #'CallAst:super-shadowed']]].
+			"NO `super-shadowed' ROW ANY MORE (P1.3).  A shadowed ``super'' is not
+			the rewrite on either path -- ___irSuperStaysOnText___ answers false
+			for it first, and ___irCallShapeUnguarded___ takes the ordinary call
+			shapes -- so when such a call refuses it refuses for an ordinary
+			reason, and a row naming super sent its reader after a super cut
+			that does not exist.  It falls to `CallAst:other' below."
 			"NO ARGUMENT-0 TEST HERE ANY MORE.  It used to answer
 			`super-argZeroDeletable' whenever ___superArgZeroGuardName___ was
 			non-nil, mirroring a refusal ___irSuperShape___ has since dropped.
@@ -4247,13 +4272,19 @@ CallAst >> ___irRefusalDetail___: localSet [
 			ordinary reason and falls to the rows below; a classless zero-argument
 			super() is ___irSuperShape___'s #superZero, the text's precondition
 			arms.  What is left to refuse is a doit."
-			(arguments isEmpty and: [keywords isEmpty]) ifTrue: [
-				self ___superNameIsShadowed___ ifTrue: [^ #'CallAst:super-shadowed'].
-				CallAst moduleClassBeingCompiled isNil
-					ifTrue: [^ #'CallAst:super-doitScopeClass'].
-				^ #'CallAst:super-other'].
-			self ___irSuperStaysOnText___ ifTrue: [
-				^ #'CallAst:super-explicitNamesOtherClass']].
+			"An unshadowed zero-argument super() with a module class is
+			___irSuperShape___'s #superZero -- in a method always, and outside
+			one whenever the call sits in a def, which every call this walk
+			judges does -- so past the doit row only the shape probe's ``on:
+			Error'' guard can have refused it: an INVARIANT (P1.3).  The
+			`super-explicitNamesOtherClass' row that followed is gone: with
+			arguments or keywords ___irSuperStaysOnText___ answers false
+			(``REASON 2 IS GONE''), so it could not be reached."
+			((arguments isEmpty and: [keywords isEmpty])
+				and: [self ___superNameIsShadowed___ not]) ifTrue: [
+					CallAst moduleClassBeingCompiled isNil
+						ifTrue: [^ #'CallAst:super-doitScopeClass'].
+					^ #'invariant:CallAst-superZeroShape']].
 		"eval/exec name WHICH of the two conditions refused, because they are
 		different cuts: -bareRewrite wants the text's compile-time locals
 		injection spelled in IR, -nested wants the frame walk to find a block
@@ -4374,43 +4405,6 @@ CallAst >> ___irSnapshotScopeIsAFunction___ [
 { #category : 'Grail-IR Codegen' }
 CallAst >> ___irStampChild___ [
 	^ function
-
-]
-
-{ #category : 'Grail-IR Codegen' }
-CallAst >> ___irSuperScopeRefusal___ [
-	"WHICH non-module-scope shape this super() call sits in.
-
-	`classDefIsModuleScope' is one boolean answering for THREE different
-	shapes -- ClassDefAst>>isModuleScopeClassDef returns false when there is no
-	module class at all, when the class is nested in another class BODY, and
-	when it is nested in a function -- so the single census row
-	`CallAst:super-methodLocalClass' was named for the third while counting all
-	three.  That is the same conflation `method:classNotAtModuleScope' had
-	(split in #933, where the measurement showed the whole row was ONE shape
-	and a cut aimed at the other half would have retired nothing).  Told apart
-	here so the ranking says which cut to make.
-
-	Read from the PARENT CHAIN, as ___irEnclosingClassIsMethodLocal___ is, and
-	for the same reason: the compile-context boolean cannot tell the shapes
-	apart after the fact."
-
-	| node cls |
-	CallAst moduleClassBeingCompiled isNil
-		ifTrue: [^ #'CallAst:super-doitScopeClass'].
-	node := parent.
-	cls := nil.
-	[node notNil and: [cls isNil]] whileTrue: [
-		(node isKindOf: ClassDefAst) ifTrue: [cls := node] ifFalse: [node := node parent]].
-	cls isNil ifTrue: [^ #'CallAst:super-noEnclosingClass'].
-	node := cls parent.
-	[node notNil] whileTrue: [
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-			ifTrue: [^ #'CallAst:super-methodLocalClass'].
-		(node isKindOf: ClassDefAst)
-			ifTrue: [^ #'CallAst:super-classInClassBody'].
-		node := node parent].
-	^ #'CallAst:super-methodLocalClass'
 
 ]
 

@@ -81,7 +81,9 @@ StarredAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 { #category : 'Grail-IR Codegen' }
 StarredAst >> ___irRefusalDetail___: localSet [
-	(ctx isKindOf: LoadAst) ifFalse: [^ #'StarredAst:storeTarget'].
+	"The walk passes THROUGH a store-context node and never asks it this, so a
+	non-Load star here is one with no ctx at all: an INVARIANT (P1.3)."
+	(ctx isKindOf: LoadAst) ifFalse: [^ #'invariant:StarredAst-notLoad'].
 	^ value ___irRefusalDetail___: localSet
 
 ]

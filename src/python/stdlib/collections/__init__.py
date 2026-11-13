@@ -364,6 +364,17 @@ class _deque_reverse_iterator(_deque_iterator):
         super().__init__(dq, reverse)
 
 
+def _required_slice_index(value):
+    """value as a start or stop that may not be None, as CPython's
+    _PyEval_SliceIndexNotNone converts it: an int or an object with
+    __index__, else the TypeError every such bound raises, which names no
+    type."""
+    if not hasattr(type(value), '__index__'):
+        raise TypeError('slice indices must be integers or have an __index__ method')
+    import operator
+    return operator.index(value)
+
+
 class deque:
     """Double-ended queue backed by a list.  O(n) for arbitrary
     indexing, O(1) amortized for append/appendleft/pop/popleft."""
@@ -488,13 +499,17 @@ class deque:
             raise RuntimeError("deque mutated during iteration")
         return c
 
-    def index(self, value, start=0, stop=None):
-        # Normalise start/stop like list.index: negatives count from the end and
-        # both clamp into [0, len] (so ``d.index(x, 0, 4)`` on a length-3 deque
-        # searches 0..2 and raises ValueError, not IndexError -- bug 24913).
+    def index(self, value, start=0, stop=_sys.maxsize):
+        # start and stop are slice indices that may not be None
+        # (_PyEval_SliceIndexNotNone, Python/ceval.c:3098, deque_index's
+        # converter): an int or an __index__ object, and anything else is
+        # CPython's TypeError.  Then they normalise like list.index's:
+        # negatives count from the end and both clamp into [0, len] (so
+        # ``d.index(x, 0, 4)`` on a length-3 deque searches 0..2 and raises
+        # ValueError, not IndexError -- bug 24913).
+        start = _required_slice_index(start)
+        stop = _required_slice_index(stop)
         n = len(self._items)
-        if stop is None:
-            stop = n
         if start < 0:
             start = max(n + start, 0)
         elif start > n:

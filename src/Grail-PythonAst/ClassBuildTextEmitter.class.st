@@ -48,16 +48,27 @@ ClassBuildTextEmitter >> ___envPrefix___: anEnvOrNil [
 
 { #category : 'Grail-private' }
 ClassBuildTextEmitter >> ___message___: aSelector env: anEnvOrNil with: argBlocks [
-	"`` [@envN:]kw1: a1 kw2: a2'' (or `` sel'', `` + a''), after a receiver."
+	"`` [@envN:]kw1: a1 kw2: a2'' (or `` sel'', `` [@envN:]+ a''), after a
+	receiver."
+
+	^ self ___message___: aSelector env: anEnvOrNil with: argBlocks
+		separator: [stream space]
+
+]
+
+{ #category : 'Grail-private' }
+ClassBuildTextEmitter >> ___message___: aSelector env: anEnvOrNil with: argBlocks separator: aSeparatorBlock [
+	"The message part of a send after its receiver, aSeparatorBlock writing what
+	separates the two (a space, or a line break for sendOnNextLine:...)."
 
 	| sel keywords |
 	sel := aSelector asString.
-	stream space.
+	aSeparatorBlock value.
 	argBlocks isEmpty ifTrue: [
 		self ___envPrefix___: anEnvOrNil.
 		^ stream nextPutAll: sel].
 	(sel first isLetter or: [sel first == $_]) ifFalse: [
-		"A binary selector takes no environment prefix in any spelling used here."
+		self ___envPrefix___: anEnvOrNil.
 		stream nextPutAll: sel; space.
 		^ (argBlocks at: 1) value].
 	keywords := ((sel subStrings: ':') reject: [:k | k isEmpty]) collect: [:k | k , ':'].
@@ -98,6 +109,30 @@ ClassBuildTextEmitter >> assign: aName from: aBlock [
 
 ]
 
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> block: bodyBlock [
+
+	stream nextPut: $[.
+	bodyBlock value.
+	stream nextPut: $]
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> blockWithArgs: argNames temps: tempNames do: bodyBlock [
+
+	stream nextPut: $[.
+	argNames do: [:a | stream nextPut: $:; nextPutAll: a asString] separatedBy: [stream space].
+	stream nextPutAll: ' | '.
+	tempNames isEmpty ifFalse: [
+		stream nextPutAll: '| '.
+		tempNames do: [:t | stream nextPutAll: t asString; space].
+		stream nextPutAll: '| '].
+	bodyBlock value.
+	stream nextPut: $]
+
+]
+
 { #category : 'Grail-literals' }
 ClassBuildTextEmitter >> boolean: aBoolean [
 
@@ -109,6 +144,15 @@ ClassBuildTextEmitter >> boolean: aBoolean [
 ClassBuildTextEmitter >> braceArray: elementBlocks [
 
 	stream nextPutAll: '{ '.
+	elementBlocks do: [:each | each value] separatedBy: [stream nextPutAll: '. '].
+	stream nextPutAll: ' }'
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> braceArrayOnNextLine: elementBlocks [
+
+	stream nextPut: ${; lf; tab.
 	elementBlocks do: [:each | each value] separatedBy: [stream nextPutAll: '. '].
 	stream nextPutAll: ' }'
 
@@ -191,6 +235,38 @@ ClassBuildTextEmitter >> emptyArray [
 ClassBuildTextEmitter >> expressionNode: anAst [
 
 	anAst printSmalltalkOn: stream
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> ifFalse: condBlock do: bodyBlock [
+
+	condBlock value.
+	stream nextPutAll: ' ifFalse: ['.
+	bodyBlock value.
+	stream nextPut: $]
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> ifTrue: condBlock do: bodyBlock [
+
+	condBlock value.
+	stream nextPutAll: ' ifTrue: ['.
+	bodyBlock value.
+	stream nextPut: $]
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> ifTrue: condBlock do: thenBlock ifFalse: elseBlock [
+
+	condBlock value.
+	stream nextPutAll: ' ifTrue: ['.
+	thenBlock value.
+	stream nextPutAll: '] ifFalse: ['.
+	elseBlock value.
+	stream nextPut: $]
 
 ]
 
@@ -308,6 +384,15 @@ ClassBuildTextEmitter >> send: aSelector env: anEnvOrNil to: rcvrBlock with: arg
 
 ]
 
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> sendOnNextLine: aSelector env: anEnvOrNil to: rcvrBlock with: argBlocks [
+
+	rcvrBlock value.
+	self ___message___: aSelector env: anEnvOrNil with: argBlocks
+		separator: [stream lf; tab]
+
+]
+
 { #category : 'Grail-layout' }
 ClassBuildTextEmitter >> space [
 
@@ -365,6 +450,18 @@ ClassBuildTextEmitter >> stringArray: strings [
 ]
 
 { #category : 'Grail-literals' }
+ClassBuildTextEmitter >> stringIndentedByStream: aString [
+	"AbstractNode >> emitStringLiteral:on:'s writes, one character at a time."
+
+	stream nextPut: $'.
+	aString do: [:ch |
+		ch = $' ifTrue: [stream nextPut: $'].
+		stream nextPut: ch].
+	stream nextPut: $'
+
+]
+
+{ #category : 'Grail-literals' }
 ClassBuildTextEmitter >> symbol: aString [
 
 	stream nextPutAll: '#'''; nextPutAll: aString asString; nextPut: $'
@@ -401,10 +498,12 @@ ClassBuildTextEmitter >> symbolPairArray: pairs [
 
 ]
 
-{ #category : 'Grail-children' }
-ClassBuildTextEmitter >> unrouted: aOneArgBlock [
+{ #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> terminatedBraceArray: elementBlocks [
 
-	^ aOneArgBlock value: stream
+	stream nextPutAll: '{ '.
+	elementBlocks do: [:each | each value. stream nextPutAll: '. '].
+	stream nextPut: $}
 
 ]
 

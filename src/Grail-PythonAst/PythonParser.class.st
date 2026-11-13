@@ -383,6 +383,18 @@ PythonParser class >> integerFrom: digits radix: radix [
 
 ]
 
+{ #category : 'Grail-constants' }
+PythonParser class >> maximumFieldNesting [
+
+	"The format-spec level at which a replacement field is refused with
+	f-string: expressions nested too deeply -- CPython's MAX_EXPR_NESTING
+	(Parser/lexer/state.h:46), checked in Parser/lexer/lexer.c:1373 and 1484.
+	So the three levels of f'{1:{2:{3}}}' are accepted and a fourth is not."
+
+	^ 3
+
+]
+
 { #category : 'Grail-parsing' }
 PythonParser class >> parse: aString [
 	"Parse Python source into a ModuleAst.
@@ -1584,7 +1596,9 @@ PythonParser >> ___fstringSpecExprFor: spec at: locTok [
 	``f'{10:{ }}''' had no location at all (eval reported ``None'')."
 	innerParser ___sourceText___: source.
 	specToken := PythonToken type: #FSTRING value: spec line: locTok line position: locTok position.
-	specToken beFormatSpec.
+	specToken beFormatSpecOf: locTok.
+	specToken formatSpecLevel >= self class maximumFieldNesting ifTrue: [
+		^ self ___syntaxError___: locTok fieldErrorPrefix , 'expressions nested too deeply' at: locTok].
 	locTok isInTemplateString ifTrue: [specToken beTemplateSpec].
 	"The f-string ended inside the field this spec belongs to, so a field of
 	the spec left open is that same open field, and its error is the one

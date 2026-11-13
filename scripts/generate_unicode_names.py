@@ -111,6 +111,57 @@ def verified_aliases(path):
     return sorted(good)
 
 
+# ---------------------------------------------------------------------------
+# NAMED SEQUENCES.  Unicode's NamedSequences.txt names a few hundred
+# sequences of code points -- KEYCAP NUMBER SIGN is U+0023 U+FE0F U+20E3 --
+# and CPython's unicodedata.lookup() answers them as the several characters
+# they are (#1562).  Only lookup() does: the \N{} escape refuses them, in
+# string literals and in regexes alike, and unicodedata.name() has no code
+# point to ask about.  So they are a table of their own, which only lookup()
+# reads.
+#
+# Read and verified as the aliases are: given with --sequences, or fetched
+# for the UCD version CPython carries, and every entry must answer from
+# CPython's own lookup() exactly the characters the file lists.
+SEQUENCES_URL = 'https://www.unicode.org/Public/%s/ucd/NamedSequences.txt'
+
+
+def read_sequences(path):
+    """[(name, [code point, ...])] from NamedSequences.txt -- fetched when path is None."""
+    if path is None:
+        import urllib.request
+        url = SEQUENCES_URL % unicodedata.unidata_version
+        with urllib.request.urlopen(url) as resp:
+            text = resp.read().decode('utf-8')
+    else:
+        with open(path, encoding='utf-8') as fh:
+            text = fh.read()
+    out = []
+    for line in text.splitlines():
+        line = line.split('#', 1)[0].strip()
+        if not line:
+            continue
+        name, cps = line.split(';')
+        out.append((name, [int(cp, 16) for cp in cps.split()]))
+    return out
+
+
+def verified_sequences(path):
+    """Every named sequence, each one confirmed by CPython itself."""
+    good = []
+    for name, cps in read_sequences(path):
+        try:
+            got = unicodedata.lookup(name)
+        except KeyError:
+            raise SystemExit('named sequence %r does not resolve in CPython UCD %s'
+                             % (name, unicodedata.unidata_version))
+        if [ord(c) for c in got] != cps:
+            raise SystemExit('named sequence %r resolves to %r, not %r'
+                             % (name, got, ''.join(map(chr, cps))))
+        good.append((name, cps))
+    return sorted(good)
+
+
 def collect():
     """Split every named code point into explicit, algorithmic and Hangul."""
     explicit, algo = [], {}
@@ -206,10 +257,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--aliases', help='NameAliases.txt for the UCD version '
                     'CPython carries (default: fetched from unicode.org)')
+    ap.add_argument('--sequences', help='NamedSequences.txt for the UCD version '
+                    'CPython carries (default: fetched from unicode.org)')
     opts = ap.parse_args()
     explicit, algo = collect()
     explicit.sort()
     aliases = verified_aliases(opts.aliases)
+    sequences = verified_sequences(opts.sequences)
     lead, vowel, trail = hangul_jamo()
     verify(lead, vowel, trail)
 
@@ -222,13 +276,14 @@ def main():
       "``\"\\N{EMPTY SET}\"\'\', cost a whole 5300-line test module.\n\n"
       "%d names are stored here, plus %d name ALIASES kept apart -- every\n"
       "category of NameAliases.txt, since CPython accepts them all and code\n"
-      "spells them (\\N{BYTE ORDER MARK}).  The other %d that the UCD names are\n"
+      "spells them (\\N{BYTE ORDER MARK}), and %d named SEQUENCES, which only\n"
+      "unicodedata.lookup() answers.  The other %d that the UCD names are\n"
       "ALGORITHMIC and computed instead: %d Hangul syllables composed from\n"
       "jamo, and %d code points whose name is a fixed prefix plus their own\n"
       "hex.  CPython does exactly this split, for the same reason -- storing\n"
       "them would quadruple the table to say nothing new.\n\n"
       "Unicode version: %s."
-      % (len(explicit), len(aliases),
+      % (len(explicit), len(aliases), len(sequences),
          sum(len(v) for v in algo.values()) + (HANGUL_LAST - HANGUL_BASE + 1),
          HANGUL_LAST - HANGUL_BASE + 1,
          sum(len(v) for v in algo.values()),
@@ -255,6 +310,16 @@ def main():
       "\twhile unicodedata.lookup('NULL') answers 0, and name(chr(0xFEFF)) is\n"
       "\tZERO WIDTH NO-BREAK SPACE, never BYTE ORDER MARK.\"\n\n\t^ %s\n"
       % (len(aliases), literal(';'.join('%s=%X' % (n, cp) for n, cp in aliases)))))
+
+    # Named sequences live apart too, and further: not even the name-to-code-
+    # point map may see them, because a sequence is several code points and
+    # the \N{} escape that reads that map must refuse it, as CPython's does.
+    methods.append(gen("___namedSequenceData\n"
+      "\t\"%d named sequences, each NAME=HEX HEX ...  Read by\n"
+      "\tunicodedata.lookup() and nothing else: CPython's \\N{} refuses a\n"
+      "\tsequence, in a string literal and in a regex.\"\n\n\t^ %s\n"
+      % (len(sequences), literal(';'.join('%s=%s' % (n, ' '.join('%X' % cp for cp in cps))
+                                         for n, cps in sequences)))))
 
     methods.append(gen("___chunkCount\n\t\"Number of ___nameChunkN methods above.\"\n\n\t^ %d\n"
                        % len(chunks)))

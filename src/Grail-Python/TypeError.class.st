@@ -197,6 +197,16 @@ TypeError class >> ___refuseUnboundKeywordsIn___: keywords given: aPositionalCou
 
 ]
 
+{ #category : 'Grail-Error Messages' }
+TypeError class >> ___requiredSliceIndexMessage___ [
+
+	"A start or stop that may not be None refuses in these words
+	(Python/ceval.c:3109, _PyEval_SliceIndexNotNone)."
+
+	^ 'slice indices must be integers or have an __index__ method'
+
+]
+
 { #category : 'Grail-Arity Checks' }
 TypeError class >> ___requireStr___: anObject argument: aName of: aFunctionName [
 	"A built-in's str parameter, converted as Argument Clinic converts one to a
@@ -213,6 +223,16 @@ TypeError class >> ___requireStr___: anObject argument: aName of: aFunctionName 
 	(anObject isKindOf: AbstractPyStr) ifTrue: [^ anObject dynamicInstVarAt: #value].
 	^ self @env1:___signal___: aFunctionName , '() argument ''' , aName , ''' must be str, not '
 		, (self ___badArgumentNameOf___: anObject)
+
+]
+
+{ #category : 'Grail-Error Messages' }
+TypeError class >> ___sliceIndexMessage___ [
+
+	"A slice bound that is not an int, None or an __index__ object refuses in
+	these words (Python/ceval.c:3088, _PyEval_SliceIndex)."
+
+	^ 'slice indices must be integers or None or have an __index__ method'
 
 ]
 

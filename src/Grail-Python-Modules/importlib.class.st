@@ -5472,7 +5472,7 @@ importlib class >> ___irCensusTopLevelDef___: aDef module: aModuleName usedIR: u
 	reason := usedIR
 		ifTrue: [#compiled]
 		ifFalse: [[aDef ___irIneligibilityReason___ ifNil: [#fallback]]
-			on: Error do: [:ex | #reasonProbeError]].
+			on: Error do: [:ex | #'invariant:reasonProbeRaised']].
 	self ___irCensusNote___: reason module: aModuleName def: aDef name count: 1.
 	nested := [aDef ___irNestedDefCount___] on: Error do: [:ex | 0].
 	nested > 0 ifTrue: [
