@@ -30,11 +30,14 @@ Class {
 
 { #category : 'Grail-Private' }
 IRStrictModeTestCase >> ___def___: aName in: aSource [
-	"The FunctionDefAst named aName anywhere in aSource, parsed, so its parent
-	chain is the one the parser builds."
+	"The FunctionDefAst named aName anywhere in aSource, parsed and linked
+	(``setParent: nil'', as the import path does), so its parent chain is the
+	one a seam sees."
 
-	| found |
-	(PythonParser parse: aSource) ___anyDescendantSatisfies___: [:n |
+	| found module |
+	module := PythonParser parse: aSource.
+	module setParent: nil.
+	module ___anyDescendantSatisfies___: [:n |
 		((n isKindOf: FunctionDefAst) and: [n name asString = aName])
 			ifTrue: [found := n. true]
 			ifFalse: [false]].
