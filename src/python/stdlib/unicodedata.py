@@ -139,11 +139,13 @@ def name(chr_, *default):
     """
     if len(default) > 1:
         raise TypeError('name expected at most 2 arguments, got %d' % (1 + len(default)))
-    if len(chr_) != 1:
-        raise TypeError('name() argument 1 must be a unicode character, '
-                        'not str')
+    # Argument Clinic's one-character check, as every other function here
+    # makes it: a str of another length, bytes, an int or None is CPython's
+    # TypeError naming what it got.
+    import _ucd
+    point = _ucd.Database._point(chr_, 'name', 'argument 1')
     import unicode_names
-    found = unicode_names.name_for_codepoint(ord(chr_))
+    found = unicode_names.name_for_codepoint(point)
     if found is None:
         if default:
             return default[0]

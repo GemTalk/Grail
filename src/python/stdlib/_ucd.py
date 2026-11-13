@@ -130,10 +130,12 @@ class Database:
     @staticmethod
     def _point(ch, what, argument='argument'):
         """The code point of ch, refused as Argument Clinic's ``int(accept={str})''
-        refuses anything but a one-character str (Modules/clinic/unicodedata.c.h)."""
+        refuses anything but a one-character str (Modules/clinic/unicodedata.c.h).
+        None is named ``None'', not by its type, as _PyArg_BadArgument names it
+        (Python/getargs.c:628)."""
         if not isinstance(ch, str):
             raise TypeError('%s() %s must be a unicode character, not %s'
-                            % (what, argument, type(ch).__name__))
+                            % (what, argument, 'None' if ch is None else type(ch).__name__))
         if len(ch) != 1:
             raise TypeError('%s(): %s must be a unicode character, not a string of length %d'
                             % (what, argument, len(ch)))
