@@ -18,6 +18,11 @@ running this file directly.
 * ``build_error_frames``: an error raised while the class is BUILT (here, an
   int as a base) is reported against the enclosing def's ``class`` line only;
   the class body has no frame there, in CPython or in Grail.
+* ``init_subclass_caller``: the same holds for the live stack.  Inside an
+  ``__init_subclass__`` run by a method-local class statement, the caller's
+  caller is the def holding the statement.  The IR helper used to show up there
+  as a frame with no filename (warnings.warn blamed it: test_warnings
+  DeprecatedTests).
 * the rest: ordinary declarative bodies -- bases from the enclosing scope,
   captured parameters, a docstring, constant attributes and defaults,
   ``__slots__``, a starred base, ``__init_subclass__`` keywords -- answer as
@@ -89,6 +94,22 @@ def build_error_frames():
     return 'no raise'
 
 
+def _caller_of_caller():
+    f = sys._getframe(2)
+    return f.f_code.co_name, f.f_lineno - BASE
+
+
+class _Watched:
+    def __init_subclass__(cls, **kw):
+        _Watched.seen = _caller_of_caller()
+
+
+def init_subclass_caller():
+    class Sub(_Watched):                 # BASE + 32
+        pass
+    return _Watched.seen
+
+
 def plain_body(b):
     class B(b):
         "doc of B"
@@ -157,6 +178,7 @@ class Host:
 r['header_order'] = header_order()
 r['decorator_call_lines'] = decorator_lines()
 r['build_error_frames'] = build_error_frames()
+r['init_subclass_caller'] = init_subclass_caller()
 r['plain_body'] = plain_body(object)
 r['captures'] = captures(7)
 r['exception_class'] = exception_class()
@@ -172,6 +194,7 @@ EXPECTED = {
                       "meta C ['flag']", 'apply inner C', 'apply outer C']),
     'decorator_call_lines': [5, 4],
     'build_error_frames': [('build_error_frames', 'class G(1):')],
+    'init_subclass_caller': ('init_subclass_caller', 32),
     'plain_body': ('plain_body.<locals>.B', 'doc of B', (1, 'two', 3, None),
                    (1, 'two', 4, 5), 'object'),
     'captures': (7, True),

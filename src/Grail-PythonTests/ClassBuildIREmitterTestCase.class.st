@@ -205,7 +205,7 @@ ClassBuildIREmitterTestCase >> testTheFixtureAgreesWithCPython [
 	bad := OrderedCollection new.
 	#('header_order' 'decorator_call_lines' 'build_error_frames' 'plain_body'
 	  'captures' 'exception_class' 'slots' 'starred_base'
-	  'init_subclass_keywords' 'class_in_a_method') do: [:k |
+	  'init_subclass_keywords' 'class_in_a_method' 'init_subclass_caller') do: [:k |
 		| got want |
 		got := (r @env1:__getitem__: k) @env1:__repr__ @env0:asString.
 		want := (expected @env1:__getitem__: k) @env1:__repr__ @env0:asString.

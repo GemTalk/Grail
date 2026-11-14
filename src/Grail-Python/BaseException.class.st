@@ -2809,6 +2809,34 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 											forHome: home
 											pendingHome: pendingHome). outerLvl. meth }]
 								ifFalse: [
+							"A METHOD-LOCAL CLASS'S HELPER BUILT THROUGH IR (P3.2) carries the
+							IR marker, so the generated-Python test below admits it at EVERY
+							ip -- including while the class-build machinery runs (the subclass
+							mint, __prepare__, the metaclass, __init_subclass__), which CPython
+							runs in __build_class__ with no class-body frame.  A frame there
+							shifted every sys._getframe depth by one: warnings.warn from an
+							__init_subclass__ blamed a frame with no co_filename
+							(test_warnings DeprecatedTests).  So the helper is a frame only
+							where its own line is derivable: the build machinery is stamped on
+							the slice trailer, which answers nil (___irCaretMarksSliceTrailer___:at:).
+							Failing closed -- a helper whose line cannot be read is dropped --
+							is what a declarative TEXT helper always got, having no marker; a
+							text helper is left to the test below, unchanged.  Named for the
+							class, as the traceback walk names it."
+							((self ___classBodyHelperClassNameFor___: meth @env0:selector) notNil
+								and: [self ___isIRPythonMethod___: meth])
+								ifTrue: [
+									| helperLine |
+									helperLine := frameLine ifNil: [self ___pythonLineForMethod___: meth ip: ip].
+									helperLine notNil ifTrue: [
+										pairs @env0:add: { meth. ip.
+											(self ___classBodyHelperClassNameFor___: meth @env0:selector).
+											helperLine.
+											(self ___liveFrameContentsList___: contents
+												pending: pendingContents
+												forHome: home
+												pendingHome: pendingHome). outerLvl. meth }]]
+								ifFalse: [
 							(((self ___pythonFrameNameFor___: meth @env0:selector) notNil)
 								and: [self ___isGeneratedPythonMethod___: meth]) ifTrue: [
 									pairs @env0:add: { meth. ip.
@@ -2817,7 +2845,7 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome). outerLvl. meth }]].
+											pendingHome: pendingHome). outerLvl. meth }]]].
 							"A real method frame ends any pending block line: whether it took
 							the line above or not, no frame further out can be this home's."
 							pendingHome := nil.
