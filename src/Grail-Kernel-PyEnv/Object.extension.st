@@ -8812,7 +8812,7 @@ Object >> ___classDict___ [
 	Python-defined classes are left to the branch below."
 	((self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:isNil
 		and: [self @env0:isMeta @env0:not]) ifTrue: [
-		[ | mroSet walker found |
+		[ | mroSet walker found allowed |
 		#('new' '__getitem__' '__instancecheck__') @env0:do: [:k | | v |
 			v := d @env0:at: k otherwise: nil.
 			((v @env0:isKindOf: UnboundMethod)
@@ -8832,12 +8832,14 @@ Object >> ___classDict___ [
 						(nm @env0:notNil and: [(found @env0:includesKey: nm) @env0:not])
 							ifTrue: [found @env0:at: nm put: walker @env0:class]]].
 				walker := walker @env0:superclass].
+		"The class's own allow-list holds here too: bool's from_bytes is int's."
+		allowed := self ___grailPythonDictNames___.
 		#( #('maketrans' #static) #('fromhex' #class) #('fromkeys' #class)
 			#('from_bytes' #class) #('from_number' #class) #('__getformat__' #class) )
 			@env0:do: [:entry | | nm owner |
 				nm := entry @env0:at: 1.
 				owner := found @env0:at: nm otherwise: nil.
-				owner @env0:notNil ifTrue: [
+				(owner @env0:notNil and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]) ifTrue: [
 					d @env0:at: nm put: ((entry @env0:at: 2) == #static
 						"A staticmethod's __func__ is called with no receiver, so it
 						wraps what ``str.maketrans'' answers.  A class method is
@@ -12294,6 +12296,8 @@ Object >> ___grailPythonDictNames___ [
 	measured, not assumed (the probe reported 0 missing).  PythonInstance has no
 	CPython counterpart at all -- it is where Grail puts the instance-dictionary
 	slot and the fallbacks -- so only __dict__ survives.
+
+	bool answers its own list (Boolean class >> ___grailPythonDictNames___).
 
 	Restricting the REPORTED dictionary changes no dispatch: lookup runs over
 	the Smalltalk method dictionaries, which are untouched."
