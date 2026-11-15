@@ -21,7 +21,12 @@ def _with_tz(spec, fn):
         time.tzset()
         return fn()
     finally:
-        os.environ['TZ'] = orig if had else ''
+        # Unset, not '': CPython reads an empty TZ as UTC, so restoring an
+        # unset TZ as '' silently re-timed everything after the first pin.
+        if had:
+            os.environ['TZ'] = orig
+        else:
+            del os.environ['TZ']
         time.tzset()
 
 
@@ -82,7 +87,7 @@ def restores_the_previous_zone():
     silently re-time every later test in the run."""
     before = (time.timezone, list(time.tzname))
     globals_for('UTC')
-    return [before == (time.timezone, list(time.tzname)), before[1]]
+    return before == (time.timezone, list(time.tzname))
 
 
 def run_with_tz_pins_the_zone():
@@ -97,3 +102,76 @@ def run_with_tz_restores_after_the_call():
     before = (time.timezone, list(time.tzname))
     run_with_tz_pins_the_zone()
     return before == (time.timezone, list(time.tzname))
+
+
+def empty_tz_is_utc():
+    """An EMPTY TZ is UTC, as CPython and the C library read it -- not
+    "unset", which would mean the host's zone.  Grail read it as unset, which
+    is what let restoring an unset TZ as '' look correct here while it
+    re-timed everything to UTC under CPython."""
+    return globals_for('')
+
+
+def _tz_after_run_with_tz(start):
+    """TZ as run_with_tz leaves it, starting from start (None = unset)."""
+    had = 'TZ' in os.environ
+    orig = os.environ.get('TZ')
+    try:
+        if start is None:
+            os.environ.pop('TZ', None)
+        else:
+            os.environ['TZ'] = start
+        time.tzset()
+        support.run_with_tz('UTC')(lambda: None)()
+        return os.environ.get('TZ', '<unset>')
+    finally:
+        if had:
+            os.environ['TZ'] = orig
+        else:
+            os.environ.pop('TZ', None)
+        time.tzset()
+
+
+def run_with_tz_leaves_tz_as_it_found_it():
+    """An unset TZ stays UNSET after the decorator, not '' (which CPython,
+    and now Grail, read as UTC), and a set one gets its value back."""
+    return [_tz_after_run_with_tz(None), _tz_after_run_with_tz('Asia/Tokyo')]
+
+
+# What CPython 3.14 answers.  Every key holds under CPython wherever it runs:
+# each case pins its own zone, so the host's is never measured.
+EXPECTED = {
+    'posix_spec_with_dst': (18000, 14400, 1, ['EST', 'EDT']),
+    'olson_name': (0, 0, 0, ['UTC', 'UTC']),
+    'olson_name_with_half_hour_dst': (-37800, -39600, 1, ['+1030', '+11']),
+    'empty_tz_is_utc': (0, 0, 0, ['UTC', 'UTC']),
+    'tzset_reads_as_a_callable': [True, True],
+    'restores_the_previous_zone': True,
+    'run_with_tz_pins_the_zone': (18000, ['EST', 'EDT']),
+    'run_with_tz_restores_after_the_call': True,
+    'run_with_tz_leaves_tz_as_it_found_it': ['<unset>', 'Asia/Tokyo'],
+}
+
+# Where Grail differs from CPython, with CPython's answer.  Pinned to Grail's
+# own answers by TzsetPinningTestCase:
+#   * a POSIX spec without a DST rule keeps the abbreviation it spells in
+#     CPython ('EDT4' -> EDT); Grail names it by its offset (-04);
+#   * an unresolvable TZ raises ValueError in Grail, on purpose, where CPython
+#     silently uses UTC.
+KNOWN_DIVERGENCES = {
+    'posix_spec_fixed_west': (14400, 14400, 0, ['EDT', 'EDT']),
+    'posix_spec_fixed_east': (-10800, -10800, 0, ['MSK', 'MSK']),
+    'unresolvable_spec_raises': 'no error',
+}
+
+
+if __name__ == '__main__':
+    for key, expected in EXPECTED.items():
+        actual = globals()[key]()
+        ok = actual == expected
+        print('%-5s %-40s -> %s' % ('OK' if ok else 'FAIL', key,
+                                    'as expected' if ok else repr(actual)))
+    for key, expected in KNOWN_DIVERGENCES.items():
+        actual = globals()[key]()
+        print('%-5s %-40s -> %r' % ('OK' if actual == expected else 'XFAIL',
+                                    key, actual))

@@ -250,11 +250,13 @@ def run_with_tz(tz):
             finally:
                 # Restoring matters more here than in CPython: the zone is
                 # session state in the gem, so leaking it would silently
-                # re-time every later test in the same run.
+                # re-time every later test in the same run.  An unset TZ is
+                # put back UNSET, as upstream does: '' is UTC, not the host's
+                # zone, and it would also stay in os.environ for later tests.
                 if had_tz:
                     os.environ['TZ'] = orig_tz
                 else:
-                    os.environ['TZ'] = ''
+                    del os.environ['TZ']
                 tzset()
         inner.__name__ = func.__name__
         inner.__doc__ = func.__doc__

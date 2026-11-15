@@ -726,7 +726,13 @@ time >> ___tzEntryAt___: epochSeconds [
 { #category : 'Grail-Initialization' }
 time >> ___tzEnvironmentSpec___ [
 	"The current ``os.environ['TZ']'' as a Smalltalk String, or nil when it is
-	unset or empty.
+	unset -- the host's zone.
+
+	An EMPTY TZ is UTC, as CPython (and the C library under it) reads it.  It
+	read as unset, which hid a bug in the restores: test.support.run_with_tz
+	and a fixture both put an unset TZ back as '', which here went on meaning
+	the host's zone while under CPython it re-timed everything after the first
+	pin to UTC -- and left TZ='' in os.environ for every later test.
 
 	Reached through the env-0 ``at:otherwise:'' protocol, which os_Environ
 	implements for exactly this caller: when environ became a read-through
@@ -743,7 +749,7 @@ time >> ___tzEnvironmentSpec___ [
 		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	v == nil ifTrue: [^ nil].
 	v := v @env0:asString.
-	^ v @env0:isEmpty ifTrue: [nil] ifFalse: [v]
+	^ v @env0:isEmpty ifTrue: ['UTC'] ifFalse: [v]
 
 ]
 
@@ -914,6 +920,21 @@ time >> ___zeroPad4___: n [
 	s := n @env0:printString.
 	[s @env0:size @env0:< 4] @env0:whileTrue: [s := '0' @env0:, s].
 	^ s
+
+]
+
+{ #category : 'Grail-Private' }
+time >> ___zoneNamedByTz___ [
+	"The GemStone TimeZone that ``os.environ['TZ']'' names, or nil when TZ is
+	unset (the host's zone) or names nothing this module can resolve.  What
+	PyDateTime class >> ___ensureSessionTimeZone___ installs at the start of a
+	session, so a gem started with TZ set is in that zone for datetime as
+	well as for this module, as a CPython process started with it is."
+
+	| spec |
+	spec := self ___tzEnvironmentSpec___.
+	spec == nil ifTrue: [^ nil].
+	^ self ___timeZoneForSpec___: spec
 
 ]
 
