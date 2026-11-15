@@ -545,6 +545,24 @@ sys >> ___pyAttrStore___: aName put: aValue [
 ]
 
 { #category : 'Grail-Private' }
+sys >> ___raiseSystemExitFor___: arg [
+	"exit(arg): CPython's sys_exit_impl is PyErr_SetObject(PyExc_SystemExit,
+	arg), and _PyErr_CreateException builds the exception from arg by its
+	rules: None is no argument at all (code None), a tuple is the argument
+	LIST (``exit((17, 23))'' has args (17, 23), and ``exit((42,))'' code 42),
+	an instance of SystemExit is raised itself, and anything else is the one
+	argument.  Grail passed a tuple through whole, so ``exit((42,))'' had code
+	(42,) (test_sys test_exit)."
+
+	arg == None ifTrue: [^ SystemExit ___signalNew___: #() kw: nil].
+	(arg @env0:isKindOf: SystemExit) ifTrue: [^ BaseException @env1:___pyRaise___: arg].
+	(arg @env0:isKindOf: tuple) ifTrue: [
+		^ SystemExit ___signalNew___: (Array @env0:withAll: arg) kw: nil].
+	^ SystemExit ___signal___: arg
+
+]
+
+{ #category : 'Grail-Private' }
 sys >> ___reportUncaught___: anException [
 	"Report an exception nothing caught through sys.excepthook, as CPython's
 	_PyErr_PrintEx does (Python/pythonrun.c) -- the launcher's half of issue
@@ -837,9 +855,17 @@ sys >> _excepthook: positional kw: keywords [
 sys >> _exit: positional kw: kwargs [
 	"exit([arg]) - varargs form.  Same 0-argument rule as the ``exit'' fast path
 	above: no argument means an EMPTY args tuple and a code of None, not
-	``(0,)'' and 0."
+	``(0,)'' and 0.  exit takes one positional argument at most and no
+	keyword, refused in argument clinic's words; the extras used to be dropped,
+	so ``exit(42, 42)'' exited with 42 where CPython raises TypeError."
+
+	(kwargs ~~ nil and: [kwargs ~~ None and: [kwargs @env0:isEmpty @env0:not]]) ifTrue: [
+		^ TypeError ___signal___: 'sys.exit() takes no keyword arguments'].
+	positional __len__ @env0:> 1 ifTrue: [
+		^ TypeError ___signal___: ('exit expected at most 1 argument, got ' @env0:,
+			positional __len__ @env0:printString)].
 	^ (positional __len__ @env0:> 0)
-		ifTrue: [SystemExit ___signal___: (positional @env0:at: 1)]
+		ifTrue: [self ___raiseSystemExitFor___: (positional @env0:at: 1)]
 		ifFalse: [SystemExit ___signalNew___: #() kw: nil]
 
 ]
@@ -1226,8 +1252,9 @@ sys >> exit [
 
 { #category : 'Grail-Built-in Functions' }
 sys >> exit: code [
-	"exit(code) -> 1-arg fast path. Raise SystemExit with given code."
-	^ SystemExit ___signal___: code
+	"exit(code) -> 1-arg fast path; ___raiseSystemExitFor___: says how the
+	argument becomes the exception."
+	^ self ___raiseSystemExitFor___: code
 
 ]
 
