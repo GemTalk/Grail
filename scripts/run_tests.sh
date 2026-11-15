@@ -141,6 +141,21 @@ TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=600000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SM
 
 EXIT=0
 
+# IR STRICT MODE (P1.4 of the IR-only codegen plan): a def the IR eligibility
+# check admits but whose IR build fails, or one refused for a broken internal
+# invariant (an ``invariant:'' census row), RAISES a SystemError naming the def
+# instead of silently compiling through the text path.  Users keep the silent
+# fallback -- GRAIL_IR_STRICT is unset for them -- but the suite turns it on, so
+# a new fallback fails the test that meets it rather than passing on the text
+# path unnoticed.  Every session below inherits it: the framework deploy, the
+# shards and the secondary sessions.  It does nothing on the text arm
+# (GRAIL_IR_CODEGEN=0), where nothing is built through IR.  An explicit
+# GRAIL_IR_STRICT=0 opts a run out; the shards' GRAIL_SHARD_IR lines then still
+# count what fell back.
+if [ -z "${GRAIL_IR_STRICT+x}" ]; then
+  export GRAIL_IR_STRICT=1
+fi
+
 # --- Phase timing -----------------------------------------------------------
 # Almost all of the CI wall-clock is in this script (install.sh is seconds), so
 # print a per-phase breakdown.  Uses the portable bash `SECONDS` builtin (whole
@@ -288,6 +303,7 @@ launch_gate_summary
 # Aggregate shard results into one summary line (portable: no gawk-isms) and
 # surface any per-shard failures/errors.
 S_RUN=0; S_PASS=0; S_FAIL=0; S_ERR=0; S_SEEN=0
+IR_FALLBACKS=0; IR_INVARIANTS=0; IR_STRICT_SHARDS=0
 SHARD_MS=""
 SHARD_TEMP=""
 SHARD_CODE=""
@@ -341,6 +357,21 @@ for i in $SHARDS; do
   # the whole multi-line block -- a Python traceback or a stack report would
   # otherwise be truncated to its first line.
   grep -E "^GRAIL_DEFECT\|" "$f" | sed 's/^GRAIL_DEFECT|/  /'
+  # IR fallbacks over the whole shard session (P1.4).  In strict mode each
+  # one already raised in the test that met it; a count here means one was
+  # raised and SWALLOWED (an ``except Exception'' around an import), so it is
+  # failed below rather than trusted.
+  irl=$(grep '^GRAIL_SHARD_IR|' "$f" 2>/dev/null | head -1)
+  if [ -n "$irl" ]; then
+    irf=$(echo "$irl" | sed -n -E 's/.*\|fallbacks=([0-9]+)\|.*/\1/p')
+    iri=$(echo "$irl" | sed -n -E 's/.*\|invariants=([0-9]+)\|.*/\1/p')
+    irs=$(echo "$irl" | sed -n -E 's/.*\|strict=([a-z]+)\|.*/\1/p')
+    IR_FALLBACKS=$((IR_FALLBACKS + ${irf:-0})); IR_INVARIANTS=$((IR_INVARIANTS + ${iri:-0}))
+    [ "$irs" = true ] && IR_STRICT_SHARDS=$((IR_STRICT_SHARDS + 1))
+    if [ "${irf:-0}" -gt 0 ] || [ "${iri:-0}" -gt 0 ]; then
+      echo "  shard $i: IR fell back ${irf:-0} time(s), ${iri:-0} invariant refusal(s) -- $(echo "$irl" | sed -n -E 's/.*\|lastError=(.*)/last: \1/p')"
+    fi
+  fi
   # Tests a class's #skippedTests left out of the suite on this gem (GemStone's
   # SUnit has no skip, so they are simply not in the run count).  The owning
   # shard names each one once; they are listed under the summary line below.
@@ -393,6 +424,16 @@ elif [ "$N_SUITE" -eq 1 ] && [ "$S_SEEN" -eq "$WORKERS" ]; then
   else
     echo "coverage: the $WORKERS shards ran all $SUITE_N tests of the suite, each once (one partition, digest$(printf '%s\n' $DIGESTS | head -1 | sed 's/^/ /'))"
   fi
+fi
+# ZERO IR FALLBACKS (P1.4).  Strict mode raises each one in its test; this is
+# the check that none was raised and swallowed.  Only a strict run is held to
+# it -- without strict mode a fallback is still the documented, correct text
+# compile -- and the line is printed either way so a non-strict run says what
+# it would have failed.
+echo "IR fallbacks (all shards): $IR_FALLBACKS fallback(s), $IR_INVARIANTS invariant refusal(s); strict mode in $IR_STRICT_SHARDS of $S_SEEN shard(s)"
+if [ "$IR_STRICT_SHARDS" -gt 0 ] && [ $((IR_FALLBACKS + IR_INVARIANTS)) -gt 0 ]; then
+  echo "ERROR: strict mode is on and the IR path fell back $IR_FALLBACKS time(s) and refused $IR_INVARIANTS def(s) for a broken invariant" >&2
+  EXIT=1
 fi
 if [ "$S_SEEN" -ne "$N_SHARDS" ] || [ "$S_FAIL" -ne 0 ] || [ "$S_ERR" -ne 0 ]; then EXIT=1; fi
 

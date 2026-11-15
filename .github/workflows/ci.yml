@@ -356,6 +356,13 @@ jobs:
       # the shards failed, because knowing the arm was real is what makes a
       # RED run interpretable too.
       #
+      # STRICT MODE (P1.4) gets the same proof.  run_tests.sh runs the suite
+      # with GRAIL_IR_STRICT=1 unless told otherwise, so on the ir arm an IR
+      # fallback to text RAISES in the test that met it, and run_tests.sh
+      # fails the run if any shard's GRAIL_SHARD_IR line counts one that was
+      # raised and swallowed.  The probe below checks that the switch took
+      # (IRSTRICT), and that its own import fell back nowhere.
+      #
       # The probe is a FILE rather than a heredoc: topaz needs its `%'
       # terminators at column 0, which an indented heredoc would break.  No -I
       # on the topaz line (it finds the ~/.topazini setup-testing-env.sh
@@ -409,6 +416,7 @@ jobs:
             GRAIL_NETLDI=gs64ldi \
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             GRAIL_IR_CODEGEN="${{ matrix.arm == 'text' && '0' || '' }}" \
+            GRAIL_IR_STRICT=1 \
             ARM="${{ matrix.arm }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
@@ -419,14 +427,21 @@ jobs:
                 < /dev/null | tee /tmp/ir_control.out
               flag=$(grep "^IRFLAG|" /tmp/ir_control.out | cut -d"|" -f2)
               compiled=$(grep "^IRCOMPILED|" /tmp/ir_control.out | cut -d"|" -f2)
+              strict=$(grep "^IRSTRICT|" /tmp/ir_control.out | cut -d"|" -f2)
+              fallbacks=$(grep "^IRFALLBACKS|" /tmp/ir_control.out | cut -d"|" -f2)
+              invariants=$(grep "^IRINVARIANTS|" /tmp/ir_control.out | cut -d"|" -f2)
               if [ "$ARM" = ir ]; then
                 [ "$flag" = true ] || { echo "the ir arm reported IR OFF"; exit 1; }
                 [ "${compiled:-0}" -gt 0 ] || { echo "the ir arm compiled nothing through IR"; exit 1; }
+                [ "$strict" = true ] || { echo "the ir arm reported strict mode OFF"; exit 1; }
+                [ "${fallbacks:-1}" -eq 0 ] || { echo "the ir arm fell back to text $fallbacks times"; exit 1; }
+                [ "${invariants:-1}" -eq 0 ] || { echo "the ir arm refused $invariants defs for a broken invariant"; exit 1; }
               else
                 [ "$flag" = false ] || { echo "the text arm reported IR ON"; exit 1; }
                 [ "${compiled:-1}" -eq 0 ] || { echo "the text arm compiled $compiled methods through IR"; exit 1; }
+                [ "$strict" = false ] || { echo "the text arm reported strict mode ON"; exit 1; }
               fi
-              echo "$ARM arm confirmed: flag=$flag compiled=$compiled"
+              echo "$ARM arm confirmed: flag=$flag compiled=$compiled strict=$strict fallbacks=$fallbacks invariants=$invariants"
             '
 
       - name: Upload logs
