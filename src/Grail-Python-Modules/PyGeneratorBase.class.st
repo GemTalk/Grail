@@ -63,6 +63,12 @@ State:
                          is the only link from a running generator back
                          to the frames waiting on it — see
                          BaseException class>>___liveFrameSections___:.
+  * excState           — the exception bookkeeping of the THREAD that last
+                         resumed this generator (BaseException class >>
+                         ___threadExceptionState___), set with
+                         consumerProcess.  The body's own protocol steps read
+                         it here instead of resolving it from their process
+                         on every step.
   * codeThunk          — a niladic block building this generator's code
                          object (gi_code / cr_code / ag_code), emitted at
                          the call site from what the compiler knew about
@@ -108,7 +114,8 @@ Class {
 		'codeFunction',
 		'frameObject',
 		'delegationTarget',
-		'inlineYields'
+		'inlineYields',
+		'excState'
 	],
 	#category : 'Grail-Modules'
 }
@@ -138,8 +145,8 @@ PyGeneratorBase >> ___bindToResumer___ [
 	the first resume there is no body process yet; _forkBody binds it then."
 
 	consumerProcess := GsProcess current.
-	proc == nil ifFalse: [
-		proc environmentAt: #'GrailExcState' put: BaseException ___threadExceptionState___]
+	excState := BaseException ___threadExceptionState___.
+	proc == nil ifFalse: [proc environmentAt: #'GrailExcState' put: excState]
 
 ]
 
@@ -172,7 +179,10 @@ PyGeneratorBase >> ___releaseBody___ [
 	treats a nil ``proc'' as nothing to do."
 
 	block := nil.
-	proc := nil
+	proc := nil.
+	"Nor the resumer's thread's exception bookkeeping: a closed generator must
+	not hold a finished thread's state alive."
+	excState := nil
 
 ]
 
@@ -238,10 +248,10 @@ PyGeneratorBase >> _forkBody [
 
 	| resumersState |
 	started := true.
-	"Read HERE, on the resumer, and handed to the body before it runs any code
-	of its own: its exception bookkeeping is the resumer's thread's (see
-	___bindToResumer___, which re-points it on every later resume)."
-	resumersState := BaseException ___threadExceptionState___.
+	"The resumer's thread's exception bookkeeping, which ___bindToResumer___
+	has just recorded, handed to the body before it runs any code of its own;
+	___bindToResumer___ re-points it on every later resume."
+	resumersState := excState ifNil: [BaseException ___threadExceptionState___].
 	proc := [
 		GsProcess @env0:current @env0:environmentAt: #'GrailExcState' put: resumersState.
 		"Which generator this process is the body of, so a lookup can find the
