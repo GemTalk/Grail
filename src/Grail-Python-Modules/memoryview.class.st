@@ -18,9 +18,10 @@ exists to provide.
 
 The fixed METADATA (format, itemsize, nbytes, shape) is captured at construction.
 CPython can do that because it forbids resizing an object while a view over it
-is exported.  Grail does not refuse that resize (bytearray>>size: says why), so
-a view keeps the length it was built with: after ``bytearray.clear()' a view
-taken before it still reports its old nbytes, and reading it raises the kernel's
+is exported.  Grail refuses that resize only while a view is held by a
+``with' (bytearray>>size: says why no other view is counted), so a view keeps
+the length it was built with: after ``bytearray.clear()' a view taken before
+it still reports its old nbytes, and reading it raises the kernel's
 OffsetError, which Python code cannot catch.  CPython raises BufferError at the
 clear instead.
 

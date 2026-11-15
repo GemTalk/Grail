@@ -655,15 +655,14 @@ GemStone uses mark-sweep GC (no refcounting, so no deterministic __del__) and co
 | `test_weakref` | weakref — refcount/GC-driven reclamation. |
 | `test_weakset` | WeakSet — weakref-based. |
 
-The same refcount dependence decides ten tests inside two wired modules. They
+The same refcount dependence decides nine tests inside two wired modules. They
 check that an object refuses a resize with `BufferError` while a `memoryview`
 of it is alive:
 
 - `test_memoryio`: `test_getbuffer`, `test_getbuffer_empty`,
   `test_write_concurrent_export` and `test_writelines_concurrent_export`, each
   in `PyBytesIOTest` and `CBytesIOTest`;
-- `test_buffer`: `TestPythonBufferProtocol.test_release_saves_reference_no_subclassing`
-  and `test_release_buffer_with_exception_set`.
+- `test_buffer`: `TestPythonBufferProtocol.test_release_saves_reference_no_subclassing`.
 
 Without a refcount, Grail can tell a view still in use from a dropped one only
 by running a mark-sweep, which takes about 20 ms with 73 MB of live temporary objects and 50 ms with 230 MB
@@ -673,6 +672,18 @@ Werkzeug's `send_file` and Django's `FileResponse` do so once per in-memory
 response. Each of those would either raise `BufferError` or pay a mark-sweep,
 so the refusal is left unmodelled. `bytearray>>size:` and `BytesIO>>getbuffer`
 carry the details.
+
+One case needs neither: a view held by a `with` is alive until the `with`
+releases it, so a `bytearray` under such a view refuses resizes for exactly
+that long (`memoryview>>___holdExportForWith___`). That is what
+`test_release_buffer_with_exception_set` checks, and it passes. Not inside a
+generator or coroutine body, though: one can be abandoned mid-`with`, which
+CPython's refcount closes on the spot and Grail's GC only later, so an export
+held there would refuse resizes CPython allows.
+`test_release_saves_reference_no_subclassing` is still on the list because its
+view outlives the `with`: the exporter's `__release_buffer__` keeps it, and
+whether anything still does by the time of the resize is again the refcount's
+question.
 
 ### Hardware / OS-platform specific  ·  18 modules
 
