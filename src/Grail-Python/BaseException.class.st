@@ -3238,15 +3238,20 @@ BaseException class >> ___noteCode___: aCode forBlockMethod: aBlockMethod [
 	"Record the PyCode stamped on a function BLOCK against the block's compiled
 	method (ExecBlock >> ___pyCode___:), for ___codeForBlockMethod___:name:.
 
-	Session-local, and keyed by the METHOD OBJECT -- an identity table holds it
-	alive, so an entry can never answer for a recycled OOP.  It holds one entry
-	per distinct def site, however many closures that site makes: every
-	closure of one def shares its compiled method, and the latest code wins."
+	Session-local, and keyed by the METHOD OBJECT, so an entry can never answer
+	for a recycled OOP.  It holds one entry per distinct def site, however many
+	closures that site makes: every closure of one def shares its compiled
+	method, and the latest code wins.
+
+	A GrailMethodTable, so a def site no class owns -- a function exec()
+	defined -- is held only as long as it lives.  Held strongly, its block led
+	to the doit it was compiled in, and the doit's literals to every global the
+	exec() bound, for the rest of the session."
 
 	| table |
 	table := SessionTemps current at: #'GrailBlockMethodCodes' otherwise: nil.
 	table isNil ifTrue: [
-		table := IdentityKeyValueDictionary new.
+		table := GrailMethodTable new.
 		SessionTemps current at: #'GrailBlockMethodCodes' put: table].
 	table at: aBlockMethod put: aCode
 

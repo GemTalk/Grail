@@ -1092,11 +1092,18 @@ ExecBlockAttrs class >> staticSlotTable [
 	at ~100k def evaluations.  Keyed by def site, the same data is bounded by
 	the number of defs in the image.
 
+	...but only for a def site some class owns.  One that exec() or eval()
+	compiled is new on every call, and held strongly it kept the doit it
+	belongs to alive -- and through the doit's literals, every global that
+	exec() bound.  So this is a GrailMethodTable: such a def site's entry lasts
+	as long as its method does, and nothing that can still read it (a live
+	function object holds its block, and so its method) outlives it.
+
 	Same session-local storage rationale as ``table''."
 
 	^ SessionTemps current
 		at: #'___ExecBlockStaticSlotsTable___'
-		ifAbsentPut: [IdentityKeyValueDictionary new]
+		ifAbsentPut: [GrailMethodTable new]
 
 ]
 

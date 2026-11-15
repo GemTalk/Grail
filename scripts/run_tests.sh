@@ -488,6 +488,11 @@ timed "durable" tests/scripts/run_durable_test.sh || EXIT=$?
 # in its session (Persistent_Modules D14): one gem patches and commits, the
 # next must see the modules as shipped.  Two gems, so a shell driver.
 timed "module-globals" tests/scripts/run_module_globals_test.sh || EXIT=$?
+# What exec() binds dies with its namespace (test_generators'
+# test_generator_resurrect), and GrailMethodTable lets a dead method go.  Fresh
+# gems, not SUnit: near a shard's memory cap the VM did not reclaim a method
+# that had just died, which says nothing about Grail.
+timed "exec-namespace" tests/scripts/run_exec_namespace_test.sh || EXIT=$?
 # unicodedata's databases are deployed built (#1508): a fresh gem finds both
 # in the committed cache, answers from them, and has nothing to commit.  It
 # deploys first (scripts/deployUnicodedata.gs, idempotent), then a second gem
