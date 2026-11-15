@@ -13,6 +13,12 @@ Grail asked no bytearray subclass for its __buffer__, never called a
 __release_buffer__, and bytearray had neither method -- test_buffer's
 TestPythonBufferProtocol, from which these cases come.
 
+The hooks are the ones the MRO finds, so a base written left of bytearray
+supplies them.  And a view held by a ``with'' is an export: its bytearray
+refuses every resize with BufferError until the view is released, while
+writes that change no size still go.  Grail counts no other view (see
+bytearray>>size:), so only views a ``with'' holds are checked here.
+
 Every check here holds under CPython 3.14, which is what makes it evidence.
 """
 
@@ -132,6 +138,148 @@ with memoryview(BufferLast(b"hello")) as view:
 r['bytes_methods_still_take_views'] = [b'abc'.find(memoryview(b'b')), b'-'.join([memoryview(b'a'), b'b']),
                                        bytes(memoryview(b'xy')), memoryview(b'ab').__buffer__(0).tobytes()]
 
+
+def raised(thunk):
+    try:
+        thunk()
+    except Exception as e:
+        return type(e).__name__
+    return 'no error'
+
+
+def a_mixin_hook_precedes_bytearray():
+    # test_multiple_inheritance_buffer_last: the release hook of a base LEFT
+    # of bytearray in the MRO is the one run.  The view __buffer__ answered is
+    # over the exporter itself, so the hook is handed a restricted view,
+    # released afterwards; keeping it keeps a released view.  A base RIGHT of
+    # bytearray is not run at all.
+    class Releaser:
+        def __release_buffer__(self, buffer):
+            self.buffer = buffer
+
+    class Keeper(Releaser, bytearray):
+        def __buffer__(self, flags):
+            return super().__buffer__(flags)
+
+    class SubKeeper(Keeper):
+        pass
+
+    class ReleaseOnly(Releaser, bytearray):
+        pass
+
+    class BytearrayFirst(bytearray, Releaser):
+        buffer = None
+
+        def __buffer__(self, flags):
+            return super().__buffer__(flags)
+
+    out = []
+    for cls in (Keeper, SubKeeper, ReleaseOnly):
+        x = cls(b"hello")
+        with memoryview(x) as view:
+            during = view.tobytes()
+        out.append([during, raised(lambda: x.buffer.tobytes())])
+    first = BytearrayFirst(b"hello")
+    with memoryview(first):
+        pass
+    out.append(first.buffer)
+    return out
+
+
+r['a_mixin_hook_precedes_bytearray'] = a_mixin_hook_precedes_bytearray()
+
+
+def imul(b):
+    b *= 2
+
+
+def iadd(b):
+    b += b'x'
+
+
+def a_with_holds_the_export():
+    # test_release_buffer_with_exception_set: a view held by a with refuses
+    # every resize of its bytearray, and writes that change no size still go.
+    resizes = [lambda b: b.extend(b'x'), lambda b: b.extend(memoryview(b'x')), lambda b: b.append(1),
+               lambda b: b.clear(), lambda b: b.pop(), lambda b: b.pop(1), lambda b: b.insert(0, 1),
+               lambda b: b.remove(ord('b')), lambda b: b.__delitem__(0), lambda b: b.__delitem__(slice(0, 2)),
+               lambda b: b.__setitem__(slice(0, 1), b'xyz'), lambda b: b.resize(10), iadd, imul]
+    same_size = [lambda b: b.__setitem__(0, 0x7a), lambda b: b.__setitem__(slice(0, 2), b'zz'),
+                 lambda b: b.extend(b''), lambda b: b.__setitem__(slice(1, 1), b''),
+                 lambda b: b.resize(len(b))]
+    out = []
+    for group in (resizes, same_size):
+        seen = []
+        for op in group:
+            b = bytearray(b"abcdef")
+            with memoryview(b):
+                during = raised(lambda: op(b))
+            seen.append([during, raised(lambda: op(b))])
+        out.append(seen)
+    return out
+
+
+r['a_with_holds_the_export'] = a_with_holds_the_export()
+
+
+def leaving_the_with_ends_the_export():
+    out = []
+    b = bytearray(b"ab")
+    with memoryview(b) as view:
+        view.release()
+        out.append(raised(lambda: b.extend(b'c')))
+    b = bytearray(b"ab")
+    try:
+        with memoryview(b):
+            raise KeyError('k')
+    except KeyError:
+        pass
+    out.append(raised(lambda: b.extend(b'c')))
+
+    def returns_from_inside(b):
+        with memoryview(b) as view:
+            return view[0]
+
+    b = bytearray(b"ab")
+    returns_from_inside(b)
+    out.append(raised(lambda: b.extend(b'c')))
+    b = bytearray(b"ab")
+    with memoryview(b) as view:
+        with view:
+            pass
+        out.append(raised(lambda: b.extend(b'c')))
+
+    # Abandoned mid-with: CPython closes the generator at the break.
+    def chunks(b):
+        with memoryview(b) as view:
+            for i in range(0, len(b), 2):
+                yield bytes(view[i:i + 2])
+
+    b = bytearray(b"abcdef")
+    for chunk in chunks(b):
+        break
+    out.append(raised(lambda: b.extend(b'g')))
+    # asyncio's StreamReader.read(): a view dropped, then the resize.
+    b = bytearray(b"abcdef")
+    n = len(bytes(memoryview(b)[:2]))
+    del b[:n]
+    out.append(bytes(b))
+    return out
+
+
+r['leaving_the_with_ends_the_export'] = leaving_the_with_ends_the_export()
+
+separator = bytearray(b',')
+
+
+def parts():
+    separator[0:1] = b';'
+    yield b'A'
+    yield b'B'
+
+
+r['a_join_allows_a_same_size_write'] = separator.join(parts())
+
 EXPECTED = {
     'a_python_exporter_is_told': [[True, b'hello'], False, True],
     'the_builtin_pair': [b'hello', None, 'ValueError', 'OverflowError',
@@ -141,6 +289,10 @@ EXPECTED = {
     'only_release_is_overridden': [['ValueError'] * 5, b'hello', 'ValueError'],
     'the_mro_picks_the_buffer': b'hello A',
     'bytes_methods_still_take_views': [1, b'a-b', b'xy', b'ab'],
+    'a_mixin_hook_precedes_bytearray': [[b'hello', 'ValueError']] * 3 + [None],
+    'a_with_holds_the_export': [[['BufferError', 'no error']] * 14, [['no error', 'no error']] * 5],
+    'leaving_the_with_ends_the_export': ['no error'] * 5 + [b'cdef'],
+    'a_join_allows_a_same_size_write': bytearray(b'A;B'),
 }
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, '<missing>') != EXPECTED[k])

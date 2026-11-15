@@ -47,35 +47,70 @@ bytearray >> add: aByte [
 ]
 
 { #category : 'Grail-Buffer Protocol' }
+bytearray >> insertAll: aCollection at: anIndex [
+	"Insert, refusing while a buffer export is live.
+
+	A THIRD funnel, missed as add: was: insert() and the buffer path of
+	extend() resize through it without reaching size:.  extend() checked by
+	hand; insert() did not, and so went through a live export that CPython
+	refuses.  Inserting nothing is no resize (see size:)."
+
+	aCollection isEmpty ifFalse: [self @env1:___refuseIfBufferExported___].
+	^ super insertAll: aCollection at: anIndex
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
+bytearray >> removeAtIndex: anIndex [
+	"Remove one byte, refusing while a buffer export is live.
+
+	The FOURTH funnel: remove(), pop(i) and ``del b[i]'' shrink through it
+	without reaching size:."
+
+	self @env1:___refuseIfBufferExported___.
+	^ super removeAtIndex: anIndex
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
 bytearray >> size: anInteger [
 	"Resize, refusing while a buffer export is live.
 
-	OVERRIDDEN HERE, on the kernel selector, because it is the ONE funnel
-	every resizing operation goes through -- clear, extend, append, pop,
-	insert, remove, resize, slice assignment and __delitem__ all reach it.
-	Guarding each of them instead would be nine edits and a tenth waiting for
+	OVERRIDDEN HERE, on the kernel selector, because it is the funnel most
+	resizing operations go through -- clear, extend, append, pop(), resize,
+	slice assignment and slice deletion all reach it.  Not all: append goes
+	through add:, and insert, remove, pop(i) and ``del b[i]'' through
+	insertAll:at: and removeAtIndex:, so those are guarded too.  Guarding
+	each operation instead would be a dozen edits and one more waiting for
 	the next one added.
 
 	CPython's rule is the buffer protocol's: an object with a live export may
 	be read and may have its bytes overwritten, but may NOT be resized, and
-	the refusal is a BufferError.  Grail has no buffer protocol; the one place
-	it matters so far is bytes>>join:, which holds an export across the
-	materialisation of its iterable -- see ___beginBufferExport___ for why a
-	join that mutates its own separator otherwise answers silently wrong.
+	the refusal is a BufferError.  Grail exports in two places:
+	bytes>>join:, which holds an export across the materialisation of its
+	iterable -- see ___beginBufferExport___ for why a join that mutates its
+	own separator otherwise answers silently wrong -- and a memoryview
+	entered by ``with'' (memoryview >> ___holdExportForWith___).
 
-	A memoryview over a bytearray registers NO export, although CPython
-	refuses a resize while one is alive.  Grail keeps no refcount, so it
-	cannot tell a live view from a dropped one without a mark-sweep (20 to
+	Any OTHER memoryview over a bytearray registers no export, although
+	CPython refuses a resize while one is alive.  Grail keeps no refcount, so
+	it cannot tell a live view from a dropped one without a mark-sweep (20 to
 	50 ms; BytesIO>>getbuffer has the measurement).  asyncio's
 	StreamReader.read() and readexactly() take
 	``bytes(memoryview(self._buffer)[:n])'' and then ``del self._buffer[:n]''
 	on every call, so registering the view would make every such call either
-	raise BufferError or pay a mark-sweep.
+	raise BufferError or pay a mark-sweep.  A ``with'' needs neither: it
+	releases its view when it ends.
 
 	The check is a SessionTemps lookup and only when the registry exists at
-	all, so an ordinary resize pays one nil test."
+	all, so an ordinary resize pays one nil test.
 
-	self @env1:___refuseIfBufferExported___.
+	Only a CHANGE of size is refused.  Slice assignment sets the size even
+	when the slice and its value are the same length, and CPython's
+	PyByteArray_Resize answers before its export check when the size does not
+	change, so ``b[0:2] = b'zz''' writes in place under a live export."
+
+	anInteger = self size ifFalse: [self @env1:___refuseIfBufferExported___].
 	^ super size: anInteger
 
 ]

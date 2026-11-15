@@ -22,10 +22,62 @@ memoryview class >> ___definesPythonHook___: aSelector for: anObject [
 	__release_buffer__: -- rather than none or the builtin one: what makes
 	CPython give a type its slot_bf_getbuffer or slot_bf_releasebuffer."
 
-	| implementor |
-	implementor := anObject @env0:class @env0:whichClassIncludesSelector: aSelector environmentId: 1.
-	^ implementor @env0:notNil
-		@env0:and: [(self ___builtinExporters___ @env0:includes: implementor) @env0:not]
+	^ (self ___hookMethod___: aSelector for: anObject) @env0:notNil
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> ___hookMethod___: aSelector for: anObject [
+	"The method CPython's type lookup finds for aSelector -- __buffer__: or
+	__release_buffer__: -- on anObject's class, or nil when that is none or the
+	builtin one bytes, bytearray and memoryview carry.  The buffer protocol
+	CALLS this method (performMethod:) rather than sending aSelector, because
+	for a subclass of those three the send can find the wrong one.
+
+	``class C(Releaser, bytearray)'' is the case.  Its MRO is C, Releaser,
+	bytearray, so CPython runs Releaser's __release_buffer__.  But Grail's
+	class merge only FILLS GAPS over a builtin storage base
+	(importlib >> ___mergeSecondaryBases___:bases:resolved: says why), so
+	Releaser's method was never copied onto C, and a send of
+	``__release_buffer__:'' to a C reached bytearray's through the Smalltalk
+	chain.  The release hook never ran (test_buffer
+	test_multiple_inheritance_buffer_last).  So for such a subclass the MRO is
+	walked as CPython walks it, up to the builtin base.
+
+	Any other class keeps the Smalltalk lookup, which is exact for it: a merge
+	over a non-builtin base copies a mixin's method onto the class, and a plain
+	bytes, bytearray or memoryview answers nil without a walk."
+
+	| cls implementor |
+	cls := anObject @env0:class.
+	(self ___builtinExporters___ @env0:includes: cls) ifTrue: [^ nil].
+	((cls @env0:inheritsFrom: ByteArray) or: [cls @env0:inheritsFrom: memoryview])
+		ifTrue: [^ self ___hookMethod___: aSelector inMroOf: cls].
+	implementor := cls @env0:whichClassIncludesSelector: aSelector environmentId: 1.
+	(implementor @env0:isNil
+		or: [self ___builtinExporters___ @env0:includes: implementor]) ifTrue: [^ nil].
+	^ implementor @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil
+
+]
+
+{ #category : 'Grail-Instance Creation' }
+memoryview class >> ___hookMethod___: aSelector inMroOf: aClass [
+	"The first definition of aSelector in aClass's MRO, or nil when the builtin
+	base comes first.  A method the merge COPIED onto a class
+	(Grail-MI-Inherited) is not that class's definition, so its origin is
+	found where the MRO puts it instead."
+
+	| mro |
+	mro := [(Python @env0:at: #'importlib') @env0:___mroOf___: aClass]
+		@env0:on: Error do: [:ex | ex @env0:return: #()].
+	mro @env0:do: [:c | | m |
+		(self ___builtinExporters___ @env0:includes: c) ifTrue: [^ nil].
+		(c isKindOf: Behavior) ifTrue: [
+			m := c @env0:compiledMethodAt: aSelector environmentId: 1 otherwise: nil.
+			(m @env0:notNil and: [(c @env0:categoryOfSelector: aSelector environmentId: 1)
+					@env0:~= #'Grail-MI-Inherited'])
+				ifTrue: [^ m]]].
+	^ nil
 
 ]
 
@@ -185,7 +237,8 @@ memoryview class >> ___overExported___: anExporter flags: someFlags [
 	BufferError."
 
 	| exported view |
-	exported := anExporter @env1:__buffer__: someFlags.
+	exported := anExporter @env0:with: someFlags
+		performMethod: (self ___hookMethod___: #'__buffer__:' for: anExporter).
 	(exported isKindOf: memoryview) ifFalse: [
 		^ TypeError ___signal___: '__buffer__ returned non-memoryview object'].
 	((self ___asksWritable___: someFlags) and: [(exported @env0:dynamicInstVarAt: #'readonly') == true]) ifTrue: [
@@ -345,6 +398,55 @@ memoryview >> ___checkRestricted___ [
 
 	((self @env0:dynamicInstVarAt: #'_restricted') @env0:= true) ifTrue: [
 		^ ValueError ___signal___: memoryview ___restrictedMessage]
+
+]
+
+{ #category : 'Grail-Lifetime' }
+memoryview >> ___dropExportForWith___ [
+	"End the export ___holdExportForWith___ took, if it took one."
+
+	| drop |
+	drop := self @env0:dynamicInstVarAt: #'_withExport'.
+	drop @env0:isNil ifTrue: [^ self].
+	self @env0:dynamicInstVarAt: #'_withExport' put: nil.
+	drop @env0:value.
+	^ self
+
+]
+
+{ #category : 'Grail-Lifetime' }
+memoryview >> ___holdExportForWith___ [
+	"Mark the bytearray under this view as exported until the view is
+	released, so that resizing it meanwhile raises BufferError, as CPython's
+	does.
+
+	ONLY FOR A VIEW ENTERED BY ``with''.  CPython refuses the resize for any
+	live view, but liveness there is a refcount, and Grail cannot tell a view
+	still in use from one already dropped -- bytearray>>size: says why
+	registering every view would break asyncio.  A ``with'' is the exception:
+	it holds the view until __exit__ releases it, so the view is alive for
+	exactly as long as the export is, and nothing CPython allows is refused
+	(test_buffer test_release_buffer_with_exception_set).
+
+	NOT INSIDE A GENERATOR OR COROUTINE BODY, which runs on a process of its
+	own (PythonGenerator >> _forkBody stamps it).  Such a body can be
+	abandoned in the middle of its ``with'': ``break'' out of a for loop over
+	a generator that yields slices of a view leaves it suspended, CPython's
+	refcount closes it on the spot, and Grail's GC only later.  An export held
+	there would refuse resizes CPython allows until that collection, so the
+	view goes unregistered, as every view did before.
+
+	Only a bytearray is registered: it is the one source whose resizes check
+	(ByteArray >> ___refuseIfBufferExported___)."
+
+	| source |
+	(self @env0:dynamicInstVarAt: #'_withExport') @env0:isNil ifFalse: [^ self].
+	source := self @env0:dynamicInstVarAt: #'_obj'.
+	(source isKindOf: bytearray) ifFalse: [^ self].
+	((GsProcess @env0:current) @env0:environmentAt: #'GrailPyGenerator' ifAbsent: [nil])
+		@env0:isNil ifFalse: [^ self].
+	self @env0:dynamicInstVarAt: #'_withExport' put: source ___beginBufferExport___.
+	^ self
 
 ]
 
@@ -680,16 +782,34 @@ memoryview >> ___tellExporterOfRelease___: anExporter [
 	"Call anExporter's own __release_buffer__ with the view its __buffer__
 	answered, or with a restricted view of the buffer that is released
 	afterwards.  What it raises is not the caller's, as an unraisable
-	exception is not in CPython."
+	exception is not in CPython.  A builtin __release_buffer__ is not called:
+	CPython has no Python hook to run then.
 
-	| exported given |
+	WHICH view goes is CPython's rule (Objects/typeobject.c).  The view
+	__buffer__ answered goes when it is over SOMETHING ELSE -- the buffer
+	wrapper hands it on.  When it is over anExporter itself, which is what
+	``super().__buffer__(flags)'' answers, the wrapper calls no Python at all:
+	that view is dropped, and anExporter's own release then runs its hook
+	(slot_bf_releasebuffer) with a restricted view, released afterwards.  So a
+	hook that keeps its argument keeps a released view, and
+	``c.buffer.tobytes()'' raises ValueError (test_buffer
+	test_multiple_inheritance_buffer_last)."
+
+	| hook exported given |
+	hook := memoryview ___hookMethod___: #'__release_buffer__:' for: anExporter.
 	exported := self @env0:dynamicInstVarAt: #'_exported'.
-	given := exported @env0:ifNil: [self ___restrictedView___].
+	"The wrapper's reference to that view ends with this release."
+	self @env0:dynamicInstVarAt: #'_exported' put: nil.
+	hook @env0:isNil ifTrue: [^ self].
+	given := (exported @env0:notNil
+			and: [(exported @env0:dynamicInstVarAt: #'_obj') ~~ anExporter])
+		ifTrue: [exported]
+		ifFalse: [self ___restrictedView___].
 	self @env0:dynamicInstVarAt: #'_releasing' put: true.
-	[anExporter @env1:__release_buffer__: given]
+	[anExporter @env0:with: given performMethod: hook]
 		@env0:on: Exception
 		do: [:ex | ex @env0:return: nil].
-	exported @env0:ifNil: [given release]
+	given == exported ifFalse: [given release]
 
 ]
 
@@ -803,9 +923,11 @@ memoryview >> __class_getitem__: item [
 
 { #category : 'Grail-Lifetime' }
 memoryview >> __enter__ [
-	"``with memoryview(b) as mv:'' -- the view itself."
+	"``with memoryview(b) as mv:'' -- the view itself, which keeps b from
+	being resized until it is released (___holdExportForWith___)."
 
 	self ___checkReleased___.
+	self ___holdExportForWith___.
 	^ self
 
 ]
@@ -1184,6 +1306,9 @@ memoryview >> release [
 	| exporter |
 	((self @env0:dynamicInstVarAt: #'_released') @env0:= true
 		@env0:or: [(self @env0:dynamicInstVarAt: #'_releasing') @env0:= true]) ifTrue: [^ None].
+	"Before the hook, as CPython's bytearray drops its export count before
+	slot_bf_releasebuffer runs the Python one."
+	self ___dropExportForWith___.
 	exporter := self @env0:dynamicInstVarAt: #'_exporter'.
 	exporter @env0:isNil ifFalse: [self ___tellExporterOfRelease___: exporter].
 	self @env0:dynamicInstVarAt: #'_released' put: true.

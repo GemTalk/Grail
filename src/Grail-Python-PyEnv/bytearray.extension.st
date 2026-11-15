@@ -289,7 +289,8 @@ bytearray >> __delitem__: index [
 	].
 
 	"Remove (convert to 1-based)"
-	self @env0:removeAtIndex: (idx @env0:+ 1)
+	self @env0:removeAtIndex: (idx @env0:+ 1).
+	^ None
 
 ]
 
@@ -570,7 +571,7 @@ bytearray >> extend: iterable [
 		| at data |
 		at := self @env0:size.
 		data := bytes ___exportBuffer___: iterable.
-		self @env1:___refuseIfBufferExported___.
+		"insertAll:at: refuses it under a live export (bytearray>>size:)."
 		self @env0:insertAll: data at: (at @env0:min: self @env0:size) @env0:+ 1.
 		^ None].
 

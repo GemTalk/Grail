@@ -753,11 +753,19 @@ ByteArray >> ___beginBufferExport___ [
 		SessionTemps @env0:current @env0:at: #'GrailBufferExports' put: reg].
 	n := reg @env0:at: self otherwise: 0.
 	reg @env0:at: self put: n @env0:+ 1.
+	"The last release drops the registry too, so that every later resize is
+	back to the one nil test ___refuseIfBufferExported___ makes when there is
+	none: a ``with memoryview(b)'' (memoryview >> ___holdExportForWith___)
+	would otherwise leave every bytearray resize in the session paying a
+	dictionary lookup."
 	^ [ | m |
 		m := reg @env0:at: self otherwise: 1.
 		m @env0:<= 1
 			ifTrue: [reg @env0:removeKey: self ifAbsent: [nil]]
-			ifFalse: [reg @env0:at: self put: m @env0:- 1] ]
+			ifFalse: [reg @env0:at: self put: m @env0:- 1].
+		(reg @env0:isEmpty
+			and: [(SessionTemps @env0:current @env0:at: #'GrailBufferExports' otherwise: nil) == reg])
+			ifTrue: [SessionTemps @env0:current @env0:removeKey: #'GrailBufferExports' ifAbsent: [nil]] ]
 
 ]
 
