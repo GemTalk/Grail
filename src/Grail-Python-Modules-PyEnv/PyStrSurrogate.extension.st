@@ -596,6 +596,21 @@ PyStrSurrogate >> __rmul__: count [
 ]
 
 { #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> __sizeof__ [
+	"``s.__sizeof__()'' for an exact str holding a surrogate, in CPython's str
+	model (CharacterCollection class >>
+	___sizeofForLength___:maxCodePoint:exact:): a compact object of 2- or
+	4-byte characters, since a surrogate is past U+00FF.  Overrides
+	AbstractPyStr's, which sizes a subclass instance."
+
+	^ CharacterCollection
+		___sizeofForLength___: codePoints @env0:size
+		maxCodePoint: (codePoints @env0:inject: 0 into: [:max :cp | max @env0:max: cp])
+		exact: true
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> __str__ [
 	"CPython: ``str(s) is s'' for an exact str."
 

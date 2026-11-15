@@ -178,6 +178,40 @@ CharacterCollection class >> ___refuseUnbuildableLength___: aLength [
 
 ]
 
+{ #category : 'Grail-Python-Size' }
+CharacterCollection class >> ___sizeofForLength___: length maxCodePoint: maxCodePoint exact: isExact [
+	"What CPython's ``str.__sizeof__()'' answers for a str of length characters
+	whose largest code point is maxCodePoint, on a 64-bit build without free
+	threading (Objects/unicodeobject.c, unicode_sizeof_impl).  This is CPython's
+	str MODEL, not GemStone's physical size -- as Integer >> __sizeof__ is for
+	int, and for the same reason: what reads it checks it against CPython's
+	struct layout.  test_str's test_raiseMemError compares sys.getsizeof of a
+	str with test.support.calcobjsize of PyASCIIObject's and
+	PyCompactUnicodeObject's fields.
+
+	Each character takes 1, 2 or 4 bytes -- the str's KIND, set by its largest
+	code point -- plus one more for the terminating NUL.  An exact str is a
+	COMPACT object with its characters right after the header: 40 bytes of
+	PyASCIIObject when every code point is ASCII, 56 of PyCompactUnicodeObject
+	otherwise.  A subclass instance is the two-block PyUnicodeObject, 64 bytes,
+	whatever its characters.
+
+	CPython also counts a non-ASCII str's cached UTF-8 copy once something has
+	asked for it.  The only such copies a fresh CPython always holds are those
+	of its one-character Latin-1 singletons, so ``'\xe9'.__sizeof__()'' is 61,
+	not 58; Grail keeps no such cache, so nothing else counts one."
+
+	| kind |
+	kind := maxCodePoint @env0:< 16r100
+		ifTrue: [1]
+		ifFalse: [maxCodePoint @env0:< 16r10000 ifTrue: [2] ifFalse: [4]].
+	isExact ifFalse: [^ 64 @env0:+ ((length @env0:+ 1) @env0:* kind)].
+	maxCodePoint @env0:< 16r80 ifTrue: [^ 40 @env0:+ length @env0:+ 1].
+	(length @env0:= 1 and: [kind @env0:= 1]) ifTrue: [^ 56 @env0:+ 2 @env0:+ 3].
+	^ 56 @env0:+ ((length @env0:+ 1) @env0:* kind)
+
+]
+
 { #category : 'Grail-String Methods' }
 CharacterCollection class >> ___streamsAsTranslation___: aReplacement [
 	"Can translate: write aReplacement to its stream of Characters: a str, or
@@ -1077,6 +1111,19 @@ CharacterCollection >> ___isPySpaceCodePoint___: cp [
 	SPACE, IDEOGRAPHIC SPACE."
 	^ (cp @env0:= 8232) or: [(cp @env0:= 8233)
 		or: [(cp @env0:= 8239) or: [(cp @env0:= 8287) or: [cp @env0:= 12288]]]]
+
+]
+
+{ #category : 'Grail-Python-Size' }
+CharacterCollection >> ___maxCodePoint___ [
+	"The largest code point in the string, 0 when it is empty -- which decides
+	the 1-, 2- or 4-byte KIND CPython stores a str in (see
+	CharacterCollection class >> ___sizeofForLength___:maxCodePoint:exact:)."
+
+	| max |
+	max := 0.
+	self @env0:do: [:char | max := max @env0:max: char @env0:codePoint].
+	^ max
 
 ]
 
@@ -2955,6 +3002,21 @@ CharacterCollection >> __rmul__: n [
 	(SequenceableCollection >> ___builtinRepeat___:)."
 
 	^ self ___builtinRepeat___: n
+
+]
+
+{ #category : 'Grail-Python-Size' }
+CharacterCollection >> __sizeof__ [
+	"``s.__sizeof__()'' in CPython's str model rather than GemStone's physical
+	size (Object >> __sizeof__) -- see CharacterCollection class >>
+	___sizeofForLength___:maxCodePoint:exact:.  A user ``class S(str)'' that
+	allocates a CharacterCollection subclass is sized as the subclass instance
+	it is."
+
+	^ CharacterCollection
+		___sizeofForLength___: self @env0:size
+		maxCodePoint: self ___maxCodePoint___
+		exact: self @env0:___isExactPyStr___
 
 ]
 
