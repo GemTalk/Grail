@@ -135,14 +135,24 @@ PyDateTime class >> ___ensureSessionTimeZone___ [
 
 	Memoised in SessionTemps: the zone lookup reads /etc/localtime, so it
 	should not run on every now() call.  A failure leaves GemStone's
-	default in place rather than breaking every date operation."
+	default in place rather than breaking every date operation.
 
-	| temps |
+	The host's zone is the one TZ names when it is set, as for a CPython
+	process started with it, and /etc/localtime only when it is not.
+	TimeZone class >> fromOS reads /etc/localtime and nothing else, so a gem
+	started with TZ set ran datetime in the machine's zone while the time
+	module, which reads TZ, ran in TZ's -- until something called tzset()."
+
+	| temps timeMod zone |
 	temps := SessionTemps @env0:current.
 	(temps @env0:at: #'GrailSessionTimeZoneSet' otherwise: false)
 		ifTrue: [^ self].
 	temps @env0:at: #'GrailSessionTimeZoneSet' put: true.
-	[TimeZone @env0:fromOS @env0:installAsCurrentTimeZone]
+	timeMod := Python @env0:at: #time otherwise: nil.
+	zone := timeMod == nil ifFalse: [
+		[timeMod @env0:___instance___ ___zoneNamedByTz___]
+			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	[(zone @env0:ifNil: [TimeZone @env0:fromOS]) @env0:installAsCurrentTimeZone]
 		@env0:on: Error
 		do: [:ex | "keep GemStone's default zone rather than fail the call"].
 

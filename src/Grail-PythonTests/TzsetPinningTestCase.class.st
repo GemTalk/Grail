@@ -35,6 +35,15 @@ TzsetPinningTestCase >> setUp [
 ]
 
 { #category : 'Grail-Tests - Spec forms' }
+TzsetPinningTestCase >> testEmptyTzIsUtc [
+	"An EMPTY TZ is UTC, as CPython and the C library read it, not the host's
+	zone (which is what an UNSET TZ means)."
+
+	self assertGlobals: #empty_tz_is_utc equal: { 0. 0. 0. #( 'UTC' 'UTC' ) }.
+
+]
+
+{ #category : 'Grail-Tests - Spec forms' }
 TzsetPinningTestCase >> testOlsonName [
 
 	self assertGlobals: #olson_name equal: { 0. 0. 0. #( 'UTC' 'UTC' ) }.
@@ -76,6 +85,17 @@ TzsetPinningTestCase >> testPosixSpecWithADstRule [
 
 	self assertGlobals: #posix_spec_with_dst
 		equal: { 18000. 14400. 1. #( 'EST' 'EDT' ) }.
+
+]
+
+{ #category : 'Grail-Tests - run_with_tz' }
+TzsetPinningTestCase >> testRunWithTzLeavesTzAsItFoundIt [
+	"An unset TZ is put back UNSET, as upstream's run_with_tz does -- not as
+	'', which is UTC and would stay in os.environ for every later test -- and
+	a set one gets its value back."
+
+	self assert: testModule @env1:run_with_tz_leaves_tz_as_it_found_it asArray
+		equals: #( '<unset>' 'Asia/Tokyo' ).
 
 ]
 
@@ -125,7 +145,6 @@ TzsetPinningTestCase >> testUnsettingTzRestoresTheHostZone [
 	silently re-time every later test in the run.  Asserted as a round trip
 	rather than against a fixed zone, so it holds on any host."
 
-	self assert: (testModule @env1:restores_the_previous_zone asArray at: 1)
-		equals: true.
+	self assert: testModule @env1:restores_the_previous_zone equals: true.
 
 ]

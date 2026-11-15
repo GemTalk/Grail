@@ -154,6 +154,55 @@ DatetimeLocalTimeTestCase >> testNowTimestampRoundtrips [
 ]
 
 { #category : 'Grail-Tests-DatetimeLocalTime' }
+DatetimeLocalTimeTestCase >> testSessionStartHonoursTz [
+	"A gem started with TZ set runs datetime in that zone from its first call,
+	as a CPython process started with TZ does -- without anyone calling
+	tzset().  The session's zone used to come from TimeZone class >> fromOS,
+	which reads /etc/localtime and nothing else, so datetime ran in the
+	machine's zone while the time module, which reads TZ, ran in TZ's.
+
+	Simulated in-session: set TZ WITHOUT tzset, put the session back in the
+	state a fresh gem starts in -- no zone aligned yet
+	(PyDateTime class >> ___ensureSessionTimeZone___'s memo) and no zone
+	table read yet (the time module's GrailTzTable) -- and ask for
+	date.today(), which reads the session zone through GemStone's Date
+	today.  Do that under Pacific/Kiritimati (+14) and Pacific/Pago_Pago
+	(-11): 25 hours apart, so their dates differ by one or two days at
+	every instant, while with the old fromOS both answered the host's date.
+
+	It has to be today().  now(), fromtimestamp(), a naive timestamp() and
+	the time module's globals all reach the zone through the time module,
+	which reads TZ itself; versions of this test built on now() and on
+	fromtimestamp() both passed with the fix reverted."
+
+	| temps prior todayIn east west |
+	temps := SessionTemps current.
+	prior := self eval: 'import os
+os.environ.get(''TZ'', ''<unset>'')'.
+	todayIn := [:zoneName |
+		self eval: 'import os
+os.environ[''TZ''] = zone' with: {#zone -> zoneName}.
+		temps
+			at: #'GrailSessionTimeZoneSet' put: false;
+			at: #'GrailTzTableSet' put: false;
+			at: #'GrailTzTable' put: nil.
+		self eval: 'import datetime
+datetime.date.today().toordinal()'].
+	[east := todayIn value: 'Pacific/Kiritimati'.
+	 west := todayIn value: 'Pacific/Pago_Pago'.
+	 self assert: ((east - west) between: 1 and: 2)]
+		ensure: [
+			"tzset installs the restored zone as the session's, and sets the memo."
+			self eval: 'import os, time
+if prior == ''<unset>'':
+    os.environ.pop(''TZ'', None)
+else:
+    os.environ[''TZ''] = prior
+time.tzset()' with: {#prior -> prior}]
+
+]
+
+{ #category : 'Grail-Tests-DatetimeLocalTime' }
 DatetimeLocalTimeTestCase >> testTimeOffsetMatchesDatetimeOffset [
 	"time.timezone/altzone must describe the SAME offset datetime uses --
 	the invariant whose absence caused the original bug.  Derived from
@@ -206,15 +255,18 @@ DatetimeLocalTimeTestCase >> testUtcFromtimestampIsRealUtc [
 ]
 
 { #category : 'Grail-Tests-DatetimeLocalTime' }
-DatetimeLocalTimeTestCase >> testUtcnowIsNoLongerNow [
-	"utcnow() and now() were literally the same method.  On a UTC host they
-	legitimately agree, so the fixture reports 'utc-host' there and the
-	offset-bearing case asserts they differ by the offset."
+DatetimeLocalTimeTestCase >> testUtcnowAndNowAreTheOffsetApart [
+	"utcnow() and now() were literally the same method.  They are the zone's
+	CURRENT offset apart, checked in the host's zone and in every zone the
+	fixture pins -- so a UTC host, where the two legitimately agree, still
+	exercises the offset-bearing cases.
 
-	| r |
-	r := (self loadFixture @env1:utcnow_is_not_local_when_offset_nonzero)
-		@env0:asString.
-	self assert: (#('differ' 'utc-host') includes: r)
-		description: 'utcnow/now relationship was: ' , r
+	This replaced testUtcnowIsNoLongerNow, whose fixture compared the offset
+	at a fixed July instant with the offset now: in any DST zone that is a
+	different offset for half the year, so it failed in America/Los_Angeles
+	from November and in Australia/Sydney from April, under CPython too."
+
+	self assert: self loadFixture @env1:utcnow_and_now_are_the_offset_apart
+		equals: true
 
 ]
