@@ -3,7 +3,12 @@
 # Gems don't expose POSIX signal handling to Python code.  Django's
 # autoreload / dev-server shutdown paths and anyio import this and register
 # handlers; registration is accepted and remembered (so getsignal
-# round-trips) but nothing is ever delivered.
+# round-trips).  The OS delivers nothing: the gem owns the process's
+# signals (hostsignal_unix.c: SIGUSR1 prints its stack, SIGTERM shuts it
+# down, SIGALRM is ignored, and one more -- SIGUSR2 on Darwin -- interrupts
+# its threads' system calls).  The one signal that IS delivered
+# is the one Python raises itself -- raise_signal() runs the handler before it
+# returns, as CPython's raise(3) followed by PyErr_CheckSignals does.
 #
 # signal.py is CPython's own, vendored verbatim: it star-imports this module
 # and converts the integers to the Signals / Handlers IntEnums anyio imports.
@@ -81,8 +86,100 @@ def getsignal(signalnum):
     return _handlers.get(_signal_number(signalnum), SIG_DFL)
 
 
-def raise_signal(signalnum):
-    raise NotImplementedError("signal delivery is not supported in Grail")
+# The signals whose default action (SIG_DFL) discards them, as Darwin's
+# sigaction(2) lists them; every other signal's ends or stops the process.
+_DISCARDED_BY_DEFAULT = frozenset(
+    (SIGCHLD, SIGCONT, SIGURG, SIGIO, SIGWINCH, SIGINFO))
+
+
+def raise_signal(signalnum, /):
+    """Send signalnum to this process, and run its handler before returning.
+
+    What CPython's raise(3) followed by PyErr_CheckSignals does: raise(3)
+    refuses a number it does not know (EINVAL) and takes 0, the null signal,
+    as nothing; the C handler writes the number to the wakeup fd; the Python
+    handler then runs with the number and the caller's frame, and whatever
+    it raises comes out of raise_signal.  SIG_IGN runs nothing, nor does
+    SIG_DFL for a signal whose default action discards it.
+
+    Refused, with NotImplementedError, where CPython would leave Python:
+    SIG_DFL for a signal whose default action ends or stops the process (the
+    process is the gem), and a handler raised for from a thread other than
+    the main one, which CPython runs later on the main thread -- Grail has no
+    point at which to interrupt it."""
+    signalnum = _index(signalnum)
+    if not -2**31 <= signalnum < 2**31:
+        raise OverflowError("Python int too large to convert to C int")
+    if signalnum == 0:
+        return None
+    if signalnum < 0 or signalnum >= NSIG:
+        raise OSError(22, 'Invalid argument')
+    handler = _handlers.get(signalnum, SIG_DFL)
+    if not callable(handler):
+        if handler == SIG_IGN or signalnum in _DISCARDED_BY_DEFAULT:
+            return None
+        raise NotImplementedError(
+            "signal %d's default action would end or stop the process, "
+            "which in Grail is the gem; raise_signal does not deliver it"
+            % signalnum)
+    if not _on_main_thread():
+        raise NotImplementedError(
+            "a signal handler runs on the main thread, and Grail cannot "
+            "deliver signal %d to it from another thread" % signalnum)
+    _write_wakeup_fd(signalnum)
+    import sys
+    try:
+        frame = sys._getframe(1)
+    except ValueError:
+        frame = None
+    handler(signalnum, frame)
+
+
+def _on_main_thread():
+    import threading
+    from _thread import get_ident
+    return get_ident() == threading.main_thread().ident
+
+
+def _write_wakeup_fd(signalnum):
+    """trip_signal's write of the number to the wakeup fd.  A failed write is
+    reported to sys.unraisablehook, as CPython reports it, unless it is a
+    full buffer and set_wakeup_fd said not to warn of one."""
+    if _wakeup_fd == -1:
+        return
+    import os
+    try:
+        os.write(_wakeup_fd, bytes((signalnum,)))
+    except OSError as exc:
+        if _warn_on_full_buffer or not isinstance(exc, BlockingIOError):
+            _write_unraisable(
+                exc,
+                'Exception ignored while trying to write to the signal wakeup fd')
+
+
+class _UnraisableHookArgs:
+    """The one argument sys.unraisablehook takes (sys.UnraisableHookArgs)."""
+
+    def __init__(self, exc_type, exc_value, exc_traceback, err_msg, object):
+        self.exc_type = exc_type
+        self.exc_value = exc_value
+        self.exc_traceback = exc_traceback
+        self.err_msg = err_msg
+        self.object = object
+
+
+def _write_unraisable(exc, err_msg):
+    """PyErr_FormatUnraisable: hand exc to whatever sys.unraisablehook is now.
+    Read as an attribute, not called as sys.unraisablehook(...), which compiles
+    to sys's own method and skips a hook assigned over it.  A failing hook is
+    swallowed; there is no one left to report to."""
+    import sys
+    try:
+        hook = getattr(sys, 'unraisablehook')
+        hook(_UnraisableHookArgs(
+            type(exc), exc, getattr(exc, '__traceback__', None), err_msg, None))
+    except BaseException:
+        pass
 
 
 def alarm(seconds):
@@ -125,20 +222,21 @@ def strsignal(signalnum):
 
 
 _wakeup_fd = -1
+_warn_on_full_buffer = True
 
 
 def set_wakeup_fd(fd, /, *, warn_on_full_buffer=True):
-    """The descriptor a signal's number would be written to, answering the
+    """The descriptor raise_signal writes a signal's number to, answering the
     one it replaces; -1 for none.  As CPython does, a descriptor that is not
     open is an OSError.  NOT MODELLED: CPython also refuses a blocking one
-    (``the fd 5 must be in non-blocking mode''); Grail's os cannot ask, and
-    Grail delivers no signal to write."""
-    global _wakeup_fd
+    (``the fd 5 must be in non-blocking mode''); Grail's os cannot ask."""
+    global _wakeup_fd, _warn_on_full_buffer
     fd = _index(fd)
     if fd != -1:
         import os
         os.fstat(fd)
     old, _wakeup_fd = _wakeup_fd, fd
+    _warn_on_full_buffer = bool(warn_on_full_buffer)
     return old
 
 
