@@ -268,11 +268,12 @@ PyGeneratorBase >> ___close___ [
 		(escapedException @env0:isKindOf: GeneratorExit)
 			ifTrue: [
 				"Absorbed, so nothing will ever walk its traceback -- and the
-				body-side frames _forkBody stashed for it are keyed by the
-				exception in a session-wide registry, holding the body's block
-				as a frame receiver and through it every local.  Left there,
-				a closed generator kept its locals for the rest of the session
-				(test_close_releases_frame_locals)."
+				body-side frames _forkBody stashed for it hold the body's block
+				as a frame receiver and through it every local.  When that
+				stash was a session-wide registry, a closed generator kept its
+				locals for the rest of the session
+				(test_close_releases_frame_locals); it is on the exception now,
+				and dropping it still frees them as soon as close() returns."
 				BaseException @env0:___dropGeneratorStack___:
 					(BaseException @env0:___payloadOf___: escapedException).
 				escapedException := nil]

@@ -141,14 +141,12 @@ BaseException class >> ___carryGeneratorStack___: oldException to: newException 
 	on, which is what forces the copy) under contextvars' Context.run (whose
 	``finally'' re-signals): test_traceback_for_dependency_with_yield."
 
-	| reg st |
+	| st |
 	oldException == newException ifTrue: [^ self].
-	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
-	reg isNil ifTrue: [^ self].
-	st := reg at: oldException otherwise: nil.
+	st := self ___generatorStackFor___: oldException.
 	st isNil ifTrue: [^ self].
-	reg removeKey: oldException ifAbsent: [].
-	reg at: newException put: st.
+	self ___dropGeneratorStack___: oldException.
+	self ___setGeneratorStack___: st on: newException.
 	^ self
 
 ]
@@ -680,12 +678,13 @@ BaseException class >> ___doitGlobalsFor___: aMethod [
 BaseException class >> ___dropGeneratorStack___: anException [
 	"Forget anException's stashed generator-side capture, if it has one.  For a
 	re-raise that takes a fresh capture (___pyRaise___:cause:): the stash
-	describes the EARLIER raise, whose frames are already in the traceback."
+	describes the EARLIER raise, whose frames are already in the traceback.
 
-	| reg |
-	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
-	reg isNil ifTrue: [^ self].
-	reg removeKey: anException ifAbsent: [].
+	Writes only when there is something to forget, so that a committed
+	exception is not dirtied for nothing."
+
+	(self ___generatorStackFor___: anException) isNil ifTrue: [^ self].
+	anException removeDynamicInstVar: #'___generatorStacks___'.
 	^ self
 
 ]
@@ -1102,12 +1101,13 @@ BaseException class >> ___generatorOwningStack___: triples [
 
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___generatorStackFor___: anException [
-	"The stashed generator-side capture for anException, or nil."
+	"The stashed generator-side capture for anException, or nil.  Kept on the
+	exception itself -- see ___stashGeneratorStack___: for why."
 
-	| reg |
-	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
-	reg isNil ifTrue: [^ nil].
-	^ reg at: anException otherwise: nil
+	^ [anException dynamicInstVarAt: #'___generatorStacks___']
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
 
 ]
 
@@ -2114,7 +2114,13 @@ BaseException class >> ___liveFrameChain___ [
 			ifFalse: [
 				secLevels := section @env0:at: 3.
 				secOffset := secLevels isNil ifTrue: [nil] ifFalse: [0]].
-		(self ___liveFramePairsFrom___: (section @env0:at: 1)
+		"From inside an except body a section still holds the frames the
+		 handler runs on top of -- the function that raised and its callees --
+		 which CPython has unwound.  Every section: a generator started in an
+		 except body leaves its consumer's handler region in the next section.
+		 Relabelled in place, so each section's level offset still lines up."
+		(self ___liveFramePairsFrom___:
+				(self ___neutralizeHandledRaiseFrames___: (section @env0:at: 1))
 			generatorBody: (section @env0:at: 2)
 			levels: secLevels
 			offset: secOffset
@@ -3054,14 +3060,12 @@ BaseException class >> ___moveGeneratorStack___: oldException to: newException [
 	signalled again -- PythonGenerator >> ___resignalable___:).  Also clears the copy's
 	_gsStack, which `copy' brought along with the other named instVars."
 
-	| reg st |
-	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
-	reg isNil ifTrue: [^ self].
+	| st |
 	oldException == newException ifTrue: [^ self].
-	st := reg at: oldException otherwise: nil.
+	st := self ___generatorStackFor___: oldException.
 	st isNil ifTrue: [^ self].
-	reg removeKey: oldException ifAbsent: [].
-	reg at: newException put: st.
+	self ___dropGeneratorStack___: oldException.
+	self ___setGeneratorStack___: st on: newException.
 	newException _gsStack: nil.
 	^ self
 
@@ -3230,6 +3234,96 @@ BaseException class >> ___nestedFunctionNameFor___: aMethod line: aLine [
 		name := self ___deriveNestedFunctionNameFor___: aMethod line: aLine.
 		cache @env0:at: key put: name.
 		name]
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___neutralizeHandledRaiseFrames___: triples [
+	"A copy of a live stack's (method, ip, receiver) triples, innermost first,
+	in which the frames an exception handler is running ON TOP OF no longer
+	read as Python frames.
+
+	A Smalltalk handler runs before the stack unwinds: the handler block is
+	called from the signal, above every frame between the raise and the
+	on:do: that installed it.  A Python except body is such a block, so from
+	inside one the live stack still held the function that raised and
+	everything it called on the way.  CPython has unwound them by then.
+	sys._getframe() in caller's except answered helper's frame, and with it
+	inspect.currentframe(), inspect.stack(), traceback.extract_stack() and
+	logging's findCaller: ``log.error()'' in an except block reported the
+	function that raised, at the line that raised.
+
+	The region runs from the frame that called the handler out to the
+	ExecBlock frame (on:do: or a kernel helper of it) whose receiver -- the
+	protected block -- shares the handler block's staticLink: the
+	VariableContext of the activation that made them both, so this is the very
+	try that caught, not merely a try in the same function -- a recursive call
+	with its own except has a context of its own.  The calling frame is
+	AbstractException >> _executeHandler: for the first handler tried, and
+	_executeOuterHandler: for one reached by ``pass'' -- which is how an
+	exception gets past a non-matching Python except on its way out.
+	(stkSerialNum looks like an activation id and is not: measured, every
+	block on one stack carried the same one.)  A handler block with no
+	staticLink -- one that captures nothing -- matches nothing, and that
+	region is left as it was.
+
+	The dead frames are relabelled, not removed.  Positions matter: the
+	walk turns a triple index into an f_locals level by one constant
+	offset, so dropping triples would shift every frame outside the gap
+	onto the wrong locals.  The kernel method put in their place is
+	skipped by the pair walk like any other non-Python frame."
+
+	| out linkIx execHandler i |
+	out := triples @env0:copy.
+	linkIx := ExecBlock @env0:allInstVarNames @env0:indexOf: #staticLink.
+	linkIx @env0:= 0 ifTrue: [^ out].
+	execHandler := nil.
+	i := 1.
+	[i @env0:<= out @env0:size] whileTrue: [
+		| meth |
+		meth := out @env0:at: i.
+		((meth @env0:isKindOf: GsNMethod)
+			and: [(#(#_executeHandler: #_executeOuterHandler:)
+					@env0:includesIdentical: meth @env0:selector)
+			and: [meth @env0:inClass @env0:== AbstractException]])
+				ifTrue: [
+					| link j k |
+					execHandler := meth.
+					"The handler block: the nearest frame inward that is a block
+					 of code outside ExecBlock (whose own on:do: wraps a lazy
+					 except selector in a block of its own)."
+					link := nil.
+					j := i @env0:- 3.
+					[link @env0:isNil and: [j @env0:>= 1]] whileTrue: [
+						| m r |
+						m := out @env0:at: j.
+						r := out @env0:at: j @env0:+ 2.
+						((r @env0:isKindOf: ExecBlock)
+							and: [(m @env0:isKindOf: GsNMethod)
+							and: [m @env0:homeMethod @env0:inClass @env0:~~ ExecBlock]])
+								ifTrue: [link := r @env0:instVarAt: linkIx.
+									link @env0:isNil ifTrue: [j := 0]].
+						j := j @env0:- 3].
+					k := nil.
+					link @env0:isNil ifFalse: [
+						j := i @env0:+ 3.
+						[k @env0:isNil and: [j @env0:<= out @env0:size]] whileTrue: [
+							| m r |
+							m := out @env0:at: j.
+							r := out @env0:at: j @env0:+ 2.
+							((m @env0:isKindOf: GsNMethod)
+								and: [m @env0:selector @env0:notNil
+								and: [m @env0:inClass @env0:== ExecBlock
+								and: [(r @env0:isKindOf: ExecBlock)
+								and: [(r @env0:instVarAt: linkIx) @env0:== link]]]])
+									ifTrue: [k := j].
+							j := j @env0:+ 3]].
+					k @env0:isNil ifFalse: [
+						i @env0:+ 3 @env0:to: k @env0:- 3 by: 3 do: [:x |
+							out @env0:at: x put: execHandler].
+						i := k]].
+		i := i @env0:+ 3].
+	^ out
 
 ]
 
@@ -4465,6 +4559,23 @@ BaseException class >> ___setCurrentException___: anExceptionOrNil [
 
 ]
 
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___setGeneratorStack___: levels on: anException [
+	"Keep a generator-side capture on anException (___stashGeneratorStack___:
+	says why it lives there).  Nothing is stored on a committed exception, nor
+	on an object that cannot take a dynamic instVar: the traceback then lacks
+	the generator's frames, which is better than a write a commit would trip
+	over or an error in the middle of an unwind."
+
+	anException isCommitted ifTrue: [^ self].
+	[anException dynamicInstVarAt: #'___generatorStacks___' put: levels]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	^ self
+
+]
+
 { #category : 'Grail-Current Exception' }
 BaseException class >> ___setInheritedException___: anExceptionOrNil [
 	"Set (nil clears) the exception a resumed generator body inherits.  Set by
@@ -4739,21 +4850,28 @@ BaseException class >> ___stashGeneratorStack___: anException [
 	``consume_delegated@15 outer_gen@10 inner_gen@6'').  Innermost level first,
 	which is also the order the walk wants.
 
-	Session-local and keyed by IDENTITY, so one generator consuming another keeps
-	its own levels.  Not stored on the exception itself: a dynamic instVar there
-	would be readable as a Python attribute."
+	KEPT ON THE EXCEPTION, as the hidden dynamic instVar ___generatorStacks___
+	(a ___ name, which __dict__, dir(), vars(), copy and pickle all leave out),
+	so it lives exactly as long as the exception.  It used to be a session-wide
+	IdentityKeyValueDictionary keyed by the exception, and only close() and a
+	re-raise with a traceback ever removed an entry -- so every exception that
+	escaped a generator and was caught by its consumer stayed in it for the rest
+	of the session, holding the body's frames as receivers and through them
+	every local (test_exceptions' test_generator_throw_cleanup_exc_state: the
+	object a generator's except block held outlived the generator).  A loop
+	catching errors out of a generator grew it without bound.
 
-	| st reg levels |
+	Not for a COMMITTED exception, which a write would dirty and a commit would
+	then try to store frames into: its generator frames are left out of the
+	traceback instead.  The consumer's half is still captured."
+
+	| st levels |
 	st := anException _gsStack.
 	st isNil ifTrue: [^ self].
-	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
-	reg isNil ifTrue: [
-		reg := IdentityKeyValueDictionary new.
-		SessionTemps current at: #'GrailGeneratorStacks' put: reg].
-	levels := reg at: anException otherwise: nil.
+	levels := self ___generatorStackFor___: anException.
 	levels isNil ifTrue: [levels := OrderedCollection new].
 	levels add: (self ___trimCapturedStack___: st).
-	reg at: anException put: levels.
+	self ___setGeneratorStack___: levels on: anException.
 	anException _gsStack: nil.
 	^ self
 
@@ -6877,15 +6995,14 @@ BaseException >> releasePythonCapture [
 	The PyTraceback chain survives; only the raw material goes, and it is the
 	bulk: (method, ip, RECEIVER) triples for the whole Smalltalk stack, which an
 	exception parked in a long-lived scope would otherwise keep alive (design
-	log 9.15).  Also forgets the generator-side stash, which is keyed by the
-	exception in SessionTemps.  Both the carrier and its payload are released."
+	log 9.15).  Also forgets the generator-side stash kept on the exception.
+	Both the carrier and its payload are released."
 
-	| payload reg |
+	| payload |
 	payload := BaseException ___payloadOf___: self.
 	payload ___releaseCapturedStack___.
 	payload == self ifFalse: [self ___releaseCapturedStack___].
-	reg := SessionTemps current at: #'GrailGeneratorStacks' otherwise: nil.
-	reg isNil ifFalse: [reg removeKey: payload ifAbsent: []].
+	BaseException ___dropGeneratorStack___: payload.
 	^ self
 
 ]
