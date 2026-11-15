@@ -810,6 +810,42 @@ sys >> _clear_type_descriptors: aType [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+sys >> _current_exceptions [
+	"_current_exceptions() -> each thread's identifier mapped to the exception
+	it is handling, or None -- CPython's sys._current_exceptions.
+
+	The identifiers are get_ident()'s.  The caller's own entry is
+	BaseException >> ___handledException___.  Every thread start_new_thread
+	started and that is still running (_thread class >> ___liveThreads___) is
+	read from its own state; the main thread, when the caller is not it, from
+	the session's, under the identifier threading.main_thread() reports --
+	the main thread is not one process, so only threading has a name for it,
+	and with no threading imported no other thread can be asking."
+
+	| out here threading mainIdent orNone |
+	orNone := [:exc | exc == nil ifTrue: [None] ifFalse: [exc]].
+	out := PyDict @env0:new.
+	here := (importlib @env0:___pythonThreadOf___: GsProcess @env0:current) @env0:asOop.
+	out @env0:at: here put: (orNone value: BaseException @env0:___handledException___).
+	(_thread @env0:___contextProcess___) == nil ifFalse: [
+		threading := (importlib @env1:modules) @env0:at: #threading otherwise: nil.
+		threading == nil ifFalse: [
+			mainIdent := (threading @env1:___pyAttrLoad___: #'_MainThread')
+				@env1:___pyAttrLoad___: #ident.
+			(mainIdent == None or: [mainIdent == here]) ifFalse: [
+				out @env0:at: mainIdent put: (orNone value:
+					(BaseException @env0:___handledExceptionIn___: SessionTemps @env0:current))]]].
+	_thread @env0:___liveThreads___ @env0:do: [:p | | ident |
+		ident := p @env0:asOop.
+		ident == here ifFalse: [
+			out @env0:at: ident put: (orNone value:
+				(BaseException @env0:___handledExceptionIn___:
+					(p @env0:environmentAt: #'GrailExcState')))]].
+	^ out
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 sys >> _displayhook: positional kw: keywords [
 	"Every call of sys.displayhook and sys.__displayhook__: one positional
 	argument, or CPython's refusal (Python/clinic/sysmodule.c.h)."

@@ -141,9 +141,7 @@ PyGeneratorBase >> ___captureConsumerState___ [
 	___yield___: does the mirror-image save/restore for the body, so each side
 	keeps its own."
 
-	^ { BaseException @env0:___currentException___ .
-		BaseException @env0:___captureHandlerState___ .
-		BaseException @env0:___inheritedException___ }
+	^ BaseException @env0:___captureThreadState___
 
 ]
 
@@ -233,7 +231,7 @@ PyGeneratorBase >> ___close___ [
 	done ifTrue: [^ None].
 	self ___checkNotRunning___.
 	___savedState___ := self ___captureConsumerState___.
-	consumerProcess := GsProcess @env0:current.
+	self @env0:___bindToResumer___.
 	injectedException := GeneratorExit @env0:new.
 	sentValue := nil.
 	running := true.
@@ -1092,9 +1090,7 @@ PyGeneratorBase >> ___restoreConsumerState___: anArray [
 	"Reinstate the consumer's exception bookkeeping after the generator body has
 	yielded control back.  See ___captureConsumerState___."
 
-	BaseException @env0:___setCurrentException___: (anArray @env0:at: 1).
-	BaseException @env0:___restoreHandlerState___: (anArray @env0:at: 2).
-	BaseException @env0:___setInheritedException___: (anArray @env0:at: 3)
+	BaseException @env0:___restoreThreadState___: anArray
 
 ]
 
@@ -1134,7 +1130,7 @@ PyGeneratorBase >> ___runInline___ [
 	| savedState |
 	started := true.
 	inlineYields := OrderedCollection @env0:new.
-	consumerProcess := GsProcess @env0:current.
+	self @env0:___bindToResumer___.
 	savedState := self ___captureConsumerState___.
 	running := true.
 	"No unwind can leave this block -- every exception is caught and held --
@@ -1182,7 +1178,7 @@ PyGeneratorBase >> ___send___: aValue [
 	next, and recorded HERE rather than after the fork: from this point on this
 	process does not yield until it blocks on consumerSem, so the body can never
 	observe a stale value."
-	consumerProcess := GsProcess @env0:current.
+	self @env0:___bindToResumer___.
 	"close() before the first resume finishes the generator without starting
 	it (``done'', not ``started''), so the body must never run: CPython's next()
 	on it is StopIteration.  It forked the body instead, which then read from
@@ -1427,10 +1423,7 @@ PyGeneratorBase >> ___stackOnResumersException___: ownExceptionOrNil [
 	slots is what gets both right -- BaseException >> ___handledException___
 	reads them in order."
 
-	| resumers |
-	resumers := BaseException @env0:___handledException___.
-	BaseException @env0:___setCurrentException___: ownExceptionOrNil.
-	BaseException @env0:___setInheritedException___: resumers
+	BaseException @env0:___stackOwnException___: ownExceptionOrNil
 
 ]
 
@@ -1496,7 +1489,7 @@ PyGeneratorBase >> ___throw___: anException [
 	].
 	done ifTrue: [^ self ___resumeFinishedWith___: ___exc___].
 	___savedState___ := self ___captureConsumerState___.
-	consumerProcess := GsProcess @env0:current.
+	self @env0:___bindToResumer___.
 	injectedException := ___exc___.
 	sentValue := nil.
 	running := true.
@@ -1696,7 +1689,7 @@ PyGeneratorBase >> ___yield___: aValue [
 	    it as the yield-expression value.
 	  * otherwise → return None (the implicit value for plain next)."
 
-	| sent bodyExc bodyHandlers |
+	| sent bodyState bodyExc bodyHandlers |
 	inlineYields @env0:notNil ifTrue: [^ self ___yieldInline___: aValue].
 	value := aValue.
 	"The body's own exception bookkeeping, kept across the suspension -- the
@@ -1714,8 +1707,9 @@ PyGeneratorBase >> ___yield___: aValue [
 	Captured BEFORE the signal and restored immediately after the wait, so the
 	window in which the other side is running is exactly the window in which its
 	own state is installed."
-	bodyExc := BaseException @env0:___currentException___.
-	bodyHandlers := BaseException @env0:___captureHandlerState___.
+	bodyState := BaseException @env0:___captureThreadState___.
+	bodyExc := bodyState @env0:at: 1.
+	bodyHandlers := bodyState @env0:at: 2.
 	consumerSem @env0:signal.
 	producerSem @env0:wait.
 	self ___stackOnResumersException___: bodyExc.
