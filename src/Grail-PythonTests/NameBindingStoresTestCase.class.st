@@ -77,14 +77,15 @@ NameBindingStoresTestCase >> ___keysIn___: aModule [
 { #category : 'Grail-Private' }
 NameBindingStoresTestCase >> ___knownFallbacks___ [
 	"Fixture name -> how many of its defs the IR build still hands to text.
-	Pinned with =, so a fix shows up as a count to lower.
+	Pinned with =, so a new fallback shows up as a count.
 
-	name_binding_stores held one until P3.2: HeaderWalrus.m, whose
-	``@d := deco'' and ``metaclass=(mk := Meta)'' failed to build under IR
-	with ``undefined symbol d'' (#2170).  Its classes' helpers are now built
-	through IR, and the header is evaluated by the enclosing IR method, which
-	binds the walrus target like any other.  A class whose body still takes
-	the text helper keeps #2170."
+	None now.  name_binding_stores held one until P1.4 and P3.2: HeaderWalrus.m,
+	whose ``@d := deco'' and ``metaclass=(mk := Meta)'' failed to build under
+	IR with ``undefined symbol d'' (#2170).  Its classes' helpers are built
+	through IR since P3.2, and the header is evaluated by the enclosing IR
+	method, which binds the walrus target like any other.  A class whose body
+	still takes the text helper is refused instead (``classDef:headerWalrus'',
+	P1.4)."
 
 	^ Dictionary new
 
@@ -96,6 +97,23 @@ NameBindingStoresTestCase >> ___knownGrailIn___: aModule [
 	known := aModule @env1:___pyAttrLoad___: #'KNOWN_GRAIL'.
 	^ ((1 to: (known @env1:__len__)) collect: [:i |
 		(known @env1:__getitem__: i - 1) @env0:asString]) asSet
+
+]
+
+{ #category : 'Grail-Private' }
+NameBindingStoresTestCase >> ___knownRefusals___ [
+	"Fixture name -> the census rows its defs may still refuse under, each
+	owned by a later phase of the IR plan.  Counted with the compiled defs, so
+	the fixture's total still holds.
+
+	None now.  name_binding_stores' HeaderWalrus.m was refused from P1.4 as
+	``classDef:headerWalrus'' (#2170), because the method-local class's TEXT
+	helper cannot reach the enclosing local its header walrus binds.  Its
+	classes' helpers are built through IR since P3.2, which evaluates the
+	header in the enclosing method, so the refusal no longer applies to them
+	and this test pins that they build."
+
+	^ Dictionary new
 
 ]
 
@@ -219,11 +237,15 @@ NameBindingStoresTestCase >> testNoDefInTheFixturesRefuses [
 				or: [(s includesString: 'signature:')
 				or: [(s includesString: 'nestedDef:')
 				or: [s includesString: 'classDef:']]]]]].
+		refusals := refusals reject: [:k |
+			(self ___knownRefusals___ at: assoc key ifAbsent: [#()]) includes: k].
 		self assert: refusals isEmpty
 			description: assoc key , ' still refuses: ' , refusals asArray printString.
 		self assert: (counts at: #fallback ifAbsent: [0]) = 0
 			description: assoc key , ': an eligible def fell back: ' , counts printString.
-		done := (counts at: #compiled ifAbsent: [0]) + (counts at: #'cm:eligible' ifAbsent: [0]).
+		done := (counts at: #compiled ifAbsent: [0]) + (counts at: #'cm:eligible' ifAbsent: [0])
+			+ ((self ___knownRefusals___ at: assoc key ifAbsent: [#()])
+				inject: 0 into: [:n :k | n + (counts at: k ifAbsent: [0])]).
 		self assert: done >= assoc value
 			description: assoc key , ': fewer defs compiled than the fixture holds ('
 				, assoc value printString , '): ' , counts printString]

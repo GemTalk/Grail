@@ -715,8 +715,21 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 				___irEligible___ (e.g. a node whose predicate has a side effect)
 				must fall back to text just like an emit error, never escape to
 				break the whole module compile."
-				usedIR := (stmt ___irEligible___)
-						       and: [stmt ___installIRMethodOn___: moduleClass. true] .
+				"A top-level def's build has never fallen back: an error raises
+				(e647f739) and stops the module.  Strict mode only gives that
+				error the def's name, file and line (___irStrictFail___:...)."
+				usedIR := (self ___irAdmits___: stmt)
+						       and: [
+								self ___irStrict___
+									ifTrue: [
+										[stmt ___installIRMethodOn___: moduleClass]
+											on: Error do: [:ex |
+												(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+												self ___irStrictFail___: 'passed the IR eligibility check, but its IR build failed: '
+														, (self ___irErrorText___: ex)
+													def: stmt file: CallAst sourcePath]]
+									ifFalse: [stmt ___installIRMethodOn___: moduleClass].
+								true] .
 				usedIR ifTrue: [self ___irNoteCompiled___: stmt]].
 			self ___irCensusOn___ ifTrue: [
 				self ___irCensusTopLevelDef___: stmt module: moduleName usedIR: usedIR].
@@ -5162,6 +5175,40 @@ importlib class >> ___installTransientGlobals___: aNames on: aModuleClass [
 
 ]
 
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irAdmits___: aDef [
+	"Is aDef -- a top-level def or a class-body method a seam is judging --
+	admitted to the IR path?  ___irEligible___, with the two things every seam
+	needs around it in one place (P1.4):
+
+	  * a predicate that RAISES is a refusal labelled
+	    ``invariant:reasonProbeRaised'', not an escape -- the class-method seam
+	    always guarded it so, and the module seam now does too;
+	  * a refusal under the ``invariant:'' prefix (AbstractNode class >>
+	    ___irIsInvariantReason___:) is a Grail bug, not a shape the IR path
+	    does not emit yet.  It is counted for the session
+	    (___irStats___ #sessionInvariants) and, in strict mode
+	    (___irStrict___), raised as a SystemError naming the def.
+
+	Without strict mode an invariant refusal still answers false, and the def
+	compiles through the text path exactly as before."
+
+	| reason |
+	reason := [aDef ___irIneligibilityReason___]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: #'invariant:reasonProbeRaised'].
+	reason isNil ifTrue: [^ true].
+	(AbstractNode ___irIsInvariantReason___: reason) ifTrue: [
+		self ___irSessionCount___: #'___grailIRInvariantTotal___'.
+		self ___irStrict___ ifTrue: [
+			^ self ___irStrictFail___: 'was refused by a broken internal invariant ('
+				, reason asString , ')'
+				def: aDef file: CallAst sourcePath]].
+	^ false
+
+]
+
 { #category : 'Grail-IR Regeneration' }
 importlib class >> ___irBuilderCache___ [
 	"The session cache of IR builders, keyed by the GsNMethod each one
@@ -5810,6 +5857,32 @@ importlib class >> ___irDefIdOf___: aMethod [
 
 ]
 
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irDefLabel___: aDef file: aPathOrNil [
+	"How a strict-mode error names aDef: its qualified name, then the file and
+	line it was written at -- ``'Outer.m.<locals>.inner' (/x/y.py, line 12)''.
+	The qualified name is walked off the AST's parent chain, so it needs no
+	compile context: the class-method seam's runtime half calls this after its
+	snapshot has been put away."
+
+	| parts node line where |
+	parts := OrderedCollection with: ([aDef name asString] on: Error do: [:e | e return: '?']).
+	node := aDef parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: FunctionDefAst) ifTrue: [
+			parts addFirst: '<locals>'; addFirst: node name asString].
+		(node isKindOf: LambdaAst) ifTrue: [
+			parts addFirst: '<locals>'; addFirst: '<lambda>'].
+		(node isKindOf: ClassDefAst) ifTrue: [parts addFirst: node name asString].
+		node := node parent].
+	line := [aDef beginLine] on: Error do: [:e | e return: nil].
+	where := (aPathOrNil ifNil: ['<unknown file>']) asString.
+	line isNil ifFalse: [where := where , ', line ' , line printString].
+	^ '''' , (parts inject: '' into: [:acc :p |
+			acc isEmpty ifTrue: [p] ifFalse: [acc , '.' , p]]) , ''' (' , where , ')'
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irDefTable___ [
 	"Session-side registry of class-body defs awaiting an IR build: id ->
@@ -5822,6 +5895,16 @@ importlib class >> ___irDefTable___ [
 
 	^ SessionTemps current at: #'___grailIRDefTable___' ifAbsent: [
 		SessionTemps current at: #'___grailIRDefTable___' put: IdentityKeyValueDictionary new]
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irErrorText___: anException [
+	"anException's message text, or its class name when it has none (or
+	answering it raises)."
+
+	^ [anException messageText asString]
+		on: Error do: [:e | e return: anException class name asString]
 
 ]
 
@@ -6003,7 +6086,10 @@ importlib class >> ___irInstallDef: anId on: aClass or: aSource category: aCateg
 				self ___irCacheBuilder___: builder forMethod: meth.
 				true]]
 			on: Error do: [:ex |
-				self ___irNoteFallback___: (entry at: 1) error: ex.
+				"The snapshot's file: the live context is the module body
+				that is running this statement, not the one the def came from."
+				self ___irNoteFallback___: (entry at: 1) error: ex
+					file: ((entry at: 2) at: #'sourcePath' otherwise: nil).
 				ex return: false]].
 	ok ifTrue: [
 		self ___irNoteCompiled___: (entry at: 1).
@@ -6047,23 +6133,67 @@ importlib class >> ___irNoteCompiled___: aFunctionDef [
 
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irNoteFallback___: aFunctionDef error: anException [
+	"___irNoteFallback___:error:file: for a def compiled under the live compile
+	context, whose sourcePath is the file the def came from."
+
+	^ self ___irNoteFallback___: aFunctionDef error: anException file: CallAst sourcePath
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irNoteFallback___: aFunctionDef error: anException file: aPathOrNil [
 	"Record that an ___irEligible___ def fell back to text compilation because
-	the IR build raised anException.  Kept for observability; the def still
-	compiles correctly via the text path."
+	the IR build raised anException; aPathOrNil is the file it came from, for
+	strict mode's error.  Without strict mode this is only observability: the
+	def still compiles correctly via the text path.  In strict mode
+	(___irStrict___) it raises instead, after recording, so the counters still
+	say what happened."
 
 	| temps log |
 	temps := SessionTemps current.
 	temps at: #'___grailIRFallbackCount___'
 		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
+	self ___irSessionCount___: #'___grailIRFallbackTotal___'.
 	temps at: #'___grailIRLastError___'
-		put: (aFunctionDef name asString , ': ' , ([anException messageText]
-			on: Error do: [:e | anException class name asString])).
+		put: (aFunctionDef name asString , ': ' , (self ___irErrorText___: anException)).
 	"Every fallback, not just the last: one build error in a batch of new
 	methods is diagnosable from lastError, fifty-nine are not (cut 55).
 	Capped so a runaway cannot grow the session unboundedly."
 	log := temps at: #'___grailIRFallbackLog___' otherwise: nil.
 	log isNil ifTrue: [log := OrderedCollection new. temps at: #'___grailIRFallbackLog___' put: log].
 	log size < 500 ifTrue: [log add: (temps at: #'___grailIRLastError___')].
+	self ___irStrict___ ifTrue: [
+		self ___irStrictFail___: 'passed the IR eligibility check, but its IR build failed: '
+				, (self ___irErrorText___: anException)
+			def: aFunctionDef file: aPathOrNil]
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irNoteRegenerateFallback___: aSelector on: aClass error: anException [
+	"A method-local class's memoized IR (cut 79) failed to generate for aClass,
+	so ___irInstallDef:on:or:category: compiles the method's text instead.
+	Counted and logged like ___irNoteFallback___:error:file:, and raised in
+	strict mode.  No def AST survives in the memo, so the error names the
+	method by class and selector."
+
+	| temps text |
+	temps := SessionTemps current.
+	text := self ___irErrorText___: anException.
+	temps at: #'___grailIRFallbackCount___'
+		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
+	self ___irSessionCount___: #'___grailIRFallbackTotal___'.
+	temps at: #'___grailIRLastError___' put: aSelector asString , ': ' , text.
+	(temps at: #'___grailIRFallbackLog___' otherwise: nil) isNil
+		ifTrue: [temps at: #'___grailIRFallbackLog___' put: OrderedCollection new].
+	(temps at: #'___grailIRFallbackLog___') size < 500
+		ifTrue: [(temps at: #'___grailIRFallbackLog___') add: (temps at: #'___grailIRLastError___')].
+	self ___irStrict___ ifTrue: [
+		^ SystemError @env1:___signal___:
+			'Grail IR strict mode (GRAIL_IR_STRICT): the memoized IR of method '
+				, aClass name asString , '>>' , aSelector asString
+				, ' (a method-local class) failed to generate: ' , text
+				, '. This is a Grail bug; without strict mode the method compiles through the text path instead.']
 
 ]
 
@@ -6259,6 +6389,10 @@ importlib class >> ___irRegenerateMethod___: aBuilder selector: aSelector on: aC
 		true]
 		on: Error do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			"A fallback like any other, though it used to go uncounted: the
+			build was counted when the memo was made, and this is a second,
+			per-class generation of it that failed."
+			self ___irNoteRegenerateFallback___: aSelector on: aClass error: ex.
 			ex return: false]
 
 ]
@@ -6373,6 +6507,20 @@ importlib class >> ___irSendCensusOn: aBoolean [
 
 ]
 
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irSessionCount___: aKey [
+	"Bump one of the SESSION-LONG IR tallies (___irStats___ #sessionFallbacks /
+	#sessionInvariants).  Unlike #fallbacks, ___irStatsReset___ never zeroes
+	these, so a test runner can read at the end of a session how many builds
+	fell back across EVERY test -- including the ones that reset the counters
+	to measure one import of their own."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: aKey put: (temps at: aKey otherwise: 0) + 1
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irSharedMethodTable___ [
 	"Session-side registry of METHOD-LOCAL class methods whose IR is already
@@ -6420,7 +6568,12 @@ importlib class >> ___irStats___ [
 	"A session-local snapshot of the direct-to-IR codegen path's activity: how
 	many top-level defs it compiled, how many eligible defs fell back to text on
 	an error, and the last fallback error.  Purely observational -- tests read it
-	to confirm the IR path was exercised (``compiled > 0'', ``fallbacks = 0'')."
+	to confirm the IR path was exercised (``compiled > 0'', ``fallbacks = 0'').
+
+	#sessionFallbacks and #sessionInvariants are the SESSION-LONG tallies of
+	fallbacks and of ``invariant:'' refusals (___irSessionCount___:), which
+	___irStatsReset___ leaves alone; #strict is whether strict mode is on
+	(___irStrict___).  The SUnit shards print them at the end of a run."
 
 	| temps |
 	temps := SessionTemps current.
@@ -6429,6 +6582,9 @@ importlib class >> ___irStats___ [
 		at: #fallbacks put: (temps at: #'___grailIRFallbackCount___' otherwise: 0);
 		at: #lastError put: (temps at: #'___grailIRLastError___' otherwise: nil);
 		at: #fallbackLog put: (temps at: #'___grailIRFallbackLog___' otherwise: #());
+		at: #sessionFallbacks put: (temps at: #'___grailIRFallbackTotal___' otherwise: 0);
+		at: #sessionInvariants put: (temps at: #'___grailIRInvariantTotal___' otherwise: 0);
+		at: #strict put: self ___irStrict___;
 		yourself
 
 ]
@@ -6444,6 +6600,87 @@ importlib class >> ___irStatsReset___ [
 	temps at: #'___grailIRFallbackCount___' put: 0.
 	temps removeKey: #'___grailIRLastError___' ifAbsent: [].
 	temps removeKey: #'___grailIRFallbackLog___' ifAbsent: [].
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irStrict___ [
+	"Is IR STRICT MODE on for this session?  P1.4 of the IR-only codegen plan.
+
+	In strict mode the IR path does not fall back to text: an IR build that
+	raises after the eligibility predicates admitted its def
+	(___irNoteFallback___:error:file:), and an eligibility exit only a broken
+	invariant can produce (___irAdmits___:), each raise a SystemError naming
+	the def, its file and line, and the real cause.  Without it both keep the
+	silent fallback users get today: the def compiles through the text path,
+	correctly, and only ___irStats___ shows it happened.
+
+	A SWITCH, OFF BY DEFAULT: the GRAIL_IR_STRICT environment variable, read
+	once per session (___irStrictFlagFor___:).  The SUnit runner turns it on
+	for the IR arm (scripts/run_tests.sh) and so does CI, where
+	tests/github/ir_seam_control.gs proves it took.  Users keep the fallback
+	until the text path is deleted (P6), when there is nothing left to fall
+	back to.
+
+	Meaningful only on the IR arm: with IR codegen off nothing is built
+	through IR, so this answers false whatever the variable says.
+	___irStrictForce___: seeds it for tests."
+
+	| temps on raw |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRStrictChecked___')
+		ifTrue: [on := temps at: #'___grailIRStrict___' ifAbsent: [false]]
+		ifFalse: [
+			raw := System gemEnvironmentVariable: 'GRAIL_IR_STRICT'.
+			on := self ___irStrictFlagFor___: raw.
+			temps at: #'___grailIRStrict___' put: on.
+			temps at: #'___grailIRStrictChecked___' put: true].
+	^ on and: [self ___irCodegenEnabled___]
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irStrictFail___: aWhat def: aDef file: aPathOrNil [
+	"Raise strict mode's error: a SystemError -- CPython's exception for a
+	failure inside the interpreter, which is what a fallback is -- that names
+	the def, where it is, and what went wrong.  aWhat completes ``def <label>
+	...''.  Python code can catch it like any SystemError; an import that
+	meets it fails with it."
+
+	^ SystemError @env1:___signal___:
+		'Grail IR strict mode (GRAIL_IR_STRICT): def '
+			, (self ___irDefLabel___: aDef file: aPathOrNil) , ' ' , aWhat
+			, '. This is a Grail bug; without strict mode the def compiles through the text path instead.'
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irStrictFlagFor___: rawOrNil [
+	"Does this raw GRAIL_IR_STRICT value turn strict mode ON?  The mirror of
+	___irCodegenFlagFor___: with the opposite default, because strict mode is
+	opt-in: unset or empty is OFF, the four off-words (any case) are OFF, and
+	anything else is ON."
+
+	rawOrNil isNil ifTrue: [^ false].
+	rawOrNil isEmpty ifTrue: [^ false].
+	^ (#('0' 'false' 'no' 'off') includes: rawOrNil asLowercase) not
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irStrictForce___: aBooleanOrNil [
+	"Seed this session's strict-mode flag, bypassing GRAIL_IR_STRICT, so an
+	SUnit test can turn strict mode on or off without touching the OS
+	environment.  nil forgets the seed: the next ___irStrict___ reads the
+	variable again.  Pair a seed with ``___irStrictForce___: nil'' in tearDown."
+
+	| temps |
+	temps := SessionTemps current.
+	aBooleanOrNil isNil ifTrue: [
+		temps removeKey: #'___grailIRStrict___' ifAbsent: [].
+		^ temps removeKey: #'___grailIRStrictChecked___' ifAbsent: []].
+	temps at: #'___grailIRStrict___' put: aBooleanOrNil.
+	temps at: #'___grailIRStrictChecked___' put: true
 
 ]
 
@@ -10934,7 +11171,7 @@ importlib class >> ___visibleMroOf___: aClass [
 				[c notNil] whileTrue: [
 					(exMro includesIdentical: c) ifFalse: [skip add: c].
 					c := c superclass]]].
-	^ out asArray
+	^ self ___withPythonOnlyBases___: out
 
 ]
 
@@ -11053,6 +11290,27 @@ importlib class >> ___withoutImplementationRoots___: aCollection for: aClass [
 			and: [each ~~ aClass])
 				ifFalse: [result add: each]].
 	^ Array withAll: result
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___withPythonOnlyBases___: aMro [
+
+	"aMro with the visible MRO of each class's Python-only base spliced in
+	after it (Object >> ___pythonOnlyBase___): ``bool.__mro__'' is
+	(bool, int, object), though Boolean's Smalltalk superclass is Object.
+	Reporting only, as ___visibleMroOf___: is."
+
+	| out |
+
+	out := OrderedCollection new.
+	aMro do: [:each | | base |
+		(out includesIdentical: each) ifFalse: [out add: each].
+		base := each ___pythonOnlyBase___.
+		base ifNotNil: [
+			(self ___visibleMroOf___: base) do: [:inherited |
+				(out includesIdentical: inherited) ifFalse: [out add: inherited]]]].
+	^ out asArray
 
 ]
 

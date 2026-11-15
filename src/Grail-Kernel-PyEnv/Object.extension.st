@@ -7589,11 +7589,55 @@ Object >> ___buildSelectorFamily___: aString [
 ]
 
 { #category : 'Grail-Introspection' }
+Object >> ___builtinMethodDocstringFor: aName [
+
+	"CPython's docstring for the method aName that this class reaches in a
+	builtin type -- str.split, or bit_length for a subclass of int -- or nil.
+
+	It walks the Python MRO and stops at the first class that defines aName.  A
+	builtin type answers its generated docstring (builtins class >>
+	___methodDocTableFor_str___ and its siblings).  A Python class answers nil,
+	because its own ___methodDocTable___ has already answered for it: an
+	undocumented override is None, not its base's text."
+
+	| order |
+
+	order := [self __mro__] @env0:on: AbstractException do: [:ex | ex @env0:return: #()].
+	order @env0:do: [:each | | table |
+		(each ___ownMethodDocTableIncludes: aName) ifTrue: [^ nil].
+		table := each ___builtinMethodDocTable___.
+		(table @env0:notNil and: [table @env0:includesKey: aName]) ifTrue: [^ table @env0:at: aName]].
+	^ nil
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___builtinMethodDocTable___ [
+
+	"CPython's method docstrings for this class when it is one of the builtins
+	module's types and documents any, as generated into builtins class >>
+	___methodDocTableFor_str___ and its siblings; nil otherwise."
+
+	| builtinsClass name selector |
+
+	builtinsClass := Python @env0:at: #builtins.
+	name := [self __name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
+	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [^ nil].
+	selector := ('___methodDocTableFor_' @env0:, name @env0:asString @env0:, '___') @env0:asSymbol.
+	(builtinsClass @env0:class @env0:includesSelector: selector environmentId: 1) ifFalse: [^ nil].
+	^ builtinsClass @env0:perform: selector env: 1
+
+]
+
+{ #category : 'Grail-Introspection' }
 Object >> ___builtinTypeDocstring___ [
 
 	"CPython's docstring for this class when it is one of the builtins module's
 	types -- None for the one CPython gives none -- or nil for any other class
-	(builtins class >> ___typeDocTable___, generated from CPython).
+	(builtins class >> ___typeDocTable___, generated from CPython).  A type the
+	types module names instead, such as code or NoneType, is looked up in a
+	table of its own.
 
 	The name alone does not decide it: a class that type() builds may call
 	itself ``int''.  The builtins module's binding of the name must be this
@@ -7604,7 +7648,8 @@ Object >> ___builtinTypeDocstring___ [
 	builtinsClass := Python @env0:at: #builtins.
 	name := [self __name__] @env0:on: AbstractException do: [:ex | ex @env0:return: nil].
 	(name @env0:isKindOf: CharacterCollection) ifFalse: [^ nil].
-	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [^ nil].
+	(self ___isBuiltinsBindingOf: name in: builtinsClass) ifFalse: [
+		^ self ___typesModuleTypeDocstringNamed: name in: builtinsClass].
 	^ builtinsClass ___typeDocTable___ @env0:at: name @env0:asString otherwise: nil
 
 ]
@@ -8566,7 +8611,9 @@ Object >> ___classDict___ [
 			and: [(refused @env0:includes: nm) @env0:not
 			and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]]]]]]) ifTrue: [
 			| um |
-			um := UnboundMethod definingClass: defCls selector: nm @env0:asSymbol.
+			um := UnboundMethod
+				definingClass: (self ___classDictHandleClassFor___: defCls)
+				selector: nm @env0:asSymbol.
 			"A declarative @property's getter is entered as the PROPERTY, the
 			same cached object a read off the class answers, so
 			``C.__dict__['p'] is C.p'' as in CPython.  It held the getter
@@ -8765,7 +8812,7 @@ Object >> ___classDict___ [
 	Python-defined classes are left to the branch below."
 	((self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) @env0:isNil
 		and: [self @env0:isMeta @env0:not]) ifTrue: [
-		[ | mroSet walker found |
+		[ | mroSet walker found allowed |
 		#('new' '__getitem__' '__instancecheck__') @env0:do: [:k | | v |
 			v := d @env0:at: k otherwise: nil.
 			((v @env0:isKindOf: UnboundMethod)
@@ -8785,12 +8832,14 @@ Object >> ___classDict___ [
 						(nm @env0:notNil and: [(found @env0:includesKey: nm) @env0:not])
 							ifTrue: [found @env0:at: nm put: walker @env0:class]]].
 				walker := walker @env0:superclass].
+		"The class's own allow-list holds here too: bool's from_bytes is int's."
+		allowed := self ___grailPythonDictNames___.
 		#( #('maketrans' #static) #('fromhex' #class) #('fromkeys' #class)
 			#('from_bytes' #class) #('from_number' #class) #('__getformat__' #class) )
 			@env0:do: [:entry | | nm owner |
 				nm := entry @env0:at: 1.
 				owner := found @env0:at: nm otherwise: nil.
-				owner @env0:notNil ifTrue: [
+				(owner @env0:notNil and: [allowed @env0:isNil or: [allowed @env0:includes: nm]]) ifTrue: [
 					d @env0:at: nm put: ((entry @env0:at: 2) == #static
 						"A staticmethod's __func__ is called with no receiver, so it
 						wraps what ``str.maketrans'' answers.  A class method is
@@ -8900,6 +8949,25 @@ Object >> ___classDict___ [
 			self ___grailIsPythonClass___ ifTrue: [
 				d := self ___grailInBodyOrder___: d names: d @env0:keys @env0:asArray headerFirst: false]].
 	^ d
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___classDictHandleClassFor___: anOwner [
+
+	"The class a method handle in this class's __dict__ is keyed by, for a
+	method anOwner's dictionary holds.  A builtin type lists a hidden
+	ancestor's methods as its own -- bytearray's count, hex and decode live on
+	ByteArray, which is bytes -- so its entry is this class's handle, the one
+	``bytearray.count'' answers, with this class as __objclass__.  Keyed by
+	anOwner it was bytes' handle: ``vars(bytearray)['hex'] is
+	vars(bytes)['hex']'', so doctest took it for a method already seen.  A
+	metaclass's method and a Python class's keep their owner."
+
+	anOwner @env0:isMeta ifTrue: [^ anOwner].
+	(self @env0:whichClassIncludesSelector: #'___pyDefinedClass___' environmentId: 1) == nil
+		ifFalse: [^ anOwner].
+	^ self
 
 ]
 
@@ -12229,6 +12297,8 @@ Object >> ___grailPythonDictNames___ [
 	CPython counterpart at all -- it is where Grail puts the instance-dictionary
 	slot and the fallbacks -- so only __dict__ survives.
 
+	bool answers its own list (Boolean class >> ___grailPythonDictNames___).
+
 	Restricting the REPORTED dictionary changes no dispatch: lookup runs over
 	the Smalltalk method dictionaries, which are untouched."
 
@@ -14668,6 +14738,18 @@ Object >> ___ownChainOwnsAnyOf___: family orUnary: aSym from: aClass [
 		(self ___class___: walker owns: aSym family: family) ifTrue: [^ true].
 		walker := walker @env0:superClass].
 	^ false
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___ownMethodDocTableIncludes: aName [
+
+	"Whether this class's own class-side ___methodDocTable___, the one ClassDefAst
+	compiles for a class statement, names aName."
+
+	(self @env0:class @env0:includesSelector: #'___methodDocTable___' environmentId: 1)
+		ifFalse: [^ false].
+	^ self ___methodDocTable___ @env0:includesKey: aName
 
 ]
 
@@ -18685,6 +18767,20 @@ Object >> ___typeReprString___ [
 	stream @env0:nextPutAll: qual.
 	stream @env0:nextPutAll: '''>'.
 	^ stream @env0:contents
+
+]
+
+{ #category : 'Grail-Introspection' }
+Object >> ___typesModuleTypeDocstringNamed: aName in: aBuiltinsClass [
+
+	"CPython's docstring for a type the types module names and builtins does
+	not bind -- code, generator, NoneType -- when this class is one Grail
+	implements in Smalltalk, or nil (builtins class >> ___typesModuleDocTable___).
+	A Python class keeps its own docstring whatever its name, so a class
+	statement's ``class code'' is not taken for the code type."
+
+	(self ___respondsTo___: #'___dynInstVars___') ifTrue: [^ nil].
+	^ aBuiltinsClass ___typesModuleDocTable___ @env0:at: aName @env0:asString otherwise: nil
 
 ]
 

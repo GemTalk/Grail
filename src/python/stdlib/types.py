@@ -142,6 +142,23 @@ def _function_from(code, globals, name=None, argdefs=None, closure=None,
 
 
 class FunctionType(metaclass=_FunctionTypeMeta):
+    # CPython's own text for ``type(f).__doc__'', assigned rather than written
+    # as a docstring so its indented lines are kept as they are.
+    __doc__ = ('Create a function object.\n'
+               '\n'
+               '  code\n'
+               '    a code object\n'
+               '  globals\n'
+               '    the globals dictionary\n'
+               '  name\n'
+               '    a string that overrides the name from the code object\n'
+               '  argdefs\n'
+               '    a tuple that specifies the default argument values\n'
+               '  closure\n'
+               '    a tuple that supplies the bindings for free variables\n'
+               '  kwdefaults\n'
+               '    a dictionary that specifies the default keyword argument values')
+
     # Declared so the class ANSWERS the protocol a function has: Callable's
     # __subclasshook__ reads ``__call__`` off each MRO class's __dict__, and
     # issubclass(FunctionType, Callable) is True in CPython (test_typing's
@@ -212,32 +229,33 @@ class _MethodTypeMeta(type):
 
 
 class MethodType(metaclass=_MethodTypeMeta):
-    """A bound method: ``MethodType(func, obj)`` calls ``func(obj, ...)``.
+    """Create a bound instance method object."""
 
-    NOT a stub, and NOT for isinstance.  Every other name in this file is a
-    stub because Grail has no public class object matching CPython's, and a
-    stub is the honest answer for a name that only ever appears in an
-    ``isinstance`` test.  This one is different: ``types.MethodType`` is CALLED,
-    to bind a function to an object after the fact --
-
-        self.fi.id = types.MethodType(id, self.fi)
-        self.fi.id()                       # -> id(self.fi)
-
-    -- and a stub answered the class itself, so the call site got an object
-    that was not callable.  The failure surfaced as a raw Smalltalk
-    MessageNotUnderstood escaping into the caller rather than as any Python
-    error, which is the worst shape available: it is uncatchable by Python code
-    and, in the conformance harness, voids the scoring of every test that
-    follows it in the module.
-
-    Grail's own bound methods are BoundMethod, not this; nothing here claims
-    otherwise.  What this provides is the CONSTRUCTOR, which Grail had no
-    spelling for at all.
-
-    ``__slots__`` rather than a plain body, because CPython's method type has
-    no attribute storage: setting or deleting any other name is an
-    AttributeError, and test_funcattrs checks both directions.
-    """
+    # A bound method: ``MethodType(func, obj)`` calls ``func(obj, ...)``.
+    #
+    # NOT a stub, and NOT for isinstance.  Every other name in this file is a
+    # stub because Grail has no public class object matching CPython's, and a
+    # stub is the honest answer for a name that only ever appears in an
+    # ``isinstance`` test.  This one is different: ``types.MethodType`` is CALLED,
+    # to bind a function to an object after the fact --
+    #
+    #     self.fi.id = types.MethodType(id, self.fi)
+    #     self.fi.id()                       # -> id(self.fi)
+    #
+    # -- and a stub answered the class itself, so the call site got an object
+    # that was not callable.  The failure surfaced as a raw Smalltalk
+    # MessageNotUnderstood escaping into the caller rather than as any Python
+    # error, which is the worst shape available: it is uncatchable by Python code
+    # and, in the conformance harness, voids the scoring of every test that
+    # follows it in the module.
+    #
+    # Grail's own bound methods are BoundMethod, not this; nothing here claims
+    # otherwise.  What this provides is the CONSTRUCTOR, which Grail had no
+    # spelling for at all.
+    #
+    # ``__slots__`` rather than a plain body, because CPython's method type has
+    # no attribute storage: setting or deleting any other name is an
+    # AttributeError, and test_funcattrs checks both directions.
 
     __slots__ = ('__func__', '__self__')
 

@@ -1477,6 +1477,27 @@ def darwin_malloc_err_warning(test_name):
 # so the free-threading build's flag is False, as it is on a default CPython.
 Py_GIL_DISABLED = False
 
+# Upstream's, verbatim: the size of a C struct with a PyObject header, as
+# CPython lays it out on a 64-bit build.  Pure arithmetic over struct.calcsize,
+# so it answers the same here.  Most callers hand the result to check_sizeof,
+# which skips under Grail (above); test_str's test_raiseMemError compares it
+# with sys.getsizeof of a str, which reports CPython's str model
+# (CharacterCollection class >> ___sizeofForLength___:maxCodePoint:exact:).
+if Py_GIL_DISABLED:
+    _header = 'PHBBInP'
+else:
+    _header = 'nP'
+_align = '0n'
+_vheader = _header + 'n'
+
+def calcobjsize(fmt):
+    import struct
+    return struct.calcsize(_header + fmt + _align)
+
+def calcvobjsize(fmt):
+    import struct
+    return struct.calcsize(_vheader + fmt + _align)
+
 
 def no_tracing(func):
     """Temporarily turn tracing off for the duration of a test.

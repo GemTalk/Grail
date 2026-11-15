@@ -173,6 +173,24 @@ AbstractPyStr >> __repr__ [
 ]
 
 { #category : 'Grail-Python Protocol' }
+AbstractPyStr >> __sizeof__ [
+	"``s.__sizeof__()'' for a str subclass instance -- a StrEnum member, a
+	``class S(str)'' -- in CPython's str model: the two-block PyUnicodeObject
+	over the wrapped string (CharacterCollection class >>
+	___sizeofForLength___:maxCodePoint:exact:).  Not forwarded to the wrapped
+	string, which would answer for the exact str it is; and not GemStone's
+	physical size of the wrapper, which is what Object >> __sizeof__ answered."
+
+	| value |
+	value := self @env0:___strValue___.
+	^ CharacterCollection
+		___sizeofForLength___: value @env0:size
+		maxCodePoint: value ___maxCodePoint___
+		exact: false
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 AbstractPyStr >> __str__ [
 	"str(x) is the wrapped string.  For a StrEnum member this is exactly
 	the ReprEnum contract (str == value); subclasses that need a

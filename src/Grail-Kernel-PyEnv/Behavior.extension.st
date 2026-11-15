@@ -897,6 +897,8 @@ Behavior >> __base__ [
 				^ declared
 					@env0:detect: [:b | self ___grailInheritsStorageOf___: b]
 					ifNone: [declared @env0:at: 1]]]].
+	"A base Python has and the Smalltalk ancestry lacks: int for bool."
+	self @env0:___pythonOnlyBase___ @env0:ifNotNil: [:base | ^ base].
 	s := self ___grailVisibleSuperclass___: il.
 	"A Python-defined class's Smalltalk superclass is ``PythonInstance'', which
 	is Grail's implementation of the role CPython gives to ``object'' -- so that
@@ -952,6 +954,9 @@ Behavior >> __bases__ [
 				b == PythonInstance
 					ifTrue: [Object]
 					ifFalse: [(il @env0:___exposedBuiltinFor___: b) ifNil: [b]]])]].
+	"A base Python has and the Smalltalk ancestry lacks: (int,) for bool."
+	self @env0:___pythonOnlyBase___ @env0:ifNotNil: [:base |
+		^ self ___grailAsTuple___: (Array @env0:with: base)].
 	s := self ___grailVisibleSuperclass___: il.
 	"A stand-in root reports as the builtin it stands for -- ``class Y(int)''
 	sits on AbstractPyInt, and __bases__ is (int,).  See importlib >>

@@ -218,6 +218,10 @@ test.test_bytes|ByteArrayTest.test_search_methods_reentrancy_raises_buffererror|
 # skipped for the same reason).
 test.test_bytes|ByteArrayTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted
 test.test_bytes|BytesTest.test_free_after_iterating|CPython refcount/__del__-timing — Grail GC is not refcounted
+# test_str's twin calls support.gc_collect() before asserting, so a collector
+# that ran finalizers there could pass it; Grail does not -- a user class's
+# __del__ never runs at all (test_iter's twin says so in its skipTest).
+test.test_str|StrTest.test_free_after_iterating|Grail never runs a Python __del__ (no finalizer wiring for user classes), so check_free_after_iterating's flag stays False after gc_collect()
 # Real filesystem I/O: these need tempfile.mktemp() plus binary file objects
 # with readinto() (test_bytearray_api) and os.open() on a file descriptor
 # (test_buffer_is_readonly).  Grail's tempfile is a stub that refuses to create

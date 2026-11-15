@@ -2595,6 +2595,29 @@ ClassDefAst >> ___irEnclosingFunctionDef___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irHeaderHasWalrus___ [
+	"Does a walrus appear anywhere in this class statement's header -- its
+	decorators, bases or keyword values?  See ___irMethodLocalClassReason___:
+	(``classDef:headerWalrus'').  Over-approximates on purpose: a walrus in a
+	lambda inside a decorator binds the lambda's own local, but refusing that
+	too costs only a text compile of a shape nothing in the corpus writes."
+
+	| isWalrus |
+	isWalrus := [:n | n isKindOf: NamedExprAst].
+	(decorator_list ifNil: [#()]) do: [:d |
+		((d isKindOf: AbstractNode) and: [d ___anyDescendantSatisfies___: isWalrus])
+			ifTrue: [^ true]].
+	(bases ifNil: [#()]) do: [:b |
+		((b isKindOf: AbstractNode) and: [b ___anyDescendantSatisfies___: isWalrus])
+			ifTrue: [^ true]].
+	(keywords ifNil: [#()]) do: [:k |
+		((k isKindOf: AbstractNode) and: [k ___anyDescendantSatisfies___: isWalrus])
+			ifTrue: [^ true]].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irHeaderNodes___ [
 	"The expressions of the class statement's HEADER that an IR-built helper's
 	caller evaluates in the enclosing frame, in CPython's order: the
@@ -2901,6 +2924,19 @@ ClassDefAst >> ___irMethodLocalClassReason___: localNames [
 	(self ___classBodyOuterBindingUnreachableNames___: localNames) isEmpty
 		ifFalse: [^ #'classDef:outerBinding'].
 	self ___classBodyWalrusNames___ isEmpty ifFalse: [^ #'classDef:walrus'].
+	"A walrus in the class HEADER -- a decorator, a base, a keyword value
+	(``@d := deco'', ``metaclass=(mk := Meta)'', test_grammar's
+	test_classdef) -- binds a local of the ENCLOSING def, and the header is
+	evaluated in the helper's frame, where that local is not a temp: the
+	helper failed to compile with ``undefined symbol d'' (#2170).  The capture
+	tests above see only READS of enclosing locals, so it refuses -- but only
+	for a class whose helper is still compiled from text.  When the helper is
+	built through IR (P3.2, ___irClassHelperTextReason___: answers nil), the
+	header is evaluated by the enclosing IR method itself (___irHeaderNodes___),
+	which binds the walrus target like any other store."
+	(self ___irHeaderHasWalrus___
+		and: [(self ___irClassHelperTextReason___: localNames) notNil])
+			ifTrue: [^ #'classDef:headerWalrus'].
 	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
 	[:v | x := v]'' -- which writes the ENCLOSING frame's temp.  The helper's
@@ -3416,6 +3452,20 @@ ClassDefAst >> ___isRedirectedPropertySetter___: aDef [
 
 	^ aDef ___propertyAccessorKind___ == #setter
 		and: [self ___decoratedPropertyNames___ includes: aDef name asSymbol]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+ClassDefAst >> ___isSlotIdentifier___: aString [
+	"Is aString a Python identifier, and so a name slotNames may turn into an
+	instVar?  The tokenizer's XID_Start / XID_Continue tests, as the runtime's
+	``__slots__ must be identifiers'' check applies them."
+
+	aString isEmpty ifTrue: [^ false].
+	(PythonTokenizer ___isIdentifierStart___: aString first) ifFalse: [^ false].
+	2 to: aString size do: [:i |
+		(PythonTokenizer ___isIdentifierPart___: (aString at: i)) ifFalse: [^ false]].
+	^ true
 
 ]
 
@@ -6118,7 +6168,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 								flag-on sweep of cut 48).  The emission loop derives the same
 								key from each source's selector pattern (___irSelectorOfSource___:)."
 								(importlib ___irClassSeamEnabled___
-									and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+									and: [importlib ___irAdmits___: def])
 										ifTrue: [importlib ___irRegisterDef: def forClass: self
 											name: def ___irSelector___ asString]].
 						"Keyword-call companion for a simple-positional instance
@@ -6211,7 +6261,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
 					(importlib ___irClassSeamEnabled___
-						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+						and: [importlib ___irAdmits___: def])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
 								name: 'class>>' , def ___irSelector___ asString
 								classSide: true].
@@ -6249,7 +6299,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 							module: (CallAst moduleNameBeingCompiled ifNil: ['?'])
 							def: name asString , '.' , def name asString count: 1].
 					(importlib ___irClassSeamEnabled___
-						and: [[def ___irEligible___] on: Error do: [:ex | ex return: false]])
+						and: [importlib ___irAdmits___: def])
 							ifTrue: [importlib ___irRegisterDef: def forClass: self
 								name: 'class>>' , def ___irSelector___ asString
 								classSide: true].
@@ -8919,9 +8969,18 @@ ClassDefAst >> slotNames [
 		declares such a slot reaches it via the explicit mangled name
 		(e.g. weakref's _Proxy declares ``__slots__ = ('__ref',)'' and uses
 		``_Proxy__ref''); mangling the slot to match keeps it findable."
-		sym := (self ___mangleSlotName___: s) asSymbol.
-		((sym == #'__dict__') or: [sym == #'__weakref__']) ifFalse: [
-			(names includes: sym) ifFalse: [names add: sym]]].
+		"A string that is not an identifier is no slot at all: the class
+		statement raises CPython's ``__slots__ must be identifiers''
+		TypeError when it runs (builtins >> ___isPythonIdentifier___:).  As
+		an instVar name it reached the generated class definition, where one
+		holding a NUL (test_descr's test_slots) is an illegal character: the
+		method compiled to a codegen-gap stub on both arms, and under IR its
+		build fell back first.  So it is skipped here and left to that
+		runtime check."
+		(self ___isSlotIdentifier___: s) ifTrue: [
+			sym := (self ___mangleSlotName___: s) asSymbol.
+			((sym == #'__dict__') or: [sym == #'__weakref__']) ifFalse: [
+				(names includes: sym) ifFalse: [names add: sym]]]].
 	(valueAst isKindOf: ConstantAst)
 		ifTrue: [
 			(valueAst value isKindOf: String) ifTrue: [addName value: valueAst value]]

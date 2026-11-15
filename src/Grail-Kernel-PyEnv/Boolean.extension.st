@@ -60,6 +60,17 @@ Boolean class >> ___defaultTruthOf___: obj [
 
 ]
 
+{ #category : 'Grail-Convenience Methods - Attribute' }
+Boolean class >> ___grailPythonDictNames___ [
+	"Boolean implements int's methods itself, being no Integer, but Python
+	finds them on int, which bool inherits from: these are CPython's
+	``sorted(bool.__dict__)''."
+
+	^ #('__and__' '__doc__' '__invert__' '__new__' '__or__' '__rand__' '__repr__'
+		'__ror__' '__rxor__' '__xor__')
+
+]
+
 { #category : 'Grail-Initialization' }
 Boolean class >> ___truthIsDecidedBy___: obj class: cls [
 	"Whether cls's method chain alone settles ``bool(obj)'': no __bool__ or

@@ -35,12 +35,13 @@ PyStrSurrogate >> ___adjustedStart___: start end: end length: length [
 
 	"start and end clamped as ADJUST_INDICES clamps them
 	(Objects/unicodeobject.c:9668), None standing for 0 and length as the
-	slice_index converter has it."
+	slice_index converter has it, and anything but an int or an __index__
+	object refused with that converter's TypeError (___asSliceIndex___)."
 
 	| first last |
 
-	first := start == None ifTrue: [0] ifFalse: [start ___asIndex___].
-	last := end == None ifTrue: [length] ifFalse: [end ___asIndex___].
+	first := start == None ifTrue: [0] ifFalse: [start ___asSliceIndex___].
+	last := end == None ifTrue: [length] ifFalse: [end ___asSliceIndex___].
 	last @env0:> length
 		ifTrue: [last := length]
 		ifFalse: [last @env0:< 0 ifTrue: [last := (last @env0:+ length) @env0:max: 0]].
@@ -591,6 +592,21 @@ PyStrSurrogate >> __rmul__: count [
 	"``n * s'' -- Integer>>__mul__: defers here for a non-numeric operand."
 
 	^ self @env1:__mul__: count
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> __sizeof__ [
+	"``s.__sizeof__()'' for an exact str holding a surrogate, in CPython's str
+	model (CharacterCollection class >>
+	___sizeofForLength___:maxCodePoint:exact:): a compact object of 2- or
+	4-byte characters, since a surrogate is past U+00FF.  Overrides
+	AbstractPyStr's, which sizes a subclass instance."
+
+	^ CharacterCollection
+		___sizeofForLength___: codePoints @env0:size
+		maxCodePoint: (codePoints @env0:inject: 0 into: [:max :cp | max @env0:max: cp])
+		exact: true
 
 ]
 

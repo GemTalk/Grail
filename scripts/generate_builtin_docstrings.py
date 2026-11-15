@@ -26,6 +26,7 @@ actually have.
 """
 
 import builtins
+import re
 import sys
 from pathlib import Path
 
@@ -66,9 +67,22 @@ TYPE_NAMES = [
     'str', 'super', 'tuple', 'type', 'zip',
 ]
 
+# The types the ``types'' module names that builtins does not bind: the C types
+# of code, frames, generators, modules, None and the rest.  Grail implements the
+# kernel-backed ones in Smalltalk, so they had no docstring either.  Keyed by
+# CPython's ``__name__'' for them (``code'', ``NoneType''), which is what the
+# Smalltalk class answers; types whose CPython ``__doc__'' is a descriptor
+# rather than a string (BuiltinFunctionType and the descriptor types) are left
+# out, and CapsuleType, which Grail does not have.  Spelled out for NAMES's reason.
+TYPES_MODULE_NAMES = [
+    'AsyncGeneratorType', 'CellType', 'CodeType', 'CoroutineType', 'EllipsisType', 'FrameType',
+    'FunctionType', 'GeneratorType', 'GenericAlias', 'MappingProxyType', 'MethodType', 'ModuleType',
+    'NoneType', 'NotImplementedType', 'TracebackType', 'UnionType',
+]
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
-from tonel_methods import Method, set_methods  # noqa: E402
+from tonel_methods import Method, remove_methods, set_methods  # noqa: E402
 
 # ``__doc__'' for the builtin FUNCTIONS. Grail implements them as Smalltalk methods, so no
 # FunctionDefAst ran for them and ClassDefAst's ___methodDocTable___ -- which captures the
@@ -97,6 +111,39 @@ TYPE_SOURCE_HEAD = """___typeDocTable___
 	GENERATED -- see the file header."
 
 	^ ((KeyValueDictionary @env0:new)"""
+
+
+TYPES_MODULE_SOURCE_HEAD = """___typesModuleDocTable___
+	"CPython's ``__doc__'' for each type the types module names that builtins
+	does not bind, keyed by the type's ``__name__'', and None for a type CPython
+	gives none.  Read by Object >> ___typesModuleTypeDocstringNamed:in:.
+	GENERATED -- see the file header."
+
+	^ ((KeyValueDictionary @env0:new)"""
+
+METHOD_SOURCE_HEAD = """___methodDocTableFor_%s___
+	"CPython's ``__doc__'' for each public method the builtin type %s defines,
+	keyed by the method's name.  Read by Object >> ___builtinMethodDocstringFor:,
+	which walks the type's MRO for inherited ones.  GENERATED -- see the file
+	header."
+
+	^ ((KeyValueDictionary @env0:new)"""
+
+METHOD_TABLE = re.compile(r'___methodDocTableFor_([A-Za-z_][A-Za-z0-9_]*?)___')
+
+
+def method_docs(cls):
+    """The documented public methods cls itself defines: its own, not its bases',
+    since the reader walks the MRO.  Class and static methods count; data
+    descriptors (int.real) do not, as they are not callable."""
+    docs = []
+    for name, value in vars(cls).items():
+        if name.startswith('_'):
+            continue
+        attribute = getattr(cls, name)
+        if callable(attribute) and attribute.__doc__:
+            docs.append((name, attribute.__doc__))
+    return sorted(docs)
 
 
 def smalltalk_string(s):
@@ -134,11 +181,39 @@ def main():
         value = smalltalk_string(doc) if doc else 'None'
         type_entries.append(f"\n\t\t@env0:at: '{name}' put: {value};")
 
+    import types
+    types_module_entries = []
+    for name in TYPES_MODULE_NAMES:
+        cls = getattr(types, name)
+        if isinstance(getattr(builtins, cls.__name__, None), type):
+            sys.exit(f'types.{name} is bound in builtins; it belongs in TYPE_NAMES')
+        doc = cls.__doc__
+        if doc is not None and not isinstance(doc, str):
+            sys.exit(f'types.{name}.__doc__ is a {type(doc).__name__}, not a docstring')
+        value = smalltalk_string(doc) if doc else 'None'
+        types_module_entries.append(f"\n\t\t@env0:at: '{cls.__name__}' put: {value};")
+
+    method_tables = []
+    for name in TYPE_NAMES:
+        docs = method_docs(getattr(builtins, name))
+        if docs:
+            body = ''.join(f"\n\t\t@env0:at: '{method}' put: {smalltalk_string(doc)};" for method, doc in docs)
+            method_tables.append((name, len(docs), METHOD_SOURCE_HEAD % (name, name) + body + SOURCE_TAIL))
+
+    # A type that no longer documents a method loses its table rather than keep a stale one.
+    tabled = {name for name, _, _ in method_tables}
+    remove_methods(str(OUT), lambda meta, selector: not (
+        meta and METHOD_TABLE.fullmatch(selector) and METHOD_TABLE.fullmatch(selector).group(1) not in tabled))
     set_methods(str(OUT), 'builtins', [
         Method(meta=True, category='Grail-Docstrings', source=SOURCE_HEAD + ''.join(entries) + SOURCE_TAIL),
         Method(meta=True, category='Grail-Docstrings',
-               source=TYPE_SOURCE_HEAD + ''.join(type_entries) + SOURCE_TAIL)])
-    print(f'wrote {OUT} with {len(entries)} function and {len(type_entries)} type docstrings'
+               source=TYPE_SOURCE_HEAD + ''.join(type_entries) + SOURCE_TAIL),
+        Method(meta=True, category='Grail-Docstrings',
+               source=TYPES_MODULE_SOURCE_HEAD + ''.join(types_module_entries) + SOURCE_TAIL)]
+        + [Method(meta=True, category='Grail-Docstrings', source=source) for _, _, source in method_tables])
+    print(f'wrote {OUT} with {len(entries)} function, {len(type_entries)} type and '
+          f'{len(types_module_entries)} types-module docstrings, '
+          f'and {sum(count for _, count, _ in method_tables)} method docstrings for {len(method_tables)} types'
           + (f' (no docstring in CPython, skipped: {skipped})' if skipped else ''))
 
 

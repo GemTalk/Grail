@@ -1756,6 +1756,18 @@ Object >> ___pyStarToArray___ [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+Object >> ___pythonOnlyBase___ [
+
+	"A base Python gives this class that its Smalltalk ancestry does not have,
+	or nil.  Only bool has one -- see Boolean class >> ___pythonOnlyBase___.
+	Instance-side so that every class reaches it through Class and Behavior,
+	and so does a metaclass, which a metaclass's own __mro__ walks."
+
+	^ nil
+
+]
+
 { #category : 'Grail-Attribute Access' }
 Object >> ___refuseReadonlyAttribute___: aName [
 	"Refuse a store or a delete of one of the receiver's read-only attributes,

@@ -15,6 +15,17 @@ Boolean class >> ___grailUnwritableOwnerName___ [
 
 ]
 
+{ #category : 'Grail-Reflection' }
+Boolean class >> ___pythonOnlyBase___ [
+
+	"int.  bool is a subclass of int in Python -- ``bool.__bases__'' is
+	(int,) and ``bool.__mro__'' (bool, int, object) -- while Boolean sits on
+	Object in GemStone, so the superclass chain alone reported (bool, object)."
+
+	^ Integer
+
+]
+
 { #category : 'Grail-Python Attribute Hook' }
 Boolean class >> ___pythonValueAttrs___ [
 	"Unary methods exposed to Python as VALUE attributes rather than

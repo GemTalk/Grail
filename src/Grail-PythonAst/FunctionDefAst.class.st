@@ -744,9 +744,22 @@ FunctionDefAst >> ___emitIRAnnotateBlockOn___: aBuilder [
 			where CPython raises: Pep649AnnotationsTestCase>>
 			testUpdateWrapperDefersAnUnresolvedAnnotation reported ``NO RAISE''
 			for a forward reference bound after the def."
+			"PEP 646's ``*args: *Ts'' is a STARRED annotation, evaluated as
+			``(*Ts,)[0]'' -- emitOneAnnotation:on:'s
+			``((Ts ___pyStarToArray___) at: 1)'', send for send.  StarredAst
+			has no value emit of its own (a bare starred value means nothing
+			anywhere else), so without this the build raised and the
+			enclosing method fell back to text (#2234)."
 			thunk := aBuilder inBlockDo: [
 				aBuilder nestedFunctionDo: [
-					aBuilder add: (node ___emitIRValueOn___: aBuilder)]].
+					aBuilder add: ((node isKindOf: StarredAst)
+						ifTrue: [
+							aBuilder send: #at:
+								to: (aBuilder send: #'___pyStarToArray___'
+									to: (node value ___emitIRValueOn___: aBuilder)
+									with: { } env: 0)
+								with: { aBuilder obj: 1 } env: 0]
+						ifFalse: [node ___emitIRValueOn___: aBuilder])]].
 			aBuilder atNode: self.
 			args := { thunk.
 				aBuilder obj: node ___annotationSourceString___.
