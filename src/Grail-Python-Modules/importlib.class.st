@@ -2547,7 +2547,7 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 	not be keyed by the method's own selector (measured: the shared GsNMethod
 	answers under both keys and still reports its original selector)."
 
-	| meth md src target site isIR |
+	| meth src site isIR regen |
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
 	site := aPrefix isEmpty
@@ -2556,10 +2556,23 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 			ifFalse: ['enum']]
 		ifFalse: ['del-shadow'].
 	isIR := BaseException ___isIRPythonMethod___: meth.
+	regen := isIR and: [self ___irCopiesRegenerate___].
+	"An IR method copied onto ANOTHER CLASS under its own selector (the MI merge
+	and the enum gap-fill) is REGENERATED there from its IR builder (P2.2):
+	the same tree, generated with aClass as its inClass -- what the text twin's
+	recompile gave it, without compiling any text.  Only under its own
+	selector: an entry keyed otherwise (a ``___grailOrig_'' shadow the walk
+	finds in a base's dictionary) would be installed under the wrong name.  A
+	method whose builder cannot be had or does not fit aClass answers nil and
+	keeps the text route below."
+	(regen and: [aPrefix isEmpty and: [aClass ~~ aProvider and: [meth selector == sel]]]) ifTrue: [
+		(self ___irRegenerate___: meth onto: aClass category: aCategory) notNil ifTrue: [
+			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+			^ self]].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
 	self ___irCensusCopy___: site
 		route: (src isNil ifTrue: ['shared'] ifFalse: [isIR ifTrue: ['twin'] ifFalse: ['text']])
-		source: src.
+		source: src of: meth.
 	src notNil ifTrue: [
 		src := self ___unshadowInstVarsIn___: src for: aClass.
 		"With the scope the original was compiled with: a method from exec'd
@@ -2571,15 +2584,8 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 	"No text source to recompile (an IR method of a class built before the
 	text table existed): share the method object -- sound for what method
 	mode admits (no super, no instVar references)."
-	target := (aPrefix , sel asString) asSymbol.
-	[md := aClass persistentMethodDictForEnv: 1.
-	 md isNil ifTrue: [^ self].
-	 md at: target put: meth.
-	 Behavior _clearLookupCaches: 1.
-	 Behavior _clearLookupCaches: 0.
-	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
-	 aClass moveMethod: target toCategory: aCategory environmentId: 1]
-		on: Error do: [:e | e return: nil]
+	^ self ___installMethod___: meth in: aClass as: (aPrefix , sel asString) asSymbol
+		category: aCategory
 
 ]
 
@@ -5136,6 +5142,28 @@ importlib class >> ___initModuleAttrsFrom___: aSpec on: aModule [
 
 ]
 
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___installMethod___: aMethod in: aClass as: aSelector category: aCategory [
+	"Put aMethod in aClass's env-1 dictionary under aSelector -- which need not
+	be its own selector: measured, a method answers under any key and still
+	reports its original selector -- and file it under aCategory.  For a
+	copy that is the method itself, so only correct where aMethod's inClass
+	is aClass or nothing checks it: whichClassIncludesSelector: answers a
+	method's inClass, not the class whose dictionary holds it.  Errors are
+	swallowed, as every copier's are."
+
+	| md |
+	[md := aClass persistentMethodDictForEnv: 1.
+	 md isNil ifTrue: [^ self].
+	 md at: aSelector put: aMethod.
+	 Behavior _clearLookupCaches: 1.
+	 Behavior _clearLookupCaches: 0.
+	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
+	 aClass moveMethod: aSelector toCategory: aCategory environmentId: 1]
+		on: Error do: [:e | e return: nil]
+
+]
+
 { #category : 'Grail-Transient Globals' }
 importlib class >> ___installTransientGlobals___: aNames on: aModuleClass [
 	"Keep the globals aNames names in SESSION storage for aModuleClass's
@@ -5441,14 +5469,27 @@ importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil 
 	The P2.2 exit gate is that ``twin'' reads zero.  A no-op unless the
 	census is on."
 
-	| m |
+	^ self ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil of: nil
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil of: aMethodOrNil [
+	"___irCensusCopy___:route:source:, naming the copied method (``Class>>sel'')
+	in the row's examples, so a route can be traced to the methods taking it."
+
+	| m what |
 	self ___irCensusOn___ ifFalse: [^ self].
 	m := self ___irCensusModuleName___.
+	what := aMethodOrNil isNil
+		ifTrue: [aSite]
+		ifFalse: [[aMethodOrNil inClass name asString , '>>' , aMethodOrNil selector asString]
+			on: Error do: [:ex | ex return: aSite]].
 	self ___irCensusNote___: ('cp:' , aSite , ':' , aRoute) asSymbol
-		module: m def: aSite count: 1.
+		module: m def: what count: 1.
 	aSourceOrNil isNil ifFalse: [
 		self ___irCensusNote___: ('cpb:' , aSite , ':' , aRoute) asSymbol
-			module: m def: aSite count: aSourceOrNil size]
+			module: m def: what count: aSourceOrNil size]
 
 ]
 
@@ -5829,6 +5870,27 @@ importlib class >> ___irCodegenSupported___ [
 				temps at: #'___grailIRSupported___' put: false.
 				temps at: #'___grailIRSupportedChecked___' put: true.
 				false]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCopiesRegenerate___ [
+	"Whether a consumer copying an IR method onto another class or selector
+	regenerates or shares it (P2.2) -- true unless this session turned it off
+	with ___irCopiesRegenerate: false, which sends every copy back to its text
+	twin.  The switch is for measurement and for tests that want the old
+	route as a control; nothing else sets it."
+
+	^ (SessionTemps current at: #'___grailIRCopiesByText___' otherwise: false) ~~ true
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCopiesRegenerate: aBoolean [
+	aBoolean
+		ifTrue: [SessionTemps current removeKey: #'___grailIRCopiesByText___' ifAbsent: []]
+		ifFalse: [SessionTemps current at: #'___grailIRCopiesByText___' put: true].
+	^ self
 
 ]
 
