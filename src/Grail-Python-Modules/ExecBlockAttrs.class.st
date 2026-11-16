@@ -1064,9 +1064,15 @@ ExecBlockAttrs class >> staticSlotAt: aBlock attr: aName put: aValue [
 
 { #category : 'Grail-Access' }
 ExecBlockAttrs class >> staticSlotsFor: aBlock [
-	"The def-site slot dictionary for aBlock, creating it on first access."
+	"The def-site slot dictionary for aBlock, creating it on first access.
 
-	^ self staticSlotTable at: aBlock method ifAbsentPut: [KeyValueDictionary new]
+	Every def-time stamp comes through here, so this is also where a function
+	anchors its method (GrailMethodTable >> atMethodOf:ifAbsentPut:, and class
+	>> keepMethodOf: for why).  Without it, under native code, the VM mourned
+	a live exec()-defined function's method and its entry here went, taking
+	__name__ and __code__ with it."
+
+	^ self staticSlotTable atMethodOf: aBlock ifAbsentPut: [KeyValueDictionary new]
 
 ]
 

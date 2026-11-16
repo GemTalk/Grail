@@ -27,8 +27,8 @@ fi
 export GRAIL_DIR="$PROJECT_ROOT"
 FIXTURE="$PROJECT_ROOT/tests/python/exec_namespace_is_collected.py"
 OUT="$PROJECT_ROOT/out/exec_namespace_test.out"
-EXPECTED_FIXTURE='6 checks, 0 disagreeing [], keys match: True'
-EXPECTED_GC='GRAIL_GC_TESTS|4 run, 4 passed, 0 failed, 0 errors'
+EXPECTED_FIXTURE='8 checks, 0 disagreeing [], keys match: True'
+EXPECTED_GC='GRAIL_GC_TESTS|6 run, 6 passed, 0 failed, 0 errors'
 mkdir -p "$PROJECT_ROOT/out"
 
 {

@@ -23,6 +23,19 @@ no method.  A reused oop is told apart by the entry's own key, which is nil
 once the method has died and been mourned.  Dead entries stay until the next
 sweep, which runs when the weak half has doubled since the last one --
 SharedWeakReferences' scheme.
+
+A LIVE FUNCTION ANCHORS ITS METHOD (keepMethodOf:), because under native
+code the VM does not trace an ExecBlock's reference to its method when it
+decides which weak references and ephemerons have died.  Measured on
+4.0.0.a8 Linux x86_64 with GEM_NATIVE_CODE_ENABLED=2, kernel only: a
+WeakReference to the method of a block held in UserGlobals is cleared by
+``System _generationScavenge_vmMarkSweep'' -- while the block still runs,
+its method at the same oop.  With native code off it is not cleared.  So
+the entries of a function exec() defined -- its block method's, and through
+that method its doit's -- were mourned while the function was alive, and
+f.__code__ and f_globals went with them.  The anchor is an entry keyed by the
+function, whose liveness the VM does see, holding its method as the value:
+while the function lives, the method is reached through the anchor too.
 "
 Class {
 	#name : 'GrailMethodTable',
@@ -35,10 +48,42 @@ Class {
 	#category : 'Grail-Weak'
 }
 
+{ #category : 'Grail-Weak-anchoring' }
+GrailMethodTable class >> anchor: aBlock method: aMethod [
+	"keepMethodOf: once the caller knows no class owns aMethod, aBlock's."
+
+	(SessionTemps current at: #GrailMethodAnchors ifAbsentPut: [self new])
+		at: aBlock put: aMethod
+
+]
+
 { #category : 'Grail-Weak-private' }
 GrailMethodTable class >> initialSweepSize [
 
 	^ 64
+
+]
+
+{ #category : 'Grail-Weak-anchoring' }
+GrailMethodTable class >> keepMethodOf: aBlock [
+	"While aBlock lives, keep its method reachable by a path the VM traces.
+
+	Under native code the VM does not see an ExecBlock's reference to its
+	method when it mourns weak references and ephemerons (see the class
+	comment), so a method no class owns, held only by a live function, read
+	as dead and its entries here were dropped.  This files an entry keyed by
+	the block itself -- held as weakly as any unowned key -- whose value is
+	the method: the block's liveness the VM does see, and while it lasts the
+	entry marks the method, and through it the home doit.
+
+	Every function is anchored at def time, by atMethodOf:ifAbsentPut: on the
+	def-site table.  A block a class owns needs no anchor and gets none: its
+	method lives as long as the class."
+
+	| method |
+	method := aBlock method.
+	method inClass ~~ nil ifTrue: [^ self].
+	self anchor: aBlock method: method
 
 ]
 
@@ -94,6 +139,26 @@ GrailMethodTable >> at: aMethod put: aValue [
 
 ]
 
+{ #category : 'Grail-Weak-accessing' }
+GrailMethodTable >> atMethodOf: aFunction ifAbsentPut: aBlock [
+	"at: aFunction method ifAbsentPut: aBlock, for a table a def stamps -- and
+	 a function no class owns also anchors its method (class >>
+	 keepMethodOf:).  One ownership test decides both, so a function a class
+	 owns pays nothing for the anchor."
+
+	| method entry value |
+	method := aFunction method.
+	(self isOwned: method) ifTrue: [
+		^ owned at: method ifAbsent: [owned at: method put: aBlock value]].
+	self class anchor: aFunction method: method.
+	entry := unowned at: method asOop otherwise: nil.
+	(entry ~~ nil and: [entry key == method]) ifTrue: [^ entry value].
+	value := aBlock value.
+	self at: method put: value.
+	^ value
+
+]
+
 { #category : 'Grail-Weak-private' }
 GrailMethodTable >> forgetDead [
 	"Drop the entries whose method has died, and sweep again once what is
@@ -127,10 +192,13 @@ GrailMethodTable >> initialize [
 GrailMethodTable >> isOwned: aKey [
 	"Does a class own aKey -- an installed method, or a block of one?  A
 	 block method's inClass answers its home method's class, so this is one
-	 test for both.  A key that is not a method counts as owned: it is held
-	 strongly, as every key was before."
+	 test for both.  A function (an ExecBlock) is owned when its method is:
+	 that is the key keepMethodOf: files.  Any other key counts as owned: it
+	 is held strongly, as every key was before."
 
-	^ (aKey isKindOf: GsNMethod) not or: [aKey inClass ~~ nil]
+	(aKey isKindOf: GsNMethod) ifTrue: [^ aKey inClass ~~ nil].
+	(aKey isKindOf: ExecBlock) ifTrue: [^ aKey method inClass ~~ nil].
+	^ true
 
 ]
 

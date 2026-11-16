@@ -12,9 +12,12 @@ and the def-site slot table -- held the doit and its blocks strongly.  So
 everything an exec() bound stayed alive for the rest of the session: the
 generator was never finalized, and a plain object never died.
 
-The last two checks are the other half: a function that outlives its exec()
-still has its globals, its name, its code and its frame's f_globals, so the
-tables must not lose what is still alive.
+The last four checks are the other half: a function, a running doit and a
+generator that outlive a collection still have their globals, their name,
+their code and their frame's f_globals, so the tables must not lose what is
+still alive.  Two of them failed only under native code (Linux x86_64), where
+the VM does not trace a block's reference to its method when it mourns weak
+entries: see GrailMethodTable's class comment.
 
 Every check here holds under CPython 3.14, which is what makes it evidence.
 """
@@ -109,13 +112,34 @@ def a_frame_of_a_function_that_outlives_its_exec_knows_its_globals():
     return attempt(f)
 
 
+def a_running_exec_knows_its_globals_after_a_collection():
+    namespace = {"sys": sys, "support": support, "marker": 'exec globals'}
+    exec("support.gc_collect()\nresult = sys._getframe().f_globals['marker']\n", namespace)
+    return namespace["result"]
+
+
+def a_generator_that_outlives_its_exec_knows_its_globals():
+    namespace = {"sys": sys}
+    exec("marker = 'exec globals'\n"
+         "def gen():\n"
+         "    yield sys._getframe().f_globals['marker']\n"
+         "    yield sys._getframe().f_code.co_name\n"
+         "g = gen()\n", namespace)
+    g = namespace["g"]
+    del namespace
+    support.gc_collect()
+    return attempt(lambda: list(g))
+
+
 for check in (
         a_generator_bound_by_exec_is_finalized_and_resurrected,
         a_generator_bound_by_exec_runs_its_finally,
         an_object_bound_by_exec_dies_with_its_namespace,
         a_function_and_its_global_die_with_their_namespace,
         a_function_that_outlives_its_exec_keeps_its_globals,
-        a_frame_of_a_function_that_outlives_its_exec_knows_its_globals):
+        a_frame_of_a_function_that_outlives_its_exec_knows_its_globals,
+        a_running_exec_knows_its_globals_after_a_collection,
+        a_generator_that_outlives_its_exec_knows_its_globals):
     r[check.__name__] = attempt(check)
 
 
@@ -126,6 +150,8 @@ EXPECTED = {
     'a_function_and_its_global_die_with_their_namespace': [True, True],
     'a_function_that_outlives_its_exec_keeps_its_globals': ['Marker', 'f', 'f'],
     'a_frame_of_a_function_that_outlives_its_exec_knows_its_globals': 'exec globals',
+    'a_running_exec_knows_its_globals_after_a_collection': 'exec globals',
+    'a_generator_that_outlives_its_exec_knows_its_globals': ['exec globals', 'gen'],
 }
 
 DISAGREEMENTS = sorted(k for k in EXPECTED if r.get(k, '<missing>') != EXPECTED[k])

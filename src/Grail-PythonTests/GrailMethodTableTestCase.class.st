@@ -13,6 +13,32 @@ GrailMethodTableTestCase >> newUnownedMethod [
 
 ]
 
+{ #category : 'Grail-Weak-Tests-support' }
+GrailMethodTableTestCase >> ownedBlock [
+	"A function some class owns: a block of this installed method."
+
+	^ [:a | a]
+
+]
+
+{ #category : 'Grail-Weak-Tests' }
+GrailMethodTableTestCase >> testAFunctionIsHeldAsItsMethodIs [
+	"keepMethodOf: files functions as keys, so a function no class owns is held
+	 as weakly as its method would be, and one a class owns as strongly."
+
+	| table owned unowned |
+	table := GrailMethodTable new.
+	owned := self ownedBlock.
+	unowned := '[:a | a]' evaluate.
+	table at: owned put: 1.
+	self assert: (self unownedHalfOf: table) isEmpty.
+	table at: unowned put: 2.
+	self assert: (self unownedHalfOf: table) size equals: 1.
+	self assert: (table at: owned otherwise: nil) equals: 1.
+	self assert: (table at: unowned otherwise: nil) equals: 2
+
+]
+
 { #category : 'Grail-Weak-Tests' }
 GrailMethodTableTestCase >> testAKeyThatIsNotAMethodIsHeldStrongly [
 
@@ -82,6 +108,31 @@ GrailMethodTableTestCase >> testAnUnownedMethodAnswersWhileItLives [
 	self assert: (self unownedHalfOf: table) size equals: 1.
 	self assert: (table removeKey: method ifAbsent: [nil]) equals: 5.
 	self assert: (table at: method otherwise: #gone) equals: #gone
+
+]
+
+{ #category : 'Grail-Weak-Tests' }
+GrailMethodTableTestCase >> testOnlyAFunctionNoClassOwnsIsAnchored [
+	"A function exec() defined anchors its method, once however often it is
+	 stamped; one a class owns needs no anchor and gets none."
+
+	| temps saved owned unowned anchors |
+	temps := SessionTemps current.
+	saved := temps at: #GrailMethodAnchors ifAbsent: [nil].
+	[
+		temps removeKey: #GrailMethodAnchors ifAbsent: [nil].
+		owned := self ownedBlock.
+		GrailMethodTable keepMethodOf: owned.
+		self deny: (temps includesKey: #GrailMethodAnchors).
+		unowned := '[:a | a]' evaluate.
+		GrailMethodTable keepMethodOf: unowned.
+		GrailMethodTable keepMethodOf: unowned.
+		anchors := temps at: #GrailMethodAnchors.
+		self assert: (anchors at: unowned otherwise: nil) == unowned method.
+		self assert: anchors size equals: 1
+	] ensure: [
+		temps removeKey: #GrailMethodAnchors ifAbsent: [nil].
+		saved ifNotNil: [:v | temps at: #GrailMethodAnchors put: v]]
 
 ]
 

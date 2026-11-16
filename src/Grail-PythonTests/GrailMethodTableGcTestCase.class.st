@@ -50,6 +50,52 @@ GrailMethodTableGcTestCase >> testABlockOfAnUnownedMethodIsNotKeptAlive [
 ]
 
 { #category : 'Grail-Weak-Tests' }
+GrailMethodTableGcTestCase >> testALiveFunctionKeepsItsEntriesAndItsDoits [
+	"A function exec() defined, held only by itself, keeps its method's entry
+	 and its doit's.  Under native code the VM does not trace a block's
+	 reference to its method when it mourns ephemerons, so without
+	 keepMethodOf: both were mourned while the function lived -- measured on
+	 Linux x86_64; with native code off, as on macOS arm64, they never were.
+
+	 Stamped the way a def is (staticSlotAt:attr:put:), so this covers the
+	 def-time anchoring and not only keepMethodOf: itself."
+
+	| table block temps saved |
+	temps := SessionTemps current.
+	saved := temps at: #GrailMethodAnchors ifAbsent: [nil].
+	[
+		table := GrailMethodTable new.
+		block := '[:a | a + 1]' evaluate.
+		block value: 1.
+		ExecBlockAttrs staticSlotAt: block attr: '__name__' put: 'f'.
+		table at: block method put: #function.
+		table at: block method homeMethod put: #doit.
+		self collectGarbage.
+		self assert: (ExecBlockAttrs staticSlotAt: block attr: '__name__') equals: 'f'.
+		self assert: (table at: block method otherwise: nil) equals: #function.
+		self assert: (table at: block method homeMethod otherwise: nil) equals: #doit
+	] ensure: [
+		temps removeKey: #GrailMethodAnchors ifAbsent: [nil].
+		saved ifNotNil: [:v | temps at: #GrailMethodAnchors put: v]]
+
+]
+
+{ #category : 'Grail-Weak-Tests' }
+GrailMethodTableGcTestCase >> testAnAnchorDoesNotKeepADeadFunctionAlive [
+	"The anchor is keyed by the function, so a function that dies takes its
+	 anchor with it, and its method goes."
+
+	| block ref |
+	block := '[:a | a + 2]' evaluate.
+	GrailMethodTable keepMethodOf: block.
+	ref := WeakReference on: block method.
+	block := nil.
+	self collectGarbage.
+	self assert: ref value isNil description: 'the anchor kept a dead function''s method alive'
+
+]
+
+{ #category : 'Grail-Weak-Tests' }
 GrailMethodTableGcTestCase >> testAnUnownedMethodIsNotKeptAlive [
 	"The point of the table: an entry does not keep its method alive, nor its
 	 value -- even when the value leads back to the method, as a doit's scope
