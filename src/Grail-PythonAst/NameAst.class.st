@@ -762,6 +762,12 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 
 	| kind |
 	aBuilder atNode: self.
+	"A CLASS-BODY VALUE READ in a method-local class helper built through IR
+	(plan P3.3): the class-body read the text writes, through the helper's
+	ClassBuildIREmitter -- one description, two outputs."
+	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyValue___]) ifTrue: [
+		^ aBuilder classBuildEmitter valueOf: [
+			self ___emitClassBodyValueWith___: aBuilder classBuildEmitter]].
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	"A ``global''-declared name is a MODULE binding for that whole scope --
 	never a local -- so the declaration has to be tested BEFORE the leaf.
@@ -2438,6 +2444,9 @@ NameAst >> ___irEligibleValueLocals___: localNames [
 	stays on text.  Store-context names appear only on an Assign LHS."
 
 	(ctx isKindOf: LoadAst) ifFalse: [^ false].
+	"A class-body value read (P3.3) is built by the class-body read both
+	helpers share, which describes every such name."
+	self ___readsAsClassBodyValue___ ifTrue: [^ true].
 	self ___irIsSelfReceiver___ ifTrue: [^ true].
 	(localNames includes: id asString) ifTrue: [^ true].
 	^ (self ___irNonLocalLoadKind___: localNames) notNil
