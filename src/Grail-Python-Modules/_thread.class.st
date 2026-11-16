@@ -21,6 +21,17 @@ _thread class >> ___contextProcess___ [
 ]
 
 { #category : 'Grail-Threading' }
+_thread class >> ___liveThreads___ [
+	"The GsProcesses of the threads start_new_thread started that are still
+	running: each adds itself as it starts and removes itself as it ends
+	(_spawnProcess:args:).  What sys._current_exceptions enumerates; the main
+	thread is not in it.  Session-local, never committed."
+
+	^ SessionTemps current at: #'GrailPyLiveThreads' ifAbsentPut: [IdentitySet new]
+
+]
+
+{ #category : 'Grail-Threading' }
 _thread class >> _spawnProcess: function args: args [
 	"Fork a GsProcess that runs ``function(*args)`` and return its identifier.
 	Forking is done here, in env 0: a fork initiated from inside an env-1
@@ -36,7 +47,11 @@ _thread class >> _spawnProcess: function args: args [
 		main process, and whichever process a later GCI call runs on -- is the
 		main thread and shares the session's."
 		GsProcess current environmentAt: #'GrailPyThread' put: true.
-		[function @env1:value: args value: nil] on: Error do: [:e |
+		"Its own exception bookkeeping, empty: a thread starts with nothing
+		being handled (BaseException class >> ___threadExceptionState___)."
+		GsProcess current environmentAt: #'GrailExcState' put: Dictionary new.
+		_thread ___liveThreads___ add: GsProcess current.
+		[[function @env1:value: args value: nil] on: Error do: [:e |
 			"REPORTED, not swallowed.  threading's bootstrap reports every
 			Python exception through excepthook; what reaches here is a
 			GemStone error below it, and dropping it silently made a thread
@@ -47,7 +62,8 @@ _thread class >> _spawnProcess: function args: args [
 				nextPutAll: e description asString; lf;
 				nextPutAll: (GsProcess stackReportToLevel: 200); lf]
 					on: Error do: [:e2 | nil].
-			nil]
+			nil]]
+				ensure: [_thread ___liveThreads___ remove: GsProcess current ifAbsent: []]
 	] fork.
 	^ proc asOop
 

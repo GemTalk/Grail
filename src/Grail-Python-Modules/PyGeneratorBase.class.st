@@ -128,6 +128,22 @@ PyGeneratorBase class >> ___pythonValueAttrs___ [
 ]
 
 { #category : 'Grail-Private' }
+PyGeneratorBase >> ___bindToResumer___ [
+	"Called by the CONSUMER as it resumes the body: record it as the resumer,
+	and point the body's process at the resumer's thread's exception
+	bookkeeping (BaseException class >> ___threadExceptionState___).  In Python
+	the body runs on the thread that resumed it -- which can be a different
+	thread from one resume to the next -- and the save/restore of that state
+	across each suspension expects the body and its resumer to share it.  Before
+	the first resume there is no body process yet; _forkBody binds it then."
+
+	consumerProcess := GsProcess current.
+	proc == nil ifFalse: [
+		proc environmentAt: #'GrailExcState' put: BaseException ___threadExceptionState___]
+
+]
+
+{ #category : 'Grail-Private' }
 PyGeneratorBase >> ___consumerProcess___ [
 	"The GsProcess blocked on consumerSem waiting for this generator, or nil
 	before the first resume.
@@ -220,8 +236,14 @@ PyGeneratorBase >> _forkBody [
 	``throw GeneratorExit'' subtest, and four of its neighbours.  close() now
 	absorbs it explicitly, which is the only place that knows it asked."
 
+	| resumersState |
 	started := true.
+	"Read HERE, on the resumer, and handed to the body before it runs any code
+	of its own: its exception bookkeeping is the resumer's thread's (see
+	___bindToResumer___, which re-points it on every later resume)."
+	resumersState := BaseException ___threadExceptionState___.
 	proc := [
+		GsProcess @env0:current @env0:environmentAt: #'GrailExcState' put: resumersState.
 		"Which generator this process is the body of, so a lookup can find the
 		Python THREAD it runs for: the process blocked resuming it, and that
 		one's, and so on (importlib class >> ___pythonThreadOf___:).  A

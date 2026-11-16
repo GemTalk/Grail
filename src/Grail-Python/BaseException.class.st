@@ -85,11 +85,33 @@ BaseException class >> ___captureHandlerState___ [
 	answer: PythonGenerator save/restores it across every suspension, from both
 	sides.  See PythonGenerator >> ___captureConsumerState___ and >> ___yield___:.
 
-	The stack is COPIED.  It is a mutable OrderedCollection living in a session
+	The stack is COPIED.  It is a mutable OrderedCollection living in a per-thread
 	slot, so handing back the same object would hand back whatever the other side
 	did to it."
 
-	^ { self ___handlerDepth___ . self ___handlerTokenStack___ @env0:copy }
+	| st |
+	st := self ___threadExceptionState___.
+	^ { st @env0:at: #'GrailHandlerDepth' otherwise: 0 .
+		(st @env0:at: #'GrailHandlerTokens' ifAbsentPut: [OrderedCollection @env0:new]) @env0:copy }
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___captureThreadState___ [
+	"This thread's whole exception bookkeeping, for a generator to keep across
+	a suspension: { handled exception . ___captureHandlerState___'s pair .
+	inherited exception }, read with ONE ___threadExceptionState___.  Each slot
+	accessor resolves that state for itself, and a generator resume makes a
+	dozen such reads; resolving once per step is what keeps per-thread state
+	from costing a for-loop over a generator.  ___restoreThreadState___: is the
+	inverse."
+
+	| st |
+	st := self ___threadExceptionState___.
+	^ { st @env0:at: #'GrailCurrentException' otherwise: nil .
+		{ st @env0:at: #'GrailHandlerDepth' otherwise: 0 .
+			(st @env0:at: #'GrailHandlerTokens' ifAbsentPut: [OrderedCollection @env0:new]) @env0:copy } .
+		st @env0:at: #'GrailInheritedException' otherwise: nil }
 
 ]
 
@@ -384,7 +406,7 @@ BaseException class >> ___curPosPositionsFromSource___: src [
 { #category : 'Grail-Current Exception' }
 BaseException class >> ___currentException___ [
 	"The exception the RUNNING CODE'S OWN handlers are handling, or nil outside
-	any active except block.  Session-local via SessionTemps (never committed).
+	any active except block.  Per thread (___threadExceptionState___), never committed.
 	TryAst codegen sets it on except-handler entry and restores the prior value
 	on exit, so nested handlers stack correctly.
 
@@ -393,7 +415,7 @@ BaseException class >> ___currentException___ [
 	___handledException___, which falls back to the exception a resumed
 	generator body inherited from whoever resumed it."
 
-	^ (SessionTemps current) at: #'GrailCurrentException' ifAbsent: [nil]
+	^ self ___threadExceptionState___ at: #'GrailCurrentException' ifAbsent: [nil]
 
 ]
 
@@ -862,10 +884,12 @@ BaseException class >> ___enterHandler___: aTokenOrNil [
 	Emitted only for a try with two or more clauses -- a single-clause try has no
 	sibling to shield, so it still calls the no-argument form and pushes nil."
 
-	SessionTemps @env0:current
-		@env0:at: #'GrailHandlerDepth'
-		put: self ___handlerDepth___ @env0:+ 1.
-	self ___handlerTokenStack___ @env0:addLast: aTokenOrNil.
+	| st |
+	st := self ___threadExceptionState___.
+	st @env0:at: #'GrailHandlerDepth'
+		put: (st @env0:at: #'GrailHandlerDepth' otherwise: 0) @env0:+ 1.
+	(st @env0:at: #'GrailHandlerTokens' ifAbsentPut: [OrderedCollection @env0:new])
+		@env0:addLast: aTokenOrNil.
 	^ self
 
 ]
@@ -887,12 +911,12 @@ BaseException class >> ___exitHandler___ [
 	search would also have to guess which entry was 'mine' among identical
 	per-SITE tokens, which is exactly the case it cannot distinguish."
 
-	| d stack |
-	d := self ___handlerDepth___.
-	SessionTemps @env0:current
-		@env0:at: #'GrailHandlerDepth'
+	| st d stack |
+	st := self ___threadExceptionState___.
+	d := st @env0:at: #'GrailHandlerDepth' otherwise: 0.
+	st @env0:at: #'GrailHandlerDepth'
 		put: (d @env0:> 0 ifTrue: [d @env0:- 1] ifFalse: [0]).
-	stack := self ___handlerTokenStack___.
+	stack := st @env0:at: #'GrailHandlerTokens' ifAbsentPut: [OrderedCollection @env0:new].
 	stack @env0:isEmpty ifFalse: [stack @env0:removeLast].
 	^ self
 
@@ -1132,9 +1156,22 @@ BaseException class >> ___handledException___ [
 
 ]
 
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___handledExceptionIn___: aThreadState [
+	"___handledException___ for ANOTHER thread, read from its state (a
+	___threadExceptionState___ answer).  The thread is not running -- Grail's
+	threads are cooperative, so only the caller is -- and its slots therefore
+	hold its own values, not a save/restore pair in flight.  For
+	sys._current_exceptions."
+
+	^ (aThreadState at: #'GrailCurrentException' otherwise: nil)
+		ifNil: [aThreadState at: #'GrailInheritedException' otherwise: nil]
+
+]
+
 { #category : 'Grail-Handler Depth' }
 BaseException class >> ___handlerDepth___ [
-	"How many ``except'' handler BODIES are currently running in this session.
+	"How many ``except'' handler BODIES are currently running on this thread.
 
 	Used to keep an exception raised in one handler from being caught by a LATER
 	handler of the same try.  Python's except clauses are alternatives for the try
@@ -1149,7 +1186,7 @@ BaseException class >> ___handlerDepth___ [
 	depth, so its own handlers still catch from its own body, while the outer
 	try's later handlers stay shielded."
 
-	^ (SessionTemps @env0:current @env0:at: #'GrailHandlerDepth' otherwise: 0)
+	^ (self ___threadExceptionState___ @env0:at: #'GrailHandlerDepth' otherwise: 0)
 
 ]
 
@@ -1182,9 +1219,10 @@ BaseException class >> ___handlerTokenActive___: aToken [
 { #category : 'Grail-Handler Depth' }
 BaseException class >> ___handlerTokenStack___ [
 	"The try-activation tokens of the ``except'' handler bodies currently
-	running, outermost first.  Session-local, like the depth it parallels."
+	running, outermost first.  Per thread, like the depth it parallels
+	(___threadExceptionState___)."
 
-	^ SessionTemps @env0:current
+	^ self ___threadExceptionState___
 		@env0:at: #'GrailHandlerTokens'
 		ifAbsentPut: [OrderedCollection @env0:new]
 
@@ -1274,7 +1312,7 @@ BaseException class >> ___inheritedException___ [
 	"The resumer's handled exception, installed while a generator body runs --
 	see ___handledException___.  nil outside a generator body."
 
-	^ (SessionTemps current) at: #'GrailInheritedException' ifAbsent: [nil]
+	^ self ___threadExceptionState___ at: #'GrailInheritedException' ifAbsent: [nil]
 
 ]
 
@@ -4464,12 +4502,26 @@ BaseException class >> ___resignalable___: anException [
 BaseException class >> ___restoreHandlerState___: anArray [
 	"Reinstate what ___captureHandlerState___ answered."
 
-	SessionTemps @env0:current
-		@env0:at: #'GrailHandlerDepth'
-		put: (anArray @env0:at: 1).
-	SessionTemps @env0:current
-		@env0:at: #'GrailHandlerTokens'
-		put: (anArray @env0:at: 2) @env0:copy.
+	| st |
+	st := self ___threadExceptionState___.
+	st @env0:at: #'GrailHandlerDepth' put: (anArray @env0:at: 1).
+	st @env0:at: #'GrailHandlerTokens' put: (anArray @env0:at: 2) @env0:copy.
+	^ self
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___restoreThreadState___: anArray [
+	"Reinstate what ___captureThreadState___ answered, with one
+	___threadExceptionState___."
+
+	| st handlers |
+	st := self ___threadExceptionState___.
+	self ___storeSlot___: #'GrailCurrentException' in: st value: (anArray @env0:at: 1).
+	handlers := anArray @env0:at: 2.
+	st @env0:at: #'GrailHandlerDepth' put: (handlers @env0:at: 1).
+	st @env0:at: #'GrailHandlerTokens' put: (handlers @env0:at: 2) @env0:copy.
+	self ___storeSlot___: #'GrailInheritedException' in: st value: (anArray @env0:at: 3).
 	^ self
 
 ]
@@ -4516,8 +4568,8 @@ BaseException class >> ___setCurrentException___: anExceptionOrNil [
 	ifAbsent: nil default is the single source of ``no active exception''."
 
 	anExceptionOrNil isNil
-		ifTrue: [ (SessionTemps current) removeKey: #'GrailCurrentException' ifAbsent: [] ]
-		ifFalse: [ (SessionTemps current) at: #'GrailCurrentException' put: anExceptionOrNil ].
+		ifTrue: [ self ___threadExceptionState___ removeKey: #'GrailCurrentException' ifAbsent: [] ]
+		ifFalse: [ self ___threadExceptionState___ at: #'GrailCurrentException' put: anExceptionOrNil ].
 	^ anExceptionOrNil
 
 ]
@@ -4529,8 +4581,8 @@ BaseException class >> ___setInheritedException___: anExceptionOrNil [
 	side's exception state."
 
 	anExceptionOrNil isNil
-		ifTrue: [ (SessionTemps current) removeKey: #'GrailInheritedException' ifAbsent: [] ]
-		ifFalse: [ (SessionTemps current) at: #'GrailInheritedException' put: anExceptionOrNil ].
+		ifTrue: [ self ___threadExceptionState___ removeKey: #'GrailInheritedException' ifAbsent: [] ]
+		ifFalse: [ self ___threadExceptionState___ at: #'GrailInheritedException' put: anExceptionOrNil ].
 	^ anExceptionOrNil
 
 ]
@@ -4753,6 +4805,24 @@ BaseException class >> ___stackOverflowReport___ [
 
 ]
 
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___stackOwnException___: ownExceptionOrNil [
+	"Install a resumed generator body's own handled exception on top of its
+	resumer's: the resumer's (___handledException___) becomes the inherited one,
+	the body's own the current one.  PyGeneratorBase >>
+	___stackOnResumersException___: says why both are kept; this does it with one
+	___threadExceptionState___."
+
+	| st resumers |
+	st := self ___threadExceptionState___.
+	resumers := (st @env0:at: #'GrailCurrentException' otherwise: nil)
+		ifNil: [st @env0:at: #'GrailInheritedException' otherwise: nil].
+	self ___storeSlot___: #'GrailCurrentException' in: st value: ownExceptionOrNil.
+	self ___storeSlot___: #'GrailInheritedException' in: st value: resumers.
+	^ self
+
+]
+
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___stampedNameForBlock___: aBlockMethod [
 	"The Python name codegen stamped on aBlockMethod's block, or nil.
@@ -4813,6 +4883,64 @@ BaseException class >> ___stashGeneratorStack___: anException [
 	reg at: anException put: levels.
 	anException _gsStack: nil.
 	^ self
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___storeSlot___: aKey in: aThreadState value: anObjectOrNil [
+	"Store one exception slot, REMOVING the key for nil, as
+	___setCurrentException___: does, so a read's ``otherwise: nil'' and an
+	absent key mean the same."
+
+	anObjectOrNil isNil
+		ifTrue: [aThreadState removeKey: aKey ifAbsent: []]
+		ifFalse: [aThreadState at: aKey put: anObjectOrNil].
+	^ self
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___threadExceptionState___ [
+	"Where this THREAD's exception bookkeeping lives: the handled exception
+	(#GrailCurrentException), the one a generator body inherited from its
+	resumer (#GrailInheritedException), and the except-handler depth and token
+	stack (#GrailHandlerDepth, #GrailHandlerTokens).  For a thread started by
+	start_new_thread it is a dictionary of that thread's own, so it dies with
+	the thread.  For the MAIN thread it is SessionTemps, as before: the main
+	thread is not one process -- a later GCI call can run on a fresh one -- and
+	every process that is not a started thread or a generator body is the main
+	thread.  That is contextvars' rule too (_thread >> _get_context).
+
+	PER THREAD, NOT PER SESSION.  CPython keeps the exc_info stack on the thread
+	state, so a thread sitting in an ``except'' block is invisible to every other
+	thread.  These lived in SessionTemps, shared by every thread of the session,
+	so while a worker waited inside ``except ValueError'' the main thread's
+	sys.exception() answered that ValueError, a bare ``raise'' there could
+	re-raise it, and its implicit __context__ chained to it (test_sys
+	test_current_exceptions).  The handler depth and token stack are the same
+	kind of state, and were shared the same way: two coroutines suspended inside
+	handlers are known to unwind each other's (PyGeneratorBase >>
+	___captureConsumerState___), and two threads could do the same.
+
+	Per PYTHON thread, not per GsProcess.  A generator body runs on a process of
+	its own but, in Python, on the thread that resumed it, and PyGeneratorBase's
+	save/restore across each suspension relies on the body and its resumer
+	sharing one slot -- as they did when it was the session's.  A thread gets a
+	fresh, empty dictionary as it starts, so one started from inside a handler
+	starts with nothing being handled, as CPython's does.
+
+	ONE LOOKUP, NO WALK.  Each process that is not the main thread carries a
+	pointer to its thread's state as #GrailExcState in its own environment: a
+	thread its own dictionary, set as it starts (_thread class >>
+	_spawnProcess:args:), and a generator body its resumer's, set at its fork and
+	again on every resume (PyGeneratorBase >> ___bindToResumer___), so it is
+	always the thread that is running it.  A process without one -- the main
+	thread's, whichever it is -- has the session's.  Asking ___pythonThreadOf___:
+	instead walked each body to its resumer on every access, and a generator
+	resume makes a dozen: a plain for-loop over a generator ran ~20% slower with
+	no thread alive and ~80% slower with one."
+
+	^ (GsProcess current environmentAt: #'GrailExcState') ifNil: [SessionTemps current]
 
 ]
 
