@@ -655,14 +655,11 @@ GemStone uses mark-sweep GC (no refcounting, so no deterministic __del__) and co
 | `test_weakref` | weakref — refcount/GC-driven reclamation. |
 | `test_weakset` | WeakSet — weakref-based. |
 
-The same refcount dependence decides nine tests inside two wired modules. They
+The same refcount dependence decides eight tests inside one wired module. They
 check that an object refuses a resize with `BufferError` while a `memoryview`
-of it is alive:
-
-- `test_memoryio`: `test_getbuffer`, `test_getbuffer_empty`,
-  `test_write_concurrent_export` and `test_writelines_concurrent_export`, each
-  in `PyBytesIOTest` and `CBytesIOTest`;
-- `test_buffer`: `TestPythonBufferProtocol.test_release_saves_reference_no_subclassing`.
+of it is alive: `test_getbuffer`, `test_getbuffer_empty`,
+`test_write_concurrent_export` and `test_writelines_concurrent_export`, each in
+`test_memoryio`'s `PyBytesIOTest` and `CBytesIOTest`.
 
 Without a refcount, Grail can tell a view still in use from a dropped one only
 by running a mark-sweep, which takes about 20 ms with 73 MB of live temporary objects and 50 ms with 230 MB
@@ -680,10 +677,18 @@ that long (`memoryview>>___holdExportForWith___`). That is what
 generator or coroutine body, though: one can be abandoned mid-`with`, which
 CPython's refcount closes on the spot and Grail's GC only later, so an export
 held there would refuse resizes CPython allows.
-`test_release_saves_reference_no_subclassing` is still on the list because its
-view outlives the `with`: the exporter's `__release_buffer__` keeps it, and
-whether anything still does by the time of the resize is again the refcount's
-question.
+
+The other case is rare enough to afford the mark-sweep:
+`test_release_saves_reference_no_subclassing`, now passing, where a Python
+`__release_buffer__` is handed the view its `__buffer__` answered and stores
+it. A view such a hook does not release is registered weakly
+(`memoryview>>___keepExportWhileReachable___`), and a resize of the
+`bytearray` under it, while it is still unreleased, runs one collection to see
+whether anything reaches it (`ByteArray>>___isHeldByAKeptView___:`). Grail's
+stdlib and bundled packages define no Python `__release_buffer__`, so no
+ordinary code ever registers a view and no ordinary resize pays more than
+before. Not modelled: a view DERIVED from the kept one (`buffer[1:]`) keeps
+no export, where CPython's shares the kept view's.
 
 ### Hardware / OS-platform specific  ·  18 modules
 

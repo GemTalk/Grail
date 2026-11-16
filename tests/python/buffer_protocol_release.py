@@ -16,8 +16,9 @@ TestPythonBufferProtocol, from which these cases come.
 The hooks are the ones the MRO finds, so a base written left of bytearray
 supplies them.  And a view held by a ``with'' is an export: its bytearray
 refuses every resize with BufferError until the view is released, while
-writes that change no size still go.  Grail counts no other view (see
-bytearray>>size:), so only views a ``with'' holds are checked here.
+writes that change no size still go.  So is a view a __release_buffer__
+stores, for as long as anything reaches it.  Grail counts no other view (see
+bytearray>>size:), so only those are checked here.
 
 Every check here holds under CPython 3.14, which is what makes it evidence.
 """
@@ -269,6 +270,53 @@ def leaving_the_with_ends_the_export():
 
 r['leaving_the_with_ends_the_export'] = leaving_the_with_ends_the_export()
 
+
+def exporting_through(ba, release):
+    class Exporter:
+        def __buffer__(self, flags):
+            return memoryview(ba)
+
+        def __release_buffer__(self, buffer):
+            release(self, buffer)
+
+    return Exporter()
+
+
+def a_kept_view_stays_exported():
+    # test_release_saves_reference_no_subclassing: the view __buffer__
+    # answered goes to __release_buffer__ unreleased, and one the hook stores
+    # keeps the bytearray exported until it is released -- or until nothing
+    # reaches it, which is what the last two cases check.
+    def keep(self, buffer):
+        self.buffer = buffer
+
+    out = []
+    ba = bytearray(b"hello")
+    c = exporting_through(ba, keep)
+    with memoryview(c):
+        pass
+    out.append([c.buffer.tobytes(), raised(lambda: ba.clear())])
+    c.buffer.release()
+    out.append(raised(lambda: ba.clear()))
+    ba = bytearray(b"hello")
+    c = exporting_through(ba, keep)
+    with memoryview(c):
+        pass
+    del c.buffer
+    out.append(raised(lambda: ba.clear()))
+    ba = bytearray(b"hello")
+    with memoryview(exporting_through(ba, lambda self, buffer: None)):
+        pass
+    out.append(raised(lambda: ba.clear()))
+    ba = bytearray(b"hello")
+    with memoryview(exporting_through(ba, lambda self, buffer: buffer.release())):
+        pass
+    out.append(raised(lambda: ba.clear()))
+    return out
+
+
+r['a_kept_view_stays_exported'] = a_kept_view_stays_exported()
+
 separator = bytearray(b',')
 
 
@@ -292,6 +340,7 @@ EXPECTED = {
     'a_mixin_hook_precedes_bytearray': [[b'hello', 'ValueError']] * 3 + [None],
     'a_with_holds_the_export': [[['BufferError', 'no error']] * 14, [['no error', 'no error']] * 5],
     'leaving_the_with_ends_the_export': ['no error'] * 5 + [b'cdef'],
+    'a_kept_view_stays_exported': [[b'hello', 'BufferError']] + ['no error'] * 4,
     'a_join_allows_a_same_size_write': bytearray(b'A;B'),
 }
 
