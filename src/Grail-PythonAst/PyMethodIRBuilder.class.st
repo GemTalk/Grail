@@ -216,6 +216,23 @@ PyMethodIRBuilder >> ___irGenerateFor___: aClass [
 ]
 
 { #category : 'generation' }
+PyMethodIRBuilder >> ___irGenerateFor___: aClass as: aSelector [
+	"___irGenerateFor___:, the method generated under aSelector instead of the
+	def's own -- a ``___grailOrig_'' or ``___grailDirect'' copy (P2.2).  The
+	copy must carry the selector it is installed under, as the prefixed text
+	twin's recompile gave it: UnboundMethod and the traceback read the shadow's
+	original name back from its selector.  aSelector has the def's arity (a
+	prefix on the first keyword).  The builder keeps its own selector."
+
+	| original |
+	original := methNode selector.
+	^ [methNode selector: aSelector.
+	   self ___irGenerateFor___: aClass]
+		ensure: [methNode selector: original]
+
+]
+
+{ #category : 'generation' }
 PyMethodIRBuilder >> ___irNoteClassHelper___: aSelector source: aString [
 	"Take a class statement's compiled-text helper (cut 76) -- compiling it NOW
 	for an ordinary build, DEFERRING it for a shared one.
