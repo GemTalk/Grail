@@ -48,7 +48,19 @@ class Mixin:
         class Local:
             def f(self):
                 return 'local'
-        return Local().f()
+        return (Local().f(), Local.__qualname__)
+
+    @classmethod
+    def cm_class(cls):
+        class K:
+            x = 1
+        return (cls.__name__, K.x, K.__qualname__)
+
+    @staticmethod
+    def sm_class():
+        class S:
+            y = 2
+        return (S.y, S.__qualname__)
 
     @property
     def prop(self):

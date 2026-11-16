@@ -2555,6 +2555,21 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 			ifTrue: [aClass isMeta ifTrue: ['mi-class'] ifFalse: ['mi']]
 			ifFalse: ['enum']]
 		ifFalse: ['del-shadow'].
+	"A method-local class's HELPER (``___irClassDef_<n>_<C>___'') is never
+	copied on its own: it ARRIVES WITH ITS DEF.  It is not a def -- it has no
+	def id, so no builder can be had for it, and it has no text twin -- and a
+	def regenerated onto aClass installs its class statements' helpers there
+	(PyMethodIRBuilder >> ___installDeferredClassHelpersOn___:), while a def
+	recompiled from its twin needs none (the twin builds the class inline).
+	Copying it as well made the result depend on the method dictionary's
+	order, which follows symbol hashes and differs between databases: met
+	before its def, the helper was SHARED (inClass the provider, a refused
+	rebuild on the way) until the def's regeneration replaced it; met after,
+	the shared copy REPLACED the def's own (#2255's IRRegenerateTestCase
+	failure, in the merge)."
+	(BaseException ___classBodyHelperClassNameFor___: sel) notNil ifTrue: [
+		self ___irCensusCopy___: site route: 'helper' source: nil of: meth.
+		^ self].
 	isIR := BaseException ___isIRPythonMethod___: meth.
 	regen := isIR and: [self ___irCopiesRegenerate___].
 	"An IR method copied onto ANOTHER CLASS under its own selector (the MI merge
@@ -5531,6 +5546,7 @@ importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil 
 	  twin    an IR method recompiled from its ___irTextSources___ twin
 	  text    a text-compiled method recompiled from its own source
 	  none    nothing copied (no source, nothing to share)
+	  helper  a method-local class's helper, not copied: it arrives with its def
 	The P2.2 exit gate is that ``twin'' reads zero.  A no-op unless the
 	census is on."
 

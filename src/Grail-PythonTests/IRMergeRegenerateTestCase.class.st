@@ -25,15 +25,56 @@ IRMergeRegenerateTestCase >> ___assertChecksPass___: aModule [
 	((aModule @env1:___pyAttrLoad___: #'run_checks') @env1:__call__) do: [:t |
 		checks at: (t @env1:__getitem__: 0) asString
 			put: { (t @env1:__getitem__: 1) == true. (t @env1:__getitem__: 2) @env1:__repr__ asString }].
-	self assert: checks size equals: 14.
+	self assert: checks size equals: 16.
 	checks keysAndValuesDo: [:name :r |
 		self assert: (r at: 1) description: name , ' answered ' , (r at: 2)]
 
 ]
 
 { #category : 'Grail-Private' }
+IRMergeRegenerateTestCase >> ___assertCopiedChecksPass___: aModule [
+	"The fixture's checks of the copies onto HelperFirst and DefFirst."
+
+	| n |
+	n := 0.
+	((aModule @env1:___pyAttrLoad___: #'run_copied_checks') @env1:__call__) do: [:t |
+		n := n + 1.
+		self assert: (t @env1:__getitem__: 1) == true
+			description: (t @env1:__getitem__: 0) asString , ' answered '
+				, (t @env1:__getitem__: 2) @env1:__repr__ asString].
+	self assert: n equals: 6
+
+]
+
+{ #category : 'Grail-Private' }
 IRMergeRegenerateTestCase >> ___built___: aModule [
 	^ aModule @env1:___pyAttrLoad___: #'Built'
+
+]
+
+{ #category : 'Grail-Private' }
+IRMergeRegenerateTestCase >> ___copyCopiedDefsOnto___: aName of: aModule helpersFirst: aBoolean [
+	"Copy Mixin's defs that define a class (the fixture's COPIED) onto
+	aModule's class aName through the merge's copier, both sides, and offer
+	the copier every class helper Mixin holds as well: BEFORE the defs when
+	aBoolean, after them otherwise.  Answer the class.
+
+	The order is forced here because the merge itself meets a def and its
+	helper in method-dictionary order, which follows symbol hashes and so
+	differs between databases (#2255's CI failure)."
+
+	| mixin target |
+	mixin := aModule @env1:___pyAttrLoad___: #'Mixin'.
+	target := aModule @env1:___pyAttrLoad___: aName asSymbol.
+	{ mixin -> target. mixin class -> target class } do: [:pair |
+		| helpers defs |
+		helpers := (self ___helpersOf___: pair key) asArray.
+		defs := #(#'with_class' #'cm_class' #'sm_class') select: [:sel |
+			pair key includesSelector: sel environmentId: 1].
+		(aBoolean ifTrue: [helpers , defs] ifFalse: [defs , helpers]) do: [:sel |
+			importlib ___copyMethod___: sel from: pair key to: pair value
+				category: 'Grail-MI-Inherited']].
+	^ target
 
 ]
 
@@ -48,6 +89,29 @@ IRMergeRegenerateTestCase >> ___copyCounts___ [
 		((k asString beginsWith: 'cp:mi') or: [k asString beginsWith: 'cp:rebuild'])
 			ifTrue: [out at: k asString put: v]].
 	^ out
+
+]
+
+{ #category : 'Grail-Private' }
+IRMergeRegenerateTestCase >> ___copyInBothOrders___: aModule [
+	"HelperFirst gets Mixin's class-defining defs with their helpers offered
+	first, DefFirst with them offered last, the census counting."
+
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[self ___copyCopiedDefsOnto___: 'HelperFirst' of: aModule helpersFirst: true.
+	 self ___copyCopiedDefsOnto___: 'DefFirst' of: aModule helpersFirst: false]
+		ensure: [importlib ___irCensusOn: false]
+
+]
+
+{ #category : 'Grail-Private' }
+IRMergeRegenerateTestCase >> ___helpersOf___: aBehavior [
+	"The selectors of aBehavior's method-local class helpers
+	(``___irClassDef_<n>_<C>___'')."
+
+	^ (aBehavior methodDictForEnv: 1) keys select: [:sel |
+		(BaseException ___classBodyHelperClassNameFor___: sel) notNil]
 
 ]
 
@@ -97,6 +161,7 @@ IRMergeRegenerateTestCase >> ___mergedMethodsOf___: aClass [
 { #category : 'Grail-Setup' }
 IRMergeRegenerateTestCase >> tearDown [
 	importlib ___irCensusOn: false.
+	importlib ___irCopiesRegenerate: true.
 	importlib ___irCensusReset___.
 	importlib ___irCodegenEnabledInvalidate___.
 	importlib ___irBuilderCacheLimit: nil.
@@ -106,6 +171,70 @@ IRMergeRegenerateTestCase >> tearDown [
 	irRegistrySnapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
 		irRegistrySnapshot := nil]
+
+]
+
+{ #category : 'Grail-Tests' }
+IRMergeRegenerateTestCase >> testAClassHelperArrivesWithItsDefInEitherOrder [
+	"A def that defines a class sends its class statement's HELPER
+	(``___irClassDef_<n>_<C>___''), an IR method of its own class with no def
+	id.  The copier never copies a helper on its own: regenerating the def
+	installs it on the target.  So whether the copier is offered the helpers
+	before the defs (HelperFirst) or after (DefFirst), each target ends with
+	every helper as its OWN method -- inClass the target, filed as a helper --
+	no builder is asked for a helper (no refused rebuild), and the local
+	classes are the ones CPython builds."
+
+	| mod mixin helpers counts |
+	mod := self ___loadBaseThen___: [].
+	mixin := mod @env1:___pyAttrLoad___: #'Mixin'.
+	helpers := { mixin -> (self ___helpersOf___: mixin). mixin class -> (self ___helpersOf___: mixin class) }.
+	self assert: ((helpers at: 1) value size + (helpers at: 2) value size) equals: 3
+		description: 'Mixin should hold three class helpers (with_class, cm_class, sm_class)'.
+	self ___copyInBothOrders___: mod.
+	counts := self ___copyCounts___.
+	self assert: (counts at: 'cp:mi:helper' ifAbsent: [0]) + (counts at: 'cp:mi-class:helper' ifAbsent: [0])
+		equals: 6.
+	self assert: (counts at: 'cp:rebuild:refused' ifAbsent: [0]) equals: 0.
+	self assert: (counts at: 'cp:mi:twin' ifAbsent: [0]) + (counts at: 'cp:mi-class:twin' ifAbsent: [0])
+		equals: 0.
+	self assert: (counts at: 'cp:mi:shared' ifAbsent: [0]) + (counts at: 'cp:mi-class:shared' ifAbsent: [0])
+		equals: 0.
+	#(#'HelperFirst' #'DefFirst') do: [:name |
+		| target |
+		target := mod @env1:___pyAttrLoad___: name.
+		helpers do: [:each |
+			| side |
+			side := each key isMeta ifTrue: [target class] ifFalse: [target].
+			each value do: [:sel |
+				| h |
+				h := side compiledMethodAt: sel environmentId: 1 otherwise: nil.
+				self assert: h notNil description: name , ' lacks ' , sel.
+				self assert: h inClass == side
+					description: name , '>>' , sel , ' is ' , h inClass name , '''s'.
+				self assert: (side categoryOfSelector: sel environmentId: 1)
+					equals: #'Grail-IR Class Helpers']]].
+	self ___assertCopiedChecksPass___: mod
+
+]
+
+{ #category : 'Grail-Tests' }
+IRMergeRegenerateTestCase >> testADefCopiedByItsTwinNeedsNoClassHelper [
+	"The control: with regeneration off, each def is recompiled from its text
+	twin, which builds the class inline.  No helper reaches either target,
+	and the local classes are still CPython's."
+
+	| mod |
+	mod := self ___loadBaseThen___: [].
+	importlib ___irCopiesRegenerate: false.
+	self ___copyInBothOrders___: mod.
+	self assert: ((self ___copyCounts___) at: 'cp:mi:twin' ifAbsent: [0]) > 0.
+	#(#'HelperFirst' #'DefFirst') do: [:name |
+		| target |
+		target := mod @env1:___pyAttrLoad___: name.
+		self assert: (self ___helpersOf___: target) isEmpty.
+		self assert: (self ___helpersOf___: target class) isEmpty].
+	self ___assertCopiedChecksPass___: mod
 
 ]
 
@@ -169,11 +298,20 @@ IRMergeRegenerateTestCase >> testMergedMethodsAreRegeneratedForTheClass [
 	is Built -- regenerated, not recompiled from text and not shared -- and
 	carries the def id of the base method it came from (Mixin's, in the base
 	module, or LocalMixin's, here).  No text twin was
-	recompiled on either side."
+	recompiled on either side.  The class helpers of Mixin's class-defining
+	defs are Built's own too, both sides, whichever order the merge met them
+	in."
 
-	| mod built merged ir counts |
+	| mod built merged ir counts helpers |
 	mod := self ___loadBaseThen___: [].
 	built := self ___built___: mod.
+	helpers := 0.
+	{ built. built class } do: [:side |
+		(self ___helpersOf___: side) do: [:sel |
+			helpers := helpers + 1.
+			self assert: (side compiledMethodAt: sel environmentId: 1) inClass == side
+				description: sel , ' on ' , side name , ' is not its own']].
+	self assert: helpers equals: 3.
 	merged := self ___mergedMethodsOf___: built.
 	ir := merged select: [:m | BaseException ___isIRPythonMethod___: m].
 	self assert: ir size >= 10

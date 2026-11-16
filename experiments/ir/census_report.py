@@ -215,7 +215,7 @@ def text_board(c,label):
     out.append(copy_table(c)+'\n')
     return '\n'.join(out)
 COPY_SITES=('mi','mi-class','enum','del-shadow','dispatch-shadow','direct','special','st-class')
-COPY_ROUTES=('regen','shared','twin','text','none')
+COPY_ROUTES=('regen','shared','twin','text','none','helper')
 def copy_table(c):
     """Methods copied onto another class or selector (plan P2.2): rows by
     consumer, columns by route, with the characters recompiled.  ``twin'' is
