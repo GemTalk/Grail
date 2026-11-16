@@ -86,11 +86,13 @@ bytearray >> size: anInteger [
 
 	CPython's rule is the buffer protocol's: an object with a live export may
 	be read and may have its bytes overwritten, but may NOT be resized, and
-	the refusal is a BufferError.  Grail exports in two places:
+	the refusal is a BufferError.  Grail exports in three places:
 	bytes>>join:, which holds an export across the materialisation of its
 	iterable -- see ___beginBufferExport___ for why a join that mutates its
-	own separator otherwise answers silently wrong -- and a memoryview
-	entered by ``with'' (memoryview >> ___holdExportForWith___).
+	own separator otherwise answers silently wrong -- a memoryview entered by
+	``with'' (memoryview >> ___holdExportForWith___), and a view a Python
+	__release_buffer__ kept, while anything reaches it
+	(memoryview >> ___keepExportWhileReachable___).
 
 	Any OTHER memoryview over a bytearray registers no export, although
 	CPython refuses a resize while one is alive.  Grail keeps no refcount, so

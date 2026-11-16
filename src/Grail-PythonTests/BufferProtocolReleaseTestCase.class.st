@@ -21,7 +21,39 @@ BufferProtocolReleaseTestCase >> testAnExporterIsAskedForItsBufferAndToldOfItsRe
 		name: 'buffer_protocol_release'.
 	self
 		assert: (fixture @env1:___pyAttrLoad___: #SUMMARY) asString
-		equals: '11 checks, 0 disagreeing [], keys match: True'
+		equals: '12 checks, 0 disagreeing [], keys match: True'
+
+]
+
+{ #category : 'Grail-Tests' }
+BufferProtocolReleaseTestCase >> testAReleasedKeptViewLeavesNoRegistry [
+	"A view a Python __release_buffer__ kept is an export only until it is
+	released (ByteArray >> ___isHeldByAKeptView___:).  The resize after its
+	release forgets it, so no later resize of that bytearray pays a
+	mark-sweep for it.
+
+	Asserted for THIS bytearray only: a kept view elsewhere may rightly still
+	be registered -- the fixture's first exporter stores its view in a module
+	global -- and the registry is dropped only once it is empty."
+
+	| ba kept |
+	ba := self eval: 'ba = bytearray(b"hello")
+class C:
+    def __buffer__(self, flags):
+        return memoryview(ba)
+    def __release_buffer__(self, buffer):
+        self.buffer = buffer
+c = C()
+with memoryview(c):
+    pass
+c.buffer.release()
+ba.clear()
+ba'.
+	kept := (SessionTemps current at: #'GrailBufferExports' otherwise: KeyValueDictionary new)
+		at: #'___keptViews___' otherwise: #().
+	self assert: ba size equals: 0.
+	self deny: (kept anySatisfy: [:ref |
+		ref value notNil and: [(ref value dynamicInstVarAt: #'_obj') == ba]])
 
 ]
 
