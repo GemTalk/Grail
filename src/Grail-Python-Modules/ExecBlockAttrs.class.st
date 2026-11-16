@@ -1064,9 +1064,15 @@ ExecBlockAttrs class >> staticSlotAt: aBlock attr: aName put: aValue [
 
 { #category : 'Grail-Access' }
 ExecBlockAttrs class >> staticSlotsFor: aBlock [
-	"The def-site slot dictionary for aBlock, creating it on first access."
+	"The def-site slot dictionary for aBlock, creating it on first access.
 
-	^ self staticSlotTable at: aBlock method ifAbsentPut: [KeyValueDictionary new]
+	Every def-time stamp comes through here, so this is also where a function
+	anchors its method (GrailMethodTable >> atMethodOf:ifAbsentPut:, and class
+	>> keepMethodOf: for why).  Without it, under native code, the VM mourned
+	a live exec()-defined function's method and its entry here went, taking
+	__name__ and __code__ with it."
+
+	^ self staticSlotTable atMethodOf: aBlock ifAbsentPut: [KeyValueDictionary new]
 
 ]
 
@@ -1092,11 +1098,18 @@ ExecBlockAttrs class >> staticSlotTable [
 	at ~100k def evaluations.  Keyed by def site, the same data is bounded by
 	the number of defs in the image.
 
+	...but only for a def site some class owns.  One that exec() or eval()
+	compiled is new on every call, and held strongly it kept the doit it
+	belongs to alive -- and through the doit's literals, every global that
+	exec() bound.  So this is a GrailMethodTable: such a def site's entry lasts
+	as long as its method does, and nothing that can still read it (a live
+	function object holds its block, and so its method) outlives it.
+
 	Same session-local storage rationale as ``table''."
 
 	^ SessionTemps current
 		at: #'___ExecBlockStaticSlotsTable___'
-		ifAbsentPut: [IdentityKeyValueDictionary new]
+		ifAbsentPut: [GrailMethodTable new]
 
 ]
 

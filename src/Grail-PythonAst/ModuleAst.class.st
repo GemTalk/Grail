@@ -269,14 +269,21 @@ ModuleAst class >> ___rememberDoitScope: aSymbolList for: aMethod [
 	PyModuleDict serves it, which is what makes the answer a real mapping
 	rather than a Smalltalk dictionary.
 
-	CAPPED, and deliberately.  Every exec, eval and REPL statement
-	compiles a doit, so an unbounded map would grow for the life of the
-	session.  Past the cap the OLDEST entries go, and a frame whose entry
-	has been evicted answers None -- exactly what every frame answered
-	before this existed.  Losing the answer is the pre-existing
-	behaviour; leaking the session is not."
+	WEAK, and that is what bounds it.  Every exec, eval and REPL statement
+	compiles a doit, so a map holding them would grow for the life of the
+	session -- and it would do worse than grow: the doit reads and writes
+	its globals through SymbolAssociations it holds as literals, so a
+	doit kept alive keeps alive everything its exec() bound.  A generator
+	bound that way was never finalized (test_generators'
+	test_generator_resurrect).  A doit is a method no class owns, so
+	GrailMethodTable holds it in an ephemeron: an entry lasts exactly as
+	long as its doit does, which is as long as any frame can ask about it.
 
-	| temps reg order files |
+	This used to be a FIFO capped at 256.  The order list that drove the cap
+	held every doit in it strongly -- the same pin -- so the cap went with
+	it."
+
+	| temps reg files |
 	aMethod isNil ifTrue: [^ self].
 	(aSymbolList isKindOf: SymbolDictionary) ifFalse: [
 		"A symbol LIST is a sequence of dictionaries; the doit scope is
@@ -292,13 +299,8 @@ ModuleAst class >> ___rememberDoitScope: aSymbolList for: aMethod [
 	temps := SessionTemps current.
 	reg := temps at: #GrailDoitScopes ifAbsent: [nil].
 	reg isNil ifTrue: [
-		reg := IdentityKeyValueDictionary new.
+		reg := GrailMethodTable new.
 		temps at: #GrailDoitScopes put: reg].
-	order := temps at: #GrailDoitScopeOrder ifAbsent: [nil].
-	order isNil ifTrue: [
-		order := OrderedCollection new.
-		temps at: #GrailDoitScopeOrder put: order].
-	(reg includesKey: aMethod) ifFalse: [order addLast: aMethod].
 	reg at: aMethod put: aSymbolList.
 	"AND THE FILENAME codegen just stamped into this doit.  Recorded HERE, at
 	compile time, rather than read back out of the method's source when a
@@ -321,29 +323,14 @@ ModuleAst class >> ___rememberDoitScope: aSymbolList for: aMethod [
 	the change additive -- an unnamed doit's frames answer exactly what they
 	always did.  See BaseException >> ___pythonFileForDoitOf___.
 
-	Same key, same order list and same cap as the scope above, so the two cannot
-	drift and an evicted doit loses both together.
-
-	THE REGISTRY IS FETCHED BEFORE THE NIL TEST, not inside it, because the
-	eviction below has to prune it on EVERY call and not merely on the calls
-	that record something.  Fetching it inside left ``files'' nil whenever an
-	UNNAMED doit drove the eviction, so the entries it dropped from ``reg'' stayed
-	in ``files'' -- unreachable from ``order'', hence never evictable again, and
-	holding their GsNMethods alive.  One named doit followed by a run of exec()s
-	is enough to do it, and it is the leak the scope registry's own comment says
-	is not acceptable.  Creating the dictionary stays conditional; only the
-	lookup moved."
-	files := temps at: #GrailDoitFiles ifAbsent: [nil].
+	Same key, and as weak as the scope above, so an entry here lasts exactly as
+	long as the doit too."
 	CallAst sourcePath ifNotNil: [:sp |
+		files := temps at: #GrailDoitFiles ifAbsent: [nil].
 		files isNil ifTrue: [
-			files := IdentityKeyValueDictionary new.
+			files := GrailMethodTable new.
 			temps at: #GrailDoitFiles put: files].
 		files at: aMethod put: sp asString].
-	[order size > 256] whileTrue: [
-		| oldest |
-		oldest := order removeFirst.
-		reg removeKey: oldest ifAbsent: [nil].
-		files ifNotNil: [:f | f removeKey: oldest ifAbsent: [nil]]].
 	^ self
 
 ]
@@ -1982,6 +1969,15 @@ ModuleAst >> executeWithScope: aSymbolList as: aKind [
 			nextPutAll: (System __sessionStateAt: 19) printString;
 			close.
 	].
+	"...AND THEN LET THAT IR GO.  Slot 19 is the compiler's last
+	GsComMethNode, kept until the NEXT compile replaces it.  Its leaves hold
+	the SymbolAssociations of the doit's globals, so until something else
+	was compiled, everything this exec() bound stayed reachable however
+	soon its namespace was dropped: ``exec(src, ns); del ns;
+	gc.collect()'' collected nothing, and a generator bound that way was
+	not finalized (test_generators' test_generator_resurrect).  Nothing
+	reads the slot after the snapshot above."
+	System __sessionStateAt: 19 put: nil.
 	"REMEMBER WHICH SCOPE THIS DOIT RUNS IN, so a frame built from one of
 	its methods can answer f_globals.  See ___rememberDoitScope:for:."
 	ModuleAst ___rememberDoitScope: aSymbolList for: compiledMethod.

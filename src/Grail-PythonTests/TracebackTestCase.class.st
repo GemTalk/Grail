@@ -478,53 +478,37 @@ TracebackTestCase >> testControlFlowSignalIsNotAHandledException [
 ]
 
 { #category : 'Grail-Tests - Embedding' }
-TracebackTestCase >> testDoitFilenameRegistryIsEvictedByUnnamedDoitsToo [
-	"The filename registry is capped by the SAME order list as the scope
-	registry it rides on, so an evicted doit loses both together.
+TracebackTestCase >> testDoitRegistriesAnswerForALiveDoit [
+	"The doit scope and filename registries answer for a doit while it lives:
+	its scope, the filename it was compiled under, and that it is a doit.
 
-	The case that broke that is a NAMED doit followed by unnamed ones: the
-	eviction runs on every ___rememberDoitScope:for:, but it could only prune
-	the filename registry on the calls that had also just WRITTEN to it, and an
-	exec() with no filename writes nothing.  So the names the eviction dropped
-	from the scope registry stayed in the filename one -- no longer reachable
-	from the order list, hence never evictable again, and holding their
-	GsNMethods alive for the life of the session.
+	They hold a doit weakly now -- a doit's literals bind every global its
+	exec() made, so holding it strongly pinned them all for the session
+	(test_generators' test_generator_resurrect).  That half needs a collection
+	to show, and a shard is no place for one: it is
+	GrailMethodTableGcTestCase>>testDoitRegistriesLetADeadDoitGo, run in a
+	fresh gem.  The registries used to be a FIFO capped at 256 whose order list
+	held each doit as strongly; the cap went with it."
 
-	Driven through the registry directly rather than through 257 compiles: the
-	keys are identities and nothing here reads them back, which makes the cap
-	testable in milliseconds instead of seconds."
-
-	| temps savedScopes savedOrder savedFiles named files |
+	| temps savedScopes savedFiles doit scope |
 	temps := SessionTemps current.
 	savedScopes := temps at: #GrailDoitScopes ifAbsent: [nil].
-	savedOrder := temps at: #GrailDoitScopeOrder ifAbsent: [nil].
 	savedFiles := temps at: #GrailDoitFiles ifAbsent: [nil].
 	[
 		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
-		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
 		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
-		"One doit somebody named..."
-		named := Object new.
+		doit := 'nil' _compileInContext: nil symbolList: GsSession currentSession symbolList.
+		scope := SymbolDictionary new.
 		ModuleAst whileCompilingWithFilename: 'named.py' do: [
-			ModuleAst ___rememberDoitScope: SymbolDictionary new for: named].
-		self assert: (ModuleAst ___doitFileFor: named) equals: 'named.py'.
-		"...then enough unnamed ones to push it past the cap."
-		1 to: 300 do: [:i |
-			ModuleAst ___rememberDoitScope: SymbolDictionary new for: Object new].
-		self assert: (temps at: #GrailDoitScopeOrder ifAbsent: [nil]) size
-			equals: 256.
-		self assert: (ModuleAst ___doitScopeFor: named) isNil
-			description: 'the scope registry evicted it'.
-		files := temps at: #GrailDoitFiles ifAbsent: [nil].
-		self assert: (files isNil or: [files isEmpty])
-			description: 'and the filename registry evicted it too'.
-		self assert: (ModuleAst ___doitFileFor: named) isNil
+			ModuleAst ___rememberDoitScope: scope for: doit].
+		self assert: (ModuleAst ___doitFileFor: doit) equals: 'named.py'.
+		self assert: (ModuleAst ___doitScopeFor: doit) == scope.
+		self assert: (ModuleAst ___isDoitMethod___: doit).
+		self deny: (ModuleAst ___isDoitMethod___: (Object compiledMethodAt: #printString))
 	] ensure: [
 		temps removeKey: #GrailDoitScopes ifAbsent: [nil].
-		temps removeKey: #GrailDoitScopeOrder ifAbsent: [nil].
 		temps removeKey: #GrailDoitFiles ifAbsent: [nil].
 		savedScopes ifNotNil: [:v | temps at: #GrailDoitScopes put: v].
-		savedOrder ifNotNil: [:v | temps at: #GrailDoitScopeOrder put: v].
 		savedFiles ifNotNil: [:v | temps at: #GrailDoitFiles put: v]]
 
 ]
