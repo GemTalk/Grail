@@ -6142,14 +6142,17 @@ PythonParser >> parseFunctionParametersUntil: endOp [
 	posonly / regular / *vararg / keyword-only / **kwarg sections share one
 	namespace.  CPython: ``duplicate argument 'X' in function definition''
 	(same test: ``def f(p1, *, p1=100)'', ``def f(p1, *k1, k1=100)'',
-	``def f(p1, *, k1, k1=100)'', ``def f(p1, *, k1, **k1)'')."
+	``def f(p1, *, k1, k1=100)'', ``def f(p1, *, k1, **k1)'').
+	CPython finds this in its symbol table, AFTER the parse, so it is raised
+	as a compiler error (ModuleAst class >> ___syntaxError___:node:): no text
+	unless the file it is reported in has that line, columns in bytes."
 	seenNames := IdentitySet new.
 	(posonlyargs, args, kwonlyargs,
 		(vararg isNil ifTrue: [#()] ifFalse: [{vararg}]),
 		(kwarg isNil ifTrue: [#()] ifFalse: [{kwarg}]))
 		do: [:p |
 			(seenNames includes: p name asSymbol) ifTrue: [
-				^ self ___syntaxError___:
+				^ ModuleAst ___syntaxError___:
 					'duplicate argument ''' , p name asString , ''' in function definition'
 					node: p].
 			seenNames add: p name asSymbol].

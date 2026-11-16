@@ -252,6 +252,46 @@ ModuleAst class >> ___nameIsReservedSelector___: aName [
 
 ]
 
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___programText___: aFilename line: aLineno [
+	"Line aLineno of the file aFilename, its newline kept, or None -- what
+	CPython's PyErr_ProgramTextObject gives a SyntaxError its compiler raises:
+	the text is READ BACK FROM THE FILE the error names, never taken from the
+	source that was compiled.  So compile(src, '<string>', 'exec') has no text
+	at all, a name that is not a readable file has none, and one that is a
+	file answers whatever that file holds on that line, even when it is not
+	the source compiled.  Decoded as UTF-8, a line that is not being left as
+	its bytes."
+
+	| f contents n start i |
+	((aFilename isKindOf: CharacterCollection) and: [aLineno isKindOf: SmallInteger])
+		ifFalse: [^ None].
+	aLineno < 1 ifTrue: [^ None].
+	"GsFile predicates answer nil, not false, for a name they cannot stat."
+	(GsFile existsOnServer: aFilename) == true ifFalse: [^ None].
+	(GsFile isServerDirectory: aFilename) == true ifTrue: [^ None].
+	f := GsFile openReadOnServer: aFilename.
+	f isNil ifTrue: [^ None].
+	[contents := f contents] ensure: [f close].
+	contents isNil ifTrue: [^ None].
+	n := 1.
+	start := 1.
+	i := 1.
+	[n < aLineno] whileTrue: [
+		i := contents indexOf: Character lf startingAt: start.
+		i = 0 ifTrue: [^ None].
+		start := i + 1.
+		n := n + 1].
+	start > contents size ifTrue: [^ None].
+	i := contents indexOf: Character lf startingAt: start.
+	contents := contents copyFrom: start to: (i = 0 ifTrue: [contents size] ifFalse: [i]).
+	^ [contents decodeFromUTF8]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: contents]
+
+]
+
 { #category : 'Grail-evaluation' }
 ModuleAst class >> ___rememberDoitScope: aSymbolList for: aMethod [
 	"Record the namespace a compiled DOIT runs in, keyed by its method.
@@ -387,6 +427,15 @@ ModuleAst class >> ___resignalSyntaxError___: ex [
 			v := [ex @env0:dynamicInstVarAt: nm]
 				@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil].
 			loc @env0:at: i put: (v isNil ifTrue: [None] ifFalse: [v])].
+	"A COMPILER error -- one raised after the parse, through
+	 ___syntaxError___:node: -- has the text CPython's compiler gives it, read
+	 back from the file the error is reported in: none for '<string>', so
+	 compile('return 1', '<string>', 'exec').text is None (test_exceptions
+	 test_string_source).  A parser error keeps the line it was found on."
+	([ex @env0:dynamicInstVarAt: #'___compileStage___']
+		@env0:on: AbstractException do: [:e2 | e2 @env0:return: nil]) == true
+			ifTrue: [loc @env0:at: 4 put:
+				(self ___programText___: (loc @env0:at: 1) line: (loc @env0:at: 2))].
 	"``ex class'', not SyntaxError: an indentation problem is an
 	 IndentationError and the class is observable -- test_bad_indentation asks for
 	 it by name, and ``except IndentationError'' is a thing people write.  A
@@ -433,11 +482,28 @@ ModuleAst class >> ___syntaxError___: aMessage node: aNode [
 	expression for ``'yield' outside function''.  Unlocated, the boundary
 	placed every one of them at the end of the source."
 
-	| src |
+	| src loc endLine |
 	src := AbstractNode ___currentModuleSource___.
 	(src isNil or: [aNode position isNil]) ifTrue: [^ SyntaxError signal: aMessage].
-	^ PythonParser ___signal___: SyntaxError message: aMessage in: src
-		from: aNode position to: (aNode endPosition ifNil: [aNode position]) + 1
+	loc := PythonParser ___locationIn___: src
+		from: aNode position to: (aNode endPosition ifNil: [aNode position]) + 1.
+	loc isNil ifTrue: [^ SyntaxError signal: aMessage].
+	"CPython's compiler reports its columns in UTF-8 BYTES and never converts
+	 them, unlike its parser: a ten-character line with one two-byte
+	 character in it ends at 12, not 11."
+	endLine := (loc at: 5) = (loc at: 2)
+		ifTrue: [loc at: 4]
+		ifFalse: [BaseException ___sourceLine___: (loc at: 5) of: src].
+	loc at: 3 put: (self ___utf8Offset___: (loc at: 3) inLine: (loc at: 4)).
+	loc at: 6 put: (self ___utf8Offset___: (loc at: 6) inLine: endLine).
+	"Marked for ___resignalSyntaxError___:, which gives it CPython's text once
+	 the file it is reported in is known -- and only a compiler error reads its
+	 text back from that file."
+	^ [PythonParser ___signal___: SyntaxError message: aMessage located: loc]
+		on: SyntaxError
+		do: [:ex |
+			ex dynamicInstVarAt: #'___compileStage___' put: true.
+			ex pass]
 
 ]
 
@@ -480,6 +546,22 @@ ModuleAst class >> ___typeParameterMarkerFor___: aName [
 	``aName is a type parameter here''."
 
 	^ ('type parameter ' , aName asString) asSymbol
+
+]
+
+{ #category : 'Grail-parsing' }
+ModuleAst class >> ___utf8Offset___: aCharOffset inLine: aLine [
+	"The 1-based column aCharOffset of aLine, counted in UTF-8 BYTES rather
+	than characters: the unit CPython's compiler reports its own SyntaxErrors
+	in, and leaves them in -- only a parser error is converted to characters.
+	A column past the end of aLine counts one byte per position beyond it."
+
+	| n |
+	(aCharOffset isKindOf: SmallInteger) ifFalse: [^ aCharOffset].
+	(aLine isKindOf: CharacterCollection) ifFalse: [^ aCharOffset].
+	aCharOffset <= 1 ifTrue: [^ aCharOffset].
+	n := (aCharOffset - 1) min: aLine size.
+	^ (aLine copyFrom: 1 to: n) encodeAsUTF8 size + 1 + (aCharOffset - 1 - n)
 
 ]
 
