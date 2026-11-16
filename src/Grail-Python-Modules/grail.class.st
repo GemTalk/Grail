@@ -66,7 +66,8 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 						src notNil ifTrue: [
 							pair value perform: #'___compileMethod:category:'
 								env: 1
-								withArguments: { src. 'Grail-ST-Extension' }]]]]]]
+								withArguments: { src. 'Grail-ST-Extension' }]]]]]].
+	self ___refileClassHelpersOn: targetClass
 
 ]
 
@@ -90,6 +91,34 @@ grail class >> ___lookupClass: className inDictionary: dictName [
 	^ AttributeError @env1:___signal___:
 		('grail.smalltalk_class: class ''' , className asString ,
 		 ''' not found in dictionary ''' , dictName asString , '''')
+
+]
+
+{ #category : 'Grail-smalltalk_class' }
+grail class >> ___refileClassHelpersOn: targetClass [
+	"File every method-local class helper on targetClass, both sides, under
+	''Grail-ST-Extension''.
+
+	A def regenerated onto the Smalltalk class (___regenerate___:onto:)
+	brings the helpers of the class statements in its body with it
+	(``___irClassDef_<n>_<C>___'', PyMethodIRBuilder >> classHelpers), which
+	file themselves as ''Grail-IR Class Helpers''.  Everything @smalltalk_class
+	puts on a Smalltalk class is under ''Grail-ST-Extension'', which is how it is
+	found and removed again; a helper left out of it would outlive the def
+	that sends it.  The text route compiled none: the twin builds the class
+	inline."
+
+	{ targetClass. targetClass class } do: [:beh |
+		| md |
+		md := beh methodDictForEnv: 1.
+		md ifNotNil: [
+			md keys do: [:sel |
+				((BaseException ___classBodyHelperClassNameFor___: sel) notNil
+					and: [(beh categoryOfSelector: sel environmentId: 1) = #'Grail-IR Class Helpers'])
+					ifTrue: [
+						[beh addCategory: 'Grail-ST-Extension' environmentId: 1]
+							on: Error do: [:e | e return: nil].
+						beh moveMethod: sel toCategory: 'Grail-ST-Extension' environmentId: 1]]]]
 
 ]
 
