@@ -40,20 +40,36 @@ IRRegenerateTestCase >> ___class___: aName of: aModule [
 IRRegenerateTestCase >> ___copy___: aSource onto: aTarget [
 	"What the MI merge does with a secondary base: every IR method of aSource,
 	both sides, that aTarget does not define itself, regenerated onto aTarget.
-	Answer the selectors that would not regenerate."
+	Answer the selectors that would not regenerate.
 
-	| failed |
+	A method-local class's helper (``___irClassDef_<n>_<C>___'') is not
+	regenerated on its own.  Since P3.2 it is built through IR, but it is not a
+	def: it has no def id, so no builder can be rebuilt for it, and
+	regenerating the def whose class statement it is installs it
+	(PyMethodIRBuilder >> classHelpers).  Asking for it directly made this
+	walk depend on the method dictionary's order, which follows the symbols'
+	hashes and so differs between databases: it passed where the def came
+	first and failed in CI where the helper did.  So the helpers are skipped
+	in the walk and checked afterwards: each one must have reached aTarget."
+
+	| failed helpers |
 	failed := OrderedCollection new.
+	helpers := OrderedCollection new.
 	{ aSource -> aTarget. aSource class -> aTarget class } do: [:pair |
 		(pair key methodDictForEnv: 1) keysAndValuesDo: [:sel :meth |
 			((BaseException ___isIRPythonMethod___: meth)
 				and: [(pair value includesSelector: sel environmentId: 1) not])
 				ifTrue: [
-					(importlib ___irRegenerate___: meth onto: pair value
-						category: 'Grail-Class Methods') isNil
-							ifTrue: [failed add: pair key name , '>>' , sel]]]].
+					(BaseException ___classBodyHelperClassNameFor___: sel) isNil
+						ifTrue: [
+							(importlib ___irRegenerate___: meth onto: pair value
+								category: 'Grail-Class Methods') isNil
+									ifTrue: [failed add: pair key name , '>>' , sel]]
+						ifFalse: [helpers add: pair -> sel]]]].
+	helpers do: [:each |
+		(each key value includesSelector: each value environmentId: 1)
+			ifFalse: [failed add: each key key name , '>>' , each value]].
 	^ failed
-
 ]
 
 { #category : 'Grail-Private' }
@@ -76,13 +92,22 @@ IRRegenerateTestCase >> ___fixturePath___ [
 
 { #category : 'Grail-Private' }
 IRRegenerateTestCase >> ___irMethodsOf___: aClass [
-	"Every IR-built method of aClass, both sides."
+	"Every IR-built CLASS METHOD of aClass, both sides.
+
+	Not a method-local class's helper (``___irClassDef_<n>_<C>___'').  Since
+	P3.2 it is built through IR too, so it carries the IR marker, but it is not
+	a def: it has no def id and no builder of its own in the cache.  It is
+	built, and regenerated onto another class, as part of the def whose class
+	statement it is (PyMethodIRBuilder >> classHelpers) --
+	testAnUninstalledMethodMustReachItsClassHelper covers that."
 
 	| out |
 	out := OrderedCollection new.
 	{ aClass. aClass class } do: [:c |
 		(c methodDictForEnv: 1) keysAndValuesDo: [:sel :meth |
-			(BaseException ___isIRPythonMethod___: meth) ifTrue: [out add: meth]]].
+			((BaseException ___isIRPythonMethod___: meth)
+				and: [(BaseException ___classBodyHelperClassNameFor___: sel) isNil])
+					ifTrue: [out add: meth]]].
 	^ out
 
 ]

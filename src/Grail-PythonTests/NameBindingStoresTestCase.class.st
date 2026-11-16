@@ -77,11 +77,15 @@ NameBindingStoresTestCase >> ___keysIn___: aModule [
 { #category : 'Grail-Private' }
 NameBindingStoresTestCase >> ___knownFallbacks___ [
 	"Fixture name -> how many of its defs the IR build still hands to text.
-	None now: name_binding_stores' HeaderWalrus.m, whose ``@d := deco'' and
-	``metaclass=(mk := Meta)'' failed to build under IR with ``undefined symbol
-	d'' (#2170), is REFUSED since P1.4 as ``classDef:headerWalrus''
-	(___knownRefusals___), so it never reaches the build.  Pinned with =, so a
-	new fallback shows up as a count."
+	Pinned with =, so a new fallback shows up as a count.
+
+	None now.  name_binding_stores held one until P1.4 and P3.2: HeaderWalrus.m,
+	whose ``@d := deco'' and ``metaclass=(mk := Meta)'' failed to build under
+	IR with ``undefined symbol d'' (#2170).  Its classes' helpers are built
+	through IR since P3.2, and the header is evaluated by the enclosing IR
+	method, which binds the walrus target like any other.  A class whose body
+	still takes the text helper is refused instead (``classDef:headerWalrus'',
+	P1.4)."
 
 	^ Dictionary new
 
@@ -99,16 +103,17 @@ NameBindingStoresTestCase >> ___knownGrailIn___: aModule [
 { #category : 'Grail-Private' }
 NameBindingStoresTestCase >> ___knownRefusals___ [
 	"Fixture name -> the census rows its defs may still refuse under, each
-	owned by a later phase of the IR plan.  name_binding_stores'
-	HeaderWalrus.m binds an enclosing local with a walrus in a class header,
-	which the method-local class's text helper cannot reach
-	(``classDef:headerWalrus'', #2170): P3, which builds class statements
-	through IR, lifts it.  Counted with the compiled defs, so the fixture's
-	total still holds."
+	owned by a later phase of the IR plan.  Counted with the compiled defs, so
+	the fixture's total still holds.
+
+	None now.  name_binding_stores' HeaderWalrus.m was refused from P1.4 as
+	``classDef:headerWalrus'' (#2170), because the method-local class's TEXT
+	helper cannot reach the enclosing local its header walrus binds.  Its
+	classes' helpers are built through IR since P3.2, which evaluates the
+	header in the enclosing method, so the refusal no longer applies to them
+	and this test pins that they build."
 
 	^ Dictionary new
-		at: 'name_binding_stores' put: #(#'cm:classDef:headerWalrus');
-		yourself
 
 ]
 

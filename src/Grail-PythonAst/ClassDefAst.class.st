@@ -1654,7 +1654,7 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 	compile failure raises, which the seam's handler turns into a fallback to
 	the whole method's text."
 
-	| sel src carried args routesToModule |
+	| sel src carried args routesToModule textReason preNodes preValues |
 	"ASK THE ROUTING QUESTION FIRST.  ___irHelperSourceWithSelector___:carrying:
 	below GENERATES THE CLASS BODY'S TEXT, which walks into the class's own
 	scope, and the answer differs on the two sides of that call: eligibility
@@ -1663,8 +1663,30 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 	to the module instance -- NameError under the flag, correct on text."
 	routesToModule := self ___nameStoreRoutesToModule___: (self ___manglePrivate___: name) asSymbol.
 	carried := self ___irCarriedCaptureNames___: (aBuilder localNameSet).
-	sel := self ___irHelperSelector___: carried.
-	src := self ___irHelperSourceWithSelector___: sel carrying: carried.
+	"THE HELPER IS BUILT THROUGH IR when the backend can build it (P3.2), and
+	compiled from its text otherwise -- the per-class fallback, with the reason
+	as a census row."
+	textReason := self ___irClassHelperTextReason___: aBuilder localNameSet.
+	textReason isNil
+		ifTrue: [
+			"THE HEADER IS EVALUATED HERE, in the enclosing frame and before the
+			helper is built, in CPython's __build_class__ order: decorators,
+			bases, keywords.  Before the build, for the reason the routing
+			question above is asked first -- the build walks into the class's
+			own scope -- and it is the ENCLOSING scope these expressions read."
+			preNodes := self ___irHeaderNodes___.
+			preValues := OrderedCollection new.
+			self ___irHeaderNodesDo___: [:n | preValues add: (n ___emitIRValueOn___: aBuilder)].
+			preValues := preValues asArray.
+			sel := self ___irHelperSelector___: carried pre: preNodes notEmpty.
+			src := self ___irBuildClassHelper___: sel carrying: carried pre: preNodes on: aBuilder]
+		ifFalse: [
+			importlib ___irCensusOn___ ifTrue: [
+				importlib ___irCensusNote___: ('th:text:' , textReason) asSymbol
+					module: importlib ___irCensusModuleName___ def: name asString count: 1].
+			preNodes := #().
+			sel := self ___irHelperSelector___: carried.
+			src := self ___irHelperSourceWithSelector___: sel carrying: carried].
 	aBuilder ___irNoteClassHelper___: sel source: src
 		classSide: self ___irRunsWithClassReceiver___.
 	"``at:'', not ``atNode:'': the OFFSET (so the frame reports the ``class''
@@ -1702,6 +1724,7 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 						assign: (aBuilder leafFor: c asSymbol)
 						from: (aBuilder var: vLeaf))]].
 			{ aBuilder arrayOf: readers. aBuilder arrayOf: setters }].
+	preNodes isEmpty ifFalse: [args := args , { aBuilder arrayOf: preValues }].
 	aBuilder at: self beginPosition.
 	"``global C; class C: ...'' binds the MODULE's C, not a temp of the
 	enclosing scope -- the same rule and the same store the assignment, the
@@ -2006,6 +2029,111 @@ ClassDefAst >> ___inferredSlotNames___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: preNodes on: aBuilder [
+	"The method-local class helper BUILT THROUGH IR (P3.2): a PyMethodIRBuilder
+	holding the same method ___irHelperSourceWithSelector___:carrying: writes as
+	text, built by the same walk of printSmalltalkRuntimeWith: through a
+	ClassBuildIREmitter.  Answered unbuilt-for-a-class: the enclosing builder
+	files it (PyMethodIRBuilder >> ___irNoteClassHelper___:source:classSide:)
+	on the class the enclosing method is installed on, or once per class for a
+	shared build.
+
+	THE HELPER IS STILL ITS OWN METHOD, with the text helper's selector shape,
+	because it is CPython's class-body frame: BaseException >>
+	___classBodyHelperClassNameFor___: names that frame for the class, and
+	ClassBodyTracebackTestCase pins it.
+
+	ITS ARGUMENTS, in order:
+	  * ``___irCaptured___'' and ``___irSetters___'' -- the reader and setter
+	    blocks of the carried captures, as the text helper takes them;
+	  * ``___irPre___'' -- the VALUES of the class's decorators, bases and
+	    keywords, which the CALLER evaluated in the enclosing frame in
+	    CPython's __build_class__ order (___irHeaderNodes___).  Each is
+	    unpacked into a temp ``___irPre_<k>___'' and the emitter reads that
+	    temp wherever the class build names the node.
+
+	THE PROLOGUE is the text helper's, built directly: the class's binding
+	temp, the capture cells and their seeded identifiers, the body's codegen
+	helper temps.  The text helper declares ``___curPos___'' only for a body
+	with control flow, which ___irClassHelperTextReason___: keeps on text.
+
+	THE SOURCE attached is the class statement's own slice, decorators
+	included, as a def's IR method attaches the def's, so a step point
+	resolves to a Python line through the position map.  The class-build
+	machinery is deliberately NOT stamped (ClassBuildIREmitter's class
+	comment): only a decorator's application is, at the decorator's line
+	(#1518)."
+
+	| hb e module moduleSrc begin end bindName firstLine restOffset |
+	hb := PyMethodIRBuilder class: aBuilder targetClass selector: aSelector env: 1.
+	module := self module.
+	moduleSrc := module source.
+	"From the FIRST DECORATOR, not the ``class'' keyword: a decorator's
+	application is stamped at the decorator's node (ClassBuildIREmitter >>
+	mapDecorator:of:do:), and a node before the slice is clamped onto its
+	first character, where two decorators' entries collide."
+	begin := self beginPosition.
+	firstLine := self beginLine.
+	(decorator_list ifNil: [#()]) do: [:d |
+		(d beginPosition notNil and: [begin isNil or: [d beginPosition < begin]])
+			ifTrue: [begin := d beginPosition. firstLine := d beginLine]].
+	end := (self endPosition ifNil: [moduleSrc size]) min: moduleSrc size.
+	(moduleSrc notNil and: [begin notNil and: [begin >= 1 and: [begin <= end]]])
+		ifTrue: [
+			| slice |
+			slice := moduleSrc copyFrom: begin to: end.
+			slice last == Character lf ifFalse: [slice lf].
+			"The trailer's first character, where the machinery is stamped
+			(ClassBuildIREmitter >> restAt:)."
+			restOffset := begin + slice size.
+			slice add: '# line '; add: firstLine asString; add: ' file '; add: module path; lf.
+			hb sourceString: slice fileName: (CallAst sourcePath ifNil: ['<grail>']) line: firstLine.
+			hb sourceBase: begin].
+	carriedNames isEmpty ifFalse: [
+		hb argNamed: #'___irCaptured___'.
+		hb argNamed: #'___irSetters___'].
+	preNodes isEmpty ifFalse: [hb argNamed: #'___irPre___'].
+	bindName := self ___stBindName___.
+	(carriedNames anySatisfy: [:c |
+		(self ___enclosingScopeIdentifierFor___: c asSymbol) = bindName])
+			ifFalse: [hb tempNamed: bindName asSymbol].
+	carriedNames doWithIndex: [:c :i |
+		hb tempNamed: ('___irCell_' , i printString , '___') asSymbol.
+		hb tempNamed: ('___irSetter_' , i printString , '___') asSymbol.
+		hb tempNamed: (self ___enclosingScopeIdentifierFor___: c asSymbol) asSymbol].
+	self ___classBodyHelperTemps___ do: [:t | hb tempNamed: t asString asSymbol].
+	preNodes doWithIndex: [:n :k | hb tempNamed: ('___irPre_' , k printString , '___') asSymbol].
+	"The capture prologue, as the text helper's: the cell, the setter, and the
+	identifier seeded from the cell for the reads the build makes eagerly."
+	carriedNames doWithIndex: [:c :i |
+		| cell |
+		cell := hb leafFor: ('___irCell_' , i printString , '___') asSymbol.
+		hb add: (hb assign: cell from: (hb
+			send: #at: to: (hb localVar: #'___irCaptured___') with: { hb obj: i } env: 0)).
+		hb add: (hb assign: (hb leafFor: ('___irSetter_' , i printString , '___') asSymbol)
+			from: (hb send: #at: to: (hb localVar: #'___irSetters___') with: { hb obj: i } env: 0)).
+		hb add: (hb
+			assign: (hb leafFor: (self ___enclosingScopeIdentifierFor___: c asSymbol) asSymbol)
+			from: (hb send: #value to: (hb var: cell) with: #() env: 0))].
+	preNodes doWithIndex: [:n :k |
+		hb add: (hb assign: (hb leafFor: ('___irPre_' , k printString , '___') asSymbol)
+			from: (hb send: #at: to: (hb localVar: #'___irPre___') with: { hb obj: k } env: 0))].
+	e := ClassBuildIREmitter on: hb.
+	restOffset ifNotNil: [e restAt: restOffset].
+	preNodes doWithIndex: [:n :k |
+		e pre: n at: (hb leafFor: ('___irPre_' , k printString , '___') asSymbol)].
+	importlib ___irCensusOn___ ifTrue: [
+		importlib ___irCensusNote___: #'th:irHelper'
+			module: importlib ___irCensusModuleName___ def: name asString count: 1].
+	self ___irHelperEmitContext___: carriedNames do: [
+		self printSmalltalkRuntimeWith: e].
+	e assertDepth: 0.
+	hb add: (hb return: (hb localVar: bindName asSymbol)).
+	^ hb
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irCaptureBeyondClassNames___: localNames [
 	"Carried captures that the text would forward through an intervening
 	class's cell rather than read from a temp -- see ___irUncarriedCaptureNames___:."
@@ -2193,6 +2321,81 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 	(self ___irMethodAnnotationLocalReads___: localNames) do: [:n |
 		n asString = recv ifFalse: [free add: n asString]].
 	^ free
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassHelperDefReason___: aDef [
+	"Why a def in the class body keeps the class on the TEXT helper, or nil.
+	A def's own body is a method SOURCE either way (a string literal the build
+	compiles at run time), but what the build evaluates FOR it is a class-body
+	expression: a decorator, an annotation, a default.  Those need the
+	class-body namespace in IR (P3.3); the first cut admits a def with none of
+	them but constant defaults."
+
+	(aDef decorator_list notNil and: [aDef decorator_list notEmpty])
+		ifTrue: [^ #'irHelper:methodDecorator'].
+	(aDef ___annotatedArgs___ notEmpty or: [aDef returns notNil])
+		ifTrue: [^ #'irHelper:methodAnnotation'].
+	((aDef ___defaultedPositionalParams___ asArray , aDef ___defaultedKeywordOnlyParams___ asArray)
+		allSatisfy: [:pair | (pair at: 2) isKindOf: ConstantAst])
+			ifFalse: [^ #'irHelper:methodDefault'].
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassHelperTextReason___: localNames [
+	"Why this method-local class's helper is still COMPILED FROM TEXT rather than
+	built through IR (P3.2), as a census row, or nil when it is built through
+	IR.  The text helper is the per-class fallback while the IR backend grows:
+	everything here is a shape the backend does not build yet, and each later
+	step of plan P3 removes rows.
+
+	The IR backend is the SAME emitter walk as the text (ClassBuildIREmitter);
+	what it cannot do yet is evaluate a class-BODY expression, whose names
+	resolve through the class namespace (P3.3).  So the first cut admits a
+	DECLARATIVE body whose every class-body expression is a constant:
+
+	  * ``pass'', the docstring, and ``NAME = <constant>'';
+	  * defs with no decorator, no annotation and only constant defaults
+	    (___irClassHelperDefReason___:).
+
+	The class's decorators, bases and keywords are not class-body expressions:
+	the caller evaluates them in the enclosing frame (___irHeaderNodes___), so
+	they need only be IR-eligible there.
+
+	A refusal by the backend itself, for a shape admitted here, is an
+	invariant failure, not a row: it raises, and the enclosing method falls
+	back to text as for any IR emit error."
+
+	| stmts |
+	importlib ___irClassHelperIREnabled___ ifFalse: [^ #'irHelper:off'].
+	"Built under a class body's runtime statements, or in a doit under
+	replaced builtins: printSmalltalkOn: writes those differently, and neither
+	reaches a method-local helper today."
+	CallAst classBodyRuntimeClass notNil ifTrue: [^ #'irHelper:classBodyRuntime'].
+	self ___builtinsAreOverridden___ ifTrue: [^ #'irHelper:builtinsOverridden'].
+	self ___irClassBodyStatementsAreSimple___ ifFalse: [^ #'irHelper:controlFlow'].
+	stmts := body isNil ifTrue: [#()] ifFalse: [body body].
+	stmts doWithIndex: [:s :i |
+		(s isKindOf: PassAst) ifFalse: [
+			(s isKindOf: FunctionDefAst)
+				ifTrue: [(self ___irClassHelperDefReason___: s) ifNotNil: [:r | ^ r]]
+				ifFalse: [
+					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
+					(s isKindOf: AnnAssignAst) ifTrue: [^ #'irHelper:annotation'].
+					(s isKindOf: ExprAst) ifTrue: [
+						(i = 1 and: [self ___docString___ notNil])
+							ifFalse: [^ #'irHelper:expression']].
+					(s isKindOf: AssignAst) ifTrue: [
+						((s targets size = 1
+							and: [(s targets at: 1) isKindOf: NameAst])
+							and: [s value isKindOf: ConstantAst])
+								ifFalse: [^ #'irHelper:assign']]]]].
+	self ___irHeaderNodesDo___: [:n |
+		(n ___irEligibleValueLocals___: localNames) ifFalse: [^ #'irHelper:header']].
+	^ nil
 
 ]
 
@@ -2415,6 +2618,75 @@ ClassDefAst >> ___irHeaderHasWalrus___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irHeaderNodes___ [
+	"The expressions of the class statement's HEADER that an IR-built helper's
+	caller evaluates in the enclosing frame, in CPython's order: the
+	decorators top to bottom (each evaluated before the class exists), then
+	the bases, then the keyword values -- the order the arguments of
+	__build_class__ are computed in.  A starred base contributes the
+	expression it splats; the splat itself stays in the helper."
+
+	| nodes |
+	nodes := OrderedCollection new.
+	self ___irHeaderNodesDo___: [:n | nodes add: n].
+	^ nodes asArray
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irHeaderNodesDo___: aBlock [
+	"Evaluate aBlock with each node of ___irHeaderNodes___, in that order, under
+	the flag the text's header emit sets for it (printClassHeaderOn: and the
+	decorator loop): ``inDecoratorEmit'' for a decorator or a keyword value,
+	``inBasesEmit'' for a base.  The flags say the expression evaluates in the
+	scope ENCLOSING the class statement, which is where the IR helper's caller
+	evaluates it; without them a walrus there (``@d := deco'') read its
+	target as the enclosing def's local seen from inside the class, a cell, and
+	raised ``free variable 'd' has no enclosing binding'' (NamedExprAst >>
+	___irClassCellTargetName___).  Restored on any exit."
+
+	| savedBases savedDeco |
+	savedBases := CallAst inBasesEmit.
+	savedDeco := CallAst inDecoratorEmit.
+	[CallAst inDecoratorEmit: true.
+	 decorator_list isNil ifFalse: [decorator_list do: [:d | aBlock value: d]].
+	 CallAst inDecoratorEmit: (savedDeco == true).
+	 CallAst inBasesEmit: true.
+	 bases isNil ifFalse: [
+		bases do: [:b |
+			aBlock value: ((b isKindOf: StarredAst) ifTrue: [b value] ifFalse: [b])]].
+	 CallAst inBasesEmit: (savedBases == true).
+	 CallAst inDecoratorEmit: true.
+	 keywords isNil ifFalse: [keywords do: [:k | aBlock value: k value]]]
+		ensure: [
+			CallAst inBasesEmit: (savedBases == true).
+			CallAst inDecoratorEmit: (savedDeco == true)]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irHelperEmitContext___: carriedNames do: aBlock [
+	"Evaluate aBlock, which emits this class's build for its method-local
+	helper -- as text or through IR -- in the context both helpers are built
+	in: the carried captures routed through the passed reader blocks
+	(___irWithCaptureCellMap___:do:), the class-method seam turned off so the
+	body's defs are compiled-text sources (___irEmitClassBodyAsTextDo___:),
+	and the decorator emits told whether the helper declares ``___curPos___''."
+
+	^ self ___irWithCaptureCellMap___: carriedNames do: [
+		self ___irEmitClassBodyAsTextDo___: [ | savedCurPos |
+			"Whether the helper declares ``___curPos___'' (see
+			___irHelperSourceWithSelector___:carrying:): the decorator emits ask
+			before storing one (#1406)."
+			savedCurPos := SessionTemps current at: #'___grailIRHelperHasCurPos___' otherwise: nil.
+			SessionTemps current at: #'___grailIRHelperHasCurPos___'
+				put: self ___irClassBodyStatementsAreSimple___ not.
+			aBlock ensure: [
+				SessionTemps current at: #'___grailIRHelperHasCurPos___' put: savedCurPos]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irHelperSelector___: carriedNames [
 	"The private selector the class statement's compiled-text helper is
 	installed under -- unary when the class captures nothing, one-keyword
@@ -2427,6 +2699,24 @@ ClassDefAst >> ___irHelperSelector___: carriedNames [
 	base := '___irClassDef_' , (self beginPosition ifNil: [0]) printString , '_'
 		, name asString , '___'.
 	^ (carriedNames isEmpty ifTrue: [base] ifFalse: [base , ':setters:']) asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irHelperSelector___: carriedNames pre: hasPre [
+	"___irHelperSelector___: with the IR-built helper's third argument, the
+	header values its caller evaluated (___irBuildClassHelper___:...):
+	``___irClassDef_<n>_<C>___:'' when the class carries no captures,
+	``...___:setters:pre:'' when it does.  The base keeps its trailing ``___''
+	before the first colon, which is what BaseException >>
+	___classBodyHelperClassNameFor___: parses the frame's name out of."
+
+	| sel |
+	hasPre ifFalse: [^ self ___irHelperSelector___: carriedNames].
+	sel := self ___irHelperSelector___: #().
+	^ (carriedNames isEmpty
+		ifTrue: [sel , ':']
+		ifFalse: [sel , ':setters:pre:']) asSymbol
 
 ]
 
@@ -2452,17 +2742,10 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 	importlib ___irCensusOn___ ifTrue: [
 		importlib ___irCensusNote___: #'th:helper'
 			module: importlib ___irCensusModuleName___ def: name asString count: 1].
-	emitted := self ___irWithCaptureCellMap___: carriedNames do: [
-		self ___irEmitClassBodyAsTextDo___: [ | savedCurPos |
-			"Whether the helper declares ``___curPos___'' (see below): the
-			decorator emits ask before storing one (#1406)."
-			savedCurPos := SessionTemps current at: #'___grailIRHelperHasCurPos___' otherwise: nil.
-			SessionTemps current at: #'___grailIRHelperHasCurPos___'
-				put: self ___irClassBodyStatementsAreSimple___ not.
-			[stream := PrettyWriteStream on: Unicode7 new.
-			 self printSmalltalkOn: stream.
-			 stream contents]
-				ensure: [SessionTemps current at: #'___grailIRHelperHasCurPos___' put: savedCurPos]]].
+	emitted := self ___irHelperEmitContext___: carriedNames do: [
+		stream := PrettyWriteStream on: Unicode7 new.
+		self printSmalltalkOn: stream.
+		stream contents].
 	"The helper deliberately declares NO ``___curPos___''.  The class emit does
 	not store one for the shapes ___irMethodLocalClassReason___: admits -- the
 	enclosing statement's stamp is the enclosing method's -- and declaring the
@@ -2646,9 +2929,14 @@ ClassDefAst >> ___irMethodLocalClassReason___: localNames [
 	test_classdef) -- binds a local of the ENCLOSING def, and the header is
 	evaluated in the helper's frame, where that local is not a temp: the
 	helper failed to compile with ``undefined symbol d'' (#2170).  The capture
-	tests above see only READS of enclosing locals, so it refuses here; until
-	P3 builds the class statement through IR the def compiles as text."
-	(self ___irHeaderHasWalrus___) ifTrue: [^ #'classDef:headerWalrus'].
+	tests above see only READS of enclosing locals, so it refuses -- but only
+	for a class whose helper is still compiled from text.  When the helper is
+	built through IR (P3.2, ___irClassHelperTextReason___: answers nil), the
+	header is evaluated by the enclosing IR method itself (___irHeaderNodes___),
+	which binds the walrus target like any other store."
+	(self ___irHeaderHasWalrus___
+		and: [(self ___irClassHelperTextReason___: localNames) notNil])
+			ifTrue: [^ #'classDef:headerWalrus'].
 	"A ``nonlocal'' anywhere below (in a body method, not just at class-body
 	level) makes the text emit a SETTER cell -- ``___cellSetter_x___ put:
 	[:v | x := v]'' -- which writes the ENCLOSING frame's temp.  The helper's

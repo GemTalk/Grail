@@ -59,6 +59,9 @@ def starred_vararg_annotation_in_method():
 # method fell back to text; in a MODULE-LEVEL def the whole module failed to
 # compile, so this file did not import at all under IR before the fix
 # (test_grammar's test_classdef: ``@d := class_decorator``).
+# Since P3.2 a class whose body the IR backend admits (these all are) builds
+# its helper through IR and evaluates the header in the enclosing method; a
+# class still on the text helper is refused as ``classDef:headerWalrus``.
 
 def header_walrus_decorator():
     def deco(c):

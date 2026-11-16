@@ -200,6 +200,14 @@ def text_board(c,label):
                f'{mb(c.get("by:classHelper",0))} MB over {c.get("tx:classHelper",0)} helper compiles. '
                'Their enclosing defs count as `compiled` above, so this is the row that shows them. '
                'Counted where the helper is built during the import; a deferred helper compiled at call time is not.\n')
+    irh=c.get('th:irHelper',0)
+    out.append(f'**{irh}** method-local class helpers were BUILT THROUGH IR instead (P3.2, `ClassBuildIREmitter`), '
+               f'so the text-helper row above is the per-class fallback: {th} of {th+irh} helpers '
+               f'({(100.0*th/(th+irh)) if th+irh else 0:.1f}%) are still compiled from text. Why each one is, '
+               '(`th:text:<reason>`, `ClassDefAst >> ___irClassHelperTextReason___:`):\n')
+    reasons=sorted(((n,k[len('th:text:'):]) for k,n in c.items() if k.startswith('th:text:')),reverse=True)
+    rows=['| helpers | reason |','| ---: | --- |']+[f'| {n} | `{r}` |' for n,r in reasons]
+    out.append('\n'.join(rows)+'\n')
     out.append(f'### Class-method installs ({label})\n')
     out.append(install_table(c)+'\n')
     return '\n'.join(out)

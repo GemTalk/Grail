@@ -97,7 +97,10 @@ ConstantAst >> ___emitIRValueOn___: aBuilder [
 	printString is the one place this emit could disagree with the text about a
 	value, and passing the Float itself removes the question."
 
-	aBuilder atNode: self.
+	"A ConstantAst the emitter made rather than parsed -- the ``None'' a class
+	with no docstring stamps as its __doc__ (ClassDefAst >>
+	printSmalltalkRuntimeWith:) -- has no position to stamp."
+	self beginPosition ifNotNil: [aBuilder atNode: self].
 	value == true ifTrue: [^ aBuilder trueLit].
 	value == false ifTrue: [^ aBuilder falseLit].
 	value == nil ifTrue: [^ aBuilder globalNamed: #None].
