@@ -106,12 +106,21 @@ BaseException class >> ___captureThreadState___ [
 	from costing a for-loop over a generator.  ___restoreThreadState___: is the
 	inverse."
 
-	| st |
-	st := self ___threadExceptionState___.
-	^ { st @env0:at: #'GrailCurrentException' otherwise: nil .
-		{ st @env0:at: #'GrailHandlerDepth' otherwise: 0 .
-			(st @env0:at: #'GrailHandlerTokens' ifAbsentPut: [OrderedCollection @env0:new]) @env0:copy } .
-		st @env0:at: #'GrailInheritedException' otherwise: nil }
+	^ self ___captureThreadStateIn___: self ___threadExceptionState___
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___captureThreadStateIn___: aThreadState [
+	"___captureThreadState___ from a thread state the caller already holds -- a
+	generator body has its resumer's in an instance variable (PyGeneratorBase
+	>> ___bindToResumer___)."
+
+	^ { aThreadState @env0:at: #'GrailCurrentException' otherwise: nil .
+		{ aThreadState @env0:at: #'GrailHandlerDepth' otherwise: 0 .
+			(aThreadState @env0:at: #'GrailHandlerTokens'
+				ifAbsentPut: [OrderedCollection @env0:new]) @env0:copy } .
+		aThreadState @env0:at: #'GrailInheritedException' otherwise: nil }
 
 ]
 
@@ -4601,10 +4610,16 @@ BaseException class >> ___resignalable___: anException [
 BaseException class >> ___restoreHandlerState___: anArray [
 	"Reinstate what ___captureHandlerState___ answered."
 
-	| st |
-	st := self ___threadExceptionState___.
-	st @env0:at: #'GrailHandlerDepth' put: (anArray @env0:at: 1).
-	st @env0:at: #'GrailHandlerTokens' put: (anArray @env0:at: 2) @env0:copy.
+	^ self ___restoreHandlerState___: anArray in: self ___threadExceptionState___
+
+]
+
+{ #category : 'Grail-Handler Depth' }
+BaseException class >> ___restoreHandlerState___: anArray in: aThreadState [
+	"___restoreHandlerState___: into a thread state the caller already holds."
+
+	aThreadState @env0:at: #'GrailHandlerDepth' put: (anArray @env0:at: 1).
+	aThreadState @env0:at: #'GrailHandlerTokens' put: (anArray @env0:at: 2) @env0:copy.
 	^ self
 
 ]
@@ -4929,12 +4944,19 @@ BaseException class >> ___stackOwnException___: ownExceptionOrNil [
 	___stackOnResumersException___: says why both are kept; this does it with one
 	___threadExceptionState___."
 
-	| st resumers |
-	st := self ___threadExceptionState___.
-	resumers := (st @env0:at: #'GrailCurrentException' otherwise: nil)
-		ifNil: [st @env0:at: #'GrailInheritedException' otherwise: nil].
-	self ___storeSlot___: #'GrailCurrentException' in: st value: ownExceptionOrNil.
-	self ___storeSlot___: #'GrailInheritedException' in: st value: resumers.
+	^ self ___stackOwnException___: ownExceptionOrNil in: self ___threadExceptionState___
+
+]
+
+{ #category : 'Grail-Current Exception' }
+BaseException class >> ___stackOwnException___: ownExceptionOrNil in: aThreadState [
+	"___stackOwnException___: on a thread state the caller already holds."
+
+	| resumers |
+	resumers := (aThreadState @env0:at: #'GrailCurrentException' otherwise: nil)
+		ifNil: [aThreadState @env0:at: #'GrailInheritedException' otherwise: nil].
+	self ___storeSlot___: #'GrailCurrentException' in: aThreadState value: ownExceptionOrNil.
+	self ___storeSlot___: #'GrailInheritedException' in: aThreadState value: resumers.
 	^ self
 
 ]

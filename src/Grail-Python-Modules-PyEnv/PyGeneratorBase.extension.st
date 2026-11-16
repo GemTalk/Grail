@@ -1424,7 +1424,11 @@ PyGeneratorBase >> ___stackOnResumersException___: ownExceptionOrNil [
 	slots is what gets both right -- BaseException >> ___handledException___
 	reads them in order."
 
-	BaseException @env0:___stackOwnException___: ownExceptionOrNil
+	"excState: the resumer's thread's, recorded by ___bindToResumer___ on the
+	resume that got the body here."
+	excState == nil
+		ifTrue: [BaseException @env0:___stackOwnException___: ownExceptionOrNil]
+		ifFalse: [BaseException @env0:___stackOwnException___: ownExceptionOrNil in: excState]
 
 ]
 
@@ -1690,7 +1694,7 @@ PyGeneratorBase >> ___yield___: aValue [
 	    it as the yield-expression value.
 	  * otherwise → return None (the implicit value for plain next)."
 
-	| sent bodyState bodyExc bodyHandlers |
+	| sent st bodyState bodyExc bodyHandlers |
 	inlineYields @env0:notNil ifTrue: [^ self ___yieldInline___: aValue].
 	value := aValue.
 	"The body's own exception bookkeeping, kept across the suspension -- the
@@ -1708,13 +1712,19 @@ PyGeneratorBase >> ___yield___: aValue [
 	Captured BEFORE the signal and restored immediately after the wait, so the
 	window in which the other side is running is exactly the window in which its
 	own state is installed."
-	bodyState := BaseException @env0:___captureThreadState___.
+	"Read through excState, which ___bindToResumer___ keeps pointing at the
+	running thread's state, rather than resolved from this process each time."
+	st := excState == nil ifTrue: [BaseException @env0:___threadExceptionState___] ifFalse: [excState].
+	bodyState := BaseException @env0:___captureThreadStateIn___: st.
 	bodyExc := bodyState @env0:at: 1.
 	bodyHandlers := bodyState @env0:at: 2.
 	consumerSem @env0:signal.
 	producerSem @env0:wait.
 	self ___stackOnResumersException___: bodyExc.
-	BaseException @env0:___restoreHandlerState___: bodyHandlers.
+	"Re-read: the resume that woke the body may have come from another thread,
+	and ___bindToResumer___ re-pointed excState before signalling."
+	st := excState == nil ifTrue: [BaseException @env0:___threadExceptionState___] ifFalse: [excState].
+	BaseException @env0:___restoreHandlerState___: bodyHandlers in: st.
 	injectedException ifNotNil: [
 		| ex |
 		ex := injectedException.
