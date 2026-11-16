@@ -490,6 +490,171 @@ NameAst >> ___emitAnnotationScopeClassReadOn___: aClassDef on: aStream [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitBuiltinFirstClassRead___: aName with: e [
+	"emitBuiltinFirstClassRead:on:, written through a ClassBuildEmitter so the
+	class-body read (___emitClassBodyValueWith___:) builds it as text or as IR
+	from one spelling.  See emitBuiltinFirstClassRead:on: for the shape."
+
+	| builtinsInstance |
+	self ___builtinsAreOverridden___ ifTrue: [
+		^ e paren: [
+			e send: #'___resolveBuiltinOrSignal___:' env: 0 to: [e var: 'NameError']
+				with: {[e string: aName asString]}]].
+	builtinsInstance := [e paren: [
+		e send: #'___instance___' env: 0 to: [e paren: [
+			e send: #'at:' env: 0 to: [e var: 'Python'] with: {[e plainSymbol: 'builtins']}]]]].
+	^ e paren: [
+		e send: #'___globalAt___:otherwise:' env: 1 to: builtinsInstance with: {
+			[e symbol: aName asString].
+			[e block: [
+				e send: #'receiver:selector:' env: nil to: [e var: 'BoundMethod'] with: {
+					builtinsInstance.
+					[e plainSymbol: aName asString]}]]}]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___emitClassBodyValueWith___: e [
+	"A class-body VALUE read of this name -- an attribute value, a default, a
+	bare expression -- written through a ClassBuildEmitter, so the class build
+	makes it as text (ClassBuildTextEmitter, from ___emitSmalltalkOn___:) or as
+	IR (ClassBuildIREmitter, from ___emitIRValueOn___: in a method-local class
+	helper built through IR, plan P3.3) from ONE description.
+
+	This is ___emitSmalltalkOn___:'s dispatcher for the reads
+	___readsAsClassBodyValue___ admits, in the same order, with the branches
+	that cannot fire there left out: no doit, no annotation or decorator scope,
+	no nested function scope, no locals()/vars() probe, and none of the
+	``__class__'' / ``__classdict__'' / ``super'' spellings.  The text it
+	writes is the text those branches wrote, byte for byte (the P3 trace diff
+	proves it); each branch keeps its reason where it stands in
+	___emitSmalltalkOn___:, and this method only names it.
+
+	CPython's class body reads every name with LOAD_NAME: the class namespace,
+	then the enclosing scopes.  Grail resolves the namespace half statically --
+	a sibling def, a sibling @staticmethod, a nested class, a conditionally
+	bound name, a prior class attribute -- each only once the statement that
+	binds it has run (classBodyBoundNames), and the enclosing half as a method
+	body does."
+
+	| mangled clsVar |
+	"``__debug__'' folds at optimize >= 1."
+	((id asString = '__debug__') and: [self ___grailOptimizeLevel___ >= 1])
+		ifTrue: [^ e var: 'false'].
+	"The enclosing method's own receiver parameter."
+	((CallAst isSelfReference: id)
+		and: [(self ___boundInNestedFunction___: id) not
+		and: [(self ___isEnclosingComprehensionTarget___: id) not]])
+			ifTrue: [^ e var: 'self'].
+	"A reserved-named enclosing local, under its transport identifier."
+	((self ___enclosingFuncDeclaresReservedParam___: id)
+		and: [self ___readsThroughClassCell___ not]) ifTrue: [
+			^ self ___emitLocalRead___: (NameAst ___transportIdentifierFor___: id)
+				guarded: (self ___guardedLocalNeedsCheck___: id) with: e].
+	"A builtin read as a value; ``type'' is the class."
+	self isFastPathBuiltinName ifTrue: [
+		id asSymbol == #'type' ifTrue: [^ e var: 'type'].
+		^ self ___emitBuiltinFirstClassRead___: id with: e].
+	clsVar := CallAst ___classBeingCompiledVar___.
+	mangled := self ___mangledId___.
+	"A sibling-method ALIAS answers the original's function."
+	(CallAst classMethodAliasTargets notNil
+		and: [(CallAst classMethodAliasTargets includesKey: id asSymbol)
+		and: [CallAst classBodyBoundNames isNil
+			or: [CallAst classBodyBoundNames includes: id asSymbol]]])
+		ifTrue: [
+			^ e paren: [
+				e send: #'___pyAttrLoad___:' env: 1 to: [e var: clsVar]
+					with: {[e symbol: (CallAst classMethodAliasTargets at: id asSymbol) asString]}]].
+	"The class namespace: a sibling def, a sibling @staticmethod, a nested
+	class, a conditionally bound name, a prior class attribute."
+	((CallAst classFunctionNames notNil
+		and: [(CallAst classFunctionNames includes: mangled asSymbol)
+		and: [CallAst classBodyBoundNames isNil
+			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+		ifTrue: [^ self ___emitSiblingFunctionWith___: e].
+	((CallAst classStaticFunctionNames notNil
+		and: [(CallAst classStaticFunctionNames includes: mangled asSymbol)
+		and: [CallAst classBodyBoundNames isNil
+			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+		ifTrue: [
+			^ e paren: [
+				e send: #'receiver:selector:' env: nil to: [e var: 'BoundMethod']
+					with: {[e var: clsVar]. [e plainSymbol: mangled]}]].
+	((CallAst classNestedClassNames notNil
+		and: [(CallAst classNestedClassNames includes: mangled asSymbol)
+		and: [CallAst classBodyBoundNames isNil
+			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+		ifTrue: [
+			^ e paren: [
+				e send: #'___dynamicClassAttr___:' env: 1 to: [e var: clsVar]
+					with: {[e symbol: mangled]}]].
+	(CallAst classBodyConditionalNames notNil
+		and: [CallAst classBodyConditionalNames includes: mangled asSymbol])
+		ifTrue: [
+			| alsoStatic |
+			alsoStatic := CallAst classAttrNames notNil
+				and: [CallAst classAttrNames includes: mangled asSymbol].
+			^ e paren: [
+				e send: #'ifNil:' env: 0
+					to: [e paren: [
+						e send: #'___dynamicClassAttr___:' env: 1 to: [e var: clsVar]
+							with: {[e symbol: mangled]}]]
+					with: {[e block: [
+						alsoStatic
+							ifTrue: [
+								e send: #'ifNil:' env: 0
+									to: [e paren: [e send: mangled env: nil to: [e var: clsVar]]]
+									with: {[e block: [self ___emitModuleInstanceLoadOf___: id with: e]]}]
+							ifFalse: [self ___emitModuleInstanceLoadOf___: id with: e]]]}]].
+	((CallAst classAttrNames notNil
+		and: [(CallAst classAttrNames includes: mangled asSymbol)
+		and: [CallAst classBodyBoundNames isNil
+			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+		ifTrue: [
+			^ e paren: [
+				e send: #'ifNil:' env: 0
+					to: [e paren: [e send: mangled env: nil to: [e var: clsVar]]]
+					with: {[e block: [self ___emitModuleInstanceLoadOf___: id with: e]]}]].
+	"The enclosing scopes, as a method body reads them: a same-module
+	function (dynamic slot first), a module name, a late-bound free name."
+	(CallAst moduleFunctionNames notNil
+		and: [(CallAst moduleFunctionNames includes: id asSymbol)
+		and: [(self ___localBindingShadows___: id) not]])
+		ifTrue: [^ self ___emitModuleFunctionReadWith___: e].
+	((self isModuleScopeName: id)
+		and: [((self ___pythonLocalInEnclosingFunctions___: id)
+			or: [self ___isEnclosingComprehensionTarget___: id]) not])
+		ifTrue: [^ self ___emitModuleInstanceLoadOf___: id with: e].
+	((self isVariableIsDeclared: id) not
+		and: [(self ___isEnclosingComprehensionTarget___: id) not
+		and: [(self class isResolvableSymbol: id asSymbol) not]])
+		ifTrue: [
+			(self class isFastPathBuiltinName: id asSymbol)
+				ifTrue: [^ self ___emitBuiltinFirstClassRead___: id with: e].
+			^ self ___emitModuleInstanceLoadOf___: id with: e].
+	"A local of a function beyond the enclosing method's class: its cell."
+	self ___readsThroughClassCell___ ifTrue: [
+		CallAst addCapturedClassName: id.
+		^ e paren: [
+			e send: #'___classCell___:' env: 1 to: [e var: 'self']
+				with: {[e symbol: '___cell_' , id asString , '___']}]].
+	"A local of the enclosing method (a temp of the helper)."
+	(self ___pythonLocalInEnclosingFunctions___: id) ifTrue: [
+		^ self ___emitLocalRead___: id asString
+			guarded: (self ___guardedLocalNeedsCheck___: id) with: e].
+	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ e var: id asString].
+	"Late module-name binding."
+	(self class isResolvableSymbol: id asSymbol) ifFalse: [
+		self isFastPathBuiltinName ifTrue: [
+			id asSymbol == #'type' ifTrue: [^ e var: 'type'].
+			^ self ___emitBuiltinFirstClassRead___: id with: e].
+		^ self ___emitModuleInstanceLoadOf___: id with: e].
+	^ e var: id asString
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitGlobalReadOn___: aStream [
 	"This name read from the GLOBALS, then builtins, in a form no enclosing
 	function's binding of it can shadow: the module instance's attribute, or
@@ -763,6 +928,25 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitLocalRead___: anIdentifier guarded: aBoolean with: e [
+	"A read of a local, ``x'' or ``(x ifNil: [<unbound signal> #x])'' when
+	the binding can be unbound -- ___emitSmalltalkOn___:'s local and
+	reserved-name branches, through a ClassBuildEmitter."
+
+	aBoolean ifFalse: [^ e var: anIdentifier].
+	^ e paren: [
+		e send: #'ifNil:' env: nil to: [e var: anIdentifier] with: {[e block: [
+			self ___readsFreeVariable___
+				ifTrue: [
+					e send: #'___signalUnboundFree___:' env: 0 to: [e var: 'NameError']
+						with: {[e plainSymbol: id asString]}]
+				ifFalse: [
+					e send: #'___signalUnbound___:' env: nil to: [e var: 'UnboundLocalError']
+						with: {[e plainSymbol: id asString]}]]]}]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitMethodAnnotationClassScopeReadOn___: aStream [
 	"The read ___readsMethodAnnotationClassScope___ asks for, from the class
 	the annotations table runs on -- Smalltalk ``self'' there, the class that
@@ -797,6 +981,50 @@ NameAst >> ___emitMethodAnnotationClassScopeReadOn___: aStream [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitModuleFunctionReadWith___: e [
+	"The class-context read of a same-module top-level FUNCTION, through a
+	ClassBuildEmitter: the module's dynamic slot first (a module-level
+	decorator stores its wrapper there), else the compiled def wrapped as a
+	BoundMethod and memoised in the slot.  ___emitIRModuleFunctionReadOn___:
+	is the same shape for a method built through IR."
+
+	| modInstance |
+	modInstance := [e paren: [
+		e send: #'___instance___' env: 0 to: [e var: CallAst moduleClassBeingCompiled name asString]]].
+	^ e paren: [
+		e ifNil: [e paren: [
+				e send: #'dynamicInstVarAt:' env: 0 to: modInstance with: {[e symbol: id asString]}]]
+			env: 0
+			temps: #('___fn___')
+			do: [
+				e statementWithoutNewline: [
+					e assign: '___fn___' from: [
+						e send: #'receiver:selector:' env: nil to: [e var: 'BoundMethod']
+							with: {modInstance. [e plainSymbol: id asString]}]].
+				e space.
+				e statementWithoutNewline: [
+					e send: #'dynamicInstVarAt:put:' env: 0 to: modInstance
+						with: {[e symbol: id asString]. [e var: '___fn___']}].
+				e space.
+				e var: '___fn___']]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___emitModuleInstanceLoadOf___: aName with: e [
+	"emitModuleAttrLoad:receiverExpr:on: with the module instance as the
+	receiver -- ``(<Mod> @env0:___instance___ @env1:___moduleAttrLoad___:
+	#'name')'' -- through a ClassBuildEmitter."
+
+	^ e paren: [
+		e send: #'___moduleAttrLoad___:' env: 1
+			to: [e send: #'___instance___' env: 0
+				to: [e var: CallAst moduleClassBeingCompiled name asString]]
+			with: {[e symbol: aName asString]}]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitOrdinaryReadOn___: aStream [
 	"This read as it is emitted outside any annotation scope's view of a class
 	namespace: the fallback the class-namespace reads take where they have no
@@ -810,6 +1038,18 @@ NameAst >> ___emitOrdinaryReadOn___: aStream [
 	[self ___emitSmalltalkOn___: aStream] ensure: [
 		CallAst methodAnnotationClassScope: savedScope.
 		CallAst annotationScopeReadsSuppressed: savedSuppressed]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___emitSiblingFunctionWith___: e [
+	"___printSiblingFunctionOn___:, through a ClassBuildEmitter: a class-body
+	read of a sibling def answers THE FUNCTION."
+
+	^ e paren: [
+		e send: #'___classBodySiblingValue___:' env: 1
+			to: [e var: CallAst ___classBeingCompiledVar___]
+			with: {[e symbol: self ___mangledId___]}]
 
 ]
 
@@ -837,6 +1077,12 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 
 	Direct call sites like `abs(5)` are special-cased in
 	`CallAst>>printSmalltalkOn:` and bypass this method entirely."
+	"A CLASS-BODY VALUE READ has one description, written through a
+	ClassBuildEmitter, which the IR-built method-local class helper shares
+	(___emitClassBodyValueWith___:, plan P3.3).  The branches below keep their
+	reasons; that method is their dispatcher for those reads."
+	self ___readsAsClassBodyValue___ ifTrue: [
+		^ self ___emitClassBodyValueWith___: (ClassBuildTextEmitter on: aStream)].
 	"``__debug__'' IS A COMPILE-TIME CONSTANT AT optimize >= 1.  CPython folds
 	it -- it cannot change while a program runs -- and ``python -O'' makes it
 	False; compile(..., optimize=1) is the same request one compile at a time.
@@ -2678,12 +2924,7 @@ NameAst >> ___printSiblingFunctionOn___: aStream [
 	same function for a plain def, and what CPython's namespace holds for a
 	decorated one or a @property (#1580)."
 
-	aStream
-		nextPutAll: '(';
-		nextPutAll: CallAst ___classBeingCompiledVar___;
-		nextPutAll: ' @env1:___classBodySiblingValue___: #''';
-		nextPutAll: self ___mangledId___;
-		nextPutAll: ''')'
+	self ___emitSiblingFunctionWith___: (ClassBuildTextEmitter on: aStream)
 
 ]
 
@@ -2744,6 +2985,36 @@ NameAst >> ___reachedThroughIterOf___: aComprehensionAst [
 		node == aComprehensionAst iter ifTrue: [^ true].
 		node := node parent].
 	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___readsAsClassBodyValue___ [
+	"Is this a class-body VALUE read that ___emitClassBodyValueWith___:
+	describes -- in an attribute value, a default or a bare expression of a
+	class body in a module, where nothing narrower claims the name?
+
+	Not in a doit (no module class), not inside a lambda or comprehension of
+	the body (a scope of its own, which skips the class), not in a def
+	emitted as a VALUE (classBodyValueDefNode), not in a method decorator's
+	or an annotation's scope, not under a locals()/vars() probe, and not one
+	of the spellings with branches of their own (``__class__'',
+	``__classdict__'', ``super'').  Every such read keeps
+	___emitSmalltalkOn___:'s own branches."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBodyValueDefNode isNil
+		and: [ModuleAst compilingDoitScope isNil
+		and: [CallAst classBodyDecoratorScope isNil
+		and: [CallAst classBodyDynamicLocals ~~ true
+		and: [(#(#'__class__' #'__classdict__' #'super') includes: id asSymbol) not
+		and: [self ___inNestedScopeWithinClassBody___ not
+		and: [self ___readsDoitLiveMapping___ not
+		and: [self ___readsMethodAnnotationClassScope___ not
+		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]]
 
 ]
 
@@ -3020,18 +3291,7 @@ NameAst >> emitBuiltinFirstClassRead: aName on: aStream [
 	entirely: it reads the one real builtins singleton, which is exactly what
 	the caller replaced.  Route to the runtime resolver instead, which
 	consults the override and raises NameError when it has no such name."
-	self ___builtinsAreOverridden___ ifTrue: [
-		aStream
-			nextPutAll: '(NameError @env0:___resolveBuiltinOrSignal___: ''';
-			nextPutAll: aName;
-			nextPutAll: ''')'.
-		^ self].
-	aStream
-		nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) @env1:___globalAt___: #''';
-		nextPutAll: aName;
-		nextPutAll: ''' otherwise: [BoundMethod receiver: ((Python @env0:at: #builtins) @env0:___instance___) selector: #';
-		nextPutAll: aName;
-		nextPutAll: '])'.
+	self ___emitBuiltinFirstClassRead___: aName with: (ClassBuildTextEmitter on: aStream)
 
 ]
 
