@@ -2184,6 +2184,24 @@ ClassDefAst >> ___irClassAnnotationLocalReads___: localNames [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyBoundNames___ [
+	"Every name a statement of this class body binds, under the name the body
+	binds it as (mangled for a private one) and as written -- the names a
+	class-body call must not name (___irClassBodyValueReason___:bound:)."
+
+	| names |
+	names := IdentitySet new.
+	body isNil ifTrue: [^ names].
+	body body do: [:stmt |
+		(stmt respondsTo: #'___boundTargetNames___') ifTrue: [
+			stmt ___boundTargetNames___ do: [:n | names add: n asSymbol]].
+		(stmt isKindOf: FunctionDefAst) ifTrue: [names add: stmt name asSymbol].
+		(stmt isKindOf: ClassDefAst) ifTrue: [names add: stmt name asSymbol]].
+	^ names
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassBodyDeclaresNonlocalBelow___: aNode [
 	"Is there a ``nonlocal'' statement anywhere in this class's subtree?  A
 	``global'' does not qualify: it routes the name to the module instance,
@@ -2228,6 +2246,70 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 			or: [(s isKindOf: ExprAst)
 			or: [(s isKindOf: AssignAst)
 			or: [s isKindOf: AnnAssignAst]]]]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
+	"Why the class-body VALUE expression anExpr -- an attribute's value, a
+	method's default -- keeps the class on the TEXT helper, as the tail of a
+	census row, or nil when the IR backend builds it (plan P3.3).
+
+	The backend builds a class-body expression with the expression's own IR
+	emitters, as a def's body is built, and a NAME through the class-body read
+	both helpers share (NameAst >> ___emitClassBodyValueWith___:).  What it
+	admits is what that holds for:
+
+	  * the plain expression shapes -- names, constants, attribute and
+	    subscript loads, calls, operators, comparisons, the conditional
+	    expression, tuple / list / set / dict displays and their splats;
+	  * NOT a nested function scope (a lambda, a comprehension, a generator
+	    expression: they skip the class namespace, and their bodies are
+	    P3.3's later steps), a walrus (it binds INTO the class namespace), a
+	    yield or an await, or an f-string;
+	  * NOT ``__class__'', ``__classdict__'' or ``super'', whose class-body
+	    reads have branches of their own, nor a call of ``locals'', ``vars'',
+	    ``dir'', ``globals'', ``eval'' or ``exec'', which the text rewrites
+	    for the class body;
+	  * NOT a call of a name the class body binds: the text calls a sibling
+	    def as an UnboundMethod of the class under construction (CallAst's
+	    class-body branch), which has no IR form yet."
+
+	| allowed reason nodes |
+	allowed := { AttributeAst. BinOpAst. BoolOpAst. CallAst. CompareAst. ConstantAst.
+		DictAst. IfExpAst. ListAst. NameAst. NotAst. SetAst. SliceAst. StarredAst.
+		SubscriptAst. TupleAst. UnaryOpAst }.
+	reason := nil.
+	nodes := OrderedCollection with: anExpr.
+	anExpr ___descendantsDo___: [:n | nodes add: n].
+	nodes do: [:n |
+		reason isNil ifTrue: [
+			((n isKindOf: ExpressionAst)
+				and: [(allowed anySatisfy: [:c | n isKindOf: c]) not]) ifTrue: [
+					reason := ((n isKindOf: LambdaAst) or: [(n isKindOf: ListCompAst)
+						or: [(n isKindOf: SetCompAst) or: [(n isKindOf: DictCompAst)
+						or: [n isKindOf: GeneratorExpAst]]]])
+							ifTrue: [#functionScope]
+							ifFalse: [(n isKindOf: NamedExprAst)
+								ifTrue: [#walrus]
+								ifFalse: [((n isKindOf: YieldAst) or: [(n isKindOf: YieldFromAst)
+										or: [n isKindOf: AwaitAst]])
+									ifTrue: [#yield]
+									ifFalse: [((n isKindOf: JoinedStrAst) or: [n isKindOf: TemplateStrAst])
+										ifTrue: [#fstring]
+										ifFalse: [#valueShape]]]]].
+			(reason isNil and: [n isKindOf: NameAst]) ifTrue: [
+				(#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
+					ifTrue: [reason := #classCell]].
+			(reason isNil and: [(n isKindOf: CallAst) and: [n function isKindOf: NameAst]]) ifTrue: [
+				(#(#'locals' #'vars' #'dir' #'globals' #'eval' #'exec')
+					includes: n function id asSymbol)
+						ifTrue: [reason := #frameCall]
+						ifFalse: [
+							((boundNames includes: n function id asSymbol)
+								or: [boundNames includes: n function ___mangledId___ asSymbol])
+									ifTrue: [reason := #siblingCall]]]]].
+	^ reason
 
 ]
 
@@ -2325,21 +2407,22 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 ]
 
 { #category : 'Grail-IR Codegen' }
-ClassDefAst >> ___irClassHelperDefReason___: aDef [
+ClassDefAst >> ___irClassHelperDefReason___: aDef bound: boundNames [
 	"Why a def in the class body keeps the class on the TEXT helper, or nil.
 	A def's own body is a method SOURCE either way (a string literal the build
-	compiles at run time), but what the build evaluates FOR it is a class-body
-	expression: a decorator, an annotation, a default.  Those need the
-	class-body namespace in IR (P3.3); the first cut admits a def with none of
-	them but constant defaults."
+	compiles at run time), and so are its annotations (the annotations table
+	is a compiled class-side method).  What the build evaluates FOR it in the
+	class body is its decorators and its defaults.  Defaults are class-body
+	values (___irClassBodyValueReason___:bound:); decorators are P3.3's later
+	step."
 
 	(aDef decorator_list notNil and: [aDef decorator_list notEmpty])
 		ifTrue: [^ #'irHelper:methodDecorator'].
-	(aDef ___annotatedArgs___ notEmpty or: [aDef returns notNil])
-		ifTrue: [^ #'irHelper:methodAnnotation'].
-	((aDef ___defaultedPositionalParams___ asArray , aDef ___defaultedKeywordOnlyParams___ asArray)
-		allSatisfy: [:pair | (pair at: 2) isKindOf: ConstantAst])
-			ifFalse: [^ #'irHelper:methodDefault'].
+	(aDef ___defaultedPositionalParams___ asArray , aDef ___defaultedKeywordOnlyParams___ asArray)
+		do: [:pair |
+			((pair at: 2) isKindOf: ConstantAst) ifFalse: [
+				(self ___irClassBodyValueReason___: (pair at: 2) bound: boundNames)
+					ifNotNil: [:r | ^ ('irHelper:methodDefault:' , r) asSymbol]]].
 	^ nil
 
 ]
@@ -2352,14 +2435,24 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	everything here is a shape the backend does not build yet, and each later
 	step of plan P3 removes rows.
 
-	The IR backend is the SAME emitter walk as the text (ClassBuildIREmitter);
-	what it cannot do yet is evaluate a class-BODY expression, whose names
-	resolve through the class namespace (P3.3).  So the first cut admits a
-	DECLARATIVE body whose every class-body expression is a constant:
+	The IR backend is the SAME emitter walk as the text (ClassBuildIREmitter).
+	P3.2 admitted a DECLARATIVE body whose every class-body expression is a
+	constant.  P3.3 admits class-body VALUE expressions -- the class-body
+	namespace in IR (___irClassBodyValueReason___:bound:):
 
-	  * ``pass'', the docstring, and ``NAME = <constant>'';
-	  * defs with no decorator, no annotation and only constant defaults
-	    (___irClassHelperDefReason___:).
+	  * ``pass'', the docstring and any other bare constant (``...''), which
+	    the build does not evaluate;
+	  * ``NAME = <value>'' and ``a = b = <value>'', every target a name;
+	  * defs with no decorator (annotations included: they are compiled
+	    method sources), and defaults that are class-body values
+	    (___irClassHelperDefReason___:bound:).
+
+	Still text: an annotated assignment, a decorated method, a bare
+	expression evaluated for effect, a target that is not a name, a value the
+	class build reads statically (``__slots__'', ``__renamed__'',
+	``__transient__''), a nested class, control flow -- and any value under a
+	locals()/vars() probe (classBodyDynamicLocals), which the shared
+	class-body read does not describe.
 
 	The class's decorators, bases and keywords are not class-body expressions:
 	the caller evaluates them in the enclosing frame (___irHeaderNodes___), so
@@ -2369,7 +2462,7 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	invariant failure, not a row: it raises, and the enclosing method falls
 	back to text as for any IR emit error."
 
-	| stmts |
+	| stmts bound hasValues |
 	importlib ___irClassHelperIREnabled___ ifFalse: [^ #'irHelper:off'].
 	"Built under a class body's runtime statements, or in a doit under
 	replaced builtins: printSmalltalkOn: writes those differently, and neither
@@ -2378,21 +2471,34 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	self ___builtinsAreOverridden___ ifTrue: [^ #'irHelper:builtinsOverridden'].
 	self ___irClassBodyStatementsAreSimple___ ifFalse: [^ #'irHelper:controlFlow'].
 	stmts := body isNil ifTrue: [#()] ifFalse: [body body].
-	stmts doWithIndex: [:s :i |
+	bound := self ___irClassBodyBoundNames___.
+	hasValues := false.
+	stmts do: [:s |
 		(s isKindOf: PassAst) ifFalse: [
 			(s isKindOf: FunctionDefAst)
-				ifTrue: [(self ___irClassHelperDefReason___: s) ifNotNil: [:r | ^ r]]
+				ifTrue: [
+					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r].
+					((s ___defaultedPositionalParams___ asArray , s ___defaultedKeywordOnlyParams___ asArray)
+						anySatisfy: [:pair | ((pair at: 2) isKindOf: ConstantAst) not])
+							ifTrue: [hasValues := true]]
 				ifFalse: [
 					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
 					(s isKindOf: AnnAssignAst) ifTrue: [^ #'irHelper:annotation'].
 					(s isKindOf: ExprAst) ifTrue: [
-						(i = 1 and: [self ___docString___ notNil])
+						(s value isKindOf: ConstantAst)
 							ifFalse: [^ #'irHelper:expression']].
 					(s isKindOf: AssignAst) ifTrue: [
-						((s targets size = 1
-							and: [(s targets at: 1) isKindOf: NameAst])
-							and: [s value isKindOf: ConstantAst])
-								ifFalse: [^ #'irHelper:assign']]]]].
+						(s targets allSatisfy: [:t | t isKindOf: NameAst])
+							ifFalse: [^ #'irHelper:assignTarget'].
+						(s value isKindOf: ConstantAst) ifFalse: [
+							(s targets anySatisfy: [:t |
+								#(#'__slots__' #'__renamed__' #'__transient__') includes: t id asSymbol])
+									ifTrue: [^ #'irHelper:assign:specialName'].
+							(self ___irClassBodyValueReason___: s value bound: bound)
+								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
+							hasValues := true]]]]].
+	(hasValues and: [self ___classBodyCanBindDynamically___])
+		ifTrue: [^ #'irHelper:dynamicLocals'].
 	self ___irHeaderNodesDo___: [:n |
 		(n ___irEligibleValueLocals___: localNames) ifFalse: [^ #'irHelper:header']].
 	^ nil
