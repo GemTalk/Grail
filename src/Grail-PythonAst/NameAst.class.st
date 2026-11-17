@@ -2480,12 +2480,24 @@ NameAst >> ___irIsSelfReceiver___ [
 	"A load of the method's own receiver parameter ``self'' inside a class-body
 	method -- the text emits Smalltalk ``self'' for it (the branch at the top
 	of printSmalltalkOn:).  A nested def's own ``self'' parameter is that def's
-	local, not the receiver, and is excluded as the text excludes it."
+	local, not the receiver, and is excluded as the text excludes it.
+
+	So is an enclosing COMPREHENSION's target of the same spelling, again as
+	the text excludes it (___emitSmalltalkOn___'s receiver branch): PEP 709
+	inlines the comprehension, its target is the block temp ComprehensionAst
+	registers, and every read inside -- directly, or from a lambda that closes
+	over it -- is that temp, not the receiver.  Without the test, IR read the
+	receiver for all of them, so ``def f(x): return [lambda: x for x in
+	range(x)]'' answered the argument from every lambda, and even ``[x for x in
+	range(x)]'' repeated the argument (#2256).  ___isEnclosingComprehensionTarget___:
+	excludes the first clause's iterable, so ``range(x)'' -- and any read after
+	the comprehension -- is still the receiver, as in CPython."
 
 	^ (ctx isKindOf: LoadAst)
 		and: [CallAst classBeingCompiled notNil
 		and: [(CallAst isSelfReference: id)
-		and: [(self ___boundInNestedFunction___: id) not]]]
+		and: [(self ___boundInNestedFunction___: id) not
+		and: [(self ___isEnclosingComprehensionTarget___: id) not]]]]
 
 ]
 
