@@ -140,10 +140,10 @@ keeps it current:
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
 | P3 | 34 | 4260 | 555 | 3685 | 13% |
 | P4 | 46 | 3781 | 146 | 3623 | 4% |
-| other | 24 | 1199 | 285 | 907 | 24% |
-| **all** | **215** | **17996** | **1997** | **15887** | **11%** |
+| other | 24 | 1199 | 285 | 908 | 24% |
+| **all** | **215** | **17996** | **1997** | **15888** | **11%** |
 
-OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12 · `test_signal` 43 of 57 · `test_stat` 15 of 22.
+OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_buffer` 80 of 95 · `test_utf8_mode` 13 of 12 · `test_signal` 43 of 57 · `test_stat` 15 of 22.
 <!-- /test-tally -->
 
 Most of the heavy skips are CPython's own, not Grail's. A module that tests a C
@@ -811,11 +811,10 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**16 of the 215 rows on the committed board are not OK.**
+**15 of the 215 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_c_locale_coercion` SKIP, 8 tests: 0 failed, 0 errors, 8 skipped
-- `test.test_buffer` FAIL, 95 tests: 1 failed, 0 errors, 80 skipped
 - `test.test_sys` ERROR, 97 tests: 3 failed, 2 errors, 63 skipped
 - `test.test_descr` ERROR, 162 tests: 33 failed, 14 errors, 12 skipped
 - `test.test_gzip` FAIL, 75 tests: 1 failed, 0 errors, 9 skipped

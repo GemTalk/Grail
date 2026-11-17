@@ -166,7 +166,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_pickletools | OK | 190 | 0 | 0 | 17 |  |
 | test.test_secrets | OK | 11 | 0 | 0 | 0 |  |
 | test.test_range | OK | 29 | 0 | 0 | 0 |  |
-| test.test_buffer | FAIL | 95 | 1 | 0 | 80 |  |
+| test.test_buffer | OK | 95 | 0 | 0 | 80 |  |
 | test.test_numeric_tower | OK | 9 | 0 | 0 | 0 |  |
 | test.test_largefile | OK | 16 | 0 | 0 | 6 |  |
 | test.test_pprint | OK | 45 | 0 | 0 | 1 |  |
