@@ -2407,6 +2407,48 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassHelperAnnotationReason___: anAnnAssign bound: boundNames [
+	"Why the class-body annotated assignment anAnnAssign keeps the class on the
+	TEXT helper, as a census row, or nil when the IR backend builds it (plan
+	P3.3b).
+
+	The build does two things with ``x: T = v'': it stores v as the attribute
+	x, the same class-body value an ``x = v'' stores, and it puts T in the
+	class's PEP 649 annotate block, which the walk builds inline in the helper
+	and whose names are class-body reads (AnnAssignAst >>
+	___emitAnnotateEntryOn___:).  So both are admitted exactly as a
+	class-body value is (___irClassBodyValueReason___:bound:).  The block is
+	evaluated lazily, and an annotation naming an ENCLOSING local has already
+	sent the whole enclosing def to text (classDef:deferredAnnotationRead), so
+	the class-body read never meets one here.
+
+	Refused:
+	  * a target that is not a simple name (``obj.a: T'', ``(x): T''): an
+	    attribute or subscript target is a class-body RUNTIME statement, which
+	    the backend does not emit yet, and a parenthesised name is not one of
+	    the class's annotated names;
+	  * a ``__renamed__'' or ``__transient__'' value, as for ``='';
+	  * an annotation or value the backend does not build."
+
+	| target |
+	target := anAnnAssign target.
+	((target isKindOf: NameAst) and: [anAnnAssign ___isSimpleAnnotation___])
+		ifFalse: [^ #'irHelper:annotation:target'].
+	(anAnnAssign value notNil
+		and: [(anAnnAssign value isKindOf: ConstantAst) not
+		and: [#(#'__renamed__' #'__transient__') includes: target id asSymbol]])
+			ifTrue: [^ #'irHelper:annotation:specialName'].
+	(anAnnAssign annotation isKindOf: ConstantAst) ifFalse: [
+		(self ___irClassBodyValueReason___: anAnnAssign annotation bound: boundNames)
+			ifNotNil: [:r | ^ ('irHelper:annotation:' , r) asSymbol]].
+	(anAnnAssign value notNil and: [(anAnnAssign value isKindOf: ConstantAst) not]) ifTrue: [
+		(self ___irClassBodyValueReason___: anAnnAssign value bound: boundNames)
+			ifNotNil: [:r | ^ ('irHelper:annotation:value:' , r) asSymbol]].
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassHelperDefReason___: aDef bound: boundNames [
 	"Why a def in the class body keeps the class on the TEXT helper, or nil.
 	A def's own body is a method SOURCE either way (a string literal the build
@@ -2447,12 +2489,28 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	    method sources), and defaults that are class-body values
 	    (___irClassHelperDefReason___:bound:).
 
-	Still text: an annotated assignment, a decorated method, a bare
-	expression evaluated for effect, a target that is not a name, a value the
-	class build reads statically (``__slots__'', ``__renamed__'',
-	``__transient__''), a nested class, control flow -- and any value under a
-	locals()/vars() probe (classBodyDynamicLocals), which the shared
-	class-body read does not describe.
+	P3.3b admits class-body ANNOTATIONS and ``__slots__'':
+
+	  * ``x: T'' and ``x: T = <value>'', a simple name target, whose
+	    annotation and value are class-body values (___irClassBodyValueReason___:
+	    bound:).  The walk builds the PEP 649 annotate block INLINE in the
+	    helper (AbstractNode >> ___emitAnnotateBlockWith___:), still inside
+	    the body-emit window, so each annotation's names are read through the
+	    same class-body read as an attribute's value, with every name the body
+	    binds (___annotateScopeBoundNames___) -- lazily, when the block runs.
+	    Under ``from __future__ import annotations'' the walk writes the
+	    unparsed strings instead, and nothing is evaluated;
+	  * ``__slots__ = <value>'' (and ``__slots__: T = <value>''): the build
+	    reads the slot names statically (slotNames) and stores the value as an
+	    ordinary class-body value, which is all the backend has to build.
+
+	Still text: a decorated method, a bare expression evaluated for effect, a
+	target that is not a name (an annotated attribute or subscript is a
+	runtime statement), a ``__renamed__'' or ``__transient__'' value (Grail's
+	persistence declarations, left to P3.5), a nested class, control flow --
+	and any value or annotation under a locals()/vars() probe
+	(classBodyDynamicLocals), which the shared class-body read does not
+	describe.
 
 	The class's decorators, bases and keywords are not class-body expressions:
 	the caller evaluates them in the enclosing frame (___irHeaderNodes___), so
@@ -2483,7 +2541,12 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 							ifTrue: [hasValues := true]]
 				ifFalse: [
 					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
-					(s isKindOf: AnnAssignAst) ifTrue: [^ #'irHelper:annotation'].
+					(s isKindOf: AnnAssignAst) ifTrue: [
+						(self ___irClassHelperAnnotationReason___: s bound: bound)
+							ifNotNil: [:r | ^ r].
+						(s annotation isKindOf: ConstantAst) ifFalse: [hasValues := true].
+						(s value notNil and: [(s value isKindOf: ConstantAst) not])
+							ifTrue: [hasValues := true]].
 					(s isKindOf: ExprAst) ifTrue: [
 						(s value isKindOf: ConstantAst)
 							ifFalse: [^ #'irHelper:expression']].
@@ -2492,7 +2555,7 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 							ifFalse: [^ #'irHelper:assignTarget'].
 						(s value isKindOf: ConstantAst) ifFalse: [
 							(s targets anySatisfy: [:t |
-								#(#'__slots__' #'__renamed__' #'__transient__') includes: t id asSymbol])
+								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
 									ifTrue: [^ #'irHelper:assign:specialName'].
 							(self ___irClassBodyValueReason___: s value bound: bound)
 								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
