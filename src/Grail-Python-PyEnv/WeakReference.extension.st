@@ -91,7 +91,7 @@ WeakReference class >> _collect [
 WeakReference >> ___hexAddress___: anObject [
 	"anObject's address as reprs print it, as object.__repr__ does."
 
-	^ (anObject @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+	^ (anObject ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase
 
 ]
 

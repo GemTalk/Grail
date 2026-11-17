@@ -2086,7 +2086,7 @@ UnboundMethod >> __repr__ [
 			@env0:, ''' of ''' @env0:, self @env0:___descriptorTypeName___ @env0:, ''' objects>')
 			@env0:asUnicodeString].
 	^ ('<function ' @env0:, q @env0:, ' at 0x'
-		@env0:, (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+		@env0:, (self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase
 		@env0:, '>') @env0:asUnicodeString
 
 ]

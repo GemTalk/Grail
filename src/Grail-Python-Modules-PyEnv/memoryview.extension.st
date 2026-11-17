@@ -1089,7 +1089,7 @@ memoryview >> __repr__ [
 	the thing that fails."
 
 	| addr |
-	addr := (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	addr := (self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase.
 	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [
 		^ ('<released memory at 0x' @env0:, addr @env0:, '>') @env0:asUnicodeString].
 	^ ('<memory at 0x' @env0:, addr @env0:, '>') @env0:asUnicodeString
