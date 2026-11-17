@@ -6591,6 +6591,17 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 			env: 1
 			classSide: true
 			emitter: e.
+		"...and whether they name ``__dict__'', which the list above leaves out
+		(object class >> ___pyDeclaresDictSlot___)."
+		self slotsDeclareDict ifTrue: [
+			self
+				emitCompileMethodOn: self ___stVarName___
+				source: '___pyDictSlotDeclared___
+	^ true'
+				category: 'Grail-Slots'
+				env: 1
+				classSide: true
+				emitter: e].
 	].
 
 	"Strict __slots__: when the class declares __slots__ as a recognized
@@ -6604,12 +6615,39 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 	WHOLE mro declares __slots__, so a slotted class with a plain base still
 	has one.  The base may live in another module, so only the runtime can
 	answer that -- see PythonInstance class>>___pyStrictSlotsAllowed___."
+	"With more than one base the Smalltalk chain names only the first, and a
+	plain SECONDARY base gives instances a __dict__ just as a plain superclass
+	does (``class C(Slotted, Plain): __slots__ = ()'', test_descr's
+	test_slots_multiple_inheritance).  The secondary bases are merged in after
+	this, so the resolved header bases are handed over instead."
 	self slotsDeclaredStrict ifTrue: [
-		e openIfTrue: [e paren: [e send: #'___pyStrictSlotsAllowed___' env: nil to: clsVar]].
+		| allowed |
+		allowed := [
+			(bases notNil and: [bases size > 1 or: [self ___hasStarredBase___]])
+				ifTrue: [e send: #'___pyStrictSlotsAllowedOver___:' env: nil to: clsVar
+					with: {[e var: '___hdrResolved___']}]
+				ifFalse: [e send: #'___pyStrictSlotsAllowed___' env: nil to: clsVar]].
+		e openIfTrue: [e paren: allowed].
 		self
 			emitCompileMethodOn: self ___stVarName___
 			source: '___pySlotsStrict___
 	^ true'
+			category: 'Grail-Slots'
+			env: 1
+			classSide: false
+			emitter: e.
+		e closeIfTrue.
+		"NOT allowed over a STRICT base: the base's true marker would be
+		inherited, so this class says false itself -- ``class C(Slotted,
+		Plain): __slots__ = ()'' has a __dict__ from Plain."
+		e openIfTrue: [e paren: [
+			e send: #'and:' env: 0
+				to: [e paren: [e send: #'not' env: 0 to: [e paren: allowed]]]
+				with: {[e block: [e send: #'___pyInheritsStrictSlots___' env: nil to: clsVar]]}]].
+		self
+			emitCompileMethodOn: self ___stVarName___
+			source: '___pySlotsStrict___
+	^ false'
 			category: 'Grail-Slots'
 			env: 1
 			classSide: false

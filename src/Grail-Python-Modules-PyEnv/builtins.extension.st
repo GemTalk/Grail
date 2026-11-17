@@ -4477,7 +4477,12 @@ builtins >> ___isInstanceViaDunderClass___: anObject of: cls [
 	pgproto.UUID answers uuid.UUID -- passes through it (FastAPI's
 	test_inherited_custom_class).  Only for an instance whose own Python class
 	overrides __class__, so an ordinary failed isinstance pays one method
-	lookup and nothing else."
+	lookup and nothing else.
+
+	A PYTHON __getattribute__ overrides it too: CPython reads __class__ through
+	the instance's attribute lookup, so a proxy that forwards every read to the
+	object it wraps claims that object's class -- test_descr's
+	test_isinst_isclass, and the shape of every transparent proxy."
 
 	| real owner dc |
 	(anObject @env0:isKindOf: Behavior) ifTrue: [^ false].
@@ -4485,7 +4490,9 @@ builtins >> ___isInstanceViaDunderClass___: anObject of: cls [
 	real := anObject @env0:class.
 	real ___grailIsPythonClass___ ifFalse: [^ false].
 	owner := real @env0:whichClassIncludesSelector: #'__class__' environmentId: 1.
-	(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifFalse: [^ false].
+	(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifFalse: [
+		owner := real @env0:whichClassIncludesSelector: #'__getattribute__:' environmentId: 1.
+		(owner ~~ nil and: [owner ___grailIsPythonClass___]) ifFalse: [^ false]].
 	dc := [anObject ___pyAttrLoad___: #'__class__']
 		@env0:on: AbstractException do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
@@ -6693,7 +6700,6 @@ builtins >> ___validateTypeArgs___: className bases: bases namespace: namespace 
 	should not have to know which implementation raised.  Ordered as CPython
 	orders them, so a call that is wrong in two ways reports the same one."
 
-	| seen |
 	"NAME.  ``type(b'A', (), {})'' built a class called 'aByteArray' -- the
 	printString of the bytes object -- which is the shape of bug that looks
 	like it worked."
@@ -6737,27 +6743,9 @@ builtins >> ___validateTypeArgs___: className bases: bases namespace: namespace 
 			@env0:or: [namespace @env0:isKindOf: KeyValueDictionary]]) ifFalse: [
 		^ TypeError ___signal___: 'type.__new__() argument 3 must be dict, not '
 			@env0:, (namespace ___pyTypeNameForError___) @env0:asString].
-	"TWO BASES THAT EACH CARRY STORAGE cannot both be the Smalltalk
-	superclass, and CPython refuses the same combination for the same reason
-	-- ``multiple bases have instance lay-out conflict''.  Grail's
-	___selectStorageBase___ simply picked the leftmost, so ``type('A', (int,
-	str), {})'' answered an int-backed class that claimed str in its bases and
-	behaved as neither.
-
-	Asked of the STORAGE roots rather than the bases themselves, because two
-	bases in a subclass relationship (int and a subclass of int) are
-	compatible -- it is unrelated storage that cannot be merged."
-	seen := nil.
-	(Array @env0:withAll: bases) @env0:do: [:b |
-		((b @env0:isKindOf: Behavior)
-			@env0:and: [(Python @env0:at: #importlib) @env0:___hasBuiltinStorage___: b]) ifTrue: [
-				seen @env0:isNil
-					ifTrue: [seen := b]
-					ifFalse: [
-						((seen @env0:== b) @env0:or: [(seen @env0:inheritsFrom: b)
-							@env0:or: [b @env0:inheritsFrom: seen]]) ifFalse: [
-								^ TypeError ___signal___:
-									'multiple bases have instance lay-out conflict']]]].
+	"Two bases with unrelated built-in storage: importlib class >>
+	___refuseLayoutConflict___:, which a class statement asks too."
+	(Python @env0:at: #importlib) @env0:___refuseLayoutConflict___: (Array @env0:withAll: bases).
 	^ self ___validateSlots___: namespace bases: bases
 
 ]
@@ -6776,10 +6764,22 @@ builtins >> ___writePrompt___: promptText [
 		^ self].
 	((target ___respondsTo___: #'write:')
 		or: [target ___respondsTo___: #'_write:kw:']) ifFalse: [
-			^ AttributeError ___signal___: '''' @env0:,
-				(bytes ___pyTypeNameOf___: target) @env0:,
-				''' object has no attribute ''write'''].
+			^ self ___writeThroughAttribute___: target text: promptText].
 	target @env1:write: promptText
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
+builtins >> ___writeThroughAttribute___: target text: aString [
+	"``file.write(text)'' for a file with no write METHOD: CPython's print reads
+	the ATTRIBUTE, so a write a __getattr__ supplies is called, and whatever
+	that lookup raises is what print raises -- test_descr's test_file_fault
+	installs a sys.stdout whose __getattr__ raises RuntimeError.  The ordinary
+	miss is the AttributeError the read itself raises, naming the type, which is
+	the message ``print(, file=)'' has always given."
+
+	^ (target @env1:___pyAttrLoad___: #'write')
+		@env1:___pyCallValue___: { aString } kw: nil
 
 ]
 
@@ -8105,11 +8105,9 @@ builtins >> _print: positional kw: kwargs [
 			Python ``def write(self, s)'' compiles to the fixed-arity selector,
 			and one with defaults or *args to the varargs form."
 			((target ___respondsTo___: #'write:')
-				or: [target ___respondsTo___: #'_write:kw:']) ifFalse: [
-					^ AttributeError ___signal___: '''' @env0:,
-						(bytes ___pyTypeNameOf___: target) @env0:,
-						''' object has no attribute ''write'''].
-			target @env1:write: text @env0:contents].
+				or: [target ___respondsTo___: #'_write:kw:'])
+					ifTrue: [target @env1:write: text @env0:contents]
+					ifFalse: [self ___writeThroughAttribute___: target text: text @env0:contents]].
 	flush := kwargs @env0:isNil
 		ifTrue: [nil]
 		ifFalse: [kwargs @env0:at: 'flush' otherwise: nil].
@@ -9730,6 +9728,18 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 	(), {})'' made a class NAMED 'aByteArray') instead of being told.
 	test_builtin test_bad_args and test_bad_slots."
 	self ___validateTypeArgs___: className bases: bases namespace: namespace.
+	"A NON-STRING KEY is legal but warned about, as type_new warns (gh-55664):
+	it can never be an attribute name.  A metaclass that adds one before its
+	``super().__new__'' arrives here too (test_descr's test_gh55664)."
+	((namespace @env0:isKindOf: AbstractDictionary)
+		and: [namespace @env0:keys @env0:anySatisfy: [:k | (k @env0:___isPyStr___) @env0:not]])
+			ifTrue: [
+				| warningsMod |
+				warningsMod := (importlib @env1:modules) @env0:at: #warnings ifAbsent: [nil].
+				warningsMod ifNotNil: [
+					warningsMod
+						warn: 'non-string key in the __dict__ of class ' @env0:, className @env0:asString
+						_: RuntimeWarning]].
 	il := Python @env0:at: #importlib.
 	baseArray := Array @env0:withAll: bases.
 	"CPython REFUSES to resolve __mro_entries__ here: ``type('Bad', (c,),

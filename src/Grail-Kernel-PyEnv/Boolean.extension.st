@@ -457,9 +457,16 @@ Boolean >> __doc__ [
 
 { #category : 'Grail-Comparison' }
 Boolean >> __eq__: other [
-	"Equality comparison. True==1 and False==0 in Python."
+	"Equality comparison. True==1 and False==0 in Python.
+
+	Against anything but a bool it is int's comparison, which reflects to an
+	operand with its own __eq__: ``True == Proxy(1)'' asks the proxy, as
+	CPython's bool (an int) does once its own __eq__ answers NotImplemented
+	(test_descr's test_specials).  It answered False."
 
 	| selfInt otherInt |
+	(other @env0:class) == bool
+		ifFalse: [^ (self ifTrue: [1] ifFalse: [0]) __eq__: other].
 	selfInt := self ifTrue: [1] ifFalse: [0].
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]
@@ -675,9 +682,11 @@ Boolean >> __mul__: other [
 
 { #category : 'Grail-Comparison' }
 Boolean >> __ne__: other [
-	"Inequality comparison."
+	"Inequality comparison: int's against anything but a bool, as __eq__:."
 
 	| selfInt otherInt |
+	(other @env0:class) == bool
+		ifFalse: [^ (self ifTrue: [1] ifFalse: [0]) __ne__: other].
 	selfInt := self ifTrue: [1] ifFalse: [0].
 	otherInt := (other @env0:class) == bool
 		ifTrue: [other ifTrue: [1] ifFalse: [0]]

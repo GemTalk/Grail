@@ -180,6 +180,14 @@ KeyValueDictionary class >> __new__: source [
 	((source @env0:isKindOf: Behavior)
 		@env0:and: [source @env0:inheritsFrom: self])
 			@env0:ifTrue: [^ source ___new___].
+	"...and the class ITSELF when the receiver is a Python subclass: that is
+	``super().__new__(cls)'' inside the subclass's own __new__, which Super
+	performs with the subclass as receiver -- so the strict test above saw
+	the class compared with itself and iterated it (test_descr's
+	test_reduce_copying).  ``list(list)'' still iterates: list is no Python
+	class."
+	((source == self) @env0:and: [self ___grailIsPythonClass___])
+		@env0:ifTrue: [^ self ___new___].
 	result := self ___new___.
 
 	"Mapping fast path: a plain dict / raw KeyValueDictionary copies straight
