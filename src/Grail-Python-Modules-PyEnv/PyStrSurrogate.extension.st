@@ -140,6 +140,28 @@ PyStrSurrogate >> ___mapNonSurrogateRuns___: aSelector [
 
 ]
 
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate >> ___pyAttrLoad___: aSym [
+	"A str subclass's instance holding a lone surrogate (class >>
+	___twinFor___:) reads a @property of the subclass by running its getter,
+	ahead of the instance's own attributes, as a data descriptor is read.  The
+	ordinary read cannot tell it from a method there: it recognises a property
+	by the receiver's class, and the twin is not the class that declared it.
+	Everything else, and every exact str, reads as before.
+
+	No temps: this frame sits in front of object's, whose width is
+	load-bearing."
+
+	(self @env0:class @env0:___twinOf___) @env0:ifNotNil: [:owner |
+		self @env0:class @env0:___twinReady___.
+		((self @env0:class @env0:class @env0:includesSelector: #'___grailOwnPropertyNames___'
+				environmentId: 1)
+			and: [(self @env0:class ___grailOwnPropertyNames___) @env0:includes: aSym])
+				ifTrue: [^ self @env0:perform: aSym env: 1]].
+	^ super ___pyAttrLoad___: aSym
+
+]
+
 { #category : 'Grail-Private' }
 PyStrSurrogate >> ___requireAffix___: anAffix atEnd: atEnd [
 
@@ -366,7 +388,9 @@ PyStrSurrogate >> __class__ [
 	backs Python-defined str subclasses, which answer themselves."
 
 	self @env0:class @env0:== PyStrSurrogate ifTrue: [^ str].
-	^ self @env0:class
+	"A str subclass's instance holding a surrogate is its twin's (class >>
+	___twinFor___:), which answers the subclass."
+	^ self @env0:class @env0:___twinOf___ @env0:ifNil: [self @env0:class]
 
 ]
 
@@ -440,6 +464,18 @@ PyStrSurrogate >> __getattr__: name [
 	sym := name @env0:asSymbol.
 	(PyStrSurrogate @env0:___viaPlaceholderNames___ @env0:includes: sym) ifTrue: [
 		^ [:positional :kw | self @env0:___viaPlaceholders___: sym positional: positional kw: kw]].
+	"A str subclass's instance (class >> ___twinFor___:) reads the subclass's
+	class attributes too.  Its methods are installed on the twin, so ordinary
+	lookup found them; a class attribute lives in the subclass's holders,
+	which the twin's chain does not reach."
+	(self @env0:class @env0:___twinOf___) @env0:ifNotNil: [:owner |
+		(owner ___classAttrOwnOrInherited___: sym) @env0:ifNotNil: [:raw |
+			^ self ___descriptorGet___: raw].
+		([(Unicode7 @env0:new) ___pyAttrLoad___: sym. true]
+				@env0:on: AttributeError do: [:ex | ex @env0:return: false])
+			ifFalse: [
+				^ AttributeError ___signal___: '''' @env0:, owner @env0:name @env0:asString
+					@env0:, ''' object has no attribute ''' @env0:, sym @env0:asString @env0:, '''']].
 	"A name NO str has is an AttributeError, as for any str -- asked of an
 	empty one, which raises exactly CPython's.  ``hasattr(s, '__slots__')''
 	must answer False; the refusal below is a NotImplementedError, which
@@ -483,6 +519,17 @@ PyStrSurrogate >> __getitem__: index [
 		^ IndexError ___signal___: 'string index out of range'].
 	^ PyStrSurrogate @env0:___fromCodePoints___:
 		(Array @env0:with: (codePoints @env0:at: i @env0:+ 1))
+
+]
+
+{ #category : 'Grail-Python Protocol' }
+PyStrSurrogate >> __getnewargs__ [
+	"str.__getnewargs__: the value as a plain str, in a tuple -- what
+	pickle and copy rebuild a str subclass's instance from (class >>
+	___twinFor___:).  AbstractPyStr's version reads the wrapped value, which
+	this class does not have."
+
+	^ (Python @env0:at: #tuple otherwise: Array) @env0:withAll: { self __str__ }
 
 ]
 
@@ -612,9 +659,12 @@ PyStrSurrogate >> __sizeof__ [
 
 { #category : 'Grail-Python Protocol' }
 PyStrSurrogate >> __str__ [
-	"CPython: ``str(s) is s'' for an exact str."
+	"CPython: ``str(s) is s'' for an exact str -- and an exact str with the
+	same characters for a str subclass's instance (class >> ___twinFor___:),
+	as str.__str__ answers one."
 
-	^ self
+	self @env0:class @env0:== PyStrSurrogate ifTrue: [^ self].
+	^ PyStrSurrogate @env0:___fromCodePoints___: self @env0:___codePoints___ @env0:copy
 
 ]
 

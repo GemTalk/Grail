@@ -4337,6 +4337,12 @@ builtins >> ___isInstanceSingle___: anObject of: aClass [
 				(anObject @env1:___pyAttrLoad___: #'__class__')
 			of: aClass depth: 0].
 	result := anObject isKindOf: aClass.
+	"A str subclass's instance holding a lone surrogate is a PyStrSurrogate of
+	the subclass's twin, which no Smalltalk inheritance links to the subclass
+	(PyStrSurrogate class >> ___twinFor___:).  Judged by the class it stands for."
+	(result not and: [anObject isKindOf: PyStrSurrogate]) ifTrue: [
+		(anObject @env0:class @env0:___twinOf___) @env0:ifNotNil: [:owner |
+			^ self ___isSubclass___: owner of: aClass depth: 1]].
 	"A C EXTENSION'S OBJECT is an instance of what its C type's MRO names, as
 	PyObject_TypeCheck reads it: numpy.float64 subclasses float, and
 	isinstance(np.float64(1), float) was False."

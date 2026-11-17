@@ -333,6 +333,18 @@ CharacterCollection class >> __new__: obj [
 	override answers its own characters through str.__str__."
 	obj @env0:ifNil: [source := ''].
 	obj @env0:ifNotNil: [source := obj __str__ @env0:___strResult___].
+	"Content with a LONE SURROGATE -- surrogateescape'd bytes, as email's
+	header tokens are -- cannot be stored in the receiver, a CharacterCollection:
+	the primitive refuses D800..DFFF.  The instance is a PyStrSurrogate of the
+	receiver's twin instead, which is the receiver to Python
+	(PyStrSurrogate class >> ___twinFor___:)."
+	(source @env0:isKindOf: CharacterCollection) ifFalse: [
+		| sur twin |
+		sur := Python @env0:at: #'PyStrSurrogate'.
+		(source @env0:isKindOf: sur) ifTrue: [
+			twin := (sur @env0:___twinFor___: self) @env0:basicNew.
+			twin @env0:___setCodePoints___: source @env0:___codePoints___ @env0:copy.
+			^ twin]].
 	"Allocate a self-typed string of the right size via Behavior's
 	primitive ``new:`` and copy bytes.  Do NOT route through
 	``___new___:`` here — Object's class-side bridge of that name
