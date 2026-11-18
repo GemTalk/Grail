@@ -1,1094 +1,1353 @@
-# Measured per-class SUnit times, in milliseconds: '<ClassName> <ms>'.
+# Measured per-class SUnit costs: '<ClassName> <ms> [<KB>]'.
 # GrailShardPlan places whole classes on the gate's shards by these numbers
-# (longest first, to the least-loaded shard); a class missing from here is
-# costed by its test count, so nothing is ever dropped.
+# (longest first, to the least-loaded shard, by time and -- where the KB
+# column is there -- by memory); a class missing from here is costed by
+# its test count, so nothing is ever dropped.
 #
 # GENERATED -- do not edit by hand.  Refresh with
 #     scripts/refresh_shard_timings.py [CI run id ...]
-# Source: CI runs 40798032173 40802740055; 1084 classes, 5479s in all
+# Source: CI run(s) 44388166520 44388163817 44381243894; 1340 classes, 12355s in all
 # (per run, the mean of a class's samples, so both arms count; across
 # runs, the largest -- see the script for why).
-AbcClassBuildTestCase 7090
-AbcMachineryTestCase 9468
-AbstractBasesProtocolTestCase 1130
-AllConformanceTestCase 478
-AnnotationMachineryTestCase 21875
-AnnotationScopeRefusalsTestCase 255
-AnyAllShareTheTruthTestTestCase 1564
-AppNamespaceTestCase 157
-ArchiveMetadataTestCase 8926
-ArgparseTestCase 17326
-ArithmeticErrorTestCase 2
-AsendLifecycleTestCase 3318
-AsgiServerTestCase 15955
-AssertStatementTestCase 140
-AssertWarnsLocationTestCase 2598
-AssertionErrorTestCase 13
-AssignDunderClassTestCase 1996
-AssignedNewTestCase 1919
-AstColumnOffsetsTestCase 960
-AstExportTestCase 1164
-AstWalkAndCategoriesTestCase 836
-AsyncComprehensionTestCase 14618
-AsyncContextManagerTestCase 14367
-AsyncDefInClassBodyTestCase 1752
-AsyncForEdgesTestCase 902
-AsyncGenExpTestCase 14267
-AsyncGeneratorsTestCase 1140
-AsyncIterationTestCase 4585
-AsyncSyntaxErrorsTestCase 111
-AsyncWithCopyContractsTestCase 2958
-AsyncWithProtocolTestCase 808
-AsyncgenShutdownHooksTestCase 7073
-AsyncioEagerTaskTestCase 7848
-AsyncioExceptionsTestCase 3636
-AsyncioIoTestCase 29566
-AsyncioShieldAndWaitForTestCase 7662
-AsyncioTimeoutTestCase 3326
-AsyncioWaitAndCancelIdentityTestCase 2508
-AttrAccessorsTestCase 2052
-AttributeAccessTestCase 1440
-AttributeCeilingTestCase 456
-AttributeErrorTestCase 8
-AttributeInheritanceTestCase 3302
-AttributePropertyTestCase 304
-AttributeProtocolTestCase 434
-AttributeStoreTestCase 9284
-AugAssignComplexTargetTestCase 944
-AugAssignModuleTargetTestCase 469
-AugAssignSliceTargetTestCase 350
-AugmentedAssignmentTestCase 1415
-AugmentedBinaryFallbackTestCase 1424
-AwaitProtocolTestCase 1004
-AwaitablePlumbingTestCase 914
-BareAssertTracebackTestCase 137
-BareCachedPropertyCachesTestCase 33442
-BareEvalExecScopeTestCase 408
-BareEvalNestedScopeTestCase 186
-BareNameManglingTestCase 6871
-BaseExceptionGroupTestCase 505
-BaseExceptionTestCase 9218
-BigmemtestIRTestCase 142
-BisectTestCase 26
-BlockingIOErrorTestCase 2
-BodyClassAttrReplayTestCase 7
-BoolBitwiseOperandsTestCase 341
-BoolConformanceTestCase 39000
-BooleanTestCase 1076
-BoundMethodBindingTestCase 283
-BoundMethodNameTestCase 8
-BracketNestingLimitTestCase 66
-BreakpointBuiltinTestCase 995
-BreakpointHookTestCase 4444
-BrokenPipeErrorTestCase 1
-BufferErrorTestCase 1
-BufferExportOnJoinTestCase 1466
-BufferedIoTestCase 6206
-BuildClassBuiltinTestCase 2143
-BuiltClassRebuildTestCase 3087
-BuiltinArgValidationTestCase 5092
-BuiltinArityMismatchTestCase 1430
-BuiltinBaseSlotsTestCase 972
-BuiltinDescriptorTypesTestCase 148
-BuiltinExtrasTestCase 44
-BuiltinKeywordRefusalsTestCase 844
-BuiltinNameCaptureTestCase 16294
-BuiltinNamespaceNarrowingTestCase 869
-BuiltinProtocolDispatchTestCase 472
-BuiltinRefusalsTestCase 2320
-BuiltinSubclassMethodsTestCase 172
-BuiltinSubclassOverrideTestCase 473
-BuiltinSubclassPickleTestCase 2090
-BuiltinSubclassPropertyTestCase 3750
-BuiltinTypeDictAndBasesTestCase 15002
-BuiltinTypesClassGetitemTestCase 1653
-BuiltinsRebindingTestCase 116
-BuiltinsReduceAndImportTestCase 2548
-BuiltinsTestCase 1614
-BundledPackagesTestCase 17336
-ByteArrayReceiverTypeTestCase 366
-BytearrayTestCase 30
-BytesSubclassTestCase 27979
-BytesTestCase 258
-BytesWarningTestCase 2
-BytesioGetbufferViewTestCase 269
-CMathTestCase 540
-CPythonHarnessTestCase 10171
-CPythonShimTestCase 5639
-CacheTagAndJoinTestCase 246
-CachedPropertyDescriptorTestCase 5918
-CachedPropertyTestCase 19802
-CalendarTestCase 129
-CallableReprTestCase 919
-CallingConventionTestCase 2918
-CanonicalRegistryRestoreTestCase 32
-CaretAnchorTestCase 2308
-CatchWarningsRecordTestCase 7084
-CatchWarningsStateTestCase 1079
-CellEmptinessTestCase 516
-CellObjectsTestCase 898
-ChainedAttributeStoreTestCase 560
-ChainedComparisonTestCase 10
-ChainedIdentityCompareTestCase 161
-CheckWarningsHelperTestCase 3614
-ChildProcessErrorTestCase 44
-ClassAttrDictSubclassTestCase 190
-ClassAttrDunderBindingTestCase 144456
-ClassAttrMethodOverrideTestCase 1114
-ClassAttrShadowsInheritedTestCase 584
-ClassAttrSingleHomeTestCase 1007
-ClassAttributeTestCase 2326
-ClassAttrsTestCase 137
-ClassBareAnnotationReadTestCase 2306
-ClassBodyAugAssignTestCase 348
-ClassBodyBindingProtocolTestCase 1218
-ClassBodyCallClosureTestCase 264
-ClassBodyCallableBindsTestCase 8214
-ClassBodyClosureCellTestCase 1860
-ClassBodyConditionalNewTestCase 155
-ClassBodyConditionalTestCase 1366
-ClassBodyControlFlowTestCase 5394
-ClassBodyDecoratedSiblingTestCase 362
-ClassBodyDecoratorScopeTestCase 1502
-ClassBodyDefAsPlainFunctionTestCase 1042
-ClassBodyDroppedStatementTestCase 460
-ClassBodyDroppedStatementsTestCase 327
-ClassBodyDunderClassTestCase 1118
-ClassBodyExpressionStatementTestCase 514
-ClassBodyGlobalTestCase 482
-ClassBodyImportTestCase 1222
-ClassBodyLocalsTestCase 1184
-ClassBodyLoopsTestCase 3574
-ClassBodyMatchAndAliasBindingsTestCase 114
-ClassBodyMethodAliasTestCase 4506
-ClassBodyMethodDecoratorTestCase 3647
-ClassBodyMethodRefsTestCase 230
-ClassBodyNamespaceDefsTestCase 316
-ClassBodyNamespaceTestCase 9912
-ClassBodyNestedDefBindingTestCase 656
-ClassBodyNonlocalTestCase 1204
-ClassBodyRebindingAndInstanceDictTestCase 582
-ClassBodyRebindingOrderTestCase 240
-ClassBodyRebindingTestCase 1588
-ClassBodySourceOrderTestCase 520
-ClassBodyTempsTestCase 1522
-ClassBodyTracebackTestCase 8630
-ClassBodyTryImportTestCase 1490
-ClassBodyUnpackingTestCase 931
-ClassCallFastPathTestCase 76
-ClassCellTestCase 5436
-ClassDecoratorTestCase 416
-ClassDefLocalBindsAtEndTestCase 1000
-ClassDescriptorReadsTestCase 263
-ClassDictEntriesTestCase 1139
-ClassDictNotWritableTestCase 516
-ClassDictOrderTestCase 541
-ClassDictProxyTestCase 338
-ClassFunctionBindingTestCase 528
-ClassGetitemNearestTestCase 468
-ClassGetitemPrecedenceTestCase 548
-ClassGetitemTestCase 1032
-ClassHeaderEvaluatedOnceTestCase 4955
-ClassIdentityAndRelativeImportTestCase 2504
-ClassInClassBodyBlockTestCase 759
-ClassInClassBodyTestCase 2070
-ClassInMethodLocalClassMethodTestCase 2406
-ClassMetaclassIdentityTestCase 1117
-ClassMethodAttrViaInstanceTestCase 246
-ClassMethodDecoratorOrderTestCase 152
-ClassMethodGlobalFallbackTestCase 362
-ClassMethodViaInstanceTestCase 311
-ClassModuleFollowsNameTestCase 4708
-ClassNewAttributeTestCase 373
-ClassPrivateNameTestCase 2844
-ClassQualnameStoreTestCase 652
-ClassReprTestCase 1036
-ClassScopeComprehensionTestCase 2516
-ClassScopeTestCase 854
-ClassSideArityMessageTestCase 4084
-ClassStatementInNewTestCase 2389
-ClassStatementSlotsTestCase 1816
-ClassSubclassesTestCase 1330
-ClassTablesChunkedTestCase 4678
-ClassTestCase 2438
-ClassTransientTestCase 1054
-ClassTypeParamsTestCase 1450
-ClassmethodCreationNoInvokeTestCase 898
-ClassmethodViaSelfMergedTestCase 551
-ClosureAttributeTestCase 3
-ClosureCellTestCase 637
-ClosureCellsPerActivationTestCase 1393
-CmathInverseFunctionsTestCase 578
-CmathPortedFunctionsTestCase 879
-CoConstsAndShadowedTypeTestCase 522
-CodeFlagsTestCase 440
-CodeFreevarsAndMethodTypeTestCase 774
-CodecNoteCarrierTestCase 1494
-CodecRegistryReachTestCase 562
-CodecsEscapeHelpersTestCase 676
-CodecsRegistryTestCase 6402
-ComparisonBlockingTestCase 1584
-ComparisonProtocolInsideSequencesTestCase 544
-ComparisonProtocolTestCase 13400
-CompatPickleAndNetrcTestCase 776
-CompileAndEvalArgumentsTestCase 7641
-CompileAstTreeTestCase 6058
-CompileCodeObjectTestCase 1304
-CompileErrorFilenameTestCase 147
-CompileOptimizeTestCase 8072
-CompileSingleModeTestCase 240
-CompileSyntaxWarningsTestCase 79
-CompileTopLevelAwaitTestCase 1604
-ComplexTestCase 110
-CompoundStatementExtentTestCase 8
-ComprehensionTargetsTestCase 198
-ComprehensionTestCase 326
-ConditionalClassBodyDefScopeTestCase 289
-ConfigparserTestCase 454
-ConnectionAbortedErrorTestCase 2
-ConnectionErrorTestCase 1
-ConnectionRefusedErrorTestCase 1
-ConnectionResetErrorTestCase 1
-ConstructorKeywordRefusalsTestCase 720
-ContextVarsPep567TestCase 10648
-ContextVarsTestCase 30
-ConversionErrorMessagesTestCase 590
-CopyProtocolTestCase 2046
-CopyregTestCase 132
-CoroutineIntrospectionTestCase 2344
-CoroutineNeverAwaitedTestCase 33355
-CoroutineNotIterableTestCase 842
-CoroutineObjectsTestCase 4732
-CoroutineReuseTestCase 323
-CoroutineSuspensionTestCase 8786
-CrossModuleFrameTestCase 2286
-CsvTestCase 432
-CtypesDataTypesTestCase 13765
-DataDescriptorSetTestCase 11446
-DataclassesTestCase 6913
-DatetimeAcceleratorNameTestCase 110
-DatetimeIsADateTestCase 2080
-DatetimeLocalTimeTestCase 248
-DatetimeSecondBaseTestCase 931
-DecimalTestCase 14106
-DeclarationLegalityTestCase 118
-DecodeErrorHandlersTestCase 1238
-DecoratedMethodSelfCallTestCase 175
-DecoratorEvalOrderTestCase 938
-DecoratorLocalBaseTestCase 528
-DecoratorLocalShadowsGlobalTestCase 112
-DecoratorReadsOwnNameTestCase 240
-DecoratorSecondaryBaseTestCase 146
-DefDefaultsScopeTestCase 917
-DefaultObjectReprTestCase 4195
-DefaultShadowsLocalTestCase 344
-DefaultsAndAttrsTestCase 13572
-DelTupleTargetTestCase 144
-DelegationIntrospectionTestCase 176
-DeleteGlobalNameTestCase 574
-DeployCheckTestCase 346
-DeprecatedCooperativeTestCase 1954
-DeprecationWarningTestCase 32
-DequeIdentitySearchTestCase 2072
-DerivedPropertyWinsTestCase 968
-DescriptorConstructorRefusalsTestCase 964
-DictDeleteByEqualKeyTestCase 650
-DictHashesBeforeEqTestCase 518
-DictKwargsTestCase 86
-DictReversedPositionsTestCase 1271
-DictTestCase 188
-DictUnpackingTestCase 659
-DirExcludesInternalsTestCase 182
-DirOfAClassTestCase 3104
-DirSlotsAndTracebackTestCase 2660
-DirectCallsTestCase 2918
-DjangoTestCase 121185
-DocstringValuesTestCase 522
-DunderCallTestCase 181
-DunderClassInjectedCellTestCase 2639
-DunderClassMethodLocalTestCase 856
-DunderClassTestCase 140
-DunderNewTestCase 26118
-DuplicateArgumentBindingTestCase 5610
-DynamicClassModuleTestCase 1180
-DynamicGlobalsTestCase 124
-DynamicInstanceAttrsTestCase 114
-DynamicStrSubclassValueTestCase 1180
-DynamicTypeTestCase 518
-EOFErrorTestCase 2
-EllipsisSingletonTestCase 222
-EmailMessageTestCase 11699
-EncodingWarningTestCase 2
-EnumAutoAtAssignmentTestCase 6248
-EnumAutoImportTestCase 15
-EnumBodyCallablesTestCase 2311
-EnumCallAndInitTestCase 9670
-EnumCompositeNameTestCase 1067
-EnumConvertExportTestCase 786
-EnumDataTypeReprTestCase 5433
-EnumDataclassReprTestCase 6474
-EnumDefinitionErrorsTestCase 7880
-EnumDescriptorMemberTestCase 1948
-EnumDictTestCase 493
-EnumDynamicClassAttributeTestCase 585
-EnumFlagMasksTestCase 2637
-EnumGlobalInjectTestCase 255
-EnumIgnoreNamesTestCase 4770
-EnumMemberMarkerTestCase 1012
-EnumMemberPropertyTestCase 2078
-EnumMetaclassExtraMembersTestCase 2746
-EnumMetaclassSignatureTestCase 2364
-EnumMethodDocsTestCase 8919
-EnumMidbuildLookupTestCase 1800
-EnumMixinNewTestCase 2772
-EnumMixinReduceTestCase 2882
-EnumMixinValueCoercionTestCase 3888
-EnumModuleApiTestCase 1100
-EnumNamedFlagsTestCase 3508
-EnumNamedtupleAutoTestCase 2488
-EnumNestedClassTestCase 3656
-EnumPickleByNameTestCase 1299
-EnumPickleHelperTestCase 4170
-EnumRootPickleIdentityTestCase 3946
-EnumSecondaryMixinTestCase 10508
-EnumTestCase 999
-EnumTupleStorageTestCase 5048
-EnumerateTypeTestCase 2013
-Env1PlumbingSendsTestCase 1142
-EnvLongValueTestCase 88
-EnvVarGuardTestCase 6015
-EquivalentStrKeysAndListdirTestCase 216
-EscapeCodecsTestCase 1616
-EtreeParsingTestCase 6881
-EvalAndEscapesTestCase 732
-EvalCallerNamespaceTestCase 4582
-EvalExecModeCodeTestCase 1575
-EvalGlobalsLocalsTestCase 155
-EvalInNestedScopeTestCase 1998
-EvalInputGrammarTestCase 180
-EvalLiveMappingTestCase 6960
-EventLoopTestCase 16900
-ExceptClauseShieldTestCase 3100
-ExceptStarReraisePositionTestCase 465
-ExceptStarShapesTestCase 440
-ExceptStarTestCase 2580
-ExcepthookPrintsTracebackTestCase 166
-ExceptionChainingAttributesTestCase 2518
-ExceptionCopyAndReduceTestCase 142
-ExceptionFramesAcrossGeneratorsTestCase 4600
-ExceptionGroupConstructionTestCase 7098
-ExceptionGroupTestCase 11
-ExceptionInitSkipsSuperTestCase 420
-ExceptionProtocolRefusalsTestCase 290
-ExceptionSubclassArgsTestCase 2790
-ExceptionTestCase 0
-ExecAnnotationsNamespaceTestCase 36
-ExecBareEvalTestCase 1074
-ExecBuiltinsMappingTestCase 6139
-ExecClassBodyLoopsTestCase 850
-ExecClassBodyNamesTestCase 6208
-ExecClassDefinitionTestCase 5102
-ExecClassMethodScopeTestCase 435
-ExecFrameGlobalsTestCase 440
-ExecLocalsTestCase 416
-ExecMethodCopiesTestCase 661
-ExecRaiseKeepsBindingsTestCase 146
-ExecRelativeImportTestCase 796
-ExecStarImportTestCase 637
-ExecWithClosureIRTestCase 277
-ExecWithClosureTestCase 816
-ExecZeroArgSuperTestCase 2603
-ExecblockGetTestCase 1452
-ExitStackProtocolTestCase 6136
-ExitStackUsageTestCase 112
-FStringAstJoinedStrTestCase 2562
-FStringEscapesAndSpecDecodingTestCase 182
-FStringFieldPositionsTestCase 786
-FStringFieldSyntaxErrorsTestCase 74
-FStringIsNotADocstringTestCase 77
-FStringManyPartsTestCase 1870
-FStringPep701TestCase 1270
-FStringUnterminatedTestCase 18
-FTStringFieldTextTestCase 630
-FailedSubmoduleImportTestCase 418
-FastapiWallsTestCase 79109
-FileExistsErrorTestCase 15
-FileIOConstructorTestCase 142
-FileIoTestCase 154
-FileNotFoundErrorTestCase 1
-FirstExceptionTracebackTestCase 292
-FlagCrossClassReprTestCase 4850
-FlagMemberLengthTestCase 1057
-FlagNumericReprTestCase 2392
-FlagOperandsTestCase 4260
-FlaskScaffoldingTestCase 96263
-FlaskViewRaisingTestCase 115671
-FloatAbsNegativeZeroTestCase 506
-FloatFloorDivModTestCase 648
-FloatTestCase 1741
-FloatingPointErrorTestCase 2
-FnmatchTestCase 87
-ForStarTargetTestCase 1293
-FormatSpecAndComplexTestCase 82708
-FormatSpecEdgesTestCase 437
-FormatSpecFieldsTestCase 150
-FormatSpecTestCase 25
-FormatSpecValidationTestCase 482
-FormatZeroPadGroupsItsFillTestCase 149
-FourArgAttrCallTestCase 786
-FractionTestCase 976
-FrameEqualityTestCase 2490
-FrameFunctionIntrospectionTestCase 399
-FrameGlobalsOutsideSysModulesTestCase 266
-FrameLocalsCaptureTestCase 1775
-FrameLocalsLiveViewTestCase 1004
-FrameReceiverSuggestionTestCase 2211
-FreeVariableUnboundTestCase 2582
-FrozensetTestCase 8
-FunctionAnnotationOrderTestCase 58
-FunctionAttrWriteTestCase 6478
-FunctionBuiltinsAttrTestCase 1204
-FunctionDefaultsTestCase 723
-FunctionDictAndDocTestCase 520
-FunctionGlobalsTestCase 560
-FunctionMetadataTestCase 4932
-FunctionNotSubscriptableTestCase 2440
-FunctionRebindingTestCase 392
-FunctionScopeImportTestCase 906
-FunctionTypeParamsTestCase 1340
-FunctionWriteGuardsTestCase 951
-FunctionalEnumModuleTestCase 4438
-FunctoolsTestCase 322
-FunctoolsWrapsVarargsTestCase 1
-FutureStatementErrorsTestCase 30
-FutureWarningTestCase 1
-GemStoneTestCase 520
-GemstoneContinuationTestCase 2
-GeneratorApiTestCase 9951
-GeneratorCloseTestCase 1412
-GeneratorDetectionTestCase 100
-GeneratorExceptionContextTestCase 822
-GeneratorExitTestCase 1
-GeneratorFrameLocalsWriteTestCase 330
-GeneratorStackFrameTestCase 2400
-GeneratorStopTestCase 4912
-GeneratorThrowTracebackTestCase 968
-GeneratorUnraisableTestCase 959
-GenericAliasStarredPickleTestCase 204
-GenericAliasSubclassConstructionTestCase 173
-GenericAliasTestCase 1999
-GenericAndAbcBasesTestCase 10454
-GenericClassSubscriptTestCase 754
-GenericFunctionScopeTestCase 5556
-GenexpLazinessTestCase 1739
-GetattrProbeTestCase 397
-GetattributeHookTestCase 10997
-GetoptTestCase 194
-GetpassTestCase 96
-GlobTestCase 824
-GlobalBindingFormsTestCase 4430
-GlobalBuiltinFallbackTestCase 1206
-GlobalDeclarationScopeTestCase 514
-GlobalStatementCodegenTestCase 16
-GlobalStatementTestCase 515
-GlobalSyntaxErrorsTestCase 545
-GlobalsAsAValueTestCase 98
-GlobalsShadowBuiltinTestCase 1354
-GlobalsTestCase 214
-GrailDirFallbackTestCase 6
-GrailModuleTestCase 410
-GrailShardPlanTestCase 345
-GrailTmpDirTestCase 171
-GzipTestCase 1504
-HeapqTestCase 39
-HtmlTestCase 64
-HtmlUnescapeTestCase 4408
-HttpClientStatusConstantsTestCase 10142
-HttpClientTestCase 14849
-HttpCookiejarTestCase 11903
-HttpCookiesTestCase 7030
-HttpKeepAliveStallTestCase 7674
-HttpStatusTestCase 5753
-IPv6AddressTestCase 2220
-IRClassDeferredNonlocalTestCase 1270
-IRCodegenFlagDefaultTestCase 19
-IRCodegenSmokeTestCase 141550
-IRDefIdStableTestCase 14
-IRTextSourcesChunkedTestCase 30864
-ImportAndOpenArgsTestCase 1461
-ImportErrorTestCase 10
-ImportFromlistTestCase 538
-ImportTypeIntrospectionTestCase 1362
-ImportWarningTestCase 1
-ImportlibFileOpenErrorTestCase 2
-ImportlibFinderSurfaceTestCase 3887
-ImportlibMetadataDiscoveryTestCase 3530
-ImportlibReloadTestCase 50026
-ImportlibResourcesTestCase 1914
-ImportlibRunArgumentsTestCase 112
-ImportlibTestCase 4046
-ImportlibUnloadTestCase 2264
-InconsistentIndentationTestCase 56
-IncrementalEscapeDecodeTestCase 2932
-IndentationErrorTestCase 1
-IndexArgumentCoercionTestCase 1540
-IndexDunderVarargsTestCase 3120
-IndexErrorTestCase 1
-IndexTypeErrorNamesTestCase 159
-IndexedSlotRebuildTestCase 9167
-InferredSlotsTestCase 12880
-InheritedMetaclassDispatchTestCase 6704
-InitSubclassAssignedTestCase 11896
-InitSubclassClassBodyTestCase 10800
-InitSubclassFixedArityTestCase 3825
-InitSubclassMroTestCase 29468
-InitSubclassTestCase 6214
-InlineSuiteContinuationTestCase 630
-InputBuiltinTestCase 32
-InspectAsyncPredicatesTestCase 134230
-InspectCallableInstanceSignatureTestCase 466
-InspectClassifyClassAttrsTestCase 6056
-InspectGetattrStaticModuleTestCase 328
-InspectGetmembersTestCase 1132
-InspectMethodPredicatesTestCase 360
-InspectSignatureObjectsTestCase 1499
-InspectSourceLocationTestCase 1040
-InstanceClassAssignmentTestCase 3510
-InstanceDocstringTestCase 1330
-IntBytesAtCeilingTestCase 2264
-IntFloatEdgesTestCase 3039
-IntFloatOverflowTestCase 2765
-IntFromBytesIterableTestCase 293
-IntNePuntsOnNotImplementedTestCase 2184
-IntOperandNotIndexTestCase 9096
-IntSizeofTestCase 276
-IntStrDigitLimitTestCase 3605
-IntSubclassFromBytesTestCase 5076
-IntToBytesDefaultsTestCase 158
-IntegerTestCase 665
-InterruptedErrorTestCase 1
-IoClassModuleTestCase 18
-IpaddressFullModuleTestCase 1152
-IsADirectoryErrorTestCase 2
-IteratorLengthHintTestCase 2580
-IteratorTestCase 1000
-JsonDecodeErrorTestCase 790
-JsonDecoderClassTestCase 11086
-JsonLoadsKeywordsTestCase 6186
-KeyErrorTestCase 1
-KeyboardInterruptTestCase 2
-KeywordOnlyParamsTestCase 396
-KwargSplatMergeTestCase 194
-KwargsSplatDictSubclassTestCase 1981
-KwargsSplatTestCase 15708
-LambdaArityMessageTestCase 13916
-LambdaDefaultsTestCase 3034
-LambdaFrameNameTestCase 3082
-LambdaFrameTestCase 186
-LambdaStarargsTestCase 520
-LegacyStatementHintTestCase 56
-LegbScopeTestCase 2882
-ListSortKwargsTestCase 146
-ListTestCase 1674
-LiveDictTestCase 1122
-LiveFrameLocalsTestCase 556
-LiveFrameProbeResilienceTestCase 260
-LocalsTestCase 116
-LoggingManagerTestCase 584
-LoggingRecordsTestCase 4695
-LookupErrorTestCase 1
-LoopElseBreakTestCase 146
-LruHashabilityAndUnionsTestCase 3306
-MakecodesPatternTestCase 45
-MapFilterZipPickleTestCase 392
-MappingProxyDelegationTestCase 150
-MatchCaptureBindingTestCase 175
-MatchClassPatternErrorsTestCase 282
-MatchPatternChecksTestCase 90
-MatchRuntimeDuplicateKeysTestCase 138
-MatchStatementIRTestCase 2063
-MatchStatementTestCase 9590
-MatchSubjectKindsTestCase 2538
-MatchTailIndexTestCase 231
-MathTestCase 350
-MemoryErrorTestCase 1
-MemoryViewTestCase 568
-MetaPathFindersTestCase 13547
-MetaclassBaseTestCase 2087
-MetaclassCallTestCase 5176
-MetaclassClassAttrTestCase 2376
-MetaclassDirectCallInitTestCase 660
-MetaclassDispatchTestCase 4690
-MetaclassGetattrOnClassMissTestCase 417
-MetaclassInstancecheckTestCase 1065
-MetaclassLookupOrderTestCase 488
-MetaclassMethodsTestCase 604
-MetaclassMroHookTestCase 3479
-MetaclassOperatorDispatchTestCase 5247
-MetaclassProtocolsTestCase 17367
-MetaclassPythonNameTestCase 982
-MetaclassWithAndNextTestCase 10386
-MethodAnnotationComprehensionTestCase 199
-MethodArityMessageTestCase 1802
-MethodClassCellClosureTestCase 8481
-MethodClosureFrameCaptureTestCase 14472
-MethodDefaultSharingTestCase 2572
-MethodDocstringTestCase 4159
-MethodFunctionDelegationTestCase 21978
-MethodFunctionTypesTestCase 6635
-MethodKeywordRefusalsTestCase 576
-MethodLocalSlotsTestCase 4971
-MethodOverrideArityTestCase 5063
-MethodOwnerAndMetaclassTestCase 10143
-MethodShadowsClassAttrTestCase 460
-MethodWrapperIdentityTestCase 442
-MethodWrapperTypeNamesTestCase 132
-MiExceptionHandlerTestCase 328
-MiSecondaryBaseAttrsTestCase 929
-MissingArgumentMessageTestCase 13394
-MixinMethodMetadataTestCase 602
-MockPatchTargetTestCase 4446
-MockTestCase 2104
-ModuleAnnotationsNameTestCase 127
-ModuleAttrCallTestCase 2308
-ModuleAttrDeleteTestCase 645
-ModuleAttrIdentityTestCase 554
-ModuleAttrZeroArgCallTestCase 13756
-ModuleAttrsAreNotDictMethodsTestCase 865
-ModuleBodyDelDefTestCase 217
-ModuleCachedAbsentTestCase 1034
-ModuleClassZeroArgCallTestCase 1439
-ModuleDefRebindingTestCase 4624
-ModuleDictItemTestCase 2705
-ModuleDocstringTestCase 294
-ModuleFixturesTestCase 2994
-ModuleFrameTestCase 312
-ModuleFromSpecTestCase 602
-ModuleFunctionDecoratorsTestCase 7034
-ModuleFunctionMetadataTestCase 8440
-ModuleFunctionTestCase 508
-ModuleFunctionsFirstClassTestCase 440
-ModuleGlobalRebindStringsTestCase 34
-ModuleGlobalsPast255TestCase 788
-ModuleHigherArityDefTestCase 573
-ModuleNotAMappingTestCase 2540
-ModuleNotFoundErrorTestCase 2
-ModuleOperatorsTestCase 930
-ModuleRebuildDefaultsTestCase 316
-ModuleRebuildStaleMethodsTestCase 1139
-ModuleScopeBindingsTestCase 808
-ModuleSpecTestCase 9048
-ModuleSubclassAttrTestCase 612
-ModuleTestCase 11
-ModuleTypeConstructionTestCase 664
-MoreCodecsTestCase 3291
-MovedClassmethodTestCase 840
-MroConflictMessageTestCase 322
-MroEntriesTestCase 4054
-MroThroughLaterBaseTestCase 694
-MultipleInheritanceTestCase 15060
-MultiprocessingModuleTestCase 7878
-NameErrorTestCase 2
-NamedIntConstantTestCase 292
-NamedTupleFieldDescriptorTestCase 25528
-NamedTupleSubclassingTestCase 28822
-NamedtupleNamingTestCase 6582
-NamespaceNonStringKeyTestCase 271
-NamespacePackageTestCase 1689
-NativeStarImportTestCase 203
-NestedClassInMethodLocalClassTestCase 5141
-NestedDefExplicitSuperTestCase 3118
-NestedDefGlobalTestCase 1264
-NestedDefIdentityTestCase 3482
-NestedDefModuleTargetTestCase 734
-NestedDefNameTestCase 114
-NestedFunctionFramesTestCase 1100
-NestedKeywordOnlyTestCase 530
-NestedLambdaQualnameTestCase 1186
-NestedOperandSpanTestCase 606
-NestedQualnameTestCase 286
-NestedStarImportTestCase 1246
-NestedUnboundLocalTestCase 568
-NestedUnpackTestCase 11420
-NewResultSkipsInitTestCase 3470
-NextIterTestCase 70
-NoDictAttributesTestCase 5356
-NoPositionalDefTestCase 1900
-NoSelfParameterTestCase 1412
-NonblockingSocketTestCase 6562
-NoneTypeTestCase 180
-NonlocalClosureTestCase 1304
-NonlocalDunderClassTestCase 10572
-NonlocalInClassBodyTestCase 4134
-NonlocalInMethodLocalClassTestCase 2887
-NonlocalParamWriteTestCase 953
-NonlocalThroughClassCellTestCase 1932
-NotADirectoryErrorTestCase 2
-NotImplementedErrorTestCase 5
-NotImplementedSingletonTestCase 249
-NulPathsLongKeysTempfilesTestCase 1053
-NumbersAbcAbstractTestCase 13556
-NumbersConcreteMixinsTestCase 2512
-NumbersTestCase 124
-NumericSubclassOperandsTestCase 1480
-OSErrorTestCase 1
-ObjectNewArgsAndSurrogateWarningsTestCase 5654
-ObjectTestCase 10
-OpenCodecsAndDescriptorsTestCase 2896
-OperandTypeErrorMessagesTestCase 5446
-OperatorSemanticsTestCase 26150
-OrderedDictMethodsTestCase 2342
-OsDirectoryErrorsTestCase 371
-OsEnvironMappingTestCase 184
-OsErrorErrnoSubclassTestCase 580
-OsErrorsCarryErrnoTestCase 7560
-OsFileDescriptorsTestCase 5593
-OsPathCommonpathTestCase 365
-OsPathPosixpathNamesTestCase 324
-OsPathPredicateTestCase 1709
-OsRemoveDollarPathTestCase 216
-OsRenameErrorsTestCase 5478
-OsScandirSymlinkTestCase 12366
-OsTestCase 354
-OsUtimeTestCase 884
-OsWalkTestCase 3956
-OsZipfileSurfaceTestCase 88
-OverflowErrorTestCase 1
-OverrideDefaultArgTestCase 670
-OverrideDocstringTestCase 5354
-PackageImportTestCase 290
-ParseErrorLocationTestCase 413
-PartialCallableAndCopyTestCase 6165
-PartialMethodDescriptorTestCase 3978
-PassTestCase 3
-PathUriTestCase 18172
-PathWalkAndMountTestCase 6238
-PathlibStubSurfaceTestCase 6554
-PendingDeprecationWarningTestCase 2
-Pep448StarredLiteralsTestCase 278
-Pep487HooksTestCase 4030
-Pep560BasesTestCase 2409
-Pep649AnnotationsTestCase 3894
-PercentFormatMappingTestCase 7522
-PermissionErrorTestCase 2
-PickleDispatchTableTestCase 5458
-PickleFinalRuntimeGapsTestCase 20338
-PickleProtocolTestCase 33222
-PkgRelativeInitTestCase 2
-PlainWithDoesNotAwaitTestCase 552
-PositionalOnlyDefaultsTestCase 537
-PosonlyAndReflectedEqTestCase 16020
-PosonlySyntaxAndArityTestCase 622
-PowSemanticsTestCase 1198
-PrintOutputRoutingTestCase 1687
-PrintableReprAndPrintfTestCase 3540
-PrivateMethodKeywordCallTestCase 207
-PrivateNameManglingTestCase 1822
-ProcessLookupErrorTestCase 1
-PropertyAndIsinstanceTestCase 59588
-PropertyBeatsStoredValueTestCase 11178
-PropertyNotDynamicClassAttributeTestCase 23220
-PropertyReturnsFunctionTestCase 512
-ProtocolFallbackAttributesTestCase 5522
-Py2PrintStatementTestCase 978
-PyDictTestCase 94
-PydanticPhase6WallsTestCase 6866
-PydocTextRendererTestCase 10050
-PyexpatDocumentEncodingTestCase 25598
-PyexpatDtdEventsTestCase 4080
-PyexpatEventPositionsTestCase 6053
-PythonCallSitePositionsTestCase 297580
-PythonClassEnumerationTestCase 554
-PythonOffsetMapTestCase 1462
-PythonParserTestCase 136
-PythonTokenizerTestCase 309
-PythonVisibleMroTestCase 4366
-QueueTestCase 1160
-RaiseSemanticsTestCase 12294
-RaiseSpanTestCase 270
-RaiseTestCase 7
-RandomConformanceTestCase 7608
-RandomTestCase 2154
-RangeTestCase 842
-RawSocketTestCase 7299
-RawUnicodeEscapeTestCase 1003
-ReConstantsTestCase 1108
-ReModuleTestCase 93514
-ReNonAsciiSubTestCase 1628
-ReSubCallableTestCase 266
-ReSubSurrogateTestCase 19252
-RealPathlibTestCase 6968
-RealpathSymlinksTestCase 8028
-ReboundDefaultsTestCase 11896
-ReceiverlessClassCallTestCase 9182
-RecursionErrorTestCase 12485
-ReduceAndBuiltinBindingTestCase 2520
-ReferenceErrorTestCase 1
-ReflectedComparisonPriorityTestCase 7976
-ReprAndRangeTestCase 1641
-ReprAndVarsTestCase 6022
-ReprRequiresAStrTestCase 1734
-ReprlibConformanceTestCase 4700
-ReprlibTestCase 178
-ReraiseIdentityTestCase 9159
-ReservedNameClassAttrTestCase 2401
-ReservedNameClassCellTestCase 2222
-ReservedNameLocalClassTestCase 7770
-ReservedParamDefaultTestCase 8548
-ReservedSelectorNamesTestCase 556
-ResourceWarningTestCase 1
-ReturnTestCase 10
-RmtreeOnexcTestCase 1660
-RmtreeSymlinksTestCase 514
-RoundDirFormatTestCase 16314
-RuntimeClassCreationTestCase 2033
-RuntimeEdgesBehindXmlEtreeTestCase 9359
-RuntimeErrorTestCase 1
-RuntimeGapsBehindPickleTestCase 32300
-RuntimeWarningTestCase 1
-SaxUtilsTestCase 8426
-SecretsTestCase 791
-SelectReadinessTestCase 1932
-SelectorManglingApiTestCase 818
-SelfCheckingFixturesTestCase 38214
-SelfNameCollisionTestCase 1876
-SelfNamedClassTestCase 2226
-SelfReboundInMethodTestCase 2036
-SelfSendOverrideTestCase 6537
-SelfSendPropertyCallTestCase 1560
-SequenceRepeatOperandsTestCase 3632
-SetDisplayUnpackTestCase 1381
-SetTestCase 170
-SetUpBridgeTestCase 10
-ShimForeignObjectTestCase 4
-ShlexTestCase 510
-ShortCircuitOperandSpanTestCase 248
-ShutilTestCase 49
-SignatureBindTestCase 1324
-SignatureDefaultTextTestCase 186
-SignatureOfAClassTestCase 5208
-SingleDispatchMethodTestCase 27588
-SingleDispatchRegisterTestCase 191
-SliceAndLoopsTestCase 6889
-SliceBlockCopyTestCase 582
-SliceOmittedBoundsTestCase 1084
-SlotMemberDescriptorTestCase 849
-SlotWrapperGetBindsImplementationTestCase 804
-SlotsInheritedDictTestCase 4480
-SlotsTestCase 34304
-SmalltalkForwarderTestCase 2427
-SocketModuleTestCase 14431
-SpanEndTokenTestCase 490
-SreTestCase 2474
-SslCallbacksTestCase 4250
-SslModuleTestCase 3284
-SslRuntimeGapsTestCase 13976
-StandInPackagesTestCase 132830
-StarImportDynamicNamesTestCase 164
-StarImportUnboundGlobalTestCase 372
-StarUnpackIteratorTestCase 391
-StarredTargetPlacementTestCase 62
-StaticmethodDefaultsTestCase 1248
-StaticmethodOverridesBaseMethodTestCase 11052
-StaticmethodShadowingTestCase 3957
-StatisticsTestCase 16154
-Stdlib3148FixesTestCase 5112
-Stdlib3148NativeTestCase 3354
-StdlibLongTailTestCase 8104
-StdlibModuleNamesTestCase 457
-StopAsyncIterationTestCase 1
-StopIterationTestCase 1
-StopIterationThroughContextManagerTestCase 950
-StoreEvaluationOrderTestCase 266
-StrAlphaTypesTestCase 476
-StrDecodeArgsTestCase 8854
-StrEnumMixinAndNewTestCase 26654
-StrFormatFieldsTestCase 2778
-StrIsATypeTestCase 310
-StrMethodKeywordArgsTestCase 386
-StrNumericTypesTestCase 718
-StrPaddingTestCase 1237
-StrRequiresAStrTestCase 2794
-StrSearchAndSplitTestCase 10028
-StrSubclassConstructionTestCase 396
-StrSubclassWideTestCase 523
-StrSurrogateProtocolTestCase 8036
-StrSurrogateShimTestCase 868
-StrTestCase 176
-StringIOSubclassTestCase 2971
-StringIOSurrogateTestCase 1438
-StringIOWriteTestCase 137
-StringLiteralKindMixingTestCase 560
-StringModuleTestCase 2230
-StrptimeModuleReuseTestCase 1256
-StructBuffersAndHalfInitTestCase 9626
-StructFormatWhitespaceTestCase 124
-StructGapsTestCase 876
-StructModuleTestCase 5676
-SubclassAttrShadowTestCase 6386
-SubclassCopyPickleTestCase 1264
-SubclassNameAttrTestCase 553
-SubclassableIoAndWarningsTestCase 744
-SubmoduleAutoBindTestCase 52
-SubmoduleParentPathTestCase 1358
-SubprocessAndCopytreeErrnoTestCase 379
-SubprocessTestCase 1237
-SuperArgZeroTestCase 3543
-SuperExitVarargsTestCase 1394
-SuperForeignReceiverTestCase 2275
-SuperLookupTestCase 2471
-SuperMethodLocalTestCase 5620
-SuperNewBindingTestCase 36244
-SuperNotRewrittenTestCase 2438
-SuperPreconditionErrorsTestCase 26579
-SuperProxyAttrsTestCase 3005
-SuperShadowingTestCase 22448
-SuperStopsAtNearestDefinitionTestCase 1229
-SuperTwoArgCheckTestCase 3466
-SuperTwoArgLocalTestCase 29731
-SuperValueAttributeTestCase 7587
-SupportContextDecoratorTestCase 7319
-SupportSubTestsTestCase 5802
-SurrogateEncodeHandlersTestCase 729
-SurrogateNamereplacePassTestCase 1347
-SurrogateStrTestCase 388
-SurrogatepassDecodeTestCase 715
-SymbolStrHashEqTestCase 284
-SyntaxErrorMessagesTestCase 346
-SyntaxErrorStrTestCase 68
-SyntaxErrorTestCase 2
-SyntaxWarningTestCase 1
-SynthesizedDunderVisibilityTestCase 10602
-SysConsoleStreamTestCase 3980
-SysHookAttributesTestCase 620
-SysPathBootstrapTestCase 218
-SysStreamSessionResolutionTestCase 20
-SysTestCase 1197
-SysVersionInfoTestCase 138
-SystemErrorTestCase 1
-SystemExitTestCase 5981
-TabErrorTestCase 2
-TarfileTestCase 4864
-TernaryTruthinessTestCase 2440
-TestSupportShimTestCase 2333
-TextwrapTestCase 50
-ThreadRegistryTestCase 6188
-ThreadingModuleTestCase 16909
-TimeClockTestCase 346
-TimedeltaFloatOperandTestCase 1817
-TimeoutErrorTestCase 2
-TimezoneKeywordsTestCase 150
-TokenizerDiagnosticsTestCase 141
-TomllibTestCase 904
-TotalOrderingTestCase 14514
-TracebackExcShorthandsTestCase 2740
-TracebackObjectTestCase 5440
-TracebackTestCase 140358
-TransformCodecsTestCase 8480
-TryElseScopeTestCase 3760
-TryTestCase 125
-TupleTestCase 14826
-TwilioClientTestCase 15484
-TwilioShapeTestCase 19626
-TwilioTier1TestCase 13984
-TypeAliasTestCase 1446
-TypeBuiltClassOverridesTestCase 874
-TypeCallMroEntriesTestCase 1952
-TypeDictGetsetTestCase 317
-TypeErrorTestCase 10574
-TypeInCallPositionTestCase 2620
-TypeMethodsOnClassesTestCase 3876
-TypeMroUnboundTestCase 222
-TypeParamEvaluateFunctionsTestCase 790
-TypeParamScopesTestCase 28706
-TypeParamSyntaxChecksTestCase 86
-TypeParamsTestCase 2180
-TypePrepareDefaultTestCase 6314
-TypeSlotsWeakrefDictOverBaseTestCase 2020
-TypeThreeArgNamespaceTestCase 1809
-TypeThreeArgTestCase 58436
-TypeWithScalarMixinTestCase 6824
-TypedDictTotalTestCase 9978
-TypesGetOriginalBasesTestCase 1586
-TypesNewClassMetaclassTestCase 374
-TypingGenericAliasTestCase 6460
-TypingSurfaceTestCase 25119
-TzFileHistoryTestCase 84
-TzsetPinningTestCase 11724
-UnaryOperandTypeErrorTestCase 4436
-UnaryVarargsDispatchTestCase 5973
-UnboundBuiltinMethodTestCase 5213
-UnboundCallArityTestCase 11294
-UnboundLocalErrorTestCase 735
-UnboundMethodDictTestCase 9494
-UnboundMethodRefusalsTestCase 886
-UnboundMethodTestCase 2101
-UndecodableFileNamesTestCase 307
-UndefinedDecoratorNameTestCase 868
-UnexpectedKeywordMessageTestCase 626
-UnhashableTestCase 1130
-UnicodeDecodeErrorTestCase 2
-UnicodeDigitsTestCase 128
-UnicodeEncodeErrorTestCase 2
-UnicodeErrorArgsTestCase 739
-UnicodeErrorFieldsTestCase 352
-UnicodeErrorTestCase 1
-UnicodeNamesTestCase 2648
-UnicodeTranslateErrorTestCase 1
-UnicodeWarningTestCase 2
-UnittestKnobsTestCase 2864
-UnittestMainExitStatusTestCase 5626
-UnittestResultExcInfoTestCase 2594
-UnittestTestCase 946
-UnpackModuleTargetTestCase 1643
-UrlopenCleanupAndErrorCloseTestCase 467
-UrlsplitIndexingTestCase 163
-UrlsplitSchemesTestCase 267
-UserWarningTestCase 1
-Utf16TruncatedDecodeTestCase 2716
-Utf32CodecTestCase 2418
-Utf7CodecTestCase 352
-ValueErrorTestCase 1
-VarargsAndImportsTestCase 759
-VarargsNamingTestCase 131
-VarargsOverrideTestCase 11656
-VarargsReceiverBindingTestCase 834
-WalrusInDisplayTestCase 2861
-WalrusInLambdaTestCase 1279
-WalrusPlacementTestCase 688
-WarnExplicitKeywordsTestCase 242
-WarnExplicitModuleGlobalsTestCase 9162
-WarningDisplayTestCase 1512
-WarningFilterOrderTestCase 6031
-WarningFiltersTestCase 20634
-WarningLocationTestCase 3078
-WarningRegistryAndOptionsTestCase 2685
-WarningRegistryTestCase 2272
-WarningStacklevelAttributionTestCase 1708
-WarningTestCase 2
-WarningsAndDecoratedPropertiesTestCase 16316
-WarningsApi314TestCase 3991
-WarningsArgValidationTestCase 1805
-WarningsDeprecatedTestCase 5526
-WarningsInternalApiTestCase 1116
-WarningsModuleFilterTestCase 918
-WeakReferenceTestCase 3464
-WeakrefModuleTestCase 30048
-WeakrefSubclassConstructionTestCase 924
-WeakrefTypeNameTestCase 840
-WerkzeugUtilsUpstreamTestCase 3501
-WideStrTypeAndAugmentedAttrStoreTestCase 5938
-WithAsTargetsTestCase 4576
-WithBlockShapesTestCase 1700
-WithExitRaisesTestCase 16738
-WithItemPositionsTestCase 18880
-WsgirefTestCase 710
-XmlParserTestCase 13876
-XmlSaxInfrastructureTestCase 37538
-YieldFromGuardTestCase 662
-YieldFromTestCase 4412
-YieldPlacementTestCase 56
-ZeroDivisionErrorTestCase 453
-ZipappRuntimeGapsTestCase 4831
-ZipfileTestCase 15464
-ZlibTestCase 548
+# Third column, where measured: KB the class added to its shard's live
+# memory (GRAIL_CLASS_MEM), the mean over runs; from CI run(s) 44387597520.
+ABoundMethodIsNamedByItsFunctionTestCase 1795 5521
+ABraceInAFormatSpecAlwaysOpensAFieldTestCase 170 143
+ABuiltinClassMethodIsAClassmethodDescriptorTestCase 729 3016
+ABuiltinMethodRefusesAForeignInstanceTestCase 694 2950
+ABytearrayTakesAnArraysBytesTestCase 1349 2746
+ACallableClassAttributeIsADescriptorMethodTestCase 174 2886
+AClassmethodObjectIsNotCallableTestCase 133 124
+AControlCharacterIsANonPrintableOneTestCase 88 208
+ADescriptorBindsAsCPythonsTestCase 433 241
+ADescriptorsGetHasCPythonsSignatureTestCase 302 511
+AFailingPrepareLookupIsRaisedTestCase 270 364
+AFieldHoldingANoBreakSpaceNamesItTestCase 74 224
+AFinalTypeIsNoBaseTestCase 358 629
+AFunctionsCodeIsOneObjectTestCase 422 242
+AKeywordBeforeAComprehensionSuggestsEqualsTestCase 66 184
+AKeywordSplatChecksAndCopiesItsKeysTestCase 1137 3044
+ALexerErrorNamesItsLineWithoutTheNewlineTestCase 188 246
+AMappingproxyHasNoMappingTestCase 117 246
+ANamedtupleNamesTheModuleItIsMadeInTestCase 585 878
+ANamedtupleSubclassIsBuiltFromItsBasesFieldsTestCase 1211 3137
+ARangeNeitherConcatenatesNorRepeatsTestCase 402 172
+ARegisteredCodecIsAFourTupleTestCase 422 66
+ARegisteredErrorHandlerIsCalledTestCase 5434 7711
+ASingleClosingBraceIsRefusedWhereItStandsTestCase 98 200
+ASingletonsMethodsHaveCPythonsSignaturesTestCase 789 376
+AStarImportBindsNoModuleBodyTestCase 700 609
+AStaticmethodHasACallTestCase 89 110
+AStrEnumMemberIsANumberLiteralTestCase 360 180
+AStrSubclassHoldsALoneSurrogateTestCase 29022
+ASurrogateStrIsNoNumberTestCase 462 368
+AUnionKeepsItsUnhashableMembersTestCase 385 272
+AbcClassBuildTestCase 10188 16206
+AbcMachineryTestCase 17264 7884
+AbstractBasesProtocolTestCase 1810 5285
+AllConformanceTestCase 1034 1082
+AnEvalInputEndingInABackslashIsRefusedThereTestCase 121 214
+AnExceptionsDirListsNoPlumbingTestCase 192 332
+AnIdIsUniqueAmongLiveObjectsTestCase 3512 5880
+AnUnterminatedStringIsDetectedAtTheLastLineTestCase 44 74
+AnnotationMachineryTestCase 32057 9240
+AnnotationScopeRefusalsTestCase 47 168
+AnyAllShareTheTruthTestTestCase 3369 1766
+AppNamespaceTestCase 228 228
+ArchiveMetadataTestCase 17440 22860
+ArgparseTestCase 28049 19543
+ArithmeticErrorTestCase 2 0
+AsendLifecycleTestCase 5936 3300
+AsgiServerTestCase 32720 40494
+AssertStatementTestCase 340 136
+AssertWarnsKeepsItsWarningsTestCase 2110 5280
+AssertWarnsLocationTestCase 2549 2886
+AssertionErrorTestCase 14 12
+AssignDunderClassTestCase 2168 2121
+AssignedModuleFunctionHooksTestCase 272 302
+AssignedNewTestCase 3310 3558
+AstColumnOffsetsTestCase 1568 192
+AstExportTestCase 2153 2148
+AstWalkAndCategoriesTestCase 1748 2473
+AstimezoneNamesTheZoneAsItWasTestCase 10902 18120
+AsyncComprehensionTestCase 18714 45888
+AsyncContextManagerTestCase 27528 28642
+AsyncDefInClassBodyTestCase 2912 3180
+AsyncForEdgesTestCase 2034 4028
+AsyncGenExpTestCase 24532 58218
+AsyncGeneratorsTestCase 2876 3395
+AsyncIterationTestCase 5853 6739
+AsyncSyntaxErrorsTestCase 168 204
+AsyncWithCopyContractsTestCase 1092 971
+AsyncWithProtocolTestCase 872 2322
+AsyncgenShutdownHooksTestCase 10351 4427
+AsyncioEagerTaskTestCase 8418 21070
+AsyncioExceptionsTestCase 990 21838
+AsyncioIoTestCase 28799 13362
+AsyncioShieldAndWaitForTestCase 17843 20827
+AsyncioTimeoutTestCase 4838 1934
+AsyncioWaitAndCancelIdentityTestCase 4084 5456
+AttrAccessorsTestCase 3726 3562
+AttributeAccessTestCase 2213 3624
+AttributeCeilingTestCase 1414 134
+AttributeDundersRefuseANonStrNameTestCase 351 93
+AttributeErrorTestCase 8 3
+AttributeInheritanceTestCase 5628 3323
+AttributePropertyTestCase 584 564
+AttributeProtocolTestCase 876 808
+AttributeStoreTestCase 15954 6098
+AugAssignComplexTargetTestCase 2232 4144
+AugAssignModuleTargetTestCase 517 410
+AugAssignSliceTargetTestCase 1014 754
+AugmentedAssignmentTestCase 2442 1055
+AugmentedBinaryFallbackTestCase 2246 1964
+AwaitProtocolTestCase 2586 1938
+AwaitablePlumbingTestCase 1717 1318
+BareAssertTracebackTestCase 371 636
+BareCachedPropertyCachesTestCase 70521 68220
+BareEvalExecScopeTestCase 818 752
+BareEvalNestedScopeTestCase 740 576
+BareExceptMustBeLastTestCase 94 135
+BareNameManglingTestCase 10556 3706
+BaseExceptionGroupTestCase 1281 452
+BaseExceptionTestCase 10534 1554
+BasesAssignmentKeepsTheLayoutTestCase 299 904
+BigmemtestIRTestCase 392 528
+BisectTestCase 113 0
+BlockingIOErrorTestCase 7 0
+BodyClassAttrReplayTestCase 112 14
+BoolAnswersIntsMethodsTestCase 308 174
+BoolBitwiseOperandsTestCase 706 364
+BoolConformanceTestCase 68750 21680
+BoolDictHoldsOnlyBoolsOwnNamesTestCase 17982 6707
+BoolReportsIntAsItsBaseTestCase 141 311
+BooleanTestCase 120 76
+BoundMethodBindingTestCase 768 317
+BoundMethodNameTestCase 15 0
+BracketNestingLimitTestCase 106 79
+BreakpointBuiltinTestCase 2284 4068
+BreakpointHookTestCase 4160 8134
+BrokenPipeErrorTestCase 2 1
+BufferErrorTestCase 2 0
+BufferExportOnJoinTestCase 2598 1684
+BufferProtocolReleaseTestCase 2398 718
+BufferedIoTestCase 15280 7203
+BufferedWriterTakesABufferTestCase 1980 6098
+BuildClassBuiltinTestCase 4436 1766
+BuiltClassRebuildTestCase 7572 5990
+BuiltinArgValidationTestCase 8040 2456
+BuiltinArityMismatchTestCase 2303 1090
+BuiltinBaseSlotsTestCase 1819 963
+BuiltinDefaultSkipsTheOverrideTestCase 5464 4598
+BuiltinDescriptorTypesTestCase 258 180
+BuiltinDictHoldsItsOwnMethodHandlesTestCase 102 140
+BuiltinExtrasTestCase 138 96
+BuiltinInstancesHaveNoDictTestCase 358 168
+BuiltinKeywordRefusalsTestCase 1236 232
+BuiltinMethodsCarryCPythonsDocstringsTestCase 205 187
+BuiltinNameCaptureTestCase 24099 13958
+BuiltinNamespaceNarrowingTestCase 2308 1020
+BuiltinProtocolDispatchTestCase 522 318
+BuiltinRefusalsTestCase 4623 3946
+BuiltinSignaturesTestCase 800 692
+BuiltinSubclassMethodsTestCase 244 100
+BuiltinSubclassOverrideTestCase 831 530
+BuiltinSubclassPickleTestCase 3678 1618
+BuiltinSubclassPropertyTestCase 12701 3650
+BuiltinTypeDictAndBasesTestCase 27636 0
+BuiltinTypesCarryCPythonsDocstringsTestCase 218 90
+BuiltinTypesClassGetitemTestCase 2604 128
+BuiltinUnhashableHashReadsNoneTestCase 3346 4596
+BuiltinsRebindingTestCase 346 298
+BuiltinsReduceAndImportTestCase 4402 4178
+BuiltinsTestCase 2792 1498
+BundledPackagesTestCase 28771 21643
+ByteArrayReceiverTypeTestCase 731 825
+BytearrayTestCase 55 0
+BytesIOBindsConvertsAndRefusesAsCPythonsTestCase 5614 2759
+BytesSubclassTestCase 35816 25258
+BytesTestCase 478 280
+BytesWarningTestCase 4 0
+BytesioGetbufferViewTestCase 739 322
+CMathTestCase 1740 2
+CPythonHarnessTestCase 31684 16910
+CPythonShimTestCase 9742 3400
+CTypeNamesInMessagesTestCase 17452 5070
+CacheTagAndJoinTestCase 504 542
+CachedPropertyDescriptorTestCase 6804 1702
+CachedPropertyTestCase 25766 42594
+CalendarTestCase 3548 5034
+CallKeywordGivenTwiceTestCase 794 302
+CallStarArgumentMustBeIterableTestCase 630 194
+CallableMetaclassTestCase 1178 2622
+CallableReprTestCase 2844 1196
+CallingConventionTestCase 3584 954
+CanonicalRegistryRestoreTestCase 102 37
+CaretAnchorTestCase 750 81
+CatchWarningsRecordTestCase 14562 1820
+CatchWarningsStateTestCase 2591 0
+CellEmptinessTestCase 1146 1113
+CellObjectsTestCase 1851 2965
+ChainedAttributeStoreTestCase 1110 772
+ChainedComparisonTestCase 18 58
+ChainedIdentityCompareTestCase 493 484
+CheckWarningsHelperTestCase 10486 2230
+ChildProcessErrorTestCase 2 0
+ClassAnnotationsGetsetTestCase 866 502
+ClassAttrDictSubclassTestCase 946 0
+ClassAttrDunderBindingTestCase 293092 36190
+ClassAttrFollowsTheMroPastASharedBaseTestCase 756 730
+ClassAttrMethodOverrideTestCase 910 5377
+ClassAttrShadowsInheritedTestCase 2232 778
+ClassAttrSingleHomeTestCase 6196 1740
+ClassAttributeTestCase 7624 1693
+ClassAttrsTestCase 269 79
+ClassBareAnnotationReadTestCase 532 390
+ClassBodyAnnotatedStoreTestCase 1140 352
+ClassBodyAnnotationsIRTestCase 4976
+ClassBodyAugAssignTestCase 1976 376
+ClassBodyBindingProtocolTestCase 4168 2026
+ClassBodyCallClosureTestCase 720 392
+ClassBodyCallableBindsTestCase 18652 16449
+ClassBodyClosureCellTestCase 4888 1881
+ClassBodyConditionalNewTestCase 318 206
+ClassBodyConditionalTestCase 6964 2682
+ClassBodyControlFlowTestCase 3258 2994
+ClassBodyDecoratedSiblingTestCase 1177 405
+ClassBodyDecoratorScopeTestCase 960 2698
+ClassBodyDefAsPlainFunctionTestCase 5196 2390
+ClassBodyDroppedStatementTestCase 1562 378
+ClassBodyDroppedStatementsTestCase 978 549
+ClassBodyDunderClassTestCase 2302 1302
+ClassBodyExpressionStatementTestCase 2104 530
+ClassBodyFunctionAttributeOrderTestCase 1198 562
+ClassBodyGlobalTestCase 1006 410
+ClassBodyImportTestCase 4290 1178
+ClassBodyLocalsTestCase 3614 737
+ClassBodyLoopsTestCase 6306 3390
+ClassBodyMatchAndAliasBindingsTestCase 407 204
+ClassBodyMethodAliasTestCase 10178 6199
+ClassBodyMethodDecoratorTestCase 4917 658
+ClassBodyMethodRefsTestCase 984 0
+ClassBodyNamespaceDefsTestCase 2146 898
+ClassBodyNamespaceIRTestCase 8982 1287
+ClassBodyNamespaceTestCase 25206 4768
+ClassBodyNestedDefBindingTestCase 1975 1770
+ClassBodyNonlocalTestCase 2460 707
+ClassBodyRebindingAndInstanceDictTestCase 1720 842
+ClassBodyRebindingOrderTestCase 936 767
+ClassBodyRebindingTestCase 3230 1174
+ClassBodySetdefaultAnswersTheValueTestCase 352 210
+ClassBodySourceOrderTestCase 1850 508
+ClassBodyTempsTestCase 8448 2680
+ClassBodyTracebackTestCase 1144 1545
+ClassBodyTryImportTestCase 5398 1886
+ClassBodyUnpackingTestCase 6351 1968
+ClassBuildIREmitterTestCase 2536 7594
+ClassBuildTextEmitterTestCase 134 76
+ClassCallFastPathTestCase 78 32
+ClassCellTestCase 20132 4004
+ClassDecoratorTestCase 684 436
+ClassDefLocalBindsAtEndTestCase 3252 1368
+ClassDescriptorReadsTestCase 1285 688
+ClassDictEntriesTestCase 3671 3336
+ClassDictNotWritableTestCase 946 314
+ClassDictOrderTestCase 1459 514
+ClassDictProxyTestCase 1106 452
+ClassFunctionBindingTestCase 2232 2253
+ClassGetitemNearestTestCase 1654 706
+ClassGetitemPrecedenceTestCase 2330 783
+ClassGetitemTestCase 4939 4458
+ClassHashAssignedAfterCreationTestCase 3920 3589
+ClassHeaderEvaluatedOnceTestCase 17562 8178
+ClassIdentityAndRelativeImportTestCase 7578 1280
+ClassInClassBodyBlockTestCase 1438 526
+ClassInClassBodyTestCase 7744 2831
+ClassInMethodLocalClassMethodTestCase 7455 5130
+ClassMetaclassIdentityTestCase 5386 1968
+ClassMethodAttrViaInstanceTestCase 442 216
+ClassMethodDecoratorOrderTestCase 556 261
+ClassMethodGlobalFallbackTestCase 528 182
+ClassMethodViaInstanceTestCase 1164 624
+ClassModuleFollowsNameTestCase 301 6408
+ClassNewAttributeTestCase 2266 307
+ClassPrivateNameTestCase 8446 1536
+ClassQualnameStoreTestCase 8663 6376
+ClassReprTestCase 3867 3208
+ClassScopeComprehensionTestCase 8794 3346
+ClassScopeTestCase 1844 764
+ClassSideArityMessageTestCase 6192 1458
+ClassStatementInNewTestCase 7040 4233
+ClassStatementSlotsTestCase 3470 1772
+ClassSubclassesTestCase 4712 1431
+ClassTablesChunkedTestCase 10379 47522
+ClassTestCase 6820 1382
+ClassTransientTestCase 1770 0
+ClassTypeParamsTestCase 3956 1872
+ClassmethodCreationNoInvokeTestCase 4210 2619
+ClassmethodDictTestCase 241 555
+ClassmethodGetOwnerTestCase 156 114
+ClassmethodViaSelfMergedTestCase 2124 580
+ClosureAttributeTestCase 7 7
+ClosureCellTestCase 2296 332
+ClosureCellsPerActivationTestCase 3802 2670
+ClosureCellsSpecialReceiverTestCase 462 176
+CmathInverseFunctionsTestCase 2026 1200
+CmathPortedFunctionsTestCase 2748 1348
+CoConstsAndShadowedTypeTestCase 1278 1886
+CodeFlagsTestCase 1522 658
+CodeFreevarsAndMethodTypeTestCase 2410 1300
+CodecNoteCarrierTestCase 4051 3026
+CodecRegistryReachTestCase 1109 1150
+CodecsEscapeHelpersTestCase 986 938
+CodecsRegistryTestCase 16288 7542
+ComparisonBlockingTestCase 2718 540
+ComparisonProtocolInsideSequencesTestCase 1928 830
+ComparisonProtocolTestCase 26634 10722
+CompatPickleAndNetrcTestCase 2530 5033
+CompileAndEvalArgumentsTestCase 11306 4842
+CompileAstTreeTestCase 10036 9750
+CompileCodeObjectTestCase 2036 948
+CompileErrorFilenameTestCase 192 201
+CompileErrorTextTestCase 349 500
+CompileOptimizeTestCase 13970 3451
+CompileSingleModeTestCase 606 690
+CompileSyntaxWarningsTestCase 140 140
+CompileTopLevelAwaitTestCase 3112 2973
+ComplexTestCase 192 180
+CompoundStatementExtentTestCase 30 0
+ComprehensionTargetsTestCase 932 1578
+ComprehensionTestCase 974 824
+ComprehensionWalrusErrorLocationsTestCase 94 276
+ConditionalAnnotationsTestCase 1037 596
+ConditionalClassBodyDefScopeTestCase 568 548
+ConfigparserTestCase 9135 4842
+ConnectionAbortedErrorTestCase 2 0
+ConnectionErrorTestCase 4 2
+ConnectionRefusedErrorTestCase 3 3
+ConnectionResetErrorTestCase 4 0
+ConstructorKeywordRefusalsTestCase 1420 708
+ContextVarsPep567TestCase 46296 7458
+ContextVarsTestCase 93 0
+ContextvarTokenIsAContextManagerTestCase 180 230
+ContextvarsReprsAndRefusalsTestCase 1266 180
+ConversionErrorMessagesTestCase 1435 481
+CopyProtocolTestCase 4348 4012
+CopyregTestCase 248 153
+CoroutineIntrospectionTestCase 5430 4804
+CoroutineNeverAwaitedTestCase 40960 3741
+CoroutineNotIterableTestCase 2749 2594
+CoroutineObjectsTestCase 13702 3694
+CoroutineReuseTestCase 1052 541
+CoroutineSuspensionTestCase 32196 13224
+CrlfErrorLocationsTestCase 75 0
+CrossModuleFrameTestCase 952 315
+CsvTestCase 1185 814
+CtypesDataTypesTestCase 10014 5848
+CtypesGenericTypesTestCase 3302 2398
+DataDescriptorSetTestCase 26622 10384
+DataclassesTestCase 19288 6892
+DatetimeAcceleratorNameTestCase 376 120
+DatetimeFieldsTakeAnyIntTestCase 420 209
+DatetimeIsADateTestCase 1556 624
+DatetimeLocalTimeTestCase 1788 554
+DatetimeSecondBaseTestCase 5234 1800
+DecimalTestCase 17800 2830
+DeclarationLegalityTestCase 297 262
+DecodeErrorHandlersTestCase 2860 1388
+DecoratedMethodSelfCallTestCase 484 0
+DecoratorEvalOrderTestCase 4330 1114
+DecoratorLocalBaseTestCase 1496 1166
+DecoratorLocalShadowsGlobalTestCase 579 162
+DecoratorReadsOwnNameTestCase 708 1632
+DecoratorSecondaryBaseTestCase 712 88
+DefDefaultsScopeTestCase 2918 696
+DefaultObjectReprTestCase 2743 1247
+DefaultShadowsLocalTestCase 1294 1004
+DefaultsAndAttrsTestCase 35897 8922
+DelOfAnUnboundNameRaisesTestCase 506 220
+DelTupleTargetTestCase 750 244
+DelegationIntrospectionTestCase 688 284
+DeleteGlobalNameTestCase 934 210
+DeployCheckTestCase 979 2274
+DeprecatedCooperativeTestCase 6930 3518
+DeprecationWarningTestCase 7 0
+DequeIdentitySearchTestCase 9302 3620
+DequeIndexBoundsAreSliceIndicesTestCase 783 0
+DerivedPropertyWinsTestCase 3122 700
+DescrProtocolsTestCase 5314 2230
+DescriptorConstructorRefusalsTestCase 1562 482
+DictConstructorSourcesTestCase 1246 354
+DictDeleteByEqualKeyTestCase 2942 364
+DictDisplaySplatNeedsAMappingTestCase 458 128
+DictHashesBeforeEqTestCase 1545 690
+DictKwargsTestCase 690 22
+DictReversedPositionsTestCase 2510 660
+DictTestCase 285 98
+DictUnpackingTestCase 3094 452
+DirExcludesInternalsTestCase 684 139
+DirListsNoClassCallTransportTestCase 1285 1014
+DirOfAClassTestCase 9398 2345
+DirOfASingletonListsNoPlumbingTestCase 233 144
+DirOfTypeListsTypesAttributesTestCase 670 412
+DirSlotsAndTracebackTestCase 3883 3322
+DirectCallsTestCase 12806 4684
+DjangoTestCase 325089 163274
+DocstringValuesTestCase 1422 253
+DoitLastLineKeepsItsLastCharacterTestCase 436 54
+DunderCallTestCase 310 114
+DunderClassInjectedCellTestCase 6372 1107
+DunderClassMethodLocalTestCase 5170 993
+DunderClassTestCase 1252 191
+DunderNewTestCase 127253 28478
+DuplicateArgumentBindingTestCase 13478 4958
+DynamicClassAttributeDefTestCase 2872 1074
+DynamicClassModuleTestCase 2117 1729
+DynamicGlobalsTestCase 462 128
+DynamicInstanceAttrsTestCase 748 18
+DynamicStrSubclassValueTestCase 2137 0
+DynamicTypeTestCase 2845 328
+EOFErrorTestCase 2 1
+EllipsisSingletonTestCase 1110 223
+EmailMessageTestCase 21300 3656
+EncodeAndDecodeBindAsClinicDoesTestCase 910 658
+EncodingWarningTestCase 2 0
+EnumAutoAtAssignmentTestCase 14562 2759
+EnumAutoImportTestCase 45 0
+EnumBodyCallablesTestCase 6107 2317
+EnumBytesStorageTestCase 8743 2081
+EnumCallAndInitTestCase 16037 2444
+EnumCompositeNameTestCase 8204 524
+EnumConvertExportTestCase 4064 1202
+EnumDataTypeReprTestCase 19679 1526
+EnumDataclassReprTestCase 15184 3320
+EnumDefinitionErrorsTestCase 19771 0
+EnumDescriptorMemberTestCase 3770 0
+EnumDictTestCase 960 408
+EnumDynamicClassAttributeTestCase 1960 287
+EnumFlagMasksTestCase 9541 942
+EnumGlobalInjectTestCase 502 146
+EnumIgnoreNamesTestCase 13708 2564
+EnumMemberMarkerTestCase 3946 1130
+EnumMemberPropertyTestCase 4744 1040
+EnumMetaclassExtraMembersTestCase 7313 1784
+EnumMetaclassSignatureTestCase 5980 1519
+EnumMethodDocsTestCase 15315 10114
+EnumMidbuildLookupTestCase 3868 1296
+EnumMixinNewTestCase 18808 2051
+EnumMixinReduceTestCase 13748 1506
+EnumMixinValueCoercionTestCase 14825 1314
+EnumModuleApiTestCase 2390 1882
+EnumNamedFlagsTestCase 10540 1710
+EnumNamedtupleAutoTestCase 6817 1072
+EnumNestedClassTestCase 7798 2172
+EnumPickleByNameTestCase 3482 1412
+EnumPickleHelperTestCase 5912 1123
+EnumRootPickleIdentityTestCase 12460 1422
+EnumSecondaryMixinTestCase 18564 3204
+EnumTestCase 7360 2023
+EnumTupleStorageTestCase 18206 2474
+EnumerateTypeTestCase 4183 910
+Env1PlumbingSendsTestCase 7008 2957
+EnvLongValueTestCase 148 420
+EnvVarGuardTestCase 14611 944
+EquivalentStrKeysAndListdirTestCase 593 496
+EscapeCodecsTestCase 3022 2012
+EtreeParsingTestCase 579 13635
+EvalAndEscapesTestCase 2460 1702
+EvalCallerNamespaceTestCase 6314 3733
+EvalExecModeCodeTestCase 5427 3794
+EvalGlobalsLocalsTestCase 832 0
+EvalInNestedScopeTestCase 5140 3282
+EvalInputGrammarTestCase 511 0
+EvalLiveMappingTestCase 12536 4230
+EventLoopTestCase 17542 9858
+ExceptClauseShieldTestCase 10546 3236
+ExceptStarReraisePositionTestCase 1228 785
+ExceptStarShapesTestCase 1056 506
+ExceptStarTestCase 11003 5519
+ExcepthookPrintsTracebackTestCase 456 80
+ExceptionChainingAttributesTestCase 8046 2267
+ExceptionCopyAndReduceTestCase 263 126
+ExceptionFramesAcrossGeneratorsTestCase 8254 4666
+ExceptionGroupConstructionTestCase 11573 4504
+ExceptionGroupHasTwoBasesTestCase 262 118
+ExceptionGroupTestCase 42 5
+ExceptionInitSkipsSuperTestCase 966 200
+ExceptionProtocolRefusalsTestCase 607 277
+ExceptionSubclassArgsTestCase 2959 432
+ExceptionTestCase 3 0
+ExecAnnotationsNamespaceTestCase 82 74
+ExecBareEvalTestCase 2470 780
+ExecBuiltinsMappingTestCase 12673 4480
+ExecClassBodyLoopsTestCase 1604 711
+ExecClassBodyNamesTestCase 9626 4060
+ExecClassDefinitionTestCase 7834 3492
+ExecClassMethodScopeTestCase 1349 298
+ExecDefsTakeTheirGlobalsModuleTestCase 336 198
+ExecFrameGlobalsTestCase 1212 516
+ExecGlobalAndComprehensionTestCase 443 0
+ExecLocalsTestCase 1583 1124
+ExecMethodCopiesTestCase 3554 876
+ExecRaiseKeepsBindingsTestCase 374 140
+ExecRelativeImportTestCase 2912 702
+ExecStarImportTestCase 2308 1011
+ExecWithClosureIRTestCase 569 310
+ExecWithClosureTestCase 1674 1076
+ExecZeroArgSuperTestCase 6561 3792
+ExecblockGetTestCase 3463 2326
+ExitStackProtocolTestCase 26350 3726
+ExitStackUsageTestCase 178 37
+FStringAstJoinedStrTestCase 6396 1304
+FStringConversionErrorsTestCase 122 0
+FStringEscapesAndSpecDecodingTestCase 336 3148
+FStringFieldExpressionErrorsTestCase 241 369
+FStringFieldPositionsTestCase 2459 822
+FStringFieldSyntaxErrorsTestCase 104 103
+FStringFieldsNestThreeDeepTestCase 112 99
+FStringIsNotADocstringTestCase 322 78
+FStringManyPartsTestCase 3578 4694
+FStringOpenFieldTestCase 150 306
+FStringPep701TestCase 2274 12318
+FStringSpecFieldErrorsTestCase 134 62
+FStringUnterminatedTestCase 90 200
+FTStringFieldTextTestCase 2344 1540
+FailedBodyRecordsTestCase 155 8
+FailedSubmoduleImportTestCase 1432 492
+FastapiWallsTestCase 145927 44196
+FileExistsErrorTestCase 2 0
+FileIOClosedDescriptorTestCase 502 665
+FileIOConstructorTestCase 572 212
+FileIOReadsAllAndIntoTestCase 565 553
+FileIORefusesAsCPythonDoesTestCase 1836 10
+FileIOReprAndModeTestCase 519 212
+FileIOTakesADescriptorTestCase 1193 493
+FileIOTruncatesThroughItsDescriptorTestCase 432 143
+FileIoTestCase 215 310
+FileNotFoundErrorTestCase 4 0
+FinalizerWarningDuringWalkTestCase 3050 1276
+FirstExceptionTracebackTestCase 390 156
+FlagCrossClassReprTestCase 17262 1858
+FlagMemberLengthTestCase 3420 848
+FlagNumericReprTestCase 8889 0
+FlagOperandsTestCase 10374 2676
+FlaskScaffoldingTestCase 211804 88483
+FlaskViewRaisingTestCase 2018 7
+FloatAbsNegativeZeroTestCase 2118 502
+FloatFloorDivModTestCase 1173 246
+FloatTestCase 4032 1653
+FloatingPointErrorTestCase 2 0
+FnmatchTestCase 502 112
+ForStarTargetTestCase 2186 874
+ForStoreTargetsTestCase 6186 1394
+FormatBuiltinSubclassTestCase 971 294
+FormatSpecAndComplexTestCase 136220 23606
+FormatSpecEdgesTestCase 580 0
+FormatSpecFieldsTestCase 419 0
+FormatSpecTestCase 58 50
+FormatSpecValidationTestCase 769 393
+FormatUnknownCodeTestCase 162 93
+FormatZeroPadGroupsItsFillTestCase 434 798
+FormatannotationPrintsAForwardRefByNameTestCase 5036 3822
+FourArgAttrCallTestCase 1380 2762
+FractionTestCase 3722 32
+FrameEqualityTestCase 266 0
+FrameFunctionIntrospectionTestCase 640 218
+FrameGlobalsOutsideSysModulesTestCase 882 244
+FrameLocalsCaptureTestCase 1282 252
+FrameLocalsLiveViewTestCase 2196 1182
+FrameReceiverSuggestionTestCase 1494 1124
+FramesInExceptTestCase 1072 413
+FreeVariableUnboundTestCase 4512 1772
+FrozensetTestCase 44 7
+FunctionAnnotateGetsetTestCase 662 94
+FunctionAnnotationOrderTestCase 157 245
+FunctionAttrWriteTestCase 11544 2261
+FunctionAttributeErrorsNameFunctionTestCase 268 260
+FunctionBuiltinsAttrTestCase 2881 854
+FunctionDefaultsTestCase 1938 871
+FunctionDictAndDocTestCase 2858 995
+FunctionGlobalsTestCase 3760 196
+FunctionMetadataTestCase 1846 504
+FunctionNotSubscriptableTestCase 3824 1105
+FunctionRebindingTestCase 1104 180
+FunctionScopeImportTestCase 4348 1420
+FunctionTypeBindsAsClinicDoesTestCase 156 0
+FunctionTypeParamsTestCase 2948 759
+FunctionWriteGuardsTestCase 2356 724
+FunctionalEnumModuleTestCase 11125 1871
+FunctionalEnumRebuildTestCase 26012 2998
+FunctoolsTestCase 510 145
+FunctoolsWrapsVarargsTestCase 4 2
+FutureStatementErrorsTestCase 80 204
+FutureWarningTestCase 2 0
+GcIsTrackedFollowsCPythonsRuleTestCase 753 206
+GemStoneTestCase 1699 203
+GemstoneContinuationTestCase 4 2
+GeneratorApiTestCase 5852 5912
+GeneratorCloseTestCase 4470 0
+GeneratorDetectionTestCase 160 29
+GeneratorExceptionContextTestCase 1842 771
+GeneratorExceptionLifetimeTestCase 3632 184
+GeneratorExitTestCase 3 0
+GeneratorFrameLocalsWriteTestCase 756 433
+GeneratorStackFrameTestCase 3671 1919
+GeneratorStopTestCase 7842 4400
+GeneratorThrowTracebackTestCase 2981 1164
+GeneratorUnraisableTestCase 4486 905
+GenericAliasAttributeReadsTestCase 1351 82
+GenericAliasStarredPickleTestCase 492 325
+GenericAliasSubclassConstructionTestCase 526 194
+GenericAliasTestCase 4239 510
+GenericAndAbcBasesTestCase 21870 8756
+GenericClassSubscriptTestCase 1610 189
+GenericFunctionScopeTestCase 566 80
+GenericMethodScopeTestCase 3201 256
+GenexpLazinessTestCase 5366 4204
+GetattrProbeTestCase 1372 336
+GetattributeHookTestCase 29770 4832
+GetoptTestCase 450 200
+GetpassTestCase 196 35
+GlobTestCase 490 1537
+GlobalBindingFormsTestCase 12512 4060
+GlobalBuiltinFallbackTestCase 3766 0
+GlobalDeclarationScopeTestCase 1908 293
+GlobalStatementCodegenTestCase 96 0
+GlobalStatementTestCase 1675 156
+GlobalSyntaxErrorsTestCase 984 750
+GlobalsAsAValueTestCase 454 8
+GlobalsShadowBuiltinTestCase 3064 1142
+GlobalsTestCase 574 403
+GrailDirFallbackTestCase 12 10
+GrailMethodTableTestCase 8 4
+GrailModuleTestCase 2554 2690
+GrailShardPlanTestCase 896 3152
+GrailTmpDirTestCase 284 11
+GzipTestCase 3395 2250
+HandledExceptionIsPerThreadTestCase 569 229
+HarnessScoresASkippingFixtureTestCase 1160 365
+HeapqTestCase 100 40
+HexSeparatorCheckedInCPythonsOrderTestCase 176 175
+HtmlTestCase 124 0
+HtmlUnescapeTestCase 9383 1106
+HttpClientRequestValidationTestCase 37340 306
+HttpClientStatusConstantsTestCase 264 358
+HttpClientTestCase 31062 10221
+HttpCookiejarTestCase 48964 17600
+HttpCookiesTestCase 19096 5512
+HttpKeepAliveStallTestCase 10000 880
+HttpStatusTestCase 25858 1112
+IPv6AddressTestCase 4142 1421
+IRCallAndComprehensionShapesTestCase 12792 5521
+IRClassDeferredNonlocalTestCase 3042 434
+IRCodegenFlagDefaultTestCase 6 0
+IRCodegenSmokeTestCase 400936 71496
+IRCopyRoutesTestCase 13450 2541
+IRDefIdStableTestCase 30 28
+IRFunctionShapesTestCase 9344 3604
+IRMergeRegenerateTestCase 17574 1687
+IRRefusalLabelsTestCase 13584 1222
+IRRegenerateTestCase 27280 6399
+IRStrictModeTestCase 5506 958
+IRTextSourcesChunkedTestCase 55092 48338
+ImportAndOpenArgsTestCase 2544 1278
+ImportCompileWarningsTestCase 275 0
+ImportErrorTestCase 4 0
+ImportFromlistTestCase 835 1091
+ImportSourceEncodingTestCase 913 630
+ImportTypeIntrospectionTestCase 4748 409
+ImportWarningTestCase 4 0
+ImportedSyntaxErrorFilenameTestCase 410 0
+ImportlibFileOpenErrorTestCase 6 4
+ImportlibFinderSurfaceTestCase 13358 1118
+ImportlibMetadataDiscoveryTestCase 8378 2656
+ImportlibReloadTestCase 82086 17745
+ImportlibResourcesTestCase 4482 1770
+ImportlibRunArgumentsTestCase 192 23
+ImportlibTestCase 9742 2044
+ImportlibUnloadTestCase 9152 3706
+InconsistentIndentationTestCase 94 166
+IncrementalEscapeDecodeTestCase 4746 1372
+IndentationErrorTestCase 2 0
+IndexArgumentCoercionTestCase 5165 1657
+IndexDunderVarargsTestCase 7876 1688
+IndexErrorTestCase 2 1
+IndexTypeErrorNamesTestCase 303 156
+IndexedSlotRebuildTestCase 16286 0
+InferredSlotsTestCase 20456 4955
+InheritedMetaclassDispatchTestCase 16574 1563
+InitReturnValueTestCase 6647 1178
+InitSubclassAssignedTestCase 13727 4682
+InitSubclassClassBodyTestCase 31946 4267
+InitSubclassFixedArityTestCase 4742 1202
+InitSubclassMroTestCase 83830 8841
+InitSubclassTestCase 40728 3614
+InlineSuiteContinuationTestCase 1988 816
+InputBuiltinTestCase 65 83
+InspectAsyncPredicatesTestCase 332804 137260
+InspectCallableInstanceSignatureTestCase 1287 482
+InspectClassifyClassAttrsTestCase 18720 0
+InspectGetattrStaticModuleTestCase 1106 176
+InspectGetmembersTestCase 4088 368
+InspectMethodPredicatesTestCase 856 274
+InspectSignatureObjectsTestCase 2588 399
+InspectSourceLocationTestCase 3029 1145
+InstanceClassAssignmentTestCase 5984 1052
+InstanceDocstringTestCase 4600 782
+IntBytesAtCeilingTestCase 5581 1173
+IntFloatAndBytesAnswerGetnewargsTestCase 1887 392
+IntFloatEdgesTestCase 5430 1880
+IntFloatOverflowTestCase 5370 894
+IntFromBytesIterableTestCase 1010 426
+IntNePuntsOnNotImplementedTestCase 5892 2002
+IntOperandNotIndexTestCase 19370 3480
+IntPowWrapperArgumentsTestCase 218 328
+IntSizeofTestCase 790 0
+IntStrDigitLimitTestCase 4696 2056
+IntSubclassDefaultedOverrideTestCase 1346 30
+IntSubclassFromBytesTestCase 10600 974
+IntToBytesDefaultsTestCase 394 386
+IntegerTestCase 946 430
+InterruptedErrorTestCase 3 0
+InterruptedImportTestCase 548 14
+IoClassModuleTestCase 9 10
+IoDefaultBufferSizeTestCase 3856 330
+IpaddressFullModuleTestCase 1868 1528
+IsADirectoryErrorTestCase 2 0
+IteratorLengthHintTestCase 9600 3484
+IteratorTestCase 3122 0
+JsonDecodeErrorTestCase 1287 497
+JsonDecoderClassTestCase 2982 604
+JsonLoadsKeywordsTestCase 768 10166
+KeyErrorTestCase 3 1
+KeyboardInterruptTestCase 3 2
+KeywordListsTestCase 46 64
+KeywordOnlyParamsTestCase 1480 244
+KwargSplatMergeTestCase 1250 149
+KwargsSplatDictSubclassTestCase 3952 1428
+KwargsSplatTestCase 56942 23692
+LambdaArityMessageTestCase 27998 2130
+LambdaDefaultsTestCase 7316 6180
+LambdaFrameNameTestCase 541 197
+LambdaFrameTestCase 594 262
+LambdaStarargsTestCase 1456 1498
+LegacyStatementHintTestCase 131 125
+LegbScopeTestCase 12508 1630
+LineContinuationErrorsTestCase 109 358
+ListSortKwargsTestCase 292 50
+ListTestCase 4038 780
+LiteralEvalCasesTestCase 839 478
+LiveDictTestCase 2614 520
+LiveFrameLocalsTestCase 1368 420
+LiveFrameProbeResilienceTestCase 859 14
+LocalClassRedefinesItselfTestCase 2730 356
+LocaleFormatsInTheCLocaleTestCase 780 1266
+LocalsTestCase 318 132
+LoggingLastResortTestCase 6532 2132
+LoggingManagerTestCase 3208 658
+LoggingRecordsTestCase 9309 2264
+LookupErrorTestCase 3 0
+LoopElseBreakTestCase 434 0
+LruHashabilityAndUnionsTestCase 9070 2383
+MakecodesPatternTestCase 198 0
+MapFilterZipAreClassesTestCase 770 366
+MapFilterZipPickleTestCase 750 392
+MappingProxyDelegationTestCase 425 0
+MatchCaptureBindingTestCase 385 254
+MatchClassPatternErrorsTestCase 2120 558
+MatchPatternChecksTestCase 172 379
+MatchRuntimeDuplicateKeysTestCase 358 0
+MatchStatementIRTestCase 3443 645
+MatchStatementTestCase 33794 5733
+MatchSubjectKindsTestCase 5405 1093
+MatchTailIndexTestCase 596 200
+MathTestCase 376 248
+MemoryErrorTestCase 2 0
+MemoryViewTestCase 1118 114
+MemoryviewCastByKeywordTestCase 205 344
+MemoryviewComparisonsTestCase 44 196
+MemoryviewCountsAndIndexesTestCase 275 165
+MemoryviewFromFlagsTestCase 996 194
+MemoryviewHexTakesASeparatorTestCase 202 524
+MemoryviewShapedCastTestCase 506 588
+MetaPathFindersTestCase 33759 10255
+MetaclassBaseTestCase 4668 599
+MetaclassCallTestCase 14360 2606
+MetaclassClassAttrTestCase 11584 998
+MetaclassDirectCallInitTestCase 1439 626
+MetaclassDispatchTestCase 15970 1984
+MetaclassGetattrOnClassMissTestCase 1353 350
+MetaclassInstancecheckTestCase 7202 484
+MetaclassLookupOrderTestCase 1243 124
+MetaclassMethodsTestCase 1537 528
+MetaclassMroHookTestCase 10538 1814
+MetaclassOperatorDispatchTestCase 13085 1699
+MetaclassProtocolsTestCase 35093 4394
+MetaclassPythonNameTestCase 5484 1404
+MetaclassWithAndNextTestCase 37028 5574
+MethodAnnotationClassScopeTestCase 3320 674
+MethodAnnotationComprehensionTestCase 380 160
+MethodArityMessageTestCase 3619 577
+MethodClassCellClosureTestCase 15310 874
+MethodClosureFrameCaptureTestCase 29663 54
+MethodDefaultSharingTestCase 5594 1634
+MethodDocstringTestCase 13000 927
+MethodFunctionDelegationTestCase 41670 5494
+MethodFunctionTypesTestCase 17278 6346
+MethodKeywordRefusalsTestCase 1570 227
+MethodLocalSlotsTestCase 15254 2145
+MethodOverrideArityTestCase 10116 2924
+MethodOwnerAndMetaclassTestCase 24750 8176
+MethodShadowsClassAttrTestCase 1521 550
+MethodWrapperIdentityTestCase 1922 954
+MethodWrapperTypeNamesTestCase 305 90
+MiExceptionHandlerTestCase 1146 7070
+MiSecondaryBaseAttrsTestCase 1997 194
+MissingArgumentMessageTestCase 26773 2675
+MissingCommaTestCase 150 0
+MixinClassAttributePrecedenceTestCase 1328 326
+MixinMethodMetadataTestCase 2054 112
+MockPatchTargetTestCase 8346 3403
+MockTestCase 6281 3486
+ModuleAnnotationsNameTestCase 364 0
+ModuleAttrCallTestCase 2232 393
+ModuleAttrDeleteTestCase 2154 1111
+ModuleAttrIdentityTestCase 1420 1263
+ModuleAttrReassignTestCase 12142 4416
+ModuleAttrZeroArgCallTestCase 9012 1206
+ModuleAttrsAreNotDictMethodsTestCase 1442 1078
+ModuleBodyDelDefTestCase 532 122
+ModuleCachedAbsentTestCase 2206 854
+ModuleClassZeroArgCallTestCase 5082 1072
+ModuleDefRebindingTestCase 10572 520
+ModuleDictItemTestCase 6072 308
+ModuleDocstringTestCase 618 706
+ModuleFixturesTestCase 3730 232
+ModuleFrameTestCase 1078 4
+ModuleFromSpecTestCase 1696 400
+ModuleFunctionDecoratorsTestCase 9168 2161
+ModuleFunctionMetadataTestCase 16424 3219
+ModuleFunctionTestCase 2224 0
+ModuleFunctionsFirstClassTestCase 1184 441
+ModuleGlobalRebindStringsTestCase 86 132
+ModuleGlobalsPast255TestCase 1793 302
+ModuleHigherArityDefTestCase 1247 58
+ModuleNotAMappingTestCase 4429 3775
+ModuleNotFoundErrorTestCase 2 0
+ModuleOperatorsTestCase 2295 698
+ModuleRebuildDefaultsTestCase 882 16
+ModuleRebuildStaleMethodsTestCase 2762 106
+ModuleScopeBindingsTestCase 2216 0
+ModuleSpecTestCase 4230 3160
+ModuleSubclassAttrTestCase 2121 47
+ModuleTestCase 15 0
+ModuleTypeConstructionTestCase 1830 261
+MoreCodecsTestCase 8186 3642
+MovedClassmethodTestCase 2241 734
+MroConflictMessageTestCase 2108 432
+MroEntriesTestCase 10552 1852
+MroThroughLaterBaseTestCase 3903 650
+MultibyteCoderStateIsCPythonsTestCase 9532 6986
+MultipleInheritanceTestCase 39007 2300
+MultiprocessingModuleTestCase 17356 3270
+NameBindingStoresTestCase 28116 3352
+NameErrorTestCase 2 0
+NamedIntConstantTestCase 569 80
+NamedTupleFieldDescriptorTestCase 96820 7838
+NamedTupleSubclassingTestCase 101088 13834
+NamedtupleNamingTestCase 7730 448
+NamespaceNonStringKeyTestCase 718 156
+NamespacePackageTestCase 5591 5049
+NativeStarImportTestCase 356 726
+NestedClassBodyOrderTestCase 6242 1016
+NestedClassInMethodLocalClassTestCase 11450 3396
+NestedDefExplicitSuperTestCase 7128 2528
+NestedDefGlobalTestCase 3236 758
+NestedDefIdentityTestCase 8937 382
+NestedDefModuleTargetTestCase 1888 206
+NestedDefNameTestCase 417 20
+NestedFunctionFramesTestCase 3259 542
+NestedKeywordOnlyTestCase 1302 198
+NestedLambdaQualnameTestCase 2804 1600
+NestedOperandSpanTestCase 1834 121
+NestedQualnameTestCase 2106 352
+NestedStarImportTestCase 2960 1180
+NestedUnboundLocalTestCase 1172 1020
+NestedUnpackTestCase 36099 0
+NewResultSkipsInitTestCase 12572 2352
+NextIterTestCase 230 104
+NoArgumentBuiltinsTestCase 904 183
+NoDictAttributesTestCase 10630 2807
+NoPositionalDefTestCase 3588 692
+NoSelfParameterTestCase 4166 724
+NonblockingSocketTestCase 13729 3555
+NoneTypeTestCase 58 38
+NonlocalAndGlobalTestCase 128 212
+NonlocalClosureTestCase 3997 578
+NonlocalDunderClassTestCase 27974 2755
+NonlocalInClassBodyTestCase 11623 1520
+NonlocalInMethodLocalClassTestCase 7690 432
+NonlocalParamWriteTestCase 2220 624
+NonlocalThroughClassCellTestCase 17201 1778
+NotADirectoryErrorTestCase 3 1
+NotImplementedErrorTestCase 3 0
+NotImplementedSingletonTestCase 708 164
+NulPathsLongKeysTempfilesTestCase 2493 1024
+NumbersAbcAbstractTestCase 15172 1606
+NumbersConcreteMixinsTestCase 5263 2058
+NumbersTestCase 259 0
+NumericSubclassOperandsTestCase 11158 794
+NumericSubclassRebuildTestCase 30940 3422
+OSErrorTestCase 138 0
+ObjectInitExcessArgumentsTestCase 1772 0
+ObjectNewArgsAndSurrogateWarningsTestCase 9940 2619
+ObjectReduceAnswersCPythonsReductionTestCase 1410 458
+ObjectTestCase 22 16
+OpenCodecsAndDescriptorsTestCase 6414 924
+OperandTypeErrorMessagesTestCase 7638 652
+OperatorSemanticsTestCase 59979 4220
+OrderedDictMethodsTestCase 361 111
+OsDirectoryErrorsTestCase 930 1900
+OsEnvironMappingTestCase 432 2435
+OsErrorErrnoSubclassTestCase 1061 508
+OsErrorsCarryErrnoTestCase 6368 9684
+OsFileDescriptorsTestCase 11452 3136
+OsFunctionsTakeAFilesDescriptorTestCase 180 0
+OsPathArgumentTypesTestCase 3646 169
+OsPathCommonpathTestCase 705 296
+OsPathPosixpathNamesTestCase 1096 232
+OsPathPredicateTestCase 3478 2936
+OsPathTakesAnyLoneSurrogateTestCase 1565 933
+OsRemoveDollarPathTestCase 720 191
+OsRenameErrorsTestCase 11756 1952
+OsScandirSymlinkTestCase 18606 9656
+OsTestCase 791 0
+OsTimesTestCase 1198 256
+OsUnameTestCase 182 435
+OsUtimeTestCase 1902 660
+OsWalkTestCase 9494 6012
+OsZipfileSurfaceTestCase 12480 0
+OverflowErrorTestCase 14 0
+OverrideDefaultArgTestCase 1258 454
+OverrideDocstringTestCase 18736 1638
+PackageImportTestCase 602 97
+ParseErrorLocationTestCase 788 0
+PartialCallableAndCopyTestCase 14554 1522
+PartialMethodDescriptorTestCase 10964 909
+PassTestCase 11 0
+PathUriTestCase 1425 4
+PathWalkAndMountTestCase 2362 805
+PathlibStubSurfaceTestCase 7254 1920
+PdbClassClickCanPatchTestCase 880 30
+PendingDeprecationWarningTestCase 3 0
+Pep448StarredLiteralsTestCase 1220 25
+Pep487HooksTestCase 13193 2323
+Pep560BasesTestCase 8358 1012
+Pep649AnnotationsTestCase 10443 332
+PercentCNamesTheQualifiedTypeTestCase 946 246
+PercentFormatMappingTestCase 11319 2684
+PercentFormatsALoneSurrogateTestCase 716 170
+PermissionErrorTestCase 4 0
+PickleDispatchTableTestCase 12316 854
+PickleFinalRuntimeGapsTestCase 36682 6527
+PickleProtocolTestCase 65837 7596
+PkgRelativeInitTestCase 7 1
+PlainWithDoesNotAwaitTestCase 1194 3754
+PlatformIsCPythonsTestCase 5558 282
+PositionalOnlyDefaultsTestCase 1137 746
+PosonlyAndReflectedEqTestCase 43689 13917
+PosonlySyntaxAndArityTestCase 1445 397
+PowSemanticsTestCase 2290 1566
+PrepareMustReturnAMappingTestCase 2200 524
+PrintOutputRoutingTestCase 5420 170
+PrintableReprAndPrintfTestCase 4784 1019
+PrivateMethodKeywordCallTestCase 633 183
+PrivateNameManglingTestCase 3270 159
+ProcessLookupErrorTestCase 2 0
+PropertyAccessorChainsTestCase 2015 383
+PropertyAndIsinstanceTestCase 163852 22405
+PropertyBeatsStoredValueTestCase 2191 56
+PropertyNotDynamicClassAttributeTestCase 44100 7008
+PropertyReturnsFunctionTestCase 1344 249
+ProtocolDefaultsAreNotAttributesTestCase 2297 540
+ProtocolFallbackAttributesTestCase 11118 2119
+Py2PrintStatementTestCase 2870 131
+PyDictTestCase 286 21
+PydanticPhase6WallsTestCase 18479 3148
+PydocTextRendererTestCase 34518 9296
+PyexpatDocumentEncodingTestCase 72745 33556
+PyexpatDtdEventsTestCase 11712 9110
+PyexpatEventPositionsTestCase 16021 10787
+PythonCallSitePositionsTestCase 595086 89766
+PythonClassEnumerationTestCase 1366 1476
+PythonOffsetMapTestCase 4068 340
+PythonParserTestCase 287 22
+PythonTokenizerTestCase 659 452
+PythonVisibleMroTestCase 13126 594
+QueueTestCase 2694 754
+RaiseSemanticsTestCase 21102 3772
+RaiseSpanTestCase 1030 42
+RaiseTestCase 12 16
+RandbytesPastTheIntegerCeilingTestCase 33256 564
+RandomConformanceTestCase 15506 2369
+RandomTestCase 2512 458
+RangeTestCase 1150 576
+RawSocketTestCase 12790 3742
+RawUnicodeEscapeTestCase 2900 4645
+ReConstantsTestCase 2466 36
+ReModuleTestCase 180216 44342
+ReNonAsciiSubTestCase 9978 1882
+ReSubCallableTestCase 872 68
+ReSubSurrogateTestCase 5528 4832
+ReadintoTakesAnArrayTestCase 1564 875
+ReadonlyBuiltinAttributesTestCase 608 574
+RealPathlibTestCase 15870 2986
+RealpathSymlinksTestCase 1242 752
+ReboundDefaultsTestCase 23634 4788
+ReceiverlessClassCallTestCase 20284 3382
+RecursionErrorTestCase 15602 437
+ReduceAndBuiltinBindingTestCase 8442 440
+ReferenceErrorTestCase 3 0
+ReflectedComparisonContainerSubclassTestCase 1166 334
+ReflectedComparisonPriorityTestCase 12228 3796
+RefusedProtocolsAreNoAttributesTestCase 624 229
+RegexWordAndSpaceAreCPythonsTestCase 72138 14224
+ReprAndRangeTestCase 4457 1410
+ReprAndVarsTestCase 12568 5075
+ReprRequiresAStrTestCase 3812 1854
+ReprlibConformanceTestCase 10572 1872
+ReprlibTestCase 565 0
+RequiresStraceWithoutSubprocessTestCase 18849 936
+ReraiseIdentityTestCase 18563 2736
+ReservedNameClassAttrTestCase 5108 296
+ReservedNameClassCellTestCase 5064 1540
+ReservedNameLocalClassTestCase 20295 1523
+ReservedParamDefaultTestCase 13795 12224
+ReservedSelectorNamesTestCase 1419 171
+ResourceWarningTestCase 2 0
+ReturnTestCase 21 88
+ReversedIsAClassTestCase 1456 626
+RmtreeOnexcTestCase 3222 1555
+RmtreeSymlinksTestCase 940 1137
+RoundDirFormatTestCase 56467 7158
+RuntimeClassCreationTestCase 3758 270
+RuntimeEdgesBehindXmlEtreeTestCase 17845 1964
+RuntimeErrorTestCase 2 0
+RuntimeGapsBehindPickleTestCase 65968 8415
+RuntimeObjectBaseTestCase 3148 462
+RuntimeWarningTestCase 2 0
+SaxUtilsTestCase 10180 12093
+SecretsTestCase 38 0
+SelectReadinessTestCase 2776 311
+SelectorManglingApiTestCase 2266 536
+SelfCheckingFixturesTestCase 99748 42910
+SelfNameCollisionTestCase 4503 80
+SelfNamedClassTestCase 7152 482
+SelfReboundInMethodTestCase 6090 1080
+SelfSendOverrideTestCase 10864 1433
+SelfSendPropertyCallTestCase 4130 361
+SequenceProtocolClassAttributeTestCase 960 0
+SequenceRepeatOperandsTestCase 9925 1134
+SetDisplayUnpackTestCase 2408 718
+SetTestCase 364 302
+SetUpBridgeTestCase 20 3
+SetattrDelattrAnswerNoneTestCase 347 142
+ShimForeignObjectTestCase 7 4
+ShlexTestCase 1017 883
+ShortCircuitOperandSpanTestCase 818 112
+ShutilTestCase 106 34
+SignalRaiseSignalDeliversAsCPythonsTestCase 2866 492
+SignalRefusesAndDescribesAsCPythonsTestCase 3352 0
+SignatureBindTestCase 2978 518
+SignatureDefaultTextTestCase 567 645
+SignatureOfAClassTestCase 20592 1962
+SignatureThroughAMetaclassCallClassTestCase 1680 1200
+SingleDispatchMethodTestCase 75100 5270
+SingleDispatchRegisterTestCase 420 216
+SliceAndLoopsTestCase 14139 868
+SliceBlockCopyTestCase 10922 290
+SliceBoundsRaiseCPythonsTypeErrorTestCase 4908 497
+SliceOmittedBoundsTestCase 2848 577
+SlotMemberDescriptorTestCase 2144 209
+SlotWrapperGetBindsImplementationTestCase 2151 226
+SlotsInheritedDictTestCase 9560 886
+SlotsTestCase 78084 5508
+SlotsWithoutWeakrefRefuseAWeakrefTestCase 3207 505
+SmalltalkForwarderTestCase 5806 708
+SocketModuleTestCase 7814 526
+SourceEncodingDeclarationsTestCase 6216 2554
+SpanEndTokenTestCase 1116 162
+SreTestCase 196 14
+SslCallbacksTestCase 13122 4783
+SslModuleTestCase 9876 300
+SslRuntimeGapsTestCase 31118 8991
+StandInPackagesTestCase 197248 57596
+StarImportDynamicNamesTestCase 491 61
+StarImportUnboundGlobalTestCase 980 251
+StarUnpackIteratorTestCase 861 22
+StarUnpackingTargetLimitTestCase 738 76
+StarredTargetPlacementTestCase 112 74
+StaticmethodDefaultsTestCase 6729 1612
+StaticmethodOverridesBaseMethodTestCase 23680 0
+StaticmethodShadowingTestCase 12262 508
+StatisticsTestCase 12190 4169
+Stdlib3148FixesTestCase 23172 2162
+Stdlib3148NativeTestCase 19424 9078
+StdlibLongTailTestCase 23283 3408
+StdlibModuleNamesTestCase 1282 178
+StopAsyncIterationTestCase 178 0
+StopIterationTestCase 21 0
+StopIterationThroughContextManagerTestCase 2980 524
+StoreEvaluationOrderTestCase 742 68
+StrAlphaTypesTestCase 1026 262
+StrAndFormatBlockedByNoneTestCase 1378 140
+StrArgumentsTakeAnyStrTestCase 562 316
+StrCallBindsAsClinicDoesTestCase 348 953
+StrConstructorDecodesTestCase 3723 2676
+StrDecodeArgsTestCase 31622 1933
+StrEnumMixinAndNewTestCase 54146 4204
+StrEnumRebuildTestCase 137780 8919
+StrFormatFieldsTestCase 5724 852
+StrIsATypeTestCase 876 46
+StrJoinAndRepeatKeepIdentityTestCase 182 39
+StrMethodKeywordArgsTestCase 935 464
+StrNumericTypesTestCase 1451 536
+StrPaddingTestCase 3449 851
+StrRequiresAStrTestCase 6526 467
+StrResultsKeepTheirSubclassTestCase 1266 288
+StrSearchAndSplitTestCase 16470 2576
+StrSizeofTestCase 466 276
+StrSubclassConstructionTestCase 856 0
+StrSubclassWideTestCase 1149 142
+StrSurrogateProtocolTestCase 17326 1308
+StrSurrogateShimTestCase 2088 27
+StrTestCase 295 3122
+StrayEqualsInDisplaysTestCase 167 0
+StrftimeIsTheCLibrarysTestCase 231 722
+StringIOSubclassTestCase 11614 3246
+StringIOSurrogateTestCase 158 166
+StringIOTranslatesNewlinesAndRefusesAsCPythonsTestCase 4742 240
+StringIOWriteTestCase 287 69
+StringLiteralKindMixingTestCase 1471 52
+StringModuleTestCase 6945 1786
+StrptimeModuleReuseTestCase 3142 498
+StructBuffersAndHalfInitTestCase 22812 0
+StructFormatWhitespaceTestCase 240 380
+StructGapsTestCase 2580 388
+StructModuleTestCase 12325 8140
+StructSequencesTestCase 1200 954
+SubclassAttrShadowTestCase 38324 2640
+SubclassCopyPickleTestCase 3229 0
+SubclassNameAttrTestCase 2556 202
+SubclassableIoAndWarningsTestCase 2164 228
+SubmoduleAutoBindTestCase 114 0
+SubmoduleParentPathTestCase 3834 274
+SubprocessAndCopytreeErrnoTestCase 875 452
+SubprocessTestCase 1572 128
+SuperArgZeroTestCase 9441 3120
+SuperDescriptorBindingTestCase 1732 142
+SuperExitVarargsTestCase 2640 457
+SuperForeignReceiverTestCase 6592 1044
+SuperLocalOverGlobalTestCase 1596 305
+SuperLookupTestCase 4944 606
+SuperMethodLocalTestCase 8613 903
+SuperNewBindingTestCase 89612 5880
+SuperNotRewrittenTestCase 5516 737
+SuperPreconditionErrorsTestCase 43138 4575
+SuperProxyAttrsTestCase 7978 570
+SuperShadowingTestCase 38698 8528
+SuperStopsAtNearestDefinitionTestCase 2962 434
+SuperTwoArgCheckTestCase 7238 688
+SuperTwoArgLocalTestCase 75356 9549
+SuperValueAttributeTestCase 16508 3528
+SupportContextDecoratorTestCase 1095 3660
+SupportSubTestsTestCase 23994 536
+SurrogateEncodeHandlersTestCase 1578 670
+SurrogateNamereplacePassTestCase 3054 4283
+SurrogateStrBoundsAreSliceIndicesTestCase 598 164
+SurrogateStrStartswithTakesBoundsTestCase 223 112
+SurrogateStrTestCase 376 648
+SurrogatepassDecodeTestCase 2588 1056
+SymbolStrHashEqTestCase 1134 190
+SyntaxErrorMessagesTestCase 542 862
+SyntaxErrorStrTestCase 140 104
+SyntaxErrorTestCase 2 0
+SyntaxWarningTestCase 2 0
+SynthesizedDunderVisibilityTestCase 18703 2352
+SysAttrReassignTestCase 2590 420
+SysConsoleStreamTestCase 7986 414
+SysExcepthookTestCase 3550 654
+SysExitBuildsItsExceptionAsCPythonsTestCase 210 52
+SysGetframemodulenameNamesAFramesModuleTestCase 582 0
+SysHookAttributesTestCase 1783 9
+SysHooksCheckTheirArgumentsTestCase 642 200
+SysImplementationShapeTestCase 70 195
+SysInfoStructSequencesTestCase 370 535
+SysJitAndGilTestCase 88 174
+SysMaxsizeIsSsizeMaxTestCase 585 181
+SysPathBootstrapTestCase 805 27
+SysStreamSessionResolutionTestCase 48 0
+SysTestCase 3694 799
+SysThreadInfoIsAStructSequenceTestCase 64 144
+SysVersionInfoTestCase 346 371
+SystemErrorTestCase 2 1
+SystemExitTestCase 14512 2129
+TStringSpecErrorsTestCase 2232 302
+TabErrorTestCase 18 0
+TarfileTestCase 7972 6939
+TemplatelibTypesTestCase 3476 719
+TernaryTruthinessTestCase 3282 0
+TestSupportRunWithLocaleTestCase 634 3543
+TestSupportShimTestCase 6006 170
+TextwrapTestCase 106 71
+TheBuiltinErrorHandlersAreCPythonsTestCase 1265 2124
+ThreadRegistryTestCase 1673 3988
+ThreadingModuleTestCase 51338 9457
+TimeClockTestCase 332 25
+TimeStructTimeZoneFieldsTestCase 208 220
+TimedeltaFloatOperandTestCase 5554 86
+TimeoutErrorTestCase 3 0
+TimezoneKeywordsTestCase 435 223
+TokenizerDiagnosticsTestCase 166 319
+TomllibTestCase 1548 1490
+TotalOrderingTestCase 46315 1798
+TracebackExcShorthandsTestCase 5454 3135
+TracebackObjectTestCase 10948 2490
+TracebackTestCase 241152 21810
+TransformCodecsTestCase 15816 3699
+TranslateRefusesAMappingOutOfRangeTestCase 284 83
+TryElseScopeTestCase 7028 2044
+TryTestCase 241 10
+TupleTestCase 33405 8088
+TwilioClientTestCase 31290 7966
+TwilioShapeTestCase 55280 5047
+TwilioTier1TestCase 21240 8187
+TypeAliasRuntimeTestCase 1388 264
+TypeAliasTestCase 3259 136
+TypeBuiltClassIsPythonTestCase 4114 584
+TypeBuiltClassOverridesTestCase 2265 724
+TypeCallMroEntriesTestCase 3862 470
+TypeDictGetsetTestCase 583 159
+TypeDuplicateBaseTestCase 943 185
+TypeErrorTestCase 40411 2903
+TypeInCallPositionTestCase 5597 704
+TypeMethodsOnClassesTestCase 8660 1924
+TypeMroUnboundTestCase 919 74
+TypeParamClassScopeTestCase 5839 0
+TypeParamEvaluateFunctionsTestCase 1452 390
+TypeParamManglingTestCase 1425 220
+TypeParamScopesTestCase 60600 6643
+TypeParamSyntaxChecksTestCase 188 180
+TypeParamsTestCase 4794 1775
+TypePassesToTheWinningMetaclassTestCase 1840 314
+TypePrepareDefaultTestCase 20419 2716
+TypeScopeRefusalsTestCase 141 101
+TypeSlotsWeakrefDictOverBaseTestCase 3640 476
+TypeThreeArgNamespaceTestCase 4386 269
+TypeThreeArgTestCase 88932 13952
+TypeWithScalarMixinTestCase 15434 3312
+TypedDictTotalTestCase 14690 2914
+TypesGetOriginalBasesTestCase 4120 202
+TypesModuleTypesCarryCPythonsDocstringsTestCase 338 155
+TypesNewClassMetaclassTestCase 1023 282
+TypingGenericAliasTestCase 12494 517
+TypingSurfaceTestCase 47744 2018
+TzFileHistoryTestCase 96 272
+TzsetPinningTestCase 19089 634
+UnaryOperandTypeErrorTestCase 10419 1358
+UnaryVarargsDispatchTestCase 14880 2004
+UnboundBuiltinMethodTestCase 12421 805
+UnboundCallArityTestCase 24516 3106
+UnboundLocalErrorTestCase 1820 154
+UnboundMethodDictTestCase 23118 3531
+UnboundMethodRefusalsTestCase 1558 182
+UnboundMethodTestCase 5088 358
+UnboundStrMethodsOnSurrogatesTestCase 406 385
+UnbuildableSizesTestCase 524 512
+UndecodableFileNamesTestCase 671 290
+UndefinedDecoratorNameTestCase 2105 366
+UnexpectedKeywordMessageTestCase 2082 342
+UnhashableTestCase 2282 417
+UnicodeDecodeErrorTestCase 1 0
+UnicodeDigitsTestCase 286 144
+UnicodeEncodeErrorTestCase 2 1
+UnicodeErrorArgsTestCase 1435 517
+UnicodeErrorFieldsTestCase 1070 496
+UnicodeErrorTestCase 2 2
+UnicodeErrorsTakeCPythonsArgumentsTestCase 2660 387
+UnicodeEscapeDecodesNamedCharactersTestCase 2018 3760
+UnicodeEscapePastTheLastCodePointTestCase 158 92
+UnicodeEscapeWarnsAboutWhatItDecodedTestCase 1810 502
+UnicodeFullCaseTestCase 260 335
+UnicodeNamesTestCase 6498 6392
+UnicodeTranslateErrorTestCase 2 1
+UnicodeWarningTestCase 2 0
+UnicodedataLookupAnswersNamedSequencesTestCase 3229 3327
+UnicodedataNameAnswersItsDefaultTestCase 354 3137
+UnicodedataNumericValuesAreCPythonsTestCase 721 1651
+UnicodedataRefusesANonCharacterTestCase 888 3148
+UnittestKnobsTestCase 1046 90
+UnittestMainExitStatusTestCase 4966 0
+UnittestResultExcInfoTestCase 6010 425
+UnittestTestCase 2624 0
+UnpackModuleTargetTestCase 4300 589
+UnpackingASequenceUsesItsOwnIterTestCase 2062 12
+UnregisterErrorIsCPythonsTestCase 402 649
+UnsupportedOperationBasesTestCase 455 183
+UrllibReadsWhatCPythonsDoesTestCase 5064 2426
+UrlopenCleanupAndErrorCloseTestCase 788 370
+UrlsplitIndexingTestCase 597 0
+UrlsplitSchemesTestCase 642 690
+UserWarningTestCase 2 2
+Utf16TruncatedDecodeTestCase 4656 1760
+Utf32CodecTestCase 3985 1653
+Utf7CodecTestCase 828 590
+Utf7EndsARunAsCPythonDoesTestCase 108 372
+ValueErrorTestCase 2 0
+VarargsAndImportsTestCase 1953 213
+VarargsNamingTestCase 408 0
+VarargsOverrideTestCase 35010 4038
+VarargsReceiverBindingTestCase 3048 552
+WalrusInDisplayTestCase 5865 2876
+WalrusInLambdaTestCase 3472 1218
+WalrusPlacementTestCase 1383 970
+WarnExplicitKeywordsTestCase 602 352
+WarnExplicitModuleGlobalsTestCase 14675 3030
+WarningDisplayTestCase 2996 1586
+WarningFilterOrderTestCase 7550 1540
+WarningFiltersTestCase 31724 5426
+WarningLocationTestCase 5118 1259
+WarningRegistryAndOptionsTestCase 6577 1808
+WarningRegistryTestCase 7361 1016
+WarningStacklevelAttributionTestCase 3102 796
+WarningTestCase 2 0
+WarningsAndDecoratedPropertiesTestCase 28656 6248
+WarningsApi314TestCase 4344 3307
+WarningsArgValidationTestCase 3203 996
+WarningsDeprecatedTestCase 8885 2046
+WarningsInternalApiTestCase 2308 850
+WarningsModuleFilterTestCase 1470 26
+WeakReferenceTestCase 5111 5
+WeakrefAttributeAnswersTheSharedReferenceTestCase 1962 412
+WeakrefModuleTestCase 47063 1037
+WeakrefSubclassConstructionTestCase 872 0
+WeakrefTypeNameTestCase 1662 314
+WerkzeugUtilsUpstreamTestCase 63176 23118
+WideStrTypeAndAugmentedAttrStoreTestCase 9539 5349
+WithAsTargetsTestCase 10665 2996
+WithBlockShapesTestCase 4228 512
+WithExitRaisesTestCase 6858 2886
+WithItemPositionsTestCase 33675 6407
+WsgirefTestCase 1824 599
+XmlParserTestCase 17854 5125
+XmlSaxInfrastructureTestCase 20492 3987
+YieldFromGuardTestCase 1480 396
+YieldFromTestCase 8216 680
+YieldPlacementTestCase 132 0
+ZeroDivisionErrorTestCase 1361 328
+ZipappRuntimeGapsTestCase 11396 958
+ZipfileTestCase 7680 6540
+ZlibDecompressorBookkeepingTestCase 292 91
+ZlibPresetDictionaryTestCase 385 484
+ZlibStreamsBindAndDrainAsCPythonsTestCase 677 175
+ZlibTestCase 4290 970

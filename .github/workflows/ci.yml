@@ -241,7 +241,9 @@ jobs:
         # longest first, by the measured times in
         # tests/scripts/shard_timings.txt (#1911).  Partitioned by a class-name
         # hash, the shard jobs ranged 3.8-13.5 minutes.  Every leg computes the
-        # same plan from the same file.
+        # same plan from the same file.  Where the file has the memory a
+        # class adds to its shard (third column, GRAIL_CLASS_MEM), the plan
+        # balances that too: each shard is one memory-capped session.
         # Refresh the timings from a green run's logs with
         # scripts/refresh_shard_timings.py.
         #
@@ -334,6 +336,7 @@ jobs:
             GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
             GRAIL_TEST_SHARDS="${{ matrix.shards }}" \
             GRAIL_IR_CODEGEN="${{ matrix.arm == 'text' && '0' || '' }}" \
+            GRAIL_SHARD_CLASS_MEM="${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && '1' || '' }}" \
             bash -ex -c '
               export PATH="$GEMSTONE/bin:$PATH"
               export GEMSTONE_GLOBAL_DIR="$GITHUB_WORKSPACE/testing"

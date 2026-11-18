@@ -308,6 +308,7 @@ SHARD_MS=""
 SHARD_TEMP=""
 SHARD_CODE=""
 PLAN_MS=""
+PLAN_KB=""
 DIGESTS=""
 SUITE_TESTS=""
 SKIPS=""
@@ -351,12 +352,18 @@ for i in $SHARDS; do
     SUITE_TESTS="$SUITE_TESTS $(echo "$plan" | sed -n -E 's/.*\|suiteTests=([0-9]+).*/\1/p')"
     pms=$(echo "$plan" | sed -n -E 's/.*\|plannedMs=([0-9]+)\|.*/\1/p')
     [ -n "$pms" ] && PLAN_MS="$PLAN_MS $i=$((pms / 1000))s"
+    pkb=$(echo "$plan" | sed -n -E 's/.*\|plannedKB=([0-9]+)\|.*/\1/p')
+    [ -n "$pkb" ] && [ "$pkb" -gt 0 ] && PLAN_KB="$PLAN_KB $i=$((pkb / 1024))MB"
   fi
   # runTestsShard.gs tags EVERY line of its defect report (header, message,
   # stack, repro) with this marker precisely so one line-oriented grep recovers
   # the whole multi-line block -- a Python traceback or a stack report would
   # otherwise be truncated to its first line.
   grep -E "^GRAIL_DEFECT\|" "$f" | sed 's/^GRAIL_DEFECT|/  /'
+  # A between-class mark sweep found the session past the AlmostOutOfMemory
+  # threshold (runTestsShard.gs re-arms it, so a test that crosses it later
+  # still fails).  Not a failure in itself; the shard's plan is overloaded.
+  grep -E "^GRAIL_SHARD_MEM_WARNING\|" "$f" | sed "s/^GRAIL_SHARD_MEM_WARNING|/  shard $i: past the AlmostOutOfMemory threshold between classes: /"
   # IR fallbacks over the whole shard session (P1.4).  In strict mode each
   # one already raised in the test that met it; a count here means one was
   # raised and SWALLOWED (an ``except Exception'' around an import), so it is
@@ -400,6 +407,7 @@ printf 'TIMING | %-26s | %4ds\n' "sunit shards [$SHARDS]" "$((SECONDS - SHARD_T0
 [ -n "$SHARD_MS" ] && printf 'TIMING | %-26s |%s\n' "  per shard (concurrent)" "$SHARD_MS"
 [ -n "$PLAN_MS" ] && printf 'TIMING | %-26s |%s\n' "  planned (shard_timings)" "$PLAN_MS"
 [ -n "$SHARD_TEMP" ] && printf 'MEMORY | %-26s |%s\n' "temp objects, by shard" "$SHARD_TEMP"
+[ -n "$PLAN_KB" ] && printf 'MEMORY | %-26s |%s\n' "  planned (shard_timings)" "$PLAN_KB"
 [ -n "$SHARD_CODE" ] && printf 'MEMORY | %-26s |%s\n' "code region peak, by shard" "$SHARD_CODE"
 # EVERY TEST EXACTLY ONCE.  The shards never talk to each other: each builds
 # the same GrailShardPlan and runs its own part, so the only way a test can run

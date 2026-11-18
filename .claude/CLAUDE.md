@@ -464,6 +464,21 @@ commit the file when that beats the current one. Each shard also prints a
 `GRAIL_SHARD_PLAN` line; `run_tests.sh` fails if shards ran different
 partitions, or if all of them ran here and did not run the whole suite.
 
+**The plan balances MEMORY too.** A shard is one session with a capped
+temporary object memory, and the gem's `AlmostOutOfMemory` notification (at
+85% after a mark sweep) fails whichever test is running — a different,
+innocent one each time. A time-only plan always gave shard 6 `DjangoTestCase`,
+and once #2270/#2271 changed which other classes it got, it ended at 91–94%
+and failed six merge-queue runs in two days. So `shard_timings.txt` has an
+optional third column: the KB a class adds to what its shard holds live after
+a mark sweep. Every shard prints it beside the class's time
+(`GRAIL_CLASS_MEM`), and the refresh script averages it over runs. It is
+measured in the shard, not with each class run alone, because a class alone
+pays in full for imports it shares with its shard: summed, those figures came
+to about twice what shards held. Watch the `MEMORY | temp objects, by shard` line against
+`MEMORY | planned (shard_timings)`. A shard far above its plan means a class's
+figure went stale, and the fix is a refresh, not a bigger cache.
+
 ### The limit counts the stone's OWN gems
 
 Whatever the key allows, `reclaimgcgem` and `symbolgem` hold two slots from the
