@@ -28,6 +28,7 @@ Class {
 		'classHelpers',
 		'markerNode',
 		'defId',
+		'cacheTick',
 		'classBuildEmitter'
 	]
 }
@@ -212,6 +213,23 @@ PyMethodIRBuilder >> ___irGenerateFor___: aClass [
 						, ' cannot reach the class-statement helper '
 						, (entry at: 1) printString]]].
 	^ self generatedMethod
+
+]
+
+{ #category : 'generation' }
+PyMethodIRBuilder >> ___irGenerateFor___: aClass as: aSelector [
+	"___irGenerateFor___:, the method generated under aSelector instead of the
+	def's own -- a ``___grailOrig_'' or ``___grailDirect'' copy (P2.2).  The
+	copy must carry the selector it is installed under, as the prefixed text
+	twin's recompile gave it: UnboundMethod and the traceback read the shadow's
+	original name back from its selector.  aSelector has the def's arity (a
+	prefix on the first keyword).  The builder keeps its own selector."
+
+	| original |
+	original := methNode selector.
+	^ [methNode selector: aSelector.
+	   self ___irGenerateFor___: aClass]
+		ensure: [methNode selector: original]
 
 ]
 
@@ -742,6 +760,22 @@ PyMethodIRBuilder >> break [
 	brk localBreak: loopStack last key.
 	brk argNode: self nilLit.
 	^ self add: brk
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> cacheTick [
+	"When importlib's builder cache last used this builder (a session counter),
+	or nil while it is not in the cache -- see importlib
+	___irCacheBuilder___:forMethod:, which evicts the least recently used."
+
+	^ cacheTick
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> cacheTick: anIntegerOrNil [
+	cacheTick := anIntegerOrNil
 
 ]
 

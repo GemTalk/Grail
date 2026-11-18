@@ -1025,23 +1025,15 @@ def _module_base_types():
     """GRAIL: the types an imported module can actually have here.
 
     CPython's check__all__ excludes ``isinstance(obj, types.ModuleType)`` so a
-    module's own imports do not count as its public API.  Grail's
-    types.ModuleType is a deliberate STUB class that nothing inherits from
-    (see src/python/stdlib/types.py), and Grail modules are instances of a
-    Smalltalk class ``module`` instead -- so that test answers False for every
-    module and ``wave.__all__`` gets compared against a set holding builtins,
-    struct and sys.
+    module's own imports do not count as its public API.  types.ModuleType is
+    now Grail's real ``module`` class, and ``type(sys)`` is kept alongside it.
 
-    Every module shares that one base, reachable from any module's type, so
-    take it from sys and keep types.ModuleType alongside for the day the stub
-    becomes real.
+    This used to take ``type(sys).__mro__[1]``, which was the kernel
+    SymbolDictionary every module is built on.  ModuleType's MRO no longer
+    names it -- it is (module, object), as CPython's is -- so that entry became
+    ``object`` and every constant in a module counted as a module.
     """
-    bases = [types.ModuleType]
-    try:
-        bases.extend(type(sys).__mro__[1:2])
-    except BaseException:
-        pass
-    return tuple(bases)
+    return (types.ModuleType, type(sys))
 
 
 def _is_module_object(obj):

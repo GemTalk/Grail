@@ -154,7 +154,7 @@ PyCell >> __repr__ [
 	stream := AppendStream @env0:on: (Unicode7 ___new___).
 	stream @env0:nextPutAll: '<cell at 0x'.
 	stream @env0:nextPutAll:
-		(self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+		(self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase.
 	stream @env0:nextPutAll: ': '.
 	contents := self @env0:___readOrMarker___.
 	(contents @env0:== (PyCell @env0:___emptyMarker___))
@@ -177,7 +177,7 @@ PyCell >> __repr__ [
 			stream @env0:nextPutAll: typeName.
 			stream @env0:nextPutAll: ' object at 0x'.
 			stream @env0:nextPutAll:
-				(contents @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase].
+				(contents ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase].
 	stream @env0:nextPut: $>.
 	^ stream @env0:contents
 

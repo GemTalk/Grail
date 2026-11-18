@@ -116,7 +116,7 @@ IRFunctionShapesTestCase >> ___refusalsIn___: counts [
 	allowed := #(#compiled #'cm:eligible' #nestedDef #classMethod).
 	^ (counts keys select: [:k |
 		(allowed includes: k) not
-			and: [(#('ms:' 'cs:' 'th:' 'in:' 'lit:' 'by:' 'tx:')
+			and: [(#('ms:' 'cs:' 'th:' 'in:' 'lit:' 'by:' 'tx:' 'cp:' 'cpb:' 'cpms:')
 				anySatisfy: [:p | k asString beginsWith: p]) not]])
 		asSortedCollection asArray
 

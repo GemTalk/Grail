@@ -39,6 +39,7 @@ test.test_generators|__test__.coroutine|`del g` inside support.catch_unraisable_
 test.test_generators|__test__.refleaks|the Leaker example's `del leaker` expects __del__ to have run before the next line, inside support.catch_unraisable_exception() -- refcount finalization; Grail's GC is not refcounted
 test.test_generators|FinalizationTest.test_refcycle|asserts sys.getrefcount(g) >= 2 before anything else -- a refcount, which Grail's GC does not keep.  The finalization it goes on to check does happen: a generator caught in a cycle is finalized by support.gc_collect()
 test.test_generators|GeneratorTest.test_close_clears_frame|expects the argument's __del__ to run the moment close() drops the generator's frame, before the next line -- refcount finalization; Grail's GC is not refcounted
+test.test_gzip|TestGzip.test_refloop_unraisable|drops an unclosed GzipFile and expects gc.collect() to run GzipFile.__del__, whose "unclosed GzipFile" ResourceWarning assertWarns waits for.  Not refcount timing -- a collecting VM could pass it -- but Grail runs no Python class's __del__ at collection: only generators, coroutines, async generators and sockets register a FinalizerEphemeron.  Remove this line when __del__ is implemented
 test.test_scope|ScopeTests.testLeaks|counts 100 closure-captured objects back to zero via __del__ after the last reference drops — refcount finalization, and gc_collect() cannot stand in for it on a non-refcounted VM
 # test_dynamic's two CPython-internals tests.  The module as a whole is about
 # rebinding globals/builtins, which Grail does implement; these two are not.
@@ -646,6 +647,13 @@ test.test_exceptions|ExceptionTests.testExceptionCleanupState|its last case asse
 test.test_exceptions|PEP626Tests.test_lineno_after_other_except|asserts a traceback frame's f_lineno is the non-matching except clause the exception passed on its way out; Grail's is the line that raised (tb_lineno agrees with CPython)
 test.test_exceptions|PEP626Tests.test_lineno_in_try|asserts a traceback frame's f_lineno is the end of the finally the exception passed on its way out; Grail's is the line that raised (tb_lineno agrees with CPython)
 test.test_exceptions|PEP626Tests.test_missing_lineno_shows_as_none|rewrites __code__ with code.replace(co_linetable=...); Grail's code objects carry no line table (lines come from the compiled method), so replace() refuses the keyword
+# test_descr: three tests are a Python __del__ running when the last reference
+# goes, which Grail never does (no refcounting, and the GC calls no Python
+# finalizer).  Everything else test_descr still fails is a real gap and stays
+# on the board.
+test.test_descr|ClassPropertiesAndMethods.test_delete_hook|asserts a class's __del__ has run after `del c; gc_collect()`; Grail never runs a Python __del__
+test.test_descr|ClassPropertiesAndMethods.test_slots|its leak check counts live instances through a __del__ that decrements the count after `del x; gc_collect()`; Grail never runs a Python __del__
+test.test_descr|ClassPropertiesAndMethods.test_subtype_resurrection|resurrects an instance from its own __del__ and asserts it was put in the container; Grail never runs a Python __del__
 # test_signal's handler-race stress test: a thread busy-loops raise_signal()
 # while the main thread waits for at least one signal to arrive.  Grail's
 # threads are cooperative green threads, so the busy thread never yields and

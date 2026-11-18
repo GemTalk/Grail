@@ -2542,15 +2542,80 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 	that stores the class body's defs as attributes recursed through the
 	dispatcher until AlmostOutOfStack (three flag-on errors after #836).
 
-	An IR method with a text twin is recompiled from that twin, prefixed; one
-	without is SHARED under the prefixed key -- a method dictionary entry need
-	not be keyed by the method's own selector (measured: the shared GsNMethod
-	answers under both keys and still reports its original selector)."
+	An IR method is GENERATED under the prefixed selector from its IR builder
+	(P2.2) when the session has the builder cached; otherwise its text twin is
+	recompiled, prefixed, and only with no twin is a builder rebuilt from
+	source.  One with none of these is SHARED under the prefixed key -- a
+	method dictionary entry need not be keyed by the method's own selector
+	(measured: the shared GsNMethod answers under both keys and still reports
+	its original selector)."
 
-	| meth md src target |
+	| meth src site isIR regen |
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
+	site := aPrefix isEmpty
+		ifTrue: [aCategory asString = 'Grail-MI-Inherited'
+			ifTrue: [aClass isMeta ifTrue: ['mi-class'] ifFalse: ['mi']]
+			ifFalse: ['enum']]
+		ifFalse: ['del-shadow'].
+	"A method-local class's HELPER (``___irClassDef_<n>_<C>___'') is never
+	copied on its own: it ARRIVES WITH ITS DEF.  It is not a def -- it has no
+	def id, so no builder can be had for it, and it has no text twin -- and a
+	def regenerated onto aClass installs its class statements' helpers there
+	(PyMethodIRBuilder >> ___installDeferredClassHelpersOn___:), while a def
+	recompiled from its twin needs none (the twin builds the class inline).
+	Copying it as well made the result depend on the method dictionary's
+	order, which follows symbol hashes and differs between databases: met
+	before its def, the helper was SHARED (inClass the provider, a refused
+	rebuild on the way) until the def's regeneration replaced it; met after,
+	the shared copy REPLACED the def's own (#2255's IRRegenerateTestCase
+	failure, in the merge)."
+	(BaseException ___classBodyHelperClassNameFor___: sel) notNil ifTrue: [
+		self ___irCensusCopy___: site route: 'helper' source: nil of: meth.
+		^ self].
+	isIR := BaseException ___isIRPythonMethod___: meth.
+	regen := isIR and: [self ___irCopiesRegenerate___].
+	"An IR method copied onto ANOTHER CLASS under its own selector (the MI merge
+	and the enum gap-fill) is REGENERATED there from its IR builder (P2.2):
+	the same tree, generated with aClass as its inClass -- what the text twin's
+	recompile gave it, without compiling any text.  Only under its own
+	selector: an entry keyed otherwise (a ``___grailOrig_'' shadow the walk
+	finds in a base's dictionary) would be installed under the wrong name.  A
+	method whose builder cannot be had or does not fit aClass answers nil and
+	keeps the text route below."
+	(regen and: [aPrefix isEmpty and: [aClass ~~ aProvider and: [meth selector == sel]]]) ifTrue: [
+		(self ___irRegenerate___: meth onto: aClass category: aCategory) notNil ifTrue: [
+			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+			^ self]].
+	"A RENAMED copy (the ``del C.m'' shadow) is generated under its new
+	selector.  Not shared under the new key: UnboundMethod reads the shadow's
+	original name back from the method's own selector
+	(___grailDeletedOriginalNargs:kwOk:), so ``f = D.m; del D.m; f(x)''
+	needs a method whose selector IS ``___grailOrig_m''.
+
+	From a CACHED builder only, before the twin: these copies are made at run
+	time, in sessions whose classes were committed by another, where a
+	builder means a rebuild of the class from source -- a second or more for
+	a large class, against milliseconds for the twin.  With neither, the
+	rebuild is tried last."
+	(regen and: [aPrefix notEmpty and: [meth selector == sel]]) ifTrue: [
+		| renamed |
+		renamed := self ___irCachedMethodFor___: meth on: aClass as: (aPrefix , sel asString) asSymbol.
+		renamed notNil ifTrue: [
+			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+			^ self ___installMethod___: renamed in: aClass as: renamed selector
+				category: aCategory]].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	(src isNil and: [regen and: [aPrefix notEmpty and: [meth selector == sel]]]) ifTrue: [
+		| renamed |
+		renamed := self ___irMethodFor___: meth on: aClass as: (aPrefix , sel asString) asSymbol.
+		renamed notNil ifTrue: [
+			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+			^ self ___installMethod___: renamed in: aClass as: renamed selector
+				category: aCategory]].
+	self ___irCensusCopy___: site
+		route: (src isNil ifTrue: ['shared'] ifFalse: [isIR ifTrue: ['twin'] ifFalse: ['text']])
+		source: src of: meth.
 	src notNil ifTrue: [
 		src := self ___unshadowInstVarsIn___: src for: aClass.
 		"With the scope the original was compiled with: a method from exec'd
@@ -2562,15 +2627,8 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 	"No text source to recompile (an IR method of a class built before the
 	text table existed): share the method object -- sound for what method
 	mode admits (no super, no instVar references)."
-	target := (aPrefix , sel asString) asSymbol.
-	[md := aClass persistentMethodDictForEnv: 1.
-	 md isNil ifTrue: [^ self].
-	 md at: target put: meth.
-	 Behavior _clearLookupCaches: 1.
-	 Behavior _clearLookupCaches: 0.
-	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
-	 aClass moveMethod: target toCategory: aCategory environmentId: 1]
-		on: Error do: [:e | e return: nil]
+	^ self ___installMethod___: meth in: aClass as: (aPrefix , sel asString) asSymbol
+		category: aCategory
 
 ]
 
@@ -2581,9 +2639,11 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	self-send dispatcher's shadow, which belongs to the patch that asked for
 	it and so to this session only.  Same two routes: a text source is
 	recompiled, prefixed; a method with none is shared under the prefixed key.
-	Errors leave aClass without a shadow, which the caller checks for."
+	An IR method is generated for aClass under the prefixed selector (P2.2),
+	with no text.  Errors leave aClass without a shadow, which the caller
+	checks for."
 
-	| meth src ownShadow |
+	| meth src ownShadow site regen own |
 	"A PROVIDER THAT IS ITSELF PATCHED answers its DISPATCHER for sel, and a
 	copy of that as aClass's shadow falls through to itself: patch an instance
 	of C, then an instance of a subclass D, and D's first self-send recursed to
@@ -2598,7 +2658,41 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 				on: Error do: [:e | e return: nil]].
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
-	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	site := (aPrefix beginsWith: '___grailDirect') ifTrue: ['direct'] ifFalse: ['dispatch-shadow'].
+	"Never a method-local class's helper on its own: it arrives with its def
+	(see ___copyMethod___:from:to:prefix:category:)."
+	(BaseException ___classBodyHelperClassNameFor___: sel) notNil ifTrue: [
+		self ___irCensusCopy___: site route: 'helper' source: nil of: meth.
+		^ self].
+	"An IR method needs no text (P2.2): it is GENERATED for aClass under the
+	prefixed selector (___irMethodFor___:on:as:).  Never shared.  Onto
+	another class -- the dispatcher's shadow on a SUBCLASS of the definer,
+	UnboundMethod's direct copy onto an unrelated class --
+	whichClassIncludesSelector: answers a method's inClass, not the class
+	whose dictionary holds it, so a shared shadow reads as not this class's
+	own and the dispatcher's ``no shadow, no dispatcher'' check declines the
+	patch.  And on any class the copy has to answer the prefixed selector as
+	its own, which UnboundMethod and the traceback read the original name
+	back from.  nil -- no builder, or a class statement whose helper aClass
+	cannot reach -- keeps the text route."
+	regen := (BaseException ___isIRPythonMethod___: meth)
+		and: [self ___irCopiesRegenerate___ and: [meth selector == sel]].
+	"From a cached builder first, then the twin, then a rebuild: see
+	___copyMethod___:from:to:prefix:category:'s renamed copy for why."
+	own := regen ifTrue: [self ___irCachedMethodFor___: meth on: aClass as: ownShadow].
+	src := own isNil ifTrue: [self ___textSourceFor___: meth in: aProvider selector: sel].
+	(own isNil and: [src isNil and: [regen]]) ifTrue: [
+		own := self ___irMethodFor___: meth on: aClass as: ownShadow].
+	own notNil ifTrue: [
+		self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+		^ [aClass perform: #'___installSessionMethod:as:' env: 1
+			withArguments: { own. ownShadow }]
+				on: Error do: [:e | e return: nil]].
+	self ___irCensusCopy___: site
+		route: (src isNil
+			ifTrue: ['shared']
+			ifFalse: [(BaseException ___isIRPythonMethod___: meth) ifTrue: ['twin'] ifFalse: ['text']])
+		source: src of: meth.
 	src notNil ifTrue: [
 		"With the original's scope, as ___copyMethod___:from:to:prefix:category:."
 		^ [aClass perform: #'___compileSessionMethod:category:scope:' env: 1
@@ -5122,6 +5216,28 @@ importlib class >> ___initModuleAttrsFrom___: aSpec on: aModule [
 
 ]
 
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___installMethod___: aMethod in: aClass as: aSelector category: aCategory [
+	"Put aMethod in aClass's env-1 dictionary under aSelector -- which need not
+	be its own selector: measured, a method answers under any key and still
+	reports its original selector -- and file it under aCategory.  For a
+	copy that is the method itself, so only correct where aMethod's inClass
+	is aClass or nothing checks it: whichClassIncludesSelector: answers a
+	method's inClass, not the class whose dictionary holds it.  Errors are
+	swallowed, as every copier's are."
+
+	| md |
+	[md := aClass persistentMethodDictForEnv: 1.
+	 md isNil ifTrue: [^ self].
+	 md at: aSelector put: aMethod.
+	 Behavior _clearLookupCaches: 1.
+	 Behavior _clearLookupCaches: 0.
+	 [aClass addCategory: aCategory environmentId: 1] on: Error do: [:e | e return: nil].
+	 aClass moveMethod: aSelector toCategory: aCategory environmentId: 1]
+		on: Error do: [:e | e return: nil]
+
+]
+
 { #category : 'Grail-Transient Globals' }
 importlib class >> ___installTransientGlobals___: aNames on: aModuleClass [
 	"Keep the globals aNames names in SESSION storage for aModuleClass's
@@ -5214,16 +5330,18 @@ importlib class >> ___irBuilderCache___ [
 	"The session cache of IR builders, keyed by the GsNMethod each one
 	generated (P2.1): GsNMethod -> PyMethodIRBuilder.  What lets a consumer
 	that copies a method onto another class REGENERATE it there instead of
-	recompiling a text twin.
+	recompiling a text twin.  One builder is usually the value of several
+	keys: the method it built and every copy regenerated from it (P2.2).
 
 	BOUNDED TWO WAYS.  The values are SOFT (IdentityKeySoftValueDictionary): a
 	builder holds a whole node tree, nothing else holds it once its method is
 	installed, and the in-memory GC clears least-recently-used soft references
 	when temporary object memory runs high, so the cache can never be what runs
 	a session out of memory.  And it holds at most ___irBuilderCacheLimit___
-	entries, the oldest dropped first (___irCacheBuilder___:forMethod:).  A
-	builder that is gone is not an error: the miss rebuilds it from the
-	method's Python source (___irRebuildBuilderFor___:).
+	BUILDERS, the least recently used dropped first, with every key that names
+	them (___irCacheBuilder___:forMethod:).  A builder that is gone is not an
+	error: the miss rebuilds it from the method's Python source
+	(___irRebuildBuilderFor___:).
 
 	RELEASED WITH THE CLASS.  A module's rebuild drops its entries
 	(___irBuilderCacheForgetModule___:), since its classes are made anew;
@@ -5237,28 +5355,58 @@ importlib class >> ___irBuilderCache___ [
 ]
 
 { #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheBuilderCount___ [
+	"How many distinct builders the cache holds now -- what its limit counts."
+
+	| live |
+	live := IdentitySet new.
+	self ___irBuilderCache___ keysAndValuesDo: [:meth :builder |
+		builder isNil ifFalse: [live add: builder]].
+	^ live size
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheDrop___: someBuilders [
+	"Remove someBuilders from the cache, under every key that names them, and
+	mark them as no longer cached (cacheTick nil)."
+
+	| cache doomed |
+	someBuilders isEmpty ifTrue: [^ self].
+	cache := self ___irBuilderCache___.
+	doomed := OrderedCollection new.
+	cache keysAndValuesDo: [:meth :builder |
+		(builder isNil or: [someBuilders includes: builder]) ifTrue: [doomed add: meth]].
+	doomed do: [:meth | cache removeKey: meth ifAbsent: []].
+	someBuilders do: [:b | b cacheTick: nil].
+	SessionTemps current at: #'___grailIRBuilderCacheCount___'
+		put: (((SessionTemps current at: #'___grailIRBuilderCacheCount___' otherwise: 0)
+			- someBuilders size) max: 0).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
 importlib class >> ___irBuilderCacheForgetModule___: aModuleName [
 	"Drop every cached builder made for a def of aModuleName -- its module is
 	being rebuilt, so the classes those builders generated for are about to be
 	replaced, and an entry keyed by one of their methods could only ever keep
 	the old class alive."
 
-	| cache order prefix victims |
+	| cache prefix victims |
 	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
 	cache isNil ifTrue: [^ self].
 	prefix := aModuleName asString , '|'.
-	victims := OrderedCollection new.
+	victims := IdentitySet new.
 	cache keysAndValuesDo: [:meth :builder |
 		| id |
 		id := builder isNil ifTrue: [nil] ifFalse: [builder defId].
-		(id isNil
-			or: [id size > prefix size
-				and: [(id copyFrom: 1 to: prefix size) = prefix]])
-			ifTrue: [victims add: meth]].
-	victims do: [:meth | cache removeKey: meth ifAbsent: []].
-	order := SessionTemps current at: #'___grailIRBuilderCacheOrder___' otherwise: nil.
-	order ifNotNil: [order removeAllSuchThat: [:meth | (cache includesKey: meth) not]].
-	^ self
+		(builder notNil
+			and: [id isNil
+				or: [id size > prefix size
+					and: [(id copyFrom: 1 to: prefix size) = prefix]]])
+			ifTrue: [victims add: builder]].
+	^ self ___irBuilderCacheDrop___: victims
 
 ]
 
@@ -5303,9 +5451,24 @@ importlib class >> ___irBuilderCacheReset___ [
 	"Empty the builder cache.  Every later regeneration rebuilds from source
 	until the cache fills again."
 
+	| cache |
+	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
+	cache isNil ifFalse: [
+		cache keysAndValuesDo: [:meth :builder | builder isNil ifFalse: [builder cacheTick: nil]]].
 	SessionTemps current removeKey: #'___grailIRBuilderCache___' ifAbsent: [].
-	SessionTemps current removeKey: #'___grailIRBuilderCacheOrder___' ifAbsent: [].
+	SessionTemps current removeKey: #'___grailIRBuilderCacheCount___' ifAbsent: [].
 	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irBuilderCacheTick___ [
+	"The next value of the cache's use counter (___irCacheBuilder___:forMethod:)."
+
+	| t |
+	t := (SessionTemps current at: #'___grailIRBuilderCacheTick___' otherwise: 0) + 1.
+	SessionTemps current at: #'___grailIRBuilderCacheTick___' put: t.
+	^ t
 
 ]
 
@@ -5317,37 +5480,81 @@ importlib class >> ___irBuilderForMethod___: aMethod [
 	module-level def, a doit, or a class method of a class built before ids
 	were recorded) -- the consumer then keeps its text route."
 
-	| builder |
+	| builder t0 |
 	aMethod isNil ifTrue: [^ nil].
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ nil].
 	builder := self ___irBuilderCache___ at: aMethod otherwise: nil.
-	builder notNil ifTrue: [^ builder].
-	^ self ___irRebuildBuilderFor___: aMethod
+	builder notNil ifTrue: [
+		builder cacheTick notNil ifTrue: [builder cacheTick: self ___irBuilderCacheTick___].
+		^ builder].
+	t0 := Time millisecondClockValue.
+	builder := self ___irRebuildBuilderFor___: aMethod.
+	"The census's cost row for a miss: how many rebuilds, and their time
+	(cpms:, milliseconds)."
+	self ___irCensusOn___ ifTrue: [
+		self ___irCensusCopy___: 'rebuild'
+			route: (builder isNil ifTrue: ['refused'] ifFalse: ['ok']) source: nil of: aMethod.
+		self ___irCensusNote___: #'cpms:rebuild' module: self ___irCensusModuleName___
+			def: ((self ___irDefIdOf___: aMethod) ifNil: ['?']) count: Time millisecondClockValue - t0].
+	^ builder
 
 ]
 
 { #category : 'Grail-IR Regeneration' }
 importlib class >> ___irCacheBuilder___: aBuilder forMethod: aMethod [
-	"Remember that aBuilder generated aMethod, dropping the oldest quarter of
-	the entries when the cache is full."
+	"Remember that aBuilder generated aMethod.  When the cache holds more than
+	___irBuilderCacheLimit___ BUILDERS, the least recently used quarter goes,
+	under every key that names them.
 
-	| cache order limit |
+	WHY BUILDERS, AND WHY RECENCY (P2.2).  The limit used to count keys, oldest
+	inserted dropped first.  Once the MI merge regenerates its copies, every
+	copy is a key of the builder it came from -- a class that takes
+	unittest.TestCase as a SECONDARY base adds some 65 -- so a few such
+	classes pushed TestCase's own builders out, and the next one rebuilt the
+	whole class from source: measured, TestCase was rebuilt 22 times
+	importing eight test modules, 22 of their 29.6 s of rebuilds.  Counting
+	builders makes copies free, and a hit refreshing a builder's use keeps a
+	popular base cached."
+
+	| cache limit count |
 	(aBuilder isNil or: [aMethod isNil]) ifTrue: [^ self].
 	limit := self ___irBuilderCacheLimit___.
 	limit = 0 ifTrue: [^ self].
 	cache := self ___irBuilderCache___.
-	order := SessionTemps current at: #'___grailIRBuilderCacheOrder___' ifAbsent: [
-		SessionTemps current at: #'___grailIRBuilderCacheOrder___' put: OrderedCollection new].
-	(cache includesKey: aMethod) ifFalse: [
-		cache size >= limit ifTrue: [
-			| drop |
-			drop := (limit // 4) max: 1.
-			[drop > 0 and: [order notEmpty]] whileTrue: [
-				cache removeKey: order removeFirst ifAbsent: [].
-				drop := drop - 1]].
-		order addLast: aMethod].
+	count := SessionTemps current at: #'___grailIRBuilderCacheCount___' otherwise: 0.
+	aBuilder cacheTick isNil ifTrue: [count := count + 1].
+	aBuilder cacheTick: self ___irBuilderCacheTick___.
 	cache at: aMethod put: aBuilder.
+	SessionTemps current at: #'___grailIRBuilderCacheCount___' put: count.
+	count > limit ifTrue: [
+		| live keep |
+		"Recount: a soft value the GC cleared took its builder with it."
+		live := IdentitySet new.
+		cache keysAndValuesDo: [:meth :builder | builder isNil ifFalse: [live add: builder]].
+		SessionTemps current at: #'___grailIRBuilderCacheCount___' put: live size.
+		live size > limit ifTrue: [
+			keep := limit - ((limit // 4) max: 1).
+			self ___irBuilderCacheDrop___: (IdentitySet withAll:
+				((live asSortedCollection: [:a :b | a cacheTick <= b cacheTick]) asArray
+					copyFrom: 1 to: live size - keep))]].
 	^ self
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCachedMethodFor___: aMethod on: aClass as: aSelector [
+	"___irMethodFor___:on:as:, from a builder already in the session cache --
+	nil rather than rebuild one from source.  For the run-time copiers, which
+	prefer the text twin to a rebuild (___copyMethod___:from:to:prefix:category:)."
+
+	| builder |
+	builder := self ___irBuilderCache___ at: aMethod otherwise: nil.
+	builder isNil ifTrue: [^ nil].
+	builder cacheTick notNil ifTrue: [builder cacheTick: self ___irBuilderCacheTick___].
+	^ [builder ___irGenerateFor___: aClass as: aSelector]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
 
 ]
 
@@ -5400,6 +5607,46 @@ importlib class >> ___irCensusClassMethodsOf___: moduleAst name: aModuleName [
 					(inner isKindOf: FunctionDefAst) ifTrue: [
 						self ___irCensusNote___: #classMethod module: aModuleName
 							def: stmt name asString , '.' , inner name asString count: 1]]]]]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil [
+	"One row for a method COPIED onto another class or selector (plan P2.2):
+	``cp:<site>:<route>'' counts the copies and ``cpb:<site>:<route>'' adds the
+	characters of Smalltalk source recompiled for them.  The site says which
+	consumer made the copy (mi, mi-class, enum, del-shadow, dispatch-shadow,
+	direct, special, st-class); the route says how:
+	  regen   regenerated from the method's IR builder (no text)
+	  shared  the same GsNMethod installed under the new key (no text)
+	  twin    an IR method recompiled from its ___irTextSources___ twin
+	  text    a text-compiled method recompiled from its own source
+	  none    nothing copied (no source, nothing to share)
+	  helper  a method-local class's helper, not copied: it arrives with its def
+	The P2.2 exit gate is that ``twin'' reads zero.  A no-op unless the
+	census is on."
+
+	^ self ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil of: nil
+
+]
+
+{ #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil of: aMethodOrNil [
+	"___irCensusCopy___:route:source:, naming the copied method (``Class>>sel'')
+	in the row's examples, so a route can be traced to the methods taking it."
+
+	| m what |
+	self ___irCensusOn___ ifFalse: [^ self].
+	m := self ___irCensusModuleName___.
+	what := aMethodOrNil isNil
+		ifTrue: [aSite]
+		ifFalse: [[aMethodOrNil inClass name asString , '>>' , aMethodOrNil selector asString]
+			on: Error do: [:ex | ex return: aSite]].
+	self ___irCensusNote___: ('cp:' , aSite , ':' , aRoute) asSymbol
+		module: m def: what count: 1.
+	aSourceOrNil isNil ifFalse: [
+		self ___irCensusNote___: ('cpb:' , aSite , ':' , aRoute) asSymbol
+			module: m def: what count: aSourceOrNil size]
 
 ]
 
@@ -5783,6 +6030,27 @@ importlib class >> ___irCodegenSupported___ [
 
 ]
 
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCopiesRegenerate___ [
+	"Whether a consumer copying an IR method onto another class or selector
+	regenerates or shares it (P2.2) -- true unless this session turned it off
+	with ___irCopiesRegenerate: false, which sends every copy back to its text
+	twin.  The switch is for measurement and for tests that want the old
+	route as a control; nothing else sets it."
+
+	^ (SessionTemps current at: #'___grailIRCopiesByText___' otherwise: false) ~~ true
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCopiesRegenerate: aBoolean [
+	aBoolean
+		ifTrue: [SessionTemps current removeKey: #'___grailIRCopiesByText___' ifAbsent: []]
+		ifFalse: [SessionTemps current at: #'___grailIRCopiesByText___' put: true].
+	^ self
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irDefIdFor___: aDef inClass: aClassDefAst name: aName classSide: classSideBool [
 	"The registration id for a class-body def: DETERMINISTIC and
@@ -6114,6 +6382,23 @@ importlib class >> ___irMethodFor___: aMethod on: aClass [
 	builder := self ___irBuilderForMethod___: aMethod.
 	builder isNil ifTrue: [^ nil].
 	^ [builder ___irGenerateFor___: aClass]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irMethodFor___: aMethod on: aClass as: aSelector [
+	"___irMethodFor___:on:, generated under aSelector -- the prefixed key a
+	shadow or direct copy is installed under, which it must also answer as
+	its own selector (PyMethodIRBuilder >> ___irGenerateFor___:as:).  nil
+	when it cannot be generated."
+
+	| builder |
+	builder := self ___irBuilderForMethod___: aMethod.
+	builder isNil ifTrue: [^ nil].
+	^ [builder ___irGenerateFor___: aClass as: aSelector]
 		on: Error do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: nil]
@@ -6808,7 +7093,7 @@ importlib class >> ___isHiddenBase___: k of: aClass [
 	bytearray.__dict__, which folds in hidden ancestors only up to the first
 	class the MRO names, stopped there and listed none of those methods."
 
-	| ba |
+	| ba mod |
 	k == aClass ifTrue: [^ false].
 	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
 	"A third kind, named because nothing exposes it: PyGeneratorBase, the
@@ -6819,6 +7104,14 @@ importlib class >> ___isHiddenBase___: k of: aClass [
 	"And PyStructSequence, the machinery struct_time, stat_result and
 	version_info share: each of CPython's derives from tuple directly."
 	k == (Python @env0:at: #PyStructSequence otherwise: nil) ifTrue: [^ true].
+	"And the kernel dictionaries a MODULE is built on.  types.ModuleType is not
+	bound in builtins, so the rule above never saw its ancestors, and
+	``ModuleType.__mro__'' read (module, SymbolDictionary, IdentityDictionary,
+	IdentityKeyValueDictionary, object) where CPython's is (module, object)."
+	mod := Python @env0:at: #module otherwise: nil.
+	(mod notNil
+		and: [(aClass == mod or: [aClass inheritsFrom: mod])
+		and: [k ~~ Object and: [mod inheritsFrom: k]]]) ifTrue: [^ true].
 	ba := Python @env0:at: #bytearray otherwise: nil.
 	^ ba notNil
 		and: [k == ba superclass
@@ -9214,6 +9507,44 @@ importlib class >> ___refuseForeignSourcePath___: pathString for: moduleName [
 ]
 
 { #category : 'Grail-Module Loading' }
+importlib class >> ___refuseLayoutConflict___: bases [
+	"TWO BASES THAT EACH CARRY STORAGE cannot both be the Smalltalk superclass,
+	and CPython's best_base refuses the same combination for the same reason --
+	``multiple bases have instance lay-out conflict''.  ___selectStorageBase___
+	simply picked the leftmost, so ``class C(list, dict)'' answered a list that
+	claimed dict among its bases and behaved as neither, and ``class M(ModuleType,
+	str)'' a module that was no str (test_descr's test_errors and
+	test_module_subclasses).  type() and, with no metaclass to speak first, the
+	class statement ask here (object class >> ___grailPrepareNamespace___...).
+
+	Asked of each base's STORAGE ROOT -- the built-in its storage comes from,
+	past any Python classes -- as CPython asks of solid bases: two str mixins
+	share str's layout however unrelated the mixins are (test_enum's
+	test_multiple_mixin_with_common_data_type).  And related as PYTHON sees it,
+	not only on the Smalltalk chain: a Python int subclass is built on
+	AbstractPyInt, a SIBLING of Integer (builtins.int)."
+
+	| seen bi |
+	seen := nil.
+	bi := (Python at: #builtins) ___instance___.
+	bases do: [:base |
+		((base isKindOf: Behavior) and: [self ___hasBuiltinStorage___: base]) ifTrue: [ | b |
+			b := base.
+			[(b @env1:___grailIsPythonClass___) and: [b superclass notNil]] whileTrue: [b := b superclass].
+			seen isNil
+				ifTrue: [seen := b]
+				ifFalse: [
+					((seen == b) or: [(seen inheritsFrom: b) or: [(b inheritsFrom: seen)
+						or: [[((bi @env1:issubclass: b _: seen) @env1:___isTruthy___)
+								or: [(bi @env1:issubclass: seen _: b) @env1:___isTruthy___]]
+							on: AbstractException do: [:ex | ex return: true]]]])
+						ifFalse: [
+							^ TypeError @env1:___signal___:
+								'multiple bases have instance lay-out conflict']]]]
+
+]
+
+{ #category : 'Grail-Module Loading' }
 importlib class >> ___refuseNonTextCodec___: aCodecInfo named: aName for: aSelector [
 	"A BYTES-TO-BYTES codec is not reachable through str.encode or
 	bytes.decode, however well registered it is.  ``base64_codec'' and its
@@ -10859,19 +11190,29 @@ importlib class >> ___textSourceFor___: aMethod in: aClass selector: aSelector [
 	the same string the text path would have compiled, so every consumer
 	behaves exactly as it did.  nil when neither is available."
 
-	| src table cls key |
+	| src table cls key sel |
 	src := [aMethod sourceString] on: Error do: [:e | e return: nil].
 	src isNil ifTrue: [^ nil].
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ src].
+	"An IR copy made under a prefixed selector (P2.2: a ``___grailOrig_''
+	shadow, a ``___grailDirect<oop>_'' copy) is the def under its own name in
+	the table."
+	sel := aSelector asString.
+	(sel size > 13 and: [(sel copyFrom: 1 to: 13) = '___grailOrig_'])
+		ifTrue: [sel := sel copyFrom: 14 to: sel size].
+	(sel size > 14 and: [(sel copyFrom: 1 to: 14) = '___grailDirect']) ifTrue: [
+		| k |
+		k := sel indexOf: $_ startingAt: 15.
+		k > 0 ifTrue: [sel := sel copyFrom: k + 1 to: sel size]].
 	"A METACLASS provider (the MI merge's class-side pass copying a
 	@classmethod, cut 61): the table hangs off the class itself, and the
 	class-side entry is keyed ``class>>'' + selector so it cannot collide with
 	an instance-side method of the same selector."
 	cls := aClass.
-	key := aSelector asSymbol.
+	key := sel asSymbol.
 	(aClass @env0:isMeta) ifTrue: [
 		cls := aClass @env0:thisClass.
-		key := ('class>>' , aSelector asString) asSymbol].
+		key := ('class>>' , sel) asSymbol].
 	"Probe before performing: a DNU on a Python CLASS is routed through the
 	Python attribute machinery, which can come straight back here."
 	(cls class whichClassIncludesSelector: #'___irTextSources___' environmentId: 1)

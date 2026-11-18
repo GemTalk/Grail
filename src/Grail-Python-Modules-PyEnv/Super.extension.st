@@ -179,6 +179,22 @@ Super class >> ___superCheck___: anObject against: aClass [
 	(aClass @env0:isKindOf: Behavior) @env0:ifFalse: [^ anObject].
 	ok := self ___isInstanceOrSubtype___: anObject of: aClass.
 	ok @env0:ifTrue: [^ anObject].
+	"CPython's supercheck has a third reading: an instance whose ``__class__''
+	CLAIMS a subtype of aClass passes, and the proxy is what gets bound.  A
+	transparent proxy (a __getattribute__ that forwards to the object it wraps)
+	answers the wrapped object's class there, so ``C.f(proxy)'' can still run
+	``super(C, self).f()'' -- test_descr's test_proxy_super.  Read only after
+	both real checks failed, so an ordinary super() never pays for it."
+	(anObject @env0:isKindOf: Behavior) @env0:ifFalse: [
+		| claimed |
+		claimed := [anObject @env1:___pyAttrLoad___: #'__class__']
+			@env0:on: AbstractException do: [:ex |
+				(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+				ex @env0:return: nil].
+		((claimed @env0:isKindOf: Behavior)
+			@env0:and: [claimed ~~ anObject @env0:class
+			@env0:and: [claimed == aClass @env0:or: [claimed @env0:inheritsFrom: aClass]]])
+				@env0:ifTrue: [^ anObject]].
 	describe := (anObject @env0:isKindOf: Behavior)
 		@env0:ifTrue: ['type ' @env0:, (self ___pyNameOf___: anObject)]
 		@env0:ifFalse: ['instance of '

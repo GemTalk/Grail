@@ -555,6 +555,27 @@ memoryview >> ___itemValuesOfBuffer___: anObject [
 
 ]
 
+{ #category : 'Grail-Lifetime' }
+memoryview >> ___keepExportWhileReachable___ [
+	"This view, handed to a Python __release_buffer__ that returned without
+	releasing it, stays an export of the bytearray under it while anything
+	reaches it -- the hook may have stored it (test_buffer
+	test_release_saves_reference_no_subclassing).  Whether it did is decided
+	at the bytearray's next resize, by a mark-sweep
+	(ByteArray >> ___isHeldByAKeptView___:), so a hook that merely drops it
+	costs one collection at that resize and nothing after.
+
+	Only a bytearray: it is the one source whose resizes check."
+
+	| source |
+	(self @env0:dynamicInstVarAt: #'_released') @env0:= true ifTrue: [^ self].
+	source := self @env0:dynamicInstVarAt: #'_obj'.
+	(source isKindOf: bytearray) ifFalse: [^ self].
+	source ___keepExportWhileReachable___: self.
+	^ self
+
+]
+
 { #category : 'Grail-Sequence Protocol' }
 memoryview >> ___normaliseDownBound___: value default: aDefault length: n [
 	"A slice bound for a NEGATIVE step, as CPython's PySlice_AdjustIndices
@@ -793,7 +814,13 @@ memoryview >> ___tellExporterOfRelease___: anExporter [
 	(slot_bf_releasebuffer) with a restricted view, released afterwards.  So a
 	hook that keeps its argument keeps a released view, and
 	``c.buffer.tobytes()'' raises ValueError (test_buffer
-	test_multiple_inheritance_buffer_last)."
+	test_multiple_inheritance_buffer_last).
+
+	The view handed on is NOT released here: CPython's wrapper only drops its
+	reference, so a hook that stores the view keeps the buffer under it
+	exported until the view is released or dies.  For a bytearray that is
+	modelled (___keepExportWhileReachable___); a hook that releases the view
+	registers nothing."
 
 	| hook exported given |
 	hook := memoryview ___hookMethod___: #'__release_buffer__:' for: anExporter.
@@ -809,7 +836,9 @@ memoryview >> ___tellExporterOfRelease___: anExporter [
 	[anExporter @env0:with: given performMethod: hook]
 		@env0:on: Exception
 		do: [:ex | ex @env0:return: nil].
-	given == exported ifFalse: [given release]
+	given == exported
+		ifTrue: [given ___keepExportWhileReachable___]
+		ifFalse: [given release]
 
 ]
 
@@ -1060,7 +1089,7 @@ memoryview >> __repr__ [
 	the thing that fails."
 
 	| addr |
-	addr := (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	addr := (self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase.
 	((self @env0:dynamicInstVarAt: #'_released') @env0:= true) ifTrue: [
 		^ ('<released memory at 0x' @env0:, addr @env0:, '>') @env0:asUnicodeString].
 	^ ('<memory at 0x' @env0:, addr @env0:, '>') @env0:asUnicodeString

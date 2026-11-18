@@ -149,7 +149,7 @@ iterator >> __repr__ [
 	stream @env0:nextPut: $<.
 	stream @env0:nextPutAll: className.
 	stream @env0:nextPutAll: ' object at 0x'.
-	stream @env0:nextPutAll: (self @env0:identityHash) @env0:printString.
+	stream @env0:nextPutAll: ((self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase).
 	stream @env0:nextPut: $>.
 	^ stream @env0:contents
 

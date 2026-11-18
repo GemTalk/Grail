@@ -16,3 +16,9 @@ class GrailSTestTarget:
     @classmethod
     def grail_side(cls):
         return 'class side'
+
+    def grail_local_class(self):
+        class Local:
+            def f(self):
+                return 'local'
+        return (Local().f(), Local.__qualname__)
