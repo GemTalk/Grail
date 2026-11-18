@@ -2673,6 +2673,25 @@ CPythonShimTestCase >> testDynLoadModule [
 ]
 
 { #category : 'Grail-Tests - Module Attrs' }
+CPythonShimTestCase >> testDynLoadModuleAllFilledInPlace [
+	"A C module that stores __all__ EMPTY and appends its exports to it
+	afterwards -- as PyO3's PyModule::add does (_grail_demo's pyo3_style_add)
+	-- exports every name, as under CPython.  The module's __dict__ was given
+	a copy of the list when it was stored, still empty, and that copy won over
+	the attribute table: rpds-py's __all__ was [] and its package's
+	``from .rpds import *'' exported nothing."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+ns = {}
+exec(''from _grail_demo import *'', ns)
+repr((d.__all__, sorted(k for k in ns if not k.startswith(''__''))))') equals: '([''Box'', ''Cell'', ''Text''], [''Box'', ''Cell'', ''Text''])'
+
+]
+
+{ #category : 'Grail-Tests - Module Attrs' }
 CPythonShimTestCase >> testDynLoadModuleConstants [
 	"Dynamically loaded modules run Py_mod_exec (previously skipped) and
 	expose their PyModule_Add*Constant values as Python attributes."

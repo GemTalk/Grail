@@ -1926,6 +1926,39 @@ static PyMethodDef grail_demo_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
+#ifndef GRAIL_SHIM
+/* PyO3's PyModule::add, step for step: its index() reads ``__all__'' off the
+   module, and the first time, on AttributeError, makes an EMPTY list and
+   setattr's it; each export then appends its name to whatever index()
+   answers and setattr's the value.  So ``__all__'' is stored once, empty,
+   and filled in place afterwards.  rpds-py's __init__ is
+   ``from .rpds import *'', which exported nothing when the empty list was
+   all Grail saw. */
+static PyObject *
+pyo3_style_index(PyObject *mod) {
+    PyObject *all = PyObject_GetAttrString(mod, "__all__");
+    if (all != NULL) return all;
+    if (!PyErr_ExceptionMatches(PyExc_AttributeError)) return NULL;
+    PyErr_Clear();
+    all = PyList_New(0);
+    if (all == NULL) return NULL;
+    if (PyObject_SetAttrString(mod, "__all__", all) < 0) { Py_DECREF(all); return NULL; }
+    return all;
+}
+
+static int
+pyo3_style_add(PyObject *mod, const char *name, PyObject *value) {
+    PyObject *all = pyo3_style_index(mod);
+    if (all == NULL) return -1;
+    PyObject *n = PyUnicode_FromString(name);
+    int rc = (n == NULL) ? -1 : PyList_Append(all, n);
+    Py_XDECREF(n);
+    Py_DECREF(all);
+    if (rc < 0) return -1;
+    return PyObject_SetAttrString(mod, name, value);
+}
+#endif
+
 /* Multi-phase init: module-level constants. Works on both real CPython
    and Grail (where shimDynLoad runs Py_mod_exec and shimModuleAttrs
    exports the constants as Python attributes). */
@@ -1978,6 +2011,11 @@ grail_demo_exec(PyObject *mod) {
         Py_XDECREF(bases);
         if (vec == NULL || PyModule_Add(mod, "Vec", vec) < 0) return -1;
     }
+    /* ``__all__'' as a PyO3 module builds it (pyo3_style_add above). */
+    if (pyo3_style_add(mod, "Box", (PyObject *)&Box_Type) < 0
+            || pyo3_style_add(mod, "Cell", (PyObject *)&Cell_Type) < 0
+            || pyo3_style_add(mod, "Text", (PyObject *)&Text_Type) < 0)
+        return -1;
 #endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");

@@ -5343,6 +5343,10 @@ struct ModuleAttr {
         char  *str_val;
         PyObject *obj_val;
     };
+    /* For an ATTR_OBJECT that is a list in CPython's layout: the Grail copy
+       the module's __dict__ was given when it was stored (OOP_NIL for
+       anything else).  See module_dict_store. */
+    OopType dict_copy;
 };
 
 static struct {
@@ -5396,7 +5400,8 @@ extern "C" PyObject *PyModule_GetDict(PyObject *module) {
     return module_attrs[idx].dict;
 }
 
-static int module_dict_store(PyObject *module, const char *name, PyObject *value);
+static int module_dict_store(PyObject *module, const char *name, PyObject *value,
+                             OopType *copy);
 extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
                                      PyObject *value) {
     int idx = find_or_create_module_attrs(module);
@@ -5412,7 +5417,7 @@ extern "C" int PyModule_AddObjectRef(PyObject *module, const char *name,
     Py_XINCREF(value);
     module_attrs[idx].attrs[ai].obj_val = value;
     module_attrs[idx].attr_count++;
-    return module_dict_store(module, name, value);
+    return module_dict_store(module, name, value, &module_attrs[idx].attrs[ai].dict_copy);
 }
 
 extern "C" int PyModule_Add(PyObject *module, const char *name,
@@ -5507,19 +5512,57 @@ static PyObject *shim_module_getattr(PyObject *module, const char *name) {
    the dict IS the namespace: Cython reads its globals -- the types it set
    with PyObject_SetAttr, and ``__pyx_capi__'', which it looks for there
    before it makes a new one -- from PyModule_GetDict.  Kept in the table too,
-   for the readers of that. */
-static int module_dict_store(PyObject *module, const char *name, PyObject *value) {
+   for the readers of that.
+
+   A list in CPython's layout reaches the Grail dict as a COPY, made now.  C
+   that goes on filling the list in place after storing it -- PyO3 stores
+   ``__all__'' empty and appends each export's name afterwards -- changes the
+   list and not the copy, and the dict's entry is what Grail sees
+   (CPythonShim>>moduleAttrs: lets it win over the table), so rpds-py's
+   ``__all__'' arrived as [].  The copy's OOP goes in *copy, and
+   refresh_module_dict_copies replaces it with a current one at export, if the
+   dict still holds it. */
+static int module_dict_store(PyObject *module, const char *name, PyObject *value,
+                             OopType *copy) {
+    *copy = OOP_NIL;
     PyObject *d = PyModule_GetDict(module);
-    return (d == NULL || value == NULL) ? 0 : PyDict_SetItemString(d, name, value);
+    if (d == NULL || value == NULL) return 0;
+    if (!(value->ob_type == &PyList_Type && is_real_layout(value)))
+        return PyDict_SetItemString(d, name, value);
+    OopType listCopy = pyobj_oop(value);
+    OopType args[3] = { pyobj_oop(d), GciNewString(name), listCopy };
+    GciPerform(server, "PyDict_SetItemString:key:value:", args, 3);
+    if (check_gci_error()) return -1;
+    *copy = listCopy;
+    return 0;
+}
+
+/* Before a module's __dict__ is exported: each list the dict was given a copy
+   of (module_dict_store) is copied again, so Grail sees what C put in it
+   since.  Only while the dict still holds that copy: a later store of the
+   same name, by either route, is the binding that counts and is left alone. */
+static int refresh_module_dict_copies(int idx) {
+    PyObject *d = module_attrs[idx].dict;
+    if (d == NULL) return 0;
+    for (int i = 0; i < module_attrs[idx].attr_count; i++) {
+        ModuleAttr *a = &module_attrs[idx].attrs[i];
+        if (a->type != ModuleAttr::ATTR_OBJECT || a->dict_copy == OOP_NIL) continue;
+        PyObject *held = PyDict_GetItemString(d, a->name);   /* borrowed */
+        if (held == NULL || pyobj_oop(held) != a->dict_copy) continue;
+        if (module_dict_store(module_attrs[idx].module, a->name, a->obj_val,
+                              &a->dict_copy) < 0)
+            return -1;
+    }
+    return 0;
 }
 
 static int shim_module_setattr(PyObject *module, const char *name, PyObject *value) {
     int idx = find_or_create_module_attrs(module);
     if (idx < 0) return -1;
-    if (module_dict_store(module, name, value) < 0) return -1;
     for (int i = 0; i < module_attrs[idx].attr_count; i++) {
         ModuleAttr *a = &module_attrs[idx].attrs[i];
         if (strcmp(a->name, name) == 0) {
+            if (module_dict_store(module, name, value, &a->dict_copy) < 0) return -1;
             a->type = ModuleAttr::ATTR_OBJECT;
             a->obj_val = value;
             return 0;
@@ -8571,7 +8614,13 @@ static OopType shimModuleAttrs(OopType modOop)
        PyModule_GetDict, never through PyModule_AddObject, so without it
        ``from numpy._core._multiarray_umath import ...'' found nothing. */
     PyObject *modDict = (idx < 0) ? NULL : module_attrs[idx].dict;
-    if (modDict != NULL) exportable++;
+    if (modDict != NULL) {
+        if (refresh_module_dict_copies(idx) < 0) {
+            check_and_raise_error();
+            return OOP_NIL;
+        }
+        exportable++;
+    }
 
     OopType sizeOop = GciI64ToOop(exportable * 2);
     OopType arr = GciPerform(OOP_CLASS_ARRAY, "new:", &sizeOop, 1);
