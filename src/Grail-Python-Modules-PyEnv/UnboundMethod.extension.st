@@ -1357,9 +1357,31 @@ UnboundMethod >> ___refusesForeignInstance___: anObject [
 	A special receiver has its own path below, and an instance of a subclass
 	of the type is one of its own."
 
-	^ (anObject @env0:isKindOf: PythonInstance)
-		and: [(anObject @env0:isKindOf: definingClass) @env0:not
-		and: [self @env0:___isBuiltinTypeMethod___]]
+	(anObject @env0:isKindOf: definingClass) ifTrue: [^ false].
+	(anObject @env0:isKindOf: PythonInstance)
+		ifTrue: [^ self @env0:___isBuiltinTypeMethod___].
+	"A SLOT WRAPPER of a built-in type checks any receiver, not only a Python
+	instance's: ``str.__eq__(1, 1)'' is ``descriptor '__eq__' requires a 'str'
+	object but received a 'int''', and so is ``__eq__ = str.__eq__'' in an int
+	subclass (test_descr's test_wrong_class_slot_wrapper) -- where Grail answered
+	the int's own comparison.  Python's isinstance decides, not the Smalltalk
+	class: a bool is an int and every string class is a str."
+	^ self ___refusesForeignSlotReceiver___: anObject
+
+]
+
+{ #category : 'Grail-Calling' }
+UnboundMethod >> ___refusesForeignSlotReceiver___: anObject [
+	"___refusesForeignInstance___: for a receiver that is no Python instance: a
+	built-in slot wrapper refuses it unless isinstance(anObject, the type)."
+
+	| typ |
+	(self @env0:___isSlotWrapper___ and: [self @env0:___isBuiltinTypeMethod___])
+		ifFalse: [^ false].
+	typ := (builtins @env0:___instance___) @env1:___pyAttrLoad___:
+		self @env0:___descriptorTypeName___ @env0:asSymbol.
+	(typ @env0:isKindOf: Behavior) ifFalse: [^ false].
+	^ ((builtins @env0:___instance___) @env1:isinstance: anObject _: typ) @env0:not
 
 ]
 

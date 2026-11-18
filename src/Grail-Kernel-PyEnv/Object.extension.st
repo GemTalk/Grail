@@ -3927,7 +3927,20 @@ Object class >> ___grailPrepareNamespace___: aMetaclass bases: basesArray keywor
 		meta := aMetaclass ifNil: [self ___grailMostDerivedMetaclassOf___: basesArray].
 		((meta notNil and: [meta @env0:isKindOf: Behavior])
 				and: [self ___grailMetaclassConstructs___: meta])
-			ifFalse: [(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: basesArray]].
+			ifFalse: [(Python @env0:at: #importlib) @env0:___refuseDuplicateBases___: basesArray].
+		"Unrelated built-in storage is best_base's refusal, made inside
+		type.__new__ -- AFTER any metaclass __prepare__, which may refuse the
+		bases in words of its own (enum's ``too many data types'').  So only
+		when no metaclass but type is involved at all -- asked of type(base) as
+		Python reads it too, because Grail's own metaclasses (EnumType) are not
+		recorded the way a Python one is."
+		((meta isNil or: [meta == (Python @env0:at: #type otherwise: nil)])
+			and: [basesArray @env0:allSatisfy: [:b |
+				(b isKindOf: Behavior) not
+					or: [([b @env1:___pyAttrLoad___: #'__class__']
+							@env0:on: AbstractException do: [:ex | ex @env0:return: nil])
+						== (Python @env0:at: #type otherwise: nil)]]])
+			ifTrue: [(Python @env0:at: #importlib) @env0:___refuseLayoutConflict___: basesArray]].
 	"RECORD THE METACLASS HERE.  ClassDefAst also emits a ___grailSetMetaclass___
 	from its class-keyword loop, but that runs AFTER ___pyClassDefined___: --
 	where the metaclass __new__/__init__ dispatch happens -- so a record written
@@ -5750,6 +5763,17 @@ Object class >> ___pyDeclaredSlotInChain___: aSym [
 ]
 
 { #category : 'Grail-Slots' }
+Object class >> ___pyDeclaresDictSlot___ [
+	"Does this class's OWN __slots__ name ``__dict__''?  Its instances then have
+	one, as do those of every class below it (test_descr's test_slots_special).
+	ClassDefAst records it with a class-side ___pyDictSlotDeclared___ marker:
+	the declared slot names leave the two directives out."
+
+	^ self @env0:class @env0:includesSelector: #'___pyDictSlotDeclared___' environmentId: 1
+
+]
+
+{ #category : 'Grail-Slots' }
 Object class >> ___pyInferredSlotNames___ [
 	"Every INFERRED slot name (Symbol) an instance of the receiver class holds:
 	the non-hole names of its slot LAYOUT (docs/Instance_Attribute_Indexed_Slots.md)
@@ -5858,7 +5882,10 @@ Object class >> ___pyStrictSlotsAllowed___ [
 			@env0:== sup)
 			ifTrue: [
 				((sup @env0:whichClassIncludesSelector: #'___pyDeclaresSlots___' environmentId: 1)
-					@env0:== sup) ifFalse: [^ false]]
+					@env0:== sup) ifFalse: [^ false].
+				"A base whose own __slots__ NAMES __dict__ gives its instances
+				one, and everything below keeps it."
+				(sup ___pyDeclaresDictSlot___) ifTrue: [^ false]]
 			ifFalse: [
 				"...except a built-in whose instances DO carry a __dict__ --
 				every BaseException, as CPython's table has it
@@ -5867,6 +5894,31 @@ Object class >> ___pyStrictSlotsAllowed___ [
 				``e.zz'' (#1693)."
 				(sup ___grailProvidesInstanceSlot___: '__dict__') ifTrue: [^ false]].
 		sup := sup @env0:superclass].
+	^ true
+
+]
+
+{ #category : 'Grail-Slots' }
+Object class >> ___pyStrictSlotsAllowedOver___: bases [
+	"___pyStrictSlotsAllowed___ for a class with more than one base: strict only
+	when the Smalltalk chain allows it AND no other base gives its instances a
+	__dict__.  CPython drops the __dict__ only when EVERY class in the MRO but
+	object declares __slots__ without one, and a multiple-inheritance class's
+	secondary bases are not on its Smalltalk chain."
+
+	self ___pyStrictSlotsAllowed___ ifFalse: [^ false].
+	(bases @env0:isKindOf: SequenceableCollection) ifFalse: [^ true].
+	bases @env0:do: [:b |
+		((b @env0:isKindOf: Behavior) and: [b ~~ self @env0:superclass
+			and: [(self @env0:inheritsFrom: b) @env0:not]]) ifTrue: [
+				(b ___grailIsPythonClass___)
+					ifTrue: [
+						((b @env0:whichClassIncludesSelector: #'___pyDeclaresSlots___' environmentId: 1)
+							@env0:== b) ifFalse: [^ false].
+						b ___pyDeclaresDictSlot___ ifTrue: [^ false].
+						b ___pyStrictSlotsAllowed___ ifFalse: [^ false]]
+					ifFalse: [
+						(b ___grailProvidesInstanceSlot___: '__dict__') ifTrue: [^ false]]]].
 	^ true
 
 ]
@@ -8790,7 +8842,22 @@ Object >> ___classDict___ [
 						wraps what ``C.f'' answers; a classmethod's takes cls, which
 						is what the metaclass UnboundMethod expects."
 						ifTrue: [PyStaticMethod __new__: (self ___pyAttrLoad___: sel)]
-						ifFalse: [PyClassMethod __new__: v])]]] ]
+						ifFalse: [PyClassMethod __new__: v])]].
+			"THE IMPLICIT ONES.  type.__new__ wraps a class body's plain
+			``__new__'' in staticmethod and its ``__init_subclass__'' and
+			``__class_getitem__'' in classmethod, so the class dict holds the
+			descriptors even though no decorator said so (test_descr's
+			test_staticmethod_annotations_without_dict_access).  Grail compiles
+			all three instance-side and runs them against the class, so (c) found
+			each as a plain function."
+			#( #('__new__' #static) #('__init_subclass__' #class) #('__class_getitem__' #class) )
+				@env0:do: [:entry | | nm v |
+					nm := entry @env0:at: 1.
+					v := d @env0:at: nm otherwise: nil.
+					(v @env0:isKindOf: UnboundMethod) ifTrue: [
+						d @env0:at: nm put: ((entry @env0:at: 2) == #static
+							ifTrue: [PyStaticMethod __new__: v]
+							ifFalse: [PyClassMethod __new__: v])]]] ]
 		@env0:on: AbstractException do: [:e | e @env0:return: nil].
 	"A BUILT-IN's class side, as CPython's type dicts show it.  Grail writes a
 	built-in's Python-level class and static methods as class-side Smalltalk
@@ -10455,11 +10522,24 @@ Object >> ___grailCompileHookForwardersFor___: nm value: aValue asSessionMethods
 	session overlay (___pyAttrStore___)."
 
 	| code argc ndefaults minArgs maxArgs pattern |
+	"A BUILT-IN METHOD DESCRIPTOR -- ``__neg__ = dict.copy'', ``__setattr__ =
+	dict.__setitem__'' -- binds like a function but has no __code__ to read an
+	arity from, so nothing was compiled and the operator never found it
+	(test_descr's test_mixing_slot_wrappers).  Its arity is the protocol's;
+	ONE form, the protocol's own: a forwarder with several arities on a
+	built-in subclass makes ``x.__neg__()'' read the zero-argument form as a
+	value and call its result, as it already does for a def with defaults."
+	(aValue @env0:isKindOf: UnboundMethod) ifTrue: [
+		[aValue @env1:___pyAttrLoad___: #'__code__']
+			@env0:on: AbstractException do: [:e |
+				argc := (self ___grailProtocolArityOf___: nm) @env0:+ 1.
+				ndefaults := 0]].
+	argc == nil ifTrue: [
 	[code := aValue @env1:___pyAttrLoad___: #'__code__'.
 	 argc := code @env1:___pyAttrLoad___: #'co_argcount'.
 	 ndefaults := [(aValue @env1:___pyAttrLoad___: #'__defaults__') @env1:__len__]
 		@env0:on: AbstractException do: [:e | e @env0:return: 0]]
-		@env0:on: AbstractException do: [:e | ^ self].
+		@env0:on: AbstractException do: [:e | ^ self]].
 	(argc @env0:isKindOf: SmallInteger) ifFalse: [^ self].
 	(ndefaults @env0:isKindOf: SmallInteger) ifFalse: [ndefaults := 0].
 	"Positional parameters after self."
@@ -12047,6 +12127,24 @@ Object >> ___grailPropertyOwns___: aSym [
 	raw := self ___nearestStoredClassAttrFrom___: self @env0:class through: owner name: aSym.
 	raw == nil ifTrue: [^ true].
 	^ self ___isDataDescriptorValue___: raw
+
+]
+
+{ #category : 'Grail-Initialization' }
+Object >> ___grailProtocolArityOf___: nm [
+	"How many arguments after self a protocol dunder is sent with: none for
+	the unary ones, two for the setters, three for the exits, one otherwise."
+
+	(#('__repr__' '__str__' '__bytes__' '__hash__' '__bool__' '__len__'
+		'__length_hint__' '__iter__' '__next__' '__reversed__' '__enter__'
+		'__aenter__' '__await__' '__aiter__' '__anext__' '__index__' '__int__'
+		'__float__' '__complex__' '__trunc__' '__floor__' '__ceil__' '__neg__'
+		'__pos__' '__abs__' '__invert__' '__copy__' '__reduce__' '__getstate__'
+		'__getnewargs__' '__getnewargs_ex__' '__sizeof__' '__fspath__' '__dir__'
+		'__round__' '__call__') @env0:includes: nm @env0:asString) ifTrue: [^ 0].
+	(#('__setitem__' '__set__' '__setattr__') @env0:includes: nm @env0:asString) ifTrue: [^ 2].
+	(#('__exit__' '__aexit__') @env0:includes: nm @env0:asString) ifTrue: [^ 3].
+	^ 1
 
 ]
 
@@ -15614,7 +15712,15 @@ Object >> ___pyAttrLoad___: aSym [
 		and: [(self ___respondsTo___: aSym)
 			and: [(s @env0:= '__class__') @env0:not
 				or: [(self ___declaresOwnClassAttr___: aSym) @env0:not]]])
-			ifTrue: [^ self @env0:perform: aSym env: 1].
+			ifTrue: [
+				"A CLASS's __doc__ that is a DESCRIPTOR is bound, as CPython's
+				type.__doc__ getter binds it: ``__doc__ = DocDescr()'' in a class
+				body reads as ``DocDescr().__get__(None, cls)'' (test_descr's
+				test_doc_descriptor).  An instance's read is bound in Object >>
+				__doc__, which knows the instance."
+				((s @env0:= '__doc__') and: [self isKindOf: Behavior]) ifTrue: [
+					^ self ___classDescriptorGet___: (self @env0:perform: aSym env: 1)].
+				^ self @env0:perform: aSym env: 1].
 	"A METACLASS __getattribute__ owns every read off its classes.  Flagged per
 	session when such a metaclass is first recorded, so the ordinary class read
 	pays one SessionTemps probe and nothing else; see
@@ -19610,6 +19716,15 @@ When called, it accepts no arguments and returns a new featureless
 instance that has no instance attributes and cannot be given any.
 '].
 	cls := self @env0:class.
+	"A DESCRIPTOR stored as the class's __doc__ is asked for the instance's,
+	``__get__(instance, cls)'', as any class attribute is.  Read RAW off the
+	class's own accessor: the attribute read binds it to the class instead."
+	d := [cls @env0:perform: #'__doc__' env: 1]
+		@env0:on: AbstractException
+		do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: nil].
+	(self ___isValueDescriptor___: d) ifTrue: [^ self ___descriptorGet___: d].
 	d := [cls @env1:___pyAttrLoad___: #'__doc__']
 		@env0:on: AbstractException
 		do: [:ex | ex @env0:return: nil].

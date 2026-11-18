@@ -85,6 +85,14 @@ OrderedCollection class >> __new__: iterable [
 	((iterable @env0:isKindOf: Behavior)
 		@env0:and: [iterable @env0:inheritsFrom: self])
 			@env0:ifTrue: [^ iterable ___new___].
+	"...and the class ITSELF when the receiver is a Python subclass: that is
+	``super().__new__(cls)'' inside the subclass's own __new__, which Super
+	performs with the subclass as receiver -- so the strict test above saw
+	the class compared with itself and iterated it (test_descr's
+	test_reduce_copying).  ``list(list)'' still iterates: list is no Python
+	class."
+	((iterable == self) @env0:and: [self ___grailIsPythonClass___])
+		@env0:ifTrue: [^ self ___new___].
 	result := self ___new___.
 	"Strings are SequenceableCollections, but ``at:'' yields Characters, not
 	the 1-char Python strings CPython's ``list(str)'' produces.  Route

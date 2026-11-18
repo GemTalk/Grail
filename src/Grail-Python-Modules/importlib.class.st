@@ -6808,7 +6808,7 @@ importlib class >> ___isHiddenBase___: k of: aClass [
 	bytearray.__dict__, which folds in hidden ancestors only up to the first
 	class the MRO names, stopped there and listed none of those methods."
 
-	| ba |
+	| ba mod |
 	k == aClass ifTrue: [^ false].
 	(self ___builtinImplementationAncestors___ includesIdentical: k) ifTrue: [^ true].
 	"A third kind, named because nothing exposes it: PyGeneratorBase, the
@@ -6819,6 +6819,14 @@ importlib class >> ___isHiddenBase___: k of: aClass [
 	"And PyStructSequence, the machinery struct_time, stat_result and
 	version_info share: each of CPython's derives from tuple directly."
 	k == (Python @env0:at: #PyStructSequence otherwise: nil) ifTrue: [^ true].
+	"And the kernel dictionaries a MODULE is built on.  types.ModuleType is not
+	bound in builtins, so the rule above never saw its ancestors, and
+	``ModuleType.__mro__'' read (module, SymbolDictionary, IdentityDictionary,
+	IdentityKeyValueDictionary, object) where CPython's is (module, object)."
+	mod := Python @env0:at: #module otherwise: nil.
+	(mod notNil
+		and: [(aClass == mod or: [aClass inheritsFrom: mod])
+		and: [k ~~ Object and: [mod inheritsFrom: k]]]) ifTrue: [^ true].
 	ba := Python @env0:at: #bytearray otherwise: nil.
 	^ ba notNil
 		and: [k == ba superclass
@@ -9210,6 +9218,44 @@ importlib class >> ___refuseForeignSourcePath___: pathString for: moduleName [
 		'. A module name stands for one module in this repository, so importing it would replace the deployed module''s classes in place, under every object stored against them. If the module MOVED, run gemdb.modules.relocate(''' ,
 		moduleName asString , ''') and import it again in the same session, then commit. If it is a DIFFERENT module that shares the name, run gemdb.modules.forget(''' ,
 		moduleName asString , ''') under a clean transaction (it refuses while instances of its classes exist), or rename one of them.'
+
+]
+
+{ #category : 'Grail-Module Loading' }
+importlib class >> ___refuseLayoutConflict___: bases [
+	"TWO BASES THAT EACH CARRY STORAGE cannot both be the Smalltalk superclass,
+	and CPython's best_base refuses the same combination for the same reason --
+	``multiple bases have instance lay-out conflict''.  ___selectStorageBase___
+	simply picked the leftmost, so ``class C(list, dict)'' answered a list that
+	claimed dict among its bases and behaved as neither, and ``class M(ModuleType,
+	str)'' a module that was no str (test_descr's test_errors and
+	test_module_subclasses).  type() and, with no metaclass to speak first, the
+	class statement ask here (object class >> ___grailPrepareNamespace___...).
+
+	Asked of each base's STORAGE ROOT -- the built-in its storage comes from,
+	past any Python classes -- as CPython asks of solid bases: two str mixins
+	share str's layout however unrelated the mixins are (test_enum's
+	test_multiple_mixin_with_common_data_type).  And related as PYTHON sees it,
+	not only on the Smalltalk chain: a Python int subclass is built on
+	AbstractPyInt, a SIBLING of Integer (builtins.int)."
+
+	| seen bi |
+	seen := nil.
+	bi := (Python at: #builtins) ___instance___.
+	bases do: [:base |
+		((base isKindOf: Behavior) and: [self ___hasBuiltinStorage___: base]) ifTrue: [ | b |
+			b := base.
+			[(b @env1:___grailIsPythonClass___) and: [b superclass notNil]] whileTrue: [b := b superclass].
+			seen isNil
+				ifTrue: [seen := b]
+				ifFalse: [
+					((seen == b) or: [(seen inheritsFrom: b) or: [(b inheritsFrom: seen)
+						or: [[((bi @env1:issubclass: b _: seen) @env1:___isTruthy___)
+								or: [(bi @env1:issubclass: seen _: b) @env1:___isTruthy___]]
+							on: AbstractException do: [:ex | ex return: true]]]])
+						ifFalse: [
+							^ TypeError @env1:___signal___:
+								'multiple bases have instance lay-out conflict']]]]
 
 ]
 

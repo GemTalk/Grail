@@ -647,6 +647,13 @@ test.test_exceptions|ExceptionTests.testExceptionCleanupState|its last case asse
 test.test_exceptions|PEP626Tests.test_lineno_after_other_except|asserts a traceback frame's f_lineno is the non-matching except clause the exception passed on its way out; Grail's is the line that raised (tb_lineno agrees with CPython)
 test.test_exceptions|PEP626Tests.test_lineno_in_try|asserts a traceback frame's f_lineno is the end of the finally the exception passed on its way out; Grail's is the line that raised (tb_lineno agrees with CPython)
 test.test_exceptions|PEP626Tests.test_missing_lineno_shows_as_none|rewrites __code__ with code.replace(co_linetable=...); Grail's code objects carry no line table (lines come from the compiled method), so replace() refuses the keyword
+# test_descr: three tests are a Python __del__ running when the last reference
+# goes, which Grail never does (no refcounting, and the GC calls no Python
+# finalizer).  Everything else test_descr still fails is a real gap and stays
+# on the board.
+test.test_descr|ClassPropertiesAndMethods.test_delete_hook|asserts a class's __del__ has run after `del c; gc_collect()`; Grail never runs a Python __del__
+test.test_descr|ClassPropertiesAndMethods.test_slots|its leak check counts live instances through a __del__ that decrements the count after `del x; gc_collect()`; Grail never runs a Python __del__
+test.test_descr|ClassPropertiesAndMethods.test_subtype_resurrection|resurrects an instance from its own __del__ and asserts it was put in the container; Grail never runs a Python __del__
 # test_signal's handler-race stress test: a thread busy-loops raise_signal()
 # while the main thread waits for at least one signal to arrive.  Grail's
 # threads are cooperative green threads, so the busy thread never yields and

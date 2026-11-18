@@ -5910,7 +5910,8 @@ PythonParser >> parseFunctionDefWithDecorators: decorators [
 	"Parse a function definition with already-parsed decorators."
 
 	| tok nameTok args returns body block funcNode decoratorNames variables writes blocking scope
-	  savedNesting typeParamNames |
+	  savedNesting typeParamNames decoNodes |
+	decoNodes := decorators.
 	tok := self advance. "consume 'def'"
 	nameTok := self expectType: #NAME.
 	"``def _(...)`` -- apply the same parse-time rename NameAst reads
@@ -5976,6 +5977,20 @@ PythonParser >> parseFunctionDefWithDecorators: decorators [
 					ifFalse: [each id]]
 			ifFalse: [self ___declarativeDecoratorSymbolFor: each]
 	].
+	"AN EXPLICIT @staticmethod ON __new__ IS THE IMPLICIT ONE.  CPython's
+	type.__new__ wraps a class body's ``__new__'' function in staticmethod
+	itself, so ``@staticmethod def __new__(cls, ...)'' and the plain def are the
+	same class.  Grail compiles the plain def as the constructor; re-classed as a
+	@staticmethod it compiled onto the metaclass instead, where construction
+	never looks, and ``C(1, 2)'' silently ran object's __new__ (test_descr's
+	test_funny_new and test_metaclass).  Dropped only when it is the OUTERMOST
+	decorator, the one CPython's wrap would add."
+	(classNesting > 0
+		and: [nameTok value asString = '__new__'
+		and: [decoratorNames notEmpty
+		and: [decoratorNames first == #'staticmethod']]]) ifTrue: [
+			decoratorNames := decoratorNames allButFirst.
+			decoNodes := decoNodes allButFirst].
 	funcNode := FunctionDefAst new 
 		name: nameTok value asSymbol;
 		args: args;
@@ -6005,7 +6020,7 @@ PythonParser >> parseFunctionDefWithDecorators: decorators [
 				and: [(each value isKindOf: NameAst)
 				and: [#('builtins' 'bltns') includes: each value id asString]]]]])
 		ifTrue: [funcNode dynamicInstVarAt: #builtinProperty put: true].
-	self ___recordDecoratorLines___: decorators on: funcNode.
+	self ___recordDecoratorLines___: decoNodes on: funcNode.
 	^funcNode
 
 ]

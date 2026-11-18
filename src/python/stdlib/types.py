@@ -541,15 +541,27 @@ class member_descriptor:
         self.__qualname__ = f"{objclass.__qualname__}.{name}"
         self.__objclass__ = objclass
 
+    def _check(self, instance):
+        # CPython's descr_check is a TYPE check, never isinstance(): an ABC
+        # that registered an unrelated class does not make the slot apply to
+        # it (test_descr test_slots_descriptor).  Hence the real MRO.
+        if self.__objclass__ not in type(instance).__mro__:
+            raise TypeError(
+                f"descriptor {self.__name__!r} for {self.__objclass__.__name__!r} "
+                f"objects doesn't apply to a {type(instance).__name__!r} object")
+
     def __get__(self, instance, owner=None):
         if instance is None:
             return self
+        self._check(instance)
         return object.__getattribute__(instance, self.__name__)
 
     def __set__(self, instance, value):
+        self._check(instance)
         object.__setattr__(instance, self.__name__, value)
 
     def __delete__(self, instance):
+        self._check(instance)
         object.__delattr__(instance, self.__name__)
 
     def __repr__(self):
