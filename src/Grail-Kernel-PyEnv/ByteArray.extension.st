@@ -2053,6 +2053,83 @@ ByteArray >> ___isAsciiSpaceByte___: byte [
 
 ]
 
+{ #category : 'Grail-Buffer Protocol' }
+ByteArray >> ___isHeldByAKeptView___: aRegistry [
+	"Whether a view that a Python __release_buffer__ kept
+	(___keepExportWhileReachable___:) still holds the receiver exported:
+	unreleased, and reachable.
+
+	Reachable is the refcount question Grail cannot otherwise answer, so it
+	is answered by a mark-sweep (20 to 50 ms; BytesIO>>getbuffer has the
+	measurement) -- but only when an unreleased kept view over the receiver
+	is still in the table.  A view the hook dropped dies at that collection
+	and frees the receiver for good; one it stored keeps refusing, as
+	CPython's does until the view is released (test_buffer
+	test_release_saves_reference_no_subclassing).  Nothing else pays: no
+	shipped code defines a Python __release_buffer__, so the table exists
+	only after one has kept a view over a bytearray.
+
+	The collection is weakref._collect()'s without its last step: queued
+	finalizers are left to run at their usual safe points, not inside a
+	resize."
+
+	| kept |
+	kept := aRegistry @env0:at: #'___keptViews___' otherwise: nil.
+	kept @env0:isNil ifTrue: [^ false].
+	(self ___keptViewOverMeIn___: kept registry: aRegistry) ifFalse: [^ false].
+	WeakReference @env0:_flushProcessStackAreas.
+	System @env0:_generationScavenge_vmMarkSweep.
+	GcFinalizeNotification @env0:new @env0:_finalizeEphemerons.
+	^ self ___keptViewOverMeIn___: kept registry: aRegistry
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
+ByteArray >> ___keepExportWhileReachable___: aView [
+	"Count aView, a view over the receiver that a Python __release_buffer__
+	was handed and did not release, as an export for as long as anything
+	reaches it.  Held WEAKLY, so that this table is not what keeps it alive;
+	___isHeldByAKeptView___: decides at the next resize."
+
+	| reg kept |
+	reg := SessionTemps @env0:current @env0:at: #'GrailBufferExports' otherwise: nil.
+	reg @env0:isNil ifTrue: [
+		reg := IdentityKeyValueDictionary @env0:new.
+		SessionTemps @env0:current @env0:at: #'GrailBufferExports' put: reg].
+	kept := reg @env0:at: #'___keptViews___' otherwise: nil.
+	kept @env0:isNil ifTrue: [
+		kept := IdentitySet @env0:new.
+		reg @env0:at: #'___keptViews___' put: kept].
+	kept @env0:add: (WeakReference @env0:on: aView).
+	^ self
+
+]
+
+{ #category : 'Grail-Buffer Protocol' }
+ByteArray >> ___keptViewOverMeIn___: aKeptSet registry: aRegistry [
+	"Forget every kept view that is collected or released, and answer whether
+	one left is over the receiver.  An emptied table is removed, and the
+	registry with it once nothing else is in it, as ___beginBufferExport___'s
+	release does."
+
+	| over |
+	over := false.
+	(aKeptSet @env0:select: [:ref | | view |
+		view := ref @env0:value.
+		view @env0:isNil
+			@env0:or: [(view @env0:dynamicInstVarAt: #'_released') @env0:= true]])
+		@env0:do: [:ref | aKeptSet @env0:remove: ref].
+	aKeptSet @env0:do: [:ref |
+		(ref @env0:value @env0:dynamicInstVarAt: #'_obj') == self ifTrue: [over := true]].
+	aKeptSet @env0:isEmpty ifTrue: [
+		aRegistry @env0:removeKey: #'___keptViews___' ifAbsent: [nil].
+		(aRegistry @env0:isEmpty
+			and: [(SessionTemps @env0:current @env0:at: #'GrailBufferExports' otherwise: nil) == aRegistry])
+			ifTrue: [SessionTemps @env0:current @env0:removeKey: #'GrailBufferExports' ifAbsent: [nil]]].
+	^ over
+
+]
+
 { #category : 'Grail-String Operations' }
 ByteArray >> ___modBytesArg___: value [
 	"%b/%s operand: a bytes-like object, or one implementing __bytes__."
@@ -2543,11 +2620,18 @@ ByteArray >> ___refuseIfBufferExported___ [
 	"Raise CPython's BufferError when the receiver is being resized while a
 	buffer export is live.  Checked by every bytearray operation that changes
 	the SIZE; reads and in-place byte writes are unaffected, which is what the
-	buffer protocol allows."
+	buffer protocol allows.
+
+	Two kinds of export: a COUNTED one (a join, a ``with''), live until its
+	release block runs, and a view a Python __release_buffer__ KEPT, live
+	while anything still reaches it (___isHeldByAKeptView___:).  Both live in
+	the one registry, so a session that has neither pays one nil test here."
 
 	| reg |
 	reg := SessionTemps @env0:current @env0:at: #'GrailBufferExports' otherwise: nil.
-	(reg @env0:notNil @env0:and: [(reg @env0:at: self otherwise: 0) @env0:> 0]) ifTrue: [
+	reg @env0:isNil ifTrue: [^ self].
+	((reg @env0:at: self otherwise: 0) @env0:> 0
+		@env0:or: [self ___isHeldByAKeptView___: reg]) ifTrue: [
 		^ BufferError ___signal___:
 			'Existing exports of data: object cannot be re-sized'].
 	^ self

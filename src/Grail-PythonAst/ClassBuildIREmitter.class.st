@@ -32,13 +32,21 @@ CHILD NODES.  ``expressionNode:'' and ``parenthesizedNode:'' answer, in order:
     helper temp that holds its value) -- which is CPython's
     __build_class__ order;
   * a ConstantAst, whose IR emit reads no scope;
-  * anything else REFUSES (Error).  Such a node needs the class-body namespace
-    in IR (plan P3.3).  ClassDefAst >> ___irClassHelperTextReason___: keeps
-    every class whose emit could reach one on the text helper, so a refusal
-    here is an invariant failure, and the enclosing method falls back to text
+  * any other class-body VALUE expression (plan P3.3): the node's own IR
+    emitter, run on the helper's builder, as a def's body is built.  Its
+    names are read through the class-body read the text writes too (NameAst
+    >> ___emitClassBodyValueWith___:), which reaches this emitter through
+    the builder (PyMethodIRBuilder >> classBuildEmitter) and resolves the
+    class under construction and every other name exactly as the text
+    helper's compile does (var:).  ClassDefAst >> ___irClassHelperTextReason___:
+    admits only the shapes that holds for, so an expression the def
+    predicates do not find IR-eligible HERE, in the class-body context, is an
+    invariant failure: it raises, and the enclosing method falls back to text
     as any IR emit error does.
 
-``statementNode:'' always refuses, for the same reason.
+``statementNode:'' always refuses: a class-body STATEMENT emitted through its
+own emitter (control flow, a runtime statement) is a later P3 step, and
+___irClassHelperTextReason___: keeps every class that has one on text.
 
 LAYOUT is a no-op: ``newline'', ``space'', and the spellings that exist only
 for the text (``openValueBlockLine:'', ``compactBraceArray:'',
@@ -211,6 +219,7 @@ ClassBuildIREmitter >> ___send___: aSelector env: anEnvOrNil to: rcvrBlock with:
 ClassBuildIREmitter >> ___setBuilder___: aBuilder [
 
 	builder := aBuilder.
+	aBuilder classBuildEmitter: self.
 	values := OrderedCollection new.
 	opens := OrderedCollection new.
 	scopes := OrderedCollection new.
@@ -377,17 +386,22 @@ ClassBuildIREmitter >> emptyArray [
 
 { #category : 'Grail-children' }
 ClassBuildIREmitter >> expressionNode: anAst [
-	"See the class comment: a value the caller evaluated, or a constant."
+	"See the class comment: a value the caller evaluated, a constant, or a
+	class-body value expression built by its own IR emitter."
 
+	| node |
 	(pre at: anAst otherwise: nil) ifNotNil: [:leaf |
 		^ self ___push___: (builder var: leaf)].
-	(anAst isKindOf: ConstantAst) ifTrue: [
-		| node |
-		node := anAst ___emitIRValueOn___: builder.
-		self ___rest___.
-		^ self ___push___: node].
-	^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
-		, ' in the class build needs the class-body namespace in IR'
+	(anAst isKindOf: ConstantAst) ifFalse: [
+		(anAst ___irEligibleValueLocals___: builder localNameSet) ifFalse: [
+			^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
+				, ' in the class body is not IR-eligible in the class-body context'].
+		CallAst inClassBodyValueEmit == true ifFalse: [
+			^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
+				, ' outside the class body''s value emit']].
+	node := anAst ___emitIRValueOn___: builder.
+	self ___rest___.
+	^ self ___push___: node
 
 ]
 
@@ -401,6 +415,28 @@ ClassBuildIREmitter >> ifFalse: condBlock do: bodyBlock [
 		to: cond
 		with: { builder inBlockDo: [self ___bodyIn___: bodyBlock] }
 		env: 1)
+
+]
+
+{ #category : 'Grail-expressions' }
+ClassBuildIREmitter >> ifNil: rcvrBlock env: anEnvOrNil temps: tempNames do: bodyBlock [
+	"Inlined, as the compiler inlines ``ifNil:'' with a literal block.  An
+	inlined block's temps are the method's anyway, so each temp is a temp of
+	the helper, made once and shared by every such read -- the shape
+	NameAst >> ___emitIRModuleFunctionReadOn___: gives ``___fn___'' in a
+	method -- and visible to the body by name."
+
+	| rcvr scope |
+	rcvr := self ___eval___: rcvrBlock.
+	scope := KeyValueDictionary new.
+	tempNames do: [:t |
+		scope at: t asString put: ((builder leafFor: t asString asSymbol)
+			ifNil: [builder tempNamed: t asString asSymbol])].
+	scopes addLast: scope.
+	^ [self ___push___: (builder
+			ifNilValue: rcvr
+			then: [self ___bodyIn___: bodyBlock])]
+		ensure: [scopes removeLast]
 
 ]
 
@@ -667,6 +703,17 @@ ClassBuildIREmitter >> symbolPairArray: pairs [
 ClassBuildIREmitter >> terminatedBraceArray: elementBlocks [
 
 	^ self braceArray: elementBlocks
+
+]
+
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> valueOf: aBlock [
+	"The ONE node aBlock pushes through this emitter, popped and answered --
+	how a child node's IR emit hands a construct to the class build's
+	emitter and takes its value back (NameAst >> ___emitIRValueOn___:'s
+	class-body read)."
+
+	^ self ___eval___: aBlock
 
 ]
 
