@@ -17339,6 +17339,39 @@ Object >> ___pyHashCheck___ [
 
 ]
 
+{ #category : 'Grail-Identity' }
+Object >> ___pyId___ [
+	"The receiver's Python id(): unique among live objects and constant for the
+	object's lifetime, as CPython guarantees.  builtins id: answers it, and every
+	default repr that prints an address (``<object at 0x...>'') prints it in hex,
+	so ``hex(id(x)) in repr(x)'' holds.
+
+	It used to be plain identityHash, which is NOT unique.  For an ordinary
+	(non-special) object identityHash is its OOP shifted right 8 bits -- the low
+	byte of such an OOP is always 1, so that is unique among them -- but for a
+	SPECIAL object (SmallInteger, SmallDouble, Character, nil, true, false, the
+	Small* kernel classes) it is the value itself, or near it: identityHash of
+	the int 1333 is 1333, of nil 257, of True 258.  The two ranges overlap, and
+	whenever the gem's temporary OOPs came from low in the OOP space a tuple
+	took the id of a live int.  pickle's memo is keyed by id(obj) and consulted
+	for ints too, so it handed back the wrong object (test_pickle
+	test_multiple_unpicklings_*); so does any id-keyed dict that holds an int
+	beside other objects.
+
+	So a special object is moved above every ordinary one: an ordinary id is
+	OOP >> 8, which is below 2^56 because an OOP is 64 bits, and a special id
+	is 2^56 + its OOP.  asOop is injective, so specials stay distinct from each
+	other, and they cannot meet an ordinary id.  Ordinary objects keep the id
+	(and repr address) they always had, and both kinds are stable: an OOP never
+	changes, across commit or across sessions, and a special object's OOP is
+	computed from its value."
+
+	self @env0:isSpecial @env0:ifTrue: [
+		^ (self @env0:asOop) @env0:+ 16r100000000000000].
+	^ (self @env0:asOop) @env0:bitShift: -8
+
+]
+
 { #category : 'Grail-Slots' }
 Object >> ___pyInferredSlotIndexFor___: aSym [
 	"The instVarAt: index of the receiver's INFERRED slot named aSym, or 0
@@ -20307,7 +20340,7 @@ Object >> __repr__ [
 	what CPython's own tests match a default repr with.  Grail printed
 	``<Foo object>'', naming neither the module nor the object.
 
-	id() is builtins id:, i.e. identityHash, so ``hex(id(x)) in repr(x)'' holds
+	id() is builtins id:, i.e. ___pyId___, so ``hex(id(x)) in repr(x)'' holds
 	the way it does in CPython.  Falls back to the class name for either part
 	that cannot be read, since a repr must not raise.
 
@@ -20337,7 +20370,7 @@ Object >> __repr__ [
 	stream @env0:nextPutAll: className.
 	stream @env0:nextPutAll: ' object at 0x'.
 	stream @env0:nextPutAll:
-		(self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+		(self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase.
 	stream @env0:nextPut: $>.
 	^ stream @env0:contents
 

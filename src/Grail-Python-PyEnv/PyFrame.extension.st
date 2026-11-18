@@ -420,7 +420,7 @@ PyFrame >> __repr__ [
 	| stream |
 	stream := AppendStream @env0:on: (String ___new___).
 	stream @env0:nextPutAll: '<frame at 0x'.
-	stream @env0:nextPutAll: (self @env0:identityHash) @env0:printString.
+	stream @env0:nextPutAll: ((self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase).
 	stream @env0:nextPutAll: ', line '.
 	stream @env0:nextPutAll: (self @env0:dynamicInstVarAt: #'f_lineno') @env0:printString.
 	stream @env0:nextPut: $>.

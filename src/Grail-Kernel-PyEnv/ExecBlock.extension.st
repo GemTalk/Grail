@@ -442,7 +442,7 @@ ExecBlock >> __repr__ [
 	Python attribute dispatch, so ``repr(f)'' kept reaching Object's default."
 
 	^ ('<function ' @env0:, self __qualname__ @env0:asString
-		@env0:, ' at 0x' @env0:, (self @env0:identityHash @env0:printStringRadix: 16)
+		@env0:, ' at 0x' @env0:, (self ___pyId___ @env0:printStringRadix: 16)
 		@env0:asLowercase @env0:, '>') @env0:asUnicodeString
 
 ]

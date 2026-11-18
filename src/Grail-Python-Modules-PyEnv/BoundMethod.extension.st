@@ -1974,7 +1974,7 @@ BoundMethod >> __repr__ [
 	| q addr |
 	q := [(self __qualname__) @env0:asString]
 		@env0:on: AbstractException do: [:ex | ex @env0:return: (self __name__) @env0:asString].
-	addr := (self @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase.
+	addr := (self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase.
 	(receiver @env0:isKindOf: module) ifTrue: [ | mn |
 		mn := [(receiver @env1:__name__) @env0:asString]
 			@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
@@ -2003,7 +2003,7 @@ BoundMethod >> __repr__ [
 					ifFalse: ['<built-in method ' @env0:, (self __name__) @env0:asString])
 				@env0:, ' of ' @env0:, ((receiver @env1:__class__) @env1:__name__) @env0:asString
 				@env0:, ' object at 0x'
-				@env0:, (receiver @env0:identityHash @env0:printStringRadix: 16) @env0:asLowercase
+				@env0:, (receiver ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase
 				@env0:, '>') @env0:asUnicodeString]].
 	^ ('<bound method ' @env0:, self ___boundMethodReprName___ @env0:, ' of ' @env0:,
 		(receiver @env1:__repr__) @env0:asString

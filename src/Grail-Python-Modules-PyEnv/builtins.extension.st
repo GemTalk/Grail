@@ -8925,9 +8925,10 @@ builtins >> hex: aNumber [
 
 { #category : 'Grail-Built-in Functions' }
 builtins >> id: anObject [
-	"Python builtin id(x) — fixed-arity fast path."
+	"Python builtin id(x) — fixed-arity fast path.  Not identityHash, which
+	collides between an int and an ordinary object: see Object>>___pyId___."
 
-	^ anObject @env0:identityHash
+	^ anObject ___pyId___
 
 ]
 
