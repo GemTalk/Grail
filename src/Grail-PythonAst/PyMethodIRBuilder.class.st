@@ -28,7 +28,8 @@ Class {
 		'classHelpers',
 		'markerNode',
 		'defId',
-		'cacheTick'
+		'cacheTick',
+		'classBuildEmitter'
 	]
 }
 
@@ -808,6 +809,25 @@ PyMethodIRBuilder >> cascade: rcvrNode specs: sendSpecs [
 		self setSourcePosition: snd.
 		casc appendSend: snd].
 	^ self setSourcePosition: casc
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> classBuildEmitter [
+	"The ClassBuildIREmitter building a method-local class helper on this
+	builder (plan P3.2), or nil for every other method.  A class-body value
+	expression's IR emit reaches the class build through it: NameAst >>
+	___emitIRValueOn___: writes a class-body read through this emitter, as
+	the text writes it through ClassBuildTextEmitter (plan P3.3)."
+
+	^ classBuildEmitter
+
+]
+
+{ #category : 'accessing' }
+PyMethodIRBuilder >> classBuildEmitter: aClassBuildIREmitter [
+
+	classBuildEmitter := aClassBuildIREmitter
 
 ]
 

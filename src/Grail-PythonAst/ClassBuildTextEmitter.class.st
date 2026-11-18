@@ -249,6 +249,22 @@ ClassBuildTextEmitter >> ifFalse: condBlock do: bodyBlock [
 ]
 
 { #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> ifNil: rcvrBlock env: anEnvOrNil temps: tempNames do: bodyBlock [
+
+	rcvrBlock value.
+	stream space.
+	self ___envPrefix___: anEnvOrNil.
+	stream nextPutAll: 'ifNil: ['.
+	tempNames isEmpty ifFalse: [
+		stream nextPutAll: ' |'.
+		tempNames do: [:t | stream space; nextPutAll: t asString].
+		stream nextPutAll: ' | '].
+	bodyBlock value.
+	stream nextPut: $]
+
+]
+
+{ #category : 'Grail-expressions' }
 ClassBuildTextEmitter >> ifTrue: condBlock do: bodyBlock [
 
 	condBlock value.
