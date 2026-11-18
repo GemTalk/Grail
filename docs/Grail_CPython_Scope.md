@@ -27,11 +27,11 @@ Where the in-scope tiers stand:
 <!-- status-tally -->
 | Tier | ✅ OK | ❗ not OK | not measured | Total |
 |------|------:|----------:|-------------:|------:|
-| P1 | 72 | 8 | 10 | 90 |
+| P1 | 75 | 5 | 10 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
 | P3 | 32 | 2 | 22 | 56 |
 | P4 | 27 | 2 | 46 | 75 |
-| **In-scope** | **161** | **12** | **82** | **255** |
+| **In-scope** | **164** | **9** | **82** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **161 of those score OK**.
+Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **164 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,14 +136,14 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 80 | 4448 | 445 | 3918 | 10% |
+| P1 | 80 | 4459 | 453 | 3933 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
 | P3 | 34 | 4260 | 555 | 3685 | 13% |
 | P4 | 46 | 3781 | 146 | 3623 | 4% |
-| other | 24 | 1199 | 282 | 903 | 24% |
-| **all** | **215** | **17985** | **1986** | **15868** | **11%** |
+| other | 24 | 1199 | 285 | 908 | 24% |
+| **all** | **215** | **17996** | **1997** | **15888** | **11%** |
 
-OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_utf8_mode` 13 of 12 · `test_stat` 15 of 22.
+OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_buffer` 80 of 95 · `test_utf8_mode` 13 of 12 · `test_signal` 43 of 57 · `test_stat` 15 of 22.
 <!-- /test-tally -->
 
 Most of the heavy skips are CPython's own, not Grail's. A module that tests a C
@@ -211,7 +211,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_exception_group` | ExceptionGroup (language). |
 | ✅ | `test_exception_hierarchy` | Built-in exception hierarchy (language). |
 | ✅ | `test_exception_variations` | try/except/finally variations (language). |
-| ❗ | `test_exceptions` | Exceptions (language). |
+| ✅ | `test_exceptions` | Exceptions (language). |
 | ✅ | `test_extcall` | Extended call syntax */** (language). |
 | ✅ | `test_float` | float — core type (in harness). |
 | ✅ | `test_flufl` | barry_as_FLUFL __future__ (language). |
@@ -220,7 +220,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_funcattrs` | Function/method attributes (language). |
 |  | `test_future_stmt` | __future__ statements (language). |
 | ✅ | `test_generator_stop` | PEP 479 StopIteration handling (language). |
-| ❗ | `test_generators` | Generators (language). |
+| ✅ | `test_generators` | Generators (language). |
 | ✅ | `test_genericclass` | __class_getitem__ / generic classes (language). |
 |  | `test_genexps` | Generator expressions (language). |
 | ✅ | `test_global` | global statement (language). |
@@ -255,7 +255,7 @@ The definition of "is Grail Python?" — grammar, control flow, the object model
 | ✅ | `test_slice` | slice objects (language). |
 | ✅ | `test_sort` | list.sort / sorted (language/builtin). |
 |  | `test_source_encoding` | Source-file encoding declarations (parser). |
-| ❗ | `test_str` | str — core type (language). |
+| ✅ | `test_str` | str — core type (language). |
 | ✅ | `test_string_literals` | String-literal syntax (language). |
 | ✅ | `test_subclassinit` | __init_subclass__ (language). |
 | ✅ | `test_super` | super() (language). |
@@ -655,14 +655,11 @@ GemStone uses mark-sweep GC (no refcounting, so no deterministic __del__) and co
 | `test_weakref` | weakref — refcount/GC-driven reclamation. |
 | `test_weakset` | WeakSet — weakref-based. |
 
-The same refcount dependence decides nine tests inside two wired modules. They
+The same refcount dependence decides eight tests inside one wired module. They
 check that an object refuses a resize with `BufferError` while a `memoryview`
-of it is alive:
-
-- `test_memoryio`: `test_getbuffer`, `test_getbuffer_empty`,
-  `test_write_concurrent_export` and `test_writelines_concurrent_export`, each
-  in `PyBytesIOTest` and `CBytesIOTest`;
-- `test_buffer`: `TestPythonBufferProtocol.test_release_saves_reference_no_subclassing`.
+of it is alive: `test_getbuffer`, `test_getbuffer_empty`,
+`test_write_concurrent_export` and `test_writelines_concurrent_export`, each in
+`test_memoryio`'s `PyBytesIOTest` and `CBytesIOTest`.
 
 Without a refcount, Grail can tell a view still in use from a dropped one only
 by running a mark-sweep, which takes about 20 ms with 73 MB of live temporary objects and 50 ms with 230 MB
@@ -680,10 +677,18 @@ that long (`memoryview>>___holdExportForWith___`). That is what
 generator or coroutine body, though: one can be abandoned mid-`with`, which
 CPython's refcount closes on the spot and Grail's GC only later, so an export
 held there would refuse resizes CPython allows.
-`test_release_saves_reference_no_subclassing` is still on the list because its
-view outlives the `with`: the exporter's `__release_buffer__` keeps it, and
-whether anything still does by the time of the resize is again the refcount's
-question.
+
+The other case is rare enough to afford the mark-sweep:
+`test_release_saves_reference_no_subclassing`, now passing, where a Python
+`__release_buffer__` is handed the view its `__buffer__` answered and stores
+it. A view such a hook does not release is registered weakly
+(`memoryview>>___keepExportWhileReachable___`), and a resize of the
+`bytearray` under it, while it is still unreleased, runs one collection to see
+whether anything reaches it (`ByteArray>>___isHeldByAKeptView___:`). Grail's
+stdlib and bundled packages define no Python `__release_buffer__`, so no
+ordinary code ever registers a view and no ordinary resize pays more than
+before. Not modelled: a view DERIVED from the kept one (`buffer[1:]`) keeps
+no export, where CPython's shares the kept view's.
 
 ### Hardware / OS-platform specific  ·  18 modules
 
@@ -806,17 +811,12 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**20 of the 215 rows on the committed board are not OK.**
+**15 of the 215 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
-- `test.test_generators` FAIL, 59 tests: 1 failed, 0 errors, 6 skipped
 - `test.test_c_locale_coercion` SKIP, 8 tests: 0 failed, 0 errors, 8 skipped
-- `test.test_buffer` ERROR, 95 tests: 2 failed, 1 errors, 80 skipped
-- `test.test_str` ERROR, 138 tests: 1 failed, 1 errors, 11 skipped
-- `test.test_signal` ERROR, 57 tests: 0 failed, 2 errors, 43 skipped
-- `test.test_sys` ERROR, 97 tests: 2 failed, 6 errors, 60 skipped
-- `test.test_exceptions` ERROR, 107 tests: 6 failed, 3 errors, 30 skipped
-- `test.test_descr` ERROR, 162 tests: 32 failed, 15 errors, 12 skipped
+- `test.test_sys` ERROR, 97 tests: 3 failed, 2 errors, 63 skipped
+- `test.test_descr` ERROR, 162 tests: 33 failed, 14 errors, 12 skipped
 - `test.test_gzip` FAIL, 75 tests: 1 failed, 0 errors, 9 skipped
 - `test.test_email.test__header_value_parser` ERROR, 380 tests: 0 failed, 8 errors, 0 skipped
 - `test.test_email.test_generator` ERROR, 73 tests: 0 failed, 1 errors, 0 skipped

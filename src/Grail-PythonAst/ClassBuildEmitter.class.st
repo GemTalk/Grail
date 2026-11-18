@@ -213,6 +213,18 @@ ClassBuildEmitter >> ifFalse: condBlock do: bodyBlock [
 ]
 
 { #category : 'Grail-expressions' }
+ClassBuildEmitter >> ifNil: rcvrBlock env: anEnvOrNil temps: tempNames do: bodyBlock [
+	"The expression ``<rcvr> [@envN:]ifNil: [ | t1 t2 | <body>]'' -- the
+	receiver when it is not nil, else the body's value, with block TEMPS.
+	Without temps it is the plain ``send: #ifNil: ... with: {[e block: ...]}''.
+	The class-body read of a same-module function memoises its BoundMethod
+	through one (NameAst >> ___emitModuleFunctionReadWith___:)."
+
+	^ self subclassResponsibility
+
+]
+
+{ #category : 'Grail-expressions' }
 ClassBuildEmitter >> ifTrue: condBlock do: bodyBlock [
 	"The expression ``<cond> ifTrue: [<body>]'' -- ifTrue:inline: without the
 	statement around it, so it can stand inside a block or another statement."
