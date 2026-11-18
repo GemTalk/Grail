@@ -191,6 +191,115 @@ PyStrSurrogate class >> ___onPrefix___: aCharacterCollection [
 
 ]
 
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___twinFor___: aStrClass [
+	"The class an instance of the Python str subclass aStrClass takes when its
+	content holds a lone surrogate -- created once per class in a session.
+
+	A ``class T(str)'' is a Unicode32 subclass (Class >> ___subclass___ keeps
+	it a CharacterCollection), and no CharacterCollection can hold D800..DFFF:
+	the primitive refuses the store.  CPython has no such limit, and it is not
+	exotic: email's header parser decodes 8-bit bytes with surrogateescape and
+	then builds its tokens as ``class Terminal(str)'' instances, so reading any
+	non-ASCII header of a bytes-parsed message raised.
+
+	So such an instance is a PyStrSurrogate, of this hidden subclass, which
+	says it is aStrClass (``___twinOf___'') wherever Python asks -- __class__,
+	type(), isinstance, super() -- and answers aStrClass's own methods: every
+	environment-1 method the Python classes of aStrClass's chain define is
+	installed on it as a session method (___twinReady___), so a direct send, a ``self.m()'' and a
+	method read all find aStrClass's code, and the str surface below it is this
+	class's own.  It is in no dictionary and named after aStrClass, and the
+	table that finds it is session-local: the installed methods are."
+
+	| twins twin |
+	twins := SessionTemps current at: #'GrailSurrogateTwins' ifAbsent: [
+		SessionTemps current at: #'GrailSurrogateTwins' put: IdentityKeyValueDictionary new].
+	twin := twins at: aStrClass ifAbsent: [nil].
+	twin == nil ifFalse: [^ twin].
+	twin := self
+		subclass: aStrClass name
+		instVarNames: #()
+		classVars: #(#GrailTwinOf)
+		classInstVars: #()
+		poolDictionaries: #()
+		inDictionary: nil
+		options: #().
+	"A class variable, not a dynamic instVar: a Class cannot carry one."
+	twin _classVars at: #GrailTwinOf put: aStrClass.
+	twin ___twinReady___.
+	twins at: aStrClass put: twin.
+	^ twin
+
+]
+
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___twinOf___ [
+	"The Python str subclass this class stands for (see ___twinFor___:), or
+	nil for PyStrSurrogate itself."
+
+	^ self _classVars ifNil: [nil] ifNotNil: [:vars | vars at: #GrailTwinOf ifAbsent: [nil]]
+
+]
+
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___twinPropertyNames___: aChain into: aTwin [
+	"Give aTwin the @property names of aChain, as each class's own
+	___grailOwnPropertyNames___ records them -- which is how an attribute read
+	tells a property, whose getter it runs, from a method, which it binds.
+	A name counts when the class nearest in the chain that defines it lists it,
+	the rule object >> ___grailPropertyOwns___: applies."
+
+	| names src |
+	names := OrderedCollection new.
+	aChain do: [:c |
+		(c class includesSelector: #'___grailOwnPropertyNames___' environmentId: 1) ifTrue: [
+			(c @env1:___grailOwnPropertyNames___) do: [:nm |
+				((names includes: nm) not
+					and: [(aChain detect: [:k | k includesSelector: nm environmentId: 1] ifNone: [nil]) == c])
+						ifTrue: [names add: nm]]]].
+	names isEmpty ifTrue: [^ self].
+	src := WriteStream on: String new.
+	src nextPutAll: '___grailOwnPropertyNames___'; lf; nextPutAll: '	^ #('.
+	names do: [:nm | src nextPutAll: ' #'''; nextPutAll: nm asString; nextPut: $'].
+	src nextPutAll: ' )'.
+	aTwin class @env1:___compileSessionMethod: src contents
+		category: 'Grail-Class Attrs'
+		scope: nil
+
+]
+
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___twinReady___ [
+	"Give this twin (see ___twinFor___:) its subclass's methods, once per
+	session.  They are SESSION methods, so a twin that outlived its session --
+	an instance committed and read back in another -- arrives with none; its
+	attribute reads come here first (instance >> ___pyAttrLoad___:), and so
+	does creating a twin.  PyStrSurrogate itself has nothing to install."
+
+	| ready owner chain done |
+	owner := self ___twinOf___.
+	owner == nil ifTrue: [^ self].
+	ready := SessionTemps current at: #'GrailSurrogateTwinsReady' ifAbsent: [
+		SessionTemps current at: #'GrailSurrogateTwinsReady' put: IdentitySet new].
+	(ready includes: self) ifTrue: [^ self].
+	ready add: self.
+	chain := OrderedCollection new.
+	(importlib ___mroOf___: owner) do: [:c |
+		((c isKindOf: Behavior) and: [c @env1:___grailIsPythonClass___]) ifTrue: [chain add: c]].
+	done := IdentitySet new.
+	done add: #'___pyDefinedClass___'.
+	chain do: [:c |
+		(c methodDictForEnv: 1) ifNotNil: [:d |
+			d keysDo: [:sel |
+				(done includes: sel) ifFalse: [
+					done add: sel.
+					self @env1:___installSessionMethod: (c compiledMethodAt: sel environmentId: 1)
+						as: sel]]]].
+	PyStrSurrogate ___twinPropertyNames___: chain into: self
+
+]
+
 { #category : 'Grail-Placeholders' }
 PyStrSurrogate class >> ___viaPlaceholderNames___ [
 	"The str methods answered through placeholders -- see above."
@@ -354,9 +463,13 @@ PyStrSurrogate >> ___isExactPyStr___ [
 	allocation class of a user ``class X(str)'' (that is AbstractPyStr's job),
 	so no instance can carry a user-written __eq__ / __lt__ / __radd__ and
 	str's own binary dunders may settle against it directly.  See
-	object >> ___isExactPyStr___."
+	object >> ___isExactPyStr___.
 
-	^ true
+	Except an instance of a str subclass's surrogate twin (class >>
+	___twinFor___:), which is that subclass's instance and may carry exactly
+	those."
+
+	^ self class == PyStrSurrogate
 
 ]
 

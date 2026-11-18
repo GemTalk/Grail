@@ -205,6 +205,20 @@ SuperBoundMethod >> value: positional value: kwargs [
 		AttributeError ___signal___:
 			'super(): no parent method ''' @env0:, selector @env0:asString @env0:, ''''
 	].
+	"A STR SUBCLASS'S INSTANCE HOLDING A LONE SURROGATE is a PyStrSurrogate of
+	the subclass's twin (PyStrSurrogate class >> ___twinFor___:), so str's own
+	methods -- a kernel string class's, which the walk reaches past the
+	subclass -- cannot run on it: they read characters it does not have.
+	``super().__repr__()'' in email's Terminal took the session down.  Run the
+	surrogate implementation of the same selector instead."
+	((obj @env0:isKindOf: PyStrSurrogate)
+		and: [(obj @env0:class @env0:___twinOf___) @env0:notNil
+		and: [(PyStrSurrogate @env0:isSubclassOf: method @env0:inClass) @env0:not
+		and: [method @env0:inClass ___grailIsPythonClass___ @env0:not]]]) ifTrue: [
+			method := (PyStrSurrogate @env0:whichClassIncludesSelector: method @env0:selector
+					environmentId: 1)
+				@env0:ifNil: [^ obj @env0:___unsupported___: method @env0:selector @env0:asString]
+				ifNotNil: [:owner | owner @env0:compiledMethodAt: method @env0:selector environmentId: 1]].
 	"super() READS THE CLASS DICT, NEVER THE INSTANCE.  A store that shadows a
 	method on some instance replaces the method with a SELF-SEND DISPATCHER
 	(object class >> ___grailInstallSelfSendDispatchers___:), which consults the
