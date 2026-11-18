@@ -11,16 +11,19 @@ class is built:
   SAME class, for a bound method captured before the delete -- and a capture
   of a method nothing else defines still runs, even with ``None`` for self;
 * ``Home.f(3)``, a class-body def called on an int, runs the def with a
-  special receiver, which needs the method compiled for ``int``'s class;
+  special receiver, which needs the method compiled for ``int``'s class --
+  and likewise for a float and a bool (``None`` is checked beside them);
 * a def of five or more arguments moved onto an unrelated class
   (``Away.five = Home.five``) is installed on that class to be run there.
 
 An IR-built method is copied by generating its IR for the other class, under
 the copy's own selector, with no Smalltalk text (plan P2.2).
 
-The ``LBase``, ``DelLocal`` and ``five_local`` checks repeat three of these
-copies with a def that defines a class: its class statement is a helper
-method of the def's own class, which every copy has to reach.
+The ``LBase``, ``DelLocal``, ``five_local`` and ``kind_local`` checks repeat
+four of these copies with a def that defines a class: its class statement is
+a helper method of the def's own class, which every copy has to reach.
+``comp_target`` is #2256's shape on a special receiver: a lambda in a
+comprehension whose target shadows the receiver parameter.
 
 ``IRCopyRoutesTestCase`` runs these checks under Grail and counts the routes;
 run as a script, this file is its own CPython oracle.
@@ -47,6 +50,17 @@ class Deleting(Base):
 class Home:
     def kind(self):
         return (type(self).__name__, self + 1)
+
+    def name_of(self):
+        return type(self).__name__
+
+    def comp_target(x):
+        return [f() for f in [lambda: x for x in range(x)]], x
+
+    def kind_local(self):
+        class Made:
+            pass
+        return (type(self).__name__, Made.__qualname__)
 
     def five(self, a, b, c, d, e):
         return (type(self).__name__, a + b + c + d + e)
@@ -130,6 +144,18 @@ def _special_receiver():
     return (Home.kind(3), Home.kind(True))
 
 
+def _special_receivers_of_every_kind():
+    return tuple(Home.name_of(v) for v in (3, 2.5, True, False, None))
+
+
+def _special_receiver_comp_target():
+    return Home.comp_target(2)
+
+
+def _special_receiver_with_a_class():
+    return Home.kind_local(3)
+
+
 def _five_on_another_class():
     Away.five = Home.five
     return Away().five(1, 2, 3, 4, 5)
@@ -143,6 +169,12 @@ CHECKS = [
     ('del_capture_with_no_inherited_method', _del_capture_with_no_inherited_method,
      ('plain', 'plain', False)),
     ('special_receiver', _special_receiver, (('int', 4), ('bool', 2))),
+    ('special_receivers_of_every_kind', _special_receivers_of_every_kind,
+     ('int', 'float', 'bool', 'bool', 'NoneType')),
+    ('special_receiver_comp_target', _special_receiver_comp_target,
+     ([1, 1], 2)),
+    ('special_receiver_with_a_class', _special_receiver_with_a_class,
+     ('int', 'Home.kind_local.<locals>.Made')),
     ('five_on_another_class', _five_on_another_class, ('Away', 15)),
     ('dispatch_a_def_with_a_class', _dispatch_a_def_with_a_class,
      ('LBase.build.<locals>.Made', 'patched', 'LBase.build.<locals>.Made',
