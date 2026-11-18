@@ -760,6 +760,12 @@ PyFrame class >> ___pythonValueAttrs___ [
 		answered the BoundMethod itself -- ``'BoundMethod' object is not
 		iterable'', which is what every reader saw."
 		add: #'f_locals';
+		"``f_back'' and ``f_lineno'' for a traceback's CATCHING frame, which keeps
+		neither as a dynamic instVar -- both are read off the live stack while it
+		runs (PyFrame >> f_back / f_lineno).  Every other frame stores both, and
+		the stored value answers first."
+		add: #'f_back';
+		add: #'f_lineno';
 		yourself
 
 ]

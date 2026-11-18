@@ -292,6 +292,30 @@ BaseException class >> ___catchingHandlerIndexIn___: st for: anException [
 
 ]
 
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___catchingOnDoIn___: triples from: start matching: aBlock [
+	"The index of the first triple from ``start'' outward that is an ExecBlock
+	method frame (on:do: or a kernel helper of it) whose receiver -- the
+	protected block -- satisfies aBlock, or nil.  ___neutralizeHandledRaise
+	Frames___'s search for the try that caught."
+
+	| j |
+	j := start.
+	[j @env0:<= triples @env0:size] whileTrue: [
+		| m r |
+		m := triples @env0:at: j.
+		r := triples @env0:at: j @env0:+ 2.
+		((m @env0:isKindOf: GsNMethod)
+			and: [m @env0:selector @env0:notNil
+			and: [m @env0:inClass @env0:== ExecBlock
+			and: [(r @env0:isKindOf: ExecBlock)
+			and: [(aBlock value: r) == true]]]])
+				ifTrue: [^ j].
+		j := j @env0:+ 3].
+	^ nil
+
+]
+
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___classBodyHelperClassNameFor___: aSelector [
 	"The PYTHON CLASS NAME inside a method-local class body helper's selector,
@@ -973,6 +997,25 @@ BaseException class >> ___forgetMethodCaches___ [
 	#(#'GrailIpLineCache' #'GrailIpTbLineCache' #'GrailIpSpanCache'
 	  #'GrailIRMethodCache' #'GrailMethodFileCache' #'___GrailReceiverNameCache___')
 		do: [:k | st removeKey: k otherwise: nil]
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___frameChainOfSuspendedProcess___: aProcess [
+	"The frames of a SUSPENDED process -- another thread, blocked -- as a chain
+	of PyFrames, innermost first, or nil when it cannot be read: what
+	sys._current_frames() reports for a thread other than the caller's."
+
+	| both |
+	aProcess isNil ifTrue: [^ nil].
+	aProcess == GsProcess _current ifTrue: [^ nil].
+	both := [self ___framesAndLevelsOfSuspendedProcess___: aProcess]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil].
+	both isNil ifTrue: [^ nil].
+	^ self ___liveFrameChainFromTriples___: (both at: 1)
+		levels: (both at: 2) offset: 0 running: false
 
 ]
 
@@ -2136,74 +2179,11 @@ BaseException class >> ___liveFrameChain___ [
 	___liveFrameSections___: follows that chain; the walk runs once per section
 	and the sections concatenate innermost-first."
 
-	| probe st trimmed levels offset sections pairs isFirstSection |
-	self ___ensureStackCapture___.
-	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
-	Error reach any outer handler -- notably not a Python ``except''."
-	probe := [Error @env0:new @env0:signal: 'grail live-frame probe']
-		@env0:on: Error do: [:ex | ex @env0:return: ex].
-	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
-	st isNil ifTrue: [^ nil].
-	"Same currency problem as ___walkableStack___, and for the same reason: this
-	is a _gsStack capture, so its ips are NATIVE offsets whenever the gem
-	generates native code.  Converting here is what makes traceback.extract_stack
-	and format_stack report the calling line rather than the one after it."
-	st := BaseException ___toPortableIps___: st.
-	trimmed := self ___trimCapturedStack___: st.
-	(SessionTemps @env0:current @env0:at: #'GrailFramesStopAtFinalizerHook' otherwise: false)
-		ifTrue: [trimmed := self ___framesInsideFinalizerHook___: trimmed].
-	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
-	ever, so f_locals has to come from the OTHER live-stack reader --
-	GsProcess class>>_frameContentsAt:, which does answer names and values but is
-	addressed by LEVEL rather than by frame.  Collected here, at the same point of
-	this method as the capture, so that a triple index and a level differ by one
-	constant offset for the whole walk; ___liveFrameLevelOffset___:levels: finds
-	that offset by identity rather than assuming it.
-
-	EVERY SECTION GETS THEM, each from its own process.  This is where the sweep
-	below serves the FIRST section -- the running one.  A later section is a
-	suspended CONSUMER, and the class-side _frameContentsAt: read here would
-	describe this stack rather than that one: the same frames, silently
-	mislabelled.  That is why later sections used to be handed nil, and the cost
-	was that any frame BELOW a generator had no f_locals at all -- for
-	``next(gen())'' inside a function, that function's own variables.
-
-	The instance-side read answers the right stack, and the consumer is
-	legitimately suspended, so ___framesAndLevelsOfSuspendedProcess___: now
-	returns each section's levels alongside its triples, from the one pass it
-	already made.  Nil levels still means no f_locals, which every consumer
-	treats as ``not available''."
-	levels := PyFrame @env0:___liveFrameContentsByLevel___.
-	offset := self ___liveFrameLevelOffset___: trimmed levels: levels.
-	sections := self ___liveFrameSections___: trimmed.
-	pairs := OrderedCollection @env0:new.
-	isFirstSection := true.
-	sections @env0:do: [:section |
-		"Each section brings its OWN levels now.  The first is the running process,
-		 whose sweep and derived offset are above; a later one is a suspended
-		 consumer, read level-by-level in ___framesAndLevelsOfSuspendedProcess___:
-		 so that its offset is 0 by construction.  Passing nil for a later section
-		 was the reason a frame BELOW a generator had no f_locals at all."
-		| secLevels secOffset |
-		isFirstSection
-			ifTrue: [secLevels := levels. secOffset := offset]
-			ifFalse: [
-				secLevels := section @env0:at: 3.
-				secOffset := secLevels isNil ifTrue: [nil] ifFalse: [0]].
-		"From inside an except body a section still holds the frames the
-		 handler runs on top of -- the function that raised and its callees --
-		 which CPython has unwound.  Every section: a generator started in an
-		 except body leaves its consumer's handler region in the next section.
-		 Relabelled in place, so each section's level offset still lines up."
-		(self ___liveFramePairsFrom___:
-				(self ___neutralizeHandledRaiseFrames___: (section @env0:at: 1))
-			generatorBody: (section @env0:at: 2)
-			levels: secLevels
-			offset: secOffset
-			running: isFirstSection)
-				@env0:do: [:each | pairs @env0:add: each].
-		isFirstSection := false].
-	^ self ___liveFrameChainFromPairs___: pairs
+	| stack |
+	stack := self ___liveFrameStack___.
+	stack isNil ifTrue: [^ nil].
+	^ self ___liveFrameChainFromTriples___: (stack @env0:at: 1)
+		levels: (stack @env0:at: 2) offset: (stack @env0:at: 3) running: true
 
 ]
 
@@ -2314,6 +2294,53 @@ BaseException class >> ___liveFrameChainFromPairs___: pairs [
 				frame @env0:dynamicInstVarAt: #'___liveLevelMethod___' put: am]].
 		prev := frame].
 	^ frame
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameChainFromTriples___: triples levels: levels offset: offset running: isRunning [
+	"The chain of PyFrames for the live stack ``triples'' -- innermost first,
+	linked by f_back -- answering the innermost, or nil.
+
+	``levels''/``offset'' are the first section's frame contents and alignment
+	(nil for no f_locals); ``isRunning'' says whether that section is the
+	RUNNING process, which a frame's live re-read of its locals needs to know.
+	A stack read off a suspended process -- another thread's, for
+	sys._current_frames or a traceback frame's f_back -- is not.
+
+	This is the half of ___liveFrameChain___ after the capture: the stack is
+	split into one section per GsProcess and each is walked into frames."
+
+	| sections pairs isFirstSection |
+	sections := self ___liveFrameSections___: triples.
+	pairs := OrderedCollection @env0:new.
+	isFirstSection := true.
+	sections @env0:do: [:section |
+		"Each section brings its OWN levels now.  The first is the running process,
+		 whose sweep and derived offset are above; a later one is a suspended
+		 consumer, read level-by-level in ___framesAndLevelsOfSuspendedProcess___:
+		 so that its offset is 0 by construction.  Passing nil for a later section
+		 was the reason a frame BELOW a generator had no f_locals at all."
+		| secLevels secOffset |
+		isFirstSection
+			ifTrue: [secLevels := levels. secOffset := offset]
+			ifFalse: [
+				secLevels := section @env0:at: 3.
+				secOffset := secLevels isNil ifTrue: [nil] ifFalse: [0]].
+		"From inside an except body a section still holds the frames the
+		 handler runs on top of -- the function that raised and its callees --
+		 which CPython has unwound.  Every section: a generator started in an
+		 except body leaves its consumer's handler region in the next section.
+		 Relabelled in place, so each section's level offset still lines up."
+		(self ___liveFramePairsFrom___:
+				(self ___neutralizeHandledRaiseFrames___: (section @env0:at: 1))
+			generatorBody: (section @env0:at: 2)
+			levels: secLevels
+			offset: secOffset
+			running: (isFirstSection and: [isRunning]))
+				@env0:do: [:each | pairs @env0:add: each].
+		isFirstSection := false].
+	^ self ___liveFrameChainFromPairs___: pairs
 
 ]
 
@@ -2564,6 +2591,62 @@ BaseException class >> ___liveFrameLevelOffset___: st levels: levels [
 			ifTrue: [tripleIndex := (i + 2) // 3]].
 	tripleIndex isNil ifTrue: [^ nil].
 	^ levelIndex - tripleIndex
+
+]
+
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameOf___: aProcess outerDepth: aDepth method: aMethod [
+	"The live PyFrame of one activation, with its callers chained on f_back, or
+	nil when that activation is no longer on aProcess's stack.
+
+	The activation is named the only way that survives a re-read: by the
+	process it runs on, how many Smalltalk frames lie BELOW it, and the method
+	at that position.  The bottom of a stack does not move while a frame is on
+	it -- callees come and go above -- so a frame still running is at the same
+	depth with the same method.  A different method there means it returned.
+	The same method there may be a later call made from the same place, which
+	answers that call's frame: its callers are the same, so the chain is
+	still the stack the caller asked about.
+
+	The running process is read by raising (___liveFrameStack___), any other by
+	its suspended frames, as sys._getframe and the generator walk do.
+
+	Which frame of the chain is ours is found by COUNTING: the stack cut just
+	below the activation builds into the chain of its callers, and the frame
+	with that many frames outside it is the activation's own."
+
+	| isCurrent stack triples n c chain outward k f |
+	(aProcess isNil or: [aDepth isNil or: [aMethod isNil]]) ifTrue: [^ nil].
+	isCurrent := aProcess == GsProcess _current.
+	stack := isCurrent
+		ifTrue: [self ___liveFrameStack___]
+		ifFalse: [ | both |
+			both := [self ___framesAndLevelsOfSuspendedProcess___: aProcess]
+				on: Error do: [:ex |
+					(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+					ex return: nil].
+			both isNil ifTrue: [nil] ifFalse: [{ both at: 1. both at: 2. 0 }]].
+	stack isNil ifTrue: [^ nil].
+	triples := stack at: 1.
+	n := triples size // 3.
+	c := n - aDepth.
+	c < 1 ifTrue: [^ nil].
+	(triples at: c * 3 - 2) == aMethod ifFalse: [^ nil].
+	chain := self ___liveFrameChainFromTriples___: triples
+		levels: (stack at: 2) offset: (stack at: 3) running: isCurrent.
+	outward := self ___liveFrameChainFromTriples___:
+			(triples copyFrom: c * 3 + 1 to: triples size)
+		levels: nil offset: nil running: false.
+	k := 0.
+	f := outward.
+	[f notNil and: [f ~~ None]] whileTrue: [
+		k := k + 1.
+		f := f dynamicInstVarAt: #'f_back'].
+	f := chain.
+	[f notNil and: [f ~~ None]] whileTrue: [
+		(f dynamicInstVarAt: #'___liveOuterIndex___') = k ifTrue: [^ f].
+		f := f dynamicInstVarAt: #'f_back'].
+	^ nil
 
 ]
 
@@ -3030,6 +3113,58 @@ BaseException class >> ___liveFrameSections___: triples [
 
 ]
 
+{ #category : 'Grail-Live Frames' }
+BaseException class >> ___liveFrameStack___ [
+	"{ triples. levels. offset } for the RUNNING process's live stack, or nil: the
+	(method, ip, receiver) triples innermost first, the frame contents of every
+	_frameContentsAt: level, and the constant that turns a triple's ordinal into
+	its level.  ___liveFrameChain___ turns it into frames; ___liveFrameOf___:
+	outerDepth:method: cuts it first.  ___framesAndLevelsOfSuspendedProcess___:
+	answers the same shape for a process that is not running, with offset 0."
+
+	| probe st trimmed levels offset |
+	self ___ensureStackCapture___.
+	"Signal and catch in one breath.  ``ex return:'' unwinds without letting the
+	Error reach any outer handler -- notably not a Python ``except''."
+	probe := [Error @env0:new @env0:signal: 'grail live-frame probe']
+		@env0:on: Error do: [:ex | ex @env0:return: ex].
+	st := [probe @env0:_gsStack] @env0:on: Error do: [:ex | ex @env0:return: nil].
+	st isNil ifTrue: [^ nil].
+	"Same currency problem as ___walkableStack___, and for the same reason: this
+	is a _gsStack capture, so its ips are NATIVE offsets whenever the gem
+	generates native code.  Converting here is what makes traceback.extract_stack
+	and format_stack report the calling line rather than the one after it."
+	st := BaseException ___toPortableIps___: st.
+	trimmed := self ___trimCapturedStack___: st.
+	(SessionTemps @env0:current @env0:at: #'GrailFramesStopAtFinalizerHook' otherwise: false)
+		ifTrue: [trimmed := self ___framesInsideFinalizerHook___: trimmed].
+	"LOCALS.  The capture above answers (method, ip, receiver) and no temporaries
+	ever, so f_locals has to come from the OTHER live-stack reader --
+	GsProcess class>>_frameContentsAt:, which does answer names and values but is
+	addressed by LEVEL rather than by frame.  Collected here, at the same point of
+	this method as the capture, so that a triple index and a level differ by one
+	constant offset for the whole walk; ___liveFrameLevelOffset___:levels: finds
+	that offset by identity rather than assuming it.
+
+	EVERY SECTION GETS THEM, each from its own process.  This is where the sweep
+	below serves the FIRST section -- the running one.  A later section is a
+	suspended CONSUMER, and the class-side _frameContentsAt: read here would
+	describe this stack rather than that one: the same frames, silently
+	mislabelled.  That is why later sections used to be handed nil, and the cost
+	was that any frame BELOW a generator had no f_locals at all -- for
+	``next(gen())'' inside a function, that function's own variables.
+
+	The instance-side read answers the right stack, and the consumer is
+	legitimately suspended, so ___framesAndLevelsOfSuspendedProcess___: now
+	returns each section's levels alongside its triples, from the one pass it
+	already made.  Nil levels still means no f_locals, which every consumer
+	treats as ``not available''."
+	levels := PyFrame @env0:___liveFrameContentsByLevel___.
+	offset := self ___liveFrameLevelOffset___: trimmed levels: levels.
+	^ { trimmed. levels. offset }
+
+]
+
 { #category : 'Grail-Traceback Building' }
 BaseException class >> ___mapSpanForMethod___: aMethod ip: anIp [
 	"The PEP 657 span for anIp, read from the method's POSITION MAP -- or nil
@@ -3391,37 +3526,50 @@ BaseException class >> ___neutralizeHandledRaiseFrames___: triples [
 					@env0:includesIdentical: meth @env0:selector)
 			and: [meth @env0:inClass @env0:== AbstractException]])
 				ifTrue: [
-					| link j k |
+					| link home found j k |
 					execHandler := meth.
 					"The handler block: the nearest frame inward that is a block
 					 of code outside ExecBlock (whose own on:do: wraps a lazy
 					 except selector in a block of its own)."
 					link := nil.
+					home := nil.
+					found := false.
 					j := i @env0:- 3.
-					[link @env0:isNil and: [j @env0:>= 1]] whileTrue: [
+					[found not and: [j @env0:>= 1]] whileTrue: [
 						| m r |
 						m := out @env0:at: j.
 						r := out @env0:at: j @env0:+ 2.
 						((r @env0:isKindOf: ExecBlock)
 							and: [(m @env0:isKindOf: GsNMethod)
 							and: [m @env0:homeMethod @env0:inClass @env0:~~ ExecBlock]])
-								ifTrue: [link := r @env0:instVarAt: linkIx.
-									link @env0:isNil ifTrue: [j := 0]].
+								ifTrue: [
+									found := true.
+									link := r @env0:instVarAt: linkIx.
+									home := m @env0:homeMethod].
 						j := j @env0:- 3].
+					"The try that caught: by the shared staticLink when the handler
+					 has one, which names the activation.  Failing that, a PROTECTED
+					 block with no staticLink of its own -- a try body that captures
+					 nothing, ``try: raise ValueError'' -- from the handler's own
+					 method: such a block has no context to share, so the link test
+					 can never match it, and the handler then reported the raise's
+					 line instead of its own (``h'' in an except body read as line
+					 11, the raise, where CPython says 13).  The nearest such on:do:
+					 outward is taken; only a recursive call of the same function,
+					 caught by a different try of the same method, could put a
+					 nearer one there."
 					k := nil.
-					link @env0:isNil ifFalse: [
-						j := i @env0:+ 3.
-						[k @env0:isNil and: [j @env0:<= out @env0:size]] whileTrue: [
-							| m r |
-							m := out @env0:at: j.
-							r := out @env0:at: j @env0:+ 2.
-							((m @env0:isKindOf: GsNMethod)
-								and: [m @env0:selector @env0:notNil
-								and: [m @env0:inClass @env0:== ExecBlock
-								and: [(r @env0:isKindOf: ExecBlock)
-								and: [(r @env0:instVarAt: linkIx) @env0:== link]]]])
-									ifTrue: [k := j].
-							j := j @env0:+ 3]].
+					found ifTrue: [
+						link @env0:isNil ifFalse: [
+							k := self ___catchingOnDoIn___: out from: i @env0:+ 3
+								matching: [:r | (r @env0:instVarAt: linkIx) @env0:== link]].
+						k @env0:isNil ifTrue: [
+							k := self ___catchingOnDoIn___: out from: i @env0:+ 3
+								matching: [:r |
+									(r @env0:instVarAt: linkIx) @env0:isNil
+										and: [([r @env0:method @env0:homeMethod]
+												@env0:on: Error do: [:e | e @env0:return: nil])
+											@env0:== home]]]].
 					k @env0:isNil ifFalse: [
 						i @env0:+ 3 @env0:to: k @env0:- 3 by: 3 do: [:x |
 							out @env0:at: x put: execHandler].
@@ -5830,14 +5978,18 @@ BaseException >> ___buildFramesFromCapturedStack___: aCode pos: posArray freshRa
 	caught exception, measured at ~+22%, and nearly all of it is levels no frame
 	of the traceback will ever name."
 
-	| pushedFrames answered walkable |
+	| pushedFrames answered walkable before |
+	before := tracebackObj.
 	walkable := self ___walkableStack___.
 	pushedFrames := OrderedCollection @env0:new.
 	answered := self ___buildFramesWalk___: aCode pos: posArray freshRaise: isFresh
 		walkable: walkable into: pushedFrames.
 	answered ifTrue: [
 		self ___attachFrameLocalsFrom___: pushedFrames
-			capture: (walkable @env0:at: 1)].
+			capture: (walkable @env0:at: 1).
+		self ___linkTracebackFramesDownTo___: before.
+		self ___noteCatcherPosition___: pushedFrames
+			capture: (walkable @env0:at: 1) code: aCode].
 	^ answered
 
 ]
@@ -6579,6 +6731,31 @@ BaseException >> ___headFrameName___ [
 ]
 
 { #category : 'Grail-Traceback Building' }
+BaseException >> ___linkTracebackFramesDownTo___: aNode [
+	"Give each frame this walk built its caller as f_back: the frame of the
+	traceback node outside it, which is the function that called it.  CPython's
+	traceback holds the frames themselves, so tb.tb_next.tb_frame.f_back is
+	tb.tb_frame.
+
+	Only the nodes the walk just made, from the head down to aNode (where the
+	chain was before the walk, nil for a first raise): below that is a chain
+	someone attached with with_traceback(), whose frames have callers of their
+	own.  The head -- the catching frame -- is left to ___noteCatcherPosition___:
+	capture:code:, since its caller is outside the traceback."
+
+	| tb next |
+	tb := tracebackObj.
+	[tb notNil and: [tb ~~ None and: [tb ~~ aNode]]] whileTrue: [
+		next := tb @env0:dynamicInstVarAt: #'tb_next'.
+		(next isNil or: [next == None or: [next == aNode]]) ifTrue: [^ self].
+		(next @env0:dynamicInstVarAt: #'tb_frame') @env0:dynamicInstVarAt: #'f_back'
+			put: (tb @env0:dynamicInstVarAt: #'tb_frame').
+		tb := next].
+	^ self
+
+]
+
+{ #category : 'Grail-Traceback Building' }
 BaseException >> ___localsPartsFor___: ordinal method: aMethod pending: pendingParts [
 	"The Smalltalk frames whose temporaries make up ONE Python frame's locals, as
 	{ captureOrdinal. method } pairs, INNERMOST FIRST.
@@ -6641,6 +6818,55 @@ BaseException >> ___newArgs___: anArray [
 
 	self @env1:___args___: #().
 	args := tuple withAll: anArray
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___noteCatcherPosition___: pushedFrames capture: st code: aCode [
+	"Let the CATCHING frame find itself on the stack again, for f_back and a live
+	f_lineno (PyFrame >> ___tracebackLiveFrame___).
+
+	CPython's tb_frame IS the catching function's frame, so its f_back is that
+	function's caller and its f_lineno the line it is running now -- in the
+	handler, while the handler runs.  Grail's frame is built here, from the
+	raise-time capture, and the capture says where the catcher sits: its
+	outermost Smalltalk frame is triple ``ord'', and everything after that
+	triple is below it.  That depth, the method there and the process are
+	recorded, and nothing else is done until something asks.  Reading the
+	stack costs a raise or a suspended-process walk, and almost no traceback
+	is ever asked for its catcher's caller.
+
+	The catcher is the last frame the walk pushed, and the head of the
+	traceback, when the walk reached aCode's function; anything else (no
+	catcher -- ensurePythonTraceback passes nil -- or a walk that stopped
+	short) records nothing, and f_back stays None.
+
+	f_back and f_lineno are then REMOVED from the frame's dynamic instVars:
+	___pyAttrLoad___ probes those before methods, and PyFrame >> f_back /
+	f_lineno have to run.  The line the walk found is kept for when the
+	activation has gone."
+
+	| last frame parts ord meth n |
+	(aCode isNil or: [pushedFrames @env0:isEmpty]) ifTrue: [^ self].
+	(tracebackObj isNil or: [tracebackObj == None]) ifTrue: [^ self].
+	last := pushedFrames @env0:last.
+	frame := last @env0:at: 1.
+	frame == (tracebackObj @env0:dynamicInstVarAt: #'tb_frame') ifFalse: [^ self].
+	((frame @env0:dynamicInstVarAt: #'f_code') @env0:dynamicInstVarAt: #'co_name')
+		@env0:= (aCode @env0:dynamicInstVarAt: #'co_name') ifFalse: [^ self].
+	parts := last @env0:at: 2.
+	parts isNil ifTrue: [^ self].
+	ord := 0.
+	parts @env0:do: [:part | | o |
+		o := part @env0:at: 1.
+		(o notNil and: [o @env0:> ord]) ifTrue: [ord := o. meth := part @env0:at: 2]].
+	(ord @env0:= 0 or: [meth isNil]) ifTrue: [^ self].
+	n := 0.
+	2 to: st @env0:size by: 3 do: [:i |
+		(st @env0:at: i) isNil ifTrue: [
+			^ self ___recordCatcher___: frame depth: n @env0:- ord method: meth].
+		n := n @env0:+ 1].
+	^ self ___recordCatcher___: frame depth: n @env0:- ord method: meth
 
 ]
 
@@ -6912,6 +7138,22 @@ BaseException >> ___pythonTypeNameForTraceback___ [
 		value: nil.
 	(mod isNil or: [mod = 'builtins' or: [mod = '__main__']]) ifTrue: [^ name].
 	^ mod , '.' , name
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException >> ___recordCatcher___: aFrame depth: aDepth method: aMethod [
+	"___noteCatcherPosition___:capture:code:'s record on the catching frame."
+
+	aDepth @env0:< 0 ifTrue: [^ self].
+	aFrame @env0:dynamicInstVarAt: #'___tbProcess___' put: GsProcess @env0:_current.
+	aFrame @env0:dynamicInstVarAt: #'___tbDepth___' put: aDepth.
+	aFrame @env0:dynamicInstVarAt: #'___tbMethod___' put: aMethod.
+	aFrame @env0:dynamicInstVarAt: #'___tbLineno___'
+		put: (aFrame @env0:dynamicInstVarAt: #'f_lineno').
+	aFrame @env0:dynamicInstVarAt: #'f_back' put: nil.
+	aFrame @env0:dynamicInstVarAt: #'f_lineno' put: nil.
+	^ self
 
 ]
 

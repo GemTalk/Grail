@@ -864,6 +864,51 @@ sys >> _current_exceptions [
 ]
 
 { #category : 'Grail-Built-in Functions' }
+sys >> _current_frames [
+	"_current_frames() -> each thread's identifier mapped to the frame it is
+	running, innermost -- CPython's sys._current_frames, beside
+	_current_exceptions and keyed the same way.
+
+	The caller's own entry is its live stack, as _getframe() reads it.  Every
+	other thread is blocked, which is the only state a single gem leaves one
+	in, so its stack is read as a suspended process's
+	(BaseException class >> ___frameChainOfSuspendedProcess___:).  The main
+	thread, asked from another thread, is the process threading reports as
+	its identifier, when that is a process this can read.
+
+	The frames are reconstructed, as every Grail frame is, so the caller's
+	entry equals sys._getframe() but is not the same object."
+
+	| out here threading mainIdent mainProc frame addThread |
+	out := PyDict @env0:new.
+	here := (importlib @env0:___pythonThreadOf___: GsProcess @env0:current) @env0:asOop.
+	frame := BaseException @env0:___liveFrameChain___.
+	[(frame @env0:~~ nil) and: [(frame @env0:~~ None) and: [
+		(self @env1:___frameName___: frame) @env0:= '_current_frames']]]
+		whileTrue: [frame := frame @env0:dynamicInstVarAt: #'f_back'].
+	(frame @env0:~~ nil and: [frame @env0:~~ None]) ifTrue: [
+		out @env0:at: here put: frame].
+	addThread := [:ident :proc | | chain |
+		(ident == here or: [proc == nil]) ifFalse: [
+			chain := BaseException @env0:___frameChainOfSuspendedProcess___: proc.
+			chain == nil ifFalse: [out @env0:at: ident put: chain]]].
+	(_thread @env0:___contextProcess___) == nil ifFalse: [
+		threading := (importlib @env1:modules) @env0:at: #threading otherwise: nil.
+		threading == nil ifFalse: [
+			mainIdent := (threading @env1:___pyAttrLoad___: #'_MainThread')
+				@env1:___pyAttrLoad___: #ident.
+			(mainIdent == None or: [mainIdent == here]) ifFalse: [
+				mainProc := [Object @env0:_objectForOop: mainIdent]
+					@env0:on: Error do: [:e | e @env0:return: nil].
+				(mainProc @env0:isKindOf: GsProcess) ifTrue: [
+					addThread value: mainIdent value: mainProc]]]].
+	_thread @env0:___liveThreads___ @env0:do: [:p |
+		addThread value: p @env0:asOop value: p].
+	^ out
+
+]
+
+{ #category : 'Grail-Built-in Functions' }
 sys >> _displayhook: positional kw: keywords [
 	"Every call of sys.displayhook and sys.__displayhook__: one positional
 	argument, or CPython's refusal (Python/clinic/sysmodule.c.h)."
