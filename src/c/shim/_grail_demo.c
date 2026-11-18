@@ -1129,6 +1129,25 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         Py_DECREF(r);
         return out;
     }
+    /* PyMapping_Items, its list and pairs read INLINE, as PyO3 reads them
+       (rpds-py's HashTrieMap(a_dict)).  A pair whose inline size is not 2 is
+       answered as that size rather than read past. */
+    if (IS("mapping_items_inline")) {
+        PyObject *items = PyMapping_Items(a);
+        if (items == NULL) return NULL;
+        PyObject *out = PyList_New(0);
+        for (Py_ssize_t i = 0; out != NULL && i < PyList_GET_SIZE(items); i++) {
+            PyObject *pair = PyList_GET_ITEM(items, i);
+            Py_ssize_t size = PyTuple_GET_SIZE(pair);
+            PyObject *e = size == 2
+                ? PyTuple_Pack(2, PyTuple_GET_ITEM(pair, 0), PyTuple_GET_ITEM(pair, 1))
+                : PyLong_FromSsize_t(size);
+            if (e == NULL || PyList_Append(out, e) < 0) Py_CLEAR(out);
+            Py_XDECREF(e);
+        }
+        Py_DECREF(items);
+        return out;
+    }
     /* Build N one-item tuples and answer the last, as numpy builds a few
        dozen on every ufunc call.  The shim used to stop recording new tuples
        once it had made 131072, and the next one could not be filled. */

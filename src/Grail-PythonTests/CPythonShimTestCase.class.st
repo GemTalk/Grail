@@ -3822,6 +3822,22 @@ CPythonShimTestCase >> testLongLongRoundtrip [
 
 ]
 
+{ #category : 'Grail-Tests - PyO3' }
+CPythonShimTestCase >> testMappingItemsPairsAreInCPythonsLayout [
+	"PyMapping_Items answers its pairs in CPython's layout, as PyDict_Items
+	does, so C that reads them with the inline PyTuple_GET_SIZE gets 2.  PyO3
+	does: rpds-py's HashTrieMap({''a'': 1}) read a pair's OOP as its size and
+	raised ''expected tuple of length 2, but got tuple of length 3992094721''."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+import collections
+repr((d.capi(''mapping_items_inline'', {''a'': 1, ''b'': (2, 3)}), d.capi(''mapping_items_inline'', collections.OrderedDict(x=[4])), d.capi(''mapping_items_inline'', {})))') equals: '([(''a'', 1), (''b'', (2, 3))], [(''x'', [4])], [])'
+
+]
+
 { #category : 'Grail-Tests - NumPy Stage 3' }
 CPythonShimTestCase >> testMembersAndMethodsReadOffAWheelTypeAreDescriptors [
 	"A struct member read off the type is a member_descriptor, and C reads every descriptor's
