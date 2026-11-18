@@ -2542,10 +2542,13 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 	that stores the class body's defs as attributes recursed through the
 	dispatcher until AlmostOutOfStack (three flag-on errors after #836).
 
-	An IR method with a text twin is recompiled from that twin, prefixed; one
-	without is SHARED under the prefixed key -- a method dictionary entry need
-	not be keyed by the method's own selector (measured: the shared GsNMethod
-	answers under both keys and still reports its original selector)."
+	An IR method is GENERATED under the prefixed selector from its IR builder
+	(P2.2) when the session has the builder cached; otherwise its text twin is
+	recompiled, prefixed, and only with no twin is a builder rebuilt from
+	source.  One with none of these is SHARED under the prefixed key -- a
+	method dictionary entry need not be keyed by the method's own selector
+	(measured: the shared GsNMethod answers under both keys and still reports
+	its original selector)."
 
 	| meth src site isIR regen |
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
@@ -2584,7 +2587,32 @@ importlib class >> ___copyMethod___: sel from: aProvider to: aClass prefix: aPre
 		(self ___irRegenerate___: meth onto: aClass category: aCategory) notNil ifTrue: [
 			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
 			^ self]].
+	"A RENAMED copy (the ``del C.m'' shadow) is generated under its new
+	selector.  Not shared under the new key: UnboundMethod reads the shadow's
+	original name back from the method's own selector
+	(___grailDeletedOriginalNargs:kwOk:), so ``f = D.m; del D.m; f(x)''
+	needs a method whose selector IS ``___grailOrig_m''.
+
+	From a CACHED builder only, before the twin: these copies are made at run
+	time, in sessions whose classes were committed by another, where a
+	builder means a rebuild of the class from source -- a second or more for
+	a large class, against milliseconds for the twin.  With neither, the
+	rebuild is tried last."
+	(regen and: [aPrefix notEmpty and: [meth selector == sel]]) ifTrue: [
+		| renamed |
+		renamed := self ___irCachedMethodFor___: meth on: aClass as: (aPrefix , sel asString) asSymbol.
+		renamed notNil ifTrue: [
+			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+			^ self ___installMethod___: renamed in: aClass as: renamed selector
+				category: aCategory]].
 	src := self ___textSourceFor___: meth in: aProvider selector: sel.
+	(src isNil and: [regen and: [aPrefix notEmpty and: [meth selector == sel]]]) ifTrue: [
+		| renamed |
+		renamed := self ___irMethodFor___: meth on: aClass as: (aPrefix , sel asString) asSymbol.
+		renamed notNil ifTrue: [
+			self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+			^ self ___installMethod___: renamed in: aClass as: renamed selector
+				category: aCategory]].
 	self ___irCensusCopy___: site
 		route: (src isNil ifTrue: ['shared'] ifFalse: [isIR ifTrue: ['twin'] ifFalse: ['text']])
 		source: src of: meth.
@@ -2611,9 +2639,11 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	self-send dispatcher's shadow, which belongs to the patch that asked for
 	it and so to this session only.  Same two routes: a text source is
 	recompiled, prefixed; a method with none is shared under the prefixed key.
-	Errors leave aClass without a shadow, which the caller checks for."
+	An IR method is generated for aClass under the prefixed selector (P2.2),
+	with no text.  Errors leave aClass without a shadow, which the caller
+	checks for."
 
-	| meth src ownShadow |
+	| meth src ownShadow site regen own |
 	"A PROVIDER THAT IS ITSELF PATCHED answers its DISPATCHER for sel, and a
 	copy of that as aClass's shadow falls through to itself: patch an instance
 	of C, then an instance of a subclass D, and D's first self-send recursed to
@@ -2628,12 +2658,41 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 				on: Error do: [:e | e return: nil]].
 	meth := [aProvider compiledMethodAt: sel environmentId: 1] on: Error do: [:e | e return: nil].
 	meth isNil ifTrue: [^ self].
-	src := self ___textSourceFor___: meth in: aProvider selector: sel.
-	self ___irCensusCopy___: ((aPrefix beginsWith: '___grailDirect') ifTrue: ['direct'] ifFalse: ['dispatch-shadow'])
+	site := (aPrefix beginsWith: '___grailDirect') ifTrue: ['direct'] ifFalse: ['dispatch-shadow'].
+	"Never a method-local class's helper on its own: it arrives with its def
+	(see ___copyMethod___:from:to:prefix:category:)."
+	(BaseException ___classBodyHelperClassNameFor___: sel) notNil ifTrue: [
+		self ___irCensusCopy___: site route: 'helper' source: nil of: meth.
+		^ self].
+	"An IR method needs no text (P2.2): it is GENERATED for aClass under the
+	prefixed selector (___irMethodFor___:on:as:).  Never shared.  Onto
+	another class -- the dispatcher's shadow on a SUBCLASS of the definer,
+	UnboundMethod's direct copy onto an unrelated class --
+	whichClassIncludesSelector: answers a method's inClass, not the class
+	whose dictionary holds it, so a shared shadow reads as not this class's
+	own and the dispatcher's ``no shadow, no dispatcher'' check declines the
+	patch.  And on any class the copy has to answer the prefixed selector as
+	its own, which UnboundMethod and the traceback read the original name
+	back from.  nil -- no builder, or a class statement whose helper aClass
+	cannot reach -- keeps the text route."
+	regen := (BaseException ___isIRPythonMethod___: meth)
+		and: [self ___irCopiesRegenerate___ and: [meth selector == sel]].
+	"From a cached builder first, then the twin, then a rebuild: see
+	___copyMethod___:from:to:prefix:category:'s renamed copy for why."
+	own := regen ifTrue: [self ___irCachedMethodFor___: meth on: aClass as: ownShadow].
+	src := own isNil ifTrue: [self ___textSourceFor___: meth in: aProvider selector: sel].
+	(own isNil and: [src isNil and: [regen]]) ifTrue: [
+		own := self ___irMethodFor___: meth on: aClass as: ownShadow].
+	own notNil ifTrue: [
+		self ___irCensusCopy___: site route: 'regen' source: nil of: meth.
+		^ [aClass perform: #'___installSessionMethod:as:' env: 1
+			withArguments: { own. ownShadow }]
+				on: Error do: [:e | e return: nil]].
+	self ___irCensusCopy___: site
 		route: (src isNil
 			ifTrue: ['shared']
 			ifFalse: [(BaseException ___isIRPythonMethod___: meth) ifTrue: ['twin'] ifFalse: ['text']])
-		source: src.
+		source: src of: meth.
 	src notNil ifTrue: [
 		"With the original's scope, as ___copyMethod___:from:to:prefix:category:."
 		^ [aClass perform: #'___compileSessionMethod:category:scope:' env: 1
@@ -5482,6 +5541,23 @@ importlib class >> ___irCacheBuilder___: aBuilder forMethod: aMethod [
 
 ]
 
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCachedMethodFor___: aMethod on: aClass as: aSelector [
+	"___irMethodFor___:on:as:, from a builder already in the session cache --
+	nil rather than rebuild one from source.  For the run-time copiers, which
+	prefer the text twin to a rebuild (___copyMethod___:from:to:prefix:category:)."
+
+	| builder |
+	builder := self ___irBuilderCache___ at: aMethod otherwise: nil.
+	builder isNil ifTrue: [^ nil].
+	builder cacheTick notNil ifTrue: [builder cacheTick: self ___irBuilderCacheTick___].
+	^ [builder ___irGenerateFor___: aClass as: aSelector]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
+
+]
+
 { #category : 'Grail-Class Compilation' }
 importlib class >> ___irCensus___ [
 	"The census so far: #counts (reason Symbol -> def count), #examples
@@ -6306,6 +6382,23 @@ importlib class >> ___irMethodFor___: aMethod on: aClass [
 	builder := self ___irBuilderForMethod___: aMethod.
 	builder isNil ifTrue: [^ nil].
 	^ [builder ___irGenerateFor___: aClass]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: nil]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irMethodFor___: aMethod on: aClass as: aSelector [
+	"___irMethodFor___:on:, generated under aSelector -- the prefixed key a
+	shadow or direct copy is installed under, which it must also answer as
+	its own selector (PyMethodIRBuilder >> ___irGenerateFor___:as:).  nil
+	when it cannot be generated."
+
+	| builder |
+	builder := self ___irBuilderForMethod___: aMethod.
+	builder isNil ifTrue: [^ nil].
+	^ [builder ___irGenerateFor___: aClass as: aSelector]
 		on: Error do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: nil]
@@ -11097,19 +11190,29 @@ importlib class >> ___textSourceFor___: aMethod in: aClass selector: aSelector [
 	the same string the text path would have compiled, so every consumer
 	behaves exactly as it did.  nil when neither is available."
 
-	| src table cls key |
+	| src table cls key sel |
 	src := [aMethod sourceString] on: Error do: [:e | e return: nil].
 	src isNil ifTrue: [^ nil].
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ src].
+	"An IR copy made under a prefixed selector (P2.2: a ``___grailOrig_''
+	shadow, a ``___grailDirect<oop>_'' copy) is the def under its own name in
+	the table."
+	sel := aSelector asString.
+	(sel size > 13 and: [(sel copyFrom: 1 to: 13) = '___grailOrig_'])
+		ifTrue: [sel := sel copyFrom: 14 to: sel size].
+	(sel size > 14 and: [(sel copyFrom: 1 to: 14) = '___grailDirect']) ifTrue: [
+		| k |
+		k := sel indexOf: $_ startingAt: 15.
+		k > 0 ifTrue: [sel := sel copyFrom: k + 1 to: sel size]].
 	"A METACLASS provider (the MI merge's class-side pass copying a
 	@classmethod, cut 61): the table hangs off the class itself, and the
 	class-side entry is keyed ``class>>'' + selector so it cannot collide with
 	an instance-side method of the same selector."
 	cls := aClass.
-	key := aSelector asSymbol.
+	key := sel asSymbol.
 	(aClass @env0:isMeta) ifTrue: [
 		cls := aClass @env0:thisClass.
-		key := ('class>>' , aSelector asString) asSymbol].
+		key := ('class>>' , sel) asSymbol].
 	"Probe before performing: a DNU on a Python CLASS is routed through the
 	Python attribute machinery, which can come straight back here."
 	(cls class whichClassIncludesSelector: #'___irTextSources___' environmentId: 1)
