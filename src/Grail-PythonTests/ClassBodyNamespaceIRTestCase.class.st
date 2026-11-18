@@ -186,7 +186,13 @@ def f(p):
     class Cell:
         a = __class__
     class Ann:
-        x: int = 1
+        x: G = 1
+        y: list[int]
+        __slots__ = (''z'',)
+    class AnnLam:
+        x: (lambda: 1) = 1
+    class AnnTarget:
+        p.x: int = 1
     class Deco:
         @staticmethod
         def s(): pass
@@ -194,8 +200,8 @@ def f(p):
         print(1)
     class Target:
         p.x = 1
-    class Slots:
-        __slots__ = (''a'',)
+    class Renamed:
+        __renamed__ = {''a'': ''b''}
     class Default:
         def m(self, k=lambda: 1): pass
     return Values
@@ -208,11 +214,13 @@ def f(p):
 		'Sibling' -> #'irHelper:assign:siblingCall'.
 		'Frame' -> #'irHelper:assign:frameCall'.
 		'Cell' -> #'irHelper:assign:classCell'.
-		'Ann' -> #'irHelper:annotation'.
+		'Ann' -> nil.
+		'AnnLam' -> #'irHelper:annotation:functionScope'.
+		'AnnTarget' -> #'irHelper:annotation:target'.
 		'Deco' -> #'irHelper:methodDecorator'.
 		'Expr' -> #'irHelper:expression'.
 		'Target' -> #'irHelper:assignTarget'.
-		'Slots' -> #'irHelper:assign:specialName'.
+		'Renamed' -> #'irHelper:assign:specialName'.
 		'Default' -> #'irHelper:methodDefault:functionScope' }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |
