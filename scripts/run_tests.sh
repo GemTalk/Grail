@@ -78,6 +78,21 @@ fi
 # it two shards died on the hard "VM temporary object memory is full".  So give
 # each worker headroom instead: 8 workers x ~879 MB of ceiling.
 #
+# 1400000 (~1.34 GB), up from 900000, for the WARM path this time.  The gem
+# signals AlmostOutOfMemory at the end of a mark sweep that leaves more than
+# 85% of System _tempObjSpaceMax in use -- and that maximum is about three
+# quarters of CACHE_SIZE, not all of it: measured, 659 MB at 900000 and 1025
+# MB at 1400000.  GRAIL_SHARD_MEM's pct= is the same ratio.  At 900000 the
+# heaviest shard (index 6, which the plan always gives DjangoTestCase) ended
+# at 86-89% on green merge-queue runs from 2026-11-12 on, and at 91-94% once
+# #2270/#2271 reshuffled the classes -- where it failed six queue runs in two
+# days, against StrEnumRebuildTestCase and
+# SignatureThroughAMetaclassCallClassTestCase, on PRs that touched neither.
+# The kernel's GsTestCase>>runCase turns the notification into an Error, so
+# the red test is whichever one was running.  Its 611 MB reads 60% here.
+# This buys headroom; GrailShardPlan balancing memory as well as time is what
+# keeps one shard from collecting the heavy classes again.
+#
 # THIS AND THE EIGHT-PARTITION CHANGE BELOW ARE TWO FIXES FOR ONE DEFECT, found
 # independently and both kept.  Partitioning lowers what a session HAS to hold;
 # the ceiling raises what it MAY hold.  The default (warm) path is fixed by
@@ -137,7 +152,7 @@ fi
 # short of the regime that starts somewhere between 4032 and 6163.
 # run_cpython_suite.sh keeps 74000 -- a different corpus with different
 # evidence, and nothing measured here says anything about it.
-TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=600000;GEM_TEMPOBJ_CACHE_SIZE=900000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
+TOPAZ_CFG="GEM_TEMPOBJ_CODE_SIZE=600000;GEM_TEMPOBJ_CACHE_SIZE=1400000;GEM_MAX_SMALLTALK_STACK_DEPTH=48000;"
 
 EXIT=0
 
