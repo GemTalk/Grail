@@ -701,6 +701,23 @@ PyGeneratorBase >> ___grailAwaitAwith___: anObject from: aMethodName [
 ]
 
 { #category : 'Grail-Generator Protocol' }
+PyGeneratorBase >> ___grailIsIterableCoroutine___ [
+	"Was this generator made by a function @types.coroutine flagged?  CPython
+	reads CO_ITERABLE_COROUTINE off gi_code; types._grail_is_iterable_coroutine
+	asks that and, for a def compiled to a method (whose generators each build a
+	fresh code object), the registry the decorator writes.  False when types or
+	the answer cannot be had: the flag only ever widens what is accepted."
+
+	^ [((((importlib @env0:___instance___) @env1:import_module: 'types')
+			@env1:___pyAttrLoad___: #'_grail_is_iterable_coroutine')
+				@env1:___pyCallValue___: { self } kw: nil) @env1:___isTruthy___]
+		@env0:on: AbstractException do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
+
+]
+
+{ #category : 'Grail-Generator Protocol' }
 PyGeneratorBase >> ___isNameAttr___: aName [
 	"Is aName ``__name__'' or ``__qualname__''?"
 
@@ -1798,7 +1815,7 @@ PyGeneratorBase >> ___yieldFrom___: anIterable [
 		unmarked generator is refused, which is exactly CPython's flag test."
 		((self @env0:isKindOf: PythonCoroutine)
 			@env0:or: [(self @env0:isKindOf: PythonAsyncGenerator)
-			@env0:or: [(self @env0:dynamicInstVarAt: #'_grail_iterable_coroutine') == True]])
+			@env0:or: [self ___grailIsIterableCoroutine___]])
 			ifFalse: [
 				^ TypeError @env1:___signal___:
 					'cannot ''yield from'' a coroutine object in a non-coroutine generator']].

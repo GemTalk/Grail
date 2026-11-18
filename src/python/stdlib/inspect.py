@@ -310,8 +310,7 @@ def isawaitable(obj):
     if iscoroutine(obj):
         return True
     if isgenerator(obj):
-        return (bool(obj.gi_code.co_flags & CO_ITERABLE_COROUTINE)
-                or getattr(obj, '_grail_iterable_coroutine', False) is True)
+        return _types._grail_is_iterable_coroutine(obj)
     return hasattr(obj, '__await__')
 
 

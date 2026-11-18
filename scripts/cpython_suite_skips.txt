@@ -654,6 +654,11 @@ test.test_exceptions|PEP626Tests.test_missing_lineno_shows_as_none|rewrites __co
 test.test_descr|ClassPropertiesAndMethods.test_delete_hook|asserts a class's __del__ has run after `del c; gc_collect()`; Grail never runs a Python __del__
 test.test_descr|ClassPropertiesAndMethods.test_slots|its leak check counts live instances through a __del__ that decrements the count after `del x; gc_collect()`; Grail never runs a Python __del__
 test.test_descr|ClassPropertiesAndMethods.test_subtype_resurrection|resurrects an instance from its own __del__ and asserts it was put in the container; Grail never runs a Python __del__
+# test_types: three tests are about CPython's C implementation itself, which
+# Grail's pure-Python types module has no counterpart for.
+test.test_types|TypesTests.test_capsule_type|asserts _datetime.datetime_CAPI is a types.CapsuleType -- a PyCapsule exported for C extensions through the C API; Grail's _datetime is no C module and exports no capsule
+test.test_types|TypesTests.test_names|compares types imported with and without CPython 3.14's C accelerator module _types (import_fresh_module fresh=/blocked=['_types']); Grail's types is pure Python and has no _types to block, so c_types is None
+test.test_types|TypesTests.test_method_descriptor_crash|gh-132747 regression test for the C default __get__() taking None as its second argument, reached through C types _io._TextIOBase and the C module _queue, which Grail does not have
 # test_signal's handler-race stress test: a thread busy-loops raise_signal()
 # while the main thread waits for at least one signal to arrive.  Grail's
 # threads are cooperative green threads, so the busy thread never yields and

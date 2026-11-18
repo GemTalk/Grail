@@ -10033,6 +10033,13 @@ builtins >> type: className _: bases _: namespace kw: classKeywords [
 	it does for a class body's assignments.  Sent directly, like the two PEP
 	487 halves below and for the reason given above."
 	newClass @env1:___grailInstallAttrMethodShadows___: ownAttrNames @env0:asArray.
+	"A TUPLE SUBCLASS given as the bases is what __bases__ answers, the very
+	object: CPython stores the argument (test_types'
+	test_tuple_subclass_as_bases).  Behavior >> __bases__ reads it back."
+	((bases @env0:class ~~ tuple) and: [bases @env0:isKindOf: tuple]) ifTrue: [
+		[(newClass @env0:perform: #'___dynInstVars___' env: 1)
+			@env0:dynamicInstVarAt: #'___basesObject___' put: bases]
+				@env0:on: AbstractException do: [:ex | ex @env0:return: nil]].
 	newClass @env1:___invokeSetNameHooks___: ownAttrNames @env0:asArray.
 	newClass @env1:___grailInitSubclass___: classKeywords.
 	^ newClass

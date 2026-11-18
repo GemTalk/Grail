@@ -728,73 +728,144 @@ del _derive_coroutine_type
 del _derive_async_generator_type
 
 
+class _GeneratorWrapper:
+    # CPython's own pure-Python wrapper (Lib/types.py), unchanged.
+    def __init__(self, gen):
+        self.__wrapped = gen
+        self.__isgen = gen.__class__ is GeneratorType
+        self.__name__ = getattr(gen, '__name__', None)
+        self.__qualname__ = getattr(gen, '__qualname__', None)
+    def send(self, val):
+        return self.__wrapped.send(val)
+    def throw(self, tp, *rest):
+        return self.__wrapped.throw(tp, *rest)
+    def close(self):
+        return self.__wrapped.close()
+    @property
+    def gi_code(self):
+        return self.__wrapped.gi_code
+    @property
+    def gi_frame(self):
+        return self.__wrapped.gi_frame
+    @property
+    def gi_running(self):
+        return self.__wrapped.gi_running
+    @property
+    def gi_yieldfrom(self):
+        return self.__wrapped.gi_yieldfrom
+    @property
+    def gi_suspended(self):
+        return self.__wrapped.gi_suspended
+    cr_code = gi_code
+    cr_frame = gi_frame
+    cr_running = gi_running
+    cr_await = gi_yieldfrom
+    cr_suspended = gi_suspended
+    def __next__(self):
+        return next(self.__wrapped)
+    def __iter__(self):
+        if self.__isgen:
+            return self.__wrapped
+        return self
+    __await__ = __iter__
+
+
+# GRAIL: the defs @types.coroutine flagged, by code identity.  CPython ORs
+# CO_ITERABLE_COROUTINE into ``func.__code__.co_flags`` and every generator the
+# function makes shares that code object, so ``gen.gi_code.co_flags & 0x100``
+# says the generator came from a decorated function.  Grail flags
+# ``func.__code__`` the same way, and a generator made by a NESTED def reads
+# exactly that object; but a def compiled to a METHOD (module level, a class
+# body) builds a fresh code object for each generator, which cannot see the
+# flag.  So the flagged code is also recorded here by what every one of those
+# code objects agrees on, and _grail_is_iterable_coroutine asks both.
+_ITERABLE_COROUTINE_CODES = set()
+
+
+def _grail_code_key(co):
+    # co_name, not co_qualname: a method of a class defined inside a function
+    # has __code__.co_qualname 'C.m' but its generators' 'f.<locals>.C.m'.
+    # File and first line already pin the def.
+    return (co.co_filename, co.co_firstlineno, co.co_name)
+
+
+def _grail_is_iterable_coroutine(gen):
+    """Was ``gen`` made by a function @types.coroutine flagged?  What CPython
+    asks as ``gen.gi_code.co_flags & CO_ITERABLE_COROUTINE`` (inspect's
+    isawaitable, anext()'s awaitable, ``yield from`` a coroutine)."""
+    try:
+        co = gen.gi_code
+    except AttributeError:
+        return False
+    try:
+        if co.co_flags & 0x100:
+            return True
+        return _grail_code_key(co) in _ITERABLE_COROUTINE_CODES
+    except Exception:
+        return False
+
+
 def coroutine(func):
-    """Convert a regular generator function into an awaitable one.
+    """Convert regular generator function to a coroutine."""
 
-    CPython does this by flipping a CODE FLAG -- it ORs CO_ITERABLE_COROUTINE
-    (0x100) into ``func.__code__.co_flags`` -- and the flag's only job is to
-    make ``await gen()`` legal, because a bare generator is otherwise rejected
-    by GET_AWAITABLE.
-
-    Grail has no code flags to flip, and mostly does not need one: ``await''
-    is routed through PythonGenerator >> ___grailAwait___:, whose first branch
-    delegates to ANY generator-shaped operand.  So the property this decorator
-    exists to grant already holds there, and the function is handed back
-    unchanged -- identity preserved, as CPython's flag-flip preserves it.
-
-    One boundary DOES need the distinction: anext()'s awaitable accepts a
-    plain-generator __anext__ result only when the method was decorated
-    (CPython's tests pin both directions -- test_anext_return_generator
-    rejects the bare one, test_python_async_iterator_types_coroutine_anext
-    accepts the decorated one).  The flag's stand-in is an attribute stamped
-    ON EACH RESULT GENERATOR by a functools.wraps'd wrapper -- CPython's own
-    pure-Python fallback (_GeneratorWrapper) is the precedent for wrapping
-    here.  A function-object stamp alone proved identity-fragile: for a
-    class defined inside a METHOD, the object the decorator stamps is not
-    the object a later attribute read retrieves, and the mark vanished
-    (measured; the result stamp survives every shape).  The wrapper costs
-    isgeneratorfunction() on the decorated function -- CPython keeps it
-    True, Grail answers False -- recorded here as the trade.
-
-    Two consequences worth being explicit about, since the difference from
-    CPython is observable:
-
-      * CPython DISTINGUISHES a decorated generator function from an
-        undecorated one, and rejects ``await'' on the latter.  Grail accepts
-        both, so the decorator is not load-bearing and forgetting it is not an
-        error here.  That is the same permissiveness ___grailAwait___: already
-        documents for a plain value.
-      * The wrapping branch CPython keeps for Cython-style objects that merely
-        LOOK generator-shaped is not reproduced.  Nothing in the tree produces
-        one, and _GeneratorWrapper exists to add send/throw/close to something
-        that lacks them -- whereas anything Grail would delegate to already has
-        them, since that is what ___yieldFrom___: forwards through.
-
-    The callable check is kept because it is the one part of CPython's
-    behaviour a caller can actually observe going wrong: ``types.coroutine(42)``
-    raises TypeError rather than silently answering 42.
-    """
     if not callable(func):
         raise TypeError('types.coroutine() expects a callable')
-    try:
-        func._grail_iterable_coroutine = True
-    except (AttributeError, TypeError):
-        pass
 
-    def wrapper(*args, **kwargs):
-        result = func(*args, **kwargs)
-        try:
-            result._grail_iterable_coroutine = True
-        except (AttributeError, TypeError):
-            pass
-        return result
+    # GRAIL: isinstance, not ``func.__class__ is FunctionType``.  A nested def
+    # and a def compiled to a method are two implementation classes that both
+    # report as 'function'; isinstance (inspect.isfunction's test) answers True
+    # for each and for nothing else.
+    if (isinstance(func, FunctionType) and
+        getattr(func, '__code__', None).__class__ is CodeType):
 
-    try:
-        import functools
-        wrapper = functools.wraps(func)(wrapper)
-    except Exception:
-        pass
-    return wrapper
+        co_flags = func.__code__.co_flags
+
+        # Check if 'func' is a coroutine function.
+        # (0x180 == CO_COROUTINE | CO_ITERABLE_COROUTINE)
+        if co_flags & 0x180:
+            return func
+
+        # Check if 'func' is a generator function.
+        # (0x20 == CO_GENERATOR)
+        if co_flags & 0x20:
+            co = func.__code__
+            # GRAIL: by identity first -- for a def compiled to a method, and
+            # for a closure, whose __code__ Grail cannot replace: its code
+            # objects record no co_freevars, so the assignment's free-variable
+            # check refuses them.
+            _ITERABLE_COROUTINE_CODES.add(_grail_code_key(co))
+            try:
+                # 0x100 == CO_ITERABLE_COROUTINE
+                func.__code__ = co.replace(co_flags=co.co_flags | 0x100)
+            except (ValueError, TypeError, AttributeError):
+                pass
+            return func
+
+    # The following code is primarily to support functions that
+    # return generator-like objects (for instance generators
+    # compiled with Cython).
+
+    # Delay functools and _collections_abc import for speeding up types import.
+    import functools
+    import _collections_abc
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        coro = func(*args, **kwargs)
+        if (coro.__class__ is CoroutineType or
+            coro.__class__ is GeneratorType and _grail_is_iterable_coroutine(coro)):
+            # 'coro' is a native coroutine object or an iterable coroutine
+            return coro
+        if (isinstance(coro, _collections_abc.Generator) and
+            not isinstance(coro, _collections_abc.Coroutine)):
+            # 'coro' is either a pure Python generator iterator, or it
+            # implements collections.abc.Generator (and does not implement
+            # collections.abc.Coroutine).
+            return _GeneratorWrapper(coro)
+        # 'coro' is either an instance of collections.abc.Coroutine or
+        # some other object -- pass it through.
+        return coro
+
+    return wrapped
 
 
 # CPython's own spelling: the class has no name of its own at module level,
