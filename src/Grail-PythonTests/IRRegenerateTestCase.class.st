@@ -343,9 +343,10 @@ IRRegenerateTestCase >> testTheCacheIsBounded [
 	importlib ___irBuilderCacheReset___.
 	importlib ___irBuilderCacheLimit: 4.
 	mod := self ___load___: self ___fixturePath___ as: 'ir_regen_fixture'.
-	self assert: importlib ___irBuilderCache___ size <= 4.
+	self assert: importlib ___irBuilderCacheBuilderCount___ <= 4.
 	self assert: (self ___copyPlanOf___: mod) isEmpty.
-	self assert: importlib ___irBuilderCache___ size <= 4
+	"The limit counts BUILDERS: a copy is one more key of its builder."
+	self assert: importlib ___irBuilderCacheBuilderCount___ <= 4
 
 ]
 

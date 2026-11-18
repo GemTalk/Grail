@@ -973,6 +973,13 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 			fresh].
 	(per @env0:includesKey: aClass) ifTrue: [^ per @env0:at: aClass].
 	src := self ___methodSourceOrNil___: aMethod.
+	(Python @env0:at: #importlib) @env0:___irCensusCopy___: 'special'
+		route: (src == nil
+			ifTrue: ['none']
+			ifFalse: [([BaseException @env0:___isIRPythonMethod___: aMethod]
+					@env0:on: Error do: [:ex | ex @env0:return: false])
+				ifTrue: ['twin'] ifFalse: ['text']])
+		source: src.
 	src == nil ifTrue: [^ nil].
 	"CompileWarning is RESUMED, not ignored.  It is a Notification, so an
 	``on: Error'' handler does not see it and its default action terminated the
