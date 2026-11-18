@@ -339,6 +339,31 @@ PyFrame >> ___storeLocal___: aName value: aValue [
 
 ]
 
+{ #category : 'Grail-Tracebacks' }
+PyFrame >> ___tracebackLiveFrame___ [
+	"For a traceback's CATCHING frame: the live frame of the same activation,
+	with its callers on f_back, while that activation is still on its stack;
+	nil once it has returned, or for any other frame.
+
+	Recorded by BaseException >> ___noteCatcherPosition___:capture:code:, and
+	resolved by BaseException class >> ___liveFrameOf___:outerDepth:method:,
+	which reads another thread's stack as readily as this one's -- what
+	sys._current_exceptions() hands back is a frame whose thread is blocked
+	in the handler.  Any failure reads as gone: an attribute read on a frame
+	must not raise."
+
+	| proc |
+	proc := self @env0:dynamicInstVarAt: #'___tbProcess___'.
+	proc isNil ifTrue: [^ nil].
+	^ [BaseException @env0:___liveFrameOf___: proc
+			outerDepth: (self @env0:dynamicInstVarAt: #'___tbDepth___')
+			method: (self @env0:dynamicInstVarAt: #'___tbMethod___')]
+		@env0:on: Error do: [:e |
+			(e @env0:isKindOf: AlmostOutOfStackError) ifTrue: [e @env0:pass].
+			e @env0:return: nil]
+
+]
+
 { #category : 'Grail-Comparison' }
 PyFrame >> __eq__: other [
 	"Two frames are equal when they describe the same frame: same code, same
@@ -422,7 +447,7 @@ PyFrame >> __repr__ [
 	stream @env0:nextPutAll: '<frame at 0x'.
 	stream @env0:nextPutAll: ((self ___pyId___ @env0:printStringRadix: 16) @env0:asLowercase).
 	stream @env0:nextPutAll: ', line '.
-	stream @env0:nextPutAll: (self @env0:dynamicInstVarAt: #'f_lineno') @env0:printString.
+	stream @env0:nextPutAll: (self @env1:___pyAttrLoad___: #'f_lineno') @env0:printString.
 	stream @env0:nextPut: $>.
 	^ stream @env0:contents
 
@@ -461,6 +486,26 @@ PyFrame >> clear [
 	self @env0:dynamicInstVarAt: #'f_locals'
 		put: (PyFrame @env0:___pyDictFrom___: Dictionary @env0:new).
 	^ None
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+PyFrame >> f_back [
+	"The caller's frame, or None.  Reached only when no f_back is stored --
+	___pyAttrLoad___ answers a stored one before any method -- which is a
+	traceback's CATCHING frame (BaseException >> ___noteCatcherPosition___:
+	capture:code:).  Its caller is not in the traceback, so it is read off the
+	live stack the first time it is asked for, and kept: CPython's frame holds
+	its caller for as long as the frame lives, whatever has returned since.
+	Asked only after the catcher has returned, it is None, as it was before."
+
+	| live back |
+	live := self ___tracebackLiveFrame___.
+	back := live isNil
+		ifTrue: [None]
+		ifFalse: [(live @env0:dynamicInstVarAt: #'f_back') ifNil: [None]].
+	self @env0:dynamicInstVarAt: #'f_back' put: back.
+	^ back
 
 ]
 
@@ -529,6 +574,22 @@ PyFrame >> f_globals [
 			@env0:on: AbstractException do: [:e | e @env0:return: nil]].
 	found isNil ifTrue: [^ None].
 	^ (Python @env0:at: #'PyModuleDict') @env0:on: found
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+PyFrame >> f_lineno [
+	"The line this frame is at.  Reached only when none is stored, which is a
+	traceback's CATCHING frame: CPython's is the frame itself, so while the
+	handler runs its f_lineno is the handler's line, not the one the exception
+	entered on (that is tb_lineno).  So it is read live while the activation is
+	still on its stack, and is the line the traceback recorded once it has
+	gone."
+
+	| live |
+	live := self ___tracebackLiveFrame___.
+	live isNil ifFalse: [^ live @env0:dynamicInstVarAt: #'f_lineno'].
+	^ (self @env0:dynamicInstVarAt: #'___tbLineno___') ifNil: [None]
 
 ]
 

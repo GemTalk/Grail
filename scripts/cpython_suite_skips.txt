@@ -573,6 +573,12 @@ test.test_traceback|TestTracebackException.test_long_context_chain|recursion dep
 test.test_sys|SysModuleTest.test_setrecursionlimit|sets a recursion limit and reads it back; Grail's limit is physical stack exhaustion and cannot be set (setrecursionlimit raises NotImplementedError, GemStone #52046)
 test.test_sys|SysModuleTest.test_recursionlimit_recovery|sets limits of 50..1000 and recurses into each twice; Grail's limit is physical stack exhaustion and cannot be set (GemStone #52046)
 test.test_exceptions|ExceptionTests.test_recursion_in_except_handler|sets a limit relative to the current depth before each of its scenarios; Grail's limit is physical stack exhaustion and cannot be set (GemStone #52046)
+# test_stdlib_dir derives the expected sys._stdlib_dir from os.__file__.
+# Grail's os is built in (a Smalltalk module class, spec origin 'built-in')
+# and has no file, so the expected value cannot exist and the test compares
+# against normpath(None).  CPython's own os is frozen too, but carries the
+# stdlib path it was frozen from; Grail's has no source file to name.
+test.test_sys|SysModuleTest.test_stdlib_dir|derives the stdlib directory from os.__file__; Grail's os is built in and has no file
 # test_xml_etree's deepcopy recursion test.  It builds a 500,000-deep element
 # chain and deep-copies it inside support.infinite_recursion(), asserting a
 # RecursionError -- upstream's own comment is "This should raise a RecursionError

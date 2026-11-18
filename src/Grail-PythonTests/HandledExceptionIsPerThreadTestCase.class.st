@@ -29,9 +29,9 @@ HandledExceptionIsPerThreadTestCase >> testSysCurrentExceptionsMapsEachThread [
 	"sys._current_exceptions(): the caller, the main thread and every running
 	started thread, each mapped to the exception it is handling or None.  Run
 	from the main thread while a worker waits inside ``except ValueError'',
-	as test_sys's test_current_exceptions does.  (That test also walks the
-	exception's tb_frame.f_back to the worker's callers, which Grail's
-	traceback frames do not carry -- a separate gap.)"
+	as test_sys's test_current_exceptions does.  (Its walk from the
+	exception's tb_frame out to the worker's callers is
+	TracebackFrameReachesItsCallersTestCase.)"
 
 	| result |
 	result := self eval: 'import sys, threading
