@@ -42,51 +42,32 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 	"Copy all env-1 methods in category ''Grail-Class Methods'' from tempClass
 	(and its metaclass) onto targetClass (and its metaclass respectively).
 	Skips internal class attribute accessors (category ''Grail-Class Attrs'').
-	Methods are installed under category ''Grail-ST-Extension''."
+	Methods are installed under category ''Grail-ST-Extension''.  An IR-built
+	method is regenerated onto the target from its IR builder (P2.2); a text
+	one, or an IR one with no builder, is recompiled from its text."
 
-	| md |
-	"Instance-side methods"
-	md := tempClass methodDictForEnv: 1.
-	md ifNotNil: [
-		md keys do: [:sel |
-			| cat src |
-			cat := tempClass categoryOfSelector: sel environmentId: 1.
-			(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
-				"An IR-built method carries Python source; the text it replaced
-				is in the class-side ___irTextSources___ table."
-				src := importlib ___textSourceFor___: (tempClass compiledMethodAt: sel environmentId: 1)
-					in: tempClass selector: sel.
-				importlib ___irCensusCopy___: 'st-class'
-					route: (self ___censusRouteOf___: (tempClass compiledMethodAt: sel environmentId: 1) source: src)
-					source: src.
-				src notNil ifTrue: [
-					targetClass perform: #'___compileMethod:category:'
-						env: 1
-						withArguments: { src. 'Grail-ST-Extension' }]
-			]
-		]
-	].
-	"Class/static methods (metaclass-side)"
-	md := tempClass class methodDictForEnv: 1.
-	md ifNotNil: [
-		md keys do: [:sel |
-			| cat src |
-			cat := tempClass class categoryOfSelector: sel environmentId: 1.
-			(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
-				"Through the same table as the instance side: an IR-built
-				@classmethod's sourceString is its Python, not Smalltalk."
-				src := importlib ___textSourceFor___: (tempClass class compiledMethodAt: sel environmentId: 1)
-					in: tempClass class selector: sel.
-				importlib ___irCensusCopy___: 'st-class'
-					route: (self ___censusRouteOf___: (tempClass class compiledMethodAt: sel environmentId: 1) source: src)
-					source: src.
-				src notNil ifTrue: [
-					targetClass class perform: #'___compileMethod:category:'
-						env: 1
-						withArguments: { src. 'Grail-ST-Extension' }]
-			]
-		]
-	]
+	{ tempClass -> targetClass. tempClass class -> targetClass class } do: [:pair |
+		| md |
+		md := pair key methodDictForEnv: 1.
+		md ifNotNil: [
+			md keys do: [:sel |
+				| cat meth src |
+				cat := pair key categoryOfSelector: sel environmentId: 1.
+				(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
+					meth := pair key compiledMethodAt: sel environmentId: 1.
+					(self ___regenerate___: meth onto: pair value) ifFalse: [
+						"A text method, or an IR one with no builder: its text,
+						which for an IR method is in the class-side
+						___irTextSources___ table (its sourceString is Python)."
+						src := importlib ___textSourceFor___: meth in: pair key selector: sel.
+						importlib ___irCensusCopy___: 'st-class'
+							route: (self ___censusRouteOf___: meth source: src)
+							source: src.
+						src notNil ifTrue: [
+							pair value perform: #'___compileMethod:category:'
+								env: 1
+								withArguments: { src. 'Grail-ST-Extension' }]]]]]].
+	self ___refileClassHelpersOn: targetClass
 
 ]
 
@@ -110,6 +91,50 @@ grail class >> ___lookupClass: className inDictionary: dictName [
 	^ AttributeError @env1:___signal___:
 		('grail.smalltalk_class: class ''' , className asString ,
 		 ''' not found in dictionary ''' , dictName asString , '''')
+
+]
+
+{ #category : 'Grail-smalltalk_class' }
+grail class >> ___refileClassHelpersOn: targetClass [
+	"File every method-local class helper on targetClass, both sides, under
+	''Grail-ST-Extension''.
+
+	A def regenerated onto the Smalltalk class (___regenerate___:onto:)
+	brings the helpers of the class statements in its body with it
+	(``___irClassDef_<n>_<C>___'', PyMethodIRBuilder >> classHelpers), which
+	file themselves as ''Grail-IR Class Helpers''.  Everything @smalltalk_class
+	puts on a Smalltalk class is under ''Grail-ST-Extension'', which is how it is
+	found and removed again; a helper left out of it would outlive the def
+	that sends it.  The text route compiled none: the twin builds the class
+	inline."
+
+	{ targetClass. targetClass class } do: [:beh |
+		| md |
+		md := beh methodDictForEnv: 1.
+		md ifNotNil: [
+			md keys do: [:sel |
+				((BaseException ___classBodyHelperClassNameFor___: sel) notNil
+					and: [(beh categoryOfSelector: sel environmentId: 1) = #'Grail-IR Class Helpers'])
+					ifTrue: [
+						[beh addCategory: 'Grail-ST-Extension' environmentId: 1]
+							on: Error do: [:e | e return: nil].
+						beh moveMethod: sel toCategory: 'Grail-ST-Extension' environmentId: 1]]]]
+
+]
+
+{ #category : 'Grail-smalltalk_class' }
+grail class >> ___regenerate___: aMethod onto: aClass [
+	"Whether an IR-built method of the temporary class went onto aClass by
+	regenerating its IR there (importlib ___irRegenerate___:onto:category:,
+	P2.2), with no text compiled.  False for a text method, and for an IR one
+	with no builder to regenerate from: the caller then recompiles its text."
+
+	((BaseException ___isIRPythonMethod___: aMethod)
+		and: [importlib ___irCopiesRegenerate___]) ifFalse: [^ false].
+	(importlib ___irRegenerate___: aMethod onto: aClass category: 'Grail-ST-Extension')
+		isNil ifTrue: [^ false].
+	importlib ___irCensusCopy___: 'st-class' route: 'regen' source: nil.
+	^ true
 
 ]
 
