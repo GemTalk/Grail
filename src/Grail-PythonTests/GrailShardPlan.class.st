@@ -24,6 +24,20 @@ A reserve (GRAIL_TEST_SHARD0_RESERVE_S) starts shard 0 with that much planned
 time, for a runner that does other work besides its shard -- in CI shard 0's
 job also runs the suites run_tests.sh runs after the shards.
 
+MEMORY AS WELL AS TIME, when the file has it: an optional third column, the
+KB a class adds to what its shard holds live after a mark sweep
+(GRAIL_CLASS_MEM, which runTestsShard.gs prints).  A shard is ONE session with a capped
+temporary object memory, and a time-only plan once gave one shard
+DjangoTestCase and enough else to end at 91-94% of it, where the gem's
+AlmostOutOfMemory failed whichever test was running.  With memory known, a
+class is ranked by the larger of its two shares (its time over the total
+time, its memory over the total memory) and goes to the shard where the
+larger of the two resulting shares is smallest -- so a shard that is light on
+time but heavy on memory stops taking memory.  Compared by cross-multiplying,
+in integers, so every worker still builds the same plan.  A class with no
+memory figure is costed at the file's mean KB per test, as for time.  With
+no memory column at all the plan is the time-only one, exactly.
+
 GrailShardPlanTestCase checks the coverage invariant on the real suite: the
 shards' union is the whole suite, with no test twice.
 "
@@ -37,7 +51,8 @@ Class {
 		'counts',
 		'order',
 		'suiteSize',
-		'timed'
+		'timed',
+		'memLoads'
 	],
 	#category : 'Grail-SUnit'
 }
@@ -71,12 +86,15 @@ GrailShardPlan class >> defaultTimingsPath [
 { #category : 'Grail-SUnit-Sharding' }
 GrailShardPlan class >> forWorkers: n [
 	"The plan the gate uses: the whole PythonTestCase suite, the committed
-	timings file and the reserve from the environment."
+	timings file (times and memory) and the reserve from the environment."
 
+	| path |
+	path := self defaultTimingsPath.
 	^ self
 		workers: n
 		leaves: (self leavesOf: PythonTestCase suite)
-		timings: (self readTimings: self defaultTimingsPath)
+		timings: (self readTimings: path)
+		memory: (self readMemory: path)
 		reserveMs: self reserveMsFromEnvironment
 
 ]
@@ -99,27 +117,49 @@ GrailShardPlan class >> leavesOf: aSuite [
 ]
 
 { #category : 'Grail-SUnit-Sharding' }
-GrailShardPlan class >> readTimings: aPath [
-	"Class name -> milliseconds, from lines '<ClassName> <ms>'.  Blank lines
-	and '#' comments are skipped, and so is any line that does not parse.  A
-	missing file answers an empty Dictionary."
+GrailShardPlan class >> readColumn: anIndex of: aPath [
+	"Class name -> the non-negative number in column anIndex, rounded, from
+	lines '<ClassName> <ms> [<KB>]'.  Blank lines and '#' comments are
+	skipped, and so is any line whose column does not parse.  A missing file
+	answers an empty Dictionary."
 
-	| timings file line |
-	timings := Dictionary new.
-	aPath isNil ifTrue: [^ timings].
+	| values file line |
+	values := Dictionary new.
+	aPath isNil ifTrue: [^ values].
 	file := [GsFile openReadOnServer: aPath] on: Error do: [:ex | ex return: nil].
-	file isNil ifTrue: [^ timings].
+	file isNil ifTrue: [^ values].
 	[[(line := file nextLine) isNil] whileFalse: [
-		| parts ms |
+		| parts n |
 		line := line trimSeparators.
 		(line isEmpty or: [(line at: 1) == $#]) ifFalse: [
 			parts := line subStrings: ' '.
-			parts size >= 2 ifTrue: [
-				ms := [(parts at: 2) asNumber] on: Error do: [:ex | ex return: nil].
-				(ms notNil and: [ms >= 0])
-					ifTrue: [timings at: (parts at: 1) asString put: ms rounded]]]]]
+			parts size >= anIndex ifTrue: [
+				n := [(parts at: anIndex) asNumber] on: Error do: [:ex | ex return: nil].
+				(n notNil and: [n >= 0])
+					ifTrue: [values at: (parts at: 1) asString put: n rounded]]]]]
 		ensure: [file close].
-	^ timings
+	^ values
+
+]
+
+{ #category : 'Grail-SUnit-Sharding' }
+GrailShardPlan class >> readMemory: aPath [
+	"Class name -> KB, from the optional third column of lines
+	'<ClassName> <ms> <KB>'.  A line with no third column, or one that does
+	not parse, contributes nothing.  No file, or no third column anywhere,
+	answers an empty Dictionary -- and the plan is then time-only."
+
+	^ self readColumn: 3 of: aPath
+
+]
+
+{ #category : 'Grail-SUnit-Sharding' }
+GrailShardPlan class >> readTimings: aPath [
+	"Class name -> milliseconds, from lines '<ClassName> <ms> [<KB>]'.  Blank
+	lines and '#' comments are skipped, and so is any line that does not
+	parse.  A missing file answers an empty Dictionary."
+
+	^ self readColumn: 2 of: aPath
 
 ]
 
@@ -137,9 +177,18 @@ GrailShardPlan class >> reserveMsFromEnvironment [
 ]
 
 { #category : 'Grail-SUnit-Sharding' }
-GrailShardPlan class >> workers: n leaves: aCollection timings: aDictionary reserveMs: reserveMs [
+GrailShardPlan class >> workers: n leaves: aCollection timings: aDictionary memory: aMemoryDictionary reserveMs: reserveMs [
 
-	^ self new initWorkers: n leaves: aCollection timings: aDictionary reserveMs: reserveMs
+	^ self new initWorkers: n leaves: aCollection timings: aDictionary memory: aMemoryDictionary reserveMs: reserveMs
+
+]
+
+{ #category : 'Grail-SUnit-Sharding' }
+GrailShardPlan class >> workers: n leaves: aCollection timings: aDictionary reserveMs: reserveMs [
+	"A time-only plan: the isolated-classes partition, where every class has
+	a session of its own and memory does not add up."
+
+	^ self workers: n leaves: aCollection timings: aDictionary memory: Dictionary new reserveMs: reserveMs
 
 ]
 
@@ -148,6 +197,28 @@ GrailShardPlan >> classesOn: anIndex [
 	"The class names placed on shard anIndex, in suite order."
 
 	^ order select: [:each | (assignment at: each) = anIndex]
+
+]
+
+{ #category : 'Grail-SUnit-Sharding' }
+GrailShardPlan >> costsFrom: aDictionary [
+	"Class name -> cost, for every class in the suite: its figure in
+	aDictionary, or -- for a class it does not name -- the mean cost per test
+	of the classes it does name, times the class's test count.  When it names
+	none, every class costs its test count."
+
+	| known knownTests knownCost perTest costs |
+	known := order select: [:each | aDictionary includesKey: each].
+	knownTests := 0.
+	knownCost := 0.
+	known do: [:each |
+		knownTests := knownTests + (counts at: each).
+		knownCost := knownCost + (aDictionary at: each)].
+	perTest := knownTests = 0 ifTrue: [1] ifFalse: [knownCost / knownTests].
+	costs := Dictionary new.
+	order do: [:each |
+		costs at: each put: (aDictionary at: each ifAbsent: [((counts at: each) * perTest) rounded])].
+	^ costs
 
 ]
 
@@ -167,12 +238,13 @@ GrailShardPlan >> digest [
 ]
 
 { #category : 'Grail-SUnit-Sharding' }
-GrailShardPlan >> initWorkers: n leaves: aCollection timings: aDictionary reserveMs: reserveMs [
+GrailShardPlan >> initWorkers: n leaves: aCollection timings: aDictionary memory: aMemoryDictionary reserveMs: reserveMs [
 	"Longest processing time first.  The sort is total (cost, then name), and
 	ties between shards go to the lower index, so the result depends on
-	nothing but the inputs."
+	nothing but the inputs.  With memory known the cost is two-dimensional:
+	see the class comment."
 
-	| known knownTests knownMs perTest costs sorted |
+	| costs mems totalMs totalKB sorted |
 	workers := (n isNil or: [n < 1]) ifTrue: [1] ifFalse: [n].
 	counts := Dictionary new.
 	order := OrderedCollection new.
@@ -181,28 +253,42 @@ GrailShardPlan >> initWorkers: n leaves: aCollection timings: aDictionary reserv
 		(counts includesKey: key) ifFalse: [order add: key. counts at: key put: 0].
 		counts at: key put: (counts at: key) + 1].
 	suiteSize := aCollection size.
-	known := order select: [:each | aDictionary includesKey: each].
-	timed := known notEmpty.
-	knownTests := 0.
-	knownMs := 0.
-	known do: [:each |
-		knownTests := knownTests + (counts at: each).
-		knownMs := knownMs + (aDictionary at: each)].
-	perTest := knownTests = 0 ifTrue: [1] ifFalse: [knownMs / knownTests].
-	costs := Dictionary new.
-	order do: [:each |
-		costs at: each put: (aDictionary at: each ifAbsent: [((counts at: each) * perTest) rounded])].
+	timed := order anySatisfy: [:each | aDictionary includesKey: each].
+	costs := self costsFrom: aDictionary.
+	mems := self costsFrom: aMemoryDictionary.
 	loads := Array new: workers withAll: 0.
+	memLoads := Array new: workers withAll: 0.
 	(timed and: [reserveMs notNil and: [reserveMs > 0]])
 		ifTrue: [loads at: 1 put: reserveMs].
 	assignment := Dictionary new.
-	sorted := order asSortedCollection: [:a :b |
-		(costs at: a) > (costs at: b)
-			or: [(costs at: a) = (costs at: b) and: [a <= b]]].
-	sorted do: [:each | | best |
-		best := 1.
-		2 to: workers do: [:i | (loads at: i) < (loads at: best) ifTrue: [best := i]].
+	totalKB := mems inject: 0 into: [:sum :each | sum + each].
+	(order anySatisfy: [:each | aMemoryDictionary includesKey: each]) ifFalse: [totalKB := 0].
+	totalKB = 0 ifTrue: [
+		"Time only -- the plan as it was before memory was measured."
+		sorted := order asSortedCollection: [:a :b |
+			(costs at: a) > (costs at: b)
+				or: [(costs at: a) = (costs at: b) and: [a <= b]]].
+		sorted do: [:each | | best |
+			best := 1.
+			2 to: workers do: [:i | (loads at: i) < (loads at: best) ifTrue: [best := i]].
+			loads at: best put: (loads at: best) + (costs at: each).
+			assignment at: each put: best - 1].
+		^ self].
+	"Shares are compared as cross-products: t/T versus m/M is t*M versus m*T."
+	totalMs := (costs inject: 0 into: [:sum :each | sum + each]) + (loads at: 1).
+	totalMs = 0 ifTrue: [totalMs := 1].
+	sorted := order asSortedCollection: [:a :b | | ka kb |
+		ka := ((costs at: a) * totalKB) max: ((mems at: a) * totalMs).
+		kb := ((costs at: b) * totalKB) max: ((mems at: b) * totalMs).
+		ka > kb or: [ka = kb and: [a <= b]]].
+	sorted do: [:each | | best bestScore |
+		best := nil.
+		1 to: workers do: [:i | | score |
+			score := (((loads at: i) + (costs at: each)) * totalKB)
+				max: (((memLoads at: i) + (mems at: each)) * totalMs).
+			(best isNil or: [score < bestScore]) ifTrue: [best := i. bestScore := score]].
 		loads at: best put: (loads at: best) + (costs at: each).
+		memLoads at: best put: (memLoads at: best) + (mems at: each).
 		assignment at: each put: best - 1]
 
 ]
@@ -213,6 +299,15 @@ GrailShardPlan >> isTimed [
 	class being costed by its test count."
 
 	^ timed
+
+]
+
+{ #category : 'Grail-SUnit-Sharding' }
+GrailShardPlan >> plannedKBOn: anIndex [
+	"The memory planned for shard anIndex, in KB: 0 when the timings file has
+	no memory column."
+
+	^ memLoads at: anIndex + 1
 
 ]
 

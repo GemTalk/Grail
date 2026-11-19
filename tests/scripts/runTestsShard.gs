@@ -45,7 +45,8 @@ escape hatch: it simply skips the deploy."
 level 1
 run
 | out numWorkers idx full shard result leaves plan
-  groups order shardT0 shardOf codeIndex codeKB codePeakKB codeCapKB |
+  groups order shardT0 shardOf codeIndex codeKB codePeakKB codeCapKB
+  liveKB memBeforeKB memFlag |
 out := GsFile stdout.
 out nextPutAll:'topaz -l  processId = ' , System gemProcessId asString ; lf .
 numWorkers := (System gemEnvironmentVariable: 'GRAIL_TEST_WORKERS') ifNil: ['1'].
@@ -74,7 +75,8 @@ werkzeug / flask / django compile ONCE (on their owner shard) rather than
 once per shard.
 
 WHICH shard is GrailShardPlan's call: a longest-processing-time assignment by
-the measured per-class times in tests/scripts/shard_timings.txt, with classes
+the measured per-class times in tests/scripts/shard_timings.txt -- and by the
+per-class memory there too, when the file has it -- with classes
 the file does not know costed by their test count (see the class comment, and
 scripts/refresh_shard_timings.sh to re-measure).  Every worker builds the same
 plan from the same suite, file and GRAIL_TEST_SHARD0_RESERVE_S, so they agree
@@ -84,6 +86,7 @@ plan := GrailShardPlan
   workers: numWorkers
   leaves: leaves
   timings: (GrailShardPlan readTimings: GrailShardPlan defaultTimingsPath)
+  memory: (GrailShardPlan readMemory: GrailShardPlan defaultTimingsPath)
   reserveMs: GrailShardPlan reserveMsFromEnvironment.
 out nextPutAll: 'GRAIL_SHARD_PLAN|idx='; nextPutAll: idx printString;
   nextPutAll: '|digest='; nextPutAll: plan digest printString;
@@ -91,6 +94,7 @@ out nextPutAll: 'GRAIL_SHARD_PLAN|idx='; nextPutAll: idx printString;
   nextPutAll: '|classes='; nextPutAll: (plan classesOn: idx) size printString;
   nextPutAll: '|tests='; nextPutAll: (plan testCountOn: idx) printString;
   nextPutAll: '|plannedMs='; nextPutAll: (plan plannedMsOn: idx) printString;
+  nextPutAll: '|plannedKB='; nextPutAll: (plan plannedKBOn: idx) printString;
   nextPutAll: '|suiteTests='; nextPutAll: plan suiteSize printString; lf.
 "Collect this shard's tests twice over: once into the shard suite (whose
 `resources' the reset contract below needs), and once into a per-CLASS suite
@@ -146,15 +150,72 @@ codeKB := [(System gemCacheStatisticsForSessionId: System session) at: codeIndex
 codeCapKB := (System gemConfigurationAt: #GEM_TEMPOBJ_CODE_SIZE) // 1024.
 codePeakKB := 0.
 result := GrailTestResult new.
+"GRAIL_CLASS_MEM|<shard>|<class>|<KB>|<liveKB>: what each class added to the
+memory this session holds LIVE -- the KB in use after a mark sweep, less the
+same figure before the class.  scripts/refresh_shard_timings.py reads it into
+the third column of tests/scripts/shard_timings.txt, and GrailShardPlan
+balances it, because a shard is one session with a capped temporary object
+memory: the gem's AlmostOutOfMemory notification fires at the end of a mark
+sweep that leaves more than 85% of it in use, and the kernel's
+GsTestCase>>runCase reports it as an error in whichever test was running.  A
+time-only plan put enough on shard 6 to fail six merge-queue runs that way.
+
+Measured HERE, in the shard, and not by running each class alone: a class's
+figure alone counts in full the imports it shares with the other classes of
+its shard, and summed over a shard those figures came to about twice what the
+shards held, with the heaviest shard ranked mid-table.  Within one session the
+figures add up to what the shard holds.
+
+ONLY WHEN GRAIL_SHARD_CLASS_MEM is set (to anything but 0): a sweep per class
+cost 37-65 s a shard on a Mac -- about 6% of the shard, against no gap at all
+without it -- which is too much for every merge-queue run.  ci.yml sets it on
+the scheduled nightly (and a manual dispatch), which is where the refresh
+script reads memory from.
+
+The sweep is between classes, outside every test.  An AlmostOutOfMemory it
+raises there is logged as GRAIL_SHARD_MEM_WARNING and re-armed -- the gem
+signals it once and then stays silent until told otherwise -- so a test that
+crosses the threshold later still fails, as it did before the sweep existed.
+The time a class reports does not include its sweep.
+
+AND THE SWEEP'S FINALIZERS RUN HERE TOO.  A sweep collects what the class left
+for dead -- a coroutine never awaited, say -- and Grail runs the Python hooks
+for those (FinalizerEphemeron: the ``never awaited'' RuntimeWarning, a
+generator's close) only at its next safe point.  Left alone, that was inside
+the NEXT class's test: on CI, ExcepthookPrintsTracebackTestCase redirects
+sys.stderr to read a traceback back, and got five ``coroutine ... was never
+awaited'' warnings from an earlier asyncio class in front of it.
+Reproduced in the grailci container (native code), and gone with the drain."
+liveKB := [
+  [System _vmMarkSweep.
+   FinalizerEphemeron _runPending.
+   System _tempObjSpaceUsed // 1024]
+    on: AlmostOutOfMemory
+    do: [:ex |
+      out nextPutAll: 'GRAIL_SHARD_MEM_WARNING|idx='; nextPutAll: idx printString;
+        nextPutAll: '|pct='; nextPutAll: System _tempObjSpacePercentUsed printString; lf.
+      System signalAlmostOutOfMemoryThreshold: 0.
+      ex resume]].
+memFlag := ((System gemEnvironmentVariable: 'GRAIL_SHARD_CLASS_MEM') ifNil: ['']) trimSeparators.
+(memFlag isEmpty or: [memFlag = '0']) ifTrue: [liveKB := nil].
+memBeforeKB := liveKB ifNotNil: [liveKB value].
 shardT0 := System _timeMs.
-[order do: [:key | | t0 |
+[order do: [:key | | t0 ms afterKB |
   t0 := System _timeMs.
   (groups at: key) run: result.
+  ms := System _timeMs - t0.
   out nextPutAll: 'GRAIL_CLASS_TIME|'; nextPutAll: idx printString;
     nextPutAll: '|'; nextPutAll: key;
-    nextPutAll: '|'; nextPutAll: (System _timeMs - t0) printString;
+    nextPutAll: '|'; nextPutAll: ms printString;
     nextPutAll: '|'; nextPutAll: (groups at: key) tests size printString; cr.
-  codePeakKB := codePeakKB max: codeKB value]]
+  codePeakKB := codePeakKB max: codeKB value.
+  liveKB ifNotNil: [
+    afterKB := liveKB value.
+    out nextPutAll: 'GRAIL_CLASS_MEM|'; nextPutAll: idx printString;
+      nextPutAll: '|'; nextPutAll: key;
+      nextPutAll: '|'; nextPutAll: (afterKB - memBeforeKB) printString;
+      nextPutAll: '|'; nextPutAll: afterKB printString; cr.
+    memBeforeKB := afterKB]]]
   ensure: [TestResource resetResources: shard resources].
 "ms= is UNCONDITIONAL.  Without it the gate reports only its slowest JOB, and a
 job is two shards run concurrently -- so a skew shows up as a number nothing in
