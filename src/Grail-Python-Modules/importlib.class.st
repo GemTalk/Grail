@@ -2673,7 +2673,9 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	own and the dispatcher's ``no shadow, no dispatcher'' check declines the
 	patch.  And on any class the copy has to answer the prefixed selector as
 	its own, which UnboundMethod and the traceback read the original name
-	back from.  nil -- no builder, or a class statement whose helper aClass
+	back from.  A def that defines a class goes too: a class that cannot
+	reach the def's class-statement helper performs one generated for it
+	(P2.3a).  nil -- no builder, or a class-side helper aClass's metaclass
 	cannot reach -- keeps the text route."
 	regen := (BaseException ___isIRPythonMethod___: meth)
 		and: [self ___irCopiesRegenerate___ and: [meth selector == sel]].
@@ -6374,9 +6376,11 @@ importlib class >> ___irMethodFor___: aMethod on: aClass [
 	run it (UnboundMethod's special-receiver form, which needs a method
 	compiled against SmallInteger, Character, ... and must leave that class's
 	dictionary alone).  nil when the method is not IR, cannot be rebuilt, or
-	does not fit aClass (an instVar it reads that aClass lacks, a class
-	statement whose helper aClass cannot reach): the consumer keeps its text
-	route for those."
+	does not fit aClass (an instVar it reads that aClass lacks, a class-side
+	class-statement helper aClass's metaclass cannot reach): the consumer
+	keeps its text route for those.  An instance-side helper aClass cannot
+	reach is no reason: the method performs one generated for aClass
+	(PyMethodIRBuilder >> ___irWithHelpersReachableFrom___:do:, P2.3a)."
 
 	| builder |
 	builder := self ___irBuilderForMethod___: aMethod.

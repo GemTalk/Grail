@@ -25,6 +25,12 @@ a helper method of the def's own class, which every copy has to reach.
 ``comp_target`` is #2256's shape on a special receiver: a lambda in a
 comprehension whose target shadows the receiver parameter.
 
+The special receiver's class and ``Away`` cannot reach that helper, so their
+copies perform one generated for their own class (plan P2.3a).
+``kind_captures`` and ``five_captures`` are the harder class statements: one
+that reads the def's locals and its ``self``, has a decorator and a base
+(values its caller evaluates), and holds a class of its own.
+
 ``IRCopyRoutesTestCase`` runs these checks under Grail and counts the routes;
 run as a script, this file is its own CPython oracle.
 """
@@ -47,6 +53,11 @@ class Deleting(Base):
         return 'Deleting'
 
 
+def _tagged(cls):
+    cls.tagged = True
+    return cls
+
+
 class Home:
     def kind(self):
         return (type(self).__name__, self + 1)
@@ -62,6 +73,18 @@ class Home:
             pass
         return (type(self).__name__, Made.__qualname__)
 
+    def kind_captures(self):
+        tag = 'cap'
+
+        @_tagged
+        class Made(Base):
+            label = tag + type(self).__name__
+
+            class Inner:
+                pass
+        return (Made.label, Made.__mro__[1].__name__, Made.Inner.__qualname__,
+                Made.tagged)
+
     def five(self, a, b, c, d, e):
         return (type(self).__name__, a + b + c + d + e)
 
@@ -69,6 +92,14 @@ class Home:
         class Made:
             pass
         return (type(self).__name__, Made.__qualname__, a + b + c + d + e)
+
+    def five_captures(self, a, b, c, d, e):
+        total = a + b + c + d + e
+
+        @_tagged
+        class Made(Base):
+            seen = total
+        return (type(self).__name__, Made.seen, Made.tagged, Made().describe())
 
 
 class Away:
@@ -156,6 +187,15 @@ def _special_receiver_with_a_class():
     return Home.kind_local(3)
 
 
+def _special_receiver_with_a_harder_class():
+    return (Home.kind_captures(3), Home.kind_captures(2.5))
+
+
+def _five_with_a_harder_class_on_another_class():
+    Away.five_captures = Home.five_captures
+    return Away().five_captures(1, 2, 3, 4, 5)
+
+
 def _five_on_another_class():
     Away.five = Home.five
     return Away().five(1, 2, 3, 4, 5)
@@ -183,6 +223,11 @@ CHECKS = [
      ('DelLocal.m.<locals>.Made', False)),
     ('five_with_a_class_on_another_class', _five_with_a_class_on_another_class,
      ('Away', 'Home.five_local.<locals>.Made', 15)),
+    ('special_receiver_with_a_harder_class', _special_receiver_with_a_harder_class,
+     (('capint', 'Base', 'Home.kind_captures.<locals>.Made.Inner', True),
+      ('capfloat', 'Base', 'Home.kind_captures.<locals>.Made.Inner', True))),
+    ('five_with_a_harder_class_on_another_class',
+     _five_with_a_harder_class_on_another_class, ('Away', 15, True, 'Base')),
 ]
 
 
