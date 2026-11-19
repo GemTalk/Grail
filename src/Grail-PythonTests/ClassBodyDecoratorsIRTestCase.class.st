@@ -5,8 +5,13 @@ in a decorator expression is read by the description both helpers share
 (NameAst >> ___emitMethodDecoratorValueWith___:): a name the class body binds
 off the class, anything else as the enclosing scopes read it.
 
-The tests load tests/python/class_body_decorators_ir.py, compare every check
-with CPython's answer on the IR arm and with the text helper as the control,
+It also covers the other class-body scopes P3.3c admits: a lambda, a
+comprehension or a generator expression in a class-body value, an annotated
+value, a default or a decorator, each built by its own emitter as in a def.
+
+The tests load tests/python/class_body_decorators_ir.py and
+class_body_function_scopes_ir.py, compare every check with CPython's answer
+on the IR arm and with the text helper as the control,
 and check that the helpers really were built through IR -- correct answers
 from a text helper would prove nothing.  ClassBodyNamespaceIRTestCase >>
 testTheRefusalsAreCensusRows pins the census rows of the shapes still refused."
@@ -45,7 +50,11 @@ ClassBodyDecoratorsIRTestCase >> ___fixtures___ [
 		  #('alias_after' 'cells' 'class_body_names' 'declarative' 'enclosing_local'
 		    'lines' 'module_deco' 'order' 'own_name' 'properties' 'raises' 'register'
 		    'skip' 'wraps').
-		  15 } }
+		  15 }.
+		{ 'class_body_function_scopes_ir.py'. 'cbfs_ir'.
+		  #('annotate' 'annotated' 'closures' 'comps' 'decorator' 'default'
+		    'lambda_names' 'lambda_scope' 'lambda_value' 'listcomp').
+		  11 } }
 
 ]
 
@@ -100,11 +109,12 @@ ClassBodyDecoratorsIRTestCase >> tearDown [
 
 { #category : 'Grail-Tests' }
 ClassBodyDecoratorsIRTestCase >> testTheFixturesAgreeWithCPython [
-	"Every check of the fixture, on the IR arm with the helpers built through
+	"Every check of both fixtures, on the IR arm with the helpers built through
 	IR: decorators that are module globals, enclosing locals and class-body
 	names, their evaluation and application order, decorators around the
 	declarative forms and properties, and the class-body frame and line a
-	decorator is called from."
+	decorator is called from; lambdas, comprehensions and generator
+	expressions in class-body values, annotations, defaults and decorators."
 
 	| bad |
 	importlib ___irCodegenSupported___ ifFalse: [^ self].
@@ -113,7 +123,7 @@ ClassBodyDecoratorsIRTestCase >> testTheFixturesAgreeWithCPython [
 		bad addAll: (self ___disagreementsOf___: (self ___load___: fx helpers: true)
 			keys: (fx at: 3))].
 	self assert: bad isEmpty
-		description: 'method decorators disagreeing with CPython under IR: '
+		description: 'method decorators or class-body scopes disagreeing with CPython under IR: '
 			, bad asArray printString
 
 ]

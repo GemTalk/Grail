@@ -203,6 +203,9 @@ def f(p):
     class DecoLam:
         @(lambda fn: fn)
         def s(self): pass
+    class DecoCell:
+        @mf(__class__)
+        def s(self): pass
     class Expr:
         print(1)
     class Target:
@@ -215,21 +218,22 @@ def f(p):
 '.
 	expect := {
 		'Values' -> nil.
-		'Lam' -> #'irHelper:assign:functionScope'.
-		'Comp' -> #'irHelper:assign:functionScope'.
+		'Lam' -> nil.
+		'Comp' -> nil.
 		'Walrus' -> #'irHelper:assign:walrus'.
 		'Sibling' -> #'irHelper:assign:siblingCall'.
 		'Frame' -> #'irHelper:assign:frameCall'.
 		'Cell' -> #'irHelper:assign:classCell'.
 		'Ann' -> nil.
-		'AnnLam' -> #'irHelper:annotation:functionScope'.
+		'AnnLam' -> nil.
 		'AnnTarget' -> #'irHelper:annotation:target'.
 		'Deco' -> nil.
-		'DecoLam' -> #'irHelper:methodDecorator:functionScope'.
+		'DecoLam' -> nil.
+		'DecoCell' -> #'irHelper:methodDecorator:classCell'.
 		'Expr' -> #'irHelper:expression'.
 		'Target' -> #'irHelper:assignTarget'.
 		'Renamed' -> #'irHelper:assign:specialName'.
-		'Default' -> #'irHelper:methodDefault:functionScope' }.
+		'Default' -> nil }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |
 		| got |

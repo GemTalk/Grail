@@ -2263,10 +2263,16 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 	  * the plain expression shapes -- names, constants, attribute and
 	    subscript loads, calls, operators, comparisons, the conditional
 	    expression, tuple / list / set / dict displays and their splats;
-	  * NOT a nested function scope (a lambda, a comprehension, a generator
-	    expression: they skip the class namespace, and their bodies are
-	    P3.3's later steps), a walrus (it binds INTO the class namespace), a
-	    yield or an await, or an f-string;
+	  * a nested FUNCTION SCOPE -- a lambda, a list / set / dict
+	    comprehension, a generator expression (P3.3c).  Its own emitter builds
+	    it as it does in a def, and its names are read as a def's are: the
+	    text stands down from the class-body read inside one
+	    (NameAst >> ___inNestedScopeWithinClassBody___), because CPython
+	    skips the class namespace there -- except in a comprehension's first
+	    iterable, which is evaluated in the class body and is a class-body
+	    read on both paths;
+	  * NOT a walrus (it binds INTO the class namespace), a yield or an
+	    await, or an f-string;
 	  * NOT ``__class__'', ``__classdict__'' or ``super'', whose class-body
 	    reads have branches of their own, nor a call of ``locals'', ``vars'',
 	    ``dir'', ``globals'', ``eval'' or ``exec'', which the text rewrites
@@ -2278,7 +2284,8 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 	| allowed reason nodes |
 	allowed := { AttributeAst. BinOpAst. BoolOpAst. CallAst. CompareAst. ConstantAst.
 		DictAst. IfExpAst. ListAst. NameAst. NotAst. SetAst. SliceAst. StarredAst.
-		SubscriptAst. TupleAst. UnaryOpAst }.
+		SubscriptAst. TupleAst. UnaryOpAst.
+		LambdaAst. ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst }.
 	reason := nil.
 	nodes := OrderedCollection with: anExpr.
 	anExpr ___descendantsDo___: [:n | nodes add: n].
@@ -2286,18 +2293,14 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 		reason isNil ifTrue: [
 			((n isKindOf: ExpressionAst)
 				and: [(allowed anySatisfy: [:c | n isKindOf: c]) not]) ifTrue: [
-					reason := ((n isKindOf: LambdaAst) or: [(n isKindOf: ListCompAst)
-						or: [(n isKindOf: SetCompAst) or: [(n isKindOf: DictCompAst)
-						or: [n isKindOf: GeneratorExpAst]]]])
-							ifTrue: [#functionScope]
-							ifFalse: [(n isKindOf: NamedExprAst)
-								ifTrue: [#walrus]
-								ifFalse: [((n isKindOf: YieldAst) or: [(n isKindOf: YieldFromAst)
-										or: [n isKindOf: AwaitAst]])
-									ifTrue: [#yield]
-									ifFalse: [((n isKindOf: JoinedStrAst) or: [n isKindOf: TemplateStrAst])
-										ifTrue: [#fstring]
-										ifFalse: [#valueShape]]]]].
+					reason := (n isKindOf: NamedExprAst)
+						ifTrue: [#walrus]
+						ifFalse: [((n isKindOf: YieldAst) or: [(n isKindOf: YieldFromAst)
+								or: [n isKindOf: AwaitAst]])
+							ifTrue: [#yield]
+							ifFalse: [((n isKindOf: JoinedStrAst) or: [n isKindOf: TemplateStrAst])
+								ifTrue: [#fstring]
+								ifFalse: [#valueShape]]]].
 			(reason isNil and: [n isKindOf: NameAst]) ifTrue: [
 				(#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
 					ifTrue: [reason := #classCell]].
@@ -2521,6 +2524,11 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	walk applies them through the emitter, and a decorator expression's names
 	are read by NameAst >> ___emitMethodDecoratorValueWith___:, the
 	description the text shares.
+
+	P3.3c also admits a LAMBDA, a COMPREHENSION and a GENERATOR EXPRESSION in
+	any of those values (___irClassBodyValueReason___:bound:): a scope of its
+	own, built by its own emitter, whose names skip the class namespace on
+	both paths.
 
 	Still text: a bare expression evaluated for effect, a
 	target that is not a name (an annotated attribute or subscript is a
