@@ -930,7 +930,11 @@ int PyIter_NextItem(PyObject *iter, PyObject **item) {
     return PyErr_Occurred() ? -1 : 0;
 }
 
-/* list(o.items()) -- CPython answers a list for any mapping. */
+/* list(o.items()) -- CPython answers a list for any mapping.  Its pairs are
+   in CPython's layout too, as PyDict_Items' are: PyO3 reads each with the
+   inline PyTuple_GET_SIZE, which on a Grail tuple's wrapper is its OOP, so
+   rpds-py's HashTrieMap({'a': 1}) raised "expected tuple of length 2, but
+   got tuple of length 3992094721". */
 PyObject *PyMapping_Items(PyObject *o) {
     PyObject *view = PyObject_CallMethod(o, "items", NULL);
     if (view == NULL) return NULL;
@@ -941,7 +945,9 @@ PyObject *PyMapping_Items(PyObject *o) {
     if (list == NULL) { _grail_release(it); return NULL; }
     PyObject *x;
     while ((x = PyIter_Next(it)) != NULL) {
-        int rc = PyList_Append(list, x);
+        PyObject *pair = _grail_real_layout(x);   /* x itself, or a new copy */
+        int rc = PyList_Append(list, pair);       /* takes its own reference */
+        if (pair != x) Py_DECREF(pair);
         _grail_release(x);
         if (rc < 0) break;
     }

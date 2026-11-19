@@ -1129,6 +1129,25 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         Py_DECREF(r);
         return out;
     }
+    /* PyMapping_Items, its list and pairs read INLINE, as PyO3 reads them
+       (rpds-py's HashTrieMap(a_dict)).  A pair whose inline size is not 2 is
+       answered as that size rather than read past. */
+    if (IS("mapping_items_inline")) {
+        PyObject *items = PyMapping_Items(a);
+        if (items == NULL) return NULL;
+        PyObject *out = PyList_New(0);
+        for (Py_ssize_t i = 0; out != NULL && i < PyList_GET_SIZE(items); i++) {
+            PyObject *pair = PyList_GET_ITEM(items, i);
+            Py_ssize_t size = PyTuple_GET_SIZE(pair);
+            PyObject *e = size == 2
+                ? PyTuple_Pack(2, PyTuple_GET_ITEM(pair, 0), PyTuple_GET_ITEM(pair, 1))
+                : PyLong_FromSsize_t(size);
+            if (e == NULL || PyList_Append(out, e) < 0) Py_CLEAR(out);
+            Py_XDECREF(e);
+        }
+        Py_DECREF(items);
+        return out;
+    }
     /* Build N one-item tuples and answer the last, as numpy builds a few
        dozen on every ufunc call.  The shim used to stop recording new tuples
        once it had made 131072, and the next one could not be filled. */
@@ -1926,6 +1945,39 @@ static PyMethodDef grail_demo_methods[] = {
     {NULL, NULL, 0, NULL}
 };
 
+#ifndef GRAIL_SHIM
+/* PyO3's PyModule::add, step for step: its index() reads ``__all__'' off the
+   module, and the first time, on AttributeError, makes an EMPTY list and
+   setattr's it; each export then appends its name to whatever index()
+   answers and setattr's the value.  So ``__all__'' is stored once, empty,
+   and filled in place afterwards.  rpds-py's __init__ is
+   ``from .rpds import *'', which exported nothing when the empty list was
+   all Grail saw. */
+static PyObject *
+pyo3_style_index(PyObject *mod) {
+    PyObject *all = PyObject_GetAttrString(mod, "__all__");
+    if (all != NULL) return all;
+    if (!PyErr_ExceptionMatches(PyExc_AttributeError)) return NULL;
+    PyErr_Clear();
+    all = PyList_New(0);
+    if (all == NULL) return NULL;
+    if (PyObject_SetAttrString(mod, "__all__", all) < 0) { Py_DECREF(all); return NULL; }
+    return all;
+}
+
+static int
+pyo3_style_add(PyObject *mod, const char *name, PyObject *value) {
+    PyObject *all = pyo3_style_index(mod);
+    if (all == NULL) return -1;
+    PyObject *n = PyUnicode_FromString(name);
+    int rc = (n == NULL) ? -1 : PyList_Append(all, n);
+    Py_XDECREF(n);
+    Py_DECREF(all);
+    if (rc < 0) return -1;
+    return PyObject_SetAttrString(mod, name, value);
+}
+#endif
+
 /* Multi-phase init: module-level constants. Works on both real CPython
    and Grail (where shimDynLoad runs Py_mod_exec and shimModuleAttrs
    exports the constants as Python attributes). */
@@ -1978,6 +2030,11 @@ grail_demo_exec(PyObject *mod) {
         Py_XDECREF(bases);
         if (vec == NULL || PyModule_Add(mod, "Vec", vec) < 0) return -1;
     }
+    /* ``__all__'' as a PyO3 module builds it (pyo3_style_add above). */
+    if (pyo3_style_add(mod, "Box", (PyObject *)&Box_Type) < 0
+            || pyo3_style_add(mod, "Cell", (PyObject *)&Cell_Type) < 0
+            || pyo3_style_add(mod, "Text", (PyObject *)&Text_Type) < 0)
+        return -1;
 #endif
     PyModule_AddIntConstant(mod, "DEMO_VERSION", 7);
     PyModule_AddStringConstant(mod, "DEMO_NAME", "grail-demo");
