@@ -30,8 +30,8 @@ Where the in-scope tiers stand:
 | P1 | 75 | 5 | 10 | 90 |
 | P2 | 30 | 0 | 4 | 34 |
 | P3 | 32 | 2 | 22 | 56 |
-| P4 | 27 | 2 | 46 | 75 |
-| **In-scope** | **164** | **9** | **82** | **255** |
+| P4 | 28 | 1 | 46 | 75 |
+| **In-scope** | **165** | **8** | **82** | **255** |
 <!-- /status-tally -->
 
 A package wired a submodule at a time takes its glyph from the submodules wired
@@ -93,7 +93,7 @@ committed and nothing gates CI.
 | **Total** | **434** |
 
 <!-- wired-tally -->
-Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **164 of those score OK**.
+Of the 255 in-scope modules, **173 are wired into the harness** (P1 80 · P2 30 · P3 34 · P4 29) and **165 of those score OK**.
 <!-- /wired-tally -->
 
 It was 19 wired when this document was written. **66** modules are genuinely
@@ -136,12 +136,12 @@ keeps it current:
 <!-- test-tally -->
 | Tier | board rows | tests | skipped | passing | skipped % |
 |------|-----------:|------:|--------:|--------:|----------:|
-| P1 | 80 | 4459 | 453 | 3933 | 10% |
+| P1 | 80 | 4459 | 459 | 3950 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
-| P3 | 34 | 4260 | 555 | 3685 | 13% |
-| P4 | 46 | 3781 | 146 | 3623 | 4% |
-| other | 24 | 1199 | 285 | 908 | 24% |
-| **all** | **215** | **17996** | **1997** | **15888** | **11%** |
+| P3 | 34 | 4260 | 555 | 3686 | 13% |
+| P4 | 46 | 3781 | 146 | 3635 | 4% |
+| other | 24 | 1199 | 287 | 909 | 24% |
+| **all** | **215** | **17996** | **2005** | **15919** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_buffer` 80 of 95 · `test_utf8_mode` 13 of 12 · `test_signal` 43 of 57 · `test_stat` 15 of 22.
 <!-- /test-tally -->
@@ -401,7 +401,7 @@ The vendored web/async/net ambition (flask/jinja/requests/asyncio point here). P
 |  | `test_codecmaps_kr` | CJK codec round-trip maps — low priority. *(edge — see below)* |
 | ❗ | `test_codecmaps_tw` | CJK codec round-trip maps — low priority. *(edge — see below)* |
 |  | `test_docxmlrpc` | XML-RPC docserver — net + server; low priority. *(edge — see below)* |
-| ❗ | `test_email` | email package (vendored) — pure-Python. |
+| ✅ | `test_email` | email package (vendored) — pure-Python. |
 |  | `test_ftplib` | ftplib — FTP client (net stack). |
 |  | `test_hashlib` | hashlib — crypto digests; C/OpenSSL-accelerated but pure fallbacks exist. *(edge — see below)* |
 |  | `test_hmac` | hmac — pure-Python over a hash. |
@@ -811,22 +811,17 @@ the last nightly is listed too; its trial score and causes go in its comment
 in `scripts/cpython_suite_manifest.txt`, as `test_uuid`'s do.
 
 <!-- not-ok-rows -->
-**15 of the 215 rows on the committed board are not OK.**
+**10 of the 215 rows on the committed board are not OK.**
 
 - `test.test_codecmaps_tw` SKIP, 6 tests: 0 failed, 0 errors, 6 skipped
 - `test.test_c_locale_coercion` SKIP, 8 tests: 0 failed, 0 errors, 8 skipped
-- `test.test_sys` ERROR, 97 tests: 3 failed, 2 errors, 63 skipped
-- `test.test_descr` ERROR, 162 tests: 33 failed, 14 errors, 12 skipped
-- `test.test_gzip` FAIL, 75 tests: 1 failed, 0 errors, 9 skipped
-- `test.test_email.test__header_value_parser` ERROR, 380 tests: 0 failed, 8 errors, 0 skipped
-- `test.test_email.test_generator` ERROR, 73 tests: 0 failed, 1 errors, 0 skipped
-- `test.test_email.test_headerregistry` ERROR, 192 tests: 0 failed, 2 errors, 0 skipped
-- `test.test_email.test_parser` ERROR, 8 tests: 0 failed, 1 errors, 0 skipped
+- `test.test_sys` FAIL, 97 tests: 3 failed, 0 errors, 64 skipped
+- `test.test_descr` ERROR, 162 tests: 24 failed, 9 errors, 15 skipped
 - `test.test_patma` ERROR, 328 tests: 6 failed, 1 errors, 0 skipped
 - `test.test_fstring` ERROR, 90 tests: 4 failed, 1 errors, 4 skipped
-- `test.test_types` ERROR, 129 tests: 5 failed, 7 errors, 3 skipped
+- `test.test_types` ERROR, 129 tests: 1 failed, 2 errors, 6 skipped
 - `test.test_type_annotations` FAIL, 46 tests: 2 failed, 0 errors, 1 skipped
-- `test.test_dataclasses` ERROR, 280 tests: 6 failed, 6 errors, 2 skipped
+- `test.test_dataclasses` ERROR, 280 tests: 6 failed, 5 errors, 2 skipped
 - `test.test_memoryio` FAIL, 182 tests: 8 failed, 0 errors, 5 skipped
 <!-- /not-ok-rows -->
 
