@@ -935,6 +935,16 @@ Behavior >> __bases__ [
 	__mro__ answers a plain Array."
 
 	| il s |
+	"The bases object type() was GIVEN, when that was a tuple subclass (builtins
+	>> type:_:_:kw:): CPython answers the very object.  Asked only of a class
+	type() built, which two method-dictionary probes decide; every other class
+	pays nothing more, which matters on deep recursions that read __bases__."
+	((self @env0:includesSelector: #'___pyTypeBuiltClass___' environmentId: 1)
+		and: [self @env0:class @env0:includesSelector: #'___dynInstVars___' environmentId: 1]) ifTrue: [
+		([(self @env0:perform: #'___dynInstVars___' env: 1)
+				@env0:dynamicInstVarAt: #'___basesObject___']
+			@env0:on: AbstractException do: [:ex | ex @env0:return: nil])
+				@env0:ifNotNil: [:given | ^ given]].
 	"Multiple-inheritance classes report their TRUE declared bases."
 	il := System @env0:myUserProfile @env0:symbolList @env0:objectNamed: #importlib.
 	il == nil ifFalse: [
