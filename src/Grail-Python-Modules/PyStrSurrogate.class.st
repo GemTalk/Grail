@@ -192,6 +192,44 @@ PyStrSurrogate class >> ___onPrefix___: aCharacterCollection [
 ]
 
 { #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___twinClassForwarders___: aChain into: aTwin [
+	"Give aTwin's class side, as session methods, a forwarder for each
+	@classmethod and @staticmethod the Python classes of aChain define: the
+	same message, with the same arguments, sent to the class aTwin stands for
+	(___twinOf___).
+
+	A class or static method read through an INSTANCE -- ``t.make('z')'',
+	``t.helper()'' -- is answered by object >> ___pyAttrLoad___: from the
+	instance's METACLASS, and only for a method filed there under
+	``Grail-Class Methods''.  The twin's metaclass had none, so both raised
+	AttributeError; and a copy would run with the twin as ``cls''.  Forwarded,
+	``cls'' is the subclass, as type(t) is.  The read itself then goes to the
+	twin class, which sends it on to the subclass (PyStrSurrogate class >>
+	___pyAttrLoad___:), so a decorator stacked under the @classmethod applies.
+
+	Nearest class first, so a subclass's override is the one forwarded --
+	though every forwarder asks the subclass, whose own lookup decides.  A
+	selector that is not a Python name, or a forwarder that does not compile,
+	is left out."
+
+	| done |
+	done := IdentitySet new.
+	aChain do: [:c |
+		(c class methodDictForEnv: 1) ifNotNil: [:d |
+			d keysDo: [:sel |
+				((done includes: sel) not
+					and: [(c class categoryOfSelector: sel environmentId: 1) = #'Grail-Class Methods'])
+						ifTrue: [
+							done add: sel.
+							(self ___twinForwarderSourceFor___: sel) ifNotNil: [:src |
+								[aTwin class @env1:___compileSessionMethod: src
+									category: 'Grail-Class Methods'
+									scope: nil]
+										on: Error do: [:e | e return: nil]]]]]]
+
+]
+
+{ #category : 'Grail-Str Subclasses' }
 PyStrSurrogate class >> ___twinFor___: aStrClass [
 	"The class an instance of the Python str subclass aStrClass takes when its
 	content holds a lone surrogate -- created once per class in a session.
@@ -230,6 +268,30 @@ PyStrSurrogate class >> ___twinFor___: aStrClass [
 	twin ___twinReady___.
 	twins at: aStrClass put: twin.
 	^ twin
+
+]
+
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___twinForwarderSourceFor___: aSelector [
+	"The source of a class-side method aSelector that sends itself, with its
+	arguments, to the class a twin stands for -- or nil for a selector that
+	is not a Python name (an operator).  See ___twinClassForwarders___:into:."
+
+	| source keywords |
+	(aSelector isEmpty
+		or: [(aSelector first isLetter or: [aSelector first == $_]) not]) ifTrue: [^ nil].
+	source := WriteStream on: String new.
+	aSelector numArgs = 0 ifTrue: [
+		source nextPutAll: aSelector; lf; tab;
+			nextPutAll: '^ self @env0:___twinOf___ '; nextPutAll: aSelector.
+		^ source contents].
+	keywords := aSelector keywords.
+	keywords doWithIndex: [:kw :i |
+		source nextPutAll: kw; nextPutAll: ' a'; print: i; space].
+	source lf; tab; nextPutAll: '^ (self @env0:___twinOf___)'.
+	keywords doWithIndex: [:kw :i |
+		source space; nextPutAll: kw; nextPutAll: ' a'; print: i].
+	^ source contents
 
 ]
 
@@ -296,7 +358,8 @@ PyStrSurrogate class >> ___twinReady___ [
 					done add: sel.
 					self @env1:___installSessionMethod: (c compiledMethodAt: sel environmentId: 1)
 						as: sel]]]].
-	PyStrSurrogate ___twinPropertyNames___: chain into: self
+	PyStrSurrogate ___twinPropertyNames___: chain into: self.
+	PyStrSurrogate ___twinClassForwarders___: chain into: self
 
 ]
 

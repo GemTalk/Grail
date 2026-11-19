@@ -1,5 +1,21 @@
 Extension { #name : 'PyStrSurrogate' }
 
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate class >> ___pyAttrLoad___: aSym [
+	"A read off a twin class (___twinFor___:) is a read off the str subclass
+	it stands for.  A @classmethod or @staticmethod read through a twin's
+	INSTANCE arrives here -- object >> ___pyAttrLoad___: hands such a read to
+	the instance's class, found through the forwarders
+	___twinClassForwarders___:into: installs -- and the subclass's own load is
+	what applies a decorator stacked under the @classmethod, whose wrapper
+	lives in the subclass's holder.  Any other class, PyStrSurrogate itself
+	included, loads as every class does."
+
+	(self @env0:___twinOf___) @env0:ifNotNil: [:owner | ^ owner ___pyAttrLoad___: aSym].
+	^ super ___pyAttrLoad___: aSym
+
+]
+
 { #category : 'Grail-Shared' }
 PyStrSurrogate class >> ___translate___: aStr table: table [
 	"CPython's str.translate, on code points, for any str-like: each code point
@@ -159,6 +175,18 @@ PyStrSurrogate >> ___pyAttrLoad___: aSym [
 			and: [(self @env0:class ___grailOwnPropertyNames___) @env0:includes: aSym])
 				ifTrue: [^ self @env0:perform: aSym env: 1]].
 	^ super ___pyAttrLoad___: aSym
+
+]
+
+{ #category : 'Grail-Str Subclasses' }
+PyStrSurrogate >> ___pyHiddenStateNames___ [
+	"The instVars that are Grail's implementation, not Python attributes:
+	the code points.  A str subclass's instance holding a lone surrogate is
+	one of these (class >> ___twinFor___:), and ``vars(t)'' listed
+	'codePoints' beside the attributes its __new__ set, where CPython's has
+	only those."
+
+	^ #( #codePoints )
 
 ]
 
@@ -460,21 +488,46 @@ PyStrSurrogate >> __getattr__: name [
 	Env 1, as AbstractPyStr's is -- that is the environment the attribute
 	load asks in."
 
-	| sym |
+	| sym owner |
 	sym := name @env0:asSymbol.
-	(PyStrSurrogate @env0:___viaPlaceholderNames___ @env0:includes: sym) ifTrue: [
-		^ [:positional :kw | self @env0:___viaPlaceholders___: sym positional: positional kw: kw]].
 	"A str subclass's instance (class >> ___twinFor___:) reads the subclass's
 	class attributes too.  Its methods are installed on the twin, so ordinary
 	lookup found them; a class attribute lives in the subclass's holders,
-	which the twin's chain does not reach."
-	(self @env0:class @env0:___twinOf___) @env0:ifNotNil: [:owner |
-		(owner ___classAttrOwnOrInherited___: sym) @env0:ifNotNil: [:raw |
+	which the twin's chain does not reach.
+	BEFORE the str methods below, because the subclass precedes str in the
+	MRO: ``class Tag(str): count = 0'' reads 0, not str.count.  A METHOD of
+	the subclass never gets here -- it is installed on the twin, so the
+	ordinary read found it -- so no nearer method can be skipped."
+	owner := self @env0:class @env0:___twinOf___.
+	owner @env0:ifNotNil: [:o | | metaOwner |
+		"The SESSION OVERLAY first, as object's instance read asks it: a runtime
+		``Tag.count = 5'' on a CANONICAL class -- every class an imported module
+		defines -- lands there, not in the holder, so the holder read alone
+		passed ``./grail file.py'' and answered the stale value under the SUnit
+		loader."
+		(self ___classAttrOverlayLookup___: o name: sym) @env0:ifNotNil: [:raw |
 			^ self ___descriptorGet___: raw].
+		(o ___classAttrOwnOrInherited___: sym) @env0:ifNotNil: [:raw |
+			^ self ___descriptorGet___: raw].
+		"A ZERO-ARGUMENT @classmethod or @staticmethod of the subclass,
+		``t.helper()''.  object >> ___pyAttrLoad___: answers one through an
+		instance only when the instance's metaclass files it under
+		``Grail-Class Methods'', and the twin's forwarder for it
+		(PyStrSurrogate class >> ___twinClassForwarders___:into:) is a session
+		method, which has no category there.  The subclass's metaclass does:
+		ask it, and read off the subclass, as the class does.  A keyword
+		selector -- ``t.make(x)'' -- is found through the forwarder."
+		metaOwner := o @env0:class @env0:whichClassIncludesSelector: sym environmentId: 1.
+		(metaOwner @env0:notNil
+			and: [(metaOwner @env0:categoryOfSelector: sym environmentId: 1)
+				@env0:= #'Grail-Class Methods']) ifTrue: [^ o ___pyAttrLoad___: sym]].
+	(PyStrSurrogate @env0:___viaPlaceholderNames___ @env0:includes: sym) ifTrue: [
+		^ [:positional :kw | self @env0:___viaPlaceholders___: sym positional: positional kw: kw]].
+	owner @env0:ifNotNil: [:o |
 		([(Unicode7 @env0:new) ___pyAttrLoad___: sym. true]
 				@env0:on: AttributeError do: [:ex | ex @env0:return: false])
 			ifFalse: [
-				^ AttributeError ___signal___: '''' @env0:, owner @env0:name @env0:asString
+				^ AttributeError ___signal___: '''' @env0:, o @env0:name @env0:asString
 					@env0:, ''' object has no attribute ''' @env0:, sym @env0:asString @env0:, '''']].
 	"A name NO str has is an AttributeError, as for any str -- asked of an
 	empty one, which raises exactly CPython's.  ``hasattr(s, '__slots__')''

@@ -10053,7 +10053,7 @@ builtins >> vars: anObject [
 	their dict entries.  The zero-arg vars() is rewritten to locals()
 	at compile time (CallAst), matching CPython's equivalence."
 
-	| d inferredPairs |
+	| d inferredPairs hidden |
 	"Reject receivers that cannot carry attributes BEFORE touching the
 	dynamic-instVar API — signaling from inside an on:Error handler
 	around dynamicInstVarPairs on a special (immediate) object loops
@@ -10152,10 +10152,17 @@ builtins >> vars: anObject [
 	1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
 		d __setitem__: ((inferredPairs @env0:at: i) @env0:asString @env0:asUnicodeString)
 			_: (inferredPairs @env0:at: i @env0:+ 1)].
+	"An object's IMPLEMENTATION state is no attribute of it (object >>
+	___pyHiddenStateNames___), here as in __getstate__: a str subclass's
+	instance holding a lone surrogate (PyStrSurrogate class >> ___twinFor___:)
+	listed its 'codePoints' beside the attributes its __new__ set."
+	hidden := (anObject ___respondsTo___: #'___pyHiddenStateNames___')
+		ifTrue: [anObject ___pyHiddenStateNames___]
+		ifFalse: [#()].
 	"A dynamic instVar named like a SET slot is a promotion leftover: the slot
 	is the home the read answers from, so it is reported once, above."
 	(anObject @env0:dynamicInstanceVariables) @env0:do: [:nm | | shadowed |
-		shadowed := false.
+		shadowed := hidden @env0:includes: nm.
 		1 @env0:to: inferredPairs @env0:size @env0:by: 2 do: [:i |
 			(inferredPairs @env0:at: i) == nm ifTrue: [shadowed := true]].
 		shadowed ifFalse: [
@@ -10167,11 +10174,11 @@ builtins >> vars: anObject [
 		"An inferred slot's ``___slot_x___'' instVar was already reported above
 		under its Python name; skip the raw spelling.  Everything else is
 		reported as before."
-		(v == nil or: [inferredPairs @env0:size @env0:> 0
+		(v == nil or: [(hidden @env0:includes: nm) or: [inferredPairs @env0:size @env0:> 0
 				and: [(nm @env0:asString @env0:size @env0:> 11)
 				and: [(nm @env0:asString @env0:copyFrom: 1 to: 8) @env0:= '___slot_'
 				and: [inferredPairs @env0:includes:
-					(nm @env0:asString @env0:copyFrom: 9 to: nm @env0:asString @env0:size @env0:- 3) @env0:asSymbol]]]]) ifFalse: [
+					(nm @env0:asString @env0:copyFrom: 9 to: nm @env0:asString @env0:size @env0:- 3) @env0:asSymbol]]]]]) ifFalse: [
 			d __setitem__: (nm @env0:asString @env0:asUnicodeString) _: v]].
 	^ d
 
