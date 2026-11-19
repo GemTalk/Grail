@@ -496,13 +496,22 @@ ClassBuildIREmitter >> integer: anInteger [
 ClassBuildIREmitter >> mapDecorator: aNode of: anOwner do: aBlock [
 	"Stamp the decorator's node, so the send aBlock builds -- the decorator's
 	application -- is attributed to the decorator's own line (#1406, #1518).
-	The guard is the text's (AbstractLocationNode >> ___mapDecorator___:on:do:):
-	a node with no full span, or one parsed out of an f-string, is not mapped."
+	A node parsed out of an f-string is not mapped.
+
+	The text's guard (AbstractLocationNode >> ___mapDecorator___:on:do:) also
+	wants a full span -- the four numbers it writes into its map literal --
+	and a BARE-NAME method decorator never has one: the parser reduces it to
+	a Symbol in the def's decorator list and keeps its NameAst only on the
+	side (PythonParser >> ___recordDecoratorLines___:on:), where no parent is
+	set, so its columns cannot be read.  The builder needs only the node's
+	position to stamp it, and records the span when it can read it
+	(PyMethodIRBuilder >> atNode:), so here the position is enough: ``@where''
+	is called at its own line, as CPython calls it (P3.3c)."
 
 	| mapped |
 	mapped := aNode notNil
-		and: [(aNode respondsTo: #___hasFullPositionSpan___)
-		and: [aNode ___hasFullPositionSpan___
+		and: [(aNode respondsTo: #beginPosition)
+		and: [aNode beginPosition notNil
 		and: [aNode ___hasFragmentPositions___ not]]].
 	"While it is built the decorator is where ___rest___ returns to: its
 	receiver may be an expression (``@unittest.skipIf(...)'') and its argument
