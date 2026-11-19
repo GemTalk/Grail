@@ -43,7 +43,9 @@ ClassBodyDecoratorsIRTestCase >> ___disagreementsOf___: aModule keys: keys [
 
 { #category : 'Grail-Helpers' }
 ClassBodyDecoratorsIRTestCase >> ___fixtures___ [
-	"Each fixture: { file. module name. its checks. its class count }."
+	"Each fixture: { file. module name. its checks. the helpers on its module
+	class (a class statement in a method of a module-level class has its
+	helper on that class, not on the module's) }."
 
 	^ {
 		{ 'class_body_decorators_ir.py'. 'cbd_ir'.
@@ -52,9 +54,9 @@ ClassBodyDecoratorsIRTestCase >> ___fixtures___ [
 		    'skip' 'wraps').
 		  15 }.
 		{ 'class_body_function_scopes_ir.py'. 'cbfs_ir'.
-		  #('annotate' 'annotated' 'closures' 'comps' 'decorator' 'default'
-		    'lambda_names' 'lambda_scope' 'lambda_value' 'listcomp').
-		  11 } }
+		  #('annotate' 'annotated' 'class_cell' 'closures' 'comps' 'decorator'
+		    'default' 'lambda_names' 'lambda_scope' 'lambda_value' 'listcomp').
+		  12 } }
 
 ]
 

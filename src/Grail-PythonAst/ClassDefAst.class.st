@@ -2251,6 +2251,15 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
+	"___irClassBodyValueReason___:bound:classCell: for a value that is not an
+	attribute's: an annotation, a default, a decorator."
+
+	^ self ___irClassBodyValueReason___: anExpr bound: boundNames classCell: false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell: readsClassCell [
 	"Why the class-body VALUE expression anExpr -- an attribute's value, a
 	method's default -- keeps the class on the TEXT helper, as the tail of a
 	census row, or nil when the IR backend builds it (plan P3.3).
@@ -2274,7 +2283,10 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 	  * NOT a walrus (it binds INTO the class namespace), a yield or an
 	    await, or an f-string;
 	  * NOT ``__class__'', ``__classdict__'' or ``super'', whose class-body
-	    reads have branches of their own, nor a call of ``locals'', ``vars'',
+	    reads have branches of their own -- except, when readsClassCell is
+	    true (an attribute's value), a read of ``__class__'' outside a lambda
+	    or generator expression, which both helpers write through NameAst >>
+	    ___emitClassBodyClassCellWith___: (P3.3c) -- nor a call of ``locals'', ``vars'',
 	    ``dir'', ``globals'', ``eval'' or ``exec'', which the text rewrites
 	    for the class body;
 	  * NOT a call of a name the class body binds: the text calls a sibling
@@ -2302,8 +2314,12 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 								ifTrue: [#fstring]
 								ifFalse: [#valueShape]]]].
 			(reason isNil and: [n isKindOf: NameAst]) ifTrue: [
-				(#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
-					ifTrue: [reason := #classCell]].
+				((#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
+					and: [(readsClassCell
+						and: [n id asSymbol == #'__class__'
+						and: [n ___inFunctionScopeOfClassBody___ not
+						and: [(n ___declaredInEnclosingFunction___: #'__class__') not]]]) not])
+						ifTrue: [reason := #classCell]].
 			(reason isNil and: [(n isKindOf: CallAst) and: [n function isKindOf: NameAst]]) ifTrue: [
 				(#(#'locals' #'vars' #'dir' #'globals' #'eval' #'exec')
 					includes: n function id asSymbol)
@@ -2585,7 +2601,7 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 							(s targets anySatisfy: [:t |
 								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
 									ifTrue: [^ #'irHelper:assign:specialName'].
-							(self ___irClassBodyValueReason___: s value bound: bound)
+							(self ___irClassBodyValueReason___: s value bound: bound classCell: true)
 								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
 							hasValues := true]]]]].
 	(hasValues and: [self ___classBodyCanBindDynamically___])

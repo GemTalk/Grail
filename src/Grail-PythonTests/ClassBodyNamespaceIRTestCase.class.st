@@ -185,6 +185,8 @@ def f(p):
         a = locals()
     class Cell:
         a = __class__
+    class CellLam:
+        a = lambda: __class__
     class Ann:
         x: G = 1
         y: list[int]
@@ -223,7 +225,8 @@ def f(p):
 		'Walrus' -> #'irHelper:assign:walrus'.
 		'Sibling' -> #'irHelper:assign:siblingCall'.
 		'Frame' -> #'irHelper:assign:frameCall'.
-		'Cell' -> #'irHelper:assign:classCell'.
+		'Cell' -> nil.
+		'CellLam' -> #'irHelper:assign:classCell'.
 		'Ann' -> nil.
 		'AnnLam' -> nil.
 		'AnnTarget' -> #'irHelper:annotation:target'.

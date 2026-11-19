@@ -514,6 +514,23 @@ NameAst >> ___emitBuiltinFirstClassRead___: aName with: e [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitClassBodyClassCellWith___: e [
+	"A class-body VALUE read of ``__class__'' (___readsAsClassBodyClassCell___),
+	written through a ClassBuildEmitter so the text and the IR-built
+	method-local class helper share it (plan P3.3c).  The body's own class
+	does not exist yet, so CPython's ``__class__'' there is the ENCLOSING
+	class's cell -- the class whose method the class statement sits in -- and
+	a NameError when there is none (CallAst >> printEnclosingClassOn:)."
+
+	CallAst ___enclosingClassRead___ ifNotNil: [:read |
+		^ CallAst ___emitEnclosingClassRead___: read on: e].
+	^ e paren: [
+		e send: #'___signal___:' env: 1 to: [e var: 'NameError']
+			with: {[e string: 'name ''__class__'' is not defined']}]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitClassBodyValueWith___: e [
 	"A class-body VALUE read of this name -- an attribute value, a default, a
 	bare expression -- written through a ClassBuildEmitter, so the class build
@@ -780,6 +797,9 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 	(aBuilder classBuildEmitter notNil and: [self ___readsAsMethodDecoratorValue___]) ifTrue: [
 		^ aBuilder classBuildEmitter valueOf: [
 			self ___emitMethodDecoratorValueWith___: aBuilder classBuildEmitter]].
+	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyClassCell___]) ifTrue: [
+		^ aBuilder classBuildEmitter valueOf: [
+			self ___emitClassBodyClassCellWith___: aBuilder classBuildEmitter]].
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	"A ``global''-declared name is a MODULE binding for that whole scope --
 	never a local -- so the declaration has to be tested BEFORE the leaf.
@@ -1136,6 +1156,10 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 	(___emitMethodDecoratorValueWith___:, plan P3.3c)."
 	self ___readsAsMethodDecoratorValue___ ifTrue: [
 		^ self ___emitMethodDecoratorValueWith___: (ClassBuildTextEmitter on: aStream)].
+	"...and a class-body value's read of ``__class__''
+	(___emitClassBodyClassCellWith___:, plan P3.3c)."
+	self ___readsAsClassBodyClassCell___ ifTrue: [
+		^ self ___emitClassBodyClassCellWith___: (ClassBuildTextEmitter on: aStream)].
 	"``__debug__'' IS A COMPILE-TIME CONSTANT AT optimize >= 1.  CPython folds
 	it -- it cannot change while a program runs -- and ``python -O'' makes it
 	False; compile(..., optimize=1) is the same request one compile at a time.
@@ -2496,6 +2520,7 @@ NameAst >> ___irEligibleValueLocals___: localNames [
 	self ___readsAsClassBodyValue___ ifTrue: [^ true].
 	"...and so is a read in a class-body method decorator (P3.3c)."
 	self ___readsAsMethodDecoratorValue___ ifTrue: [^ true].
+	self ___readsAsClassBodyClassCell___ ifTrue: [^ true].
 	self ___irIsSelfReceiver___ ifTrue: [^ true].
 	(localNames includes: id asString) ifTrue: [^ true].
 	^ (self ___irNonLocalLoadKind___: localNames) notNil
@@ -3055,6 +3080,30 @@ NameAst >> ___reachedThroughIterOf___: aComprehensionAst [
 		node == aComprehensionAst iter ifTrue: [^ true].
 		node := node parent].
 	^ false
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___readsAsClassBodyClassCell___ [
+	"Is this a read of ``__class__'' directly in a class-body value -- not in
+	a lambda or generator expression of it, not in a def emitted as a value,
+	not in a decorator or annotation scope, and not where the enclosing
+	function binds the name -- which ___emitClassBodyClassCellWith___:
+	describes?  ___emitSmalltalkOn___:'s earlier branches cannot claim such a
+	read, so it is tested first there, as the class-body value read is."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [id asSymbol == #'__class__'
+		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [ModuleAst compilingDoitScope isNil
+		and: [CallAst classBodyDecoratorScope isNil
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+		and: [self ___inFunctionScopeOfClassBody___ not
+		and: [self ___readsDoitLiveMapping___ not
+		and: [self ___readsMethodAnnotationClassScope___ not
+		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]
 
 ]
 

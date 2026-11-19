@@ -1,5 +1,5 @@
-"""Fixture: LAMBDAS and COMPREHENSIONS in the body of a method-local class
-(plan P3.3c).
+"""Fixture: LAMBDAS, COMPREHENSIONS and ``__class__`` in the body of a
+method-local class (plan P3.3c).
 
 On the IR arm a ``class`` statement inside a def is built by a helper method of
 its own -- CPython's class-body frame.  Since P3.3c that helper is built
@@ -28,6 +28,9 @@ agree with it.
 * ``default``: a method default that is a lambda.
 * ``decorator``: a lambda as a method decorator, and a decorator expression
   holding a comprehension.
+* ``class_cell``: ``__class__`` read in the class body, and in a
+  comprehension there, is the ENCLOSING class's cell -- the class whose
+  method holds the class statement -- and a NameError with none.
 """
 
 import dataclasses
@@ -137,6 +140,24 @@ def decorator():
     return C().a(), C.b.tagged
 
 
+class Outer:
+    def method(self):
+        class X:
+            x = __class__
+            in_comp = [__class__ for _ in range(1)]
+        return X.x is Outer, X.in_comp[0] is Outer
+
+
+def class_cell():
+    try:
+        class X:
+            x = __class__
+        missing = None
+    except NameError as e:
+        missing = str(e)
+    return Outer().method(), missing
+
+
 r['lambda_value'] = lambda_value()
 r['lambda_scope'] = lambda_scope()
 r['lambda_names'] = lambda_names()
@@ -147,6 +168,7 @@ r['comps'] = comps()
 r['closures'] = closures()
 r['default'] = default()
 r['decorator'] = decorator()
+r['class_cell'] = class_cell()
 
 
 EXPECTED = {
@@ -160,6 +182,7 @@ EXPECTED = {
     'closures': [4, 4, 4, 4, 4],
     'default': ('kay', 'other'),
     'decorator': ('a', [0, 1, 4]),
+    'class_cell': ((True, True), "name '__class__' is not defined"),
 }
 
 
