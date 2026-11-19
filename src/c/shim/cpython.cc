@@ -10565,7 +10565,18 @@ extern "C" PyObject *PyIter_Next(PyObject *iterator) {
     if (addr == 0) return NULL;  /* exhausted — NULL without error */
     /* A new reference: Cython DECREFs each item, and an itertools.cycle
        hands the same C objects out again on every pass. */
-    return c_new_ref((PyObject *)(intptr_t)addr);
+    PyObject *item = c_new_ref((PyObject *)(intptr_t)addr);
+    /* A tuple comes back in CPython's layout, as dict_lookup's do: PyO3
+       reads each item of an iterable of pairs with the inline
+       PyTuple_GET_SIZE, which on the wrapper is its OOP -- rpds-py's
+       HashTrieMap(d.items()) raised "expected tuple of length 2, but got
+       tuple of length 5331970049".  Tuples only: a copy of a list would hide
+       C's changes to it from Grail. */
+    if (plausible_pyobj(item) && item->ob_type == &PyTuple_Type && !is_real_layout(item)) {
+        PyObject *real = real_layout_arg(item, 0);
+        if (real != item) { c_release(item); return real; }
+    }
+    return item;
 }
 
 /* PySequence_Fast: a list or tuple as itself, anything else iterated into a

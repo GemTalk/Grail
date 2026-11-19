@@ -3520,6 +3520,22 @@ repr(d.capi("iter_next_ref", iter([b, b])))') equals: '1'
 
 ]
 
+{ #category : 'Grail-Tests - PyO3' }
+CPythonShimTestCase >> testIterNextAnswersTuplesInCPythonsLayout [
+	"PyIter_Next answers a tuple from a Grail iterator in CPython's layout, as
+	a dict lookup does, so C that reads it with the inline PyTuple_GET_SIZE
+	gets 2.  PyO3 does: rpds-py's HashTrieMap(d.items()) read a pair's OOP as
+	its size and raised ''expected tuple of length 2, but got tuple of length
+	5331970049''.  The value is CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.capi(''iter_pairs_inline'', {''a'': 1, ''b'': (2, 3)}.items()), d.capi(''iter_pairs_inline'', [(''x'', [4]), (5, 6)]), d.capi(''iter_pairs_inline'', iter([]))))') equals: '([(''a'', 1), (''b'', (2, 3))], [(''x'', [4]), (5, 6)], [])'
+
+]
+
 { #category : 'Grail-Tests - Iteration' }
 CPythonShimTestCase >> testIterSum [
 	"PyObject_GetIter + PyIter_Next traverse a Python list."
