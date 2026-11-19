@@ -1148,6 +1148,27 @@ grail_capi(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
         Py_DECREF(items);
         return out;
     }
+    /* Iterate ``a'' with PyIter_Next and read each item as a pair, INLINE,
+       as PyO3 extracts an iterable of (key, value) -- rpds-py's
+       HashTrieMap(d.items()).  An item whose inline size is not 2 is
+       answered as that size rather than read past. */
+    if (IS("iter_pairs_inline")) {
+        PyObject *it = PyObject_GetIter(a);
+        if (it == NULL) return NULL;
+        PyObject *out = PyList_New(0), *item;
+        while (out != NULL && (item = PyIter_Next(it)) != NULL) {
+            Py_ssize_t size = PyTuple_Check(item) ? PyTuple_GET_SIZE(item) : -1;
+            PyObject *e = size == 2
+                ? PyTuple_Pack(2, PyTuple_GET_ITEM(item, 0), PyTuple_GET_ITEM(item, 1))
+                : PyLong_FromSsize_t(size);
+            if (e == NULL || PyList_Append(out, e) < 0) Py_CLEAR(out);
+            Py_XDECREF(e);
+            Py_DECREF(item);
+        }
+        Py_DECREF(it);
+        if (out != NULL && PyErr_Occurred()) Py_CLEAR(out);
+        return out;
+    }
     /* Build N one-item tuples and answer the last, as numpy builds a few
        dozen on every ufunc call.  The shim used to stop recording new tuples
        once it had made 131072, and the next one could not be filled. */
@@ -1899,6 +1920,78 @@ static PyType_Spec vec_spec = {
     .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_HAVE_VECTORCALL,
     .slots = vec_slots,
 };
+
+/* Pmap: a heap type from a spec whose operators are all slots, as a PyO3
+   pyclass's are -- rpds-py's HashTrieMap is one: __getitem__ / __len__ are
+   mp_subscript / mp_length, ``in'' is sq_contains, ``|'' is nb_or, == is
+   tp_richcompare and hash() tp_hash.  It wraps a dict. */
+typedef struct {
+    PyObject_HEAD
+    PyObject *d;
+} PmapObject;
+
+static PyObject *pmap_wrap(PyTypeObject *type, PyObject *d) {
+    PmapObject *self = (PmapObject *)type->tp_alloc(type, 0);
+    if (self == NULL) { Py_DECREF(d); return NULL; }
+    self->d = d;   /* stolen */
+    return (PyObject *)self;
+}
+static PyObject *pmap_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    (void)kwds;
+    PyObject *src = NULL;
+    if (!PyArg_ParseTuple(args, "|O", &src)) return NULL;
+    PyObject *d = PyDict_New();
+    if (d == NULL) return NULL;
+    if (src != NULL && PyDict_Update(d, src) < 0) { Py_DECREF(d); return NULL; }
+    return pmap_wrap(type, d);
+}
+static void pmap_dealloc(PyObject *self) {
+    PyTypeObject *tp = Py_TYPE(self);
+    Py_XDECREF(((PmapObject *)self)->d);
+    tp->tp_free(self);
+    Py_DECREF(tp);
+}
+static Py_ssize_t pmap_length(PyObject *self) { return PyObject_Length(((PmapObject *)self)->d); }
+static PyObject *pmap_subscript(PyObject *self, PyObject *key) {
+    return PyObject_GetItem(((PmapObject *)self)->d, key);
+}
+static int pmap_contains(PyObject *self, PyObject *key) {
+    return PySequence_Contains(((PmapObject *)self)->d, key);
+}
+static PyObject *pmap_iter(PyObject *self) { return PyObject_GetIter(((PmapObject *)self)->d); }
+static PyObject *pmap_richcompare(PyObject *a, PyObject *b, int op) {
+    if (Py_TYPE(b) != Py_TYPE(a) || (op != Py_EQ && op != Py_NE)) Py_RETURN_NOTIMPLEMENTED;
+    return PyObject_RichCompare(((PmapObject *)a)->d, ((PmapObject *)b)->d, op);
+}
+static Py_hash_t pmap_hash(PyObject *self) { return 1000 + pmap_length(self); }
+static PyObject *pmap_or(PyObject *a, PyObject *b) {
+    if (Py_TYPE(a) != Py_TYPE(b)) Py_RETURN_NOTIMPLEMENTED;
+    PyObject *d = PyDict_New();
+    if (d == NULL) return NULL;
+    if (PyDict_Update(d, ((PmapObject *)a)->d) < 0 || PyDict_Update(d, ((PmapObject *)b)->d) < 0) {
+        Py_DECREF(d);
+        return NULL;
+    }
+    return pmap_wrap(Py_TYPE(a), d);
+}
+static PyType_Slot pmap_slots[] = {
+    {Py_tp_new, (void *)pmap_new},
+    {Py_tp_dealloc, (void *)pmap_dealloc},
+    {Py_mp_length, (void *)pmap_length},
+    {Py_mp_subscript, (void *)pmap_subscript},
+    {Py_sq_contains, (void *)pmap_contains},
+    {Py_tp_iter, (void *)pmap_iter},
+    {Py_tp_richcompare, (void *)pmap_richcompare},
+    {Py_tp_hash, (void *)pmap_hash},
+    {Py_nb_or, (void *)pmap_or},
+    {0, NULL}
+};
+static PyType_Spec pmap_spec = {
+    .name = "_grail_demo.Pmap",
+    .basicsize = sizeof(PmapObject),
+    .flags = Py_TPFLAGS_DEFAULT,
+    .slots = pmap_slots,
+};
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -2030,6 +2123,7 @@ grail_demo_exec(PyObject *mod) {
         Py_XDECREF(bases);
         if (vec == NULL || PyModule_Add(mod, "Vec", vec) < 0) return -1;
     }
+    if (PyModule_Add(mod, "Pmap", PyType_FromSpec(&pmap_spec)) < 0) return -1;
     /* ``__all__'' as a PyO3 module builds it (pyo3_style_add above). */
     if (pyo3_style_add(mod, "Box", (PyObject *)&Box_Type) < 0
             || pyo3_style_add(mod, "Cell", (PyObject *)&Cell_Type) < 0

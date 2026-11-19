@@ -3327,6 +3327,24 @@ CPythonShimTestCase >> testHeapTypeBase [
 
 ]
 
+{ #category : 'Grail-Tests - Heap Types' }
+CPythonShimTestCase >> testHeapTypeOperatorsAreItsSlots [
+	"A heap type's operators are its slots, as a PyO3 pyclass's are: [] is
+	mp_subscript, len() mp_length, ``in'' sq_contains, ``|'' nb_or, ==
+	tp_richcompare, hash() tp_hash, and dir() lists their dunders.  The slot
+	search stopped at every type the shim's PyType_FromSpec built and that
+	function dropped the number slots, so rpds-py's HashTrieMap was ``not
+	subscriptable'' and had ``no len()''.  The value is CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+p = d.Pmap({''a'': 1}); q = d.Pmap({''b'': 2})
+repr((p[''a''], len(p), ''a'' in p, ''z'' in p, sorted(p), p == d.Pmap({''a'': 1}), p == q, p != q, hash(p), sorted((p | q).__iter__()), type(p).__getitem__(p, ''a''), sorted(n for n in dir(p) if n in (''__getitem__'', ''__len__'', ''__contains__'', ''__iter__'', ''__or__'', ''__ror__'', ''__add__''))))') equals: '(1, 1, True, False, [''a''], True, False, True, 1001, [''a'', ''b''], 1, [''__contains__'', ''__getitem__'', ''__iter__'', ''__len__'', ''__or__'', ''__ror__''])'
+
+]
+
 { #category : 'Grail-Tests - Object Protocol' }
 CPythonShimTestCase >> testImportGetAttr [
 	"_PyImport_GetModuleAttrString imports a module and reads an attribute."
@@ -3499,6 +3517,22 @@ docs/Shim_Memory.md, Step 1).  The value is CPython's."
 	self assert: (self eval: 'import _grail_demo as d
 b = d.Buf()
 repr(d.capi("iter_next_ref", iter([b, b])))') equals: '1'
+
+]
+
+{ #category : 'Grail-Tests - PyO3' }
+CPythonShimTestCase >> testIterNextAnswersTuplesInCPythonsLayout [
+	"PyIter_Next answers a tuple from a Grail iterator in CPython's layout, as
+	a dict lookup does, so C that reads it with the inline PyTuple_GET_SIZE
+	gets 2.  PyO3 does: rpds-py's HashTrieMap(d.items()) read a pair's OOP as
+	its size and raised ''expected tuple of length 2, but got tuple of length
+	5331970049''.  The value is CPython's."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+repr((d.capi(''iter_pairs_inline'', {''a'': 1, ''b'': (2, 3)}.items()), d.capi(''iter_pairs_inline'', [(''x'', [4]), (5, 6)]), d.capi(''iter_pairs_inline'', iter([]))))') equals: '([(''a'', 1), (''b'', (2, 3))], [(''x'', [4]), (5, 6)], [])'
 
 ]
 
