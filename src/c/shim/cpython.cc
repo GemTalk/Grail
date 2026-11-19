@@ -4063,10 +4063,22 @@ static const ForeignOpDef *foreign_op_named(const char *name) {
     return NULL;
 }
 
-/* The first type on t's tp_base chain, short of the shim's own types, for
+/* Where a slot search along tp_base stops: at the shim's own STATIC types,
+   the Grail-backed builtins, whose slots call back into Grail.  Not at a
+   heap type, although the shim's PyType_FromSpec registers each one it
+   builds as a shim type: every PyO3 class is built that way, and its slots
+   are its own.  Stopping there too left a pyclass with no operators at all --
+   rpds-py's HashTrieMap answered "not subscriptable" and "has no len()",
+   compared by identity and hashed by identity, so jsonschema's referencing
+   failed on ``self._resources[uri]''.  Iteration searched heap types
+   already (pydantic_core's ValidatorIterator); compare and hash had been
+   held back from it only so that the two stayed consistent, and they now
+   move together. */
+#define FOREIGN_SLOT_STOP(t) (is_shim_type(t) && !((t)->tp_flags & Py_TPFLAGS_HEAPTYPE))
+/* The first type on t's tp_base chain, short of FOREIGN_SLOT_STOP, for
    which pick() answers a slot -- and that slot. */
 #define FOREIGN_SLOT(t, expr) ({ void *_r = NULL; \
-    for (PyTypeObject *_t = (t); _t != NULL && !is_shim_type(_t); _t = _t->tp_base) { \
+    for (PyTypeObject *_t = (t); _t != NULL && !FOREIGN_SLOT_STOP(_t); _t = _t->tp_base) { \
         PyTypeObject *T = _t; (void)T; void *_v = (void *)(expr); if (_v) { _r = _v; break; } } _r; })
 
 static void *foreign_nb_slot(PyTypeObject *t, int off) {
@@ -4097,25 +4109,18 @@ static void *foreign_sq_ass_item(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->t
 static void *foreign_sq_contains(PyTypeObject *t)  { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_contains : NULL); }
 static void *foreign_sq_concat(PyTypeObject *t)    { return FOREIGN_SLOT(t, T->tp_as_sequence ? (void *)T->tp_as_sequence->sq_concat : NULL); }
 static void *foreign_tp_richcompare(PyTypeObject *t) { return FOREIGN_SLOT(t, (void *)T->tp_richcompare); }
-/* Iteration searches HEAP types too.  The shim's PyType_FromSpec registers
-   every type it builds as a shim type, and every PyO3 class is built that way
-   -- pydantic_core's ValidatorIterator, what an ``Iterable[Model]'' validates
-   to -- so stopping at the first shim type found no tp_iter and the iterator
-   answered ``not iterable''.  Only iteration: the compare / hash slots keep
-   FOREIGN_SLOT's stop, so a PyO3 object's == and hash stay consistent. */
-#define FOREIGN_ITER_STOP(t) (is_shim_type(t) && !((t)->tp_flags & Py_TPFLAGS_HEAPTYPE))
 static void *foreign_tp_iter(PyTypeObject *t) {
-    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+    for (; t != NULL && !FOREIGN_SLOT_STOP(t); t = t->tp_base)
         if (t->tp_iter) return (void *)t->tp_iter;
     return NULL;
 }
 static void *foreign_tp_iternext(PyTypeObject *t) {
-    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+    for (; t != NULL && !FOREIGN_SLOT_STOP(t); t = t->tp_base)
         if (t->tp_iternext) return (void *)t->tp_iternext;
     return NULL;
 }
 static void *foreign_tp_init(PyTypeObject *t) {
-    for (; t != NULL && !FOREIGN_ITER_STOP(t); t = t->tp_base)
+    for (; t != NULL && !FOREIGN_SLOT_STOP(t); t = t->tp_base)
         if (t->tp_init) return (void *)t->tp_init;
     return NULL;
 }
@@ -4134,7 +4139,7 @@ extern "C" Py_hash_t PyObject_HashNotImplemented(PyObject *v) {
 
 static hashfunc foreign_tp_hash(PyTypeObject *t, int *unhashable) {
     *unhashable = 0;
-    for (; t != NULL && !is_shim_type(t); t = t->tp_base) {
+    for (; t != NULL && !FOREIGN_SLOT_STOP(t); t = t->tp_base) {
         if (t->tp_hash == PyObject_HashNotImplemented) { *unhashable = 1; return NULL; }
         if (t->tp_hash != NULL) return t->tp_hash;
         if (t->tp_richcompare != NULL) { *unhashable = 1; return NULL; }
@@ -8101,8 +8106,100 @@ static struct {
     PySequenceMethods  *as_sequence;
     PyNumberMethods    *as_number;
     PyBufferProcs      *as_buffer;
+    PyAsyncMethods     *as_async;
 } heap_types[MAX_HEAP_TYPES];
 static int heap_type_count = 0;
+
+/* Where each suite slot of a PyType_Spec lives, as CPython's typeslots.inc
+   has it: which suite, and the field's offset in it.  The number slots were
+   missing, along with sq_concat / sq_repeat / sq_ass_item, the in-place
+   sequence slots and the async ones, so PyType_FromSpec dropped them -- a
+   PyO3 class's ``__or__'' (rpds-py's HashTrieSet union) was never reached. */
+enum { HEAP_SUITE_NB, HEAP_SUITE_SQ, HEAP_SUITE_MP, HEAP_SUITE_AM, HEAP_SUITE_BF };
+#define HS(id, suite, type, field) { id, suite, (int)offsetof(type, field) }
+static const struct { int id; int suite; int off; } g_heap_suite_slots[] = {
+    HS(Py_bf_getbuffer, HEAP_SUITE_BF, PyBufferProcs, bf_getbuffer),
+    HS(Py_bf_releasebuffer, HEAP_SUITE_BF, PyBufferProcs, bf_releasebuffer),
+    HS(Py_mp_ass_subscript, HEAP_SUITE_MP, PyMappingMethods, mp_ass_subscript),
+    HS(Py_mp_length, HEAP_SUITE_MP, PyMappingMethods, mp_length),
+    HS(Py_mp_subscript, HEAP_SUITE_MP, PyMappingMethods, mp_subscript),
+    HS(Py_nb_absolute, HEAP_SUITE_NB, PyNumberMethods, nb_absolute),
+    HS(Py_nb_add, HEAP_SUITE_NB, PyNumberMethods, nb_add),
+    HS(Py_nb_and, HEAP_SUITE_NB, PyNumberMethods, nb_and),
+    HS(Py_nb_bool, HEAP_SUITE_NB, PyNumberMethods, nb_bool),
+    HS(Py_nb_divmod, HEAP_SUITE_NB, PyNumberMethods, nb_divmod),
+    HS(Py_nb_float, HEAP_SUITE_NB, PyNumberMethods, nb_float),
+    HS(Py_nb_floor_divide, HEAP_SUITE_NB, PyNumberMethods, nb_floor_divide),
+    HS(Py_nb_index, HEAP_SUITE_NB, PyNumberMethods, nb_index),
+    HS(Py_nb_inplace_add, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_add),
+    HS(Py_nb_inplace_and, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_and),
+    HS(Py_nb_inplace_floor_divide, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_floor_divide),
+    HS(Py_nb_inplace_lshift, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_lshift),
+    HS(Py_nb_inplace_multiply, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_multiply),
+    HS(Py_nb_inplace_or, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_or),
+    HS(Py_nb_inplace_power, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_power),
+    HS(Py_nb_inplace_remainder, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_remainder),
+    HS(Py_nb_inplace_rshift, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_rshift),
+    HS(Py_nb_inplace_subtract, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_subtract),
+    HS(Py_nb_inplace_true_divide, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_true_divide),
+    HS(Py_nb_inplace_xor, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_xor),
+    HS(Py_nb_int, HEAP_SUITE_NB, PyNumberMethods, nb_int),
+    HS(Py_nb_invert, HEAP_SUITE_NB, PyNumberMethods, nb_invert),
+    HS(Py_nb_lshift, HEAP_SUITE_NB, PyNumberMethods, nb_lshift),
+    HS(Py_nb_multiply, HEAP_SUITE_NB, PyNumberMethods, nb_multiply),
+    HS(Py_nb_negative, HEAP_SUITE_NB, PyNumberMethods, nb_negative),
+    HS(Py_nb_or, HEAP_SUITE_NB, PyNumberMethods, nb_or),
+    HS(Py_nb_positive, HEAP_SUITE_NB, PyNumberMethods, nb_positive),
+    HS(Py_nb_power, HEAP_SUITE_NB, PyNumberMethods, nb_power),
+    HS(Py_nb_remainder, HEAP_SUITE_NB, PyNumberMethods, nb_remainder),
+    HS(Py_nb_rshift, HEAP_SUITE_NB, PyNumberMethods, nb_rshift),
+    HS(Py_nb_subtract, HEAP_SUITE_NB, PyNumberMethods, nb_subtract),
+    HS(Py_nb_true_divide, HEAP_SUITE_NB, PyNumberMethods, nb_true_divide),
+    HS(Py_nb_xor, HEAP_SUITE_NB, PyNumberMethods, nb_xor),
+    HS(Py_sq_ass_item, HEAP_SUITE_SQ, PySequenceMethods, sq_ass_item),
+    HS(Py_sq_concat, HEAP_SUITE_SQ, PySequenceMethods, sq_concat),
+    HS(Py_sq_contains, HEAP_SUITE_SQ, PySequenceMethods, sq_contains),
+    HS(Py_sq_inplace_concat, HEAP_SUITE_SQ, PySequenceMethods, sq_inplace_concat),
+    HS(Py_sq_inplace_repeat, HEAP_SUITE_SQ, PySequenceMethods, sq_inplace_repeat),
+    HS(Py_sq_item, HEAP_SUITE_SQ, PySequenceMethods, sq_item),
+    HS(Py_sq_length, HEAP_SUITE_SQ, PySequenceMethods, sq_length),
+    HS(Py_sq_repeat, HEAP_SUITE_SQ, PySequenceMethods, sq_repeat),
+    HS(Py_nb_matrix_multiply, HEAP_SUITE_NB, PyNumberMethods, nb_matrix_multiply),
+    HS(Py_nb_inplace_matrix_multiply, HEAP_SUITE_NB, PyNumberMethods, nb_inplace_matrix_multiply),
+    HS(Py_am_await, HEAP_SUITE_AM, PyAsyncMethods, am_await),
+    HS(Py_am_aiter, HEAP_SUITE_AM, PyAsyncMethods, am_aiter),
+    HS(Py_am_anext, HEAP_SUITE_AM, PyAsyncMethods, am_anext),
+};
+#undef HS
+
+/* The field a suite slot id names in type's suite, or NULL when the id is not
+   a suite slot -- or, unless create, when the type has no such suite.  With
+   create (heap type idx, being built) a missing suite is allocated. */
+static void **suite_slot_field(PyTypeObject *type, int idx, int id, int create) {
+    for (size_t i = 0; i < sizeof(g_heap_suite_slots) / sizeof(g_heap_suite_slots[0]); i++) {
+        if (g_heap_suite_slots[i].id != id) continue;
+        void *suite = NULL;
+#define SUITE(member, ctype, field)                                              \
+        if (type->member == NULL && create) {                                   \
+            type->member = (ctype *)calloc(1, sizeof(ctype));                   \
+            heap_types[idx].field = type->member;                               \
+        }                                                                        \
+        suite = (void *)type->member;
+        switch (g_heap_suite_slots[i].suite) {
+            case HEAP_SUITE_NB: SUITE(tp_as_number, PyNumberMethods, as_number); break;
+            case HEAP_SUITE_SQ: SUITE(tp_as_sequence, PySequenceMethods, as_sequence); break;
+            case HEAP_SUITE_MP: SUITE(tp_as_mapping, PyMappingMethods, as_mapping); break;
+            case HEAP_SUITE_AM: SUITE(tp_as_async, PyAsyncMethods, as_async); break;
+            case HEAP_SUITE_BF: SUITE(tp_as_buffer, PyBufferProcs, as_buffer); break;
+        }
+#undef SUITE
+        return suite ? (void **)((char *)suite + g_heap_suite_slots[i].off) : NULL;
+    }
+    return NULL;
+}
+static void **heap_suite_slot(int idx, int id, int create) {
+    return suite_slot_field(heap_types[idx].type, idx, id, create);
+}
 
 /* Subclass-identity bits a heap type inherits from its base so the
    flag-based PyXxx_Check functions see through the subclassing. */
@@ -8171,6 +8268,7 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
     heap_types[idx].as_sequence = NULL;
     heap_types[idx].as_number = NULL;
     heap_types[idx].as_buffer = NULL;
+    heap_types[idx].as_async = NULL;
 
     /* Walk the spec slots and populate the type */
     for (PyType_Slot *slot = spec->slots; slot && slot->slot; slot++) {
@@ -8210,57 +8308,14 @@ static PyObject *type_from_spec_impl(PyObject *module, PyType_Spec *spec,
             case Py_tp_del:        type->tp_del = (destructor)slot->pfunc; break;
             case Py_tp_vectorcall: type->tp_vectorcall = (vectorcallfunc)slot->pfunc; break;
 
-            /* Mapping protocol slots */
-            case Py_mp_length:
-            case Py_mp_subscript:
-            case Py_mp_ass_subscript: {
-                if (!heap_types[idx].as_mapping) {
-                    heap_types[idx].as_mapping = (PyMappingMethods *)calloc(1, sizeof(PyMappingMethods));
-                    type->tp_as_mapping = heap_types[idx].as_mapping;
-                }
-                if (slot->slot == Py_mp_length)
-                    heap_types[idx].as_mapping->mp_length = (lenfunc)slot->pfunc;
-                else if (slot->slot == Py_mp_subscript)
-                    heap_types[idx].as_mapping->mp_subscript = (binaryfunc)slot->pfunc;
-                else
-                    heap_types[idx].as_mapping->mp_ass_subscript = (objobjargproc)slot->pfunc;
+            default: {
+                /* A suite slot -- number, sequence, mapping, async, buffer --
+                   goes into its suite, created on first use; anything else
+                   is ignored. */
+                void **field = heap_suite_slot(idx, slot->slot, 1);
+                if (field != NULL) *field = slot->pfunc;
                 break;
             }
-
-            /* Sequence protocol slots */
-            case Py_sq_length:
-            case Py_sq_item:
-            case Py_sq_contains: {
-                if (!heap_types[idx].as_sequence) {
-                    heap_types[idx].as_sequence = (PySequenceMethods *)calloc(1, sizeof(PySequenceMethods));
-                    type->tp_as_sequence = heap_types[idx].as_sequence;
-                }
-                if (slot->slot == Py_sq_length)
-                    heap_types[idx].as_sequence->sq_length = (lenfunc)slot->pfunc;
-                else if (slot->slot == Py_sq_item)
-                    heap_types[idx].as_sequence->sq_item = (ssizeargfunc)slot->pfunc;
-                else
-                    heap_types[idx].as_sequence->sq_contains = (objobjproc)slot->pfunc;
-                break;
-            }
-
-            /* Buffer protocol slots */
-            case Py_bf_getbuffer:
-            case Py_bf_releasebuffer: {
-                if (!heap_types[idx].as_buffer) {
-                    heap_types[idx].as_buffer = (PyBufferProcs *)calloc(1, sizeof(PyBufferProcs));
-                    type->tp_as_buffer = heap_types[idx].as_buffer;
-                }
-                if (slot->slot == Py_bf_getbuffer)
-                    heap_types[idx].as_buffer->bf_getbuffer = (getbufferproc)slot->pfunc;
-                else
-                    heap_types[idx].as_buffer->bf_releasebuffer = (releasebufferproc)slot->pfunc;
-                break;
-            }
-
-            default:
-                /* Ignore unhandled slots */
-                break;
         }
     }
 
@@ -8348,7 +8403,10 @@ extern "C" void *PyType_GetSlot(PyTypeObject *type, int slot) {
         case Py_tp_alloc:      return (void *)type->tp_alloc;
         case Py_tp_new:        return (void *)type->tp_new;
         case Py_tp_free:       return (void *)type->tp_free;
-        default:               return NULL;
+        default: {
+            void **field = suite_slot_field(type, -1, slot, 0);
+            return field ? *field : NULL;
+        }
     }
 }
 
@@ -9194,7 +9252,7 @@ static OopType shimDataDescriptorNames(OopType typeOop)
     char buf[8192];
     size_t used = 0;
     buf[0] = '\0';
-    for (; t != NULL && plausible_pyobj((PyObject *)t) && !is_shim_type(t); t = t->tp_base) {
+    for (; t != NULL && plausible_pyobj((PyObject *)t) && !FOREIGN_SLOT_STOP(t); t = t->tp_base) {
         for (PyGetSetDef *gs = t->tp_getset; gs && gs->name; gs++) {
             int n = snprintf(buf + used, sizeof(buf) - used, "%s ", gs->name);
             if (n < 0 || (size_t)n >= sizeof(buf) - used) break;
@@ -9230,7 +9288,16 @@ static OopType shimForeignDirNames(OopType ptrOop)
             PyList_Append(names, PyList_GetItem(keys, i));
         Py_XDECREF(keys);
     }
-    for (; t != NULL && plausible_pyobj((PyObject *)t) && !is_shim_type(t); t = t->tp_base)
+    /* The dunders of the slots it implements, as the slot wrappers CPython's
+       PyType_Ready puts in a type's dict (sq_item alone gives no __iter__
+       there: iteration by index is the interpreter's fallback). */
+    for (const ForeignOpDef *d = g_foreign_ops; d->name != NULL; d++) {
+        if (d->kind == FOP_ITER ? foreign_tp_iter(t) == NULL : !foreign_op_present(t, d))
+            continue;
+        PyObject *s = PyUnicode_FromString(d->name);
+        if (s != NULL) { PyList_Append(names, s); Py_DECREF(s); }
+    }
+    for (; t != NULL && plausible_pyobj((PyObject *)t) && !FOREIGN_SLOT_STOP(t); t = t->tp_base)
         foreign_type_own_names(t, names);
     PyErr_Clear();
     buffer_cache_clear();
