@@ -12,7 +12,9 @@
 ! default one and each app's), so an application binds warm after an upgrade.
 !
 ! Only STALE modules are rebuilt; a current one is left alone. A module whose
-! source file is gone, or that fails to build, is reported and skipped: it stays
+! source file is gone is rebuilt from the file this checkout finds under its
+! name when that file holds the same source (the deploying checkout was moved
+! or removed); otherwise it, like one that fails to build, is reported and skipped: it stays
 ! stale, and rebuilds (or raises) on its next import, as it would have anyway.
 ! A build failure is reported once, after the last pass, and only for a module no
 ! pass rebuilt: one that fails before a dependency and rebuilds after it is
@@ -64,9 +66,18 @@ apps do: [:app | | ns mods pass before failures |
 		this one as a dependency.  Stale but already loaded this session: a later
 		pass, after a dependency moved; evicted so the load rebuilds it."
 		(importlib ___isCurrentModule___: nm)
-			ifFalse: [ | path |
+			ifFalse: [ | path deployed |
 				(importlib @env1:lookupModule: nm) notNil ifTrue: [importlib removeModule: nm].
-				path := importlib ___deployedSourcePathOf___: nm.
+				"The file it was deployed from -- or, when that is gone, the file
+				this checkout has under its name if it holds the same source:
+				a module deployed from a removed worktree is rebuilt from here
+				rather than skipped on every install (importlib
+				___redeploySourcePathOf___:)."
+				deployed := importlib ___deployedSourcePathOf___: nm.
+				path := importlib ___redeploySourcePathOf___: nm.
+				(path notNil and: [deployed notNil and: [path ~= deployed]]) ifTrue: [
+					out nextPutAll: 'redeployModules: moved ' , (app ifNil: ['']) , ' ' , nm
+						, ' (same source): ' , deployed , ' is gone, rebuilt from ' , path; cr].
 				(path isNil or: [(GsFile existsOnServer: path) ~~ true])
 					ifTrue: [
 						skipped := skipped + 1.

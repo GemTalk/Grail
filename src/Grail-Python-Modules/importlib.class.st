@@ -9400,6 +9400,43 @@ importlib class >> ___recordedGenerationOf___: aName [
 
 ]
 
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___redeploySourcePathOf___: aModuleName [
+	"The file install's redeploy (scripts/redeployModules.gs) rebuilds the
+	deployed module aModuleName from: the file it was deployed from, or --
+	when that file is gone -- the file this installation finds under its name
+	(___moduleNameToPath___:), if that file holds the very source the module
+	was deployed with.  nil when neither: nothing to rebuild from.
+
+	WHY THE SECOND FILE.  The recorded file is gone whenever the checkout that
+	deployed the module was removed -- a git worktree, on a stone where each
+	worktree is a GemStone user -- and the redeploy used to skip every such
+	module as having no source.  Measured on 2026-11-19: all 202 of one
+	user's deployed modules, every install, so none of them was ever rebuilt
+	by an install again.  Their classes kept the code of whatever Grail built
+	them, IR methods with no def id among it (P2.3a's case 1).  The same
+	source at another path is the same module (D10, ___sameSourcePath___:as:,
+	___refuseForeignSourcePath___:for:), which an import would rebuild from
+	there anyway; a CHANGED source is still left alone, since only
+	gemdb.modules.relocate can say a changed file is the same module."
+
+	| path found hash |
+	path := self ___deployedSourcePathOf___: aModuleName.
+	path isNil ifTrue: [^ nil].
+	(GsFile existsOnServer: path) == true ifTrue: [^ path].
+	hash := self ___canonicalModuleHashes___ at: aModuleName otherwise: nil.
+	hash isNil ifTrue: [^ nil].
+	found := [self @env1:___moduleNameToPath___: aModuleName]
+		on: Error do: [:ex | ex return: nil].
+	(found isNil or: [found == None]) ifTrue: [^ nil].
+	found := found asString.
+	(GsFile existsOnServer: found) == true ifFalse: [^ nil].
+	([(self ___sourceStringForPath___: found) sha1Sum] on: Error do: [:ex | ex return: nil]) = hash
+		ifFalse: [^ nil].
+	^ found
+
+]
+
 { #category : 'Grail-Module Loading' }
 importlib class >> ___refreshCarriedSubmodulesOf___: aPackage named: aName [
 	"Bring up to date the submodules a committed package CARRIES that this
