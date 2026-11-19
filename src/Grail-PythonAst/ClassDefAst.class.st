@@ -2455,11 +2455,24 @@ ClassDefAst >> ___irClassHelperDefReason___: aDef bound: boundNames [
 	compiles at run time), and so are its annotations (the annotations table
 	is a compiled class-side method).  What the build evaluates FOR it in the
 	class body is its decorators and its defaults.  Defaults are class-body
-	values (___irClassBodyValueReason___:bound:); decorators are P3.3's later
-	step."
+	values (___irClassBodyValueReason___:bound:).
 
-	(aDef decorator_list notNil and: [aDef decorator_list notEmpty])
-		ifTrue: [^ #'irHelper:methodDecorator'].
+	DECORATORS (P3.3c) are admitted on the same terms.  The walk applies them
+	through the emitter already -- at the def or in the pass after the body
+	(printMethodDecoratorsOn:decorators:className:siblingNames: and its
+	marking and property-accessor siblings) -- and a name in a decorator
+	expression is read by the description both helpers share (NameAst >>
+	___emitMethodDecoratorValueWith___:).  A bare-name decorator (the parser
+	records it as a Symbol) is written by printDecoratorReceiverWith:deco:
+	through the emitter too.  An expression decorator is refused for what a
+	class-body value is refused for -- a lambda or comprehension, a walrus,
+	``__class__'' / ``super'', a frame call, a call of a name the body binds
+	-- under ``methodDecorator:<reason>''."
+
+	(aDef decorator_list ifNil: [#()]) do: [:deco |
+		((deco isKindOf: Symbol) or: [deco isKindOf: ConstantAst]) ifFalse: [
+			(self ___irClassBodyValueReason___: deco bound: boundNames)
+				ifNotNil: [:r | ^ ('irHelper:methodDecorator:' , r) asSymbol]]].
 	(aDef ___defaultedPositionalParams___ asArray , aDef ___defaultedKeywordOnlyParams___ asArray)
 		do: [:pair |
 			((pair at: 2) isKindOf: ConstantAst) ifFalse: [
@@ -2504,7 +2517,12 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	    reads the slot names statically (slotNames) and stores the value as an
 	    ordinary class-body value, which is all the backend has to build.
 
-	Still text: a decorated method, a bare expression evaluated for effect, a
+	P3.3c admits METHOD DECORATORS (___irClassHelperDefReason___:bound:): the
+	walk applies them through the emitter, and a decorator expression's names
+	are read by NameAst >> ___emitMethodDecoratorValueWith___:, the
+	description the text shares.
+
+	Still text: a bare expression evaluated for effect, a
 	target that is not a name (an annotated attribute or subscript is a
 	runtime statement), a ``__renamed__'' or ``__transient__'' value (Grail's
 	persistence declarations, left to P3.5), a nested class, control flow --
@@ -2538,7 +2556,9 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r].
 					((s ___defaultedPositionalParams___ asArray , s ___defaultedKeywordOnlyParams___ asArray)
 						anySatisfy: [:pair | ((pair at: 2) isKindOf: ConstantAst) not])
-							ifTrue: [hasValues := true]]
+							ifTrue: [hasValues := true].
+					(s decorator_list notNil and: [s decorator_list notEmpty])
+						ifTrue: [hasValues := true]]
 				ifFalse: [
 					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
 					(s isKindOf: AnnAssignAst) ifTrue: [

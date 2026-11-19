@@ -196,6 +196,13 @@ def f(p):
     class Deco:
         @staticmethod
         def s(): pass
+        @mf
+        def t(self): pass
+        @G.real
+        def u(self): pass
+    class DecoLam:
+        @(lambda fn: fn)
+        def s(self): pass
     class Expr:
         print(1)
     class Target:
@@ -217,7 +224,8 @@ def f(p):
 		'Ann' -> nil.
 		'AnnLam' -> #'irHelper:annotation:functionScope'.
 		'AnnTarget' -> #'irHelper:annotation:target'.
-		'Deco' -> #'irHelper:methodDecorator'.
+		'Deco' -> nil.
+		'DecoLam' -> #'irHelper:methodDecorator:functionScope'.
 		'Expr' -> #'irHelper:expression'.
 		'Target' -> #'irHelper:assignTarget'.
 		'Renamed' -> #'irHelper:assign:specialName'.
