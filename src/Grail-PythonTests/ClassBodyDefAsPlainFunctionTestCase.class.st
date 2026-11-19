@@ -184,8 +184,9 @@ ClassBodyDefAsPlainFunctionTestCase >> testACompTargetShadowingTheReceiverParame
 	makes the loop run twice at all.
 
 	The receiver here is the SmallInteger 2, so the def runs as its special-
-	receiver recompile, not as the IR method; the two tests above run the IR
-	method itself with a heap receiver (#2256)."
+	receiver form: on the IR arm, the def's IR generated for SmallInteger
+	(P2.2), on the text arm its text recompiled there.  The two tests above
+	run the IR method itself with a heap receiver (#2256)."
 
 	self assert: (self at: 'shadowing_comprehension' item: 1) equals: 2.
 	self

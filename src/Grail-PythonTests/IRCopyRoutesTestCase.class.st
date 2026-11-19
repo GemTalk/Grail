@@ -1,12 +1,12 @@
 "
 P2.2's run-time consumers: the self-send dispatcher's ``___grailOrig_''
-shadow, the ``del C.m'' shadow, UnboundMethod's ``___grailDirect'' copy onto
-an unrelated class, and @smalltalk_class.  Each copies an IR-built method
-without compiling any Smalltalk text (the run-time ones from a builder the
-session has cached; otherwise they keep the twin): it is
-generated for the target from its IR builder, under the selector the copy is
-installed by (importlib ___irMethodFor___:on:, ___irMethodFor___:on:as:,
-___irRegenerate___:onto:category:).
+shadow, the ``del C.m'' shadow, UnboundMethod's special-receiver form and its
+``___grailDirect'' copy onto an unrelated class, and @smalltalk_class.  Each
+copies an IR-built method without compiling any Smalltalk text (the shadows
+and the direct copy from a builder the session has cached; otherwise they
+keep the twin): it is generated for the target from its IR builder, under
+the selector the copy is installed by (importlib ___irMethodFor___:on:as:,
+___irCachedMethodFor___:on:as:, ___irRegenerate___:onto:category:).
 
 The census rows (importlib ___irCensusCopy___:route:source:of:) say which
 route each copy took; tests/python/ir_copies_without_text.py is the CPython
@@ -80,7 +80,7 @@ IRCopyRoutesTestCase >> ___runChecksCounting___: aModule [
 	importlib ___irCensusReset___.
 	importlib ___irCensusOn: true.
 	checks := [self ___checksOf___: aModule] ensure: [importlib ___irCensusOn: false].
-	self assert: checks size equals: 8.
+	self assert: checks size equals: 11.
 	checks keysAndValuesDo: [:name :r |
 		self assert: (r at: 1) description: name , ' answered ' , (r at: 2)].
 	^ checks
@@ -120,7 +120,9 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	and the del shadow is on the definer itself, so both are generated with
 	no text and no helper of their own.  The direct copy onto an UNRELATED
 	class cannot reach it, so it keeps the def's text twin, which builds the
-	class inline: the one twin a run-time copy here still takes."
+	class inline; nor can a special receiver's class (SmallInteger), so
+	``Home.kind_local(3)'' does the same.  Those are the two twins a run-time
+	copy here still takes."
 
 	| mod lbase lsub delLocal away shadow |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
@@ -143,7 +145,10 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	self assert: (BaseException ___isIRPythonMethod___: shadow).
 	self assert: (self ___count___: 'cp:direct:twin') equals: 1.
 	self assert: ((self ___examples___: 'cp:direct:twin') allSatisfy: [:e |
-		e includesString: 'five_local'])
+		e includesString: 'five_local']).
+	self assert: (self ___count___: 'cp:special:twin') equals: 1.
+	self assert: ((self ___examples___: 'cp:special:twin') allSatisfy: [:e |
+		e includesString: 'kind_local'])
 
 ]
 
@@ -170,27 +175,26 @@ IRCopyRoutesTestCase >> testAShadowOnASubclassIsGeneratedForTheSubclass [
 
 { #category : 'Grail-Tests' }
 IRCopyRoutesTestCase >> testEveryRuntimeCopyAvoidsTheTextTwin [
-	"The del shadow and the direct copy recompile no text twin: each is
-	generated under the selector it is installed by.
-
-	The special receiver still compiles its twin, by design for now: its IR
-	route exposed an IR codegen bug (a lambda in a comprehension whose target
-	shadows the receiver parameter captures the receiver,
-	ClassBodyDefAsPlainFunctionTestCase), so it waits for that fix.  Its text
-	fallback must find the twin of a shadow generated under a prefixed
-	selector -- ``captured(None)'' after ``del'' is exactly that."
+	"The del shadow, the special receiver and the direct copy recompile no
+	text twin: each is generated under the selector it is installed by (the
+	special receiver's is installed nowhere, and keeps the method's own).
+	The special receiver's cases are an int, a float, True and False, and
+	#2256's lambda in a comprehension whose target shadows the receiver
+	parameter.  (None, checked beside them, does not need this form.)"
 
 	| mod |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
 	self ___runChecksCounting___: mod.
 	#('del-shadow' 'dispatch-shadow') do: [:site |
 		self assert: (self ___count___: 'cp:' , site , ':twin') equals: 0].
-	"Save five_local's, whose class helper Away cannot reach
-	(testADefsClassHelperIsReachedByEveryCopy)."
+	"Save five_local's and kind_local's, whose class helper Away and
+	SmallInteger cannot reach (testADefsClassHelperIsReachedByEveryCopy)."
 	self assert: (self ___count___: 'cp:direct:twin') equals: 1.
+	self assert: (self ___count___: 'cp:special:twin') equals: 1.
 	self assert: (self ___count___: 'cp:del-shadow:regen') > 0.
 	self assert: (self ___count___: 'cp:direct:regen') > 0.
-	self assert: (self ___count___: 'cp:special:twin') > 0
+	self assert: (self ___count___: 'cp:special:regen') > 0
+
 ]
 
 { #category : 'Grail-Tests' }

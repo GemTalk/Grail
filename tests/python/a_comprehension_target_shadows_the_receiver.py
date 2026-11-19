@@ -14,7 +14,8 @@ The IR build used to read the receiver for every one of those inner reads
 lambda, and even ``[x for x in range(x)]`` repeated it.  The text build was
 already right.  class_body_def_as_plain_function.py pins the first shape too,
 but calls it with an int from inside the class body, where a special receiver
-takes the text twin -- so the IR method never ran there.
+took the text twin (it now takes the IR, generated for ``int``'s class; see
+ir_copies_without_text.py) -- so the IR method itself never ran there.
 
 Here every call passes an ordinary HEAP receiver (an int subclass instance,
 or the class itself for a classmethod), so the method runs exactly as it was
