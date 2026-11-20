@@ -434,15 +434,19 @@ if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ] && [ "${GRAIL_NO_REDEPLOY:-0}" != "1" ]; t
     # here: which module failed, and why, is only knowable from THIS run -- a
     # re-run finds the failed modules rebuilt by whatever imported them since,
     # or nothing stale at all.
+    # The whole topaz output is kept too: a session that dies says why only
+    # there (a fatal ``VM temporary object memory is full'' is topaz's own
+    # output, not the script's).
     LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
          -S "$GRAIL_DIR/scripts/redeployModules.gs" < /dev/null \
-         | grep -a '^redeployModules: ' > "$GRAIL_DIR/redeployModules-report.out"
+         > "$GRAIL_DIR/redeployModules-topaz.out" 2>&1
+    grep -a '^redeployModules: ' "$GRAIL_DIR/redeployModules-topaz.out" > "$GRAIL_DIR/redeployModules-report.out"
     # A session that dies part-way (out of temporary object memory, a crash)
     # writes no summary line, and that FAILS the install: nothing then says
     # which modules are left stale.  A summary that counts failed modules
     # stays a warning, as above.  scripts/redeploy_verdict.sh says which.
     "$GRAIL_DIR/scripts/redeploy_verdict.sh" "$GRAIL_DIR/redeployModules-report.out" \
-        "$(pwd -P)/redeployModules.out"
+        "$GRAIL_DIR/redeployModules-topaz.out"
     case $? in
         0) printf 'TIMING | %-26s | %4ds\n' "redeploy-modules" "$((SECONDS - DEPLOY_T0))" ;;
         2) ;;

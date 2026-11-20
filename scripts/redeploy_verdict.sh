@@ -3,7 +3,8 @@
 #
 # install.sh's verdict on its redeploy step (scripts/redeployModules.gs), read
 # from REPORT -- the step's ``redeployModules:'' lines -- and naming
-# FULL_OUTPUT, the step's whole topaz output, when the step did not finish.
+# FULL_OUTPUT, the step's whole topaz output (redeployModules-topaz.out), when
+# the step did not finish: a fatal error is reported only there.
 # Prints the report, and then what it means, and exits:
 #
 #   0  finished, every stale module rebuilt or skipped;
