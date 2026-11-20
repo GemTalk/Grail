@@ -745,6 +745,10 @@ timed "stone-lock" ./tests/scripts/run_stone_lock_test.sh || EXIT=$?
 # average and the gem count.
 timed "launch-gate" ./tests/scripts/run_launch_gate_test.sh || EXIT=$?
 
+# install.sh fails when its redeploy step dies without a summary, and warns
+# when modules failed.  Needs no stone: it writes the step's output itself.
+timed "redeploy-verdict" ./tests/scripts/run_redeploy_verdict_test.sh || EXIT=$?
+
 # new_worktree.sh takes this machine's stone from the main checkout's .setenv,
 # from the main checkout or any worktree.  Needs no stone: it builds a scratch
 # repository and a fake product directory.

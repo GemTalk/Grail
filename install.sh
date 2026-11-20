@@ -424,8 +424,9 @@ fi
 # session that does not commit.  So it happens here, once, in every namespace.
 # On a fresh stone there is nothing deployed and this does nothing.
 #
-# A WARNING on failure, like unicodedata's: the modules it could not rebuild
-# stay stale and rebuild on their next import, as they would have anyway.
+# A WARNING when modules failed, like unicodedata's: the modules it could not
+# rebuild stay stale and rebuild on their next import, as they would have
+# anyway.  An ERROR when the step did not finish (scripts/redeploy_verdict.sh).
 # GRAIL_NO_REDEPLOY=1 skips just this step (the upgrade test's control).
 if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ] && [ "${GRAIL_NO_REDEPLOY:-0}" != "1" ]; then
     DEPLOY_T0=$SECONDS
@@ -433,19 +434,24 @@ if [ "${GRAIL_NO_DEPLOY:-0}" != "1" ] && [ "${GRAIL_NO_REDEPLOY:-0}" != "1" ]; t
     # here: which module failed, and why, is only knowable from THIS run -- a
     # re-run finds the failed modules rebuilt by whatever imported them since,
     # or nothing stale at all.
+    # The whole topaz output is kept too: a session that dies says why only
+    # there (a fatal ``VM temporary object memory is full'' is topaz's own
+    # output, not the script's).
     LC_ALL=C topaz -lq -C "GEM_TEMPOBJ_CODE_SIZE=300000;GEM_TEMPOBJ_CACHE_SIZE=900000;" \
          -S "$GRAIL_DIR/scripts/redeployModules.gs" < /dev/null \
-         | grep -a '^redeployModules: ' > "$GRAIL_DIR/redeployModules-report.out"
-    if grep -qE '^redeployModules: [0-9]+ rebuilt, [0-9]+ skipped, 0 failed' "$GRAIL_DIR/redeployModules-report.out"; then
-        cat "$GRAIL_DIR/redeployModules-report.out"
-        printf 'TIMING | %-26s | %4ds\n' "redeploy-modules" "$((SECONDS - DEPLOY_T0))"
-    else
-        cat "$GRAIL_DIR/redeployModules-report.out"
-        echo ""
-        echo "Warning: rebuilding the deployed modules failed for some of them (above)."
-        echo "  Grail is installed; each of those rebuilds on its next import, and"
-        echo "  leaves that session with something to commit."
-    fi
+         > "$GRAIL_DIR/redeployModules-topaz.out" 2>&1
+    grep -a '^redeployModules: ' "$GRAIL_DIR/redeployModules-topaz.out" > "$GRAIL_DIR/redeployModules-report.out"
+    # A session that dies part-way (out of temporary object memory, a crash)
+    # writes no summary line, and that FAILS the install: nothing then says
+    # which modules are left stale.  A summary that counts failed modules
+    # stays a warning, as above.  scripts/redeploy_verdict.sh says which.
+    "$GRAIL_DIR/scripts/redeploy_verdict.sh" "$GRAIL_DIR/redeployModules-report.out" \
+        "$GRAIL_DIR/redeployModules-topaz.out"
+    case $? in
+        0) printf 'TIMING | %-26s | %4ds\n' "redeploy-modules" "$((SECONDS - DEPLOY_T0))" ;;
+        2) ;;
+        *) exit 1 ;;
+    esac
 fi
 
 echo ""
