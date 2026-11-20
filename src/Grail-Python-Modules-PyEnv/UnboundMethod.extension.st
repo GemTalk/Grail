@@ -615,8 +615,13 @@ UnboundMethod >> ___grailDeletedOriginalNargs: nargs kwOk: kwOk [
 	m := self @env0:_resolveMethodNargs: nargs kwOk: kwOk
 		from: definingClass prefix: '___grailOrig_'.
 	m == nil ifTrue: [^ nil].
-	sel := (m @env0:selector @env0:asString @env0:copyFrom: 14 to: m @env0:selector @env0:size)
-		@env0:asSymbol.
+	"The shadow's selector names the original -- unless the shadow SHARES the
+	original method, whose selector is the original's already (an IR method
+	with no builder, importlib ___copyIRMethod___:..., P2.3b)."
+	sel := m @env0:selector @env0:asString.
+	((sel @env0:size @env0:> 13) and: [(sel @env0:copyFrom: 1 to: 13) @env0:= '___grailOrig_'])
+		ifTrue: [sel := sel @env0:copyFrom: 14 to: sel @env0:size].
+	sel := sel @env0:asSymbol.
 	pinnedAt := BoundMethod ___grailPinnedAt___: sel in: m @env0:inClass.
 	pinnedAt == nil ifTrue: [^ nil].
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt

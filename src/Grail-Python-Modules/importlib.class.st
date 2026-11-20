@@ -2694,6 +2694,26 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	raises a TypeError naming the module and the cause
 	(___irCopyRefused___:site:onto:)."
 	(BaseException ___isIRPythonMethod___: meth) ifTrue: [
+		"ON ITS OWN CLASS, NO REBUILD (P2.3b).  A session reinstalls the
+		dispatchers of every committed override at its start
+		(object class >> ___grailInstallRecordedSelfSendOverrides___) -- typing's
+		@_tp_cache'd __getitem__s, pathlib, ipaddress, dataclasses: almost all
+		on the class that defines the method -- and in a warm session no
+		builder is cached.  The twin compiled in milliseconds; a rebuild re-runs
+		the class's emit from source, 0.3-0.6 s a class, and measured, took a
+		warm session's start from 1.1-1.5 s to 7-19 s.  On its own class the
+		shadow can be the method itself: it is the definer's own, so the
+		dispatcher's own-shadow check holds, and the readers of a shadow's
+		name take it from an unprefixed selector as well (BaseException's
+		traceback naming, UnboundMethod >> ___grailDeletedOriginalNargs:kwOk:).
+		So a cached builder still generates it; without one it is SHARED.  A
+		subclass's shadow has to be generated, and rebuilds."
+		own := self ___irBuilderCache___ at: meth otherwise: nil.
+		(own isNil and: [aClass == meth inClass]) ifTrue: [
+			self ___irCensusCopy___: site route: 'shared' source: nil of: meth.
+			^ [aClass perform: #'___installSessionMethod:as:' env: 1
+				withArguments: { meth. ownShadow }]
+					on: Error do: [:e | e return: nil]].
 		own := self ___irMethodFor___: meth on: aClass as: ownShadow.
 		own isNil ifTrue: [
 			aClass == meth inClass ifFalse: [
@@ -5407,10 +5427,14 @@ importlib class >> ___irBuilderCacheForgetModule___: aModuleName [
 	replaced, and an entry keyed by one of their methods could only ever keep
 	the old class alive."
 
-	| cache prefix victims |
+	| cache prefix victims refusals |
+	prefix := aModuleName asString , '|'.
+	refusals := SessionTemps current at: #'___grailIRRebuildRefusals___' otherwise: nil.
+	refusals isNil ifFalse: [
+		(refusals select: [:k | k size > prefix size and: [(k copyFrom: 1 to: prefix size) = prefix]])
+			do: [:k | refusals remove: k ifAbsent: []]].
 	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
 	cache isNil ifTrue: [^ self].
-	prefix := aModuleName asString , '|'.
 	victims := IdentitySet new.
 	cache keysAndValuesDo: [:meth :builder |
 		| id |
@@ -5471,6 +5495,7 @@ importlib class >> ___irBuilderCacheReset___ [
 		cache keysAndValuesDo: [:meth :builder | builder isNil ifFalse: [builder cacheTick: nil]]].
 	SessionTemps current removeKey: #'___grailIRBuilderCache___' ifAbsent: [].
 	SessionTemps current removeKey: #'___grailIRBuilderCacheCount___' ifAbsent: [].
+	SessionTemps current removeKey: #'___grailIRRebuildRefusals___' ifAbsent: [].
 	^ self
 
 ]
@@ -6476,8 +6501,7 @@ importlib class >> ___irNoBuilderCauseOf___: aMethod for: aClass [
 	"Why no copy of aMethod could be generated for aClass, as a phrase for
 	___irCopyRefused___:site:onto:'s TypeError.  The checks are
 	___irRebuildBuilderFor___:'s, in its order, re-made on the failure path
-	only: a builder the session has, or one that rebuilds, means the
-	generation itself failed for aClass."
+	only, and never rebuilding: the caller's rebuild just failed."
 
 	| id parts modName inst path |
 	(self ___irBuilderCache___ at: aMethod otherwise: nil) notNil ifTrue: [
@@ -6504,9 +6528,9 @@ importlib class >> ___irNoBuilderCauseOf___: aMethod for: aClass [
 		and: [(self ___sourceHashNowOf___: modName)
 			~= (self ___canonicalModuleHashes___ at: modName otherwise: nil)]) ifTrue: [
 		^ 'its source file ' , path , ' has changed since the class was built'].
-	(self ___irBuilderForMethod___: aMethod) notNil ifTrue: [
-		^ 'it could not be generated for ''' , aClass name asString , ''''].
-	^ 'its def no longer matches ' , path
+	^ 'it could not be rebuilt from ' , path
+		, ' (the def there no longer matches it, or did not generate for '''
+		, aClass name asString , ''')'
 
 ]
 
@@ -6639,7 +6663,7 @@ importlib class >> ___irRebuildBuilderFor___: aMethod [
 	disagrees with the file (a tracked module), when the re-parsed def's text
 	is not the text the method was built from, or on any error."
 
-	| id parts modName side inst modClass path ast harvested home thisClass result |
+	| id parts modName side inst modClass path ast harvested home thisClass result memoKey |
 	id := self ___irDefIdOf___: aMethod.
 	id isNil ifTrue: [^ nil].
 	parts := id subStrings: '|'.
@@ -6659,6 +6683,15 @@ importlib class >> ___irRebuildBuilderFor___: aMethod [
 		(self ___isTrackedModule___: modName) ifTrue: [
 			(self ___sourceHashNowOf___: modName) = (self ___canonicalModuleHashes___ at: modName otherwise: nil)
 				ifFalse: [^ nil]].
+		"A rebuild of this def from this file that was refused once in this
+		session is refused again without parsing the module (P2.3b): see
+		___irRebuildRefusals___."
+		memoKey := id , '|' , path , '|'
+			, ([aMethod sourceString hash printString] on: Error do: [:ex | ex return: '?']).
+		(self ___irRebuildRefusals___ includes: memoKey) ifTrue: [
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusCopy___: 'rebuild' route: 'refused-memo' source: nil of: aMethod].
+			^ nil].
 		ast := (self ___compilingFile___: path do: [
 				ModuleAst parseSource: (self ___sourceStringForPath___: path)])
 			path: path;
@@ -6700,10 +6733,33 @@ importlib class >> ___irRebuildBuilderFor___: aMethod [
 							((self ___irDefIdOf___: sib) = k asString
 								and: [self ___irRebuiltSourceOf___: builder matches: sib])
 								ifTrue: [self ___irCacheBuilder___: builder forMethod: sib]]]]].
+		result isNil ifTrue: [self ___irRebuildRefusals___ add: memoKey].
 		result]
 		on: Error do: [:ex |
 			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
 			ex return: nil]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irRebuildRefusals___ [
+	"This session's rebuilds that were refused after the module was parsed
+	(___irRebuildBuilderFor___:), as ``<def id>|<path>|<hash of the method's
+	source>'' Strings.  The same method rebuilt from the same file is
+	refused the same way, so it is not parsed again.
+
+	WHY (P2.3b).  With no text twin to fall back on, every copy without a
+	cached builder rebuilds, and a session reinstalls the dispatchers of
+	every committed override at its start.  A committed class whose IR
+	methods no longer match their module's source -- built by an older Grail,
+	or from an older copy of the module, in an app namespace no install
+	rebuilt -- was refused once per method and per class, each a parse of the
+	module: measured, 24 such werkzeug copies cost seconds at every session
+	start.  Cleared with the builder cache, and per module when the module
+	is rebuilt."
+
+	^ SessionTemps current at: #'___grailIRRebuildRefusals___' ifAbsent: [
+		SessionTemps current at: #'___grailIRRebuildRefusals___' put: Set new]
 
 ]
 
