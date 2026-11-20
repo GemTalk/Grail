@@ -4203,6 +4203,32 @@ importlib class >> ___grailNeedsNamespaceOfClassKey___: aKey [
 
 ]
 
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___grailOwnedSourceFor___: aDeployedPath in: aGrailDir [
+	"aGrailDir's own copy of the Grail source file aDeployedPath, when
+	aDeployedPath is <some checkout>/src/python/<rel> of ANOTHER checkout and
+	aGrailDir/src/python/<rel> exists; else nil.  The install's redeploy
+	moves such a module to this checkout (___redeployPlanFor___:grailDir:).
+	Each /src/python/ in the path is tried, outermost first, so a checkout
+	that itself sits under some src/python/ directory still matches."
+
+	| path marker gd from idx candidate |
+	(aDeployedPath isNil or: [aGrailDir isNil]) ifTrue: [^ nil].
+	path := aDeployedPath asString.
+	gd := aGrailDir asString.
+	marker := '/src/python/'.
+	from := 1.
+	[idx := path indexOfSubCollection: marker startingAt: from.
+	 idx > 0] whileTrue: [
+		candidate := gd , marker , (path copyFrom: idx + marker size to: path size).
+		((GsFile existsOnServer: candidate) == true
+			and: [(self ___sameSourcePath___: candidate as: path) not])
+				ifTrue: [^ candidate].
+		from := idx + 1].
+	^ nil
+
+]
+
 { #category : 'Grail-Deploy Audit' }
 importlib class >> ___grailPathOfChain___: aChain [
 	"A chain of objects as Python sees it, and the last object it names:
@@ -9401,39 +9427,72 @@ importlib class >> ___recordedGenerationOf___: aName [
 ]
 
 { #category : 'Grail-Canonical Classes' }
-importlib class >> ___redeploySourcePathOf___: aModuleName [
-	"The file install's redeploy (scripts/redeployModules.gs) rebuilds the
-	deployed module aModuleName from: the file it was deployed from, or --
-	when that file is gone -- the file this installation finds under its name
-	(___moduleNameToPath___:), if that file holds the very source the module
-	was deployed with.  nil when neither: nothing to rebuild from.
+importlib class >> ___redeployPlanFor___: aModuleName [
+	"What install's redeploy (scripts/redeployModules.gs) does with the stale
+	deployed module aModuleName, judged against this checkout: see
+	___redeployPlanFor___:grailDir:."
 
-	WHY THE SECOND FILE.  The recorded file is gone whenever the checkout that
-	deployed the module was removed -- a git worktree, on a stone where each
-	worktree is a GemStone user -- and the redeploy used to skip every such
-	module as having no source.  Measured on 2026-11-19: all 202 of one
-	user's deployed modules, every install, so none of them was ever rebuilt
-	by an install again.  Their classes kept the code of whatever Grail built
-	them, IR methods with no def id among it (P2.3a's case 1).  The same
-	source at another path is the same module (D10, ___sameSourcePath___:as:,
-	___refuseForeignSourcePath___:for:), which an import would rebuild from
-	there anyway; a CHANGED source is still left alone, since only
-	gemdb.modules.relocate can say a changed file is the same module."
+	^ self ___redeployPlanFor___: aModuleName grailDir: self grailDir
 
-	| path found hash |
-	path := self ___deployedSourcePathOf___: aModuleName.
-	path isNil ifTrue: [^ nil].
-	(GsFile existsOnServer: path) == true ifTrue: [^ path].
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___redeployPlanFor___: aModuleName grailDir: aGrailDir [
+	"What install's redeploy (scripts/redeployModules.gs) rebuilds the deployed
+	module aModuleName from, as {kind. file}, or nil when there is nothing to
+	rebuild it from and it is skipped.  The kinds:
+
+	  #relocated -- one of GRAIL'S OWN modules, recorded under another
+	     checkout's src/python/ (___grailOwnedSourceFor___:in:), whose source
+	     in aGrailDir differs.  Rebuilt from aGrailDir's file as if
+	     gemdb.modules.relocate had been run for it.
+	  #moved -- the same source at another file: Grail's own module from
+	     aGrailDir's file, or, when the recorded file is gone, any module from
+	     the file found under its name (___moduleNameToPath___:).  D10 already
+	     takes the same source at another path for the same module, so this
+	     is the rebuild the next import would do anyway.
+	  #recorded -- the file it was deployed from, which exists.
+
+	WHY.  The recorded file is gone whenever the checkout that deployed the
+	module was removed -- a git worktree, on a stone where each worktree is a
+	GemStone user -- and the redeploy used to skip every such module as having
+	no source.  Measured on 2026-11-19: all 202 of one user's deployed
+	modules, every install, so none of them was ever rebuilt by an install
+	again.  Their classes kept the code of whatever Grail built them, IR
+	methods with no def id among it (P2.3a's case 1).
+
+	WHY GRAIL'S OWN ARE RELOCATED.  A Grail module from another checkout is
+	the same module whatever its source: the install IS a new version of
+	Grail, and its stdlib comes with it.  Left at the old checkout's changed
+	file, every import of it from this checkout is refused (D10) -- and with
+	it every module that imports it: measured, a changed types.py failed the
+	rebuild of 110 of one user's 210 modules.  Only the SHARED base's
+	modules count (D11): an app's module is the app's, wherever its file is.
+	Anything else with a changed source is still skipped -- only
+	gemdb.modules.relocate can say a changed file is the same module -- and
+	D10's refusal at import is unchanged."
+
+	| deployed hash owned found sameSource |
+	deployed := self ___deployedSourcePathOf___: aModuleName.
+	deployed isNil ifTrue: [^ nil].
 	hash := self ___canonicalModuleHashes___ at: aModuleName otherwise: nil.
-	hash isNil ifTrue: [^ nil].
+	sameSource := [:path | hash notNil
+		and: [([(self ___sourceStringForPath___: path) sha1Sum] on: Error do: [:ex | ex return: nil]) = hash]].
+	owned := self ___grailNamespace___ == UserGlobals
+		ifTrue: [self ___grailOwnedSourceFor___: deployed in: aGrailDir]
+		ifFalse: [nil].
+	owned isNil ifFalse: [
+		^ Array
+			with: ((sameSource value: owned) ifTrue: [#moved] ifFalse: [#relocated])
+			with: owned].
+	(GsFile existsOnServer: deployed) == true ifTrue: [^ Array with: #recorded with: deployed].
 	found := [self @env1:___moduleNameToPath___: aModuleName]
 		on: Error do: [:ex | ex return: nil].
 	(found isNil or: [found == None]) ifTrue: [^ nil].
 	found := found asString.
 	(GsFile existsOnServer: found) == true ifFalse: [^ nil].
-	([(self ___sourceStringForPath___: found) sha1Sum] on: Error do: [:ex | ex return: nil]) = hash
-		ifFalse: [^ nil].
-	^ found
+	(sameSource value: found) ifFalse: [^ nil].
+	^ Array with: #moved with: found
 
 ]
 
@@ -9534,6 +9593,12 @@ importlib class >> ___refuseForeignSourcePath___: pathString for: moduleName [
 	deployed := self ___deployedSourcePathOf___: moduleName.
 	deployed isNil ifTrue: [^ self].
 	(self ___sameSourcePath___: pathString as: deployed) ifTrue: [^ self].
+	"Recorded for install's redeploy (scripts/redeployModules.gs), which must
+	tell this refusal -- of the module it rebuilds or of one it imports --
+	from any other failure: no later pass can clear it, so the module is not
+	retried, and the report names this module and the command for it."
+	SessionTemps current at: #'GrailForeignSourceRefusal'
+		put: (Array with: moduleName asString with: deployed with: pathString asString).
 	^ ImportError @env1:___signal___:
 		'module ''' , moduleName asString , ''' is deployed from ' , deployed ,
 		', and this import found a different file with different source, ' , pathString asString ,

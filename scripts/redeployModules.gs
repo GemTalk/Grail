@@ -11,14 +11,22 @@
 ! rebuilds it again.  Here it happens once, committed, in every namespace (the
 ! default one and each app's), so an application binds warm after an upgrade.
 !
-! Only STALE modules are rebuilt; a current one is left alone. A module whose
-! source file is gone is rebuilt from the file this checkout finds under its
-! name when that file holds the same source (the deploying checkout was moved
-! or removed); otherwise it, like one that fails to build, is reported and skipped: it stays
-! stale, and rebuilds (or raises) on its next import, as it would have anyway.
+! Only STALE modules are rebuilt; a current one is left alone. Where each one is
+! rebuilt from is importlib ___redeployPlanFor___:grailDir:'s answer:
+!   - one of Grail's own modules (shared base) recorded under ANOTHER checkout's
+!     src/python/ is moved to this checkout's copy, and relocated as by
+!     gemdb.modules.relocate when its source changed (``relocated'' line);
+!   - any other module whose recorded file is gone is rebuilt from the file
+!     found under its name when that file holds the same source (``moved'');
+!   - otherwise from its recorded file, or, when that is gone, it is reported
+!     and skipped: it stays stale, and rebuilds (or raises) on its next import,
+!     as it would have anyway.
 ! A build failure is reported once, after the last pass, and only for a module no
 ! pass rebuilt: one that fails before a dependency and rebuilds after it is
-! reported as rebuilt after a retry.
+! reported as rebuilt after a retry.  A failure that is a D10 refusal (a
+! different file with different source under a deployed name, for the module or
+! one it imports) is not retried: no pass can clear it.  It is reported with the
+! refused module and the command for it.
 ! Idempotent: a second run finds nothing stale.
 output pushnew redeployModules.out
 iferr 1 where
@@ -40,7 +48,7 @@ t0 := System _timeMs.
 rebuilt := 0. skipped := 0. failed := 0.
 apps := OrderedCollection with: nil.
 importlib ___grailApps___ ifNotNil: [:reg | reg keysDo: [:k | apps add: k]].
-apps do: [:app | | ns mods pass before failures |
+apps do: [:app | | ns mods pass before failures foreign relocating announced relocate |
 	ns := importlib ___grailUseApp___: app.
 	"A FAILURE IS A MODULE'S LAST OUTCOME, NOT ITS FIRST.  A module rebuilt
 	before a deployed module it imports fails in that pass -- its import of a
@@ -53,6 +61,27 @@ apps do: [:app | | ns mods pass before failures |
 	retry, and only one still failing at the end counts as failed."
 	failures := Dictionary new.
 	mods := ns at: #'GrailCanonicalModules' otherwise: nil.
+	"A REFUSAL IS FINAL FOR THE RUN.  A rebuild that fails on D10's refusal --
+	the module's own import, or one of a module it imports, found a different
+	file with different source under a deployed name (importlib
+	___refuseForeignSourcePath___:for:, which records it) -- fails the same way
+	in every later pass.  Retried, the ~100 modules that import a refused
+	types.py were rebuilt and failed again on every pass until the session ran
+	out of temporary object memory.  So such a module is held here, not
+	retried, and reported once with the refused module."
+	foreign := Dictionary new.
+	announced := Set new.
+	"GRAIL'S OWN MODULES WITH A CHANGED SOURCE are relocated to this checkout
+	(#relocated).  A module rebuilt before one of them imports it from here
+	before its own turn comes, so every rebuild runs with the relocate
+	allowance (gemdb.modules.relocate's) for all of them."
+	relocating := Set new.
+	mods isNil ifFalse: [mods keysDo: [:nm |
+		(importlib ___isCurrentModule___: nm) ifFalse: [
+			(importlib ___redeployPlanFor___: nm) ifNotNil: [:plan |
+				plan first == #relocated ifTrue: [relocating add: nm]]]]].
+	relocate := [relocating do: [:r |
+		[importlib ___grailRelocateModule___: r] on: Error do: [:e | e return: nil]]].
 	"PASSES until one rebuilds nothing.  A rebuild moves the module's generation,
 	which makes a module already rebuilt that imports it stale again -- measured:
 	codecs and pickle were left stale behind _codecs and _compat_pickle.  Bounded,
@@ -65,19 +94,23 @@ apps do: [:app | | ns mods pass before failures |
 		"Current: nothing to do -- an earlier module's rebuild may have rebuilt
 		this one as a dependency.  Stale but already loaded this session: a later
 		pass, after a dependency moved; evicted so the load rebuilds it."
-		(importlib ___isCurrentModule___: nm)
-			ifFalse: [ | path deployed |
+		((importlib ___isCurrentModule___: nm) or: [foreign includesKey: nm])
+			ifFalse: [ | plan path deployed |
 				(importlib @env1:lookupModule: nm) notNil ifTrue: [importlib removeModule: nm].
-				"The file it was deployed from -- or, when that is gone, the file
-				this checkout has under its name if it holds the same source:
+				"Where to rebuild it from (importlib ___redeployPlanFor___:grailDir:):
 				a module deployed from a removed worktree is rebuilt from here
-				rather than skipped on every install (importlib
-				___redeploySourcePathOf___:)."
-				deployed := importlib ___deployedSourcePathOf___: nm.
-				path := importlib ___redeploySourcePathOf___: nm.
-				(path notNil and: [deployed notNil and: [path ~= deployed]]) ifTrue: [
-					out nextPutAll: 'redeployModules: moved ' , (app ifNil: ['']) , ' ' , nm
-						, ' (same source): ' , deployed , ' is gone, rebuilt from ' , path; cr].
+				rather than skipped on every install.  Announced once, on its first
+				pass."
+				plan := importlib ___redeployPlanFor___: nm.
+				path := plan ifNotNil: [plan last].
+				(plan notNil and: [plan first ~~ #recorded and: [(announced includes: nm) not]]) ifTrue: [
+					announced add: nm.
+					deployed := importlib ___deployedSourcePathOf___: nm.
+					out nextPutAll: 'redeployModules: '
+						, (plan first == #relocated ifTrue: ['relocated '] ifFalse: ['moved '])
+						, (app ifNil: ['']) , ' ' , nm
+						, (plan first == #relocated ifTrue: [' (Grail source changed): '] ifFalse: [' (same source): '])
+						, deployed , ' -> ' , path; cr].
 				(path isNil or: [(GsFile existsOnServer: path) ~~ true])
 					ifTrue: [
 						skipped := skipped + 1.
@@ -101,6 +134,8 @@ apps do: [:app | | ns mods pass before failures |
 							attempt := attempt + 1.
 							err := nil.
 							SessionTemps current removeKey: #'GrailRefusedBaseChanges' ifAbsent: [].
+							SessionTemps current removeKey: #'GrailForeignSourceRefusal' ifAbsent: [].
+							relocate value.
 							(importlib @env1:lookupModule: nm) notNil ifTrue: [importlib removeModule: nm].
 							[importlib ___allowBaseChanges___: allowed while: [importlib loadModuleFromPath: path name: nm].
 							 System commitTransaction ifFalse: [
@@ -126,6 +161,11 @@ apps do: [:app | | ns mods pass before failures |
 									dropped: the next call evaluates each default again."
 									SessionTemps current removeKey: #'GrailModuleFunctionDefaults' ifAbsent: [nil].
 									e return: nil].
+							(done not and: [(SessionTemps current at: #'GrailForeignSourceRefusal' otherwise: nil) notNil])
+								ifTrue: [
+									foreign at: nm put: (SessionTemps current at: #'GrailForeignSourceRefusal').
+									failures removeKey: nm ifAbsent: [].
+									done := true].
 							done ifFalse: [
 								refused := (SessionTemps current at: #'GrailRefusedBaseChanges' otherwise: #())
 									reject: [:k | allowed includes: k].
@@ -148,6 +188,22 @@ apps do: [:app | | ns mods pass before failures |
 		failed := failed + 1.
 		out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm , ': '
 			, (failures at: nm); cr].
+	"Refusals: each module once, then each refused module once, with its fix."
+	(foreign keys asSortedCollection: [:a :b | a <= b]) do: [:nm | | r |
+		failed := failed + 1.
+		r := foreign at: nm.
+		out nextPutAll: 'redeployModules: FAILED ' , (app ifNil: ['']) , ' ' , nm , ': not retried, '
+			, ((r at: 1) = nm ifTrue: ['its import'] ifFalse: ['its import of ' , (r at: 1)])
+			, ' is refused (see REFUSED below)'; cr].
+	((foreign values collect: [:r | r at: 1]) asSet asSortedCollection: [:a :b | a <= b]) do: [:dep | | r |
+		r := foreign detect: [:each | (each at: 1) = dep].
+		out nextPutAll: 'redeployModules: REFUSED ' , (app ifNil: ['']) , ' ' , dep , ': deployed from '
+			, (r at: 2) , ', and this checkout has a different file with different source, ' , (r at: 3)
+			, '. If it moved, run gemdb.modules.relocate(''' , dep
+			, '''), import it and commit; if it is a different module, gemdb.modules.forget(''' , dep , ''')'; cr].
+	"The allowances nothing used, so none outlives this namespace's passes."
+	(SessionTemps current at: #'GrailModulePathChangeAllowed' otherwise: nil) ifNotNil: [:set |
+		relocating do: [:r | set remove: r ifAbsent: []]].
 	System commitTransaction ifFalse: [
 		out nextPutAll: 'redeployModules: COMMIT FAILED for ' , (app ifNil: ['the default namespace']); cr.
 		ExitClientError signal: 'redeployModules commit failed' status: 1]].
