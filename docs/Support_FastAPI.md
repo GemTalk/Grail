@@ -1293,7 +1293,10 @@ Re-gated after merging `origin/main` (2026-10-14), which brought Phase 5
 (#1568) and a generic foreign-object protocol of its own (`ShimForeignObject`
 operators through `shimForeignOp`): its `__iter__` / `__next__` replaced this
 phase's, and its slot search, which stops at the first shim-built type, was
-taught to search heap types for iteration (above).  `run_tests.sh` **8103
+taught to search heap types for iteration (above).  (#2289 later extended
+that to every slot -- operators, compare and hash together, `tp_init`, and
+`dir()` -- so a PyO3 class's `==`, `hash()`, `[]` and `len()` reach
+its own slots too.)  `run_tests.sh` **8103
 run, 8103 passed**, 8 of 8 shards; the CPython conformance gate **0
 regressions, 5 improvements** (test_unpack, test_statistics, test_long,
 test_copyreg, test_uuid) -- test_math, test_pickle and test___all__ timed out
