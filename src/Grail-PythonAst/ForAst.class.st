@@ -69,6 +69,11 @@ ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
 	rather than letting this emit quietly diverge from its oracle."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
+		"A leaf bound in a class-body RUNTIME ``for'' (P3.4): the class's
+		definitional store, as emitForTargetStore:source:on: writes it."
+		(self ___irIsClassBodyRuntimeStore___: aTarget) ifTrue: [
+			^ aBuilder add: (self ___emitIRClassBodyRuntimeStoreOf___: aTarget id
+				from: aSourceBlock value on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: aSourceBlock value)].
 	"A subscript or attribute LEAF -- ``for d[k], o.a in pairs'' -- takes the
@@ -276,6 +281,11 @@ ForAst >> ___emitIRTargetBindFrom___: stepNode on: aBuilder [
 			never advanced: one SUnit shard spun at 100% CPU for four hours
 			instead of failing."
 			^ aBuilder add: (self ___emitIRModuleScopeStoreOf___: target id asSymbol
+				from: stepNode on: aBuilder)].
+		"A class-body RUNTIME ``for'' (P3.4) binds the loop variable on the
+		class, as emitForTargetStore:source:on: does."
+		(self ___irIsClassBodyRuntimeStore___: target) ifTrue: [
+			^ aBuilder add: (self ___emitIRClassBodyRuntimeStoreOf___: target id
 				from: stepNode on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: target id asSymbol) from: stepNode)].
@@ -516,7 +526,8 @@ ForAst >> ___irForTargetEligible___: localNames [
 	store is the same dynamicInstVarAt:put: every other module-bound binding
 	form uses.  Only the STORE differs; the loop itself is unchanged."
 	^ (localNames includes: target id asString)
-		or: [self ___nameStoreRoutesToModule___: target id asSymbol]
+		or: [(self ___nameStoreRoutesToModule___: target id asSymbol)
+		or: [self ___irIsClassBodyRuntimeStore___: target]]
 
 ]
 
@@ -552,7 +563,8 @@ ForAst >> ___irForTupleTargetEligible___: aTarget locals: localNames [
 					ifTrue: [self ___irUnpackLeafEligible___: t locals: localNames]
 					ifFalse: [(t isKindOf: NameAst)
 						and: [((t ctx) isKindOf: StoreAst)
-						and: [localNames includes: t id asString]]]]]
+						and: [(localNames includes: t id asString)
+							or: [self ___irIsClassBodyRuntimeStore___: t]]]]]]
 
 ]
 
