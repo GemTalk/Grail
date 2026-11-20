@@ -2673,7 +2673,9 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	own and the dispatcher's ``no shadow, no dispatcher'' check declines the
 	patch.  And on any class the copy has to answer the prefixed selector as
 	its own, which UnboundMethod and the traceback read the original name
-	back from.  nil -- no builder, or a class statement whose helper aClass
+	back from.  A def that defines a class goes too: a class that cannot
+	reach the def's class-statement helper performs one generated for it
+	(P2.3a).  nil -- no builder, or a class-side helper aClass's metaclass
 	cannot reach -- keeps the text route."
 	regen := (BaseException ___isIRPythonMethod___: meth)
 		and: [self ___irCopiesRegenerate___ and: [meth selector == sel]].
@@ -5490,10 +5492,18 @@ importlib class >> ___irBuilderForMethod___: aMethod [
 	t0 := Time millisecondClockValue.
 	builder := self ___irRebuildBuilderFor___: aMethod.
 	"The census's cost row for a miss: how many rebuilds, and their time
-	(cpms:, milliseconds)."
+	(cpms:, milliseconds).  A refusal for want of a def id is its own row,
+	``cp:rebuild:no-id'' (P2.3a): an IR method with no id is a module-level
+	def, a doit's, or a class method built before #2173 recorded ids and
+	never rebuilt since -- the last is what the next install's redeploy
+	removes, and what P2.3b must not meet without the twin."
 	self ___irCensusOn___ ifTrue: [
 		self ___irCensusCopy___: 'rebuild'
-			route: (builder isNil ifTrue: ['refused'] ifFalse: ['ok']) source: nil of: aMethod.
+			route: (builder notNil
+				ifTrue: ['ok']
+				ifFalse: [(self ___irDefIdOf___: aMethod) isNil
+					ifTrue: ['no-id'] ifFalse: ['refused']])
+			source: nil of: aMethod.
 		self ___irCensusNote___: #'cpms:rebuild' module: self ___irCensusModuleName___
 			def: ((self ___irDefIdOf___: aMethod) ifNil: ['?']) count: Time millisecondClockValue - t0].
 	^ builder
@@ -5623,6 +5633,11 @@ importlib class >> ___irCensusCopy___: aSite route: aRoute source: aSourceOrNil 
 	  text    a text-compiled method recompiled from its own source
 	  none    nothing copied (no source, nothing to share)
 	  helper  a method-local class's helper, not copied: it arrives with its def
+	The ``rebuild'' site is a builder rebuilt from source for a copy: ok,
+	refused, or no-id (an IR method with no def id to rebuild from).  The
+	``cp:helper:performed'' row (PyMethodIRBuilder >>
+	___irWithHelpersReachableFrom___:do:) counts the class-statement helpers
+	generated for a copy's class because that class cannot reach the def's.
 	The P2.2 exit gate is that ``twin'' reads zero.  A no-op unless the
 	census is on."
 
@@ -6374,9 +6389,11 @@ importlib class >> ___irMethodFor___: aMethod on: aClass [
 	run it (UnboundMethod's special-receiver form, which needs a method
 	compiled against SmallInteger, Character, ... and must leave that class's
 	dictionary alone).  nil when the method is not IR, cannot be rebuilt, or
-	does not fit aClass (an instVar it reads that aClass lacks, a class
-	statement whose helper aClass cannot reach): the consumer keeps its text
-	route for those."
+	does not fit aClass (an instVar it reads that aClass lacks, a class-side
+	class-statement helper aClass's metaclass cannot reach): the consumer
+	keeps its text route for those.  An instance-side helper aClass cannot
+	reach is no reason: the method performs one generated for aClass
+	(PyMethodIRBuilder >> ___irWithHelpersReachableFrom___:do:, P2.3a)."
 
 	| builder |
 	builder := self ___irBuilderForMethod___: aMethod.

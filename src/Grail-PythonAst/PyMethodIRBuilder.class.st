@@ -26,6 +26,7 @@ Class {
 		'sendCensus',
 		'instVarLeaves',
 		'classHelpers',
+		'classHelperSends',
 		'markerNode',
 		'defId',
 		'cacheTick',
@@ -190,10 +191,14 @@ PyMethodIRBuilder >> ___irGenerateFor___: aClass [
 	    became per-class layout POSITIONS read through accessor sends,
 	    docs/Instance_Attribute_Indexed_Slots.md.  The rewrite is kept so a
 	    leaf, if one comes back, cannot carry one class's offset to another.);
-	  * a class statement's compiled-text helper, which the method SENDS to its
-	    receiver: aClass must reach it, or this raises rather than answer a
-	    method whose class statement DNUs.  Not installed here -- a consumer
-	    that installs calls ___irRegenerateOn___:, which files the helpers.
+	  * a class statement's helper, which the method SENDS to its receiver.
+	    Where aClass reaches it (its own, or inherited) the send stays as it
+	    is.  Where aClass does NOT -- a special receiver's class, an unrelated
+	    class a five-argument def is moved onto -- the helper is generated for
+	    aClass too and the method PERFORMS it instead of sending its selector
+	    (___irWithHelpersReachableFrom___:do:, P2.3a).  Not installed here: a
+	    consumer that installs calls ___irRegenerateOn___:, which files the
+	    helpers.
 
 	Nothing else in the tree names a class.  super() reads the DEFINING class
 	through the module instance by name, globals are literal associations off
@@ -203,16 +208,7 @@ PyMethodIRBuilder >> ___irGenerateFor___: aClass [
 	targetClass := aClass.
 	methNode class: aClass.
 	self ___resolveDeferredInstVarsOn___: aClass.
-	classHelpers ifNotNil: [
-		classHelpers do: [:entry |
-			| receiver |
-			receiver := (entry at: 3) ifTrue: [aClass class] ifFalse: [aClass].
-			(receiver whichClassIncludesSelector: (entry at: 1) environmentId: env) isNil
-				ifTrue: [
-					Error signal: 'PyMethodIRBuilder: ' , aClass name asString
-						, ' cannot reach the class-statement helper '
-						, (entry at: 1) printString]]].
-	^ self generatedMethod
+	^ self ___irWithHelpersReachableFrom___: aClass do: [self generatedMethod]
 
 ]
 
@@ -230,6 +226,35 @@ PyMethodIRBuilder >> ___irGenerateFor___: aClass as: aSelector [
 	^ [methNode selector: aSelector.
 	   self ___irGenerateFor___: aClass]
 		ensure: [methNode selector: original]
+
+]
+
+{ #category : 'generation' }
+PyMethodIRBuilder >> ___irGenerateHelper___: anEntry for: aClass [
+	"The class-statement helper anEntry ({ selector. text or builder.
+	alsoOnTheMetaclass }, see classHelpers) as a method of aClass, installed
+	NOWHERE -- for a copy of this method onto a class that cannot reach the
+	helper (___irWithHelpersReachableFrom___:do:).  Generated from its IR when
+	the helper was built through IR (P3.2), so a helper's own class statements
+	are handled the same way, recursively; compiled from its text otherwise,
+	against the symbol list a runtime compile uses, as UnboundMethod's text
+	route compiled the whole method.  A failure raises: the consumer then
+	keeps its old route."
+
+	| src compiled |
+	src := anEntry at: 2.
+	src isString ifFalse: [^ src ___irGenerateFor___: aClass].
+	importlib ___irCensusOn___ ifTrue: [
+		importlib ___irCensusText: src kind: 'classHelper'].
+	compiled := [aClass _compileMethod: src
+			symbolList: (aClass @env1:___grailRuntimeCompileDictionaries___: nil)
+			environmentId: 1]
+		on: CompileWarning do: [:ex | ex resume].
+	"A compile FAILURE answers the error report rather than raising."
+	(compiled isKindOf: GsNMethod) ifFalse: [
+		Error signal: 'IR class helper did not compile for ' , aClass name asString , ': '
+			, (anEntry at: 1) asString].
+	^ compiled
 
 ]
 
@@ -285,6 +310,21 @@ PyMethodIRBuilder >> ___irNoteClassHelper___: aSelector source: aString classSid
 ]
 
 { #category : 'generation' }
+PyMethodIRBuilder >> ___irNoteClassHelperSend___: aSendNode selector: aSelector [
+	"Remember aSendNode as a send of the class-statement helper aSelector, and
+	answer it.  ClassDefAst >> ___emitIRStatementOn___: notes every helper send
+	it emits, so a generation for a class that cannot reach the helper can
+	turn the send into a perform of a helper generated for that class
+	(___irWithHelpersReachableFrom___:do:).  Recording writes nothing into the
+	tree: the method built here is exactly the one built before."
+
+	classHelperSends isNil ifTrue: [classHelperSends := OrderedCollection new].
+	classHelperSends add: (Array with: aSelector with: aSendNode).
+	^ aSendNode
+
+]
+
+{ #category : 'generation' }
 PyMethodIRBuilder >> ___irRegenerateOn___: aClass [
 	"Generate the ALREADY-BUILT IR again, for a DIFFERENT class, and install the
 	result in that class's env-`env` dictionary; answer the GsNMethod.
@@ -316,6 +356,91 @@ PyMethodIRBuilder >> ___irRegenerateOn___: aClass [
 	self ___resolveDeferredInstVarsOn___: aClass.
 	self ___installDeferredClassHelpersOn___: aClass.
 	^ self install
+
+]
+
+{ #category : 'generation' }
+PyMethodIRBuilder >> ___irWithHelperSend___: aSendNode performing: aMethod do: aBlock [
+	"Evaluate aBlock -- a generation -- with aSendNode, a send of a class-
+	statement helper to self, turned into ``self with: ... performMethod:
+	aMethod'' (env 0, the kernel-native variants for 0 to 3 arguments, which
+	covers every helper arity); the node is restored afterwards, so the tree
+	stays the one every other generation uses.
+
+	The receiver is unchanged.  Run against a special receiver, aMethod must
+	be compiled for that receiver's class, as the method itself is (primitive
+	2027; UnboundMethod >> ___methodForSpecialReceiver___:class:), which is
+	what ___irGenerateHelper___:for: gives.
+
+	Every instance variable of the node is saved and put back; ``arguments''
+	is replaced by a copy before the extra argument is appended, because
+	appendArgument: adds to the collection in place."
+
+	| n saved argsIndex perform |
+	n := aSendNode class instSize.
+	saved := (1 to: n) collect: [:i | aSendNode instVarAt: i].
+	argsIndex := aSendNode class allInstVarNames indexOf: #'arguments'.
+	argsIndex = 0 ifTrue: [Error signal: 'PyMethodIRBuilder: GsComSendNode has no arguments'].
+	perform := #(#'performMethod:' #'with:performMethod:' #'with:with:performMethod:'
+		#'with:with:with:performMethod:')
+			at: (saved at: argsIndex) size + 1
+			ifAbsent: [Error signal: 'PyMethodIRBuilder: no performMethod: for '
+				, (saved at: argsIndex) size printString , ' arguments'].
+	^ [aSendNode instVarAt: argsIndex put: (saved at: argsIndex) copy.
+	   aSendNode selector: perform env: 0.
+	   aSendNode appendArgument: (GsComLiteralNode newObject: aMethod).
+	   aBlock value]
+		ensure: [1 to: n do: [:i | aSendNode instVarAt: i put: (saved at: i)]]
+
+]
+
+{ #category : 'generation' }
+PyMethodIRBuilder >> ___irWithHelpersReachableFrom___: aClass do: aBlock [
+	"Evaluate aBlock -- a generation for aClass -- with every class-statement
+	helper aClass cannot reach PERFORMED rather than sent: generated for aClass
+	(___irGenerateHelper___:for:) and run with the method's own receiver
+	through ___irWithHelperSend___:performing:do:.
+
+	This is what lets a copy onto such a class build its class statement with
+	no text (P2.3a): UnboundMethod's special-receiver form (SmallInteger,
+	Boolean, ... reach none of a Python class's methods) and its five-argument
+	``___grailDirect'' copy onto an unrelated class used to fall back to the
+	method's text twin, which built the class inline.  The helper generated
+	for aClass is that same inline build, so the copy behaves as the twin did.
+
+	A helper filed on the METACLASS (a __new__ or implicit classmethod that
+	defines a class, ClassDefAst >> ___irRunsWithClassReceiver___) still
+	refuses, as does a helper whose send was not recorded: the consumer keeps
+	its old route for those."
+
+	| retargets seen run |
+	retargets := OrderedCollection new.
+	seen := IdentitySet new.
+	classHelpers ifNotNil: [
+		classHelpers do: [:entry |
+			| receiver sends helper |
+			receiver := (entry at: 3) ifTrue: [aClass class] ifFalse: [aClass].
+			((receiver whichClassIncludesSelector: (entry at: 1) environmentId: env) isNil
+				and: [(seen includes: (entry at: 1)) not]) ifTrue: [
+					seen add: (entry at: 1).
+					sends := (classHelperSends ifNil: [#()])
+						select: [:pair | (pair at: 1) == (entry at: 1)].
+					((entry at: 3) or: [sends isEmpty]) ifTrue: [
+						Error signal: 'PyMethodIRBuilder: ' , aClass name asString
+							, ' cannot reach the class-statement helper '
+							, (entry at: 1) printString].
+					helper := self ___irGenerateHelper___: entry for: aClass.
+					importlib ___irCensusOn___ ifTrue: [
+						importlib ___irCensusNote___: #'cp:helper:performed'
+							module: importlib ___irCensusModuleName___
+							def: aClass name asString , '>>' , (entry at: 1) asString count: 1].
+					sends do: [:pair | retargets add: (Array with: (pair at: 2) with: helper)]]]].
+	run := aBlock.
+	retargets do: [:r |
+		| inner |
+		inner := run.
+		run := [self ___irWithHelperSend___: (r at: 1) performing: (r at: 2) do: inner]].
+	^ run value
 
 ]
 

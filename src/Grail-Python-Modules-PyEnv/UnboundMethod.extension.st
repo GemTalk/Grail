@@ -979,8 +979,10 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 	"An IR-built method is GENERATED for aClass from its IR builder (P2.2) --
 	the same tree with aClass as its inClass, which is all the primitive asks
 	of it -- under aMethod's own selector (a ``___grailOrig_'' shadow's too),
-	and, like the compile below, installed nowhere.  nil (no builder, or a
-	class statement whose helper aClass cannot reach) keeps the text route."
+	and, like the compile below, installed nowhere.  A class statement in
+	the def needs no helper on aClass: the method performs its helper
+	generated for aClass (P2.3a).  nil (no builder, or a class-side helper)
+	keeps the text route."
 	compiled := [((Python @env0:at: #importlib) @env0:___irCopiesRegenerate___)
 			ifTrue: [(Python @env0:at: #importlib)
 				@env0:___irMethodFor___: aMethod on: aClass as: aMethod @env0:selector]]
