@@ -464,6 +464,35 @@ StdlibLongTailTestCase >> testPkgutilIterModulesAndWalkPackagesListWhatIsThere [
 
 ]
 
+{ #category : 'Grail-Tests - pkgutil' }
+StdlibLongTailTestCase >> testPkgutilResolveNameResolvesANameToAnObject [
+	"pkgutil.resolve_name was missing (issue #2297), so jsonschema.cli, which
+	imports it, failed to import.  It is CPython's: the ``pkg.mod:attr'' form
+	imports once and walks the rest, a trailing colon answers the module, the
+	dotted form imports as far as it can and walks the rest, and a malformed
+	name, a missing module and a missing attribute raise ValueError,
+	ImportError and AttributeError.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/pkgutil_resolve_name.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'pkgutil_resolve_name' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/pkgutil_resolve_name.py')
+		name: 'pkgutil_resolve_name'.
+	#( 'the_colon_form_imports_once_and_walks_the_rest'
+	   'a_trailing_colon_answers_the_module'
+	   'the_dotted_form_finds_the_package_boundary'
+	   'a_malformed_name_raises_value_error'
+	   'a_missing_module_raises_import_error'
+	   'a_missing_attribute_raises_attribute_error'
+	   'it_can_be_imported_by_name' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'pkgutil.resolve_name check failed: ' , k]
+
+]
+
 { #category : 'Grail-Tests - urllib.request proxies' }
 StdlibLongTailTestCase >> testProxyBypassEnvironmentMatchesNoProxy [
 	"no_proxy is a comma-separated list of DNS suffixes, or '*' for everything.
