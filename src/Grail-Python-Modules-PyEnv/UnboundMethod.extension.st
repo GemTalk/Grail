@@ -943,8 +943,11 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 	plain function that checks nothing, so ``_C.f(2)'' just binds x = 2.
 
 	An IR-built method is not recompiled at all: its IR is generated again for
-	the receiver's class (importlib ___irMethodFor___:on:), and only a method
-	with no builder falls back to the text compile.
+	the receiver's class (importlib ___irMethodFor___:on:).  One with no
+	builder to generate from raises a TypeError naming its module and why
+	(importlib ___irCopyRefused___:site:onto:): it keeps no Smalltalk text to
+	compile since P2.3b, and a method compiled for its own class cannot run
+	with a special receiver at all.
 
 	Cached per (method, receiver class) in SessionTemps.  The GsNMethod object
 	itself is the key, so an ``install.sh'' -- which replaces the method object --
@@ -981,27 +984,27 @@ UnboundMethod >> ___methodForSpecialReceiver___: aMethod class: aClass [
 	of it -- under aMethod's own selector (a ``___grailOrig_'' shadow's too),
 	and, like the compile below, installed nowhere.  A class statement in
 	the def needs no helper on aClass: the method performs its helper
-	generated for aClass (P2.3a).  nil (no builder, or a class-side helper)
-	keeps the text route."
-	compiled := [((Python @env0:at: #importlib) @env0:___irCopiesRegenerate___)
-			ifTrue: [(Python @env0:at: #importlib)
-				@env0:___irMethodFor___: aMethod on: aClass as: aMethod @env0:selector]]
-		@env0:on: Error do: [:ex |
-			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
-			ex @env0:return: nil].
-	compiled == nil ifFalse: [
-		(Python @env0:at: #importlib) @env0:___irCensusCopy___: 'special' route: 'regen'
-			source: nil of: aMethod.
-		per @env0:at: aClass put: compiled.
-		self ___recordHome___: home ofRecompile: compiled.
-		^ compiled].
+	generated for aClass (P2.3a).  nil -- no builder -- raises: an IR method
+	keeps no text twin to compile instead (P2.3b), and is not cached, so a
+	later call after a re-import can succeed."
+	([BaseException @env0:___isIRPythonMethod___: aMethod]
+		@env0:on: Error do: [:ex | ex @env0:return: false]) ifTrue: [
+			compiled := [(Python @env0:at: #importlib)
+					@env0:___irMethodFor___: aMethod on: aClass as: aMethod @env0:selector]
+				@env0:on: Error do: [:ex |
+					(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+					ex @env0:return: nil].
+			compiled == nil ifTrue: [
+				^ (Python @env0:at: #importlib)
+					@env0:___irCopyRefused___: aMethod site: 'special' onto: aClass].
+			(Python @env0:at: #importlib) @env0:___irCensusCopy___: 'special' route: 'regen'
+				source: nil of: aMethod.
+			per @env0:at: aClass put: compiled.
+			self ___recordHome___: home ofRecompile: compiled.
+			^ compiled].
 	src := self ___methodSourceOrNil___: aMethod.
 	(Python @env0:at: #importlib) @env0:___irCensusCopy___: 'special'
-		route: (src == nil
-			ifTrue: ['none']
-			ifFalse: [([BaseException @env0:___isIRPythonMethod___: aMethod]
-					@env0:on: Error do: [:ex | ex @env0:return: false])
-				ifTrue: ['twin'] ifFalse: ['text']])
+		route: (src == nil ifTrue: ['none'] ifFalse: ['text'])
 		source: src of: aMethod.
 	src == nil ifTrue: [^ nil].
 	"CompileWarning is RESUMED, not ignored.  It is a Notification, so an
@@ -1036,14 +1039,12 @@ UnboundMethod >> ___methodSourceOrNil___: aMethod [
 	wrong TypeError rather than an uncatchable Smalltalk error."
 
 	| s |
-	"An IR-built method's sourceString is its Python; the text the IR replaced
-	is in the class's ___irTextSources___ table (importlib
-	___textSourceFor___:in:selector:), which a recompile against the
-	receiver's class needs."
-	([BaseException @env0:___isIRPythonMethod___: aMethod] @env0:on: Error do: [:ex | ex @env0:return: false]) ifTrue: [
-		^ [(Python @env0:at: #importlib) @env0:___textSourceFor___: aMethod
-				in: aMethod @env0:inClass selector: aMethod @env0:selector]
-			@env0:on: Error do: [:ex | ex @env0:return: nil]].
+	"An IR-built method's sourceString is its Python, which no Smalltalk
+	compile can take, and since P2.3b no text twin is kept for it: nil.
+	(___methodForSpecialReceiver___:class: generates such a method from its
+	IR and never asks; this guard keeps the Python out of the compiler.)"
+	([BaseException @env0:___isIRPythonMethod___: aMethod] @env0:on: Error do: [:ex | ex @env0:return: false])
+		ifTrue: [^ nil].
 	s := [aMethod @env0:sourceString]
 		@env0:on: Error do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
@@ -1116,10 +1117,15 @@ UnboundMethod >> ___performMethod___: aMethod on: obj args: args [
 	this compiled method (its oop is in the name) and sent under that: a
 	virtual send, but to a name only aMethod answers to.  On the class that
 	owns it the method object is shared as is; onto an unrelated class it is
-	recompiled from source, the self-send dispatcher's own route
-	(importlib >> ___copySessionMethod___:from:to:prefix:).  Session methods
-	are transient and private to this session.  If the install fails the old
-	send is kept, so nothing that worked before can stop working."
+	recompiled from source, or generated from its IR, the self-send
+	dispatcher's own route (importlib >> ___copySessionMethod___:from:to:prefix:).
+	Session methods are transient and private to this session.  If the
+	install fails the old send is kept, so nothing that worked before can
+	stop working -- except the copier's TypeError for an IR method it cannot
+	generate for the unrelated class (P2.3b), which names the module and the
+	cause: the old send there is the uncatchable MessageNotUnderstood or the
+	recursion above.  It is a Python exception, not an Error, so the handler
+	below lets it through."
 
 	| sel home target direct |
 	sel := aMethod @env0:selector.

@@ -32,8 +32,7 @@ grail class >> ___censusRouteOf___: aMethod source: aSourceOrNil [
 	"The P2.2 census route of one @smalltalk_class copy
 	(importlib ___irCensusCopy___:route:source:)."
 
-	aSourceOrNil isNil ifTrue: [^ 'none'].
-	^ (BaseException ___isIRPythonMethod___: aMethod) ifTrue: ['twin'] ifFalse: ['text']
+	^ aSourceOrNil isNil ifTrue: ['none'] ifFalse: ['text']
 
 ]
 
@@ -43,8 +42,11 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 	(and its metaclass) onto targetClass (and its metaclass respectively).
 	Skips internal class attribute accessors (category ''Grail-Class Attrs'').
 	Methods are installed under category ''Grail-ST-Extension''.  An IR-built
-	method is regenerated onto the target from its IR builder (P2.2); a text
-	one, or an IR one with no builder, is recompiled from its text."
+	method is regenerated onto the target from its IR builder (P2.2); one with
+	no builder cannot be copied -- it keeps no text since P2.3b, and sharing
+	it would leave the temporary class its inClass -- and raises a TypeError
+	(importlib ___irCopyRefused___:site:onto:).  A text method is recompiled
+	from its text."
 
 	{ tempClass -> targetClass. tempClass class -> targetClass class } do: [:pair |
 		| md |
@@ -56,9 +58,9 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 				(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
 					meth := pair key compiledMethodAt: sel environmentId: 1.
 					(self ___regenerate___: meth onto: pair value) ifFalse: [
-						"A text method, or an IR one with no builder: its text,
-						which for an IR method is in the class-side
-						___irTextSources___ table (its sourceString is Python)."
+						(BaseException ___isIRPythonMethod___: meth) ifTrue: [
+							^ importlib ___irCopyRefused___: meth site: 'st-class'
+								onto: pair value].
 						src := importlib ___textSourceFor___: meth in: pair key selector: sel.
 						importlib ___irCensusCopy___: 'st-class'
 							route: (self ___censusRouteOf___: meth source: src)
@@ -126,11 +128,11 @@ grail class >> ___refileClassHelpersOn: targetClass [
 grail class >> ___regenerate___: aMethod onto: aClass [
 	"Whether an IR-built method of the temporary class went onto aClass by
 	regenerating its IR there (importlib ___irRegenerate___:onto:category:,
-	P2.2), with no text compiled.  False for a text method, and for an IR one
-	with no builder to regenerate from: the caller then recompiles its text."
+	P2.2), with no text compiled.  False for a text method, which the caller
+	recompiles, and for an IR one with no builder to regenerate from, which
+	the caller refuses."
 
-	((BaseException ___isIRPythonMethod___: aMethod)
-		and: [importlib ___irCopiesRegenerate___]) ifFalse: [^ false].
+	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ false].
 	(importlib ___irRegenerate___: aMethod onto: aClass category: 'Grail-ST-Extension')
 		isNil ifTrue: [^ false].
 	importlib ___irCensusCopy___: 'st-class' route: 'regen' source: nil.
