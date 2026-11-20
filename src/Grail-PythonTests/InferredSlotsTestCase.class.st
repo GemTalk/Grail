@@ -131,7 +131,7 @@ InferredSlotsTestCase >> testFlagOffChangesNothing [
 	self assert: (point whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) isNil.
 	sent := self ___selectorsSentBy___: #total in: point.
-	self assert: (sent includes: 'dynamicInstVarAt:') description: sent printString.
+	self assert: (sent anySatisfy: [:s | s beginsWith: 'dynamicInstVarAt:']) description: sent printString.
 	self deny: (sent anySatisfy: [:s | s includesString: '___pyattr_'])
 		description: sent printString.
 
@@ -167,7 +167,7 @@ InferredSlotsTestCase >> testInferredNamesBecomeNamedInstVarsWithAccessors [
 	self assert: (point whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) isNil.
 	sent := self ___selectorsSentBy___: #total in: point.
 	self assert: (sent includes: '___pyattr_x___') description: sent printString.
-	self deny: (sent includes: 'dynamicInstVarAt:') description: sent printString.
+	self deny: (sent anySatisfy: [:s | s beginsWith: 'dynamicInstVarAt:']) description: sent printString.
 	self assert: (point @env1:___pyInferredSlotNames___) asArray equals: #(#x #y).
 
 ]
