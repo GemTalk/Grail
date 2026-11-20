@@ -5433,6 +5433,10 @@ importlib class >> ___irBuilderCacheForgetModule___: aModuleName [
 	refusals isNil ifFalse: [
 		(refusals select: [:k | k size > prefix size and: [(k copyFrom: 1 to: prefix size) = prefix]])
 			do: [:k | refusals remove: k ifAbsent: []]].
+	refusals := SessionTemps current at: #'___grailIRRebuiltClasses___' otherwise: nil.
+	refusals isNil ifFalse: [
+		(refusals keys select: [:k | k size > prefix size and: [(k copyFrom: 1 to: prefix size) = prefix]])
+			do: [:k | refusals removeKey: k ifAbsent: []]].
 	cache := SessionTemps current at: #'___grailIRBuilderCache___' otherwise: nil.
 	cache isNil ifTrue: [^ self].
 	victims := IdentitySet new.
@@ -5496,6 +5500,7 @@ importlib class >> ___irBuilderCacheReset___ [
 	SessionTemps current removeKey: #'___grailIRBuilderCache___' ifAbsent: [].
 	SessionTemps current removeKey: #'___grailIRBuilderCacheCount___' ifAbsent: [].
 	SessionTemps current removeKey: #'___grailIRRebuildRefusals___' ifAbsent: [].
+	SessionTemps current removeKey: #'___grailIRRebuiltClasses___' ifAbsent: [].
 	^ self
 
 ]
@@ -6663,7 +6668,7 @@ importlib class >> ___irRebuildBuilderFor___: aMethod [
 	disagrees with the file (a tracked module), when the re-parsed def's text
 	is not the text the method was built from, or on any error."
 
-	| id parts modName side inst modClass path ast harvested home thisClass result memoKey |
+	| id parts modName side inst modClass path ast harvested home thisClass result memoKey classKey built |
 	id := self ___irDefIdOf___: aMethod.
 	id isNil ifTrue: [^ nil].
 	parts := id subStrings: '|'.
@@ -6692,47 +6697,58 @@ importlib class >> ___irRebuildBuilderFor___: aMethod [
 			self ___irCensusOn___ ifTrue: [
 				self ___irCensusCopy___: 'rebuild' route: 'refused-memo' source: nil of: aMethod].
 			^ nil].
-		ast := (self ___compilingFile___: path do: [
-				ModuleAst parseSource: (self ___sourceStringForPath___: path)])
-			path: path;
-			yourself.
-		ast name: modName.
-		ast useTempsForBlock: false.
-		ast setParent: nil.
-		self expandStarImports: ast.
-		harvested := self ___irHarvestDefsFor___: id from: ast name: modName moduleClass: modClass.
-		harvested isNil ifTrue: [^ nil].
+		"The class statement is parsed, re-emitted and built ONCE per session and
+		file (___irRebuiltClasses___): every later rebuild of a def of it --
+		another method of the class, or a method of another copy of the class
+		built from the same statement -- only matches its source against the
+		builders already made."
+		classKey := modName , '|' , path , '|' , (parts at: 2).
+		built := self ___irRebuiltClasses___ at: classKey otherwise: nil.
+		built isNil ifTrue: [
+			ast := (self ___compilingFile___: path do: [
+					ModuleAst parseSource: (self ___sourceStringForPath___: path)])
+				path: path;
+				yourself.
+			ast name: modName.
+			ast useTempsForBlock: false.
+			ast setParent: nil.
+			self expandStarImports: ast.
+			harvested := self ___irHarvestDefsFor___: id from: ast name: modName moduleClass: modClass.
+			harvested isNil ifTrue: [^ nil].
+			built := Dictionary new.
+			harvested keysAndValuesDo: [:k :entry |
+				| kparts builder |
+				kparts := k asString subStrings: '|'.
+				(kparts size = 5 and: [(kparts at: 2) = (parts at: 2)]) ifTrue: [
+					builder := [CallAst ___withCompileContext___: (entry at: 2) do: [
+							(entry at: 1) ___irBuilderFor___: ((kparts at: 5) = 'c'
+								ifTrue: [self ___irShareStandInClass___ class]
+								ifFalse: [self ___irShareStandInClass___])]]
+						on: Error do: [:ex |
+							(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+							ex return: nil].
+					builder notNil ifTrue: [
+						builder defId: k asString.
+						built at: k asString put: builder]]].
+			self ___irRebuiltClasses___ at: classKey put: built].
 		home := aMethod inClass.
 		thisClass := home isMeta ifTrue: [home thisClass] ifFalse: [home].
 		result := nil.
-		harvested keysAndValuesDo: [:k :entry |
-			| kparts |
-			kparts := k asString subStrings: '|'.
-			(kparts size = 5 and: [(kparts at: 2) = (parts at: 2)]) ifTrue: [
-				| builder |
-				builder := [CallAst ___withCompileContext___: (entry at: 2) do: [
-						(entry at: 1) ___irBuilderFor___: ((kparts at: 5) = 'c'
-							ifTrue: [self ___irShareStandInClass___ class]
-							ifFalse: [self ___irShareStandInClass___])]]
-					on: Error do: [:ex |
-						(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
-						ex return: nil].
-				builder notNil ifTrue: [
-					| sel owner sib |
-					builder defId: k asString.
-					sel := builder selector.
-					k asString = id
+		built keysAndValuesDo: [:k :builder |
+			| kparts owner sib |
+			kparts := k subStrings: '|'.
+			k = id
+				ifTrue: [
+					(self ___irRebuiltSourceOf___: builder matches: aMethod)
 						ifTrue: [
-							(self ___irRebuiltSourceOf___: builder matches: aMethod)
-								ifTrue: [
-									result := builder.
-									self ___irCacheBuilder___: builder forMethod: aMethod]]
-						ifFalse: [
-							owner := (kparts at: 5) = 'c' ifTrue: [thisClass class] ifFalse: [thisClass].
-							sib := owner compiledMethodAt: sel environmentId: 1 otherwise: nil.
-							((self ___irDefIdOf___: sib) = k asString
-								and: [self ___irRebuiltSourceOf___: builder matches: sib])
-								ifTrue: [self ___irCacheBuilder___: builder forMethod: sib]]]]].
+							result := builder.
+							self ___irCacheBuilder___: builder forMethod: aMethod]]
+				ifFalse: [
+					owner := (kparts at: 5) = 'c' ifTrue: [thisClass class] ifFalse: [thisClass].
+					sib := owner compiledMethodAt: builder selector environmentId: 1 otherwise: nil.
+					((self ___irDefIdOf___: sib) = k
+						and: [self ___irRebuiltSourceOf___: builder matches: sib])
+						ifTrue: [self ___irCacheBuilder___: builder forMethod: sib]]].
 		result isNil ifTrue: [self ___irRebuildRefusals___ add: memoKey].
 		result]
 		on: Error do: [:ex |
@@ -6760,6 +6776,27 @@ importlib class >> ___irRebuildRefusals___ [
 
 	^ SessionTemps current at: #'___grailIRRebuildRefusals___' ifAbsent: [
 		SessionTemps current at: #'___grailIRRebuildRefusals___' put: Set new]
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irRebuiltClasses___ [
+	"This session's class statements rebuilt from source
+	(___irRebuildBuilderFor___:): ``<module>|<path>|<class offset>'' -> def id
+	-> the builder made for that def.  Soft values: the in-memory GC may
+	clear one under pressure, which only costs the next rebuild a parse.
+
+	WHY (P2.3b).  A rebuild parsed the module and re-emitted the class for
+	every miss, and a refused one cached nothing.  Several committed copies
+	of one class statement -- a module deployed into more than one app
+	namespace, or rebuilt by successive installs, each copy's methods a miss
+	of their own -- each paid the parse, and a session reinstalling their
+	dispatchers paid it at every start.  Now the statement is built once and
+	each copy's method only compares its source with the builder's.
+	Cleared with the builder cache, and per module when it is rebuilt."
+
+	^ SessionTemps current at: #'___grailIRRebuiltClasses___' ifAbsent: [
+		SessionTemps current at: #'___grailIRRebuiltClasses___' put: KeySoftValueDictionary new]
 
 ]
 
