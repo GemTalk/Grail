@@ -246,18 +246,27 @@ IRRegenerateTestCase >> testAMissRebuildsTheMethodTheBuildMade [
 
 { #category : 'Grail-Tests' }
 IRRegenerateTestCase >> testAnUninstalledMethodMustReachItsClassHelper [
-	"Base's with_class holds a class statement, carried as a text helper the
-	method sends to its receiver.  The helper is on Base, so a method generated
-	for a subclass reaches it; one generated for an unrelated class would DNU
-	at the class statement, and ___irMethodFor___:on: -- which installs nothing,
-	helpers included -- answers nil so the consumer keeps its text route."
+	"Base's with_class holds a class statement, carried as a helper the method
+	sends to its receiver.  The helper is on Base, so a method generated for a
+	subclass reaches it and sends it.  One generated for an UNRELATED class
+	cannot; since P2.3a it PERFORMS the helper generated for that class
+	instead, so ___irMethodFor___:on: -- which installs nothing, helpers
+	included -- answers a method that builds the class on a Stranger, and
+	Stranger gains neither the def nor a helper.  (It used to answer nil and
+	leave the consumer to the text twin.)"
 
-	| mod meth |
+	| mod meth stranger copy |
 	mod := self ___load___: self ___fixturePath___ as: 'ir_regen_fixture'.
 	meth := (self ___class___: 'Base' of: mod) compiledMethodAt: #'with_class' environmentId: 1.
+	stranger := self ___class___: 'Stranger' of: mod.
 	self assert: (importlib ___irMethodFor___: meth on: (self ___class___: 'GrandChild' of: mod)) notNil.
-	self assert: (importlib ___irMethodFor___: meth on: (self ___class___: 'Stranger' of: mod)) isNil.
-	self deny: ((self ___class___: 'Stranger' of: mod) includesSelector: #'with_class' environmentId: 1)
+	copy := importlib ___irMethodFor___: meth on: stranger.
+	self assert: copy notNil.
+	self assert: copy inClass == stranger.
+	self assert: ((stranger @env1:___pyCallValue___: #() kw: nil) performMethod: copy) equals: 'local'.
+	self deny: (stranger includesSelector: #'with_class' environmentId: 1).
+	self assert: ((stranger methodDictForEnv: 1) ifNil: [#()] ifNotNil: [:md | md keys select: [:sel |
+		(BaseException ___classBodyHelperClassNameFor___: sel) notNil]]) isEmpty
 
 ]
 

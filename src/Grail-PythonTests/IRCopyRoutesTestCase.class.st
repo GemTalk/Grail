@@ -6,7 +6,10 @@ copies an IR-built method without compiling any Smalltalk text (the shadows
 and the direct copy from a builder the session has cached; otherwise they
 keep the twin): it is generated for the target from its IR builder, under
 the selector the copy is installed by (importlib ___irMethodFor___:on:as:,
-___irCachedMethodFor___:on:as:, ___irRegenerate___:onto:category:).
+___irCachedMethodFor___:on:as:, ___irRegenerate___:onto:category:).  A def
+that defines a class takes its class statement along: a copy onto a class
+that cannot reach the def's helper performs one generated for that class
+(PyMethodIRBuilder >> ___irWithHelpersReachableFrom___:do:).
 
 The census rows (importlib ___irCensusCopy___:route:source:of:) say which
 route each copy took; tests/python/ir_copies_without_text.py is the CPython
@@ -80,7 +83,7 @@ IRCopyRoutesTestCase >> ___runChecksCounting___: aModule [
 	importlib ___irCensusReset___.
 	importlib ___irCensusOn: true.
 	checks := [self ___checksOf___: aModule] ensure: [importlib ___irCensusOn: false].
-	self assert: checks size equals: 11.
+	self assert: checks size equals: 13.
 	checks keysAndValuesDo: [:name :r |
 		self assert: (r at: 1) description: name , ' answered ' , (r at: 2)].
 	^ checks
@@ -119,10 +122,11 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	dispatcher's shadow on a SUBCLASS reaches the definer's by inheritance,
 	and the del shadow is on the definer itself, so both are generated with
 	no text and no helper of their own.  The direct copy onto an UNRELATED
-	class cannot reach it, so it keeps the def's text twin, which builds the
-	class inline; nor can a special receiver's class (SmallInteger), so
-	``Home.kind_local(3)'' does the same.  Those are the two twins a run-time
-	copy here still takes."
+	class cannot reach it, nor can a special receiver's class (SmallInteger,
+	SmallDouble): those copies PERFORM the helper generated for their own
+	class, installed nowhere (P2.3a), where they used to keep the def's text
+	twin, which built the class inline.  So no run-time copy here takes a
+	twin, and neither Away nor SmallInteger gains a helper."
 
 	| mod lbase lsub delLocal away shadow |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
@@ -134,6 +138,8 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	self assert: (self ___helpersOf___: lbase) size equals: 1.
 	self assert: (self ___helpersOf___: lsub) isEmpty.
 	self assert: (self ___helpersOf___: away) isEmpty.
+	self assert: (self ___helpersOf___: SmallInteger) isEmpty.
+	self assert: (self ___helpersOf___: SmallDouble) isEmpty.
 	self assert: (self ___helpersOf___: delLocal) size equals: 1.
 	shadow := lsub compiledMethodAt: #'___grailOrig_build' environmentId: 1 otherwise: nil.
 	self assert: shadow notNil.
@@ -143,12 +149,15 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	self assert: shadow notNil.
 	self assert: shadow selector equals: #'___grailOrig_m'.
 	self assert: (BaseException ___isIRPythonMethod___: shadow).
-	self assert: (self ___count___: 'cp:direct:twin') equals: 1.
-	self assert: ((self ___examples___: 'cp:direct:twin') allSatisfy: [:e |
-		e includesString: 'five_local']).
-	self assert: (self ___count___: 'cp:special:twin') equals: 1.
-	self assert: ((self ___examples___: 'cp:special:twin') allSatisfy: [:e |
-		e includesString: 'kind_local'])
+	self assert: (self ___count___: 'cp:direct:twin') equals: 0.
+	self assert: (self ___count___: 'cp:special:twin') equals: 0.
+	"five_local and five_captures on Away; kind_local on SmallInteger, and
+	kind_captures on SmallInteger and SmallDouble."
+	self assert: (self ___count___: 'cp:helper:performed') >= 5.
+	#('Away>>___irClassDef_' 'SmallInteger>>___irClassDef_' 'SmallDouble>>___irClassDef_')
+		do: [:what |
+			self assert: ((self ___examples___: 'cp:helper:performed') anySatisfy: [:e |
+				e includesString: what])]
 
 ]
 
@@ -180,17 +189,18 @@ IRCopyRoutesTestCase >> testEveryRuntimeCopyAvoidsTheTextTwin [
 	special receiver's is installed nowhere, and keeps the method's own).
 	The special receiver's cases are an int, a float, True and False, and
 	#2256's lambda in a comprehension whose target shadows the receiver
-	parameter.  (None, checked beside them, does not need this form.)"
+	parameter.  (None, checked beside them, does not need this form.)  A def
+	that defines a class is no exception since P2.3a: the copy performs its
+	class statement's helper generated for the copy's class
+	(testADefsClassHelperIsReachedByEveryCopy)."
 
 	| mod |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
 	self ___runChecksCounting___: mod.
 	#('del-shadow' 'dispatch-shadow') do: [:site |
 		self assert: (self ___count___: 'cp:' , site , ':twin') equals: 0].
-	"Save five_local's and kind_local's, whose class helper Away and
-	SmallInteger cannot reach (testADefsClassHelperIsReachedByEveryCopy)."
-	self assert: (self ___count___: 'cp:direct:twin') equals: 1.
-	self assert: (self ___count___: 'cp:special:twin') equals: 1.
+	self assert: (self ___count___: 'cp:direct:twin') equals: 0.
+	self assert: (self ___count___: 'cp:special:twin') equals: 0.
 	self assert: (self ___count___: 'cp:del-shadow:regen') > 0.
 	self assert: (self ___count___: 'cp:direct:regen') > 0.
 	self assert: (self ___count___: 'cp:special:regen') > 0

@@ -1742,11 +1742,18 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 			overwrote the class with nil, and the next read of the name raised
 			NameError (test_global test_class_def, flag-on only).  The text
 			path emits no outer store here either; this is the same shape."
-			aBuilder add: (aBuilder send: sel to: aBuilder selfNode with: args env: 1).
+			aBuilder add: (aBuilder ___irNoteClassHelperSend___:
+				(aBuilder send: sel to: aBuilder selfNode with: args env: 1)
+				selector: sel).
 			^ self].
+	"THE SEND IS RECORDED with its helper (___irNoteClassHelperSend___:selector:),
+	so a copy of this method onto a class that cannot reach the helper can
+	still build the class (PyMethodIRBuilder >> ___irWithHelpersReachableFrom___:do:)."
 	aBuilder add: (aBuilder
 		assign: (aBuilder leafFor: (self ___manglePrivate___: name) asSymbol)
-		from: (aBuilder send: sel to: aBuilder selfNode with: args env: 1)).
+		from: (aBuilder ___irNoteClassHelperSend___:
+			(aBuilder send: sel to: aBuilder selfNode with: args env: 1)
+			selector: sel)).
 	^ self
 
 ]
