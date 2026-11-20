@@ -99,7 +99,8 @@ median is 65%:
   - **A C extension or its stand-in is missing:**
     - cffi: no `ctypes`, #1413.
     - pyjwt: cryptography's Rust bindings.
-    - rpds-py: `execution of extension module rpds.rpds failed`.
+    - rpds-py: `execution of extension module rpds.rpds failed`. Since
+      fixed: 130 / 132 on 2026-11-20 (see "Re-measured since" below).
     - googleapis-common-protos: grpc's `cygrpc` fails to `dlopen`.
     - pydantic-settings: `pydantic_core` has no `ArgsKwargs`.
   - **A Grail bug at collection:**
@@ -159,12 +160,62 @@ more than once`). So the rerun used a new namespace, through the runner's new
 `--namespace` option. The stale `pypi_package_tests` namespace is still on
 the stone.
 
+### Re-measured since: the jsonschema family (2026-11-20)
+
+A teammate reported that rpds-py's native module created all five of its
+classes, but its `__all__` was `[]`. So its package's `from .rpds import *`
+exported nothing, and jsonschema failed on `HashTrieMap`. These five projects
+were re-measured once that was fixed. **The headline numbers above were not.**
+
+Setup:
+- Grail `main` at `d2a4cb08`, CPython 3.14.8, Darwin arm64.
+- A venv holding only these projects and their dependencies, at the census's
+  versions, with pytest 9.1.1 as before.
+- `--only attrs,referencing,rpds-py,jsonschema,jsonschema-specifications`, for
+  `--submodules` and for the tests runner.
+
+| Project | 2026-10-15 | **2026-11-20** | Submodules | Tests |
+| --- | --- | --- | ---: | ---: |
+| attrs | FAILS, #1418 | **IMPORTS** | 18 / 18 | CPython 0 |
+| rpds-py | FAILS, C extension | **IMPORTS** | — | **130 / 132** (was 0) |
+| jsonschema | FAILS, #1418 | **IMPORTS** | 13 / 14 | no tests |
+| referencing | FAILS, #1418 | **IMPORTS** | 6 / 6 | no tests |
+| jsonschema-specifications | FAILS, #1418 | **IMPORTS** | 1 / 1 | no tests |
+
+jsonschema validates and rejects instances as it does under CPython. The fixes:
+- **#1418**, attrs, closed late on 2026-10-15, after that day's measurement.
+- **#2287:** a C module's `__all__` filled in place is exported whole; this
+  was the reported bug. `PyMapping_Items` also answers its pairs in CPython's
+  layout, so `HashTrieMap({'a': 1})` works.
+- **#2289:** a PyO3 class's operators reach its slots. `PyType_FromSpec`
+  keeps every suite slot, so `HashTrieMap` subscripts, has a `len()`, compares
+  and hashes, and `HashTrieSet` supports `|`. `PyIter_Next` also answers tuples
+  in CPython's layout, so `HashTrieMap(d.items())` works.
+
+What still fails:
+- **`jsonschema.cli`:** Grail's own `pkgutil` (`src/python/stdlib/pkgutil.py`)
+  has no `resolve_name` (#2297). jsonschema's eight `benchmarks` modules need `pyperf`,
+  which CPython lacks in this venv too, so they are not counted.
+- **rpds-py's `test_fromkeys_explicit_value_not_copied`:** a list passed into C
+  is a copy, so `HashTrieMap.fromkeys(keys, [])` stores a list that the
+  caller's `append` does not reach (#2301).
+- **rpds-py's `test_reverse`:** `reversed()` does not call a wheel class's
+  `__reversed__`, so `reversed(rpds.List(...))` answers "not subscriptable"
+  (#2300).
+- **pytest's assertion rewriting:** both failures above report
+  `module 'builtins' has no attribute 'locals'` instead of the comparison,
+  because Grail's `builtins` has no `locals` (#2298).
+- **pytest 9.2.0** cannot run any suite: it calls `importlib.util.source_hash`,
+  which Grail lacks (#2299). That is why this run pins 9.1.1.
+
 ### Every row
 
 `Submodules` is Grail's count over CPython's, for projects whose top level
 imports; `—` means a single-module wheel. `First blocker` is what stops the
 top-level import. `Tests` is the project's own tests that pass under Grail over those
 that pass under CPython (see above); "(budget)" means the run stopped at 45 minutes. A **bold** verdict changed since 2026-10-11.
+The five rows marked "re-measured 2026-11-20" come from the section above;
+the rest are 2026-10-15's.
 
 | # | Project | Version | Scope | Verdict | Submodules | Tests | First blocker |
 | ---: | --- | --- | --- | --- | ---: | ---: | --- |
@@ -196,7 +247,7 @@ that pass under CPython (see above); "(budget)" means the run stopped at 45 minu
 | 26 | annotated-types | 0.8.0 | pure | IMPORTS | 1 / 1 | 242 / 256 |  |
 | 27 | h11 | 0.16.0 | pure | IMPORTS | 10 / 10 | no tests |  |
 | 28 | typing-inspection | 0.4.4 | pure | IMPORTS | 2 / 2 | 93 / 96 |  |
-| 29 | attrs | 26.1.0 | pure | FAILS |  | CPython 0 | #1418 (attrs) |
+| 29 | attrs | 26.1.0 | pure | **IMPORTS** | 18 / 18 | CPython 0 | re-measured 2026-11-20 |
 | 30 | s3transfer | 0.19.2 | pure | **IMPORTS** | 14 / 14 | 141 / 676 (budget) |  |
 | 31 | aiobotocore | 3.9.2 | ext-dep | IMPORTS | 19 / 37 | CPython 0 |  |
 | 32 | protobuf | 7.36.2 | ext | IMPORTS | 37 / 55 | no tests |  |
@@ -215,16 +266,16 @@ that pass under CPython (see above); "(budget)" means the run stopped at 45 minu
 | 45 | starlette | 1.7.0 | pure | IMPORTS | 33 / 34 | CPython 0 |  |
 | 46 | uvicorn | 0.54.0 | pure | FAILS |  | CPython 0 | #1429 |
 | 47 | multidict | 6.9.1 | ext | IMPORTS | 3 / 3 | CPython 0 |  |
-| 48 | jsonschema | 4.26.0 | ext-dep | FAILS |  | no tests | #1418 (attrs) |
-| 49 | rpds-py | 2026.9.1 | ext | FAILS |  | 0 / 132 | C extension |
+| 48 | jsonschema | 4.26.0 | ext-dep | **IMPORTS** | 13 / 14 | no tests | re-measured 2026-11-20 |
+| 49 | rpds-py | 2026.9.1 | ext | **IMPORTS** | — | 130 / 132 | re-measured 2026-11-20 |
 | 50 | yarl | 1.25.1 | ext | IMPORTS | 7 / 7 | CPython 0 |  |
 | 51 | aiohttp | 3.14.5 | ext | FAILS |  | CPython 0 | #1418 (attrs) |
 | 52 | rich | 15.0.0 | pure | IMPORTS | 68 / 75 | no tests |  |
 | 53 | tomlkit | 0.15.1 | pure | IMPORTS | 11 / 11 | 265 / 1,051 (budget) |  |
 | 54 | markdown-it-py | 4.2.0 | pure | IMPORTS | 65 / 65 | no tests |  |
 | 55 | propcache | 0.5.4 | ext | IMPORTS | 3 / 3 | CPython 0 |  |
-| 56 | referencing | 0.37.0 | ext-dep | FAILS |  | no tests | #1418 (attrs) |
-| 57 | jsonschema-specifications | 2025.9.1 | ext-dep | FAILS |  | no tests | #1418 (attrs) |
+| 56 | referencing | 0.37.0 | ext-dep | **IMPORTS** | 6 / 6 | no tests | re-measured 2026-11-20 |
+| 57 | jsonschema-specifications | 2025.9.1 | ext-dep | **IMPORTS** | 1 / 1 | no tests | re-measured 2026-11-20 |
 | 58 | mdurl | 0.1.2 | pure | IMPORTS | 5 / 5 | no tests |  |
 | 59 | pillow | 12.3.0 | ext | IMPORTS | 31 / 91 | CPython 0 |  |
 | 60 | opentelemetry-api | 1.45.1 | pure | IMPORTS | 28 / 29 | 168 / 256 |  |
@@ -276,7 +327,7 @@ excluded):
 
 | Gap | Projects |
 | --- | --- |
-| #1418 `object.__setattr__.__get__(obj)` re-dispatches to the override (attrs) | attrs, jsonschema, referencing, jsonschema-specifications (and aiohttp) |
+| ~~#1418 `object.__setattr__.__get__(obj)` re-dispatches to the override (attrs)~~ fixed; all four import as of 2026-11-20 | ~~attrs, jsonschema, referencing, jsonschema-specifications~~ (aiohttp not re-measured) |
 | #1414 pydantic-core's extension needs PEP 489 multi-phase init | pydantic, fastapi, pydantic-settings, openai (and pydantic-core itself) |
 | #1413 no `ctypes` | fsspec, filelock, s3fs |
 | #1428 object-model gaps | googleapis-common-protos (and wrapt, sqlalchemy) |
@@ -290,7 +341,7 @@ excluded):
 | #1429 `logging.addLevelName` (the next wall after `setLoggerClass`, #1573) | 184 | pip |
 | cryptography's Rust bindings (`_rust` has no `openssl`, `exceptions`, `x509`, …) | 66 | cryptography 58, google-auth 8 |
 | pillow's Python modules after its extension is missing (`PIL.ImageFile` has no `ImageFile`, …) | 45 | pillow; inferred, not root-caused |
-| #1418 attrs | 41 | pip 17, aiobotocore 16, rich 6, google-auth 2 |
+| #1418 attrs (fixed since; these modules not re-measured) | 41 | pip 17, aiobotocore 16, rich 6, google-auth 2 |
 | #1429 the rest: `types.CapsuleType`, `mmap`, `email.policy.EmailPolicy`, `unittest.case.SkipTest`, `importlib.metadata` (`Distribution`, and `version()` of an installed package), `xmlrpc.client`, `py_compile`, `plistlib`, `cProfile`, `termios`, `_imp` | 41 | pillow, numpy, pip, wheel, hatchling, aiobotocore, … |
 | `dlopen` of a C extension fails | 27 | lxml 16, numpy 5, grpcio-status 2, pillow 2, beautifulsoup4 1, pyyaml 1 |
 | #1429 no `fileinput` | 20 | numpy |
@@ -302,7 +353,8 @@ excluded):
 | #1428 `__weakref__` slot check | 3 | protobuf 2, grpcio-status 1 |
 
 **Most of the pure-Python queue is now two issues.** #1418 (attrs) blocks four
-top-level projects and 41 submodules. #1429's `logging.addLevelName` alone is
+top-level projects and 41 submodules. (#1418 has since been fixed; see
+"Re-measured since" above.) #1429's `logging.addLevelName` alone is
 184 of pip's modules. The C-extension rows have not moved: pydantic-core,
 cryptography and the `dlopen` failures are the native-extension track.
 
