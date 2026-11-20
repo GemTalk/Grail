@@ -257,6 +257,34 @@ IRCopyRoutesTestCase >> testAShadowOnASubclassIsGeneratedForTheSubclass [
 ]
 
 { #category : 'Grail-Tests' }
+IRCopyRoutesTestCase >> testAShadowOnItsDefinerWithNoBuilderIsSharedNotRebuilt [
+	"With no builder cached -- a warm session reinstalling the dispatchers of
+	committed overrides, most of them on the class that defines the method --
+	the dispatcher's shadow on the DEFINER shares the method instead of
+	rebuilding the class from source (P2.3b): a rebuild costs 0.3-0.6 s a
+	class, at every session start.  The shared shadow is the definer's own,
+	so the dispatcher installs and the patch reaches the self-send."
+
+	| mod patched shadow answer |
+	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
+	patched := mod @env1:___pyAttrLoad___: #'Patched'.
+	importlib ___irBuilderCacheReset___.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	answer := [((mod @env1:___pyAttrLoad___: #'patch_on_the_definer') @env1:__call__) @env1:__repr__ asString]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: answer equals: '(''Patched'', ''patched'', ''patched'')'.
+	shadow := patched compiledMethodAt: #'___grailOrig_label' environmentId: 1 otherwise: nil.
+	self assert: shadow notNil.
+	self assert: shadow inClass == patched.
+	self assert: shadow selector equals: #'label'.
+	self assert: (self ___count___: 'cp:dispatch-shadow:shared') > 0.
+	self assert: (self ___count___: 'cp:dispatch-shadow:regen') equals: 0.
+	self assert: (self ___count___: 'cp:rebuild:ok') equals: 0
+
+]
+
+{ #category : 'Grail-Tests' }
 IRCopyRoutesTestCase >> testEveryRuntimeCopyAvoidsTheTextTwin [
 	"The del shadow, the special receiver and the direct copy recompile no
 	text twin: each is generated under the selector it is installed by (the

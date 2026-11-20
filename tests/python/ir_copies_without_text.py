@@ -266,6 +266,24 @@ CHECKS = [
 ]
 
 
+class Patched:
+    def label(self):
+        return 'Patched'
+
+    def describe(self):
+        return self.label()
+
+
+def patch_on_the_definer():
+    """Not one of CHECKS: IRCopyRoutesTestCase calls it with no builder cached,
+    so the dispatcher's shadow on Patched -- the class that defines label --
+    shares the method rather than rebuild the class (plan P2.3b)."""
+    p = Patched()
+    before = p.describe()
+    Patched.label = lambda self: 'patched'
+    return (before, p.describe(), Patched.describe(p))
+
+
 def run_checks():
     """[(name, ok, actual)] for every check."""
     out = []
@@ -281,3 +299,4 @@ def run_checks():
 if __name__ == '__main__':
     for name, ok, actual in run_checks():
         print('%-36s %s %r' % (name, 'OK ' if ok else 'DIFF', actual))
+    print('%-36s %r' % ('patch_on_the_definer', patch_on_the_definer()))

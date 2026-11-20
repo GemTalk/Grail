@@ -58,17 +58,20 @@ grail class >> ___installMethodsFrom: tempClass onto: targetClass [
 				(cat notNil and: [cat asSymbol = #'Grail-Class Methods']) ifTrue: [
 					meth := pair key compiledMethodAt: sel environmentId: 1.
 					(self ___regenerate___: meth onto: pair value) ifFalse: [
-						(BaseException ___isIRPythonMethod___: meth) ifTrue: [
-							^ importlib ___irCopyRefused___: meth site: 'st-class'
-								onto: pair value].
-						src := importlib ___textSourceFor___: meth in: pair key selector: sel.
-						importlib ___irCensusCopy___: 'st-class'
-							route: (self ___censusRouteOf___: meth source: src)
-							source: src.
-						src notNil ifTrue: [
-							pair value perform: #'___compileMethod:category:'
-								env: 1
-								withArguments: { src. 'Grail-ST-Extension' }]]]]]].
+						(BaseException ___isIRPythonMethod___: meth)
+							ifTrue: [
+								(self ___regenerateIntoPackage___: meth onto: pair value) ifFalse: [
+									^ importlib ___irCopyRefused___: meth site: 'st-class'
+										onto: pair value]]
+							ifFalse: [
+								src := importlib ___textSourceFor___: meth in: pair key selector: sel.
+								importlib ___irCensusCopy___: 'st-class'
+									route: (self ___censusRouteOf___: meth source: src)
+									source: src.
+								src notNil ifTrue: [
+									pair value perform: #'___compileMethod:category:'
+										env: 1
+										withArguments: { src. 'Grail-ST-Extension' }]]]]]]].
 	self ___refileClassHelpersOn: targetClass
 
 ]
@@ -135,6 +138,40 @@ grail class >> ___regenerate___: aMethod onto: aClass [
 	(BaseException ___isIRPythonMethod___: aMethod) ifFalse: [^ false].
 	(importlib ___irRegenerate___: aMethod onto: aClass category: 'Grail-ST-Extension')
 		isNil ifTrue: [^ false].
+	importlib ___irCensusCopy___: 'st-class' route: 'regen' source: nil.
+	^ true
+
+]
+
+{ #category : 'Grail-smalltalk_class' }
+grail class >> ___regenerateIntoPackage___: aMethod onto: aClass [
+	"Whether aMethod, an IR-built method of the temporary class, went onto
+	aClass through the home SESSION-METHOD package -- for a class this user
+	cannot write, a kernel class such as Association, where
+	___regenerate___:onto: (which installs into aClass's own method
+	dictionary) fails.  The method is generated for aClass and installed
+	nowhere (importlib ___irMethodFor___:on:as:), then filed in the package's
+	environment-1 method and category dictionaries for aClass under
+	''Grail-ST-Extension'', exactly where Behavior >>
+	compileMethod:dictionaries:category:environmentId:methodDictEnvId: files
+	a compiled source -- which is what the text twin's recompile did until
+	P2.3b deleted the twin.  False when the package policy does not permit a
+	session method there, or the method cannot be generated."
+
+	| copy policy sel dicts cats cat |
+	copy := importlib ___irMethodFor___: aMethod on: aClass as: aMethod selector.
+	copy isNil ifTrue: [^ false].
+	policy := GsPackagePolicy current.
+	sel := copy selector.
+	(policy enabled and: [policy permitSessionMethodFor: aClass selector: sel environmentId: 1])
+		ifFalse: [^ false].
+	dicts := policy homeSessionMethods methodAndCategoryDictionaryFor: aClass environmentId: 1.
+	(dicts at: 1) at: sel put: copy.
+	cats := dicts at: 2.
+	cats valuesDo: [:selectors | selectors remove: sel ifAbsent: []].
+	cat := #'Grail-ST-Extension'.
+	(cats at: cat ifAbsent: [cats at: cat put: SymbolSet new]) add: sel.
+	policy updateMethodLookupCacheFor: copy in: aClass environmentId: 1.
 	importlib ___irCensusCopy___: 'st-class' route: 'regen' source: nil.
 	^ true
 
