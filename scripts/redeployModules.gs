@@ -48,7 +48,7 @@ t0 := System _timeMs.
 rebuilt := 0. skipped := 0. failed := 0.
 apps := OrderedCollection with: nil.
 importlib ___grailApps___ ifNotNil: [:reg | reg keysDo: [:k | apps add: k]].
-apps do: [:app | | ns mods pass before failures foreign relocating announced relocate |
+apps do: [:app | | ns mods pass before failures foreign relocating relocate |
 	ns := importlib ___grailUseApp___: app.
 	"A FAILURE IS A MODULE'S LAST OUTCOME, NOT ITS FIRST.  A module rebuilt
 	before a deployed module it imports fails in that pass -- its import of a
@@ -70,16 +70,26 @@ apps do: [:app | | ns mods pass before failures foreign relocating announced rel
 	out of temporary object memory.  So such a module is held here, not
 	retried, and reported once with the refused module."
 	foreign := Dictionary new.
-	announced := Set new.
-	"GRAIL'S OWN MODULES WITH A CHANGED SOURCE are relocated to this checkout
-	(#relocated).  A module rebuilt before one of them imports it from here
-	before its own turn comes, so every rebuild runs with the relocate
-	allowance (gemdb.modules.relocate's) for all of them."
+	"WHERE EACH STALE MODULE COMES FROM, decided before the first rebuild
+	(importlib ___redeployPlanFor___:grailDir:), and every move announced here,
+	once: a module rebuilt earlier often imports one of them before its own
+	turn, and that import moves it with no turn of its own -- measured, types
+	and inspect were both relocated that way, and announced at their turns
+	only the four modules nothing had imported first were.
+	GRAIL'S OWN MODULES WITH A CHANGED SOURCE (#relocated) need the relocate
+	allowance (gemdb.modules.relocate's) for that import too, so every rebuild
+	runs with it for all of them."
 	relocating := Set new.
-	mods isNil ifFalse: [mods keysDo: [:nm |
+	mods isNil ifFalse: [(mods keys asSortedCollection: [:a :b | a <= b]) do: [:nm |
 		(importlib ___isCurrentModule___: nm) ifFalse: [
 			(importlib ___redeployPlanFor___: nm) ifNotNil: [:plan |
-				plan first == #relocated ifTrue: [relocating add: nm]]]]].
+				plan first == #relocated ifTrue: [relocating add: nm].
+				plan first == #recorded ifFalse: [
+					out nextPutAll: 'redeployModules: '
+						, (plan first == #relocated ifTrue: ['relocated '] ifFalse: ['moved '])
+						, (app ifNil: ['']) , ' ' , nm
+						, (plan first == #relocated ifTrue: [' (Grail source changed): '] ifFalse: [' (same source): '])
+						, (importlib ___deployedSourcePathOf___: nm) , ' -> ' , plan last; cr]]]]].
 	relocate := [relocating do: [:r |
 		[importlib ___grailRelocateModule___: r] on: Error do: [:e | e return: nil]]].
 	"PASSES until one rebuilds nothing.  A rebuild moves the module's generation,
@@ -95,22 +105,13 @@ apps do: [:app | | ns mods pass before failures foreign relocating announced rel
 		this one as a dependency.  Stale but already loaded this session: a later
 		pass, after a dependency moved; evicted so the load rebuilds it."
 		((importlib ___isCurrentModule___: nm) or: [foreign includesKey: nm])
-			ifFalse: [ | plan path deployed |
+			ifFalse: [ | plan path |
 				(importlib @env1:lookupModule: nm) notNil ifTrue: [importlib removeModule: nm].
 				"Where to rebuild it from (importlib ___redeployPlanFor___:grailDir:):
 				a module deployed from a removed worktree is rebuilt from here
-				rather than skipped on every install.  Announced once, on its first
-				pass."
+				rather than skipped on every install."
 				plan := importlib ___redeployPlanFor___: nm.
 				path := plan ifNotNil: [plan last].
-				(plan notNil and: [plan first ~~ #recorded and: [(announced includes: nm) not]]) ifTrue: [
-					announced add: nm.
-					deployed := importlib ___deployedSourcePathOf___: nm.
-					out nextPutAll: 'redeployModules: '
-						, (plan first == #relocated ifTrue: ['relocated '] ifFalse: ['moved '])
-						, (app ifNil: ['']) , ' ' , nm
-						, (plan first == #relocated ifTrue: [' (Grail source changed): '] ifFalse: [' (same source): '])
-						, deployed , ' -> ' , path; cr].
 				(path isNil or: [(GsFile existsOnServer: path) ~~ true])
 					ifTrue: [
 						skipped := skipped + 1.
