@@ -38,10 +38,12 @@ CHILD NODES.  ``expressionNode:'' and ``parenthesizedNode:'' answer, in order:
     >> ___emitClassBodyValueWith___:), which reaches this emitter through
     the builder (PyMethodIRBuilder >> classBuildEmitter) and resolves the
     class under construction and every other name exactly as the text
-    helper's compile does (var:).  ClassDefAst >> ___irClassHelperTextReason___:
-    admits only the shapes that holds for, so an expression the def
-    predicates do not find IR-eligible HERE, in the class-body context, is an
-    invariant failure: it raises, and the enclosing method falls back to text
+    helper's compile does (var:).  A METHOD DECORATOR's expression is built
+    the same way (plan P3.3c), its names read through the description the
+    text shares there (NameAst >> ___emitMethodDecoratorValueWith___:).
+    ClassDefAst >> ___irClassHelperTextReason___: admits only the shapes
+    that holds for, so an expression the def predicates do not find
+    IR-eligible HERE, in the class-body context, is an invariant failure: it raises, and the enclosing method falls back to text
     as any IR emit error does.
 
 ``statementNode:'' always refuses: a class-body STATEMENT emitted through its
@@ -73,7 +75,8 @@ Class {
 		'opens',
 		'scopes',
 		'pre',
-		'restOffset'
+		'restOffset',
+		'decorators'
 	],
 	#category : 'Grail-Parser'
 }
@@ -194,9 +197,13 @@ ClassBuildIREmitter >> ___push___: aNode [
 { #category : 'Grail-private' }
 ClassBuildIREmitter >> ___rest___ [
 	"Put the builder back at the machinery's position (restAt:), dropping any
-	map entry a child node or a decorator armed and no send consumed."
+	map entry a child node or a decorator armed and no send consumed -- or,
+	while a decorator's application is being built (mapDecorator:of:do:), back
+	at that decorator, so the application's own send, built after its
+	receiver and its argument, is still stamped at the decorator's line."
 
 	builder clearPosition.
+	decorators isEmpty ifFalse: [^ builder atNode: decorators last].
 	restOffset ifNotNil: [:ofs | builder at: ofs]
 
 ]
@@ -223,7 +230,8 @@ ClassBuildIREmitter >> ___setBuilder___: aBuilder [
 	values := OrderedCollection new.
 	opens := OrderedCollection new.
 	scopes := OrderedCollection new.
-	pre := IdentityKeyValueDictionary new
+	pre := IdentityKeyValueDictionary new.
+	decorators := OrderedCollection new
 
 ]
 
@@ -396,9 +404,11 @@ ClassBuildIREmitter >> expressionNode: anAst [
 		(anAst ___irEligibleValueLocals___: builder localNameSet) ifFalse: [
 			^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
 				, ' in the class body is not IR-eligible in the class-body context'].
-		CallAst inClassBodyValueEmit == true ifFalse: [
+		(CallAst inClassBodyValueEmit == true
+			or: [CallAst inDecoratorEmit == true
+				and: [CallAst classBodyDecoratorScope notNil]]) ifFalse: [
 			^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
-				, ' outside the class body''s value emit']].
+				, ' outside the class body''s value emit and its method decorators']].
 	node := anAst ___emitIRValueOn___: builder.
 	self ___rest___.
 	^ self ___push___: node
@@ -486,15 +496,33 @@ ClassBuildIREmitter >> integer: anInteger [
 ClassBuildIREmitter >> mapDecorator: aNode of: anOwner do: aBlock [
 	"Stamp the decorator's node, so the send aBlock builds -- the decorator's
 	application -- is attributed to the decorator's own line (#1406, #1518).
-	The guard is the text's (AbstractLocationNode >> ___mapDecorator___:on:do:):
-	a node with no full span, or one parsed out of an f-string, is not mapped."
+	A node parsed out of an f-string is not mapped.
 
-	(aNode notNil
-		and: [(aNode respondsTo: #___hasFullPositionSpan___)
-		and: [aNode ___hasFullPositionSpan___
-		and: [aNode ___hasFragmentPositions___ not]]])
-			ifTrue: [builder atNode: aNode].
-	^ [aBlock value] ensure: [self ___rest___]
+	The text's guard (AbstractLocationNode >> ___mapDecorator___:on:do:) also
+	wants a full span -- the four numbers it writes into its map literal --
+	and a BARE-NAME method decorator never has one: the parser reduces it to
+	a Symbol in the def's decorator list and keeps its NameAst only on the
+	side (PythonParser >> ___recordDecoratorLines___:on:), where no parent is
+	set, so its columns cannot be read.  The builder needs only the node's
+	position to stamp it, and records the span when it can read it
+	(PyMethodIRBuilder >> atNode:), so here the position is enough: ``@where''
+	is called at its own line, as CPython calls it (P3.3c)."
+
+	| mapped |
+	mapped := aNode notNil
+		and: [(aNode respondsTo: #beginPosition)
+		and: [aNode beginPosition notNil
+		and: [aNode ___hasFragmentPositions___ not]]].
+	"While it is built the decorator is where ___rest___ returns to: its
+	receiver may be an expression (``@unittest.skipIf(...)'') and its argument
+	the next decorator's application, each of which ends by resting, and the
+	application send is built after both."
+	mapped ifTrue: [
+		decorators addLast: aNode.
+		builder atNode: aNode].
+	^ [aBlock value] ensure: [
+		mapped ifTrue: [decorators removeLast].
+		self ___rest___]
 
 ]
 

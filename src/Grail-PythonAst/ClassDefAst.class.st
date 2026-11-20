@@ -2251,6 +2251,15 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
+	"___irClassBodyValueReason___:bound:classCell: for a value that is not an
+	attribute's: an annotation, a default, a decorator."
+
+	^ self ___irClassBodyValueReason___: anExpr bound: boundNames classCell: false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell: readsClassCell [
 	"Why the class-body VALUE expression anExpr -- an attribute's value, a
 	method's default -- keeps the class on the TEXT helper, as the tail of a
 	census row, or nil when the IR backend builds it (plan P3.3).
@@ -2263,12 +2272,21 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 	  * the plain expression shapes -- names, constants, attribute and
 	    subscript loads, calls, operators, comparisons, the conditional
 	    expression, tuple / list / set / dict displays and their splats;
-	  * NOT a nested function scope (a lambda, a comprehension, a generator
-	    expression: they skip the class namespace, and their bodies are
-	    P3.3's later steps), a walrus (it binds INTO the class namespace), a
-	    yield or an await, or an f-string;
+	  * a nested FUNCTION SCOPE -- a lambda, a list / set / dict
+	    comprehension, a generator expression (P3.3c).  Its own emitter builds
+	    it as it does in a def, and its names are read as a def's are: the
+	    text stands down from the class-body read inside one
+	    (NameAst >> ___inNestedScopeWithinClassBody___), because CPython
+	    skips the class namespace there -- except in a comprehension's first
+	    iterable, which is evaluated in the class body and is a class-body
+	    read on both paths;
+	  * NOT a walrus (it binds INTO the class namespace), a yield or an
+	    await, or an f-string;
 	  * NOT ``__class__'', ``__classdict__'' or ``super'', whose class-body
-	    reads have branches of their own, nor a call of ``locals'', ``vars'',
+	    reads have branches of their own -- except, when readsClassCell is
+	    true (an attribute's value), a read of ``__class__'' outside a lambda
+	    or generator expression, which both helpers write through NameAst >>
+	    ___emitClassBodyClassCellWith___: (P3.3c) -- nor a call of ``locals'', ``vars'',
 	    ``dir'', ``globals'', ``eval'' or ``exec'', which the text rewrites
 	    for the class body;
 	  * NOT a call of a name the class body binds: the text calls a sibling
@@ -2278,7 +2296,8 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 	| allowed reason nodes |
 	allowed := { AttributeAst. BinOpAst. BoolOpAst. CallAst. CompareAst. ConstantAst.
 		DictAst. IfExpAst. ListAst. NameAst. NotAst. SetAst. SliceAst. StarredAst.
-		SubscriptAst. TupleAst. UnaryOpAst }.
+		SubscriptAst. TupleAst. UnaryOpAst.
+		LambdaAst. ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst }.
 	reason := nil.
 	nodes := OrderedCollection with: anExpr.
 	anExpr ___descendantsDo___: [:n | nodes add: n].
@@ -2286,21 +2305,21 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames [
 		reason isNil ifTrue: [
 			((n isKindOf: ExpressionAst)
 				and: [(allowed anySatisfy: [:c | n isKindOf: c]) not]) ifTrue: [
-					reason := ((n isKindOf: LambdaAst) or: [(n isKindOf: ListCompAst)
-						or: [(n isKindOf: SetCompAst) or: [(n isKindOf: DictCompAst)
-						or: [n isKindOf: GeneratorExpAst]]]])
-							ifTrue: [#functionScope]
-							ifFalse: [(n isKindOf: NamedExprAst)
-								ifTrue: [#walrus]
-								ifFalse: [((n isKindOf: YieldAst) or: [(n isKindOf: YieldFromAst)
-										or: [n isKindOf: AwaitAst]])
-									ifTrue: [#yield]
-									ifFalse: [((n isKindOf: JoinedStrAst) or: [n isKindOf: TemplateStrAst])
-										ifTrue: [#fstring]
-										ifFalse: [#valueShape]]]]].
+					reason := (n isKindOf: NamedExprAst)
+						ifTrue: [#walrus]
+						ifFalse: [((n isKindOf: YieldAst) or: [(n isKindOf: YieldFromAst)
+								or: [n isKindOf: AwaitAst]])
+							ifTrue: [#yield]
+							ifFalse: [((n isKindOf: JoinedStrAst) or: [n isKindOf: TemplateStrAst])
+								ifTrue: [#fstring]
+								ifFalse: [#valueShape]]]].
 			(reason isNil and: [n isKindOf: NameAst]) ifTrue: [
-				(#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
-					ifTrue: [reason := #classCell]].
+				((#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
+					and: [(readsClassCell
+						and: [n id asSymbol == #'__class__'
+						and: [n ___inFunctionScopeOfClassBody___ not
+						and: [(n ___declaredInEnclosingFunction___: #'__class__') not]]]) not])
+						ifTrue: [reason := #classCell]].
 			(reason isNil and: [(n isKindOf: CallAst) and: [n function isKindOf: NameAst]]) ifTrue: [
 				(#(#'locals' #'vars' #'dir' #'globals' #'eval' #'exec')
 					includes: n function id asSymbol)
@@ -2455,11 +2474,24 @@ ClassDefAst >> ___irClassHelperDefReason___: aDef bound: boundNames [
 	compiles at run time), and so are its annotations (the annotations table
 	is a compiled class-side method).  What the build evaluates FOR it in the
 	class body is its decorators and its defaults.  Defaults are class-body
-	values (___irClassBodyValueReason___:bound:); decorators are P3.3's later
-	step."
+	values (___irClassBodyValueReason___:bound:).
 
-	(aDef decorator_list notNil and: [aDef decorator_list notEmpty])
-		ifTrue: [^ #'irHelper:methodDecorator'].
+	DECORATORS (P3.3c) are admitted on the same terms.  The walk applies them
+	through the emitter already -- at the def or in the pass after the body
+	(printMethodDecoratorsOn:decorators:className:siblingNames: and its
+	marking and property-accessor siblings) -- and a name in a decorator
+	expression is read by the description both helpers share (NameAst >>
+	___emitMethodDecoratorValueWith___:).  A bare-name decorator (the parser
+	records it as a Symbol) is written by printDecoratorReceiverWith:deco:
+	through the emitter too.  An expression decorator is refused for what a
+	class-body value is refused for -- a lambda or comprehension, a walrus,
+	``__class__'' / ``super'', a frame call, a call of a name the body binds
+	-- under ``methodDecorator:<reason>''."
+
+	(aDef decorator_list ifNil: [#()]) do: [:deco |
+		((deco isKindOf: Symbol) or: [deco isKindOf: ConstantAst]) ifFalse: [
+			(self ___irClassBodyValueReason___: deco bound: boundNames)
+				ifNotNil: [:r | ^ ('irHelper:methodDecorator:' , r) asSymbol]]].
 	(aDef ___defaultedPositionalParams___ asArray , aDef ___defaultedKeywordOnlyParams___ asArray)
 		do: [:pair |
 			((pair at: 2) isKindOf: ConstantAst) ifFalse: [
@@ -2504,7 +2536,17 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	    reads the slot names statically (slotNames) and stores the value as an
 	    ordinary class-body value, which is all the backend has to build.
 
-	Still text: a decorated method, a bare expression evaluated for effect, a
+	P3.3c admits METHOD DECORATORS (___irClassHelperDefReason___:bound:): the
+	walk applies them through the emitter, and a decorator expression's names
+	are read by NameAst >> ___emitMethodDecoratorValueWith___:, the
+	description the text shares.
+
+	P3.3c also admits a LAMBDA, a COMPREHENSION and a GENERATOR EXPRESSION in
+	any of those values (___irClassBodyValueReason___:bound:): a scope of its
+	own, built by its own emitter, whose names skip the class namespace on
+	both paths.
+
+	Still text: a bare expression evaluated for effect, a
 	target that is not a name (an annotated attribute or subscript is a
 	runtime statement), a ``__renamed__'' or ``__transient__'' value (Grail's
 	persistence declarations, left to P3.5), a nested class, control flow --
@@ -2538,7 +2580,9 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r].
 					((s ___defaultedPositionalParams___ asArray , s ___defaultedKeywordOnlyParams___ asArray)
 						anySatisfy: [:pair | ((pair at: 2) isKindOf: ConstantAst) not])
-							ifTrue: [hasValues := true]]
+							ifTrue: [hasValues := true].
+					(s decorator_list notNil and: [s decorator_list notEmpty])
+						ifTrue: [hasValues := true]]
 				ifFalse: [
 					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
 					(s isKindOf: AnnAssignAst) ifTrue: [
@@ -2557,7 +2601,7 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 							(s targets anySatisfy: [:t |
 								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
 									ifTrue: [^ #'irHelper:assign:specialName'].
-							(self ___irClassBodyValueReason___: s value bound: bound)
+							(self ___irClassBodyValueReason___: s value bound: bound classCell: true)
 								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
 							hasValues := true]]]]].
 	(hasValues and: [self ___classBodyCanBindDynamically___])

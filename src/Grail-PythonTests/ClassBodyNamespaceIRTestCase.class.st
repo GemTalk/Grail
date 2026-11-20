@@ -185,6 +185,8 @@ def f(p):
         a = locals()
     class Cell:
         a = __class__
+    class CellLam:
+        a = lambda: __class__
     class Ann:
         x: G = 1
         y: list[int]
@@ -196,6 +198,16 @@ def f(p):
     class Deco:
         @staticmethod
         def s(): pass
+        @mf
+        def t(self): pass
+        @G.real
+        def u(self): pass
+    class DecoLam:
+        @(lambda fn: fn)
+        def s(self): pass
+    class DecoCell:
+        @mf(__class__)
+        def s(self): pass
     class Expr:
         print(1)
     class Target:
@@ -208,20 +220,23 @@ def f(p):
 '.
 	expect := {
 		'Values' -> nil.
-		'Lam' -> #'irHelper:assign:functionScope'.
-		'Comp' -> #'irHelper:assign:functionScope'.
+		'Lam' -> nil.
+		'Comp' -> nil.
 		'Walrus' -> #'irHelper:assign:walrus'.
 		'Sibling' -> #'irHelper:assign:siblingCall'.
 		'Frame' -> #'irHelper:assign:frameCall'.
-		'Cell' -> #'irHelper:assign:classCell'.
+		'Cell' -> nil.
+		'CellLam' -> #'irHelper:assign:classCell'.
 		'Ann' -> nil.
-		'AnnLam' -> #'irHelper:annotation:functionScope'.
+		'AnnLam' -> nil.
 		'AnnTarget' -> #'irHelper:annotation:target'.
-		'Deco' -> #'irHelper:methodDecorator'.
+		'Deco' -> nil.
+		'DecoLam' -> nil.
+		'DecoCell' -> #'irHelper:methodDecorator:classCell'.
 		'Expr' -> #'irHelper:expression'.
 		'Target' -> #'irHelper:assignTarget'.
 		'Renamed' -> #'irHelper:assign:specialName'.
-		'Default' -> #'irHelper:methodDefault:functionScope' }.
+		'Default' -> nil }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |
 		| got |

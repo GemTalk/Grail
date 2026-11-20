@@ -514,6 +514,23 @@ NameAst >> ___emitBuiltinFirstClassRead___: aName with: e [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitClassBodyClassCellWith___: e [
+	"A class-body VALUE read of ``__class__'' (___readsAsClassBodyClassCell___),
+	written through a ClassBuildEmitter so the text and the IR-built
+	method-local class helper share it (plan P3.3c).  The body's own class
+	does not exist yet, so CPython's ``__class__'' there is the ENCLOSING
+	class's cell -- the class whose method the class statement sits in -- and
+	a NameError when there is none (CallAst >> printEnclosingClassOn:)."
+
+	CallAst ___enclosingClassRead___ ifNotNil: [:read |
+		^ CallAst ___emitEnclosingClassRead___: read on: e].
+	^ e paren: [
+		e send: #'___signal___:' env: 1 to: [e var: 'NameError']
+			with: {[e string: 'name ''__class__'' is not defined']}]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitClassBodyValueWith___: e [
 	"A class-body VALUE read of this name -- an attribute value, a default, a
 	bare expression -- written through a ClassBuildEmitter, so the class build
@@ -557,65 +574,71 @@ NameAst >> ___emitClassBodyValueWith___: e [
 		^ self ___emitBuiltinFirstClassRead___: id with: e].
 	clsVar := CallAst ___classBeingCompiledVar___.
 	mangled := self ___mangledId___.
-	"A sibling-method ALIAS answers the original's function."
-	(CallAst classMethodAliasTargets notNil
+	"A sibling-method ALIAS answers the original's function.  This and the
+	class-namespace branches below fire only inside the class body's emit
+	window, as the text's do: a method decorator applied after the body
+	(___emitMethodDecoratorValueWith___:) reads its names here too, and there
+	the class namespace is the decorator scope's, already tested."
+	(CallAst inClassBodyValueEmit == true
+		and: [CallAst classMethodAliasTargets notNil
 		and: [(CallAst classMethodAliasTargets includesKey: id asSymbol)
 		and: [CallAst classBodyBoundNames isNil
-			or: [CallAst classBodyBoundNames includes: id asSymbol]]])
+			or: [CallAst classBodyBoundNames includes: id asSymbol]]]])
 		ifTrue: [
 			^ e paren: [
 				e send: #'___pyAttrLoad___:' env: 1 to: [e var: clsVar]
 					with: {[e symbol: (CallAst classMethodAliasTargets at: id asSymbol) asString]}]].
 	"The class namespace: a sibling def, a sibling @staticmethod, a nested
 	class, a conditionally bound name, a prior class attribute."
-	((CallAst classFunctionNames notNil
-		and: [(CallAst classFunctionNames includes: mangled asSymbol)
-		and: [CallAst classBodyBoundNames isNil
-			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
-		ifTrue: [^ self ___emitSiblingFunctionWith___: e].
-	((CallAst classStaticFunctionNames notNil
-		and: [(CallAst classStaticFunctionNames includes: mangled asSymbol)
-		and: [CallAst classBodyBoundNames isNil
-			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
-		ifTrue: [
-			^ e paren: [
-				e send: #'receiver:selector:' env: nil to: [e var: 'BoundMethod']
-					with: {[e var: clsVar]. [e plainSymbol: mangled]}]].
-	((CallAst classNestedClassNames notNil
-		and: [(CallAst classNestedClassNames includes: mangled asSymbol)
-		and: [CallAst classBodyBoundNames isNil
-			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
-		ifTrue: [
-			^ e paren: [
-				e send: #'___dynamicClassAttr___:' env: 1 to: [e var: clsVar]
-					with: {[e symbol: mangled]}]].
-	(CallAst classBodyConditionalNames notNil
-		and: [CallAst classBodyConditionalNames includes: mangled asSymbol])
-		ifTrue: [
-			| alsoStatic |
-			alsoStatic := CallAst classAttrNames notNil
-				and: [CallAst classAttrNames includes: mangled asSymbol].
-			^ e paren: [
-				e send: #'ifNil:' env: 0
-					to: [e paren: [
-						e send: #'___dynamicClassAttr___:' env: 1 to: [e var: clsVar]
-							with: {[e symbol: mangled]}]]
-					with: {[e block: [
-						alsoStatic
-							ifTrue: [
-								e send: #'ifNil:' env: 0
-									to: [e paren: [e send: mangled env: nil to: [e var: clsVar]]]
-									with: {[e block: [self ___emitModuleInstanceLoadOf___: id with: e]]}]
-							ifFalse: [self ___emitModuleInstanceLoadOf___: id with: e]]]}]].
-	((CallAst classAttrNames notNil
-		and: [(CallAst classAttrNames includes: mangled asSymbol)
-		and: [CallAst classBodyBoundNames isNil
-			or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
-		ifTrue: [
-			^ e paren: [
-				e send: #'ifNil:' env: 0
-					to: [e paren: [e send: mangled env: nil to: [e var: clsVar]]]
-					with: {[e block: [self ___emitModuleInstanceLoadOf___: id with: e]]}]].
+	CallAst inClassBodyValueEmit == true ifTrue: [
+		((CallAst classFunctionNames notNil
+			and: [(CallAst classFunctionNames includes: mangled asSymbol)
+			and: [CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+			ifTrue: [^ self ___emitSiblingFunctionWith___: e].
+		((CallAst classStaticFunctionNames notNil
+			and: [(CallAst classStaticFunctionNames includes: mangled asSymbol)
+			and: [CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+			ifTrue: [
+				^ e paren: [
+					e send: #'receiver:selector:' env: nil to: [e var: 'BoundMethod']
+						with: {[e var: clsVar]. [e plainSymbol: mangled]}]].
+		((CallAst classNestedClassNames notNil
+			and: [(CallAst classNestedClassNames includes: mangled asSymbol)
+			and: [CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+			ifTrue: [
+				^ e paren: [
+					e send: #'___dynamicClassAttr___:' env: 1 to: [e var: clsVar]
+						with: {[e symbol: mangled]}]].
+		(CallAst classBodyConditionalNames notNil
+			and: [CallAst classBodyConditionalNames includes: mangled asSymbol])
+			ifTrue: [
+				| alsoStatic |
+				alsoStatic := CallAst classAttrNames notNil
+					and: [CallAst classAttrNames includes: mangled asSymbol].
+				^ e paren: [
+					e send: #'ifNil:' env: 0
+						to: [e paren: [
+							e send: #'___dynamicClassAttr___:' env: 1 to: [e var: clsVar]
+								with: {[e symbol: mangled]}]]
+						with: {[e block: [
+							alsoStatic
+								ifTrue: [
+									e send: #'ifNil:' env: 0
+										to: [e paren: [e send: mangled env: nil to: [e var: clsVar]]]
+										with: {[e block: [self ___emitModuleInstanceLoadOf___: id with: e]]}]
+								ifFalse: [self ___emitModuleInstanceLoadOf___: id with: e]]]}]].
+		((CallAst classAttrNames notNil
+			and: [(CallAst classAttrNames includes: mangled asSymbol)
+			and: [CallAst classBodyBoundNames isNil
+				or: [CallAst classBodyBoundNames includes: mangled asSymbol]]]))
+			ifTrue: [
+				^ e paren: [
+					e send: #'ifNil:' env: 0
+						to: [e paren: [e send: mangled env: nil to: [e var: clsVar]]]
+						with: {[e block: [self ___emitModuleInstanceLoadOf___: id with: e]]}]]].
 	"The enclosing scopes, as a method body reads them: a same-module
 	function (dynamic slot first), a module name, a late-bound free name."
 	(CallAst moduleFunctionNames notNil
@@ -644,8 +667,10 @@ NameAst >> ___emitClassBodyValueWith___: e [
 		^ self ___emitLocalRead___: id asString
 			guarded: (self ___guardedLocalNeedsCheck___: id) with: e].
 	(self ___isEnclosingComprehensionTarget___: id) ifTrue: [^ e var: id asString].
-	"Late module-name binding."
-	(self class isResolvableSymbol: id asSymbol) ifFalse: [
+	"Late module-name binding -- in the class body's emit window only, as the
+	text's; a method decorator applied after the body reads the bare name."
+	(CallAst inClassBodyValueEmit == true
+		and: [(self class isResolvableSymbol: id asSymbol) not]) ifTrue: [
 		self isFastPathBuiltinName ifTrue: [
 			id asSymbol == #'type' ifTrue: [^ e var: 'type'].
 			^ self ___emitBuiltinFirstClassRead___: id with: e].
@@ -768,6 +793,13 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyValue___]) ifTrue: [
 		^ aBuilder classBuildEmitter valueOf: [
 			self ___emitClassBodyValueWith___: aBuilder classBuildEmitter]].
+	"...and a read in a class-body METHOD DECORATOR (plan P3.3c)."
+	(aBuilder classBuildEmitter notNil and: [self ___readsAsMethodDecoratorValue___]) ifTrue: [
+		^ aBuilder classBuildEmitter valueOf: [
+			self ___emitMethodDecoratorValueWith___: aBuilder classBuildEmitter]].
+	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyClassCell___]) ifTrue: [
+		^ aBuilder classBuildEmitter valueOf: [
+			self ___emitClassBodyClassCellWith___: aBuilder classBuildEmitter]].
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	"A ``global''-declared name is a MODULE binding for that whole scope --
 	never a local -- so the declaration has to be tested BEFORE the leaf.
@@ -987,6 +1019,37 @@ NameAst >> ___emitMethodAnnotationClassScopeReadOn___: aStream [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitMethodDecoratorValueWith___: e [
+	"A read of this name in a class-body METHOD DECORATOR's expression, written
+	through a ClassBuildEmitter, so the class build makes it as text
+	(ClassBuildTextEmitter, from ___emitSmalltalkOn___:) or as IR
+	(ClassBuildIREmitter, from ___emitIRValueOn___: in a method-local class
+	helper built through IR, plan P3.3c) from ONE description -- the reads
+	___readsAsMethodDecoratorValue___ admits.
+
+	A name the class body binds is read off the class, through the decorator
+	scope (CallAst >> classBodyDecoratorScope, whose reason is the branch of
+	___emitSmalltalkOn___: it mirrors).  Every other name is read as
+	___emitSmalltalkOn___:'s remaining branches read it, which are the
+	class-body value read's: that dispatcher already tests the body's emit
+	window wherever the text does, so it serves both moments a decorator is
+	applied at -- AT THE DEF, inside the window (ClassDefAst >>
+	___defsDecoratedAtTheirPosition___), and in the decorator pass after the
+	body, outside it."
+
+	| scope |
+	((id asString = '__debug__') and: [self ___grailOptimizeLevel___ >= 1])
+		ifTrue: [^ e var: 'false'].
+	scope := CallAst classBodyDecoratorScope.
+	(scope value includes: id asSymbol) ifTrue: [
+		^ e paren: [
+			e send: #'___classBodyNamespaceValue___:' env: 1 to: [e var: scope key]
+				with: {[e symbol: id asString]}]].
+	^ self ___emitClassBodyValueWith___: e
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitModuleFunctionReadWith___: e [
 	"The class-context read of a same-module top-level FUNCTION, through a
 	ClassBuildEmitter: the module's dynamic slot first (a module-level
@@ -1089,6 +1152,14 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 	reasons; that method is their dispatcher for those reads."
 	self ___readsAsClassBodyValue___ ifTrue: [
 		^ self ___emitClassBodyValueWith___: (ClassBuildTextEmitter on: aStream)].
+	"...and so has a read in a class-body METHOD DECORATOR
+	(___emitMethodDecoratorValueWith___:, plan P3.3c)."
+	self ___readsAsMethodDecoratorValue___ ifTrue: [
+		^ self ___emitMethodDecoratorValueWith___: (ClassBuildTextEmitter on: aStream)].
+	"...and a class-body value's read of ``__class__''
+	(___emitClassBodyClassCellWith___:, plan P3.3c)."
+	self ___readsAsClassBodyClassCell___ ifTrue: [
+		^ self ___emitClassBodyClassCellWith___: (ClassBuildTextEmitter on: aStream)].
 	"``__debug__'' IS A COMPILE-TIME CONSTANT AT optimize >= 1.  CPython folds
 	it -- it cannot change while a program runs -- and ``python -O'' makes it
 	False; compile(..., optimize=1) is the same request one compile at a time.
@@ -2447,6 +2518,9 @@ NameAst >> ___irEligibleValueLocals___: localNames [
 	"A class-body value read (P3.3) is built by the class-body read both
 	helpers share, which describes every such name."
 	self ___readsAsClassBodyValue___ ifTrue: [^ true].
+	"...and so is a read in a class-body method decorator (P3.3c)."
+	self ___readsAsMethodDecoratorValue___ ifTrue: [^ true].
+	self ___readsAsClassBodyClassCell___ ifTrue: [^ true].
 	self ___irIsSelfReceiver___ ifTrue: [^ true].
 	(localNames includes: id asString) ifTrue: [^ true].
 	^ (self ___irNonLocalLoadKind___: localNames) notNil
@@ -3010,6 +3084,30 @@ NameAst >> ___reachedThroughIterOf___: aComprehensionAst [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___readsAsClassBodyClassCell___ [
+	"Is this a read of ``__class__'' directly in a class-body value -- not in
+	a lambda or generator expression of it, not in a def emitted as a value,
+	not in a decorator or annotation scope, and not where the enclosing
+	function binds the name -- which ___emitClassBodyClassCellWith___:
+	describes?  ___emitSmalltalkOn___:'s earlier branches cannot claim such a
+	read, so it is tested first there, as the class-body value read is."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [id asSymbol == #'__class__'
+		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [ModuleAst compilingDoitScope isNil
+		and: [CallAst classBodyDecoratorScope isNil
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+		and: [self ___inFunctionScopeOfClassBody___ not
+		and: [self ___readsDoitLiveMapping___ not
+		and: [self ___readsMethodAnnotationClassScope___ not
+		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___readsAsClassBodyValue___ [
 	"Is this a class-body VALUE read that ___emitClassBodyValueWith___:
 	describes -- in an attribute value, a default or a bare expression of a
@@ -3030,6 +3128,35 @@ NameAst >> ___readsAsClassBodyValue___ [
 		and: [CallAst classBodyValueDefNode isNil
 		and: [ModuleAst compilingDoitScope isNil
 		and: [CallAst classBodyDecoratorScope isNil
+		and: [CallAst classBodyDynamicLocals ~~ true
+		and: [(#(#'__class__' #'__classdict__' #'super') includes: id asSymbol) not
+		and: [self ___inNestedScopeWithinClassBody___ not
+		and: [self ___readsDoitLiveMapping___ not
+		and: [self ___readsMethodAnnotationClassScope___ not
+		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___readsAsMethodDecoratorValue___ [
+	"Is this a read in a class-body METHOD DECORATOR's expression that
+	___emitMethodDecoratorValueWith___: describes?  The decorator scope is
+	announced (printMethodDecoratorsOn:decorators:className:siblingNames: and
+	its marking and property-accessor siblings), the decorator is being
+	emitted, and otherwise the conditions of ___readsAsClassBodyValue___: a
+	class and a module being compiled, no doit, no def emitted as a value, no
+	locals()/vars() probe, not inside a lambda or comprehension of the
+	decorator, not an annotation-scope read, and not ``__class__'',
+	``__classdict__'' or ``super'', which keep ___emitSmalltalkOn___:'s own
+	branches."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [CallAst classBodyDecoratorScope notNil
+		and: [CallAst inDecoratorEmit == true
+		and: [CallAst classBeingCompiled notNil
+		and: [CallAst moduleClassBeingCompiled notNil
+		and: [CallAst classBodyValueDefNode isNil
+		and: [ModuleAst compilingDoitScope isNil
 		and: [CallAst classBodyDynamicLocals ~~ true
 		and: [(#(#'__class__' #'__classdict__' #'super') includes: id asSymbol) not
 		and: [self ___inNestedScopeWithinClassBody___ not
