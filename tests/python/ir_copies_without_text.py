@@ -31,6 +31,13 @@ copies perform one generated for their own class (plan P2.3a).
 that reads the def's locals and its ``self``, has a decorator and a base
 (values its caller evaluates), and holds a class of its own.
 
+``NewHome.__new__`` and ``NewFive.__new__`` define a class in a def that runs
+with the CLASS as its receiver, whose helper is filed on the metaclass too.
+Called with an int, or with five more arguments on an instance of an
+unrelated class, the receiver is not a class at all, and the copy performs
+the helper generated for the receiver's class (plan P2.3b; these copies used
+to fall back to the method's Smalltalk text twin, which the plan deleted).
+
 ``IRCopyRoutesTestCase`` runs these checks under Grail and counts the routes;
 run as a script, this file is its own CPython oracle.
 """
@@ -109,6 +116,20 @@ class Away:
 class DelPlain:
     def m(self):
         return 'plain'
+
+
+class NewHome:
+    def __new__(cls):
+        class Made:
+            pass
+        return (repr(cls), Made.__qualname__)
+
+
+class NewFive:
+    def __new__(cls, a, b, c, d, e):
+        class Made:
+            pass
+        return (Made.__qualname__, a + b + c + d + e)
 
 
 class LBase:
@@ -201,6 +222,14 @@ def _five_on_another_class():
     return Away().five(1, 2, 3, 4, 5)
 
 
+def _special_receiver_with_a_class_built_by_new():
+    return (NewHome.__new__(3), NewHome.__new__(2.5))
+
+
+def _five_new_on_an_unrelated_instance():
+    return NewFive.__new__(Away(), 1, 2, 3, 4, 5)
+
+
 CHECKS = [
     ('dispatch_on_a_subclass', _dispatch_on_a_subclass,
      ('Base', 'patched', 'Base', 'Base')),
@@ -228,6 +257,12 @@ CHECKS = [
       ('capfloat', 'Base', 'Home.kind_captures.<locals>.Made.Inner', True))),
     ('five_with_a_harder_class_on_another_class',
      _five_with_a_harder_class_on_another_class, ('Away', 15, True, 'Base')),
+    ('special_receiver_with_a_class_built_by_new',
+     _special_receiver_with_a_class_built_by_new,
+     (('3', 'NewHome.__new__.<locals>.Made'),
+      ('2.5', 'NewHome.__new__.<locals>.Made'))),
+    ('five_new_on_an_unrelated_instance', _five_new_on_an_unrelated_instance,
+     ('NewFive.__new__.<locals>.Made', 15)),
 ]
 
 

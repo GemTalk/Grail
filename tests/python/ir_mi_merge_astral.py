@@ -1,18 +1,17 @@
 """Fixture: a mixin whose methods reach a subclass through the MI merge.
 
-The merge copies a secondary base's methods by RE-COMPILING their Smalltalk
-source.  An IR-built method's source is its Python, so the class carries the
-text each IR method replaced in a class-side table, ``___irTextSources___`` --
-and that table is compiled from ONE string literal in the class-build code.
-GemStone refuses a literal over 5M bytes, counted in STORAGE bytes: a single
-character above U+FFFF anywhere in the class's methods makes it a four-byte
-string.  test_builtin's BuiltinTest reached 5.86 MB and would not import.
-
-A table too large for one literal is now split into chunk accessors.  This
-fixture is small; ``IRTextSourcesChunkedTestCase`` lowers the budget so it
-splits anyway, and every method below has to survive the split to be callable
-on ``Merged``.  ``astral`` puts an astral-plane character in the table, which
-is what sets a chunk's storage width.
+The merge gives ``Merged`` its own copy of each method of its secondary base
+``Mixin``.  An IR-built method is copied by regenerating it from its IR
+builder.  Until plan P2.3b it could also be copied by recompiling the
+Smalltalk text it replaced, which every IR class kept in a class-side table,
+``___irTextSources___``, compiled from string literals in the class-build
+code.  A character above U+FFFF anywhere in a class made those literals four
+bytes a character, test_builtin's BuiltinTest outgrew GemStone's 5M-byte
+limit, and the table had to be split into chunks -- what this fixture was
+written for.  The table is gone; the fixture stays as a merge of methods that
+include quotes and an astral-plane character (``astral``), every one of which
+has to be callable on ``Merged``.  ``IRMergeRegenerateTestCase`` runs it under
+Grail; run as a script, it is its own CPython oracle.
 """
 
 r = {}

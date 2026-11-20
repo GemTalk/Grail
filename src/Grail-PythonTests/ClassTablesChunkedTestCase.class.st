@@ -18,8 +18,8 @@ ClassTablesChunkedTestCase >> ___load___: aBudgetOrNil [
 	(importlib @env1:modules) removeKey: #'ctc_chunked' ifAbsent: [].
 	self ___forgetCanonicalModule___: 'ctc_chunked'.
 	aBudgetOrNil isNil
-		ifTrue: [SessionTemps current removeKey: #'___grailIRTextSourcesBudget___' ifAbsent: []]
-		ifFalse: [SessionTemps current at: #'___grailIRTextSourcesBudget___' put: aBudgetOrNil].
+		ifTrue: [SessionTemps current removeKey: #'___grailClassTableLiteralBudget___' ifAbsent: []]
+		ifFalse: [SessionTemps current at: #'___grailClassTableLiteralBudget___' put: aBudgetOrNil].
 	^ importlib
 		loadModuleFromPath: importlib grailDir , '/tests/python/class_tables_chunked.py'
 		name: 'ctc_chunked'
@@ -42,7 +42,7 @@ ClassTablesChunkedTestCase >> ___splitTablesOf___: aClass [
 
 { #category : 'Grail-Setup' }
 ClassTablesChunkedTestCase >> tearDown [
-	SessionTemps current removeKey: #'___grailIRTextSourcesBudget___' ifAbsent: [].
+	SessionTemps current removeKey: #'___grailClassTableLiteralBudget___' ifAbsent: [].
 	(importlib @env1:modules) removeKey: #'ctc_chunked' ifAbsent: [].
 	self ___forgetCanonicalModule___: 'ctc_chunked'
 

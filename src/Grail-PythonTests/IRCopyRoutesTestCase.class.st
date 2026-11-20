@@ -3,13 +3,18 @@ P2.2's run-time consumers: the self-send dispatcher's ``___grailOrig_''
 shadow, the ``del C.m'' shadow, UnboundMethod's special-receiver form and its
 ``___grailDirect'' copy onto an unrelated class, and @smalltalk_class.  Each
 copies an IR-built method without compiling any Smalltalk text (the shadows
-and the direct copy from a builder the session has cached; otherwise they
-keep the twin): it is generated for the target from its IR builder, under
-the selector the copy is installed by (importlib ___irMethodFor___:on:as:,
-___irCachedMethodFor___:on:as:, ___irRegenerate___:onto:category:).  A def
-that defines a class takes its class statement along: a copy onto a class
-that cannot reach the def's helper performs one generated for that class
+and the direct copy from a builder the session has cached, else one rebuilt
+from the def's Python source): it is generated for the target from its IR
+builder, under the selector the copy is installed by (importlib
+___irMethodFor___:on:as:, ___irRegenerate___:onto:category:).  A def that
+defines a class takes its class statement along: a copy onto a class that
+cannot reach the def's helper performs one generated for that class
 (PyMethodIRBuilder >> ___irWithHelpersReachableFrom___:do:).
+
+There is no text twin to fall back on since P2.3b.  A copy with no builder
+to be had -- the def's module changed on disk or is gone -- shares the method
+on its own class and raises a TypeError anywhere else
+(testACopyWithNoBuilderSharesOnItsOwnClassAndRefusesElsewhere).
 
 The census rows (importlib ___irCensusCopy___:route:source:of:) say which
 route each copy took; tests/python/ir_copies_without_text.py is the CPython
@@ -65,12 +70,24 @@ IRCopyRoutesTestCase >> ___helpersOf___: aBehavior [
 IRCopyRoutesTestCase >> ___load___: aFile as: aName [
 	"A fresh forced-IR import of tests/python/<aFile>."
 
+	^ self ___load___: aFile as: aName ir: true
+
+]
+
+{ #category : 'Grail-Private' }
+IRCopyRoutesTestCase >> ___load___: aFile as: aName ir: aBoolean [
+	"A fresh import of tests/python/<aFile> (or of aFile, when it is a full
+	path), with the IR path forced on or off."
+
 	(importlib @env1:modules) removeKey: aName asSymbol ifAbsent: [].
 	self ___forgetCanonicalModule___: aName.
 	irRegistrySnapshot ifNil: [
 		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
-	importlib ___irCodegenForce___: true.
-	^ importlib loadModuleFromPath: importlib grailDir , '/tests/python/' , aFile name: aName
+	importlib ___irCodegenForce___: aBoolean.
+	^ importlib loadModuleFromPath: ((aFile beginsWith: '/')
+			ifTrue: [aFile]
+			ifFalse: [importlib grailDir , '/tests/python/' , aFile])
+		name: aName
 
 ]
 
@@ -83,7 +100,7 @@ IRCopyRoutesTestCase >> ___runChecksCounting___: aModule [
 	importlib ___irCensusReset___.
 	importlib ___irCensusOn: true.
 	checks := [self ___checksOf___: aModule] ensure: [importlib ___irCensusOn: false].
-	self assert: checks size equals: 13.
+	self assert: checks size equals: 15.
 	checks keysAndValuesDo: [:name :r |
 		self assert: (r at: 1) description: name , ' answered ' , (r at: 2)].
 	^ checks
@@ -94,7 +111,6 @@ IRCopyRoutesTestCase >> ___runChecksCounting___: aModule [
 IRCopyRoutesTestCase >> tearDown [
 	importlib ___irCensusOn: false.
 	importlib ___irCensusReset___.
-	importlib ___irCopiesRegenerate: true.
 	importlib ___irCodegenEnabledInvalidate___.
 	"What @smalltalk_class put on the Smalltalk class.  A category is a
 	Symbol, and a Symbol is never = to a String, so it is compared with a Symbol."
@@ -105,12 +121,61 @@ IRCopyRoutesTestCase >> tearDown [
 			doomed := md keys select: [:sel |
 				(beh categoryOfSelector: sel environmentId: 1) == #'Grail-ST-Extension'].
 			doomed do: [:sel | beh removeSelector: sel environmentId: 1]]].
-	#(#'ir_copies_without_text' #'grail_smalltalk_class') do: [:n |
+	#(#'ir_copies_without_text' #'grail_smalltalk_class' #'ir_copies_no_builder') do: [:n |
 		(importlib @env1:modules) removeKey: n ifAbsent: [].
 		self ___forgetCanonicalModule___: n asString].
 	irRegistrySnapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
 		irRegistrySnapshot := nil]
+
+]
+
+{ #category : 'Grail-Tests' }
+IRCopyRoutesTestCase >> testACopyWithNoBuilderSharesOnItsOwnClassAndRefusesElsewhere [
+	"The fixture loaded from a copy that is then DELETED, with the session's
+	builders dropped: no copy can rebuild a builder, as for a module whose
+	source is gone or changed since it was built.  Until P2.3b each copy then
+	recompiled the method's Smalltalk text twin; there is none now.
+
+	  * The del shadow is on the method's own class, so it SHARES it, and the
+	    captured method still runs.
+	  * A special receiver cannot run a shared method, and the direct copy
+	    onto Away would be Home's: both raise a TypeError that names the
+	    module and says why.
+	  * The dispatcher's shadow on Sub would be Base's, so it refuses too.  A
+	    store swallows a dispatcher failure by design (object class >>
+	    ___grailInstallSelfSendDispatchers___:), so the patch is seen by
+	    outside lookups and not by Sub's own self-sends."
+
+	| path mod checks counts |
+	path := self tmp: 'ir_copies_no_builder.py'.
+	(GsFile openWriteOnServer: path)
+		nextPutAll: (GsFile openReadOnServer: importlib grailDir , '/tests/python/ir_copies_without_text.py') contents;
+		close.
+	mod := self ___load___: path as: 'ir_copies_no_builder' ir: true.
+	GsFile removeServerFile: path.
+	importlib ___irBuilderCacheReset___.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	checks := [self ___checksOf___: mod] ensure: [importlib ___irCensusOn: false].
+	self assert: ((checks at: 'del_keeps_a_captured_method') at: 1)
+		description: 'del_keeps_a_captured_method answered ' , ((checks at: 'del_keeps_a_captured_method') at: 2).
+	#('special_receiver' 'five_on_another_class') do: [:name |
+		| answer |
+		answer := (checks at: name) at: 2.
+		self assert: (answer includesString: 'TypeError: Grail cannot copy')
+			description: name , ' answered ' , answer.
+		self assert: (answer includesString: '(module ''ir_copies_no_builder'')')
+			description: name , ' answered ' , answer.
+		self assert: (answer includesString: 'is gone')
+			description: name , ' answered ' , answer].
+	self assert: ((checks at: 'dispatch_on_a_subclass') at: 2)
+		equals: '(''Base'', ''Base'', ''Base'', ''Base'')'.
+	counts := importlib ___irCensus___ at: #counts.
+	self assert: (counts at: #'cp:del-shadow:shared' otherwise: 0) > 0.
+	#(#'cp:special:refused' #'cp:direct:refused' #'cp:dispatch-shadow:refused') do: [:k |
+		self assert: (counts at: k otherwise: 0) > 0 description: k , ' did not count'].
+	self assert: (counts at: #'cp:del-shadow:regen' otherwise: 0) equals: 0
 
 ]
 
@@ -125,8 +190,11 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	class cannot reach it, nor can a special receiver's class (SmallInteger,
 	SmallDouble): those copies PERFORM the helper generated for their own
 	class, installed nowhere (P2.3a), where they used to keep the def's text
-	twin, which built the class inline.  So no run-time copy here takes a
-	twin, and neither Away nor SmallInteger gains a helper."
+	twin, which built the class inline.  So does a __new__'s, whose helper is
+	filed on the metaclass too (P2.3b): with an int, or an Away, for its
+	receiver, the receiver's class is what the helper is generated for.  So
+	every run-time copy here is generated, none is refused, and neither Away
+	nor SmallInteger gains a helper."
 
 	| mod lbase lsub delLocal away shadow |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
@@ -149,14 +217,20 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	self assert: shadow notNil.
 	self assert: shadow selector equals: #'___grailOrig_m'.
 	self assert: (BaseException ___isIRPythonMethod___: shadow).
-	self assert: (self ___count___: 'cp:direct:twin') equals: 0.
-	self assert: (self ___count___: 'cp:special:twin') equals: 0.
+	self assert: (self ___count___: 'cp:direct:refused') equals: 0.
+	self assert: (self ___count___: 'cp:special:refused') equals: 0.
 	"five_local and five_captures on Away; kind_local on SmallInteger, and
 	kind_captures on SmallInteger and SmallDouble."
 	self assert: (self ___count___: 'cp:helper:performed') >= 5.
 	#('Away>>___irClassDef_' 'SmallInteger>>___irClassDef_' 'SmallDouble>>___irClassDef_')
 		do: [:what |
 			self assert: ((self ___examples___: 'cp:helper:performed') anySatisfy: [:e |
+				e includesString: what])].
+	"NewHome.__new__ on SmallInteger and SmallDouble, NewFive.__new__ on Away."
+	self assert: (self ___count___: 'cp:helper:class-performed') >= 3.
+	#('Away>>___irClassDef_' 'SmallInteger>>___irClassDef_' 'SmallDouble>>___irClassDef_')
+		do: [:what |
+			self assert: ((self ___examples___: 'cp:helper:class-performed') anySatisfy: [:e |
 				e includesString: what])]
 
 ]
@@ -178,7 +252,7 @@ IRCopyRoutesTestCase >> testAShadowOnASubclassIsGeneratedForTheSubclass [
 	self assert: shadow selector equals: #'___grailOrig_label'.
 	self assert: (BaseException ___isIRPythonMethod___: shadow).
 	self assert: (self ___count___: 'cp:dispatch-shadow:regen') > 0.
-	self assert: (self ___count___: 'cp:dispatch-shadow:twin') equals: 0
+	self assert: (self ___count___: 'cp:dispatch-shadow:refused') equals: 0
 
 ]
 
@@ -197,10 +271,9 @@ IRCopyRoutesTestCase >> testEveryRuntimeCopyAvoidsTheTextTwin [
 	| mod |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
 	self ___runChecksCounting___: mod.
-	#('del-shadow' 'dispatch-shadow') do: [:site |
-		self assert: (self ___count___: 'cp:' , site , ':twin') equals: 0].
-	self assert: (self ___count___: 'cp:direct:twin') equals: 0.
-	self assert: (self ___count___: 'cp:special:twin') equals: 0.
+	#('del-shadow' 'dispatch-shadow' 'direct' 'special') do: [:site |
+		self assert: (self ___count___: 'cp:' , site , ':shared') equals: 0.
+		self assert: (self ___count___: 'cp:' , site , ':refused') equals: 0].
 	self assert: (self ___count___: 'cp:del-shadow:regen') > 0.
 	self assert: (self ___count___: 'cp:direct:regen') > 0.
 	self assert: (self ___count___: 'cp:special:regen') > 0
@@ -217,7 +290,7 @@ IRCopyRoutesTestCase >> testSmalltalkClassRegeneratesOntoTheSmalltalkClass [
 	[self ___load___: 'grail_smalltalk_class.py' as: 'grail_smalltalk_class']
 		ensure: [importlib ___irCensusOn: false].
 	self assert: (self ___count___: 'cp:st-class:regen') > 0.
-	self assert: (self ___count___: 'cp:st-class:twin') equals: 0
+	self assert: (self ___count___: 'cp:st-class:refused') equals: 0
 
 ]
 
@@ -226,14 +299,13 @@ IRCopyRoutesTestCase >> testSmalltalkClassTakesALocalClassHelperWithItsDef [
 	"A def that defines a class (grail_local_class) is regenerated onto the
 	Smalltalk class with its class statement's helper, which is the Smalltalk
 	class's own and filed under 'Grail-ST-Extension' with the def, so it goes
-	when the extension methods do.  With regeneration off the def is
-	recompiled from its twin, which builds the class inline: no helper."
+	when the extension methods do.  On the text path (the control) the def is
+	recompiled from its text, which builds the class inline: no helper."
 
 	#(true false) do: [:regen |
 		| helpers result |
 		self tearDown.
-		importlib ___irCopiesRegenerate: regen.
-		self ___load___: 'grail_smalltalk_class.py' as: 'grail_smalltalk_class'.
+		self ___load___: 'grail_smalltalk_class.py' as: 'grail_smalltalk_class' ir: regen.
 		result := GrailSTestTarget new @env1:grail_local_class.
 		self assert: (result @env1:__getitem__: 0) equals: 'local'.
 		self assert: (result @env1:__getitem__: 1) asString
@@ -254,14 +326,17 @@ IRCopyRoutesTestCase >> testSmalltalkClassTakesALocalClassHelperWithItsDef [
 
 { #category : 'Grail-Tests' }
 IRCopyRoutesTestCase >> testTheTextRouteIsTheControl [
-	"With regeneration turned off every copy goes back to its text twin, and
-	the checks still pass: the two routes agree."
+	"The control: the same fixture compiled on the TEXT path
+	(GRAIL_IR_CODEGEN=0).  Every copy is a text method recompiled from its own
+	source, none is generated, and the checks pass: the two paths agree.
+	(Until P2.3b the control was the IR path with regeneration turned off,
+	which sent every IR copy back to its text twin.)"
 
 	| mod |
-	importlib ___irCopiesRegenerate: false.
-	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
+	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text' ir: false.
 	self ___runChecksCounting___: mod.
 	self assert: (self ___count___: 'cp:dispatch-shadow:regen') equals: 0.
-	self assert: (self ___count___: 'cp:special:twin') > 0
+	self assert: (self ___count___: 'cp:dispatch-shadow:text') > 0.
+	self assert: (self ___count___: 'cp:special:text') > 0
 
 ]
