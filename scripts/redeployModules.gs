@@ -42,10 +42,10 @@ dir ifNotNil: [
 %
 level 0
 run
-| out t0 apps rebuilt skipped failed |
+| out t0 apps rebuilt skipped failed peak |
 out := GsFile stdout.
 t0 := System _timeMs.
-rebuilt := 0. skipped := 0. failed := 0.
+rebuilt := 0. skipped := 0. failed := 0. peak := 0.
 apps := OrderedCollection with: nil.
 importlib ___grailApps___ ifNotNil: [:reg | reg keysDo: [:k | apps add: k]].
 apps do: [:app | | ns mods pass before failures foreign relocating relocate |
@@ -183,7 +183,10 @@ apps do: [:app | | ns mods pass before failures foreign relocating relocate |
 									ifFalse: [
 										failures at: nm put: err asString.
 										attempt := 5]]]]
-							value: Set new]]].
+							value: Set new.
+						"The fullest this session's temporary object memory got, after
+						any module: a run that dies of it leaves no summary at all."
+						peak := peak max: System _tempObjSpacePercentUsed]]].
 	 rebuilt > before and: [pass < 5]] whileTrue.
 	(failures keys asSortedCollection: [:a :b | a <= b]) do: [:nm |
 		failed := failed + 1.
@@ -209,6 +212,8 @@ apps do: [:app | | ns mods pass before failures foreign relocating relocate |
 		out nextPutAll: 'redeployModules: COMMIT FAILED for ' , (app ifNil: ['the default namespace']); cr.
 		ExitClientError signal: 'redeployModules commit failed' status: 1]].
 importlib ___grailUseApp___: nil.
+out nextPutAll: 'redeployModules: temporary object memory peaked at '; print: peak;
+	nextPutAll: '% of '; print: (System _tempObjSpaceMax // 1048576); nextPutAll: ' MB, after a module'; cr.
 out nextPutAll: 'redeployModules: ' ; print: rebuilt; nextPutAll: ' rebuilt, ';
 	print: skipped; nextPutAll: ' skipped, '; print: failed; nextPutAll: ' failed, in ';
 	print: (System _timeMs - t0); nextPutAll: ' ms'; cr.
