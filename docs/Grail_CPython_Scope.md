@@ -139,9 +139,9 @@ keeps it current:
 | P1 | 80 | 4459 | 459 | 3950 | 10% |
 | P2 | 31 | 4297 | 558 | 3739 | 13% |
 | P3 | 34 | 4260 | 555 | 3686 | 13% |
-| P4 | 46 | 3781 | 146 | 3635 | 4% |
+| P4 | 46 | 3781 | 145 | 3636 | 4% |
 | other | 24 | 1199 | 287 | 909 | 24% |
-| **all** | **215** | **17996** | **2005** | **15919** | **11%** |
+| **all** | **215** | **17996** | **2004** | **15920** | **11%** |
 
 OK rows that skip at least 50% of their tests: `test_heapq` 34 of 68 · `test_operator` 59 of 112 · `test_traceback` 270 of 370 · `test_call` 182 of 189 · `test_hash` 16 of 30 · `test_uuid` 73 of 120 · `test_buffer` 80 of 95 · `test_utf8_mode` 13 of 12 · `test_signal` 43 of 57 · `test_stat` 15 of 22.
 <!-- /test-tally -->
