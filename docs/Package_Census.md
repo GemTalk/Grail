@@ -194,18 +194,19 @@ jsonschema validates and rejects instances as it does under CPython. The fixes:
 
 What still fails:
 - **`jsonschema.cli`:** Grail's own `pkgutil` (`src/python/stdlib/pkgutil.py`)
-  has no `resolve_name`. jsonschema's eight `benchmarks` modules need `pyperf`,
+  has no `resolve_name` (#2297). jsonschema's eight `benchmarks` modules need `pyperf`,
   which CPython lacks in this venv too, so they are not counted.
 - **rpds-py's `test_fromkeys_explicit_value_not_copied`:** a list passed into C
   is a copy, so `HashTrieMap.fromkeys(keys, [])` stores a list that the
-  caller's `append` does not reach.
+  caller's `append` does not reach (#2301).
 - **rpds-py's `test_reverse`:** `reversed()` does not call a wheel class's
-  `__reversed__`, so `reversed(rpds.List(...))` answers "not subscriptable".
+  `__reversed__`, so `reversed(rpds.List(...))` answers "not subscriptable"
+  (#2300).
 - **pytest's assertion rewriting:** both failures above report
   `module 'builtins' has no attribute 'locals'` instead of the comparison,
-  because Grail's `builtins` has no `locals`.
+  because Grail's `builtins` has no `locals` (#2298).
 - **pytest 9.2.0** cannot run any suite: it calls `importlib.util.source_hash`,
-  which Grail lacks. That is why this run pins 9.1.1.
+  which Grail lacks (#2299). That is why this run pins 9.1.1.
 
 ### Every row
 
