@@ -625,10 +625,9 @@ UnboundMethod >> ___grailDeletedOriginalNargs: nargs kwOk: kwOk [
 	"The pin is recorded against the class that HOLDS the shadow, which for a
 	shadow shared from the definer is not the method's inClass (P2.3b): the
 	first class up from definingClass whose own dictionary has it."
-	holder := definingClass.
-	[holder ~~ nil and: [(holder @env0:includesSelector:
-			('___grailOrig_' @env0:, sel @env0:asString) @env0:asSymbol environmentId: 1) @env0:not]]
-		whileTrue: [holder := holder @env0:superclass].
+	holder := BoundMethod ___grailShadowHolder___:
+			('___grailOrig_' @env0:, sel @env0:asString) @env0:asSymbol
+		from: definingClass.
 	pinnedAt := BoundMethod ___grailPinnedAt___: sel in: (holder == nil ifTrue: [m @env0:inClass] ifFalse: [holder]).
 	pinnedAt == nil ifTrue: [^ nil].
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
@@ -676,8 +675,8 @@ UnboundMethod >> ___grailPinnedMethodFor___: aMethod receiver: obj [
 	unrelated class carrying the same selector cannot be picked up -- and the
 	stamp is compared with THAT class's pin, not the selector's latest on any
 	class (see BoundMethod >> ___pinnedSelectorFor___:receiver:)."
-	owner := (self @env0:_resolutionRootFor: obj)
-		@env0:whichClassIncludesSelector: shadow environmentId: 1.
+	owner := BoundMethod ___grailShadowHolder___: shadow
+		from: (self @env0:_resolutionRootFor: obj).
 	owner == nil ifTrue: [^ aMethod].
 	pinnedAt := BoundMethod ___grailPinnedAt___: aMethod @env0:selector in: owner.
 	pinnedAt == nil ifTrue: [^ aMethod].
@@ -695,8 +694,9 @@ UnboundMethod >> ___grailPinnedMethodFor___: aMethod receiver: obj [
 		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])
 			ifTrue: [ | home |
 				home := aMethod @env0:inClass.
-				(home ~~ nil and: [(home @env0:whichClassIncludesSelector: shadow
-						environmentId: 1) == home])
+				"The dispatcher's class holds the shadow in its own dictionary;
+				the shadow's inClass may be the definer (P2.3b)."
+				(home ~~ nil and: [home @env0:includesSelector: shadow environmentId: 1])
 					ifFalse: [^ aMethod].
 				^ home @env0:compiledMethodAt: shadow environmentId: 1].
 	^ owner @env0:compiledMethodAt: shadow environmentId: 1
