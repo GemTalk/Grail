@@ -515,6 +515,15 @@ ClassBuildTextEmitter >> symbolPairArray: pairs [
 ]
 
 { #category : 'Grail-expressions' }
+ClassBuildTextEmitter >> tempVar: aName [
+	"The temp itself, never redirected through a reader block (see
+	ClassBuildEmitter >> tempVar:)."
+
+	stream nextPutAll: aName asString
+
+]
+
+{ #category : 'Grail-expressions' }
 ClassBuildTextEmitter >> terminatedBraceArray: elementBlocks [
 
 	stream nextPutAll: '{ '.
@@ -525,7 +534,21 @@ ClassBuildTextEmitter >> terminatedBraceArray: elementBlocks [
 
 { #category : 'Grail-expressions' }
 ClassBuildTextEmitter >> var: aName [
+	"A carried capture read in a method-local class helper's class body is
+	read through its reader block, ``(___irCell_<i>___ value)'', not the temp
+	seeded from it on entry: a call earlier in the body may have rebound the
+	enclosing variable, which CPython's class body then sees (plan P3.5).  The
+	IR helper does the same (ClassBuildIREmitter >> carriedLeaf:cell:).
+	Nothing changes outside a helper's emit, where there is no capture map."
 
+	| map |
+	map := SessionTemps current at: #'___grailIRCaptureCells___' otherwise: nil.
+	(map notNil
+		and: [CallAst inClassBodyValueEmit == true
+		and: [aName asString ~= CallAst ___classBeingCompiledVar___ asString]]) ifTrue: [
+			(map at: aName asString ifAbsent: [nil]) ifNotNil: [:i |
+				stream nextPutAll: '(___irCell_'; print: i; nextPutAll: '___ @env0:value)'.
+				^ self]].
 	stream nextPutAll: aName asString
 
 ]

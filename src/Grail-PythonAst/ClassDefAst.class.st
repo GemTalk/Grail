@@ -1396,7 +1396,7 @@ ClassDefAst >> ___emitCarriedNonlocalWriteBack___: targets on: e [
 			e newline.
 			e statementWithoutNewline: [
 				e send: #'value:' env: 0 to: [e var: '___irSetter_' , i printString , '___']
-					with: {[e var: t id asString]}]]]
+					with: {[e tempVar: t id asString]}]]]
 
 ]
 
@@ -2203,6 +2203,19 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 			from: (hb send: #at: to: (hb localVar: #'___irPre___') with: { hb obj: k } env: 0))].
 	e := ClassBuildIREmitter on: hb.
 	e carried: carriedNames.
+	"...and every READ of a carried name goes through its reader block, not
+	the seeded copy (plan P3.5, #2292): a lambda, a generator expression, a
+	def built as a value or the annotate block runs after the class statement,
+	and an eager read can follow a call that rebinds the enclosing variable.
+	The copy is kept for a class-body ``nonlocal'' store, whose write-back
+	reads it.  Not for a capture spelled like the class's own variable, which
+	the build reads as the class under construction."
+	carriedNames doWithIndex: [:c :i |
+		| ident |
+		ident := self ___enclosingScopeIdentifierFor___: c asSymbol.
+		(ident = bindName or: [ident = self ___stVarName___]) ifFalse: [
+			e carriedLeaf: (hb leafFor: ident asSymbol)
+				cell: (hb leafFor: ('___irCell_' , i printString , '___') asSymbol)]].
 	restOffset ifNotNil: [e restAt: restOffset].
 	preNodes doWithIndex: [:n :k |
 		e pre: n at: (hb leafFor: ('___irPre_' , k printString , '___') asSymbol)].
@@ -2258,14 +2271,19 @@ ClassDefAst >> ___irCarriedCaptureNames___: localNames [
 
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassAnnotationLocalReads___: localNames [
-	"The enclosing def's locals that a class-body annotation names."
+	"The enclosing def's locals that a class-body annotation names: one at the
+	top of the body, in a branch of a class-body statement, or in the body of
+	a class nested in it -- every annotation the class build evaluates (an
+	annotation inside a def's body never is).  A nested class's helper carries
+	this class's captures, so its annotations count here too (plan P3.5)."
 
 	| out |
 	out := Set new.
 	body isNil ifTrue: [^ out].
-	(body body ifNil: [#()]) do: [:stmt |
-		((stmt isKindOf: AnnAssignAst) and: [stmt ___isSimpleAnnotation___])
-			ifTrue: [stmt annotation ___irReadLocalNamesInto___: out locals: localNames]].
+	body ___descendantsDo___: [:n |
+		((n isKindOf: AnnAssignAst) and: [n ___isSimpleAnnotation___
+			and: [(self ___irIsInsideAFunctionScope___: n) not]])
+				ifTrue: [n annotation ___irReadLocalNamesInto___: out locals: localNames]].
 	^ out
 
 ]
@@ -2507,12 +2525,16 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 	    reads have branches of their own -- except, when readsClassCell is
 	    true (an attribute's value), a read of ``__class__'' outside a lambda
 	    or generator expression, which both helpers write through NameAst >>
-	    ___emitClassBodyClassCellWith___: (P3.3c) -- nor a call of ``locals'', ``vars'',
+	    ___emitClassBodyClassCellWith___: (P3.3c), and a read of ``__class__''
+	    or ``__classdict__'' INSIDE one, the class's own cell, which both
+	    write through NameAst >> ___emitClassBodyOwnCellWith___: (P3.5) --
+	    nor a call of ``locals'', ``vars'',
 	    ``dir'', ``globals'', ``eval'' or ``exec'', which the text rewrites
 	    for the class body;
-	  * NOT a call of a name the class body binds: the text calls a sibling
-	    def as an UnboundMethod of the class under construction (CallAst's
-	    class-body branch), which has no IR form yet."
+	  * a call of a name the class body binds: a sibling def is called as an
+	    UnboundMethod of the class under construction, by the text and by the
+	    IR backend alike (CallAst >> ___readsAsClassBodySiblingCall___, plan
+	    P3.5), and any other binding is read as a class-body value."
 
 	| allowed reason nodes |
 	allowed := { AttributeAst. BinOpAst. BoolOpAst. CallAst. CompareAst. ConstantAst.
@@ -2537,18 +2559,18 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 			(reason isNil and: [n isKindOf: NameAst]) ifTrue: [
 				((#(#'__class__' #'__classdict__' #'super') includes: n id asSymbol)
 					and: [(readsClassCell
-						and: [n id asSymbol == #'__class__'
-						and: [n ___inFunctionScopeOfClassBody___ not
-						and: [(n ___declaredInEnclosingFunction___: #'__class__') not]]]) not])
+						and: [(n id asSymbol == #'__class__'
+							and: [n ___inFunctionScopeOfClassBody___ not
+							and: [(n ___declaredInEnclosingFunction___: #'__class__') not]])
+						or: [n id asSymbol ~~ #'super'
+							and: [n ___inFunctionScopeOfClassBody___
+							and: [(n ___declaredInEnclosingFunction___: n id asSymbol) not
+							and: [(n ___boundInNestedFunction___: n id asSymbol) not]]]]]) not])
 						ifTrue: [reason := #classCell]].
 			(reason isNil and: [(n isKindOf: CallAst) and: [n function isKindOf: NameAst]]) ifTrue: [
 				(#(#'locals' #'vars' #'dir' #'globals' #'eval' #'exec')
 					includes: n function id asSymbol)
-						ifTrue: [reason := #frameCall]
-						ifFalse: [
-							((boundNames includes: n function id asSymbol)
-								or: [boundNames includes: n function ___mangledId___ asSymbol])
-									ifTrue: [reason := #siblingCall]]]]].
+						ifTrue: [reason := #frameCall]]]].
 	^ reason
 
 ]
@@ -2641,6 +2663,13 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 	stored a cell over a ``T'' the helper did not carry, an undefined symbol
 	in its text, and the class did not compile."
 	(self ___irMethodAnnotationLocalReads___: localNames) do: [:n |
+		n asString = recv ifFalse: [free add: n asString]].
+	"A class-body ANNOTATION is the same hole: AnnAssignAst's read walk skips
+	the annotation, and the parser's set need not have it.  PEP 649 evaluates
+	it when __annotate__ runs, so it must reach the enclosing binding as it is
+	then -- through the carried reader block, which the IR helper's annotate
+	block reads (ClassBuildIREmitter >> carriedLeaf:cell:, plan P3.5)."
+	(self ___irClassAnnotationLocalReads___: localNames) do: [:n |
 		n asString = recv ifFalse: [free add: n asString]].
 	^ free
 
@@ -2797,14 +2826,39 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 	| reason |
 	((aStmt isKindOf: FunctionDefAst) or: [aStmt isKindOf: ClassDefAst]) ifTrue: [^ nil].
 	((aStmt isKindOf: ExprAst) and: [aStmt value isKindOf: ConstantAst]) ifTrue: [^ nil].
+	"A statement storing a name the body declares ``global'' or ``nonlocal''
+	(plan P3.5): a pending statement the walk builds with its own emitter
+	OUTSIDE the class-body runtime class, so the store goes to the module or
+	to the helper's copy of the carried capture (then out through its setter),
+	as the text's does."
+	((self ___classBodyNonlocalTargetNames___: aStmt) isEmpty not
+		or: [(self ___classBodyGlobalTargetNames___: aStmt) isEmpty not]) ifTrue: [
+			"Its name targets are the declared names, not class-body reads:
+			only the value is judged (``__class__ = 42'' under ``global'' or
+			``nonlocal __class__'', test_super)."
+			reason := (((aStmt isKindOf: AssignAst) or: [aStmt isKindOf: AugAssignAst])
+					and: [(aStmt isKindOf: AssignAst)
+						ifTrue: [aStmt targets allSatisfy: [:tg | tg isKindOf: NameAst]]
+						ifFalse: [aStmt target isKindOf: NameAst]])
+				ifTrue: [(self ___irClassBodyValueReason___: aStmt value bound: boundNames)
+					ifNotNil: [:r | 'runtime:' , r]]
+				ifFalse: [self ___irClassBodyRuntimeReason___: aStmt bound: boundNames].
+			^ reason isNil ifTrue: [#runtime] ifFalse: [('irHelper:declared:' , reason) asSymbol]].
 	((aStmt isKindOf: AssignAst)
 		and: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 			"A global- or nonlocal-declared target is refused below with its
 			declaration."
 			^ nil].
 	((aStmt isKindOf: AnnAssignAst) and: [aStmt target isKindOf: NameAst]) ifTrue: [^ nil].
-	(aStmt isKindOf: GlobalAst) ifTrue: [^ #'irHelper:global'].
-	(aStmt isKindOf: NonlocalAst) ifTrue: [^ #'irHelper:nonlocal'].
+	"A ``global'' or ``nonlocal'' DECLARATION emits nothing (plan P3.5).  The
+	statements that store a declared name are pending statements, built by
+	their own emitter OUTSIDE the class-body runtime class: a ``global'' one
+	stores the module binding, a ``nonlocal'' one the helper's copy of the
+	carried capture, which ___emitCarriedNonlocalWriteBack___:on: then pushes
+	out through the setter block (``__class__'' writes the enclosing class's
+	cell instead, ___emitNonlocalClassCellWrite___:on:).  A name the helper
+	cannot reach refuses the whole def (classDef:outerBinding)."
+	((aStmt isKindOf: GlobalAst) or: [aStmt isKindOf: NonlocalAst]) ifTrue: [^ nil].
 	(aStmt isKindOf: TypeAliasAst) ifTrue: [^ #'irHelper:typeAlias'].
 	(aStmt isKindOf: MatchAst) ifTrue: [^ #'irHelper:match'].
 	((aStmt isKindOf: ImportAst) or: [aStmt isKindOf: ImportFromAst])
@@ -2931,36 +2985,88 @@ ClassDefAst >> ___irCollectDeferredReads___: aNode into: aSet deferred: deferred
 	eagerly.  Over-reporting only refuses a method the text path compiles
 	correctly anyway."
 
+	^ self ___irCollectDeferredReads___: aNode into: aSet deferred: deferredBool valueDefs: false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irCollectDeferredReads___: aNode into: aSet deferred: deferredBool valueDefs: valueDefsBool [
+	"___irCollectDeferredReads___:into:deferred:, and when valueDefsBool is
+	true a def met on the way is a VALUE -- a def in a class-body ``if'' or
+	loop, built as a closure in the class build rather than compiled as a
+	method -- whose body reads a captured name the way a lambda's does, so it
+	is walked as deferred too."
+
 	aNode isNil ifTrue: [^ self].
 	aNode isString ifTrue: [^ self].
 	(aNode isKindOf: NameAst) ifTrue: [
 		deferredBool ifTrue: [aSet add: aNode id asSymbol].
 		^ self].
 	(aNode isKindOf: SequenceableCollection) ifTrue: [
-		aNode do: [:e | self ___irCollectDeferredReads___: e into: aSet deferred: deferredBool].
+		aNode do: [:e |
+			self ___irCollectDeferredReads___: e into: aSet deferred: deferredBool
+				valueDefs: valueDefsBool].
 		^ self].
 	(aNode isKindOf: AbstractNode) ifFalse: [^ self].
 	(aNode isKindOf: FunctionDefAst) ifTrue: [
-		"The BODY reads through the cell.  Decorators run now; the signature's
-		annotations run later."
-		self ___irCollectDeferredReads___: aNode decorator_list into: aSet deferred: deferredBool.
-		self ___irCollectDeferredReads___: aNode args into: aSet deferred: true.
-		self ___irCollectDeferredReads___: aNode returns into: aSet deferred: true.
+		"The BODY of a method reads through the cell.  Decorators run now; the
+		signature's annotations run later."
+		self ___irCollectDeferredReads___: aNode decorator_list into: aSet deferred: deferredBool
+			valueDefs: valueDefsBool.
+		self ___irCollectDeferredReads___: aNode args into: aSet deferred: true
+			valueDefs: valueDefsBool.
+		self ___irCollectDeferredReads___: aNode returns into: aSet deferred: true
+			valueDefs: valueDefsBool.
+		valueDefsBool ifTrue: [
+			self ___irCollectDeferredReads___: aNode body into: aSet deferred: true
+				valueDefs: valueDefsBool].
 		^ self].
 	((aNode isKindOf: LambdaAst) or: [aNode isKindOf: GeneratorExpAst]) ifTrue: [
 		aNode class allInstVarNames doWithIndex: [:nameSym :i |
 			nameSym == #parent ifFalse: [
-				self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: true]].
+				self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: true
+					valueDefs: valueDefsBool]].
 		^ self].
 	(aNode isKindOf: AnnAssignAst) ifTrue: [
-		self ___irCollectDeferredReads___: aNode annotation into: aSet deferred: true.
-		self ___irCollectDeferredReads___: aNode target into: aSet deferred: deferredBool.
-		self ___irCollectDeferredReads___: aNode value into: aSet deferred: deferredBool.
+		self ___irCollectDeferredReads___: aNode annotation into: aSet deferred: true
+			valueDefs: valueDefsBool.
+		self ___irCollectDeferredReads___: aNode target into: aSet deferred: deferredBool
+			valueDefs: valueDefsBool.
+		self ___irCollectDeferredReads___: aNode value into: aSet deferred: deferredBool
+			valueDefs: valueDefsBool.
 		^ self].
 	aNode class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
-			self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: deferredBool]].
+			self ___irCollectDeferredReads___: (aNode instVarAt: i) into: aSet deferred: deferredBool
+				valueDefs: valueDefsBool]].
 	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irCollectHelperDeferredReads___: aClassDef into: aSet [
+	"Add to aSet every name the class build of aClassDef reads LATE -- in a
+	lambda or generator expression, an annotation, a method's signature, the
+	body of a def built as a value -- recursing into the classes nested in its
+	body, which a text helper builds inline (___irReadsCarriedLateInTextHelper___:)."
+
+	| stmts |
+	stmts := (aClassDef body isNil or: [aClassDef body body isNil])
+		ifTrue: [#()]
+		ifFalse: [aClassDef body body].
+	(stmts isKindOf: SequenceableCollection) ifFalse: [
+		^ self ___irCollectDeferredReads___: aClassDef body into: aSet deferred: false
+			valueDefs: true].
+	stmts do: [:s |
+		(s isKindOf: FunctionDefAst)
+			ifTrue: [self ___irCollectDeferredReads___: s into: aSet deferred: false]
+			ifFalse: [(s isKindOf: ClassDefAst)
+				ifTrue: [
+					s ___irHeaderNodesDo___: [:n |
+						self ___irCollectDeferredReads___: n into: aSet deferred: false valueDefs: true].
+					self ___irCollectHelperDeferredReads___: s into: aSet]
+				ifFalse: [
+					self ___irCollectDeferredReads___: s into: aSet deferred: false valueDefs: true]]]
 
 ]
 
@@ -3375,6 +3481,20 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irIsInsideAFunctionScope___: aNode [
+	"Is aNode, below this class, inside a def or a lambda on the way up -- a
+	scope whose body the class build does not run?"
+
+	| n |
+	n := aNode parent.
+	[n notNil and: [n ~~ self]] whileTrue: [
+		((n isKindOf: FunctionDefAst) or: [n isKindOf: LambdaAst]) ifTrue: [^ true].
+		n := n parent].
+	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irMethodAnnotationLocalReads___: localNames [
 	"The enclosing def's locals that an annotation of one of the body's defs
 	names -- the defs emitMethodAnnotationsTableOn:className: builds annotate
@@ -3497,8 +3617,13 @@ ClassDefAst >> ___irMethodLocalClassReason___: localNames [
 	only after the class raised UnboundLocalError (test_annotationlib's
 	nonlocal-in-class ForwardRef: NameError).  Refused until the emit reads
 	those through the block as well."
-	(self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
-		ifFalse: [^ #'classDef:deferredReadOfNonlocal'].
+	"...and a TEXT helper only (plan P3.5): the IR helper reads every carried
+	name through its reader block, from a lambda as from the class body
+	(ClassBuildIREmitter >> carriedLeaf:cell:), so it sees the enclosing
+	binding at read time.  The text helper still reads the seeded temp."
+	((self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
+		or: [(self ___irClassHelperTextReason___: localNames) isNil])
+			ifFalse: [^ #'classDef:deferredReadOfNonlocal'].
 	"A class-body ANNOTATION is a deferred read of the same kind: PEP 649
 	evaluates it through __annotate__ when asked, not when the class statement
 	runs, so it must see an enclosing binding as it is THEN.  ``class X: y:
@@ -3507,8 +3632,19 @@ ClassDefAst >> ___irMethodLocalClassReason___: localNames [
 	(test_typing test_deferred_annotations).  An annotation naming ANY enclosing
 	local refuses -- AnnAssignAst's read walk skips annotations, so such a name
 	may not be among the carried captures at all."
-	(self ___irClassAnnotationLocalReads___: localNames) isEmpty
-		ifFalse: [^ #'classDef:deferredAnnotationRead'].
+	"Text helper only, as above: the IR helper's annotate block reads the
+	carried reader block, and ___irClassCapturedNames___: carries every name an
+	annotation reads (plan P3.5)."
+	((self ___irClassAnnotationLocalReads___: localNames) isEmpty
+		or: [(self ___irClassHelperTextReason___: localNames) isNil])
+			ifFalse: [^ #'classDef:deferredAnnotationRead'].
+	"Any other carried name the class build reads LATE -- in a lambda, a
+	generator expression, a def built as a value -- is the same defect in a
+	text helper: it closes over the seeded temp (#2292).  Refused for a text
+	helper, so the enclosing def is text and reads the binding itself; the IR
+	helper reads it through the reader block."
+	(self ___irReadsCarriedLateInTextHelper___: localNames)
+		ifTrue: [^ #'classDef:deferredRead'].
 	"Captured enclosing locals (cut 77).  A capture is carried only when it
 	cannot CHANGE after the class statement -- the text's cell is a block, read
 	by reference -- which is what an enclosing PARAMETER that the body never
@@ -3594,6 +3730,26 @@ ClassDefAst >> ___irReadLocalNamesInto___: aSet locals: localSet [
 
 	(self ___irClassCapturedNames___: localSet) do: [:n | aSet add: n].
 	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irReadsCarriedLateInTextHelper___: localNames [
+	"Is this class's helper compiled from TEXT, and does its build read a
+	carried name late (___irCollectHelperDeferredReads___:into:)?  Such a read
+	closes over the helper temp seeded once on entry and sees the enclosing
+	binding as it was then (#2292).  Eligibility must not raise: a failed walk
+	answers true, and refusing falls back to the text path."
+
+	| reads |
+	(self ___irClassHelperTextReason___: localNames) isNil ifTrue: [^ false].
+	^ [reads := Set new.
+		self ___irCollectHelperDeferredReads___: self into: reads.
+		(self ___irCarriedCaptureNames___: localNames) anySatisfy: [:c |
+			reads includes: c asSymbol]]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: true]
 
 ]
 
