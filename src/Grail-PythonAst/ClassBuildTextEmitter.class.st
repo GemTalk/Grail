@@ -538,7 +538,7 @@ ClassBuildTextEmitter >> var: aName [
 	read through its reader block, ``(___irCell_<i>___ value)'', not the temp
 	seeded from it on entry: a call earlier in the body may have rebound the
 	enclosing variable, which CPython's class body then sees (plan P3.5).  The
-	IR helper does the same (ClassBuildIREmitter >> carriedLeaf:cell:).
+	IR helper does the same (ClassBuildIREmitter >> carriedLeaf:cell:setter:).
 	Nothing changes outside a helper's emit, where there is no capture map."
 
 	| map |
