@@ -100,7 +100,7 @@ IRCopyRoutesTestCase >> ___runChecksCounting___: aModule [
 	importlib ___irCensusReset___.
 	importlib ___irCensusOn: true.
 	checks := [self ___checksOf___: aModule] ensure: [importlib ___irCensusOn: false].
-	self assert: checks size equals: 15.
+	self assert: checks size equals: 16.
 	checks keysAndValuesDo: [:name :r |
 		self assert: (r at: 1) description: name , ' answered ' , (r at: 2)].
 	^ checks
@@ -121,7 +121,7 @@ IRCopyRoutesTestCase >> tearDown [
 			doomed := md keys select: [:sel |
 				(beh categoryOfSelector: sel environmentId: 1) == #'Grail-ST-Extension'].
 			doomed do: [:sel | beh removeSelector: sel environmentId: 1]]].
-	#(#'ir_copies_without_text' #'grail_smalltalk_class' #'ir_copies_no_builder') do: [:n |
+	#(#'ir_copies_without_text' #'grail_smalltalk_class' #'ir_copies_no_builder' #'ir_copies_no_share') do: [:n |
 		(importlib @env1:modules) removeKey: n ifAbsent: [].
 		self ___forgetCanonicalModule___: n asString].
 	irRegistrySnapshot ifNotNil: [:snap |
@@ -142,10 +142,9 @@ IRCopyRoutesTestCase >> testACopyWithNoBuilderSharesOnItsOwnClassAndRefusesElsew
 	  * A special receiver cannot run a shared method, and the direct copy
 	    onto Away would be Home's: both raise a TypeError that names the
 	    module and says why.
-	  * The dispatcher's shadow on Sub would be Base's, so it refuses too.  A
-	    store swallows a dispatcher failure by design (object class >>
-	    ___grailInstallSelfSendDispatchers___:), so the patch is seen by
-	    outside lookups and not by Sub's own self-sends."
+	  * The dispatcher's shadow on Sub is Base's own method, shared, as it is
+	    with a builder: it needs none, so the patch still reaches Sub's
+	    self-sends."
 
 	| path mod checks counts |
 	path := self tmp: 'ir_copies_no_builder.py'.
@@ -169,11 +168,13 @@ IRCopyRoutesTestCase >> testACopyWithNoBuilderSharesOnItsOwnClassAndRefusesElsew
 			description: name , ' answered ' , answer.
 		self assert: (answer includesString: 'is gone')
 			description: name , ' answered ' , answer].
-	self assert: ((checks at: 'dispatch_on_a_subclass') at: 2)
-		equals: '(''Base'', ''Base'', ''Base'', ''Base'')'.
+	self assert: ((checks at: 'dispatch_on_a_subclass') at: 1)
+		description: 'dispatch_on_a_subclass answered ' , ((checks at: 'dispatch_on_a_subclass') at: 2).
 	counts := importlib ___irCensus___ at: #counts.
 	self assert: (counts at: #'cp:del-shadow:shared' otherwise: 0) > 0.
-	#(#'cp:special:refused' #'cp:direct:refused' #'cp:dispatch-shadow:refused') do: [:k |
+	self assert: (counts at: #'cp:dispatch-shadow:shared' otherwise: 0) > 0.
+	self assert: (counts at: #'cp:dispatch-shadow:refused' otherwise: 0) equals: 0.
+	#(#'cp:special:refused' #'cp:direct:refused') do: [:k |
 		self assert: (counts at: k otherwise: 0) > 0 description: k , ' did not count'].
 	self assert: (counts at: #'cp:del-shadow:regen' otherwise: 0) equals: 0
 
@@ -184,7 +185,8 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	"A def that defines a class sends its class statement's helper
 	(``___irClassDef_<n>_<C>___''), a method of the def's own class.  No
 	copier copies a helper on its own; each copy has to REACH the def's.  The
-	dispatcher's shadow on a SUBCLASS reaches the definer's by inheritance,
+	dispatcher's shadow on a SUBCLASS is the definer's method itself, which
+	reaches the definer's helper by inheritance,
 	and the del shadow is on the definer itself, so both are generated with
 	no text and no helper of their own.  The direct copy onto an UNRELATED
 	class cannot reach it, nor can a special receiver's class (SmallInteger,
@@ -211,7 +213,7 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 	self assert: (self ___helpersOf___: delLocal) size equals: 1.
 	shadow := lsub compiledMethodAt: #'___grailOrig_build' environmentId: 1 otherwise: nil.
 	self assert: shadow notNil.
-	self assert: shadow inClass == lsub.
+	self assert: shadow inClass == lbase.
 	self assert: (BaseException ___isIRPythonMethod___: shadow).
 	shadow := delLocal compiledMethodAt: #'___grailOrig_m' environmentId: 1 otherwise: nil.
 	self assert: shadow notNil.
@@ -236,22 +238,26 @@ IRCopyRoutesTestCase >> testADefsClassHelperIsReachedByEveryCopy [
 ]
 
 { #category : 'Grail-Tests' }
-IRCopyRoutesTestCase >> testAShadowOnASubclassIsGeneratedForTheSubclass [
-	"Patching ``Sub.label'' puts Base's label on Sub as the dispatcher's
-	shadow.  A method SHARED there would answer Base to
-	whichClassIncludesSelector: -- its inClass -- and the dispatcher would
-	decline the patch; generated for Sub, it is Sub's own."
+IRCopyRoutesTestCase >> testAShadowOnASubclassIsTheDefinersMethod [
+	"Patching ``Sub.label'' needs a shadow of Base's label on Sub.  It is
+	Base's method itself, shared under the shadow key (P2.3b): the
+	dispatcher's own-shadow check looks in Sub's own dictionary, not at
+	whichClassIncludesSelector: (which answers the method's inClass, Base),
+	so the dispatcher installs and the patch reaches Sub's self-sends."
 
-	| mod sub shadow |
+	| mod sub base shadow |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
 	self ___runChecksCounting___: mod.
 	sub := mod @env1:___pyAttrLoad___: #'Sub'.
+	base := mod @env1:___pyAttrLoad___: #'Base'.
 	shadow := sub compiledMethodAt: #'___grailOrig_label' environmentId: 1 otherwise: nil.
 	self assert: shadow notNil.
-	self assert: shadow inClass == sub.
-	self assert: shadow selector equals: #'___grailOrig_label'.
-	self assert: (BaseException ___isIRPythonMethod___: shadow).
-	self assert: (self ___count___: 'cp:dispatch-shadow:regen') > 0.
+	self assert: shadow inClass == base.
+	self assert: shadow selector equals: #'label'.
+	self assert: (sub includesSelector: #'___grailOrig_label' environmentId: 1).
+	self deny: (base includesSelector: #'___grailOrig_label' environmentId: 1).
+	self assert: (self ___count___: 'cp:dispatch-shadow:shared') > 0.
+	self assert: (self ___count___: 'cp:dispatch-shadow:regen') equals: 0.
 	self assert: (self ___count___: 'cp:dispatch-shadow:refused') equals: 0
 
 ]
@@ -285,6 +291,77 @@ IRCopyRoutesTestCase >> testAShadowOnItsDefinerWithNoBuilderIsSharedNotRebuilt [
 ]
 
 { #category : 'Grail-Tests' }
+IRCopyRoutesTestCase >> testAShadowThatCannotShareWarns [
+	"The one shape left that can neither share nor generate: a method held
+	in the dictionary of a class that does NOT inherit its class -- here
+	Home's name_of put into Away's dictionary, as a stale shared copy would
+	be -- with no builder to be had (the module's source deleted).  The
+	store keeps its value, but with no shadow there is no dispatcher, and
+	that is VISIBLE: a cp:dispatch-shadow:refused row and a RuntimeWarning
+	naming the method, its module and the cause, where a TypeError would be
+	swallowed by the store's handler."
+
+	| path mod home away messages |
+	path := self tmp: 'ir_copies_no_share.py'.
+	(GsFile openWriteOnServer: path)
+		nextPutAll: (GsFile openReadOnServer: importlib grailDir , '/tests/python/ir_copies_without_text.py') contents;
+		close.
+	mod := self ___load___: path as: 'ir_copies_no_share' ir: true.
+	GsFile removeServerFile: path.
+	home := mod @env1:___pyAttrLoad___: #'Home'.
+	away := mod @env1:___pyAttrLoad___: #'Away'.
+	importlib ___installMethod___: (home compiledMethodAt: #'name_of' environmentId: 1)
+		in: away as: #'name_of' category: 'Grail-Class Methods'.
+	importlib ___irBuilderCacheReset___.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	messages := [((mod @env1:___pyAttrLoad___: #'patch_and_record') @env1:value: { away. 'name_of' } value: nil)
+			asArray collect: [:m | m asString]]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: (self ___count___: 'cp:dispatch-shadow:refused') > 0.
+	self assert: (messages anySatisfy: [:m |
+			(m includesString: 'Grail cannot copy Home.name_of')
+				and: [(m includesString: '(module ''ir_copies_no_share'')')
+				and: [m includesString: 'not by its own methods']]])
+		description: messages printString.
+	self deny: (away includesSelector: #'___grailOrig_name_of' environmentId: 1)
+
+]
+
+{ #category : 'Grail-Tests' }
+IRCopyRoutesTestCase >> testASubclassShadowKeepsSuperAndSlotsWithNoRebuild [
+	"SLeaf patches greet (SBase's, which reads a slot) and shout (SMid's,
+	which calls super()).  With no builder cached -- a warm session -- each
+	shadow on SLeaf is the definer's method, shared, and nothing is rebuilt.
+	describe(), SBase's, self-sends both and reaches the patches; the
+	originals, reached through SBase.greet / SMid.shout and from the patch
+	itself, still read SLeaf's slots and walk super() from their DEFINING
+	class, as CPython's do (fixture check
+	subclass_shadow_with_super_and_slots)."
+
+	| mod leaf answer |
+	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
+	leaf := mod @env1:___pyAttrLoad___: #'SLeaf'.
+	importlib ___irBuilderCacheReset___.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	answer := [((mod @env1:___pyAttrLoad___: #'_subclass_shadow_with_super_and_slots') @env1:__call__)
+			@env1:__repr__ asString]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: answer
+		equals: '(''base:1|MB'', ''patched:1:2|MB'', ''patched:1:2|PMB'', ''base:1'', ''MB'', ''base:3|MB'')'.
+	self assert: (leaf compiledMethodAt: #'___grailOrig_greet' environmentId: 1) inClass
+		== (mod @env1:___pyAttrLoad___: #'SBase').
+	self assert: (leaf compiledMethodAt: #'___grailOrig_shout' environmentId: 1) inClass
+		== (mod @env1:___pyAttrLoad___: #'SMid').
+	self assert: (self ___count___: 'cp:dispatch-shadow:shared') >= 2.
+	self assert: (self ___count___: 'cp:dispatch-shadow:refused') equals: 0.
+	self assert: (self ___count___: 'cp:rebuild:ok') equals: 0.
+	self assert: (self ___count___: 'cp:rebuild:refused') equals: 0
+
+]
+
+{ #category : 'Grail-Tests' }
 IRCopyRoutesTestCase >> testEveryRuntimeCopyAvoidsTheTextTwin [
 	"The del shadow, the special receiver and the direct copy recompile no
 	text twin: each is generated under the selector it is installed by (the
@@ -299,9 +376,10 @@ IRCopyRoutesTestCase >> testEveryRuntimeCopyAvoidsTheTextTwin [
 	| mod |
 	mod := self ___load___: 'ir_copies_without_text.py' as: 'ir_copies_without_text'.
 	self ___runChecksCounting___: mod.
-	#('del-shadow' 'dispatch-shadow' 'direct' 'special') do: [:site |
+	#('del-shadow' 'direct' 'special') do: [:site |
 		self assert: (self ___count___: 'cp:' , site , ':shared') equals: 0.
 		self assert: (self ___count___: 'cp:' , site , ':refused') equals: 0].
+	self assert: (self ___count___: 'cp:dispatch-shadow:refused') equals: 0.
 	self assert: (self ___count___: 'cp:del-shadow:regen') > 0.
 	self assert: (self ___count___: 'cp:direct:regen') > 0.
 	self assert: (self ___count___: 'cp:special:regen') > 0

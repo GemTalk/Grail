@@ -31,6 +31,11 @@ copies perform one generated for their own class (plan P2.3a).
 that reads the def's locals and its ``self``, has a decorator and a base
 (values its caller evaluates), and holds a class of its own.
 
+``SBase``, ``SMid`` and ``SLeaf`` patch, on a SUBCLASS, methods that read
+slots and call ``super()``: the dispatcher's shadow there is the definer's own
+method (plan P2.3b), and the subclass's self-sends must reach the patch while
+the originals keep their ``super()`` and slot reads.
+
 ``NewHome.__new__`` and ``NewFive.__new__`` define a class in a def that runs
 with the CLASS as its receiver, whose helper is filed on the metaclass too.
 Called with an int, or with five more arguments on an instance of an
@@ -230,6 +235,60 @@ def _five_new_on_an_unrelated_instance():
     return NewFive.__new__(Away(), 1, 2, 3, 4, 5)
 
 
+
+class SBase:
+    __slots__ = ('v',)
+
+    def __init__(self, v):
+        self.v = v
+
+    def greet(self):
+        return 'base:%s' % self.v
+
+    def shout(self):
+        return 'B'
+
+    def describe(self):
+        return self.greet() + '|' + self.shout()
+
+
+class SMid(SBase):
+    __slots__ = ('w',)
+
+    def __init__(self, v, w):
+        super().__init__(v)
+        self.w = w
+
+    def shout(self):
+        return 'M' + super().shout()
+
+
+class SLeaf(SMid):
+    __slots__ = ()
+
+
+def _subclass_shadow_with_super_and_slots():
+    leaf = SLeaf(1, 2)
+    before = leaf.describe()
+    SLeaf.greet = lambda self: 'patched:%s:%s' % (self.v, self.w)
+    after_greet = leaf.describe()
+    SLeaf.shout = lambda self: 'P' + SMid.shout(self)
+    after_shout = leaf.describe()
+    return (before, after_greet, after_shout, SBase.greet(leaf), SMid.shout(leaf),
+            SMid(3, 4).describe())
+
+
+def patch_and_record(cls, name):
+    """Not one of CHECKS: store a patch over cls.name and answer the messages
+    of the warnings the store raised.  IRCopyRoutesTestCase calls it on a
+    class whose dispatcher shadow can be neither shared nor generated."""
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        setattr(cls, name, lambda self: 'patched')
+    return [str(w.message) for w in caught]
+
+
 CHECKS = [
     ('dispatch_on_a_subclass', _dispatch_on_a_subclass,
      ('Base', 'patched', 'Base', 'Base')),
@@ -263,6 +322,8 @@ CHECKS = [
       ('2.5', 'NewHome.__new__.<locals>.Made'))),
     ('five_new_on_an_unrelated_instance', _five_new_on_an_unrelated_instance,
      ('NewFive.__new__.<locals>.Made', 15)),
+    ('subclass_shadow_with_super_and_slots', _subclass_shadow_with_super_and_slots,
+     ('base:1|MB', 'patched:1:2|MB', 'patched:1:2|PMB', 'base:1', 'MB', 'base:3|MB')),
 ]
 
 

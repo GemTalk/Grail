@@ -611,7 +611,7 @@ UnboundMethod >> ___grailDeletedOriginalNargs: nargs kwOk: kwOk [
 	Only a handle minted before the pin: one minted after the ``del'' names a
 	method the class no longer has, as CPython's would."
 
-	| m sel pinnedAt |
+	| m sel pinnedAt holder |
 	m := self @env0:_resolveMethodNargs: nargs kwOk: kwOk
 		from: definingClass prefix: '___grailOrig_'.
 	m == nil ifTrue: [^ nil].
@@ -622,7 +622,14 @@ UnboundMethod >> ___grailDeletedOriginalNargs: nargs kwOk: kwOk [
 	((sel @env0:size @env0:> 13) and: [(sel @env0:copyFrom: 1 to: 13) @env0:= '___grailOrig_'])
 		ifTrue: [sel := sel @env0:copyFrom: 14 to: sel @env0:size].
 	sel := sel @env0:asSymbol.
-	pinnedAt := BoundMethod ___grailPinnedAt___: sel in: m @env0:inClass.
+	"The pin is recorded against the class that HOLDS the shadow, which for a
+	shadow shared from the definer is not the method's inClass (P2.3b): the
+	first class up from definingClass whose own dictionary has it."
+	holder := definingClass.
+	[holder ~~ nil and: [(holder @env0:includesSelector:
+			('___grailOrig_' @env0:, sel @env0:asString) @env0:asSymbol environmentId: 1) @env0:not]]
+		whileTrue: [holder := holder @env0:superclass].
+	pinnedAt := BoundMethod ___grailPinnedAt___: sel in: (holder == nil ifTrue: [m @env0:inClass] ifFalse: [holder]).
 	pinnedAt == nil ifTrue: [^ nil].
 	(pinGeneration ~~ nil and: [pinGeneration @env0:>= pinnedAt
 		and: [pinGeneration @env0:<= BoundMethod @env1:___grailPinGeneration___]])

@@ -351,8 +351,15 @@ Object class >> ___grailInstallOneDispatcher___: aSelector definedIn: definingCl
 	selector NOW, after an earlier install, is the DISPATCHER -- shadowing that
 	would make the dispatcher's own fall-through send reach itself.  An
 	existing shadow is already the pristine original, which is exactly what
-	is wanted."
-	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
+	is wanted.
+
+	OWNED means in THIS class's own method dictionary (includesSelector:,
+	which sees a session method too), not ``whichClassIncludesSelector:
+	answers self'': that primitive answers a method's inClass, and an IR
+	shadow is the DEFINER's method shared under the shadow key, on the
+	definer or on a subclass alike (importlib ___copySessionMethod___:...,
+	P2.3b)."
+	(self @env0:includesSelector: shadowSel environmentId: 1)
 		ifFalse: [
 			importlib @env0:___copySessionMethod___: aSelector from: definingClass to: self
 				prefix: '___grailOrig_'].
@@ -360,8 +367,10 @@ Object class >> ___grailInstallOneDispatcher___: aSelector definedIn: definingCl
 	source is not Grail-generated text (a kernel .gs method); a dispatcher
 	whose fall-through has nowhere to go is the
 	MNU the 9th cut showed on every later enum class.  Leave the original in
-	place instead -- the store is still visible through the loader."
-	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
+	place instead -- the store is still visible through the loader.  Owned
+	in this class's own dictionary, as above: a shadow shared from the
+	definer answers the definer to whichClassIncludesSelector:."
+	(self @env0:includesSelector: shadowSel environmentId: 1)
 		ifFalse: [^ self].
 	BoundMethod @env1:___grailPinSelector___: aSelector in: self.
 	"A VARARGS def ``_m: pos kw: kw'' ends in the forward ``^ self m: a b'' to its

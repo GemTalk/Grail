@@ -2694,28 +2694,47 @@ importlib class >> ___copySessionMethod___: sel from: aProvider to: aClass prefi
 	raises a TypeError naming the module and the cause
 	(___irCopyRefused___:site:onto:)."
 	(BaseException ___isIRPythonMethod___: meth) ifTrue: [
-		"ON ITS OWN CLASS, NO REBUILD (P2.3b).  A session reinstalls the
-		dispatchers of every committed override at its start
-		(object class >> ___grailInstallRecordedSelfSendOverrides___) -- typing's
-		@_tp_cache'd __getitem__s, pathlib, ipaddress, dataclasses: almost all
-		on the class that defines the method -- and in a warm session no
-		builder is cached.  The twin compiled in milliseconds; a rebuild re-runs
-		the class's emit from source, 0.3-0.6 s a class, and measured, took a
-		warm session's start from 1.1-1.5 s to 7-19 s.  On its own class the
-		shadow can be the method itself: it is the definer's own, so the
-		dispatcher's own-shadow check holds, and the readers of a shadow's
-		name take it from an unprefixed selector as well (BaseException's
-		traceback naming, UnboundMethod >> ___grailDeletedOriginalNargs:kwOk:).
-		So a cached builder still generates it; without one it is SHARED.  A
-		subclass's shadow has to be generated, and rebuilds."
-		own := self ___irBuilderCache___ at: meth otherwise: nil.
-		(own isNil and: [aClass == meth inClass]) ifTrue: [
-			self ___irCensusCopy___: site route: 'shared' source: nil of: meth.
-			^ [aClass perform: #'___installSessionMethod:as:' env: 1
-				withArguments: { meth. ownShadow }]
-					on: Error do: [:e | e return: nil]].
+		"THE DISPATCHER'S SHADOW IS THE DEFINER'S METHOD ITSELF (P2.3b), on the
+		definer and on any subclass of it: the original, shared under the
+		shadow key, generated for nothing and rebuilt from nothing.
+
+		Why share.  A session reinstalls the dispatchers of every committed
+		override at its start (object class >>
+		___grailInstallRecordedSelfSendOverrides___) -- typing's @_tp_cache'd
+		__getitem__s, pathlib's WindowsPath, ipaddress's IPv4Network,
+		werkzeug's NullSession -- and a warm session has no builder cached.
+		The text twin compiled in milliseconds; a rebuild re-runs the class's
+		emit from source, 0.3-0.6 s a class: measured, a warm session's start
+		went from 1.1-1.5 s to 7-19 s.
+
+		Why it is sound.  The dispatcher's own-shadow checks look in the
+		class's own dictionary (includesSelector:), not at
+		whichClassIncludesSelector:, which answers a method's inClass.  What
+		the method does does not depend on its inClass either: super() reads
+		the DEFINING class through the module, which is the class whose MRO
+		CPython's super() walks from; a slot is read through an accessor sent
+		to the receiver; and a Smalltalk super send in it starts above the
+		definer, where the original's would.  A copy generated for a subclass
+		would start that lookup above the SUBCLASS and find the definer's
+		method again.  The readers of a shadow's name take it from an
+		unprefixed selector (BaseException's traceback naming, UnboundMethod
+		>> ___grailDeletedOriginalNargs:kwOk:).
+
+		A shadow onto a class that does not inherit the method's class -- a
+		stale method shared into another class's dictionary -- is generated
+		for it (cached builder, else a rebuild); failing that, there is no
+		shadow, so no dispatcher, and a RuntimeWarning says the patch will not
+		reach the class's own methods (___irShadowRefused___:onto:)."
+		(site = 'dispatch-shadow'
+			and: [aClass == meth inClass or: [aClass inheritsFrom: meth inClass]]) ifTrue: [
+				self ___irCensusCopy___: site route: 'shared' source: nil of: meth.
+				^ [aClass perform: #'___installSessionMethod:as:' env: 1
+					withArguments: { meth. ownShadow }]
+						on: Error do: [:e | e return: nil]].
 		own := self ___irMethodFor___: meth on: aClass as: ownShadow.
 		own isNil ifTrue: [
+			site = 'dispatch-shadow' ifTrue: [
+				^ self ___irShadowRefused___: meth onto: aClass].
 			aClass == meth inClass ifFalse: [
 				^ self ___irCopyRefused___: meth site: site onto: aClass].
 			self ___irCensusCopy___: site route: 'shared' source: nil of: meth.
@@ -6077,6 +6096,29 @@ importlib class >> ___irCodegenSupported___ [
 ]
 
 { #category : 'Grail-IR Regeneration' }
+importlib class >> ___irCopyRefusal___: aMethod site: aSite onto: aClass [
+	"The text of the TypeError or warning for a refused copy
+	(___irCopyRefused___:site:onto:, ___irShadowRefused___:onto:)."
+
+	| cause what modName |
+	cause := [self ___irNoBuilderCauseOf___: aMethod for: aClass]
+		on: Error do: [:ex | ex return: 'Grail could not rebuild it from its Python source'].
+	modName := [self ___irModuleNameOf___: aMethod] on: Error do: [:ex | ex return: nil].
+	what := [aMethod inClass isMeta
+			ifTrue: [aMethod inClass thisClass name asString]
+			ifFalse: [aMethod inClass name asString]]
+		on: Error do: [:ex | ex return: '?'].
+	what := what , '.' , (self ___irPythonNameOf___: aMethod).
+	^ 'Grail cannot copy ' , what
+		, (modName isNil ifTrue: [''] ifFalse: [' (module ''' , modName , ''')'])
+		, ' for ' , (self ___irCopySiteDescription___: aSite onto: aClass)
+		, ': it was compiled through IR, and an IR method is copied by '
+		, 'regenerating it from its Python source, which failed because '
+		, cause , '.  Re-import the module so its classes are built again.'
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
 importlib class >> ___irCopyRefused___: aMethod site: aSite onto: aClass [
 	"Raise the TypeError for a copy of aMethod, an IR-built method, that can
 	be neither generated for aClass nor shared there (P2.3b): the copy needs
@@ -6090,22 +6132,8 @@ importlib class >> ___irCopyRefused___: aMethod site: aSite onto: aClass [
 	the old text too -- so the error says what to do instead: re-import the
 	module, which builds the class again from its source."
 
-	| cause what modName |
 	self ___irCensusCopy___: aSite route: 'refused' source: nil of: aMethod.
-	cause := [self ___irNoBuilderCauseOf___: aMethod for: aClass]
-		on: Error do: [:ex | ex return: 'Grail could not rebuild it from its Python source'].
-	modName := [self ___irModuleNameOf___: aMethod] on: Error do: [:ex | ex return: nil].
-	what := [aMethod inClass isMeta
-			ifTrue: [aMethod inClass thisClass name asString]
-			ifFalse: [aMethod inClass name asString]]
-		on: Error do: [:ex | ex return: '?'].
-	what := what , '.' , (self ___irPythonNameOf___: aMethod).
-	^ TypeError @env1:___signal___: 'Grail cannot copy ' , what
-		, (modName isNil ifTrue: [''] ifFalse: [' (module ''' , modName , ''')'])
-		, ' for ' , (self ___irCopySiteDescription___: aSite onto: aClass)
-		, ': it was compiled through IR, and an IR method is copied by '
-		, 'regenerating it from its Python source, which failed because '
-		, cause , '.  Re-import the module so its classes are built again.'
+	^ TypeError @env1:___signal___: (self ___irCopyRefusal___: aMethod site: aSite onto: aClass)
 
 ]
 
@@ -7002,6 +7030,27 @@ importlib class >> ___irSessionCount___: aKey [
 	| temps |
 	temps := SessionTemps current.
 	temps at: aKey put: (temps at: aKey otherwise: 0) + 1
+
+]
+
+{ #category : 'Grail-IR Regeneration' }
+importlib class >> ___irShadowRefused___: aMethod onto: aClass [
+	"No dispatcher shadow for aMethod on aClass: aClass does not inherit the
+	method's class, so the method cannot be shared there, and it could not be
+	generated for aClass (P2.3b).  The store that asked keeps its value --
+	outside lookups see the patch -- but with no shadow there is no
+	dispatcher, so aClass's own methods do not.  That is not silent: a
+	``cp:dispatch-shadow:refused'' row and a RuntimeWarning that names the
+	method, its module and the cause.  A TypeError would be swallowed by the
+	store's handler (object class >> ___grailInstallSelfSendDispatchers___)."
+
+	self ___irCensusCopy___: 'dispatch-shadow' route: 'refused' source: nil of: aMethod.
+	[((Python at: #warnings) ___instance___)
+		@env1:warn: (self ___irCopyRefusal___: aMethod site: 'dispatch-shadow' onto: aClass)
+			, '  The patch is seen from outside the class, but not by its own methods.'
+		_: (Python at: #'RuntimeWarning')]
+			on: Error do: [:e | e return: nil].
+	^ nil
 
 ]
 
