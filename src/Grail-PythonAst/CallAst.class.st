@@ -152,11 +152,7 @@ CallAst class >> ___emitFreeVariableRead___: aSymbol parent: aNode on: aStream [
 	cells are emitted at the DEF SITE, in the enclosing scope, while the
 	locals() snapshot is emitted INSIDE the function body."
 
-	| nameNode |
-	nameNode := NameAst with: aSymbol.
-	nameNode ctx: LoadAst basicNew.
-	nameNode setParent: aNode.
-	nameNode printSmalltalkOn: aStream
+	(self ___freeVariableReadNode___: aSymbol parent: aNode) printSmalltalkOn: aStream
 
 ]
 
@@ -344,6 +340,20 @@ CallAst class >> ___freeVariableNamesFor___: aFunctionDefAst [
 			and: [(own includes: n) not
 			and: [(globals includes: n) not]]])
 				asSortedCollection: [:a :b | a asString <= b asString]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+CallAst class >> ___freeVariableReadNode___: aSymbol parent: aNode [
+	"A load of aSymbol as it resolves AT aNode: the NameAst
+	___emitFreeVariableRead___:parent:on: compiles, and the class-body
+	locals() description (___emitClassBodyLocalsWith___:) hands its emitter."
+
+	| nameNode |
+	nameNode := NameAst with: aSymbol.
+	nameNode ctx: LoadAst basicNew.
+	nameNode setParent: aNode.
+	^ nameNode
 
 ]
 
@@ -2142,6 +2152,37 @@ CallAst >> ___directCallSelector___ [
 
 ]
 
+{ #category : 'Grail-codegen helpers' }
+CallAst >> ___emitClassBodyLocalsWith___: e [
+	"The class-body ``locals()'' / zero-argument ``vars()'' (printClassBodyLocalsOn:,
+	which says what it answers and why), written through a ClassBuildEmitter so
+	the text and the IR-built method-local class helper (#classBodyLocals, plan
+	P3.6) share one description:
+
+	    (((Python @env0:at: #builtins) @env0:___instance___)
+	        ___buildClassBodyLocals___: { { 'a'. <read of a> }. ... } forClass: <cls>)
+
+	One pair per name the body has bound so far (CallAst classBodyBoundNames),
+	each value read by a NameAst built here and compiled under the live
+	class-body context (CallAst class >> ___emitFreeVariableRead___:parent:on:),
+	so a sibling def, a prior attribute and a name bound behind codegen's back
+	read as any other class-body read of them does."
+
+	| builtinsInstance pairs |
+	builtinsInstance := [e paren: [
+		e send: #'___instance___' env: 0 to: [e paren: [
+			e send: #'at:' env: 0 to: [e var: 'Python'] with: {[e plainSymbol: 'builtins']}]]]].
+	pairs := (CallAst classBodyBoundNames ifNil: [#()]) asArray collect: [:each |
+		[e braceArray: {
+			[e string: each asString].
+			[e expressionNode: (CallAst ___freeVariableReadNode___: each asSymbol parent: self)]}]].
+	^ e paren: [
+		e send: #'___buildClassBodyLocals___:forClass:' env: nil to: builtinsInstance with: {
+			[e terminatedBraceArray: pairs].
+			[e var: CallAst ___classBeingCompiledVar___]}]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRArgumentsArrayOn___: aBuilder [
 	"The positional arguments' Array, as ___emitIRElementsArrayOn___:elts:
@@ -2332,6 +2373,20 @@ CallAst >> ___emitIRCallKeywords___: aKeywordsValue on: aBuilder [
 
 	aBuilder atNode: self.
 	^ aBuilder send: #'___asCallKeywords___' to: aKeywordsValue with: { } env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRClassBodyLocalsOn___: aBuilder [
+	"The #classBodyLocals shape: the class-body locals() / vars() the text
+	writes (___emitClassBodyLocalsWith___:), through the helper's class build
+	emitter.  Reached only in a class body's emit window, so only by a
+	method-local class helper built through IR."
+
+	aBuilder classBuildEmitter isNil ifTrue: [
+		^ self error: 'CallAst: a class-body locals() outside a class helper built through IR'].
+	^ aBuilder classBuildEmitter valueOf: [
+		self ___emitClassBodyLocalsWith___: aBuilder classBuildEmitter]
 
 ]
 
@@ -3048,6 +3103,7 @@ CallAst >> ___emitIRValueOn___: aBuilder [
 		aBuilder atNode: self.
 		^ aBuilder send: self ___directCallSelector___ to: recv with: argVals env: 1].
 	shape == #classBodySiblingCall ifTrue: [^ self ___emitIRClassBodySiblingCallOn___: aBuilder].
+	shape == #classBodyLocals ifTrue: [^ self ___emitIRClassBodyLocalsOn___: aBuilder].
 	"#attrLegacy and #general: load THEN call through the unified protocol --
 	the loaded value might be a BoundMethod, a class, or any callable."
 	^ self ___emitIRGeneralCallOn___: aBuilder
@@ -3856,6 +3912,21 @@ CallAst >> ___irCallShapeUnguarded___ [
 			and: [CallAst functionBeingCompiled notNil
 				or: [self ___irSnapshotScopeIsAFunction___]]]]])
 				ifTrue: [^ #localsSnapshot].
+		"...and in a CLASS BODY (plan P3.6): printLocalsCallOn:'s class-body
+		case, the names the body has bound so far, connected to the class
+		(printClassBodyLocalsOn:), outside a comprehension, whose own targets
+		are its scope.  Only a method-local class helper built through IR
+		emits inside the class body's window, and ClassDefAst >>
+		___irClassBodyValueReason___:bound:classCell: admits the call only
+		outside a lambda or comprehension of the body."
+		((function id = #'locals' or: [function id = #'vars'])
+			and: [arguments isEmpty
+			and: [keywords isEmpty
+			and: [CallAst inClassBodyValueEmit == true
+			and: [CallAst classBeingCompiled notNil
+			and: [ModuleAst compilingDoitScope isNil
+			and: [self ___enclosingComprehensionTargetNames___ isEmpty]]]]]])
+				ifTrue: [^ #classBodyLocals].
 		"Bare ``dir()'' (cut 85): the text's step-0b' rewrite, which is
 		___dirOfNamespace___: applied to whatever printLocalsCallOn: would
 		print here.  So this admits EXACTLY the two scopes cut 83 and cut 84
@@ -5899,17 +5970,9 @@ CallAst >> printClassBodyLocalsOn: aStream [
 	emitting none.  And the order is the class body's binding order rather
 	than a dict's insertion order over those dunders first."
 
-	| bound |
-	bound := CallAst classBodyBoundNames.
-	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildClassBodyLocals___: { '.
-	bound ifNotNil: [
-		bound do: [:each |
-			aStream nextPutAll: '{ '''; nextPutAll: each asString; nextPutAll: '''. '.
-			CallAst ___emitFreeVariableRead___: each asSymbol parent: self on: aStream.
-			aStream nextPutAll: ' }. ']].
-	aStream nextPutAll: '} forClass: '.
-	aStream nextPutAll: CallAst ___classBeingCompiledVar___.
-	aStream nextPutAll: ')'
+	"Written through a ClassBuildEmitter, which the IR-built method-local class
+	helper shares (___emitClassBodyLocalsWith___:, plan P3.6)."
+	^ self ___emitClassBodyLocalsWith___: (ClassBuildTextEmitter on: aStream)
 
 ]
 

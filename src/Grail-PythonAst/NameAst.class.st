@@ -531,6 +531,39 @@ NameAst >> ___emitClassBodyClassCellWith___: e [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitClassBodyDynamicReadWith___: e [
+	"A class-body value read in a body that calls locals() or vars()
+	(CallAst classBodyDynamicLocals), written through a ClassBuildEmitter so
+	the text and the IR-built method-local class helper share it (plan P3.6):
+
+	    ((<cls> @env1:___classBodyDynamicRead___: #'x') @env0:ifNil: [<read>])
+
+	CPython reads every class-body name with LOAD_NAME, which asks the body's
+	namespace first, so ``locals()['x'] = 43'' followed by ``y = x'' reads 43.
+	Grail resolves the namespace half statically, which is exact only for a
+	body whose bindings are all statements.  A write through the body's
+	locals() binds a name no statement mentions in the per-class holder, so
+	the read asks the class for it first, without walking the bases (LOAD_NAME
+	never sees an inherited attribute), and otherwise reads the name as it
+	would have been read: the class-body value read itself, entered again
+	with the probe off.  See ___emitSmalltalkOn___:'s CLASS-BODY LOAD_NAME
+	branch, which still writes this for the reads this description does not
+	cover (a doit, a def built as a value); the text both write is the same."
+
+	^ e paren: [
+		e send: #'ifNil:' env: 0
+			to: [e paren: [
+				e send: #'___classBodyDynamicRead___:' env: 1
+					to: [e var: CallAst ___classBeingCompiledVar___]
+					with: {[e symbol: self ___mangledId___]}]]
+			with: {[e block: [
+				CallAst classBodyDynamicLocals: false.
+				[self ___emitClassBodyValueWith___: e]
+					ensure: [CallAst classBodyDynamicLocals: true]]]}]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitClassBodyOwnCellWith___: e [
 	"A read of the class's OWN implicit cell from a function scope written in
 	its body (___readsAsClassBodyOwnCell___), through a ClassBuildEmitter so
@@ -562,8 +595,10 @@ NameAst >> ___emitClassBodyValueWith___: e [
 	This is ___emitSmalltalkOn___:'s dispatcher for the reads
 	___readsAsClassBodyValue___ admits, in the same order, with the branches
 	that cannot fire there left out: no doit, no annotation or decorator scope,
-	no nested function scope, no locals()/vars() probe, and none of the
-	``__class__'' / ``__classdict__'' / ``super'' spellings.  The text it
+	no nested function scope, and none of the ``__class__'' /
+	``__classdict__'' / ``super'' spellings.  The locals()/vars() probe
+	(classBodyDynamicLocals) is described here too, at the place
+	___emitSmalltalkOn___: puts it (plan P3.6).  The text it
 	writes is the text those branches wrote, byte for byte (the P3 trace diff
 	proves it); each branch keeps its reason where it stands in
 	___emitSmalltalkOn___:, and this method only names it.
@@ -593,6 +628,10 @@ NameAst >> ___emitClassBodyValueWith___: e [
 	self isFastPathBuiltinName ifTrue: [
 		id asSymbol == #'type' ifTrue: [^ e var: 'type'].
 		^ self ___emitBuiltinFirstClassRead___: id with: e].
+	"A body that calls locals() or vars() asks the class first for a name bound
+	behind codegen's back (plan P3.6): ___emitClassBodyDynamicReadWith___:."
+	(CallAst classBodyDynamicLocals and: [CallAst inClassBodyValueEmit == true])
+		ifTrue: [^ self ___emitClassBodyDynamicReadWith___: e].
 	clsVar := CallAst ___classBeingCompiledVar___.
 	mangled := self ___mangledId___.
 	"A sibling-method ALIAS answers the original's function.  This and the
@@ -1590,6 +1629,14 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 	Gated on classBodyDynamicLocals, so a class body with no locals()/vars()
 	call -- every class body in the corpus but a handful -- emits exactly what
 	it did before.
+
+	A class-body value or method-decorator read in a module never reaches
+	here: ___readsAsClassBodyValue___ / ___readsAsMethodDecoratorValue___ take
+	it first, and the description they share writes the same probe
+	(___emitClassBodyDynamicReadWith___:, plan P3.6), which is how the
+	IR-built method-local class helper writes it too.  What is left for this
+	branch is a read those two do not admit, such as one in a doit or in a
+	def built as a value.
 
 	The fallback is THIS METHOD re-entered with the gate suppressed, so there is
 	one description of how a class-body name resolves rather than a copy that
@@ -3239,10 +3286,10 @@ NameAst >> ___readsAsClassBodyValue___ [
 	Not in a doit (no module class), not inside a lambda or comprehension of
 	the body (a scope of its own, which skips the class), not in a def
 	emitted as a VALUE (classBodyValueDefNode), not in a method decorator's
-	or an annotation's scope, not under a locals()/vars() probe, and not one
-	of the spellings with branches of their own (``__class__'',
-	``__classdict__'', ``super'').  Every such read keeps
-	___emitSmalltalkOn___:'s own branches."
+	or an annotation's scope, and not one of the spellings with branches of
+	their own (``__class__'', ``__classdict__'', ``super'').  Every such read
+	keeps ___emitSmalltalkOn___:'s own branches.  A body that calls locals()
+	or vars() is included: the description writes its probe (plan P3.6)."
 
 	^ (ctx isKindOf: LoadAst)
 		and: [CallAst inClassBodyValueEmit == true
@@ -3251,12 +3298,11 @@ NameAst >> ___readsAsClassBodyValue___ [
 		and: [CallAst classBodyValueDefNode isNil
 		and: [ModuleAst compilingDoitScope isNil
 		and: [CallAst classBodyDecoratorScope isNil
-		and: [CallAst classBodyDynamicLocals ~~ true
 		and: [(#(#'__class__' #'__classdict__' #'super') includes: id asSymbol) not
 		and: [self ___inNestedScopeWithinClassBody___ not
 		and: [self ___readsDoitLiveMapping___ not
 		and: [self ___readsMethodAnnotationClassScope___ not
-		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]]
+		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]
 
 ]
 
@@ -3267,8 +3313,8 @@ NameAst >> ___readsAsMethodDecoratorValue___ [
 	announced (printMethodDecoratorsOn:decorators:className:siblingNames: and
 	its marking and property-accessor siblings), the decorator is being
 	emitted, and otherwise the conditions of ___readsAsClassBodyValue___: a
-	class and a module being compiled, no doit, no def emitted as a value, no
-	locals()/vars() probe, not inside a lambda or comprehension of the
+	class and a module being compiled, no doit, no def emitted as a value,
+	not inside a lambda or comprehension of the
 	decorator, not an annotation-scope read, and not ``__class__'',
 	``__classdict__'' or ``super'', which keep ___emitSmalltalkOn___:'s own
 	branches."
@@ -3280,12 +3326,11 @@ NameAst >> ___readsAsMethodDecoratorValue___ [
 		and: [CallAst moduleClassBeingCompiled notNil
 		and: [CallAst classBodyValueDefNode isNil
 		and: [ModuleAst compilingDoitScope isNil
-		and: [CallAst classBodyDynamicLocals ~~ true
 		and: [(#(#'__class__' #'__classdict__' #'super') includes: id asSymbol) not
 		and: [self ___inNestedScopeWithinClassBody___ not
 		and: [self ___readsDoitLiveMapping___ not
 		and: [self ___readsMethodAnnotationClassScope___ not
-		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]]
+		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]
 
 ]
 
