@@ -122,7 +122,7 @@ opens. See .github/workflows/cpython-conformance.yml.
 | test.test_netrc | OK | 24 | 0 | 0 | 1 |  |
 | test.test_pulldom | OK | 11 | 0 | 0 | 0 |  |
 | test.test_sax | OK | 191 | 0 | 0 | 0 |  |
-| test.test_ssl | OK | 203 | 0 | 0 | 23 |  |
+| test.test_ssl | OK | 203 | 0 | 0 | 22 |  |
 | test.test_urllib2_localnet | OK | 21 | 0 | 0 | 0 |  |
 | test.test_wave | OK | 113 | 0 | 0 | 0 |  |
 | test.test_xml_etree | OK | 233 | 0 | 0 | 7 |  |

@@ -462,7 +462,7 @@ From `P07_MODS=...`. A module body is one text `initialize` whose class
 statements are blocks, so the code is spread over many methods. Its source is
 mostly STRING LITERALS: the method source each class statement compiles at
 run time (`___compileMethod:`, `___irInstallDef:...or:`, the `___irTextSources___`
-and table methods).
+and table methods; the `___irTextSources___` table went in P2.3b).
 
 | module | `initialize` source | .py | home literal frame | distinct strings | of which translated method source | largest string | methods | step points (all / home) | words (all / home) | map |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |

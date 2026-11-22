@@ -269,6 +269,34 @@ StdlibLongTailTestCase >> testHttpClientContentLength [
 
 ]
 
+{ #category : 'Grail-Tests - importlib.util' }
+StdlibLongTailTestCase >> testImportlibUtilSourceHashMatchesCPython [
+	"importlib.util.source_hash was missing (issue #2299), and pytest 9.2's
+	assertion rewriting calls it, so with pytest 9.2 Grail ran no tests at
+	all.  It is CPython's SipHash-1-3 keyed with the magic number: the same
+	8 bytes for the same source, for any bytes-like object, and TypeError
+	for a str.
+
+	Every expected hash came from CPython 3.14; see
+	tests/python/importlib_util_source_hash.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'importlib_util_source_hash' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/importlib_util_source_hash.py')
+		name: 'importlib_util_source_hash'.
+	#( 'the_issues_example_matches'
+	   'every_final_block_length_matches'
+	   'a_longer_source_matches'
+	   'it_answers_eight_bytes'
+	   'any_bytes_like_object_is_accepted'
+	   'a_str_raises_type_error'
+	   'it_can_be_imported_by_name' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'importlib.util.source_hash check failed: ' , k]
+
+]
+
 { #category : 'Grail-Tests - http.client' }
 StdlibLongTailTestCase >> testIncompleteReadCarriesPartialAndExpected [
 	"urllib3 imports this by name at module scope, so its absence stopped
@@ -461,6 +489,35 @@ StdlibLongTailTestCase >> testPkgutilIterModulesAndWalkPackagesListWhatIsThere [
 	   'with_no_path_the_standard_library_is_listed' ) do: [:k |
 		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
 			description: 'pkgutil check failed: ' , k]
+
+]
+
+{ #category : 'Grail-Tests - pkgutil' }
+StdlibLongTailTestCase >> testPkgutilResolveNameResolvesANameToAnObject [
+	"pkgutil.resolve_name was missing (issue #2297), so jsonschema.cli, which
+	imports it, failed to import.  It is CPython's: the ``pkg.mod:attr'' form
+	imports once and walks the rest, a trailing colon answers the module, the
+	dotted form imports as far as it can and walks the rest, and a malformed
+	name, a missing module and a missing attribute raise ValueError,
+	ImportError and AttributeError.
+
+	Verified against real CPython by running the fixture directly; see
+	tests/python/pkgutil_resolve_name.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'pkgutil_resolve_name' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/pkgutil_resolve_name.py')
+		name: 'pkgutil_resolve_name'.
+	#( 'the_colon_form_imports_once_and_walks_the_rest'
+	   'a_trailing_colon_answers_the_module'
+	   'the_dotted_form_finds_the_package_boundary'
+	   'a_malformed_name_raises_value_error'
+	   'a_missing_module_raises_import_error'
+	   'a_missing_attribute_raises_attribute_error'
+	   'it_can_be_imported_by_name' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'pkgutil.resolve_name check failed: ' , k]
 
 ]
 

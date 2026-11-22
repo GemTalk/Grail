@@ -255,6 +255,16 @@ AssignAst >> ___emitIRStatementOn___: aBuilder [
 		ifTrue: [^ self ___emitIRDunderClassCellStoreOn___: aBuilder].
 	(self ___irClassCellTargetName___: tgt) ifNotNil: [:nm |
 		^ self ___emitIRClassCellStoreOn___: aBuilder name: nm].
+	"A bare name bound by a class-body RUNTIME statement (P3.4): the class's
+	definitional store, as printSmalltalkClassBodyRuntimeStoreOn:target:
+	writes it -- after the module route, which the text tests first."
+	((tgt isKindOf: NameAst)
+		and: [(self isModuleScopeStoreTarget: tgt) not
+		and: [self ___irIsClassBodyRuntimeStore___: tgt]]) ifTrue: [
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (self ___emitIRClassBodyRuntimeStoreOf___: tgt id from: v on: aBuilder).
+			^ self].
 	((tgt isKindOf: NameAst) and: [(aBuilder leafFor: tgt id asSymbol) isNil]) ifTrue: [
 		"A module-scope store (cut 69): the target has no leaf on the builder
 		because it is not a local of this def."
@@ -593,7 +603,9 @@ AssignAst >> ___irSingleLocalTarget: localSet [
 	targets size == 1 ifFalse: [^ nil].
 	(targets first isKindOf: NameAst) ifFalse: [^ nil].
 	((targets first ctx) isKindOf: StoreAst) ifFalse: [^ nil].
-	(localSet includes: targets first id asString) ifFalse: [^ nil].
+	"...or one a class-body runtime statement binds into the class (P3.4)."
+	((localSet includes: targets first id asString)
+		or: [self ___irIsClassBodyRuntimeStore___: targets first]) ifFalse: [^ nil].
 	^ targets first
 
 ]

@@ -686,6 +686,9 @@ TryAst >> ___irCatchTargetEligible___: aName locals: localNames [
 	well, so the second arm is what keeps the answer right when it does not."
 
 	(localNames includes: aName asString) ifTrue: [^ true].
+	"...or a handler of a class-body RUNTIME ``try'' (P3.4), whose as-name
+	___emitIRModuleScopeStoreOf___:from:on: binds on the class."
+	self ___inClassBodyRuntimeScope___ ifTrue: [^ true].
 	^ self ___nameStoreRoutesToModule___: aName asSymbol
 
 ]
