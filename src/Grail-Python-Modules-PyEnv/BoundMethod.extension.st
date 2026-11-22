@@ -220,6 +220,26 @@ BoundMethod class >> ___grailSessionPinHolder___ [
 
 ]
 
+{ #category : 'Grail-Dynamic Rebinding' }
+BoundMethod class >> ___grailShadowHolder___: aShadowSelector from: aClass [
+	"The first class from aClass up whose OWN env-1 dictionary holds
+	aShadowSelector -- a ``___grailOrig_'' shadow -- or nil.
+
+	The pins and the dispatcher are recorded against that class.
+	whichClassIncludesSelector: answered it while every shadow was compiled
+	or generated for the class holding it; since P2.3b an IR shadow is the
+	DEFINER's method shared under the shadow key, on a subclass too, and that
+	primitive answers a method's inClass.  Asked only for a pinned selector."
+
+	| c |
+	c := aClass.
+	[c ~~ nil] whileTrue: [
+		(c @env0:includesSelector: aShadowSelector environmentId: 1) ifTrue: [^ c].
+		c := c @env0:superclass].
+	^ nil
+
+]
+
 { #category : 'Grail-Instance creation' }
 BoundMethod class >> ___internedFor___: aReceiver selector: aSymbol [
 	"The session-cached handle for (aReceiver, aSymbol), minting it on first
@@ -919,7 +939,10 @@ BoundMethod >> ___pinnedSelectorFor___: aSelector receiver: actualReceiver [
 	one that was pinned.  Only pinned selectors pay for the check."
 	shadow := ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol.
 	cls := actualReceiver @env0:class.
-	owner := cls @env0:whichClassIncludesSelector: shadow environmentId: 1.
+	"The class that HOLDS the shadow, which is the class the pin was recorded
+	against -- not the shadow method's inClass, which for an IR shadow shared
+	from the definer onto a subclass is the definer (P2.3b)."
+	owner := BoundMethod ___grailShadowHolder___: shadow from: cls.
 	owner == nil ifTrue: [^ aSelector].
 	"THE GENERATION OF THE SHADOW'S OWN PIN, not the selector's latest.  A pin
 	was per SELECTOR, so pinning ``__iter__'' on one class re-dated every

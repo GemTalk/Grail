@@ -649,7 +649,6 @@ IRMergeRegenerateTestCase 17574 1687
 IRRefusalLabelsTestCase 13584 1222
 IRRegenerateTestCase 27280 6399
 IRStrictModeTestCase 5506 958
-IRTextSourcesChunkedTestCase 55092 48338
 ImportAndOpenArgsTestCase 2544 1278
 ImportCompileWarningsTestCase 275 0
 ImportErrorTestCase 4 0

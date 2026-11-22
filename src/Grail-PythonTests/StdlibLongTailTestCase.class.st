@@ -269,6 +269,34 @@ StdlibLongTailTestCase >> testHttpClientContentLength [
 
 ]
 
+{ #category : 'Grail-Tests - importlib.util' }
+StdlibLongTailTestCase >> testImportlibUtilSourceHashMatchesCPython [
+	"importlib.util.source_hash was missing (issue #2299), and pytest 9.2's
+	assertion rewriting calls it, so with pytest 9.2 Grail ran no tests at
+	all.  It is CPython's SipHash-1-3 keyed with the magic number: the same
+	8 bytes for the same source, for any bytes-like object, and TypeError
+	for a str.
+
+	Every expected hash came from CPython 3.14; see
+	tests/python/importlib_util_source_hash.py."
+
+	| mod |
+	importlib @env1:modules removeKey: #'importlib_util_source_hash' ifAbsent: [].
+	mod := importlib
+		loadModuleFromPath: (importlib grailDir , '/tests/python/importlib_util_source_hash.py')
+		name: 'importlib_util_source_hash'.
+	#( 'the_issues_example_matches'
+	   'every_final_block_length_matches'
+	   'a_longer_source_matches'
+	   'it_answers_eight_bytes'
+	   'any_bytes_like_object_is_accepted'
+	   'a_str_raises_type_error'
+	   'it_can_be_imported_by_name' ) do: [:k |
+		self assert: ((mod @env0:perform: k asSymbol env: 1) = true)
+			description: 'importlib.util.source_hash check failed: ' , k]
+
+]
+
 { #category : 'Grail-Tests - http.client' }
 StdlibLongTailTestCase >> testIncompleteReadCarriesPartialAndExpected [
 	"urllib3 imports this by name at module scope, so its absence stopped

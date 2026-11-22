@@ -15142,10 +15142,13 @@ Object >> ___pyAttrDelete___: aName [
 				  shadowing that would both lose the original and point the
 				  dispatcher's fall-through send at itself."
 				  "Through importlib's copier, which recompiles a TEXT method's source
-				  prefixed and SHARES an IR-built method (GRAIL_IR_CODEGEN) under the
-				  shadow key -- its sourceString is Python and cannot be recompiled."
-				  ((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1)
-					== self) ifFalse: [
+				  prefixed and regenerates or shares an IR-built method (GRAIL_IR_CODEGEN)
+				  -- its sourceString is Python and cannot be recompiled.  An existing
+				  shadow is one in this class's OWN dictionary: a dispatcher's shadow
+				  shared from the definer answers the definer to
+				  whichClassIncludesSelector: (P2.3b), and copying over it would point
+				  the dispatcher's fall-through at the dispatcher."
+				  (self @env0:includesSelector: shadowSel environmentId: 1) ifFalse: [
 					importlib @env0:___copyMethod___: sel from: self to: self
 						prefix: '___grailOrig_' category: 'Grail-Dynamic Rebinding Originals'].
 				  BoundMethod @env1:___grailPinSelector___: sel in: self ]

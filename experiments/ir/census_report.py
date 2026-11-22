@@ -211,23 +211,24 @@ def text_board(c,label):
     out.append(f'### Class-method installs ({label})\n')
     out.append(install_table(c)+'\n')
     out.append(f'### Methods copied onto another class ({label})\n')
-    out.append('Every method a consumer copies onto another class or selector during the import (plan P2), by how it was copied: `regen` regenerated from its IR builder, `shared` the same method under another key, `twin` an IR method recompiled from its `___irTextSources___` text twin, `text` a text method recompiled from its own source. Runtime consumers (the shadows, `direct`, `special`) fire when tests run, so an import census sees few of them.\n')
+    out.append('Every method a consumer copies onto another class or selector during the import (plan P2), by how it was copied: `regen` regenerated from its IR builder, `shared` the same method under another key, `refused` an IR method with no builder that could not be shared, so the copy raised a TypeError (P2.3b), `twin` an IR method recompiled from its `___irTextSources___` text twin (gone since P2.3b), `text` a text method recompiled from its own source. Runtime consumers (the shadows, `direct`, `special`) fire when tests run, so an import census sees few of them.\n')
     out.append(copy_table(c)+'\n')
     return '\n'.join(out)
 COPY_SITES=('mi','mi-class','enum','del-shadow','dispatch-shadow','direct','special','st-class')
-COPY_ROUTES=('regen','shared','twin','text','none','helper')
+COPY_ROUTES=('regen','shared','refused','twin','text','none','helper')
 def copy_table(c):
     """Methods copied onto another class or selector (plan P2.2): rows by
     consumer, columns by route, with the characters recompiled.  ``twin'' is
     an IR method recompiled from its ___irTextSources___ twin, which P2.2
-    drives to zero; ``regen'' is regenerated from its IR builder."""
+    drove to zero and P2.3b deleted; ``regen'' is regenerated from its IR
+    builder; ``refused'' raised a TypeError for want of one (P2.3b)."""
     out=['| consumer | '+' | '.join(COPY_ROUTES)+' | twin MB | text MB |',
          '| --- |'+' ---: |'*(len(COPY_ROUTES)+2)]
     for site in COPY_SITES:
         if not any(c.get(f'cp:{site}:{r}',0) for r in COPY_ROUTES): continue
         cells=' | '.join(str(c.get(f'cp:{site}:{r}',0)) for r in COPY_ROUTES)
         out.append(f'| `{site}` | {cells} | {mb(c.get(f"cpb:{site}:twin",0))} | {mb(c.get(f"cpb:{site}:text",0))} |')
-    ok=c.get('cp:rebuild:ok',0); bad=c.get('cp:rebuild:refused',0)
+    ok=c.get('cp:rebuild:ok',0); bad=c.get('cp:rebuild:refused',0)+c.get('cp:rebuild:no-id',0)
     out.append('')
     out.append(f'Builders rebuilt from source on a cache miss: {ok} rebuilt, {bad} refused, '
                f'{c.get("cpms:rebuild",0)/1000:.1f} s in all.')
