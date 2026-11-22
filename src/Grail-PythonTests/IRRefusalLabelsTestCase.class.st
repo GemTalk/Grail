@@ -204,9 +204,10 @@ IRRefusalLabelsTestCase >> testFixtureAgreesWithCPythonUnderIR [
 
 { #category : 'Grail-Tests - fixture' }
 IRRefusalLabelsTestCase >> testFixtureXfailsKeepTheTextAnswer [
-	"Both XFAIL shapes still refuse IR, so their answer IS the text path's.
-	A change of answer here means either a fix (update the fixture) or a
-	refusal that stopped refusing without its emit being checked."
+	"The XFAIL shape still refuses IR, so its answer IS the text path's.  A
+	change of answer here means either a fix (update the fixture, as #2231 moved
+	lambda_async_genexp to EXPECTED) or a refusal that stopped refusing without
+	its emit being checked."
 
 	| bad |
 	bad := self ___table___: #XFAIL.

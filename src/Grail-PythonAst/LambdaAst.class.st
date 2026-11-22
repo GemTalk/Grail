@@ -525,8 +525,9 @@ LambdaAst >> ___irLambdaReasonUnguarded___: localNames [
 	body, valid Python, which ___irBodyHasYieldOrAwait___: finds because it
 	descends into the genexp.  So the row is named for that
 	(`LambdaAst:awaitInGenexp'; it used to say `LambdaAst:yield', P1.3).  It
-	stays refused: the text path is the oracle, and it builds a plain
-	generator there where CPython builds an async_generator."
+	stays refused because IR has no async generator expression yet
+	(GeneratorExpAst >> ___irEligibleValueLocals___:), so the text builds it
+	-- now correctly, as an async_generator (#2231)."
 	((self ___irBodyHasYieldOrAwait___: body)
 		and: [(self ___irBodyHasYield___: body) not]) ifTrue: [^ #'LambdaAst:awaitInGenexp'].
 	(args defaults ifNil: [#()]) do: [:d |
@@ -1091,12 +1092,20 @@ LambdaAst >> printSmalltalkOn: aStream [
 	so the call answers a PythonGenerator and the ___gen___ its yield reads is
 	declared.  It used to be emitted bare, and the module failed to compile
 	with ``undefined symbol ___gen___''.  (The IR path already refuses such a
-	lambda, so this is the only emit.)"
+	lambda, so this is the only emit.)
+
+	A YIELD makes it one, not an await.  An await reaches a lambda only inside
+	a generator expression in its body -- anywhere else in a lambda it is a
+	SyntaxError -- and there it makes the GENERATOR EXPRESSION asynchronous
+	(PEP 530), not the lambda.  The test used to be
+	___irBodyHasYieldOrAwait___:, which descends into the genexp, so
+	``lambda y: (await x for x in y)'' answered a plain generator wrapping
+	the body instead of the async generator the body builds (#2231)."
 	"The body is emitted INSIDE this lambda's scope frame, so a lambda or genexpr
 	nested in it is named through it -- ``<lambda>.<locals>.<lambda>'' (#1522).
 	The defaults above are not: CPython evaluates them in the enclosing scope."
 	savedScopeDepth := CallAst ___pushScope___: self kind: #function name: '<lambda>'.
-	[(self ___irBodyHasYieldOrAwait___: body)
+	[(self ___irBodyHasYield___: body)
 		ifTrue: [
 			aStream nextPutAll: 'PythonGenerator @env1:___withBlock___: [:___gen___ |'; lf.
 			body printSmalltalkOn: aStream.
