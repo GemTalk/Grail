@@ -229,11 +229,11 @@ def f(p):
 		'CellLam' -> #'irHelper:assign:classCell'.
 		'Ann' -> nil.
 		'AnnLam' -> nil.
-		'AnnTarget' -> #'irHelper:annotation:target'.
+		'AnnTarget' -> nil.
 		'Deco' -> nil.
 		'DecoLam' -> nil.
 		'DecoCell' -> #'irHelper:methodDecorator:classCell'.
-		'Expr' -> #'irHelper:expression'.
+		'Expr' -> nil.
 		'Target' -> #'irHelper:assignTarget'.
 		'Renamed' -> #'irHelper:assign:specialName'.
 		'Default' -> nil }.

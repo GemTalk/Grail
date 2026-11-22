@@ -103,6 +103,16 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 		(t isKindOf: NameAst)
 			ifTrue: [
 				aBuilder atNode: self.
+				"``del x'' in a CLASS BODY (P3.4): DELETE_NAME on the class's own
+				namespace -- printSmalltalkOn:'s ``<cls> @env1:
+				___classBodyDefinitionalDelete___: #x'', which it takes for every
+				name target while classBodyRuntimeClass is set."
+				CallAst classBodyRuntimeClass notNil ifTrue: [
+					aBuilder add: (aBuilder
+						send: #'___classBodyDefinitionalDelete___:'
+						to: (self ___emitIRClassBodyRuntimeClassOn___: aBuilder)
+						with: { aBuilder obj: t ___mangledId___ asSymbol } env: 1)]
+				ifFalse: [
 				"``nonlocal __class__; del __class__'' EMPTIES the shared cell
 				rather than unbinding anything -- the twin of the text's
 				``<class object> @env1:___grailClearClassCell___''.  Tested
@@ -167,7 +177,7 @@ DeleteAst >> ___emitIRStatementOn___: aBuilder [
 						aBuilder add: (aBuilder
 							ifNilValue: (aBuilder localVar: t id asSymbol)
 							then: [aBuilder add: (t ___irUnboundReadSignalWith___: aBuilder)]).
-						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]]]
+						aBuilder add: (aBuilder assign: leaf from: aBuilder nilLit)]]]]]
 			ifFalse: [
 				| objV |
 				objV := t value ___emitIRValueOn___: aBuilder.
@@ -292,7 +302,8 @@ DeleteAst >> ___irNameTargetEligible___: aNameAst locals: localNames [
 	here (cm:DeleteAst:name, test_dict's ClearOnDelete.__del__) and the
 	TEXT could not spell it either -- see printSmalltalkOn:."
 	(self ___irIsClosureCellDelete___: aNameAst) ifTrue: [^ true].
-	CallAst classBodyRuntimeClass notNil ifTrue: [^ false].
+	"A class-body ``del x'' unbinds the class attribute (P3.4)."
+	CallAst classBodyRuntimeClass notNil ifTrue: [^ true].
 	(self isModuleScopeTarget: aNameAst) ifTrue: [^ true].
 	^ localNames includes: aNameAst id asString
 

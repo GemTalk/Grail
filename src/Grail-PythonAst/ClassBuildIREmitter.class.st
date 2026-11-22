@@ -46,9 +46,9 @@ CHILD NODES.  ``expressionNode:'' and ``parenthesizedNode:'' answer, in order:
     IR-eligible HERE, in the class-body context, is an invariant failure: it raises, and the enclosing method falls back to text
     as any IR emit error does.
 
-``statementNode:'' always refuses: a class-body STATEMENT emitted through its
-own emitter (control flow, a runtime statement) is a later P3 step, and
-___irClassHelperTextReason___: keeps every class that has one on text.
+``statementNode:'' builds a class-body STATEMENT -- control flow, a runtime
+statement -- with the statement's own IR emitter (plan P3.4): see its
+comment.
 
 LAYOUT is a no-op: ``newline'', ``space'', and the spellings that exist only
 for the text (``openValueBlockLine:'', ``compactBraceArray:'',
@@ -64,8 +64,11 @@ enclosing frame's ``class'' line, as CPython reports what __build_class__
 raises.  ``mapDecorator:of:do:'' stamps the decorator's node for the
 decorator's application only, so a frame inside a decorator call reports the
 decorator's own line (#1406, #1518); a constant's own stamp is cleared after
-it too.  ``curPos:'' has no IR form: the helpers this backend builds are
-declarative and never emit one, so it refuses."
+it too.  ``curPos:'' has no IR form: an IR method derives its positions from its
+step points, so the helper declares no ``___curPos___'' even when its body
+has control flow, and the decorator emits that would store one are told so
+(ClassDefAst >> ___irHelperEmitContext___:curPos:do:).  A store reaching
+here is a bug, and refuses."
 Class {
 	#name : 'ClassBuildIREmitter',
 	#superclass : 'ClassBuildEmitter',
@@ -76,7 +79,8 @@ Class {
 		'scopes',
 		'pre',
 		'restOffset',
-		'decorators'
+		'decorators',
+		'helperLocals'
 	],
 	#category : 'Grail-Parser'
 }
@@ -227,6 +231,12 @@ ClassBuildIREmitter >> ___setBuilder___: aBuilder [
 
 	builder := aBuilder.
 	aBuilder classBuildEmitter: self.
+	"The helper's own locals as its prologue declared them, before the walk
+	adds a temp: what a class-body statement is judged against
+	(statementNode:).  The live set grows as statements are built -- a
+	``for'' registers its iterator temp -- and a SECOND loop judged against it
+	would find its temp taken and refuse."
+	helperLocals := aBuilder localNameSet copy.
 	values := OrderedCollection new.
 	opens := OrderedCollection new.
 	scopes := OrderedCollection new.
@@ -659,9 +669,31 @@ ClassBuildIREmitter >> statement: aBlock [
 
 { #category : 'Grail-children' }
 ClassBuildIREmitter >> statementNode: anAst [
+	"A class-body STATEMENT the walk hands to the statement's own emitter
+	(plan P3.4): a bare expression, a store through a subscript or an
+	attribute, a ``for'' / ``while'' / ``try'' / ``with'', an augmented
+	assignment, a ``del'', a ``raise'', an ``assert'' -- at its own position
+	in the body, under the class-body runtime class when it can bind a name.
 
-	^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
-		, ' statement in the class build needs the class-body namespace in IR'
+	Built by the statement's IR emitter on the helper's builder, as a def's
+	statement is.  The class-body half is the text's too: a name it reads is a
+	class-body value read (NameAst >> ___emitClassBodyValueWith___:, reached
+	through this emitter), and a bare name it binds goes to the class's
+	definitional store (AbstractNode >> ___emitIRClassBodyRuntimeStoreOf___:
+	from:on:), which is where the text's class-body branches send it.
+	ClassDefAst >> ___irClassHelperTextReason___: admits only the statements
+	that holds for, so one the def predicates do not find IR-eligible HERE is
+	an invariant failure: it raises, and the enclosing method falls back to
+	text as any IR emit error does."
+
+	CallAst inClassBodyValueEmit == true ifFalse: [
+		^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
+			, ' statement outside the class body''s emit window'].
+	(anAst ___irEligibleStatementLocals___: helperLocals) ifFalse: [
+		^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
+			, ' statement in the class body is not IR-eligible in the class-body context'].
+	anAst ___emitIRStatementOn___: builder.
+	self ___rest___
 
 ]
 

@@ -2061,8 +2061,9 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 
 	THE PROLOGUE is the text helper's, built directly: the class's binding
 	temp, the capture cells and their seeded identifiers, the body's codegen
-	helper temps.  The text helper declares ``___curPos___'' only for a body
-	with control flow, which ___irClassHelperTextReason___: keeps on text.
+	helper temps.  The text helper declares ``___curPos___'' for a body with
+	control flow; this one never does, as an IR method derives its positions
+	from its step points (ClassBuildIREmitter >> curPos:).
 
 	THE SOURCE attached is the class statement's own slice, decorators
 	included, as a def's IR method attaches the def's, so a step point
@@ -2132,7 +2133,7 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 	importlib ___irCensusOn___ ifTrue: [
 		importlib ___irCensusNote___: #'th:irHelper'
 			module: importlib ___irCensusModuleName___ def: name asString count: 1].
-	self ___irHelperEmitContext___: carriedNames do: [
+	self ___irHelperEmitContext___: carriedNames curPos: false do: [
 		self printSmalltalkRuntimeWith: e].
 	e assertDepth: 0.
 	hb add: (hb return: (hb localVar: bindName asSymbol)).
@@ -2229,6 +2230,133 @@ ClassDefAst >> ___irClassBodyDeclaresNonlocalBelow___: aNode [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyIfBranchReason___: aStmt bound: boundNames [
+	"___irClassBodyIfReason___:bound: for one statement of a branch."
+
+	(aStmt isKindOf: PassAst) ifTrue: [^ nil].
+	(aStmt isKindOf: IfAst) ifTrue: [^ self ___irClassBodyIfReason___: aStmt bound: boundNames].
+	"A PEP 695 class or alias in the body, which the parser rewrites into an
+	``if'' around its type-parameter scope (PythonParser >>
+	___rewriteTypeParamStatement___): P3.5's, with the PEP 695 class bodies."
+	((aStmt isKindOf: FunctionDefAst) and: [CallAst ___isTypeParamScope___: aStmt])
+		ifTrue: [^ 'typeParams'].
+	(aStmt isKindOf: FunctionDefAst) ifTrue: [^ 'if:def'].
+	(aStmt isKindOf: ClassDefAst) ifTrue: [^ 'if:class'].
+	((aStmt isKindOf: AssignAst)
+		and: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+			(aStmt targets anySatisfy: [:t |
+				#(#'__renamed__' #'__transient__' #'__slots__') includes: t id asSymbol])
+					ifTrue: [^ 'if:specialName'].
+			^ (self ___irClassBodyValueReason___: aStmt value bound: boundNames)
+				ifNotNil: [:r | 'if:assign:' , r]].
+	((aStmt isKindOf: AnnAssignAst) and: [aStmt target isKindOf: NameAst]) ifTrue: [
+		(self ___irClassHelperAnnotationReason___: aStmt bound: boundNames)
+			ifNotNil: [:r | ^ 'if:' , (r asString copyFrom: 'irHelper:' size + 1 to: r size)].
+		^ nil].
+	((self ___isClassBodyRuntimeStatement___: aStmt)
+		or: [(aStmt isKindOf: AssignAst) or: [aStmt isKindOf: DeleteAst]])
+			ifTrue: [^ self ___irClassBodyRuntimeReason___: aStmt bound: boundNames].
+	"A constant expression is not evaluated; anything else in a branch -- an
+	import, a ``global'' -- is not the branch emit's."
+	((aStmt isKindOf: ExprAst) and: [aStmt value isKindOf: ConstantAst]) ifTrue: [^ nil].
+	^ 'if:' , aStmt class name asString
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyIfReason___: anIf bound: boundNames [
+	"Why the class-body ``if'' anIf keeps the class on the TEXT helper, as the
+	tail of a census row, or nil when the IR backend builds it (plan P3.4).
+
+	The walk builds it through the emitter (emitClassBodyIf:on:): the test is a
+	class-body value, and each branch statement takes one of
+	emitClassBodyIfBranch:on:'s forms -- a nested ``if'', a NAME = value
+	binding through the definitional store, an annotated name (its value
+	stored, its run recorded), or a runtime statement emitted by its own
+	emitter (___irClassBodyRuntimeReason___:bound:).  Refused: a def or a
+	class in a branch, which the walk builds as a VALUE in a block of its own
+	(emitClassBodyIfDef:on:), and any statement the branch emit does not
+	handle (it would be dropped on every path)."
+
+	(self ___irClassBodyValueReason___: anIf test bound: boundNames)
+		ifNotNil: [:r | ^ 'if:test:' , r].
+	{ anIf body. anIf orelse } do: [:suite |
+		((suite isKindOf: SuiteAst) and: [suite body notNil]) ifTrue: [
+			suite body do: [:st |
+				(self ___irClassBodyIfBranchReason___: st bound: boundNames)
+					ifNotNil: [:r | ^ r]]]].
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyRuntimeReason___: aStmt bound: boundNames [
+	"Why the class-body RUNTIME statement aStmt -- one the walk emits through
+	its own emitter (ClassBuildIREmitter >> statementNode:) -- keeps the class
+	on the TEXT helper, as the tail of a census row, or nil when the IR backend
+	builds it (plan P3.4).
+
+	The statement's own IR emitter builds it, as in a def, on the helper's
+	builder: a name it READS is a class-body value read (NameAst >>
+	___emitClassBodyValueWith___:), and a bare name it BINDS -- an assignment,
+	a ``for'' target, an ``except ... as'' or ``with ... as'' name, an
+	augmented assignment, a ``del'' -- goes to the class's definitional store,
+	as the text's class-body branches send it
+	(AbstractNode >> ___emitIRClassBodyRuntimeStoreOf___:from:on:).
+
+	Admitted inside it: expression statements, assignments (one target: a
+	name, an attribute, a subscript or a nest of them), augmented
+	assignments, ``del'', ``if'', ``for'', ``while'', ``try'', ``with'',
+	``raise'', ``assert'', ``pass'', ``break'' and ``continue'', and an
+	annotation of an attribute or subscript.  Every expression in it is
+	admitted as a class-body value is (___irClassBodyValueReason___:bound:).
+	Refused, each under its own row: a def or a class (built as a value in a
+	block, P3.5), a chained assignment, an annotated NAME (whose record the
+	statement emit does not keep), an async statement, ``except*'', and the
+	scope declarations and imports."
+
+	| reason |
+	reason := nil.
+	aStmt ___descendantsDo___: [:n |
+		reason isNil ifTrue: [
+			(n isKindOf: StatementAst) ifTrue: [
+				reason := self ___irClassBodyRuntimeStatementShapeReason___: n].
+			(reason isNil and: [(n isKindOf: ExpressionAst)
+				and: [(n parent isKindOf: ExpressionAst) not]]) ifTrue: [
+					reason := (self ___irClassBodyValueReason___: n bound: boundNames)
+						ifNotNil: [:r | 'runtime:' , r]]]].
+	^ reason
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyRuntimeStatementShapeReason___: aStmt [
+	"___irClassBodyRuntimeReason___:bound:'s test of one statement's KIND (its
+	expressions are tested apart), or nil."
+
+	(aStmt isKindOf: FunctionDefAst) ifTrue: [^ 'runtime:def'].
+	(aStmt isKindOf: ClassDefAst) ifTrue: [^ 'runtime:class'].
+	(((aStmt isKindOf: AsyncForAst) or: [aStmt isKindOf: AsyncWithAst]))
+		ifTrue: [^ 'runtime:async'].
+	(aStmt isKindOf: AssignAst) ifTrue: [
+		^ aStmt targets size = 1 ifTrue: [nil] ifFalse: ['runtime:chain']].
+	(aStmt isKindOf: AnnAssignAst) ifTrue: [
+		^ (aStmt target isKindOf: NameAst) ifTrue: ['runtime:annotation'] ifFalse: [nil]].
+	((aStmt isKindOf: TryAst)
+		and: [(aStmt handlers ifNil: [#()]) anySatisfy: [:h | h isStar == true]])
+			ifTrue: [^ 'runtime:exceptStar'].
+	((aStmt isKindOf: ExprAst) or: [(aStmt isKindOf: AugAssignAst)
+		or: [(aStmt isKindOf: DeleteAst) or: [(aStmt isKindOf: IfAst)
+		or: [(aStmt isKindOf: ForAst) or: [(aStmt isKindOf: WhileAst)
+		or: [(aStmt isKindOf: TryAst) or: [(aStmt isKindOf: WithAst)
+		or: [(aStmt isKindOf: RaiseAst) or: [(aStmt isKindOf: AssertAst)
+		or: [(aStmt isKindOf: PassAst) or: [(aStmt isKindOf: BreakAst)
+		or: [aStmt isKindOf: ContinueAst]]]]]]]]]]]]) ifTrue: [^ nil].
+	^ 'runtime:' , aStmt class name asString
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 	"Are the class body's top-level statements only the DECLARATIVE kinds --
 	defs, nested classes, a docstring or other bare expression, a plain or
@@ -2240,7 +2368,8 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 	store ``___curPos___'' -- a temp the helper must not declare, since
 	PyFrame>>___namesIncludeCodegenMarker___: would then read it as a Python
 	frame.  Rare (single digits across the vendored stdlib and the CPython
-	suite corpus) and refused rather than half-handled."
+	suite corpus) and refused rather than half-handled.
+"
 
 	| stmts |
 	body isNil ifTrue: [^ true].
@@ -2475,6 +2604,54 @@ ClassDefAst >> ___irClassHelperAnnotationReason___: anAnnAssign bound: boundName
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassHelperBodyReason___ [
+	"___irClassHelperTextReason___:'s judgement of the class BODY, as a census
+	row, or nil when the IR backend builds it."
+
+	| stmts bound hasValues |
+	stmts := body isNil ifTrue: [#()] ifFalse: [body body].
+	(stmts isKindOf: SequenceableCollection) ifFalse: [^ #'irHelper:controlFlow'].
+	bound := self ___irClassBodyBoundNames___.
+	hasValues := false.
+	stmts do: [:s |
+		(s isKindOf: PassAst) ifFalse: [
+			"A statement CPython runs for its effect (P3.4): the walk emits it
+			through the statement's own emitter (statementNode:) or the
+			class-body ``if'' (emitClassBodyIf:on:)."
+			(self ___irClassHelperStatementReason___: s bound: bound) ifNotNil: [:r |
+				r == #runtime ifTrue: [hasValues := true] ifFalse: [^ r]].
+			(s isKindOf: FunctionDefAst)
+				ifTrue: [
+					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r].
+					((s ___defaultedPositionalParams___ asArray , s ___defaultedKeywordOnlyParams___ asArray)
+						anySatisfy: [:pair | ((pair at: 2) isKindOf: ConstantAst) not])
+							ifTrue: [hasValues := true].
+					(s decorator_list notNil and: [s decorator_list notEmpty])
+						ifTrue: [hasValues := true]]
+				ifFalse: [
+					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
+					((s isKindOf: AnnAssignAst) and: [s target isKindOf: NameAst]) ifTrue: [
+						(self ___irClassHelperAnnotationReason___: s bound: bound)
+							ifNotNil: [:r | ^ r].
+						(s annotation isKindOf: ConstantAst) ifFalse: [hasValues := true].
+						(s value notNil and: [(s value isKindOf: ConstantAst) not])
+							ifTrue: [hasValues := true]].
+					((s isKindOf: AssignAst)
+						and: [s targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+						(s value isKindOf: ConstantAst) ifFalse: [
+							(s targets anySatisfy: [:t |
+								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
+									ifTrue: [^ #'irHelper:assign:specialName'].
+							(self ___irClassBodyValueReason___: s value bound: bound classCell: true)
+								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
+							hasValues := true]]]]].
+	(hasValues and: [self ___classBodyCanBindDynamically___])
+		ifTrue: [^ #'irHelper:dynamicLocals'].
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassHelperDefReason___: aDef bound: boundNames [
 	"Why a def in the class body keeps the class on the TEXT helper, or nil.
 	A def's own body is a method SOURCE either way (a string literal the build
@@ -2505,6 +2682,69 @@ ClassDefAst >> ___irClassHelperDefReason___: aDef bound: boundNames [
 				(self ___irClassBodyValueReason___: (pair at: 2) bound: boundNames)
 					ifNotNil: [:r | ^ ('irHelper:methodDefault:' , r) asSymbol]]].
 	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
+	"How the class-body statement aStmt stands with the IR helper (plan P3.4):
+	nil for a DECLARATIVE statement, which ___irClassHelperTextReason___:
+	judges itself (a def, a nested class, a NAME = value or annotated-name
+	binding, a constant expression); #runtime for a statement CPython runs for
+	its effect that the IR backend builds; otherwise the census row that keeps
+	the class on the text helper.
+
+	The walk emits a runtime statement in one of four ways, each through the
+	emitter: a class-body ``if'' (emitClassBodyIf:on:), a ``f.attr = v'' on a
+	sibling def (emitMethodAttributeAssign:on:), a store through an attribute
+	of a nested class, after the body (___isClassBodyAttributeAssign___:),
+	and every other one through the statement's own emitter
+	(ClassBuildIREmitter >> statementNode:), under the class-body runtime
+	class when it can bind a name.  What it does not emit at all -- an
+	attribute store on anything else, an augmented store through an attribute
+	or subscript -- is dropped on every path, and stays text so the IR helper
+	does not start dropping it too."
+
+	| reason |
+	((aStmt isKindOf: FunctionDefAst) or: [aStmt isKindOf: ClassDefAst]) ifTrue: [^ nil].
+	((aStmt isKindOf: ExprAst) and: [aStmt value isKindOf: ConstantAst]) ifTrue: [^ nil].
+	((aStmt isKindOf: AssignAst)
+		and: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
+			"A global- or nonlocal-declared target is refused below with its
+			declaration."
+			^ nil].
+	((aStmt isKindOf: AnnAssignAst) and: [aStmt target isKindOf: NameAst]) ifTrue: [^ nil].
+	(aStmt isKindOf: GlobalAst) ifTrue: [^ #'irHelper:global'].
+	(aStmt isKindOf: NonlocalAst) ifTrue: [^ #'irHelper:nonlocal'].
+	(aStmt isKindOf: TypeAliasAst) ifTrue: [^ #'irHelper:typeAlias'].
+	(aStmt isKindOf: MatchAst) ifTrue: [^ #'irHelper:match'].
+	((aStmt isKindOf: ImportAst) or: [aStmt isKindOf: ImportFromAst])
+		ifTrue: [^ #'irHelper:import'].
+	(aStmt isKindOf: IfAst) ifTrue: [
+		reason := self ___irClassBodyIfReason___: aStmt bound: boundNames.
+		^ reason isNil ifTrue: [#runtime] ifFalse: [('irHelper:' , reason) asSymbol]].
+	((self ___methodAttributeAssigns___) includesIdentical: aStmt) ifTrue: [
+		(self ___irClassBodyValueReason___: aStmt value bound: boundNames)
+			ifNotNil: [:r | ^ ('irHelper:assignTarget:' , r) asSymbol].
+		^ #runtime].
+	(aStmt isKindOf: ExprAst) ifTrue: [
+		(self ___irClassBodyValueReason___: aStmt value bound: boundNames)
+			ifNotNil: [:r | ^ ('irHelper:expression:' , r) asSymbol].
+		^ #runtime].
+	((self ___isClassBodySubscriptAssign___: aStmt)
+		or: [(self ___isClassBodyAttributeAssign___: aStmt)
+		or: [(self ___isClassBodyDeleteStatement___: aStmt)
+		or: [self ___isClassBodyRuntimeStatement___: aStmt]]]) ifTrue: [
+			reason := self ___irClassBodyRuntimeReason___: aStmt bound: boundNames.
+			reason isNil ifTrue: [^ #runtime].
+			^ ((aStmt isKindOf: AnnAssignAst)
+				ifTrue: ['irHelper:annotation:target:' , reason]
+				ifFalse: [(aStmt isKindOf: AssignAst)
+					ifTrue: ['irHelper:assignTarget:' , reason]
+					ifFalse: ['irHelper:controlFlow:' , reason]]) asSymbol].
+	(aStmt isKindOf: AssignAst) ifTrue: [^ #'irHelper:assignTarget'].
+	(aStmt isKindOf: DeleteAst) ifTrue: [^ #'irHelper:delete'].
+	^ ('irHelper:controlFlow:' , aStmt class name asString) asSymbol
 
 ]
 
@@ -2553,13 +2793,20 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	own, built by its own emitter, whose names skip the class namespace on
 	both paths.
 
-	Still text: a bare expression evaluated for effect, a
-	target that is not a name (an annotated attribute or subscript is a
-	runtime statement), a ``__renamed__'' or ``__transient__'' value (Grail's
-	persistence declarations, left to P3.5), a nested class, control flow --
-	and any value or annotation under a locals()/vars() probe
-	(classBodyDynamicLocals), which the shared class-body read does not
-	describe.
+	P3.4 admits STATEMENTS CPython runs for their effect
+	(___irClassHelperStatementReason___:bound:): a bare expression, a store
+	through a subscript, an annotated attribute or subscript, ``f.attr = v''
+	on a sibling def, the class-body ``if'', and ``for'', ``while'', ``try'',
+	``with'', augmented assignment, ``del'', ``raise'' and ``assert'', each
+	built by its own IR emitter with the names it binds stored on the class.
+
+	Still text: a nested class, a ``global'' or ``nonlocal'' declaration, ``type'' aliases
+	and type parameters (P3.5); a def or class inside control flow, built as
+	a value in a block; an import or ``match''; an attribute store the walk
+	drops on every path; a ``__renamed__'' or ``__transient__'' value
+	(Grail's persistence declarations, left to P3.5) -- and any value or
+	annotation under a locals()/vars() probe (classBodyDynamicLocals), which
+	the shared class-body read does not describe.
 
 	The class's decorators, bases and keywords are not class-body expressions:
 	the caller evaluates them in the enclosing frame (___irHeaderNodes___), so
@@ -2569,50 +2816,13 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	invariant failure, not a row: it raises, and the enclosing method falls
 	back to text as for any IR emit error."
 
-	| stmts bound hasValues |
 	importlib ___irClassHelperIREnabled___ ifFalse: [^ #'irHelper:off'].
 	"Built under a class body's runtime statements, or in a doit under
 	replaced builtins: printSmalltalkOn: writes those differently, and neither
 	reaches a method-local helper today."
 	CallAst classBodyRuntimeClass notNil ifTrue: [^ #'irHelper:classBodyRuntime'].
 	self ___builtinsAreOverridden___ ifTrue: [^ #'irHelper:builtinsOverridden'].
-	self ___irClassBodyStatementsAreSimple___ ifFalse: [^ #'irHelper:controlFlow'].
-	stmts := body isNil ifTrue: [#()] ifFalse: [body body].
-	bound := self ___irClassBodyBoundNames___.
-	hasValues := false.
-	stmts do: [:s |
-		(s isKindOf: PassAst) ifFalse: [
-			(s isKindOf: FunctionDefAst)
-				ifTrue: [
-					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r].
-					((s ___defaultedPositionalParams___ asArray , s ___defaultedKeywordOnlyParams___ asArray)
-						anySatisfy: [:pair | ((pair at: 2) isKindOf: ConstantAst) not])
-							ifTrue: [hasValues := true].
-					(s decorator_list notNil and: [s decorator_list notEmpty])
-						ifTrue: [hasValues := true]]
-				ifFalse: [
-					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
-					(s isKindOf: AnnAssignAst) ifTrue: [
-						(self ___irClassHelperAnnotationReason___: s bound: bound)
-							ifNotNil: [:r | ^ r].
-						(s annotation isKindOf: ConstantAst) ifFalse: [hasValues := true].
-						(s value notNil and: [(s value isKindOf: ConstantAst) not])
-							ifTrue: [hasValues := true]].
-					(s isKindOf: ExprAst) ifTrue: [
-						(s value isKindOf: ConstantAst)
-							ifFalse: [^ #'irHelper:expression']].
-					(s isKindOf: AssignAst) ifTrue: [
-						(s targets allSatisfy: [:t | t isKindOf: NameAst])
-							ifFalse: [^ #'irHelper:assignTarget'].
-						(s value isKindOf: ConstantAst) ifFalse: [
-							(s targets anySatisfy: [:t |
-								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
-									ifTrue: [^ #'irHelper:assign:specialName'].
-							(self ___irClassBodyValueReason___: s value bound: bound classCell: true)
-								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
-							hasValues := true]]]]].
-	(hasValues and: [self ___classBodyCanBindDynamically___])
-		ifTrue: [^ #'irHelper:dynamicLocals'].
+	self ___irClassHelperBodyReason___ ifNotNil: [:r | ^ r].
 	self ___irHeaderNodesDo___: [:n |
 		(n ___irEligibleValueLocals___: localNames) ifFalse: [^ #'irHelper:header']].
 	^ nil
@@ -2885,13 +3095,15 @@ ClassDefAst >> ___irHeaderNodesDo___: aBlock [
 ]
 
 { #category : 'Grail-IR Codegen' }
-ClassDefAst >> ___irHelperEmitContext___: carriedNames do: aBlock [
+ClassDefAst >> ___irHelperEmitContext___: carriedNames curPos: declaresCurPos do: aBlock [
 	"Evaluate aBlock, which emits this class's build for its method-local
 	helper -- as text or through IR -- in the context both helpers are built
 	in: the carried captures routed through the passed reader blocks
 	(___irWithCaptureCellMap___:do:), the class-method seam turned off so the
 	body's defs are compiled-text sources (___irEmitClassBodyAsTextDo___:),
-	and the decorator emits told whether the helper declares ``___curPos___''."
+	and the decorator emits told whether the helper declares ``___curPos___''
+	(declaresCurPos).  The TEXT helper declares one for a body with control
+	flow; the IR helper never does (ClassBuildIREmitter >> curPos:)."
 
 	^ self ___irWithCaptureCellMap___: carriedNames do: [
 		self ___irEmitClassBodyAsTextDo___: [ | savedCurPos |
@@ -2899,8 +3111,7 @@ ClassDefAst >> ___irHelperEmitContext___: carriedNames do: aBlock [
 			___irHelperSourceWithSelector___:carrying:): the decorator emits ask
 			before storing one (#1406)."
 			savedCurPos := SessionTemps current at: #'___grailIRHelperHasCurPos___' otherwise: nil.
-			SessionTemps current at: #'___grailIRHelperHasCurPos___'
-				put: self ___irClassBodyStatementsAreSimple___ not.
+			SessionTemps current at: #'___grailIRHelperHasCurPos___' put: declaresCurPos.
 			aBlock ensure: [
 				SessionTemps current at: #'___grailIRHelperHasCurPos___' put: savedCurPos]]]
 
@@ -2962,7 +3173,8 @@ ClassDefAst >> ___irHelperSourceWithSelector___: aSelector carrying: carriedName
 	importlib ___irCensusOn___ ifTrue: [
 		importlib ___irCensusNote___: #'th:helper'
 			module: importlib ___irCensusModuleName___ def: name asString count: 1].
-	emitted := self ___irHelperEmitContext___: carriedNames do: [
+	emitted := self ___irHelperEmitContext___: carriedNames
+		curPos: self ___irClassBodyStatementsAreSimple___ not do: [
 		stream := PrettyWriteStream on: Unicode7 new.
 		self printSmalltalkOn: stream.
 		stream contents].
