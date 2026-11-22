@@ -8,21 +8,18 @@ Class {
 }
 
 { #category : 'Grail-Private' }
-InferredSlotsTestCase >> ___smalltalkSourceOf___: aSelector in: aClass [
-	"The SMALLTALK source of aClass's env-1 method aSelector.
+InferredSlotsTestCase >> ___selectorsSentBy___: aSelector in: aClass [
+	"The selectors aClass's env-1 method aSelector sends, as Strings.
 
-	Not ``sourceString'': under GRAIL_IR_CODEGEN an eligible method is built
-	from IR and its sourceString is the user's PYTHON, so every assertion below
+	Not its source: under GRAIL_IR_CODEGEN an eligible method is built from
+	IR and its sourceString is the user's PYTHON, so the assertions below
 	about ``dynamicInstVarAt:'' or ``self ___pyattr_x___'' failed on the
-	flag-on run while passing flag-off.  importlib ___textSourceFor___:in:
-	selector: is the accessor built for exactly this -- the text twin for an
-	IR-built method, the plain source otherwise -- and it is what the MI merge,
-	the enum gap-fill and the grail.smalltalk_class copier already use."
+	flag-on run while passing flag-off.  They read the Smalltalk text twin
+	until P2.3b deleted it; what they are about is which messages the body
+	SENDS, and the compiled method's selector pool says that on either path."
 
-	| meth |
-	meth := aClass compiledMethodAt: aSelector environmentId: 1.
-	^ (importlib ___textSourceFor___: meth in: aClass selector: aSelector)
-		ifNil: [meth sourceString]
+	^ ((aClass compiledMethodAt: aSelector environmentId: 1) _selectorPool
+		collect: [:each | each asString]) asArray
 
 ]
 
@@ -127,15 +124,16 @@ InferredSlotsTestCase >> testFlagOffChangesNothing [
 	"With the flag off the backing class has no slot instVars, no accessors
 	and no marker, and the method body is the dynamic-instVar probe."
 
-	| mod point src |
+	| mod point sent |
 	mod := self loadFixtureWithFlag: false.
 	point := self classNamed: #Point in: mod.
 	self deny: (point allInstVarNames includes: #'___slot_x___').
 	self assert: (point whichClassIncludesSelector: #'___pyattr_x___' environmentId: 1) isNil.
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) isNil.
-	src := self ___smalltalkSourceOf___: #total in: point.
-	self assert: (src includesString: 'dynamicInstVarAt:').
-	self deny: (src includesString: '___pyattr_').
+	sent := self ___selectorsSentBy___: #total in: point.
+	self assert: (sent anySatisfy: [:s | s beginsWith: 'dynamicInstVarAt:']) description: sent printString.
+	self deny: (sent anySatisfy: [:s | s includesString: '___pyattr_'])
+		description: sent printString.
 
 ]
 
@@ -149,7 +147,7 @@ InferredSlotsTestCase >> testInferredNamesBecomeNamedInstVarsWithAccessors [
 	accessor pair, and a method body reads through the SEND rather than the
 	storage."
 
-	| mod point src inst |
+	| mod point sent inst |
 	mod := self loadFixtureWithFlag: true.
 	point := self classNamed: #Point in: mod.
 	self deny: (point allInstVarNames includes: #'___slot_x___').
@@ -167,9 +165,9 @@ InferredSlotsTestCase >> testInferredNamesBecomeNamedInstVarsWithAccessors [
 	self assert: (point whichClassIncludesSelector: #'___pyHasSlots___' environmentId: 1) == point.
 	"Non-strict: no ___pySlotsStrict___ marker of its own."
 	self assert: (point whichClassIncludesSelector: #'___pySlotsStrict___' environmentId: 1) isNil.
-	src := self ___smalltalkSourceOf___: #total in: point.
-	self assert: (src includesString: 'self ___pyattr_x___').
-	self deny: (src includesString: 'dynamicInstVarAt:').
+	sent := self ___selectorsSentBy___: #total in: point.
+	self assert: (sent includes: '___pyattr_x___') description: sent printString.
+	self deny: (sent anySatisfy: [:s | s beginsWith: 'dynamicInstVarAt:']) description: sent printString.
 	self assert: (point @env1:___pyInferredSlotNames___) asArray equals: #(#x #y).
 
 ]

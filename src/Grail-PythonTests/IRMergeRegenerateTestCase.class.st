@@ -2,7 +2,9 @@
 P2.2's first consumer: the multiple-inheritance merge copies a secondary
 base's IR-built methods onto the class being built by REGENERATING them there
 (importlib ___irRegenerate___:onto:category:), where it used to recompile a
-Smalltalk text twin from the base's ___irTextSources___ table.
+Smalltalk text twin from the base's ___irTextSources___ table.  Since P2.3b
+there is no table: a base whose builders cannot be rebuilt makes the merge
+raise a TypeError instead.
 
 The fixture, tests/python/ir_mi_merge_regenerates.py, is its own CPython
 oracle; its secondary base Mixin lives in tests/python/ir_mi_merge_base.py, so
@@ -119,12 +121,24 @@ IRMergeRegenerateTestCase >> ___helpersOf___: aBehavior [
 IRMergeRegenerateTestCase >> ___load___: aFile as: aName [
 	"A fresh forced-IR import of tests/python/<aFile>."
 
+	^ self ___load___: aFile as: aName ir: true
+
+]
+
+{ #category : 'Grail-Private' }
+IRMergeRegenerateTestCase >> ___load___: aFile as: aName ir: aBoolean [
+	"A fresh import of tests/python/<aFile> (or of aFile, when it is a full
+	path), with the IR path forced on or off."
+
 	(importlib @env1:modules) removeKey: aName asSymbol ifAbsent: [].
 	self ___forgetCanonicalModule___: aName.
 	irRegistrySnapshot ifNil: [
 		irRegistrySnapshot := importlib ___canonicalRegistrySnapshot___].
-	importlib ___irCodegenForce___: true.
-	^ importlib loadModuleFromPath: importlib grailDir , '/tests/python/' , aFile name: aName
+	importlib ___irCodegenForce___: aBoolean.
+	^ importlib loadModuleFromPath: ((aFile beginsWith: '/')
+			ifTrue: [aFile]
+			ifFalse: [importlib grailDir , '/tests/python/' , aFile])
+		name: aName
 
 ]
 
@@ -133,12 +147,21 @@ IRMergeRegenerateTestCase >> ___loadBaseThen___: aBlock [
 	"Import the base module, let aBlock prepare the cache, then import the
 	module that merges from it with the census counting; answer the latter."
 
+	^ self ___loadBaseThen___: aBlock ir: true
+
+]
+
+{ #category : 'Grail-Private' }
+IRMergeRegenerateTestCase >> ___loadBaseThen___: aBlock ir: aBoolean [
+	"___loadBaseThen___:, both modules compiled with the IR path forced on or
+	off."
+
 	| mod |
-	self ___load___: 'ir_mi_merge_base.py' as: 'ir_mi_merge_base'.
+	self ___load___: 'ir_mi_merge_base.py' as: 'ir_mi_merge_base' ir: aBoolean.
 	aBlock value.
 	importlib ___irCensusReset___.
 	importlib ___irCensusOn: true.
-	mod := [self ___load___: 'ir_mi_merge_regenerates.py' as: 'ir_mi_merge_regenerates']
+	mod := [self ___load___: 'ir_mi_merge_regenerates.py' as: 'ir_mi_merge_regenerates' ir: aBoolean]
 		ensure: [importlib ___irCensusOn: false].
 	^ mod
 
@@ -161,11 +184,10 @@ IRMergeRegenerateTestCase >> ___mergedMethodsOf___: aClass [
 { #category : 'Grail-Setup' }
 IRMergeRegenerateTestCase >> tearDown [
 	importlib ___irCensusOn: false.
-	importlib ___irCopiesRegenerate: true.
 	importlib ___irCensusReset___.
 	importlib ___irCodegenEnabledInvalidate___.
 	importlib ___irBuilderCacheLimit: nil.
-	#(#'ir_mi_merge_regenerates' #'ir_mi_merge_base') do: [:n |
+	#(#'ir_mi_merge_regenerates' #'ir_mi_merge_base' #'ir_mi_merge_astral') do: [:n |
 		(importlib @env1:modules) removeKey: n ifAbsent: [].
 		self ___forgetCanonicalModule___: n asString].
 	irRegistrySnapshot ifNotNil: [:snap |
@@ -196,7 +218,7 @@ IRMergeRegenerateTestCase >> testAClassHelperArrivesWithItsDefInEitherOrder [
 	self assert: (counts at: 'cp:mi:helper' ifAbsent: [0]) + (counts at: 'cp:mi-class:helper' ifAbsent: [0])
 		equals: 6.
 	self assert: (counts at: 'cp:rebuild:refused' ifAbsent: [0]) equals: 0.
-	self assert: (counts at: 'cp:mi:twin' ifAbsent: [0]) + (counts at: 'cp:mi-class:twin' ifAbsent: [0])
+	self assert: (counts at: 'cp:mi:refused' ifAbsent: [0]) + (counts at: 'cp:mi-class:refused' ifAbsent: [0])
 		equals: 0.
 	self assert: (counts at: 'cp:mi:shared' ifAbsent: [0]) + (counts at: 'cp:mi-class:shared' ifAbsent: [0])
 		equals: 0.
@@ -219,22 +241,57 @@ IRMergeRegenerateTestCase >> testAClassHelperArrivesWithItsDefInEitherOrder [
 ]
 
 { #category : 'Grail-Tests' }
-IRMergeRegenerateTestCase >> testADefCopiedByItsTwinNeedsNoClassHelper [
-	"The control: with regeneration off, each def is recompiled from its text
-	twin, which builds the class inline.  No helper reaches either target,
-	and the local classes are still CPython's."
+IRMergeRegenerateTestCase >> testADefCopiedOnTheTextPathNeedsNoClassHelper [
+	"The control: on the TEXT path (GRAIL_IR_CODEGEN=0) each def is recompiled
+	from its own text, which builds the class inline.  No helper reaches
+	either target, and the local classes are still CPython's.  (Until P2.3b
+	the control was the IR path with regeneration off, which recompiled each
+	IR def's text twin.)"
 
 	| mod |
-	mod := self ___loadBaseThen___: [].
-	importlib ___irCopiesRegenerate: false.
+	mod := self ___loadBaseThen___: [] ir: false.
 	self ___copyInBothOrders___: mod.
-	self assert: ((self ___copyCounts___) at: 'cp:mi:twin' ifAbsent: [0]) > 0.
+	self assert: ((self ___copyCounts___) at: 'cp:mi:text' ifAbsent: [0]) > 0.
+	self assert: ((self ___copyCounts___) at: 'cp:mi:regen' ifAbsent: [0]) equals: 0.
 	#(#'HelperFirst' #'DefFirst') do: [:name |
 		| target |
 		target := mod @env1:___pyAttrLoad___: name.
 		self assert: (self ___helpersOf___: target) isEmpty.
 		self assert: (self ___helpersOf___: target class) isEmpty].
 	self ___assertCopiedChecksPass___: mod
+
+]
+
+{ #category : 'Grail-Tests' }
+IRMergeRegenerateTestCase >> testAMergeFromABaseWhoseSourceIsGoneRaises [
+	"The base loaded from a copy that is then DELETED, its builders dropped:
+	the merge cannot regenerate the secondary base's methods, and a method
+	SHARED onto the merging class would answer the base to
+	whichClassIncludesSelector:.  Until P2.3b the merge recompiled the base's
+	text twin; now the class statement raises a TypeError naming the base's
+	module and the cause, and nothing is copied by text."
+
+	| path raised counts |
+	path := self tmp: 'ir_mi_merge_base.py'.
+	(GsFile openWriteOnServer: path)
+		nextPutAll: (GsFile openReadOnServer: importlib grailDir , '/tests/python/ir_mi_merge_base.py') contents;
+		close.
+	self ___load___: path as: 'ir_mi_merge_base' ir: true.
+	GsFile removeServerFile: path.
+	importlib ___irBuilderCacheReset___.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	raised := nil.
+	[[self ___load___: 'ir_mi_merge_regenerates.py' as: 'ir_mi_merge_regenerates' ir: true]
+		on: TypeError
+		do: [:ex | raised := ex messageText asString. ex return: nil]]
+			ensure: [importlib ___irCensusOn: false].
+	self assert: raised notNil description: 'the merge did not raise'.
+	#('Grail cannot copy' '(module ''ir_mi_merge_base'')' 'is gone' 'secondary base') do: [:s |
+		self assert: (raised includesString: s) description: raised].
+	counts := self ___copyCounts___.
+	self assert: (counts at: 'cp:mi:refused' ifAbsent: [0]) + (counts at: 'cp:mi-class:refused' ifAbsent: [0]) > 0.
+	self assert: (counts at: 'cp:mi:text' ifAbsent: [0]) equals: 0
 
 ]
 
@@ -247,7 +304,7 @@ IRMergeRegenerateTestCase >> testAMergeRebuildsABaseWhoseBuildersAreGone [
 	| mod counts |
 	mod := self ___loadBaseThen___: [importlib ___irBuilderCacheReset___].
 	counts := self ___copyCounts___.
-	self assert: (counts at: 'cp:mi:twin' ifAbsent: [0]) equals: 0.
+	self assert: (counts at: 'cp:mi:refused' ifAbsent: [0]) equals: 0.
 	self assert: (counts at: 'cp:mi:regen' ifAbsent: [0]) > 0.
 	self assert: (counts at: 'cp:rebuild:ok' ifAbsent: [0]) > 0
 		description: 'nothing was rebuilt, so this did not exercise a miss'.
@@ -266,10 +323,38 @@ IRMergeRegenerateTestCase >> testAMergeWithNoCacheAtAllStillRegenerates [
 		importlib ___irBuilderCacheReset___.
 		importlib ___irBuilderCacheLimit: 0].
 	counts := self ___copyCounts___.
-	self assert: (counts at: 'cp:mi:twin' ifAbsent: [0]) equals: 0.
-	self assert: (counts at: 'cp:mi-class:twin' ifAbsent: [0]) equals: 0.
+	self assert: (counts at: 'cp:mi:refused' ifAbsent: [0]) equals: 0.
+	self assert: (counts at: 'cp:mi-class:refused' ifAbsent: [0]) equals: 0.
 	self assert: (counts at: 'cp:mi:regen' ifAbsent: [0]) > 0.
 	self ___assertChecksPass___: mod
+
+]
+
+{ #category : 'Grail-Tests' }
+IRMergeRegenerateTestCase >> testAnIRClassCarriesNoTextTable [
+	"Since P2.3b an IR-built class carries no ___irTextSources___ table (nor
+	its chunks), and ___textSourceFor___:in:selector: answers nil for its
+	methods: nothing copies an IR method by its text.  The merge still gives
+	Merged every method of Mixin, quotes and an astral-plane character
+	included -- what the split table was once tested on -- and the merged
+	copies are regenerated."
+
+	| mod mixin meth |
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	mod := [self ___load___: 'ir_mi_merge_astral.py' as: 'ir_mi_merge_astral' ir: true]
+		ensure: [importlib ___irCensusOn: false].
+	mixin := mod @env1:___pyAttrLoad___: #'Mixin'.
+	meth := mixin compiledMethodAt: #'astral' environmentId: 1.
+	self assert: (BaseException ___isIRPythonMethod___: meth).
+	self assert: (importlib ___textSourceFor___: meth in: mixin selector: #'astral') isNil.
+	#(#'___irTextSources___' #'___irTextSources_1___:') do: [:sel |
+		self assert: (mixin class whichClassIncludesSelector: sel environmentId: 1) isNil
+			description: 'Mixin class still answers ' , sel].
+	self
+		assert: (mod @env1:___pyAttrLoad___: #'SUMMARY') asString
+		equals: '7 checks, 0 disagreeing [], keys match: True'.
+	self assert: ((self ___copyCounts___) at: 'cp:mi:regen' ifAbsent: [0]) >= 6
 
 ]
 
@@ -323,8 +408,8 @@ IRMergeRegenerateTestCase >> testMergedMethodsAreRegeneratedForTheClass [
 				includes: (((importlib ___irDefIdOf___: m) ifNil: ['?']) subStrings: '|') first)
 			description: m selector , ' carries no def id from a base'].
 	counts := self ___copyCounts___.
-	self assert: (counts at: 'cp:mi:twin' ifAbsent: [0]) equals: 0.
-	self assert: (counts at: 'cp:mi-class:twin' ifAbsent: [0]) equals: 0.
+	self assert: (counts at: 'cp:mi:refused' ifAbsent: [0]) equals: 0.
+	self assert: (counts at: 'cp:mi-class:refused' ifAbsent: [0]) equals: 0.
 	self assert: (counts at: 'cp:mi:regen' ifAbsent: [0]) + (counts at: 'cp:mi-class:regen' ifAbsent: [0])
 		equals: ir size.
 	self ___assertChecksPass___: mod

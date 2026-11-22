@@ -343,25 +343,34 @@ Object class >> ___grailInstallOneDispatcher___: aSelector definedIn: definingCl
 	the argument names, the body and every other keyword untouched.  The copy
 	goes through importlib's copier: a TEXT method is recompiled from its
 	source, prefixed; an IR-built method (GRAIL_IR_CODEGEN) has PYTHON for its
-	sourceString and is recompiled from its text twin or SHARED under the
-	shadow key instead -- prefixing its source compiled nothing, the
-	fall-through DNU'd, and a metaclass storing the body's defs recursed here."
+	sourceString and is generated from its IR under the shadow selector
+	instead -- prefixing its source compiled nothing, the fall-through DNU'd,
+	and a metaclass storing the body's defs recursed here."
 	shadowSel := ('___grailOrig_' @env0:, aSelector @env0:asString) @env0:asSymbol.
 	"NEVER OVERWRITE A SHADOW THIS CLASS ALREADY OWNS.  What answers to the
 	selector NOW, after an earlier install, is the DISPATCHER -- shadowing that
 	would make the dispatcher's own fall-through send reach itself.  An
 	existing shadow is already the pristine original, which is exactly what
-	is wanted."
-	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
+	is wanted.
+
+	OWNED means in THIS class's own method dictionary (includesSelector:,
+	which sees a session method too), not ``whichClassIncludesSelector:
+	answers self'': that primitive answers a method's inClass, and an IR
+	shadow is the DEFINER's method shared under the shadow key, on the
+	definer or on a subclass alike (importlib ___copySessionMethod___:...,
+	P2.3b)."
+	(self @env0:includesSelector: shadowSel environmentId: 1)
 		ifFalse: [
 			importlib @env0:___copySessionMethod___: aSelector from: definingClass to: self
 				prefix: '___grailOrig_'].
 	"NO SHADOW, NO DISPATCHER.  The copier compiles nothing for a method whose
-	source is not Grail-generated text (a kernel .gs method, an IR build with
-	no text twin); a dispatcher whose fall-through has nowhere to go is the
+	source is not Grail-generated text (a kernel .gs method); a dispatcher
+	whose fall-through has nowhere to go is the
 	MNU the 9th cut showed on every later enum class.  Leave the original in
-	place instead -- the store is still visible through the loader."
-	((self @env0:whichClassIncludesSelector: shadowSel environmentId: 1) == self)
+	place instead -- the store is still visible through the loader.  Owned
+	in this class's own dictionary, as above: a shadow shared from the
+	definer answers the definer to whichClassIncludesSelector:."
+	(self @env0:includesSelector: shadowSel environmentId: 1)
 		ifFalse: [^ self].
 	BoundMethod @env1:___grailPinSelector___: aSelector in: self.
 	"A VARARGS def ``_m: pos kw: kw'' ends in the forward ``^ self m: a b'' to its
@@ -487,10 +496,15 @@ Object class >> ___grailInstallRecordedSelfSendOverrides___ [
 	temps @env0:at: #'GrailRecordedDispatchersInstalled' put: true.
 	reg := self ___grailCommittedSelfSendOverrides___.
 	reg == nil ifTrue: [^ self].
+	"A TypeError too: the shadow of an IR method whose class cannot be rebuilt
+	from its source (changed or gone since the override was committed) is
+	refused (importlib ___irCopyRefused___:site:onto:, P2.3b).  That costs
+	the override its dispatcher, as a raise at the store does, and must not
+	cost the session its first Python execution."
 	reg @env0:keysAndValuesDo: [:cls :names |
 		names @env0:asIdentitySet @env0:do: [:sym |
 			[cls ___grailInstallSelfSendDispatchers___: sym]
-				@env0:on: Error do: [:e | e @env0:return: nil]]].
+				@env0:on: Error, TypeError do: [:e | e @env0:return: nil]]].
 	^ self
 
 ]

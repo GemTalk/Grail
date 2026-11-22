@@ -1816,28 +1816,6 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 
 ]
 
-{ #category : 'Grail-IR Codegen' }
-ClassDefAst >> ___emitIRTextSourcesAccessor___: aSelector entries: entries threaded: threadedBool on: classVarName emitter: e [
-	"One accessor.  UNTHREADED is the single-literal form every class used to
-	get, unchanged: ``___irTextSources___  ^ (KeyValueDictionary @env0:new) ...
-	@env0:yourself''.  THREADED is a chunk: it fills the table it is handed
-	and answers it, ``___irTextSources_N___: d  ^ d ... @env0:yourself''."
-
-	| src |
-	src := WriteStream on: String new.
-	threadedBool
-		ifTrue: [
-			src nextPutAll: aSelector; nextPutAll: ' ___d___'; lf.
-			src nextPutAll: '	^ ___d___']
-		ifFalse: [
-			src nextPutAll: aSelector; lf.
-			src nextPutAll: '	^ (KeyValueDictionary @env0:new)'].
-	entries do: [:assoc | src nextPutAll: (self ___irTextSourceLineFor___: assoc)].
-	src lf; nextPutAll: '		@env0:yourself'.
-	self ___compileClassSide___: src contents on: classVarName emitter: e
-
-]
-
 { #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___emitNonlocalClassCellWrite___: stmt on: e [
 	"Emit ``nonlocal __class__; __class__ = v'' as a write to the ENCLOSING
@@ -1886,10 +1864,11 @@ ClassDefAst >> ___emitTable___: aSelector entries: entries category: aCategory e
 	uncatchable ``string literal too big'' CompileError.
 
 	A table that fits is the single accessor every class used to get, and
-	still does.  One that does not is split exactly as the IR text twin is
-	(emitIRTextSourcesOn:...): chunk accessors ``<stem>_N___:'' each fill the
-	table they are handed, and aSelector threads a fresh one through them, so
-	every reader asks the selector it always asked."
+	still does.  One that does not is split into chunk accessors
+	``<stem>_N___:'' that each fill the table they are handed, and aSelector
+	threads a fresh one through them, so every reader asks the selector it
+	always asked.  (The IR text twin's ___irTextSources___ table was split the
+	same way until P2.3b deleted it.)"
 
 	| chunks src stem main |
 	chunks := self ___literalChunks___: entries spelledBy: [:line | line].
@@ -3650,50 +3629,6 @@ ClassDefAst >> ___irSelectorOfSource___: aMethodSource [
 ]
 
 { #category : 'Grail-IR Codegen' }
-ClassDefAst >> ___irTextSourceChunks___: pairs [
-	"pairs split, in order, into runs whose accessor literal stays inside
-	___irTextSourcesLiteralBudget___ (___literalChunks___:spelledBy:), each
-	entry costed as its accessor line."
-
-	^ self ___literalChunks___: pairs
-		spelledBy: [:assoc | self ___irTextSourceLineFor___: assoc]
-
-]
-
-{ #category : 'Grail-IR Codegen' }
-ClassDefAst >> ___irTextSourceLineFor___: assoc [
-	"One table entry as the accessor spells it: ``@env0:at: #'sel' put: '...';''."
-
-	| line |
-	line := WriteStream on: String new.
-	line lf; nextPutAll: '		@env0:at: #'.
-	self printQuotedString: assoc key asString on: line.
-	line nextPutAll: ' put: '.
-	self printQuotedString: assoc value on: line.
-	line nextPut: $;.
-	^ line contents
-
-]
-
-{ #category : 'Grail-IR Codegen' }
-ClassDefAst >> ___irTextSourcesLiteralBudget___ [
-	"Bytes one table accessor's literal may occupy in the class-build text --
-	the IR text twin's and each per-method table's (___emitTable___:...).  A
-	fifth of GemStone's 5M-byte limit: ___literalChunks___:spelledBy: counts
-	the outer quote doubling and the widest storage, but not every byte a
-	literal costs, and the margin is cheap -- a chunk is one more method on
-	the metaclass.
-
-	A session may lower it (``___grailIRTextSourcesBudget___'' in SessionTemps)
-	so a test can split a SMALL class and check the split loses nothing --
-	proving that on a class big enough to need it would cost a 1.3M-character
-	fixture."
-
-	^ SessionTemps current at: #'___grailIRTextSourcesBudget___' otherwise: 1000000
-
-]
-
-{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irTopLevelWriteNames___: localSet [
 	"The class statement binds its own name unconditionally when it completes."
 
@@ -4047,7 +3982,7 @@ ClassDefAst >> ___keepsExecutionRecord___ [
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___literalChunks___: entries spelledBy: aBlock [
 	"entries split, in order, into runs whose accessor literal stays inside
-	___irTextSourcesLiteralBudget___.  aBlock answers an entry's text as the
+	___tableLiteralBudget___.  aBlock answers an entry's text as the
 	accessor spells it, and the entry costs that text's length after the
 	OUTER quoting ___compileMethod: applies (every quote doubled again), at
 	four bytes a character.
@@ -4065,7 +4000,7 @@ ClassDefAst >> ___literalChunks___: entries spelledBy: aBlock [
 	method's text, which the class build compiles too."
 
 	| chunks current currentChars budget |
-	budget := self ___irTextSourcesLiteralBudget___.
+	budget := self ___tableLiteralBudget___.
 	chunks := OrderedCollection new.
 	current := OrderedCollection new.
 	currentChars := 0.
@@ -4471,6 +4406,23 @@ ClassDefAst >> ___stVarName___ [
 	self ___buildsIntoBlockTemp___ ifTrue: [
 		^ '___classBuild_' , name asString , '___'].
 	^ NameAst ___transportIdentifierFor___: name asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___tableLiteralBudget___ [
+	"Bytes one per-method table accessor's literal may occupy in the
+	class-build text (___emitTable___:...).  A fifth of GemStone's 5M-byte
+	limit: ___literalChunks___:spelledBy: counts the outer quote doubling and
+	the widest storage, but not every byte a literal costs, and the margin is
+	cheap -- a chunk is one more method on the metaclass.
+
+	A session may lower it (``___grailClassTableLiteralBudget___'' in
+	SessionTemps) so a test can split a SMALL class and check the split loses
+	nothing -- proving that on a class big enough to need it would cost a
+	1.3M-character fixture."
+
+	^ SessionTemps current at: #'___grailClassTableLiteralBudget___' otherwise: 1000000
 
 ]
 
@@ -5229,53 +5181,6 @@ ClassDefAst >> emitIRInstallOn: classVarName id: anId source: sourceString categ
 
 	^ self emitIRInstallOn: classVarName id: anId source: sourceString
 		category: categoryString classSide: false emitter: e
-
-]
-
-{ #category : 'Grail-IR Codegen' }
-ClassDefAst >> emitIRTextSourcesOn: classVarName pairs: pairs emitter: e [
-	"For a class with IR-built methods, a class-side ``___irTextSources___''
-	method answering selector -> the TEXT source each IR method replaced:
-	  <cls> @env0:class ___compileMethod: '___irTextSources___  ^ (KeyValueDictionary
-	      @env0:new) @env0:at: #sel put: <src>; ...; @env0:yourself' category: ...
-	It is what importlib ___textSourceFor___:in:selector: hands the consumers
-	that re-compile a method's source (MI merge, enum gap-fill, smalltalk_class,
-	the special-receiver recompile), so they keep behaving exactly as for a
-	text-compiled method.  Persistent with the class, like ___methodCodeTable___.
-
-	THE WHOLE ACCESSOR IS ONE STRING LITERAL in the class-build text, and
-	GemStone refuses a literal over 5M bytes.  Bytes, not characters: ONE
-	character above U+FFFF anywhere in the class's methods makes the literal a
-	four-byte string, so 1.46M characters -- test_builtin's BuiltinTest, whose
-	tests are full of astral-plane test strings -- measured 5.86 MB, and the
-	module failed to import under IR with ``string literal too big'' while the
-	text path, which carries no twin, scored OK.
-
-	So a class whose table would exceed ___irTextSourcesLiteralBudget___ is
-	split into CHUNK accessors, each filling the table it is handed, and
-	``___irTextSources___'' threads one table through them:
-	  ___irTextSources___  ^ self ___irTextSources_2___: (self
-	      ___irTextSources_1___: (KeyValueDictionary @env0:new))
-	The reader still asks only ``___irTextSources___''.  A class that fits in
-	one literal -- every class but a handful -- gets exactly the single
-	accessor it always did, byte for byte, so the twin stays deterministic."
-
-	| chunks main |
-	pairs isEmpty ifTrue: [^ self].
-	chunks := self ___irTextSourceChunks___: pairs.
-	chunks size = 1 ifTrue: [
-		^ self ___emitIRTextSourcesAccessor___: '___irTextSources___'
-			entries: (chunks at: 1) threaded: false on: classVarName emitter: e].
-	chunks doWithIndex: [:entries :i |
-		self ___emitIRTextSourcesAccessor___:
-				'___irTextSources_' , i printString , '___:'
-			entries: entries threaded: true on: classVarName emitter: e].
-	main := WriteStream on: String new.
-	main nextPutAll: '___irTextSources___'; lf; nextPutAll: '	^ '.
-	main nextPutAll: ((1 to: chunks size) inject: '(KeyValueDictionary @env0:new)'
-		into: [:acc :i |
-			'(self ___irTextSources_' , i printString , '___: ' , acc , ')']).
-	self ___compileClassSide___: main contents on: classVarName emitter: e
 
 ]
 
@@ -7268,14 +7173,16 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 					source: assoc value
 					category: 'Grail-Class Methods'
 					emitter: e.
-				importlib ___irNoteTextSource___: assoc value selector: (irEntry at: 2) forClass: self.
 				importlib ___irClassDefIdConsumed___: self name: irKey]].
-	"The ___irTextSources___ table and the registration map's release both
-	move past the @classmethod loop below (cut 61): the table must carry the
-	class-side twins too (the MI merge's class-side pass recompiles them), and
-	forgetting the map here, as before, left every registered classmethod's
-	install statement unemitted -- the text compiled and nothing counted the
-	miss."
+	"The registration map's release moves past the @classmethod loop below
+	(cut 61): forgetting the map here, as before, left every registered
+	classmethod's install statement unemitted -- the text compiled and
+	nothing counted the miss.
+
+	The copiers no longer read an IR method's text (P2.3b): every one
+	regenerates the method from its IR builder, so the class-side
+	___irTextSources___ table this loop used to feed is gone.  (The install
+	statement's own fallback literal stays until P4.6.)"
 
 	"Fixed-arity forwarders into a varargs body (see §9.36), each GATED on the
 	superclass actually implementing that selector -- which is the only case
@@ -7346,10 +7253,6 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 					category: 'Grail-Class Methods'
 					classSide: true
 					emitter: e.
-				"Noted under ``class>>'' + selector: ___textSourceFor___:in:selector:
-				looks a METACLASS provider up under that key."
-				importlib ___irNoteTextSource___: assoc value
-					selector: ('class>>' , (irEntry at: 2) asString) asSymbol forClass: self.
 				importlib ___irClassDefIdConsumed___: self name: irKey]].
 	"Compile each @staticmethod onto the metaclass.  Body has no
 	implicit ``self`` — generateModuleMethodSourceOn: (module form, no
@@ -7377,14 +7280,10 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 					category: 'Grail-Class Methods'
 					classSide: true
 					emitter: e.
-				importlib ___irNoteTextSource___: assoc value
-					selector: ('class>>' , (irEntry at: 2) asString) asSymbol forClass: self.
 				importlib ___irClassDefIdConsumed___: self name: irKey]].
-	"After the LAST method loop (instance, class, static): the text-source table
-	must carry every class-side twin, and the registration map is released only
-	once every loop has read it (cut 61's lesson, extended to statics)."
-	self emitIRTextSourcesOn: self ___stVarName___
-		pairs: (importlib ___irTextSourcesFor___: self) emitter: e.
+	"After the LAST method loop (instance, class, static): the registration
+	map is released only once every loop has read it (cut 61's lesson,
+	extended to statics)."
 	importlib ___irForgetClassDefIds___: self.
 
 	"A @staticmethod / @classmethod that shadows a BASE's ordinary method needs

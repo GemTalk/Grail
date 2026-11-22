@@ -31,6 +31,18 @@ copies perform one generated for their own class (plan P2.3a).
 that reads the def's locals and its ``self``, has a decorator and a base
 (values its caller evaluates), and holds a class of its own.
 
+``SBase``, ``SMid`` and ``SLeaf`` patch, on a SUBCLASS, methods that read
+slots and call ``super()``: the dispatcher's shadow there is the definer's own
+method (plan P2.3b), and the subclass's self-sends must reach the patch while
+the originals keep their ``super()`` and slot reads.
+
+``NewHome.__new__`` and ``NewFive.__new__`` define a class in a def that runs
+with the CLASS as its receiver, whose helper is filed on the metaclass too.
+Called with an int, or with five more arguments on an instance of an
+unrelated class, the receiver is not a class at all, and the copy performs
+the helper generated for the receiver's class (plan P2.3b; these copies used
+to fall back to the method's Smalltalk text twin, which the plan deleted).
+
 ``IRCopyRoutesTestCase`` runs these checks under Grail and counts the routes;
 run as a script, this file is its own CPython oracle.
 """
@@ -109,6 +121,20 @@ class Away:
 class DelPlain:
     def m(self):
         return 'plain'
+
+
+class NewHome:
+    def __new__(cls):
+        class Made:
+            pass
+        return (repr(cls), Made.__qualname__)
+
+
+class NewFive:
+    def __new__(cls, a, b, c, d, e):
+        class Made:
+            pass
+        return (Made.__qualname__, a + b + c + d + e)
 
 
 class LBase:
@@ -201,6 +227,68 @@ def _five_on_another_class():
     return Away().five(1, 2, 3, 4, 5)
 
 
+def _special_receiver_with_a_class_built_by_new():
+    return (NewHome.__new__(3), NewHome.__new__(2.5))
+
+
+def _five_new_on_an_unrelated_instance():
+    return NewFive.__new__(Away(), 1, 2, 3, 4, 5)
+
+
+
+class SBase:
+    __slots__ = ('v',)
+
+    def __init__(self, v):
+        self.v = v
+
+    def greet(self):
+        return 'base:%s' % self.v
+
+    def shout(self):
+        return 'B'
+
+    def describe(self):
+        return self.greet() + '|' + self.shout()
+
+
+class SMid(SBase):
+    __slots__ = ('w',)
+
+    def __init__(self, v, w):
+        super().__init__(v)
+        self.w = w
+
+    def shout(self):
+        return 'M' + super().shout()
+
+
+class SLeaf(SMid):
+    __slots__ = ()
+
+
+def _subclass_shadow_with_super_and_slots():
+    leaf = SLeaf(1, 2)
+    before = leaf.describe()
+    SLeaf.greet = lambda self: 'patched:%s:%s' % (self.v, self.w)
+    after_greet = leaf.describe()
+    SLeaf.shout = lambda self: 'P' + SMid.shout(self)
+    after_shout = leaf.describe()
+    return (before, after_greet, after_shout, SBase.greet(leaf), SMid.shout(leaf),
+            SMid(3, 4).describe())
+
+
+def patch_and_record(cls, name):
+    """Not one of CHECKS: store a patch over cls.name and answer the messages
+    of the warnings the store raised.  IRCopyRoutesTestCase calls it on a
+    class whose dispatcher shadow can be neither shared nor generated."""
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        setattr(cls, name, lambda self: 'patched')
+    return [str(w.message) for w in caught]
+
+
 CHECKS = [
     ('dispatch_on_a_subclass', _dispatch_on_a_subclass,
      ('Base', 'patched', 'Base', 'Base')),
@@ -228,7 +316,33 @@ CHECKS = [
       ('capfloat', 'Base', 'Home.kind_captures.<locals>.Made.Inner', True))),
     ('five_with_a_harder_class_on_another_class',
      _five_with_a_harder_class_on_another_class, ('Away', 15, True, 'Base')),
+    ('special_receiver_with_a_class_built_by_new',
+     _special_receiver_with_a_class_built_by_new,
+     (('3', 'NewHome.__new__.<locals>.Made'),
+      ('2.5', 'NewHome.__new__.<locals>.Made'))),
+    ('five_new_on_an_unrelated_instance', _five_new_on_an_unrelated_instance,
+     ('NewFive.__new__.<locals>.Made', 15)),
+    ('subclass_shadow_with_super_and_slots', _subclass_shadow_with_super_and_slots,
+     ('base:1|MB', 'patched:1:2|MB', 'patched:1:2|PMB', 'base:1', 'MB', 'base:3|MB')),
 ]
+
+
+class Patched:
+    def label(self):
+        return 'Patched'
+
+    def describe(self):
+        return self.label()
+
+
+def patch_on_the_definer():
+    """Not one of CHECKS: IRCopyRoutesTestCase calls it with no builder cached,
+    so the dispatcher's shadow on Patched -- the class that defines label --
+    shares the method rather than rebuild the class (plan P2.3b)."""
+    p = Patched()
+    before = p.describe()
+    Patched.label = lambda self: 'patched'
+    return (before, p.describe(), Patched.describe(p))
 
 
 def run_checks():
@@ -246,3 +360,4 @@ def run_checks():
 if __name__ == '__main__':
     for name, ok, actual in run_checks():
         print('%-36s %s %r' % (name, 'OK ' if ok else 'DIFF', actual))
+    print('%-36s %r' % ('patch_on_the_definer', patch_on_the_definer()))
