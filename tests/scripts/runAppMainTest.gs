@@ -364,7 +364,15 @@ System gemEnvironmentVariable: 'GEMDB_NAMESPACE' put: app.
 "Warm bind compiles nothing: no IR method built (classes A and B have
 methods, so a class build would build some), and no builder cached for a
 regeneration -- the cache is filled by builds, so an empty one is the same
-fact seen from P2.1's side."
+fact seen from P2.1's side.
+
+The session's reinstall of COMMITTED dispatchers is done first, outside the
+check.  It is session setup, not the re-run: a dispatcher's shadow on a
+SUBCLASS of the method's definer (pathlib's WindowsPath, ipaddress's
+IPv4Network) is generated from the definer's builder, which a warm session
+has to rebuild since the text twin went (P2.3b) -- once per session, whatever
+the session then runs."
+object ___grailInstallRecordedSelfSendOverrides___.
 importlib ___irStatsReset___.
 importlib ___irBuilderCacheReset___.
 main := importlib runPath: root , '/main.py'.

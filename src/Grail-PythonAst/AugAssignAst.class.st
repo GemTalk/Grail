@@ -281,6 +281,25 @@ AugAssignAst >> ___emitIRStatementOn___: aBuilder [
 	self ___irModuleScopeNameTarget___ ifNotNil: [
 		^ self ___emitIRModuleScopeAugOn___: aBuilder].
 	pair := self ___irSelectorPair___.
+	"CLASS-BODY LEVEL ``x += 1'' (P3.4): the read and the store both go to the
+	class -- printSmalltalkOn:'s class-body branch, send for send:
+	``<cls> ___classBodyDefinitionalStore___: #x put: ((<cls> ___pyAttrLoad___:
+	#x) ___augmentedOp___: (v) inplace: ... binary: ...)''."
+	(self ___irIsClassBodyRuntimeStore___: target) ifTrue: [
+		| read |
+		read := aBuilder
+			send: #'___pyAttrLoad___:'
+			to: (self ___emitIRClassBodyRuntimeClassOn___: aBuilder)
+			with: { aBuilder obj: target id asSymbol } env: 1.
+		v := value ___emitIRValueOn___: aBuilder.
+		aBuilder atNode: self.
+		augSend := aBuilder
+			send: #'___augmentedOp___:inplace:binary:'
+			to: read
+			with: { v. aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }
+			env: 1.
+		aBuilder add: (self ___emitIRClassBodyRuntimeStoreOf___: target id from: augSend on: aBuilder).
+		^ self].
 	rcvr := aBuilder localVar: target id asSymbol.
 	v := value ___emitIRValueOn___: aBuilder.
 	leaf := aBuilder leafFor: target id asSymbol.
@@ -370,7 +389,8 @@ AugAssignAst >> ___irEligibleStatementLocals___: localNames [
 		^ value ___irEligibleValueLocals___: localNames].
 	^ ((self ___irLocalNameTarget___: localNames) notNil
 			or: [self ___irModuleScopeNameTarget___ notNil
-			or: [(self ___irComplexTargetKind___: localNames) notNil]])
+			or: [(self ___irIsClassBodyRuntimeStore___: target)
+			or: [(self ___irComplexTargetKind___: localNames) notNil]]])
 		and: [self ___irSelectorPair___ notNil
 		and: [value ___irEligibleValueLocals___: localNames]]
 

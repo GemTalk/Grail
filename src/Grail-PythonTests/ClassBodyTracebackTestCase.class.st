@@ -38,11 +38,11 @@ ClassBodyTracebackTestCase >> ___irModule___ [
 
 { #category : 'Grail-Private' }
 ClassBodyTracebackTestCase >> ___keys___ [
-	"The fixture's XFAIL (``a_nested_class_body'') is deliberately absent and
-	has its own test below."
+	"Every key of the fixture.  ``a_nested_class_body'' was its XFAIL until P3.4
+	gave a nested class body a helper -- a frame -- of its own."
 
 	^ #('a_simple_class_body' 'a_class_body_calling_a_function'
-	    'raises_outside_any_class')
+	    'a_nested_class_body' 'raises_outside_any_class')
 
 ]
 
@@ -82,27 +82,26 @@ ClassBodyTracebackTestCase >> tearDown [
 ]
 
 { #category : 'Grail-Tests - class body traceback' }
-ClassBodyTracebackTestCase >> testANestedClassBodyIsStillOneFrameShort [
-	"The fixture's XFAIL.  Only the OUTERMOST method-local class body becomes a
-	helper of its own, so a class nested inside it is built inline within that
-	helper and its failing line is reported under the OUTER class's name.  The
-	LINE is present, which is what this cut was about; the missing frame is a
-	separate cut.  When it lands, this fails."
+ClassBodyTracebackTestCase >> testANestedClassBodyHasItsOwnFrame [
+	"Cut 114's XFAIL, closed by P3.4: a class nested in a method-local class
+	body is built by a helper of its own, so the failing line is reported under
+	the NESTED class's name, with the outer class's frame at the ``class
+	Inner:'' line above it, as CPython reports them."
 
 	| got |
 	got := self ___reprOf___: self ___irModule___ key: 'a_nested_class_body'.
-	self assert: ((got includesString: 'w = 1 // 0')
-		and: [(got includesString: '''Inner''') not])
-		description: 'the nested class-body frame changed -- retire the fixture''s '
-			, 'XFAIL: ' , got
+	self assert: ((got includesString: '(''Inner'', ''w = 1 // 0'')')
+		and: [got includesString: '(''Outer'', ''class Inner:'')'])
+		description: 'the nested class-body frame is missing: ' , got
 
 ]
 
 { #category : 'Grail-Tests - class body traceback' }
 ClassBodyTracebackTestCase >> testTheClassBodyFrameIsReportedUnderIR [
-	"The cut.  Three shapes: a class body whose attribute value raises, one
-	whose value raises inside a CALL, and -- as the control that the ordinary
-	path is untouched -- a raise with no class involved at all."
+	"The cut.  Four shapes: a class body whose attribute value raises, one
+	whose value raises inside a CALL, a class nested in one (P3.4), and -- as
+	the control that the ordinary path is untouched -- a raise with no class
+	involved at all."
 
 	| bad |
 	bad := OrderedCollection new.

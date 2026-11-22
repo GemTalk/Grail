@@ -408,10 +408,19 @@ PyMethodIRBuilder >> ___irWithHelpersReachableFrom___: aClass do: aBlock [
 	method's text twin, which built the class inline.  The helper generated
 	for aClass is that same inline build, so the copy behaves as the twin did.
 
-	A helper filed on the METACLASS (a __new__ or implicit classmethod that
-	defines a class, ClassDefAst >> ___irRunsWithClassReceiver___) still
-	refuses, as does a helper whose send was not recorded: the consumer keeps
-	its old route for those."
+	A helper filed on the METACLASS too -- a __new__ or implicit classmethod
+	that defines a class (ClassDefAst >> ___irRunsWithClassReceiver___): the
+	def runs with the CLASS as its receiver, so its send looks on aClass's
+	metaclass, and where that reaches the helper (a shadow on the definer or
+	a subclass) the send stays.  Where it does not, the copy is a special
+	receiver's or a direct copy's, and its receiver is an INSTANCE of aClass
+	(``Home.__new__(3)'' runs the def with 3 for cls), so the helper is
+	generated for aClass, as for an instance-side helper, and performed
+	(P2.3b; counted as ``cp:helper:class-performed'').  Until P2.3b this case
+	refused and the copy fell back to the method's text twin.
+
+	A helper whose send was not recorded still refuses: the consumer then
+	shares the method or refuses the copy."
 
 	| retargets seen run |
 	retargets := OrderedCollection new.
@@ -425,13 +434,15 @@ PyMethodIRBuilder >> ___irWithHelpersReachableFrom___: aClass do: aBlock [
 					seen add: (entry at: 1).
 					sends := (classHelperSends ifNil: [#()])
 						select: [:pair | (pair at: 1) == (entry at: 1)].
-					((entry at: 3) or: [sends isEmpty]) ifTrue: [
+					sends isEmpty ifTrue: [
 						Error signal: 'PyMethodIRBuilder: ' , aClass name asString
 							, ' cannot reach the class-statement helper '
 							, (entry at: 1) printString].
 					helper := self ___irGenerateHelper___: entry for: aClass.
 					importlib ___irCensusOn___ ifTrue: [
-						importlib ___irCensusNote___: #'cp:helper:performed'
+						importlib ___irCensusNote___: ((entry at: 3)
+								ifTrue: [#'cp:helper:class-performed']
+								ifFalse: [#'cp:helper:performed'])
 							module: importlib ___irCensusModuleName___
 							def: aClass name asString , '>>' , (entry at: 1) asString count: 1].
 					sends do: [:pair | retargets add: (Array with: (pair at: 2) with: helper)]]]].

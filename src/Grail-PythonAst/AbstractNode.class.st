@@ -1183,6 +1183,44 @@ AbstractNode >> ___emitIRChunkedArrayOf___: irValues on: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRClassBodyRuntimeClassOn___: aBuilder [
+	"The class a class-body RUNTIME statement binds into (CallAst >>
+	classBodyRuntimeClass, the Smalltalk variable the class build holds it in),
+	as an IR node.
+
+	In a method-local class helper built through IR (plan P3.4) that variable
+	is a temp of the helper or of a block the class build opened, so it is read
+	through the class build's own emitter (PyMethodIRBuilder >>
+	classBuildEmitter), which resolves a name exactly as the Smalltalk compiler
+	resolves it in the text helper.  With no class build, the name is a global,
+	as the text would compile it."
+
+	| name |
+	name := CallAst classBodyRuntimeClass.
+	aBuilder classBuildEmitter ifNotNil: [:e |
+		^ e valueOf: [e var: name]].
+	^ aBuilder globalNamed: name asSymbol
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AbstractNode >> ___emitIRClassBodyRuntimeStoreOf___: aNameSymbol from: aValueNode on: aBuilder [
+	"``<cls> @env1:___classBodyDefinitionalStore___: #name put: (v)'' -- the
+	store every class-body RUNTIME statement makes for a bare name it binds
+	(a ``for'' target, an assignment inside a ``try'' or ``with'', an
+	``except ... as'' name), which the text spells in AssignAst,
+	AugAssignAst, ForAst and ___emitModuleScopeStoreOf___:from:on:.  ANSWERS
+	THE NODE, like ___emitIRModuleScopeStoreOf___:from:on:; a statement caller
+	adds it."
+
+	^ aBuilder
+		send: #'___classBodyDefinitionalStore___:put:'
+		to: (self ___emitIRClassBodyRuntimeClassOn___: aBuilder)
+		with: { aBuilder obj: aNameSymbol asSymbol. aValueNode } env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AbstractNode >> ___emitIRClassObjectOn___: aBuilder [
 	"The CLASS OBJECT itself -- the IR twin of
 	CallAst>>___printClassObjectOn___:, and it has to stay in step with it.
@@ -1377,10 +1415,7 @@ AbstractNode >> ___emitIRModuleScopeStoreOf___: aNameSymbol from: aValueNode on:
 			send: #dynamicInstVarAt:put: to: (self ___emitIRModuleReceiverOn___: aBuilder)
 			with: { aBuilder obj: sym. aValueNode } env: 0].
 	self ___inClassBodyRuntimeScope___ ifTrue: [
-		^ aBuilder
-			send: #'___classBodyDefinitionalStore___:put:'
-			to: (aBuilder globalNamed: CallAst classBodyRuntimeClass asSymbol)
-			with: { aBuilder obj: sym. aValueNode } env: 1].
+		^ self ___emitIRClassBodyRuntimeStoreOf___: sym from: aValueNode on: aBuilder].
 	^ aBuilder assign: (aBuilder leafFor: sym) from: aValueNode
 
 ]
@@ -1560,6 +1595,11 @@ AbstractNode >> ___emitIRUnpackStore___: aTarget from: rhsNode holder: holderNam
 		(aTarget ___nameStoreRoutesToModule___: aTarget id asSymbol) ifTrue: [
 			^ aBuilder add: (self
 				___emitIRModuleStoreOf___: rhsNode to: aTarget on: aBuilder)].
+		"A leaf a class-body RUNTIME statement binds (P3.4): the class's
+		definitional store, emitNameStoreOn:target:rhs:'s second home."
+		(self ___irIsClassBodyRuntimeStore___: aTarget) ifTrue: [
+			^ aBuilder add: (self
+				___emitIRClassBodyRuntimeStoreOf___: aTarget id from: rhsNode on: aBuilder)].
 		^ aBuilder add: (aBuilder
 			assign: (aBuilder leafFor: aTarget id asSymbol) from: rhsNode)].
 	(aTarget isKindOf: AttributeAst) ifTrue: [
@@ -2629,6 +2669,31 @@ AbstractNode >> ___irFlowTerminates___: boundIn locals: localSet [
 ]
 
 { #category : 'Grail-IR Codegen' }
+AbstractNode >> ___irIsClassBodyRuntimeStore___: aTarget [
+	"Is aTarget a bare NAME that a class-body RUNTIME statement binds -- one
+	the class build is emitting under CallAst >> classBodyRuntimeClass, directly
+	in the class body rather than in a def or lambda within it?  Its store is
+	the class's definitional store (___emitIRClassBodyRuntimeStoreOf___:...),
+	so it needs no local.  Never true in a def body, where
+	classBodyRuntimeClass is nil."
+
+	| node |
+	((aTarget isKindOf: NameAst)
+		and: [((aTarget ctx) isKindOf: StoreAst)
+		and: [aTarget ___inClassBodyRuntimeScope___]]) ifFalse: [^ false].
+	"Not a comprehension's own target, which is a temp of the comprehension
+	however deep in the class body it sits."
+	node := aTarget parent.
+	[node notNil and: [(node isKindOf: ClassDefAst) not]] whileTrue: [
+		((node isKindOf: LambdaAst) or: [(node isKindOf: ListCompAst)
+			or: [(node isKindOf: SetCompAst) or: [(node isKindOf: DictCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]]) ifTrue: [^ false].
+		node := node parent].
+	^ true
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AbstractNode >> ___irLocalWriteTarget___: localSet [
 	"The NameAst this statement writes as a plain top-level local binding, or
 	nil.  ___irTopLevelWriteNames___: derives the flow analysis's definite
@@ -2754,6 +2819,7 @@ AbstractNode >> ___irUnpackLeafEligible___: aLeaf locals: localNames [
 		keep the whole statement on text.  It stores to the MODULE instead, by
 		the same four-way rule every other store in this file consults."
 		(aLeaf ___nameStoreRoutesToModule___: aLeaf id asSymbol) ifTrue: [^ true].
+		(self ___irIsClassBodyRuntimeStore___: aLeaf) ifTrue: [^ true].
 		^ localNames includes: aLeaf id asString].
 	"``o.__class__'' is admitted: ___emitIRUnpackStore___: emits the type
 	change for it (and a self receiver's __setattr__), as the text leaf does."

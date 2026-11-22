@@ -133,3 +133,70 @@ def cache_from_source(path, debug_override=None, *, optimization=None):
                 raise ValueError('{!r} is not alphanumeric'.format(optimization))
             almost_filename = '{}.opt-{}'.format(almost_filename, opt)
     return os.path.join(head, '__pycache__', almost_filename + '.pyc')
+
+
+_MASK64 = 0xFFFFFFFFFFFFFFFF
+
+
+def _rotl64(x, b):
+    return ((x << b) | (x >> (64 - b))) & _MASK64
+
+
+def _siphash13(k0, k1, data):
+    """SipHash-1-3 of ``data`` under the key (k0, k1), as a 64-bit int.
+
+    CPython's _Py_KeyedHash (Python/pyhash.c), which source_hash calls with
+    k1 = 0: one compression round per 8-byte block, three finalization
+    rounds, little-endian throughout.
+    """
+    v0 = k0 ^ 0x736f6d6570736575
+    v1 = k1 ^ 0x646f72616e646f6d
+    v2 = k0 ^ 0x6c7967656e657261
+    v3 = k1 ^ 0x7465646279746573
+
+    def sipround():
+        nonlocal v0, v1, v2, v3
+        v0 = (v0 + v1) & _MASK64
+        v1 = _rotl64(v1, 13) ^ v0
+        v0 = _rotl64(v0, 32)
+        v2 = (v2 + v3) & _MASK64
+        v3 = _rotl64(v3, 16) ^ v2
+        v0 = (v0 + v3) & _MASK64
+        v3 = _rotl64(v3, 21) ^ v0
+        v2 = (v2 + v1) & _MASK64
+        v1 = _rotl64(v1, 17) ^ v2
+        v2 = _rotl64(v2, 32)
+
+    n = len(data)
+    end = n - n % 8
+    for i in range(0, end, 8):
+        m = int.from_bytes(data[i:i + 8], 'little')
+        v3 ^= m
+        sipround()
+        v0 ^= m
+    last = ((n & 0xFF) << 56) | int.from_bytes(data[end:], 'little')
+    v3 ^= last
+    sipround()
+    v0 ^= last
+    v2 ^= 0xFF
+    sipround()
+    sipround()
+    sipround()
+    return v0 ^ v1 ^ v2 ^ v3
+
+
+def source_hash(source_bytes):
+    """The 8-byte hash CPython writes into a hash-based .pyc for this source.
+
+    SipHash-1-3 keyed with the magic number, as CPython's _imp.source_hash
+    computes it, so the bytes match CPython's for the same source.  Grail
+    writes no bytecode; pytest 9.2's assertion rewriting calls this, and
+    without it pytest could not load its plugins at all (issue #2299).
+    """
+    try:
+        data = memoryview(source_bytes).tobytes()
+    except TypeError:
+        raise TypeError('a bytes-like object is required, not %r'
+                        % type(source_bytes).__name__) from None
+    key = int.from_bytes(MAGIC_NUMBER, 'little')
+    return _siphash13(key, 0, data).to_bytes(8, 'little')
