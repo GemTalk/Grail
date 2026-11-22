@@ -43,6 +43,16 @@ reversed_iterator class >> ___reversing___: aSequence [
 		or: [(aSequence @env0:isKindOf: PythonInstance)
 			and: [(aSequence ___typeDunder___: #'__reversed__') ~~ nil]])
 		ifTrue: [^ aSequence __reversed__].
+	"A wheel's object: its C type's __reversed__, from the method table, which
+	the selector test above cannot see (#2300).  For an instance of a Python
+	subclass of a wheel's type, the one it inherits from the C base, read
+	through its C body as its other base names are."
+	(aSequence @env0:isKindOf: ShimForeignObject) ifTrue: [
+		(aSequence ___foreignTypeAttr___: #'__reversed__') @env0:ifNotNil: [:method |
+			^ method ___pyCallValue___: { aSequence } kw: nil]].
+	(aSequence @env0:isKindOf: ShimForeignSubclass) ifTrue: [
+		(aSequence ___pyAttrForeignBaseLoad___: #'__reversed__') @env0:ifNotNil: [:found |
+			^ found @env0:value ___pyCallValue___: #() kw: nil]].
 	(namespace ___hasProtocolForCall___: aSequence _: '__getitem__')
 		ifFalse: [^ namespace ___notReversible___: aSequence].
 	(namespace ___hasProtocolForCall___: aSequence _: '__len__') ifFalse: [
