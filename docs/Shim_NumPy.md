@@ -736,7 +736,13 @@ The walls, in the order they fell:
     `PySequence_Fast` and `PyDict_Keys` / `Values` / `Items`, is a real-layout
     copy (`real_layout_arg`); `np.dtype([('a', 'f8')])` read its list with
     `PyList_GET_ITEM`.  The shim's own modules keep the caller's list:
-    `_bisect.insort` mutates its argument.
+    `_bisect.insort` mutates its argument.  A list's copy remembers the
+    Grail list it was made from (#2301): it comes back from C as that list,
+    and what C changes in it reaches that list when it crosses back or C
+    releases it -- unless Python changed the list meanwhile, when the copy
+    comes back as a new list rather than overwrite either change.
+    rpds-py's `HashTrieMap.fromkeys(keys, [])` answered a new list for
+    every `m[k]`.
 37. **`np.float64(x)` was always 0.0.**  `numpy.float64` subclasses float and
     builds through `PyFloat_Type.tp_new`, which was object's: a zeroed
     object.  `float_tp_new` stores the value at `ob_fval` for a subtype, and a

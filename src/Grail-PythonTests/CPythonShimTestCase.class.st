@@ -2647,10 +2647,11 @@ CPythonShimTestCase >> testDynLoadGrailDemo [
 	methodNames := System userAction: #shimDynLoad withArgs: { soPath . '_grail_demo' }.
 	self assert: (methodNames isKindOf: Array).
 	self assert: methodNames asSortedCollection asArray
-		equals: #('add' 'as_long_overflow' 'capi' 'cython' 'descr_def_name' 'dict_values_inline' 'dot_product'
-			'float_inline' 'function_name' 'getattr_in_c' 'give_singletons' 'interp_matches'
-			'is_cell' 'make_box' 'make_nohash' 'make_plain' 'match_kw' 'optional_attr' 'same_object' 'scale'
-			'seq_fast_len' 'setattr_in_c' 'sig_demo' 'singletons' 'sum_inline' 'unicode_compare').
+		equals: #('add' 'append_to' 'append_to_kept' 'as_long_overflow' 'capi' 'cython' 'descr_def_name'
+			'dict_values_inline' 'dot_product' 'float_inline' 'function_name' 'getattr_in_c' 'give_singletons'
+			'interp_matches' 'is_cell' 'keep' 'kept' 'make_box' 'make_nohash' 'make_plain' 'match_kw'
+			'optional_attr' 'same_object' 'scale' 'seq_fast_len' 'setattr_in_c' 'sig_demo' 'singletons'
+			'sum_inline' 'unicode_compare').
 
 ]
 
@@ -3729,6 +3730,77 @@ CPythonShimTestCase >> testListAsTuple [
 		with: oc.
 	self assert: (result isKindOf: Array).
 	self assert: result asArray equals: #(1 2).
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testListAWheelChangesReachesTheCallersList [
+	"A list a wheel changes is the caller's list changed, as in CPython (#2301):
+	one the wheel keeps, when it comes back and when the wheel lets go of it,
+	and one it changes in place as an argument."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+a = [1]
+d.keep(a)
+d.append_to_kept(2)
+r1 = (d.kept() is a, a[:])
+d.append_to_kept(3)
+d.keep(None)
+r2 = a[:]
+b = [0]
+d.append_to(b, 9)
+repr((r1, r2, b))')
+		equals: '((True, [1, 2]), [1, 2, 3], [0, 9])'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testListAWheelKeepsComesBackAsTheCallersList [
+	"A list a wheel keeps and hands back is the list Python gave it, nested
+	ones too, and a change made in Python shows in it (#2301): rpds-py's
+	HashTrieMap.fromkeys(keys, []) answered a new list for every m[k]."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+a = [1]
+d.keep(a)
+r1 = d.kept() is a
+a.append(2)
+r2 = d.kept() is a
+inner = [3]
+outer = [inner, 4]
+d.keep(outer)
+r3 = d.kept() is outer and d.kept()[0] is inner
+d.keep(None)
+repr((r1, r2, a, r3))')
+		equals: '(True, True, [1, 2], True)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testListBothSidesChangedComesBackAsANewList [
+	"A kept list that Python and the wheel have both changed comes back as a
+	new list, and the caller's keeps Python's change (#2301).  CPython
+	answers the one list with both changes; the wheel's copy cannot see
+	Python's, so neither is written over the other."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+a = [1]
+d.keep(a)
+a.append(2)
+d.append_to_kept(3)
+k = d.kept()
+d.keep(None)
+repr((k is a, a, k))')
+		equals: '(False, [1, 2], [1, 3])'
 
 ]
 

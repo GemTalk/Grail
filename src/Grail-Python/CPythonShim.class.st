@@ -687,6 +687,17 @@ CPythonShim >> ___ellipsis [
 
 ]
 
+{ #category : 'Grail-CPython API' }
+CPythonShim >> ___emptyList: aList [
+	"Empty aList, the Grail list a real-layout copy was made from, before the
+	shim appends the copy's items to it: C changed the copy, and the caller's
+	list changes with it (the shim's list_origin_oop, #2301)."
+
+	aList size: 0.
+	^ 0
+
+]
+
 { #category : 'Grail-Wrapping' }
 CPythonShim >> ___fillByteArrayBody: aBody from: anEntry [
 	"Point a bytearray's PyByteArrayObject body at its bytes, anEntry being

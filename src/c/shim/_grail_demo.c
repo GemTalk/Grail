@@ -1992,6 +1992,39 @@ static PyType_Spec pmap_spec = {
     .flags = Py_TPFLAGS_DEFAULT,
     .slots = pmap_slots,
 };
+
+/* A list C keeps, as rpds-py's HashTrieMap.fromkeys keeps its value (#2301):
+   keep(x) stores x, kept() answers it, append_to_kept(v) appends v to it in
+   C, and append_to(lst, v) appends v to its argument in place. */
+static PyObject *g_kept = NULL;
+static PyObject *grail_keep(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+    (void)self;
+    if (nargs != 1) { PyErr_SetString(PyExc_TypeError, "keep(x)"); return NULL; }
+    Py_XSETREF(g_kept, Py_NewRef(args[0]));
+    Py_RETURN_NONE;
+}
+static PyObject *grail_kept(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+    (void)self; (void)args; (void)nargs;
+    return Py_NewRef(g_kept ? g_kept : Py_None);
+}
+static PyObject *grail_append_to_kept(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+    (void)self;
+    if (nargs != 1 || g_kept == NULL || !PyList_Check(g_kept)) {
+        PyErr_SetString(PyExc_TypeError, "append_to_kept(v), with a list kept");
+        return NULL;
+    }
+    if (PyList_Append(g_kept, args[0]) < 0) return NULL;
+    Py_RETURN_NONE;
+}
+static PyObject *grail_append_to(PyObject *self, PyObject *const *args, Py_ssize_t nargs) {
+    (void)self;
+    if (nargs != 2 || !PyList_Check(args[0])) {
+        PyErr_SetString(PyExc_TypeError, "append_to(list, v)");
+        return NULL;
+    }
+    if (PyList_Append(args[0], args[1]) < 0) return NULL;
+    Py_RETURN_NONE;
+}
 #endif
 
 /* ------------------------------------------------------------------ */
@@ -2034,6 +2067,10 @@ static PyMethodDef grail_demo_methods[] = {
      "sig_demo($module, a, /, b=2, *, c=None)\n--\n\nA function with a text signature."},
     {"cython", (PyCFunction)(void *)grail_cython, METH_FASTCALL, NULL},
     {"match_kw", (PyCFunction)(void *)grail_match_kw, METH_FASTCALL | METH_KEYWORDS, NULL},
+    {"keep", (PyCFunction)(void *)grail_keep, METH_FASTCALL, NULL},
+    {"kept", (PyCFunction)(void *)grail_kept, METH_FASTCALL, NULL},
+    {"append_to_kept", (PyCFunction)(void *)grail_append_to_kept, METH_FASTCALL, NULL},
+    {"append_to", (PyCFunction)(void *)grail_append_to, METH_FASTCALL, NULL},
 #endif
     {NULL, NULL, 0, NULL}
 };
