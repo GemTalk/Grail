@@ -80,6 +80,7 @@ Class {
 		'pre',
 		'restOffset',
 		'decorators',
+		'carried',
 		'helperLocals'
 	],
 	#category : 'Grail-Parser'
@@ -328,6 +329,31 @@ ClassBuildIREmitter >> braceArrayOnNextLine: elementBlocks [
 
 ]
 
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> builder [
+	"The PyMethodIRBuilder the helper is built on."
+
+	^ builder
+
+]
+
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> carried [
+	"The enclosing def's locals the helper carries, in its argument order
+	(ClassDefAst >> ___irCarriedCaptureNames___:) -- what a nested class's
+	helper carries too (ClassDefAst >> ___emitIRNestedClassWith___:)."
+
+	^ carried ifNil: [#()]
+
+]
+
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> carried: aCollection [
+
+	carried := aCollection
+
+]
+
 { #category : 'Grail-expressions' }
 ClassBuildIREmitter >> cascadeTo: rcvrBlock sends: specs [
 
@@ -550,6 +576,15 @@ ClassBuildIREmitter >> nilLiteral [
 
 ]
 
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> node: anIRNode [
+	"Push an IR node the caller built on the builder itself -- the send of a
+	nested class's helper (ClassDefAst >> ___emitIRNestedClassWith___:)."
+
+	^ self ___push___: anIRNode
+
+]
+
 { #category : 'Grail-structure' }
 ClassBuildIREmitter >> openIfTrue: condBlock [
 
@@ -689,6 +724,15 @@ ClassBuildIREmitter >> statementNode: anAst [
 	CallAst inClassBodyValueEmit == true ifFalse: [
 		^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
 			, ' statement outside the class body''s emit window'].
+	"A class nested directly in the body (emitNestedClass:on:) is built by a
+	helper of its own: ClassDefAst >> ___emitIRNestedClassWith___:."
+	(anAst isKindOf: ClassDefAst) ifTrue: [
+		(CallAst classBodyRuntimeClass isNil
+			and: [anAst ___directlyEnclosingClassDef___ notNil]) ifFalse: [
+				^ self error: 'ClassBuildIREmitter: a class statement that is not '
+					, 'nested directly in the class body'].
+		anAst ___emitIRNestedClassWith___: self.
+		^ self ___rest___].
 	(anAst ___irEligibleStatementLocals___: helperLocals) ifFalse: [
 		^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
 			, ' statement in the class body is not IR-eligible in the class-body context'].

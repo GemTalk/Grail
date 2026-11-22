@@ -13,10 +13,12 @@ enclosing entry reports the body's line instead.  The IR path compiles the body
 into a HELPER METHOD of its own, which is a real frame and can therefore carry
 the class-body entry CPython describes.
 
-ONE SHAPE IS AN XFAIL: a class nested INSIDE a method-local class body.  Only
-the outermost body becomes a helper of its own, so the inner build is inline
-within it and Grail reports the failing line under the OUTER class's name, one
-frame short of CPython.  The line is there, which is what this cut was for.
+A class nested INSIDE a method-local class body gets a helper of its own too
+(plan P3.4), so its body is a frame named for it, between the outer class's
+frame at the ``class Inner:'' line and the failing statement.  Until P3.4 the
+inner build was inline in the outer helper and Grail reported the failing line
+under the OUTER class's name, one frame short of CPython (cut 114's XFAIL).
+The text helper and the text arm still build it inline.
 
 WHAT THIS FIXTURE PINS is that the failing line is REPORTED AT ALL.  The helper
 had neither a Python name nor a derivable line, so the traceback capture walk
@@ -90,11 +92,7 @@ EXPECTED = {
         ('a_class_body_calling_a_function', 'class D:'),
         ('D', "v = int('not a number')"),
     ],
-    # XFAIL.  Only the OUTERMOST method-local class body becomes a helper of
-    # its own; a class nested inside it is built inline within that helper,
-    # exactly as the text builds it inline in the enclosing def.  So Grail
-    # reports the failing line -- which is the whole point of this fixture --
-    # but under the OUTER class's name, one frame short of CPython.
+    # The nested class body is a frame of its own, named for it.
     'a_nested_class_body': [
         ('frames_of', 'fn()'),
         ('a_nested_class_body', 'class Outer:'),
@@ -109,7 +107,7 @@ EXPECTED = {
 }
 
 
-XFAIL = {'a_nested_class_body'}
+XFAIL = set()
 
 
 KEYS = sorted(EXPECTED)

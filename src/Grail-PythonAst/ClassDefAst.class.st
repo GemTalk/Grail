@@ -1640,6 +1640,64 @@ ClassDefAst >> ___emitImportlibOn___: e [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___emitIRNestedClassWith___: e [
+	"Build this class -- nested DIRECTLY in the body of a class whose helper is
+	being built through IR, the emitter e (plan P3.4) -- through a helper of
+	its OWN, and leave it in the block temp emitNestedClass:on: opened for it
+	(___stVarName___).
+
+	A helper of its own, not the build inline in the outer helper, because the
+	helper IS the class-body frame: CPython runs a nested class body in a frame
+	named for the nested class, between the outer class's frame and whatever
+	the body calls.  Built inline -- as the text builds it, in the outer build
+	-- an error in the nested body was reported under the OUTER class's name,
+	one frame short (cut 114's XFAIL, tests/python/class_body_traceback.py).
+
+	The helper is shaped like a method-local class's
+	(___irBuildClassHelper___:carrying:pre:on:nested:), with two differences:
+
+	  * its HEADER -- decorators, bases, keywords -- is evaluated HERE, in the
+	    outer class body, in CPython's __build_class__ order, through the
+	    outer emitter (expressionNode:), so a name in it is a class-body read
+	    of the OUTER class, which is where CPython evaluates it;
+	  * it carries the OUTER helper's captures, handed straight through
+	    (its ``___irCaptured___'' and ``___irSetters___'' arguments): a class
+	    body does not see an enclosing class body's names, so what the nested
+	    body reads beyond its own namespace is the enclosing function's, which
+	    is exactly what the outer helper carries, in the same order.
+
+	The helper is filed with the outer one's (PyMethodIRBuilder >>
+	___irNoteClassHelper___:source:classSide:), on the class the enclosing
+	method runs on, and a copy of the method onto another class generates it
+	there the same way (___irGenerateHelper___:for:, recursively)."
+
+	| builder carriedNames preNodes preValues sel hb args |
+	builder := e builder.
+	carriedNames := e carried.
+	preNodes := self ___irHeaderNodes___.
+	preValues := OrderedCollection new.
+	self ___irHeaderNodesDo___: [:n | preValues add: (e valueOf: [e expressionNode: n])].
+	sel := self ___irHelperSelector___: carriedNames pre: preNodes notEmpty.
+	hb := self ___irBuildClassHelper___: sel carrying: carriedNames pre: preNodes
+		on: builder nested: true.
+	builder ___irNoteClassHelper___: sel source: hb classSide: self ___irRunsWithClassReceiver___.
+	args := carriedNames isEmpty
+		ifTrue: [#()]
+		ifFalse: [{ builder localVar: #'___irCaptured___'. builder localVar: #'___irSetters___' }].
+	preNodes isEmpty ifFalse: [args := args , { builder arrayOf: preValues asArray }].
+	"At the ``class'' line, with no map entry, as the method-local class's send
+	(___emitIRStatementOn___:): the outer frame reports that line while the
+	nested body runs."
+	builder at: self beginPosition.
+	e statement: [
+		e assign: self ___stVarName___ from: [
+			e node: (builder ___irNoteClassHelperSend___:
+				(builder send: sel to: builder selfNode with: args env: 1)
+				selector: sel)]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 	"``<C> := self ___irClassDef_<n>_<C>___'' -- see
 	___irEligibleStatementLocals___: for why the class emit travels as a
@@ -2072,6 +2130,23 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 	comment): only a decorator's application is, at the decorator's line
 	(#1518)."
 
+	^ self ___irBuildClassHelper___: aSelector carrying: carriedNames pre: preNodes
+		on: aBuilder nested: false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: preNodes on: aBuilder nested: isNested [
+	"___irBuildClassHelper___:carrying:pre:on:, for a method-local class
+	(isNested false) or for a class NESTED in the body of one whose helper is
+	being built through IR (isNested true, plan P3.4, sent from
+	ClassBuildIREmitter >> statementNode:).  A nested class's helper is built
+	inside the OUTER class's build, so the emit context its walk needs -- the
+	carried captures' cells, the suppressed class-method seam -- is already in
+	place (___irHelperEmitContext___:curPos:do:), and it carries the outer
+	helper's captures unchanged; it is counted on a census row of its own,
+	so the method-local helper count stays what it was."
+
 	| hb e module moduleSrc begin end bindName firstLine restOffset |
 	hb := PyMethodIRBuilder class: aBuilder targetClass selector: aSelector env: 1.
 	module := self module.
@@ -2127,14 +2202,18 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 		hb add: (hb assign: (hb leafFor: ('___irPre_' , k printString , '___') asSymbol)
 			from: (hb send: #at: to: (hb localVar: #'___irPre___') with: { hb obj: k } env: 0))].
 	e := ClassBuildIREmitter on: hb.
+	e carried: carriedNames.
 	restOffset ifNotNil: [e restAt: restOffset].
 	preNodes doWithIndex: [:n :k |
 		e pre: n at: (hb leafFor: ('___irPre_' , k printString , '___') asSymbol)].
 	importlib ___irCensusOn___ ifTrue: [
-		importlib ___irCensusNote___: #'th:irHelper'
+		importlib ___irCensusNote___: (isNested ifTrue: [#'th:irNestedHelper'] ifFalse: [#'th:irHelper'])
 			module: importlib ___irCensusModuleName___ def: name asString count: 1].
-	self ___irHelperEmitContext___: carriedNames curPos: false do: [
-		self printSmalltalkRuntimeWith: e].
+	isNested
+		ifTrue: [self printSmalltalkRuntimeWith: e]
+		ifFalse: [
+			self ___irHelperEmitContext___: carriedNames curPos: false do: [
+				self printSmalltalkRuntimeWith: e]].
 	e assertDepth: 0.
 	hb add: (hb return: (hb localVar: bindName asSymbol)).
 	^ hb
@@ -2369,7 +2448,13 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 	PyFrame>>___namesIncludeCodegenMarker___: would then read it as a Python
 	frame.  Rare (single digits across the vendored stdlib and the CPython
 	suite corpus) and refused rather than half-handled.
-"
+
+	A NESTED class's body is built inline in the text helper, so its control
+	flow stores ``___curPos___'' there too: a nested class counts as simple
+	only when its own body is.  Asked of the outer class alone, ``class
+	Outer: class Inner: for i in ...'' compiled a text helper naming an
+	undefined ``___curPos___'', and the whole module failed to compile on the
+	IR arm."
 
 	| stmts |
 	body isNil ifTrue: [^ true].
@@ -2377,7 +2462,7 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 	(stmts isKindOf: SequenceableCollection) ifFalse: [^ false].
 	^ stmts allSatisfy: [:s |
 		(s isKindOf: FunctionDefAst)
-			or: [(s isKindOf: ClassDefAst)
+			or: [((s isKindOf: ClassDefAst) and: [s ___irClassBodyStatementsAreSimple___])
 			or: [(s isKindOf: PassAst)
 			or: [(s isKindOf: ExprAst)
 			or: [(s isKindOf: AssignAst)
@@ -2606,7 +2691,9 @@ ClassDefAst >> ___irClassHelperAnnotationReason___: anAnnAssign bound: boundName
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassHelperBodyReason___ [
 	"___irClassHelperTextReason___:'s judgement of the class BODY, as a census
-	row, or nil when the IR backend builds it."
+	row, or nil when the IR backend builds it -- for a method-local class, and
+	for a class nested in its body (___irNestedClassReason___:bound:), whose
+	body is judged the same way."
 
 	| stmts bound hasValues |
 	stmts := body isNil ifTrue: [#()] ifFalse: [body body].
@@ -2629,7 +2716,9 @@ ClassDefAst >> ___irClassHelperBodyReason___ [
 					(s decorator_list notNil and: [s decorator_list notEmpty])
 						ifTrue: [hasValues := true]]
 				ifFalse: [
-					(s isKindOf: ClassDefAst) ifTrue: [^ #'irHelper:nestedClass'].
+					(s isKindOf: ClassDefAst) ifTrue: [
+						(self ___irNestedClassReason___: s bound: bound) ifNotNil: [:r | ^ r].
+						hasValues := true].
 					((s isKindOf: AnnAssignAst) and: [s target isKindOf: NameAst]) ifTrue: [
 						(self ___irClassHelperAnnotationReason___: s bound: bound)
 							ifNotNil: [:r | ^ r].
@@ -2799,8 +2888,10 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	on a sibling def, the class-body ``if'', and ``for'', ``while'', ``try'',
 	``with'', augmented assignment, ``del'', ``raise'' and ``assert'', each
 	built by its own IR emitter with the names it binds stored on the class.
+	And a NESTED CLASS, built by a helper of its own
+	(___irNestedClassReason___:bound:, ___emitIRNestedClassWith___:).
 
-	Still text: a nested class, a ``global'' or ``nonlocal'' declaration, ``type'' aliases
+	Still text: a ``global'' or ``nonlocal'' declaration, ``type'' aliases
 	and type parameters (P3.5); a def or class inside control flow, built as
 	a value in a block; an import or ``match''; an attribute store the walk
 	drops on every path; a ``__renamed__'' or ``__transient__'' value
@@ -3444,6 +3535,33 @@ ClassDefAst >> ___irMethodLocalClassReason___: localNames [
 	((localNames includes: bound)
 		or: [self ___nameStoreRoutesToModule___: bound asSymbol])
 			ifFalse: [^ #'classDef:nameNotLocal'].
+	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irNestedClassReason___: aClassDef bound: boundNames [
+	"Why the class aClassDef, nested directly in this class's body, keeps this
+	class on the TEXT helper, as a census row, or nil when the IR backend builds
+	it through a helper of its own (plan P3.4, ___emitIRNestedClassWith___:).
+
+	Its header is evaluated in THIS body, so each decorator, base and keyword
+	is admitted as a class-body value of this class is
+	(___irClassBodyValueReason___:bound:); its body is judged as a
+	method-local class's is (___irClassHelperBodyReason___), its own nested
+	classes included.  Type parameters stay text (P3.5, with PEP 695 class
+	bodies)."
+
+	| reason |
+	(aClassDef type_params isNil or: [aClassDef type_params isEmpty])
+		ifFalse: [^ #'irHelper:nestedClass:typeParams'].
+	reason := nil.
+	aClassDef ___irHeaderNodesDo___: [:n |
+		reason isNil ifTrue: [
+			reason := self ___irClassBodyValueReason___: n bound: boundNames]].
+	reason ifNotNil: [^ ('irHelper:nestedClass:header:' , reason) asSymbol].
+	aClassDef ___irClassHelperBodyReason___ ifNotNil: [:r |
+		^ ('irHelper:nestedClass:' , (r asString copyFrom: 'irHelper:' size + 1 to: r size)) asSymbol].
 	^ nil
 
 ]

@@ -1,12 +1,15 @@
-"Class-body statements in IR (plan P3.4): a method-local class whose body
-holds statements CPython runs for their effect -- a bare expression, a store
-through a subscript or an attribute, ``if'', ``for'', ``while'', ``try'',
-``with'', an augmented assignment, ``del'', ``raise'', ``assert'' -- has its
-helper built through IR.  A runtime statement is built by its own IR emitter,
-with the names it binds stored on the class (AbstractNode >>
-___emitIRClassBodyRuntimeStoreOf___:from:on:).
+"Class-body statements and nested classes in IR (plan P3.4): a method-local
+class whose body holds statements CPython runs for their effect -- a bare
+expression, a store through a subscript or an attribute, ``if'', ``for'',
+``while'', ``try'', ``with'', an augmented assignment, ``del'', ``raise'',
+``assert'' -- or a nested class, has its helper built through IR.  A runtime
+statement is built by its own IR emitter, with the names it binds stored on
+the class (AbstractNode >> ___emitIRClassBodyRuntimeStoreOf___:from:on:); a
+nested class is built by a helper of its own, its header evaluated in the
+outer body (ClassDefAst >> ___emitIRNestedClassWith___:).
 
-The tests load tests/python/class_body_statements_ir.py, compare every check with CPython's answer on
+The tests load tests/python/class_body_statements_ir.py and
+class_body_nested_classes_ir.py, compare every check with CPython's answer on
 the IR arm and with the text helper as the control, check that the helpers
 really were built through IR -- correct answers from a text helper would
 prove nothing -- and pin the census rows of the shapes still refused."
@@ -63,7 +66,11 @@ ClassBodyStatementsIRTestCase >> ___fixtures___ [
 		    'for_loop' 'if_else_false' 'if_else_inner' 'if_else_true'
 		    'method_attr' 'raise_assert_false' 'raise_assert_true' 'subscript'
 		    'try_except' 'while_loop' 'with_stmt').
-		  15. 0 } }
+		  15. 0 }.
+		{ 'class_body_nested_classes_ir.py'. 'cbnc_ir'.
+		  #('attr_store' 'base' 'decorated' 'doubly' 'enclosing' 'enum' 'methods'
+		    'order' 'raises' 'simple' 'statements').
+		  11. 12 } }
 
 ]
 
@@ -120,7 +127,9 @@ ClassBodyStatementsIRTestCase >> tearDown [
 ClassBodyStatementsIRTestCase >> testTheFixturesAgreeWithCPython [
 	"Every check of both fixtures, on the IR arm with the helpers built through
 	IR: runtime statements of every kind and the names they bind on the class,
-	and the class-body ``if''."
+	the class-body ``if'', and nested classes -- their header read in the
+	outer body, their body reading the enclosing function, their position in
+	the body."
 
 	| bad |
 	importlib ___irCodegenSupported___ ifFalse: [^ self].
@@ -129,7 +138,7 @@ ClassBodyStatementsIRTestCase >> testTheFixturesAgreeWithCPython [
 		bad addAll: (self ___disagreementsOf___: (self ___load___: fx helpers: true)
 			keys: (fx at: 3))].
 	self assert: bad isEmpty
-		description: 'class-body statements disagreeing with CPython under IR: '
+		description: 'class-body statements or nested classes disagreeing with CPython under IR: '
 			, bad asArray printString
 
 ]
@@ -137,7 +146,8 @@ ClassBodyStatementsIRTestCase >> testTheFixturesAgreeWithCPython [
 { #category : 'Grail-Tests' }
 ClassBodyStatementsIRTestCase >> testTheHelpersWereBuiltThroughIR [
 	"Correct answers prove nothing if the helpers were compiled from text, so
-	check the methods themselves: every helper of each fixture carries the IR marker, nothing fell back, and the
+	check the methods themselves: every helper of each fixture -- a nested
+	class's included -- carries the IR marker, nothing fell back, and the
 	census counts no text helper."
 
 	importlib ___irCodegenSupported___ ifFalse: [^ self].
@@ -242,9 +252,9 @@ def f(p):
 		'Imp' -> #'irHelper:import'.
 		'Locs' -> #'irHelper:assignTarget:runtime:frameCall'.
 		'Target' -> #'irHelper:assignTarget'.
-		'Outer' -> #'irHelper:nestedClass'.
+		'Outer' -> nil.
 		'OuterTp' -> #'irHelper:typeParams'.
-		'OuterBad' -> #'irHelper:nestedClass' }.
+		'OuterBad' -> #'irHelper:nestedClass:nonlocal' }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |
 		| got |
