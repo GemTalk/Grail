@@ -461,8 +461,14 @@ FunctionDefAst >> ___decoratorNameIsUnboundInModule___: aSymbol [
 		and: [CallAst moduleVariableNames includes: sym]) ifTrue: [^ false].
 	(CallAst moduleFunctionNames notNil
 		and: [CallAst moduleFunctionNames includes: sym]) ifTrue: [^ false].
+	"A class attribute binds the name only where the CLASS BODY evaluates the
+	decorator.  A def nested in a method has its decorator evaluated in the
+	method, which cannot see the class namespace: CPython raises NameError
+	there.  Keeping the bare identifier for it compiled ``undefined symbol''
+	and stubbed the whole method (#2232)."
 	(CallAst classAttrNames notNil
-		and: [CallAst classAttrNames includes: sym]) ifTrue: [^ false].
+		and: [(CallAst classAttrNames includes: sym)
+		and: [self ___decoratorRunsInFunctionScope___ not]]) ifTrue: [^ false].
 	(NameAst isResolvableSymbol: sym) ifTrue: [^ false].
 	^ true
 
@@ -574,6 +580,24 @@ FunctionDefAst >> ___decoratorRootName___: deco [
 					ifTrue: [node := node function]
 					ifFalse: [^ nil]]].
 	^ nil
+
+]
+
+{ #category : 'Grail-code generation' }
+FunctionDefAst >> ___decoratorRunsInFunctionScope___ [
+	"Is this def's decorator list evaluated in a FUNCTION's scope -- the def is
+	nested in a def, a method or a lambda's body -- rather than in a class body
+	or at module level?  The nearest enclosing scope decides: a class body
+	reached first means the decorator runs there, and sees its names."
+
+	| node |
+	node := parent.
+	[node notNil] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			ifTrue: [^ true].
+		node := node parent].
+	^ false
 
 ]
 
