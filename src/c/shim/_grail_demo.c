@@ -1557,6 +1557,12 @@ static PyObject *cell_describe(PyObject *self, PyObject *noargs) {
     Py_DECREF(label);
     return out;
 }
+/* Cell.__reversed__() -> ('reversed', value): a method-table __reversed__,
+   as a PyO3 class has, that a Python subclass inherits (#2300). */
+static PyObject *cell_reversed(PyObject *self, PyObject *noargs) {
+    (void)noargs;
+    return Py_BuildValue("(sO)", "reversed", CELL_VALUE(self));
+}
 static PyObject *cell_add(PyObject *a, PyObject *b) {
     if (PyObject_TypeCheck(a, &Cell_Type)) return PyNumber_Add(CELL_VALUE(a), b);
     return PyNumber_Add(a, CELL_VALUE(b));
@@ -1569,6 +1575,7 @@ static PyMemberDef cell_members[] = {
 static PyMethodDef cell_methods[] = {
     {"get", cell_get, METH_NOARGS, "the value"},
     {"describe", cell_describe, METH_NOARGS, "tp_name:self.label, read from C"},
+    {"__reversed__", cell_reversed, METH_NOARGS, "Return a reverse iterator."},
     {NULL, NULL, 0, NULL}
 };
 static PyTypeObject Cell_Type = {

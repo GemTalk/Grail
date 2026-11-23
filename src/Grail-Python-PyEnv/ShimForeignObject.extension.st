@@ -64,6 +64,32 @@ ShimForeignObject >> ___foreignOp: aDunder with: a with: b [
 ]
 
 { #category : 'Grail-Python Protocol' }
+ShimForeignObject >> ___foreignTypeAttr___: aSym [
+	"The attribute aSym of this object's TYPE, unbound, or nil when the type
+	has none: the lookup half of CPython's _PyObject_LookupSpecial, which is
+	how reversed() finds __reversed__.  The caller calls it with the object.
+
+	reversed_iterator class >> ___reversing___: asks this for __reversed__.
+	A proxy compiles no __reversed__, so the selector test there never saw
+	the one in a wheel class's method table -- rpds-py's List has a PyO3
+	__reversed__ -- and built a reversed object over a sequence protocol the
+	class does not have (#2300).
+
+	The TYPE, not the object, because a C type crosses as a proxy too: its own
+	__reversed__ is a method of its instances, not a protocol of the type.  A
+	type's type is a Grail class (``type'') or, for a metatype such as numpy's
+	_DTypeMeta, another proxy; only a proxy is asked of C."
+
+	| type |
+	type := [self ___pyAttrLoad___: #'__class__']
+		@env0:on: AbstractException do: [:ex | ex @env0:return: nil].
+	(type @env0:isKindOf: ShimForeignObject) ifFalse: [^ nil].
+	^ [(CPythonShim @env0:current) @env0:foreignGetAttr: type @env0:cPtr name: aSym @env0:asString]
+		@env0:on: AttributeError do: [:ex | ex @env0:return: nil]
+
+]
+
+{ #category : 'Grail-Python Protocol' }
 ShimForeignObject >> ___grailForeignTypeCheck___: aCandidate subclass: aBoolean [
 	"isinstance(aCandidate, self) -- or issubclass(aCandidate, self) when
 	aBoolean -- for a proxied C-extension TYPE, answered in C by
