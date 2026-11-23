@@ -262,6 +262,46 @@ ClassBuildIREmitter >> ___symbolFor___: aName [
 
 ]
 
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> ___valueDef___: aDef [
+	"statementNode:'s def built as a value: the closure the nested-def IR
+	emitter builds -- as it builds a def nested in a def, with its decorators
+	applied nearest first -- assigned to the value block's temp of the def's
+	name, which the walk then stores on the class.  Its body reads names as
+	any def nested in the helper does: the class namespace is skipped, the
+	enclosing function's variables are the carried captures (read through
+	their blocks), and a PEP 695 scope's reads of the class namespace go
+	through the class variable (NameAst >> ___emitIRAnnotationScopeClassRead___:on:).
+	Judged by the nested-def predicate against the helper's prologue locals
+	and the def's own name; a refusal is an invariant failure, as for any
+	statement here."
+
+	| fname leaf fn locals |
+	fname := aDef ___mangledName___ asString.
+	leaf := self ___leafNamed___: fname.
+	leaf isNil ifTrue: [
+		^ self error: 'ClassBuildIREmitter: no value block temp for the def ' , fname].
+	locals := helperLocals copy add: fname; add: aDef name asString; yourself.
+	(aDef ___irNestedDefReason___: locals) ifNotNil: [:r |
+		| detail |
+		"Name the refusing statement, as a strict-mode report does for a def."
+		detail := [(aDef ___irFirstRefusedIn___: aDef body body
+				locals: (aDef ___irNestedLocals___: locals)) printString]
+			on: Error do: [:ex | ex return: '?'].
+		^ self error: 'ClassBuildIREmitter: a def built as a value in the class body is not IR-eligible: '
+			, r printString , ' (' , detail , ')'].
+	aDef ___needsPreEvaluatedDecorators___ ifTrue: [
+		^ self error: 'ClassBuildIREmitter: a def built as a value whose decorator reads its own name'].
+	fn := aDef ___emitIRNestedFunctionValueOn___: builder.
+	builder atNode: aDef.
+	builder add: (builder assign: leaf from: fn).
+	aDef ___emitIRNestedDecoratorsOn___: builder
+		read: [builder var: leaf]
+		store: [:v | builder assign: leaf from: v].
+	self ___rest___
+
+]
+
 { #category : 'Grail-structure' }
 ClassBuildIREmitter >> assertDepth: anInteger [
 
@@ -356,7 +396,7 @@ ClassBuildIREmitter >> carried: aCollection [
 ]
 
 { #category : 'Grail-children' }
-ClassBuildIREmitter >> carriedLeaf: aLeaf cell: aCellLeaf [
+ClassBuildIREmitter >> carriedLeaf: aLeaf cell: aCellLeaf setter: aSetterLeaf [
 	"Note that the helper temp aLeaf is the copy of a carried capture seeded
 	from the reader block held in aCellLeaf (ClassDefAst >>
 	___irBuildClassHelper___:carrying:pre:on:nested:).  Every READ of it then
@@ -369,7 +409,7 @@ ClassBuildIREmitter >> carriedLeaf: aLeaf cell: aCellLeaf [
 	copy, and its write-back reads it (tempVar:)."
 
 	carriedCells isNil ifTrue: [carriedCells := IdentityKeyValueDictionary new].
-	carriedCells at: aLeaf put: aCellLeaf
+	carriedCells at: aLeaf put: { aCellLeaf. aSetterLeaf }
 
 ]
 
@@ -389,10 +429,10 @@ ClassBuildIREmitter >> cascadeTo: rcvrBlock sends: specs [
 { #category : 'Grail-children' }
 ClassBuildIREmitter >> cellForCarriedLeaf: aLeaf [
 	"The leaf of the reader block a carried capture's helper temp aLeaf was
-	seeded from (carriedLeaf:cell:), or nil when aLeaf is no such temp."
+	seeded from (carriedLeaf:cell:setter:), or nil when aLeaf is no such temp."
 
 	carriedCells isNil ifTrue: [^ nil].
-	^ carriedCells at: aLeaf otherwise: nil
+	^ (carriedCells at: aLeaf otherwise: nil) ifNotNil: [:pair | pair at: 1]
 
 ]
 
@@ -680,7 +720,7 @@ ClassBuildIREmitter >> quotedSymbolArray: names [
 { #category : 'Grail-children' }
 ClassBuildIREmitter >> readOfCarriedLeaf: aLeaf [
 	"``(___irCell_<i>___ value)'' when aLeaf is a carried capture's seeded copy
-	(carriedLeaf:cell:), the read every mention of the name takes -- here and
+	(carriedLeaf:cell:setter:), the read every mention of the name takes -- here and
 	from a nested scope the helper builds (NameAst >> ___emitIRValueOn___:,
 	FunctionDefAst >> ___emitIRFreeVariableRead___:on:) -- or nil."
 
@@ -729,6 +769,17 @@ ClassBuildIREmitter >> sendOnNextLine: aSelector env: anEnvOrNil to: rcvrBlock w
 
 ]
 
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> setterForCarriedLeaf: aLeaf [
+	"The leaf of the setter block handed in beside the reader a carried
+	capture's helper temp aLeaf was seeded from (carriedLeaf:cell:setter:), or
+	nil when aLeaf is no such temp."
+
+	carriedCells isNil ifTrue: [^ nil].
+	^ (carriedCells at: aLeaf otherwise: nil) ifNotNil: [:pair | pair at: 2]
+
+]
+
 { #category : 'Grail-layout' }
 ClassBuildIREmitter >> space [
 
@@ -774,6 +825,14 @@ ClassBuildIREmitter >> statementNode: anAst [
 					, 'nested directly in the class body'].
 		anAst ___emitIRNestedClassWith___: self.
 		^ self ___rest___].
+	"A def BUILT AS A VALUE (plan P3.5): a def in a class-body ``if'' -- the
+	parser puts a PEP 695 generic method's, class's or alias's type-parameter
+	scope function in one too -- which ClassDefAst >> emitClassBodyIfDef:on:
+	hands here inside a value block whose temp is the def's name."
+	(anAst isKindOf: FunctionDefAst) ifTrue: [
+		CallAst classBodyValueDefNode == anAst ifFalse: [
+			^ self error: 'ClassBuildIREmitter: a def statement that is not built as a value'].
+		^ self ___valueDef___: anAst].
 	(anAst ___irEligibleStatementLocals___: helperLocals) ifFalse: [
 		^ self error: 'ClassBuildIREmitter: a ' , anAst class name asString
 			, ' statement in the class body is not IR-eligible in the class-body context'].
@@ -877,7 +936,7 @@ ClassBuildIREmitter >> var: aName [
 
 	| s |
 	(self ___leafNamed___: aName) ifNotNil: [:leaf |
-		"A carried capture is read through its reader block (carriedLeaf:cell:)."
+		"A carried capture is read through its reader block (carriedLeaf:cell:setter:)."
 		(self readOfCarriedLeaf: leaf) ifNotNil: [:read | ^ self ___push___: read].
 		^ self ___push___: (builder var: leaf)].
 	s := aName asString.

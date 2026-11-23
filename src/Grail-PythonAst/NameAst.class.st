@@ -734,6 +734,51 @@ NameAst >> ___emitGlobalReadOn___: aStream [
 ]
 
 { #category : 'Grail-IR Codegen' }
+NameAst >> ___emitIRAnnotationScopeClassRead___: aClassDef on: aBuilder [
+	"___emitAnnotationScopeClassReadOn___:on: in IR, for a PEP 695 annotation
+	scope written in the body of a method-local class whose helper is built
+	through IR (plan P3.5): a type parameter's bound or default, an alias's
+	value, a generic method's or class's scope function.  The class namespace
+	first, through the variable the helper builds the class in --
+	``((<cls> @env1:___annotationScopeValueFor___: #'x') ifNil: [...])'',
+	the ifNil: inlined as the text's compiles -- then, for a name the class
+	body binds or declares ``global'', the module's globals; any other name
+	reads as it would have outside the annotation scope."
+
+	| moduleRead probe |
+	moduleRead := [
+		aBuilder
+			send: #'___moduleAttrLoad___:'
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { aBuilder obj: self ___mangledId___ asSymbol }
+			env: 1].
+	((aClassDef body globalNames ifNil: [#()]) includes: id asSymbol)
+		ifTrue: [^ moduleRead value].
+	probe := aBuilder
+		send: #'___annotationScopeValueFor___:'
+		to: (aBuilder classBuildEmitter valueOf: [
+			aBuilder classBuildEmitter var: aClassDef ___stVarName___])
+		with: { aBuilder obj: self ___mangledId___ asSymbol }
+		env: 1.
+	^ aBuilder ifNilValue: probe then: [
+		(aClassDef ___annotationScopeNames___ includes: self ___mangledId___ asSymbol)
+			ifTrue: [aBuilder add: moduleRead value]
+			ifFalse: [
+				| savedScope savedSuppressed |
+				savedScope := CallAst methodAnnotationClassScope.
+				savedSuppressed := CallAst annotationScopeReadsSuppressed.
+				CallAst methodAnnotationClassScope: nil.
+				CallAst annotationScopeReadsSuppressed: true.
+				[aBuilder add: (self ___emitIRValueOn___: aBuilder)] ensure: [
+					CallAst methodAnnotationClassScope: savedScope.
+					CallAst annotationScopeReadsSuppressed: savedSuppressed]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 NameAst >> ___emitIRBuiltinValueReadOn___: aBuilder [
 	"emitBuiltinFirstClassRead:on: (cut 68) -- a builtin FUNCTION read as a
 	value (``f = len'', ``map(len, xs)''):
@@ -826,6 +871,33 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyOwnCell___]) ifTrue: [
 		^ aBuilder classBuildEmitter valueOf: [
 			self ___emitClassBodyOwnCellWith___: aBuilder classBuildEmitter]].
+	"...and a read in a PEP 695 annotation scope written in the class body,
+	which sees the class namespace (plan P3.5)."
+	aBuilder classBuildEmitter notNil ifTrue: [
+		self ___annotationScopeClass___ ifNotNil: [:classDef |
+			^ self ___emitIRAnnotationScopeClassRead___: classDef on: aBuilder]].
+	"``__class__'' in a def a method-local class helper builds INLINE (plan
+	P3.5) -- one in a class-body ``if'', or the method a PEP 695 scope function
+	there returns -- is the class's build variable, as the text's
+	printDefiningClassOn: reads it there (CallAst class >>
+	___printClassObjectOn___:cellSelector:), with the same cell wrapper when the
+	cell can be rebound."
+	((ctx isKindOf: LoadAst)
+		and: [id asSymbol == #'__class__'
+		and: [aBuilder classBuildEmitter notNil
+		and: [CallAst classBodyValueDefNode notNil
+		and: [CallAst ___emitsInlineInClassBuild___
+		and: [(self ___declaredInEnclosingFunction___: #'__class__') not
+			or: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']]]]]])
+		ifTrue: [
+			| classRead |
+			CallAst classNeedsClassCell: true.
+			CallAst ___recordClassCellMethod___.
+			classRead := aBuilder classBuildEmitter valueOf: [
+				aBuilder classBuildEmitter var: CallAst ___classBeingCompiledVar___].
+			CallAst classCellRebindable ifTrue: [
+				classRead := aBuilder send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
+			^ classRead].
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	"A ``global''-declared name is a MODULE binding for that whole scope --
 	never a local -- so the declaration has to be tested BEFORE the leaf.
@@ -864,7 +936,7 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 		"A carried capture's seeded copy in a method-local class helper is read
 		through its reader block, from the class body and from every scope the
 		helper builds inside it (plan P3.5, #2292): see ClassBuildIREmitter >>
-		carriedLeaf:cell:."
+		carriedLeaf:cell:setter:."
 		read := (aBuilder classBuildEmitter notNil
 				ifTrue: [aBuilder classBuildEmitter readOfCarriedLeaf: (aBuilder leafFor: id asSymbol)])
 			ifNil: [aBuilder localVar: id asSymbol].
@@ -941,14 +1013,22 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 		whether the cell matters'' -- so this is the same guard the arm above
 		applies, on the same flag."
 		| classRead |
-		CallAst addCapturedClassName: CallAst classBeingCompiled.
 		CallAst classNeedsClassCell: true.
 		CallAst ___recordClassCellMethod___.
-		classRead := aBuilder
-			send: #'___dunderClassCell___:' to: aBuilder selfNode
-			with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
-				, '___') asSymbol }
-			env: 1.
+		"In a def a method-local class helper builds inline (plan P3.5), the
+		class's build variable, as the text reads it there
+		(CallAst class >> ___printClassObjectOn___:cellSelector:)."
+		classRead := (CallAst ___emitsInlineInClassBuild___ and: [aBuilder classBuildEmitter notNil])
+			ifTrue: [
+				aBuilder classBuildEmitter valueOf: [
+					aBuilder classBuildEmitter var: CallAst ___classBeingCompiledVar___]]
+			ifFalse: [
+				CallAst addCapturedClassName: CallAst classBeingCompiled.
+				aBuilder
+					send: #'___dunderClassCell___:' to: aBuilder selfNode
+					with: { aBuilder obj: ('___cell_' , CallAst classBeingCompiled asString
+						, '___') asSymbol }
+					env: 1].
 		CallAst classCellRebindable ifTrue: [
 			classRead := aBuilder
 				send: #'___grailClassCellValue___' to: classRead with: { } env: 1].
@@ -2533,6 +2613,10 @@ NameAst >> ___irEligibleValueLocals___: localNames [
 	self ___readsAsMethodDecoratorValue___ ifTrue: [^ true].
 	self ___readsAsClassBodyClassCell___ ifTrue: [^ true].
 	self ___readsAsClassBodyOwnCell___ ifTrue: [^ true].
+	"...and a PEP 695 annotation scope's read of the class namespace, inside
+	a class build (plan P3.5): ___emitIRAnnotationScopeClassRead___:on:."
+	(CallAst inClassBodyValueEmit == true and: [self ___annotationScopeClass___ notNil])
+		ifTrue: [^ true].
 	self ___irIsSelfReceiver___ ifTrue: [^ true].
 	(localNames includes: id asString) ifTrue: [^ true].
 	^ (self ___irNonLocalLoadKind___: localNames) notNil
