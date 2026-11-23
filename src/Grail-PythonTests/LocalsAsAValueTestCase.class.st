@@ -71,3 +71,13 @@ LocalsAsAValueTestCase >> testLocalsIsABuiltinFunction [
 	self assertAll: #('it_is_a_builtin_function')
 
 ]
+
+{ #category : 'Grail-Tests' }
+LocalsAsAValueTestCase >> testTheCallTransportIsNotALocal [
+	"A def with *args or **kwargs runs its body, on the text path, in a block
+	that reads the method's call-transport arguments; those are not variables
+	the program has (#2298, seen only on the merge queue's text arm)."
+
+	self assertAll: #('call_transport_is_not_a_local')
+
+]

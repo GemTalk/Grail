@@ -47,6 +47,21 @@ def as_pytest_uses_it():
     return 'a' in builtins.locals(), 'marker' in builtins.locals()
 
 
+def call_transport_is_not_a_local():
+    # A def with *args or **kwargs: on Grail's text path its body runs in a
+    # block beside the method's call-transport arguments (positional, kwargs),
+    # which locals() must not report as the program's variables.
+    def star(*args, k=1, **kw):
+        b = 2
+        return sorted(builtins.locals())
+    return star(), star(1, k=2, z=3), sorted(_star_at_module_level(1, k=2, z=3))
+
+
+def _star_at_module_level(*args, k=1, **kw):
+    b = 2
+    return builtins.locals()
+
+
 def at_module_scope():
     return at_module_scope_it_is_globals
 
@@ -63,12 +78,16 @@ EXPECTED = {
     'through_an_alias': [('x', 5)],
     'each_call_is_a_fresh_snapshot': (1, False),
     'as_pytest_uses_it': (True, False),
+    'call_transport_is_not_a_local': (['args', 'b', 'k', 'kw'],
+                                      ['args', 'b', 'k', 'kw'],
+                                      ['args', 'b', 'k', 'kw']),
     'at_module_scope': True,
     'it_is_a_builtin_function': (True, True, 'locals'),
 }
 
 for _fn in (through_builtins, through_getattr_on_builtins, through_an_alias,
-            each_call_is_a_fresh_snapshot, as_pytest_uses_it, at_module_scope,
+            each_call_is_a_fresh_snapshot, as_pytest_uses_it,
+            call_transport_is_not_a_local, at_module_scope,
             it_is_a_builtin_function):
     try:
         _v = _fn()
