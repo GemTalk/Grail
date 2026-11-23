@@ -1086,7 +1086,12 @@ FunctionDefAst >> ___emitIRFreeVariableRead___: aName on: aBuilder [
 	the raise was a quiet text fallback; without that seam it failed the
 	module load."
 
-	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
+	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l |
+		"A carried capture of a method-local class helper: through its reader
+		block (ClassBuildIREmitter >> carriedLeaf:cell:)."
+		aBuilder classBuildEmitter ifNotNil: [:cbe |
+			(cbe readOfCarriedLeaf: l) ifNotNil: [:read | ^ read]].
+		^ aBuilder var: l].
 	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
 		ifTrue: [^ aBuilder selfNode].
 	^ self ___emitIRFreeVariableRead___: aName asSymbol
@@ -2926,6 +2931,14 @@ FunctionDefAst >> ___irCollectNonlocalsIn___: node into: aSet [
 	((node isKindOf: FunctionDefAst) and: [node ~~ self]) ifTrue: [
 		(node body notNil and: [node body nonlocalNames notNil])
 			ifTrue: [node body nonlocalNames do: [:n | aSet add: n asString]]].
+	"A CLASS BODY's ``nonlocal'' writes the enclosing binding too, through the
+	setter block a method-local class helper is handed (ClassDefAst >>
+	___emitCarriedNonlocalWriteBack___:on:), so a parameter it names needs a
+	writable temp as much as a nested def's does.  As a bare argument the
+	setter's store did not reach the method's reads: ``def f(x): class c:
+	nonlocal x; x += 1'' left f's x at its old value (plan P3.5)."
+	(node isKindOf: ClassDefAst) ifTrue: [
+		(node ___irNonlocalNamesBelow___: node body) do: [:n | aSet add: n asString]].
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self ___irCollectNonlocalsIn___: (node instVarAt: i) into: aSet]].

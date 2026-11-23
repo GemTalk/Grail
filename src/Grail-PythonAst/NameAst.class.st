@@ -531,6 +531,27 @@ NameAst >> ___emitClassBodyClassCellWith___: e [
 ]
 
 { #category : 'Grail-codegen helpers' }
+NameAst >> ___emitClassBodyOwnCellWith___: e [
+	"A read of the class's OWN implicit cell from a function scope written in
+	its body (___readsAsClassBodyOwnCell___), through a ClassBuildEmitter so
+	the text and the IR-built method-local class helper share it (plan P3.5):
+	``__class__'' is the class being defined, filled once it exists, and
+	``__classdict__'' its namespace.  The class is the variable the body is
+	building it in, which the lambda's block closes over."
+
+	| clsVar |
+	clsVar := CallAst ___classBeingCompiledVar___.
+	id asSymbol == #'__class__' ifTrue: [
+		"CPython creates the cell for this read, so the class must bind one
+		(ClassDefAst's ___grailBindClassCell___)."
+		CallAst classNeedsClassCell: true.
+		^ e paren: [e send: #'___grailOwnClassCellValue___' env: 1 to: [e var: clsVar]]].
+	CallAst classNeedsClassDict: true.
+	^ e paren: [e send: #'___grailClassDictCell___' env: 1 to: [e var: clsVar]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 NameAst >> ___emitClassBodyValueWith___: e [
 	"A class-body VALUE read of this name -- an attribute value, a default, a
 	bare expression -- written through a ClassBuildEmitter, so the class build
@@ -800,6 +821,11 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyClassCell___]) ifTrue: [
 		^ aBuilder classBuildEmitter valueOf: [
 			self ___emitClassBodyClassCellWith___: aBuilder classBuildEmitter]].
+	"...and, from a lambda or generator expression in a class-body value, the
+	class's OWN ``__class__'' / ``__classdict__'' cell (plan P3.5)."
+	(aBuilder classBuildEmitter notNil and: [self ___readsAsClassBodyOwnCell___]) ifTrue: [
+		^ aBuilder classBuildEmitter valueOf: [
+			self ___emitClassBodyOwnCellWith___: aBuilder classBuildEmitter]].
 	self ___irIsSelfReceiver___ ifTrue: [^ aBuilder selfNode].
 	"A ``global''-declared name is a MODULE binding for that whole scope --
 	never a local -- so the declaration has to be tested BEFORE the leaf.
@@ -835,7 +861,13 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 			and: [self ___nearestEnclosingFunctionDeclaresNonlocal___: #'__class__']) not])
 		ifTrue: [
 		| read |
-		read := aBuilder localVar: id asSymbol.
+		"A carried capture's seeded copy in a method-local class helper is read
+		through its reader block, from the class body and from every scope the
+		helper builds inside it (plan P3.5, #2292): see ClassBuildIREmitter >>
+		carriedLeaf:cell:."
+		read := (aBuilder classBuildEmitter notNil
+				ifTrue: [aBuilder classBuildEmitter readOfCarriedLeaf: (aBuilder leafFor: id asSymbol)])
+			ifNil: [aBuilder localVar: id asSymbol].
 		"Two reasons a local read carries the text's unbound guard ``(x ifNil:
 		[UnboundLocalError ___signalUnbound___: #x])'', the ifNil: inlined as
 		the text relies on.  (cut 72) The def's own flow proof failed, so every
@@ -1332,33 +1364,12 @@ NameAst >> ___emitSmalltalkOn___: aStream [
 	test_references___class___nested_used / ___classdict___nested.
 
 	The class is reached through the Smalltalk variable the body is building it
-	in, which the lambda's block closes over.  The class body is always emitted
-	as text -- the IR arm refuses this window (___irDunderClassLoadKind___) and
-	a method-local class travels as a compiled-text helper -- so this is the
-	one place for both arms."
-	((ctx isKindOf: LoadAst)
-		and: [(id asSymbol == #'__class__' or: [id asSymbol == #'__classdict__'])
-		and: [CallAst inClassBodyValueEmit == true
-		and: [CallAst classBodyValueDefNode isNil
-		and: [CallAst classBeingCompiled notNil
-		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
-		and: [(self ___boundInNestedFunction___: id asSymbol) not
-		and: [self ___inFunctionScopeOfClassBody___]]]]]]])
-		ifTrue: [
-			id asSymbol == #'__class__'
-				ifTrue: [
-					"CPython creates the cell for this read, so the class
-					must bind one (ClassDefAst's ___grailBindClassCell___)."
-					CallAst classNeedsClassCell: true.
-					aStream nextPutAll: '(';
-						nextPutAll: CallAst ___classBeingCompiledVar___;
-						nextPutAll: ' @env1:___grailOwnClassCellValue___)']
-				ifFalse: [
-					CallAst classNeedsClassDict: true.
-					aStream nextPutAll: '(';
-						nextPutAll: CallAst ___classBeingCompiledVar___;
-						nextPutAll: ' @env1:___grailClassDictCell___)'].
-			^ self].
+	in, which the lambda's block closes over.  One description,
+	___emitClassBodyOwnCellWith___:, writes it for the text and for a
+	method-local class helper built through IR (plan P3.5)."
+	self ___readsAsClassBodyOwnCell___ ifTrue: [
+		self ___emitClassBodyOwnCellWith___: (ClassBuildTextEmitter on: aStream).
+		^ self].
 	"Inside a doit too: an exec'd class has no module class, and its methods
 	reach the class through the cell (CallAst >> ___printClassObjectOn___:
 	cellSelector:)."
@@ -2521,6 +2532,7 @@ NameAst >> ___irEligibleValueLocals___: localNames [
 	"...and so is a read in a class-body method decorator (P3.3c)."
 	self ___readsAsMethodDecoratorValue___ ifTrue: [^ true].
 	self ___readsAsClassBodyClassCell___ ifTrue: [^ true].
+	self ___readsAsClassBodyOwnCell___ ifTrue: [^ true].
 	self ___irIsSelfReceiver___ ifTrue: [^ true].
 	(localNames includes: id asString) ifTrue: [^ true].
 	^ (self ___irNonLocalLoadKind___: localNames) notNil
@@ -3104,6 +3116,33 @@ NameAst >> ___readsAsClassBodyClassCell___ [
 		and: [self ___readsDoitLiveMapping___ not
 		and: [self ___readsMethodAnnotationClassScope___ not
 		and: [self ___annotationScopeClass___ isNil]]]]]]]]]]]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
+NameAst >> ___readsAsClassBodyOwnCell___ [
+	"Is this a read of ``__class__'' or ``__classdict__'' from a FUNCTION SCOPE
+	written directly in a class body -- a lambda, a generator expression's body
+	-- which closes over the class's implicit cells as a method does, and which
+	___emitClassBodyOwnCellWith___: describes?  Not in a def emitted as a
+	value, nor where an enclosing or nested function binds the name; and not
+	in the reads ___emitSmalltalkOn___: claims before this one (a doit's live
+	mapping, an annotation scope, a decorator scope's names), so the IR
+	backend, which tests it earlier, claims the same reads."
+
+	^ (ctx isKindOf: LoadAst)
+		and: [(id asSymbol == #'__class__' or: [id asSymbol == #'__classdict__'])
+		and: [CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil
+		and: [CallAst classBeingCompiled notNil
+		and: [(self ___declaredInEnclosingFunction___: id asSymbol) not
+		and: [(self ___boundInNestedFunction___: id asSymbol) not
+		and: [self ___inFunctionScopeOfClassBody___
+		and: [self ___readsDoitLiveMapping___ not
+		and: [self ___readsMethodAnnotationClassScope___ not
+		and: [self ___annotationScopeClass___ isNil
+		and: [CallAst classBodyDecoratorScope isNil
+			or: [(CallAst classBodyDecoratorScope value includes: id asSymbol) not]]]]]]]]]]]]
 
 ]
 

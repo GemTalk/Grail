@@ -223,10 +223,10 @@ def f(p):
 		'Lam' -> nil.
 		'Comp' -> nil.
 		'Walrus' -> #'irHelper:assign:walrus'.
-		'Sibling' -> #'irHelper:assign:siblingCall'.
+		'Sibling' -> nil.
 		'Frame' -> #'irHelper:assign:frameCall'.
 		'Cell' -> nil.
-		'CellLam' -> #'irHelper:assign:classCell'.
+		'CellLam' -> nil.
 		'Ann' -> nil.
 		'AnnLam' -> nil.
 		'AnnTarget' -> nil.

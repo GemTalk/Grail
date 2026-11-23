@@ -81,7 +81,8 @@ Class {
 		'restOffset',
 		'decorators',
 		'carried',
-		'helperLocals'
+		'helperLocals',
+		'carriedCells'
 	],
 	#category : 'Grail-Parser'
 }
@@ -354,6 +355,24 @@ ClassBuildIREmitter >> carried: aCollection [
 
 ]
 
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> carriedLeaf: aLeaf cell: aCellLeaf [
+	"Note that the helper temp aLeaf is the copy of a carried capture seeded
+	from the reader block held in aCellLeaf (ClassDefAst >>
+	___irBuildClassHelper___:carrying:pre:on:nested:).  Every READ of it then
+	goes through the block instead (var:, cellForCarriedLeaf:): the copy holds
+	the enclosing binding as it was when the class statement started, and a
+	read that runs later -- a lambda, a generator expression, a def built as a
+	value, the PEP 649 annotate block -- or after something rebinds the
+	enclosing variable must see it as it is THEN, as CPython's cell does
+	(plan P3.5, #2292).  Only a class-body ``nonlocal'' store still writes the
+	copy, and its write-back reads it (tempVar:)."
+
+	carriedCells isNil ifTrue: [carriedCells := IdentityKeyValueDictionary new].
+	carriedCells at: aLeaf put: aCellLeaf
+
+]
+
 { #category : 'Grail-expressions' }
 ClassBuildIREmitter >> cascadeTo: rcvrBlock sends: specs [
 
@@ -364,6 +383,16 @@ ClassBuildIREmitter >> cascadeTo: rcvrBlock sends: specs [
 		  ((spec at: 2) collect: [:b | self ___eval___: b]) asArray.
 		  self ___env___: (spec at: 3) }].
 	^ self ___push___: (builder cascade: rcvr specs: built asArray)
+
+]
+
+{ #category : 'Grail-children' }
+ClassBuildIREmitter >> cellForCarriedLeaf: aLeaf [
+	"The leaf of the reader block a carried capture's helper temp aLeaf was
+	seeded from (carriedLeaf:cell:), or nil when aLeaf is no such temp."
+
+	carriedCells isNil ifTrue: [^ nil].
+	^ carriedCells at: aLeaf otherwise: nil
 
 ]
 
@@ -649,6 +678,18 @@ ClassBuildIREmitter >> quotedSymbolArray: names [
 ]
 
 { #category : 'Grail-children' }
+ClassBuildIREmitter >> readOfCarriedLeaf: aLeaf [
+	"``(___irCell_<i>___ value)'' when aLeaf is a carried capture's seeded copy
+	(carriedLeaf:cell:), the read every mention of the name takes -- here and
+	from a nested scope the helper builds (NameAst >> ___emitIRValueOn___:,
+	FunctionDefAst >> ___emitIRFreeVariableRead___:on:) -- or nil."
+
+	^ (self cellForCarriedLeaf: aLeaf) ifNotNil: [:cell |
+		builder send: #value to: (builder var: cell) with: #() env: 0]
+
+]
+
+{ #category : 'Grail-children' }
 ClassBuildIREmitter >> restAt: aModuleOffset [
 	"The position the class-build MACHINERY is stamped at, between the nodes
 	that carry a Python position of their own: the first character of the
@@ -804,6 +845,16 @@ ClassBuildIREmitter >> symbolPairArray: pairs [
 ]
 
 { #category : 'Grail-expressions' }
+ClassBuildIREmitter >> tempVar: aName [
+	"The helper temp aName itself, even when it is a carried capture's copy
+	(see ClassBuildEmitter >> tempVar:)."
+
+	(self ___leafNamed___: aName) ifNotNil: [:leaf | ^ self ___push___: (builder var: leaf)].
+	^ self var: aName
+
+]
+
+{ #category : 'Grail-expressions' }
 ClassBuildIREmitter >> terminatedBraceArray: elementBlocks [
 
 	^ self braceArray: elementBlocks
@@ -825,7 +876,10 @@ ClassBuildIREmitter >> valueOf: aBlock [
 ClassBuildIREmitter >> var: aName [
 
 	| s |
-	(self ___leafNamed___: aName) ifNotNil: [:leaf | ^ self ___push___: (builder var: leaf)].
+	(self ___leafNamed___: aName) ifNotNil: [:leaf |
+		"A carried capture is read through its reader block (carriedLeaf:cell:)."
+		(self readOfCarriedLeaf: leaf) ifNotNil: [:read | ^ self ___push___: read].
+		^ self ___push___: (builder var: leaf)].
 	s := aName asString.
 	s = 'self' ifTrue: [^ self ___push___: builder selfNode].
 	s = 'nil' ifTrue: [^ self ___push___: builder nilLit].
