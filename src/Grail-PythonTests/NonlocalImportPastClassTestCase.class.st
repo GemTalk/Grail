@@ -7,7 +7,8 @@ stub on both paths, and the IR path refused it as `cm:shape:ImportAst'.
 
 tests/python/nonlocal_import_past_class.py (self-running against CPython 3.14)
 is loaded once per path; both must give CPython's answers, and the IR load
-must build the methods through IR with no fallback and no import refusal.
+must build the methods, and the functions defining their classes, through IR
+with no fallback and no refusal.
 "
 Class {
 	#name : 'NonlocalImportPastClassTestCase',
@@ -101,7 +102,9 @@ NonlocalImportPastClassTestCase >> testEveryShapeAgreesWithCPythonUnderIR [
 { #category : 'Grail-Tests - an import binding a nonlocal past a class' }
 NonlocalImportPastClassTestCase >> testTheIRArmBuildsTheImportsThroughIR [
 	"Correct answers prove nothing if the methods were built as text: the
-	import refusal is gone from the census and nothing fell back."
+	import refusal is gone from the census, so is the enclosing class
+	statement's (a nonlocal name bound only by an import was not in the class
+	scope's reads, so the helper did not carry it), and nothing fell back."
 
 	| stats counts |
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
@@ -111,7 +114,7 @@ NonlocalImportPastClassTestCase >> testTheIRArmBuildsTheImportsThroughIR [
 		description: 'IR fell back to text: ' , stats printString.
 	counts := importlib ___irCensus___ at: #counts.
 	#(#'cm:shape:ImportAst' #'cm:shape:ImportFromAst' #'shape:ImportAst'
-	  #'shape:ImportFromAst') do: [:row |
+	  #'shape:ImportFromAst' #'classDef:nonlocalNotCarried') do: [:row |
 		self assert: (counts at: row otherwise: 0) = 0
 			description: row , ' still refuses: ' , counts printString]
 
