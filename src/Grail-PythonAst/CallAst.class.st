@@ -2336,6 +2336,29 @@ CallAst >> ___emitIRCallKeywords___: aKeywordsValue on: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRClassBodySiblingCallOn___: aBuilder [
+	"The #classBodySiblingCall shape: ``((UnboundMethod @env1:definingClass:
+	<cls> selector: #'f') @env1:value: { args } value: kw)'', the text's
+	class-body call of a sibling def, with the class under construction read
+	through the helper's class build emitter as the text helper's compile
+	reads it."
+
+	| cls um argsArray kw |
+	cls := aBuilder classBuildEmitter valueOf: [
+		aBuilder classBuildEmitter var: CallAst ___classBeingCompiledVar___].
+	um := aBuilder
+		send: #'definingClass:selector:'
+		to: (aBuilder globalNamed: #UnboundMethod)
+		with: { cls. aBuilder obj: function id asSymbol }
+		env: 1.
+	argsArray := self ___emitIRArgumentsArrayOn___: aBuilder.
+	kw := self ___emitIRKeywordsOn___: aBuilder.
+	aBuilder atNode: self.
+	^ aBuilder send: #'value:value:' to: um with: { argsArray. kw } env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRDefiningClassReadOn___: aBuilder cellSelector: aCellSelector [
 	"The DEFINING class, by whichever of the two routes reaches it -- the IR
 	twin of ___printClassObjectOn___:cellSelector:.
@@ -3004,6 +3027,7 @@ CallAst >> ___emitIRValueOn___: aBuilder [
 		argVals := arguments collect: [:a | a ___emitIRValueOn___: aBuilder].
 		aBuilder atNode: self.
 		^ aBuilder send: self ___directCallSelector___ to: recv with: argVals env: 1].
+	shape == #classBodySiblingCall ifTrue: [^ self ___emitIRClassBodySiblingCallOn___: aBuilder].
 	"#attrLegacy and #general: load THEN call through the unified protocol --
 	the loaded value might be a BoundMethod, a class, or any callable."
 	^ self ___emitIRGeneralCallOn___: aBuilder
@@ -3632,12 +3656,7 @@ CallAst >> ___emitSmalltalkOn___: aStream [
 	(self ___directCallSelector___) ifNotNil: [:directSel |
 		^ self printDirectAttributeCallOn: aStream selector: directSel].
 
-	((self class inClassBodyValueEmit)
-		and: [(function isKindOf: NameAst)
-		and: [self class classFunctionNames notNil
-		and: [(self class classFunctionNames includes: function id asSymbol)
-		and: [self class classBodyBoundNames isNil
-			or: [self class classBodyBoundNames includes: function id asSymbol]]]]])
+	self ___readsAsClassBodySiblingCall___
 		ifTrue: [
 			aStream
 				nextPutAll: '((UnboundMethod @env1:definingClass: ';
@@ -3987,6 +4006,11 @@ CallAst >> ___irCallShapeUnguarded___ [
 		answers."
 		(self knownClassName notNil and: [self hasStarredArgument not])
 			ifTrue: [^ #arityMismatch].
+		"A class-body call of a def the same body binds (plan P3.5): the text's
+		UnboundMethod on the class under construction, reached only inside the
+		class body's emit window, so only by a method-local class helper built
+		through IR (___readsAsClassBodySiblingCall___)."
+		self ___readsAsClassBodySiblingCall___ ifTrue: [^ #classBodySiblingCall].
 		^ #general].
 	(function isKindOf: AttributeAst) ifTrue: [
 		"Inside a method, ``self.m(args)'' for a sibling def m is the text's
@@ -4691,6 +4715,23 @@ CallAst >> ___printShadowableSuperOn___: aStream arm: aBlock [
 		nextPutAll: '] ifFalse: [___sup___ @env1:value: { } value: nil]] @env0:value: ((';
 		nextPutAll: CallAst moduleClassBeingCompiled name;
 		nextPutAll: ' @env0:___instance___) @env1:___grailShadowedSuper___))'
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+CallAst >> ___readsAsClassBodySiblingCall___ [
+	"Is this a call, in a class body's emit window, of a def the body has
+	bound by now -- which the class build makes as an UnboundMethod on the
+	class under construction, run non-virtually with the first argument as
+	the receiver (``__add__, __radd__ = _operator_fallbacks(_add, ...)'')?
+	Both the text and the IR backend (#classBodySiblingCall) test it here."
+
+	^ (self class inClassBodyValueEmit)
+		and: [(function isKindOf: NameAst)
+		and: [self class classFunctionNames notNil
+		and: [(self class classFunctionNames includes: function id asSymbol)
+		and: [self class classBodyBoundNames isNil
+			or: [self class classBodyBoundNames includes: function id asSymbol]]]]]
 
 ]
 

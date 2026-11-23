@@ -246,15 +246,15 @@ def f(p):
 		'CondDef' -> #'irHelper:if:def'.
 		'LoopDef' -> #'irHelper:controlFlow:runtime:def'.
 		'Chain' -> #'irHelper:controlFlow:runtime:chain'.
-		'Glob' -> #'irHelper:global'.
-		'NonLoc' -> #'irHelper:nonlocal'.
+		'Glob' -> nil.
+		'NonLoc' -> nil.
 		'Alias' -> #'irHelper:typeAlias'.
 		'Imp' -> #'irHelper:import'.
 		'Locs' -> #'irHelper:assignTarget:runtime:frameCall'.
 		'Target' -> #'irHelper:assignTarget'.
 		'Outer' -> nil.
 		'OuterTp' -> #'irHelper:typeParams'.
-		'OuterBad' -> #'irHelper:nestedClass:nonlocal' }.
+		'OuterBad' -> nil }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |
 		| got |
