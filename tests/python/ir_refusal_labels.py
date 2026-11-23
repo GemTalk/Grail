@@ -26,11 +26,44 @@ def record(key, fn):
 # --- LambdaAst:awaitInGenexp (was LambdaAst:yield) -----------------------------
 # The row's condition is "an await and no yield".  A bare await in a lambda is
 # a SyntaxError, so what reaches it is an ASYNC generator expression in the
-# body -- valid Python, and still refused.
+# body -- valid Python, and still refused, because IR has no async generator
+# expression.  The await makes the GENEXP asynchronous, not the lambda: the
+# text built a plain generator around the body until #2231.
+
+class Ready:
+    def __init__(self, v):
+        self.v = v
+
+    def __await__(self):
+        return self.v
+        yield
+
+
+def drain(agen):
+    out = []
+    while True:
+        try:
+            agen.__anext__().send(None)
+        except StopIteration as e:
+            out.append(e.value)
+        except StopAsyncIteration:
+            return out
+
 
 def lambda_async_genexp():
     f = lambda ys: (await y for y in ys)
     return type(f([])).__name__
+
+
+def lambda_async_genexp_runs():
+    f = lambda ys: (await y for y in ys)
+    return drain(f([Ready(1), Ready(2)]))
+
+
+def lambda_generator_still_a_generator():
+    f = lambda: (yield 1)
+    g = lambda ys: (y for y in ys)
+    return type(f()).__name__, list(f()), type(g([])).__name__
 
 
 # --- nestedDef:decorator, split by cause -----------------------------------------
@@ -107,6 +140,8 @@ def aug_assign_slice():
 
 
 record('lambda_async_genexp', lambda_async_genexp)
+record('lambda_async_genexp_runs', lambda_async_genexp_runs)
+record('lambda_generator_still_a_generator', lambda_generator_still_a_generator)
 record('decorator_through_class_cell', decorator_through_class_cell)
 record('decorator_class_attribute',
        lambda: Holder().decorate_with_class_attribute())
@@ -116,17 +151,18 @@ record('aug_assign_slice', aug_assign_slice)
 
 
 EXPECTED = {
+    'lambda_async_genexp': "'async_generator'",
+    'lambda_async_genexp_runs': '[1, 2]',
+    'lambda_generator_still_a_generator': "('generator', [1], 'generator')",
     'decorator_through_class_cell': "'tagged g'",
     'shadowed_super_call': "'mine'",
     'del_nonlocal_past_a_class': "'UnboundLocalError'",
     'aug_assign_slice': '[1, 2, 3, 9, 4]',
 }
 
-# Grail's answers, recorded so a fix shows up as an XPASS here.  Both are TEXT
-# path answers: the two defs still refuse IR, so the text compiles them.
+# Grail's answer, recorded so a fix shows up as an XPASS here.  It is a TEXT
+# path answer: the def still refuses IR, so the text compiles it.
 XFAIL = {
-    # CPython: 'async_generator' -- an await in a genexp makes it async.
-    'lambda_async_genexp': "'generator'",
     # CPython: ('NameError', "name 'deco' is not defined").
     'decorator_class_attribute':
         'NameError: Grail could not compile this method (codegen gap); '
