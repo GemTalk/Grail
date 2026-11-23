@@ -2387,6 +2387,14 @@ CallAst >> ___emitIRDefiningClassReadOn___: aBuilder cellSelector: aCellSelector
 	not exist to read -- so the fixture asserts a value THROUGH the cell rather
 	than merely that the call compiles."
 
+	"In a def a method-local class helper builds INLINE -- one in a class-body
+	``if'', or the method a PEP 695 scope function there returns -- Smalltalk
+	``self'' is the enclosing function's receiver, and the text reads the
+	class's build variable instead (___printClassObjectOn___:cellSelector:);
+	so does this, through the helper's class build emitter (plan P3.5)."
+	(CallAst ___emitsInlineInClassBuild___ and: [aBuilder classBuildEmitter notNil]) ifTrue: [
+		^ aBuilder classBuildEmitter valueOf: [
+			aBuilder classBuildEmitter var: CallAst ___classBeingCompiledVar___]].
 	CallAst classDefIsModuleScope == false ifFalse: [
 		^ aBuilder
 			send: CallAst classBeingCompiled asSymbol
@@ -2792,12 +2800,17 @@ CallAst >> ___emitIRSuperProxyOn___: aBuilder [
 		classRead := aBuilder
 			send: #'___grailClassCellValueForSuper___' to: classRead with: { } env: 1].
 	objName := self ___superObjTempName___.
+	"A def built as a value binds its first parameter, read by its PYTHON name:
+	the builder keys the leaf by it and only names it after the transport
+	(``___self___'' for ``self''), so the Smalltalk spelling found no local
+	(plan P3.5, a generic method inside its scope function)."
 	^ aBuilder
 		send: #cls:obj: to: (aBuilder globalNamed: #Super)
 		with: { classRead.
 			objName isNil
 				ifTrue: [aBuilder selfNode]
-				ifFalse: [aBuilder localVar: objName asSymbol] } env: 1
+				ifFalse: [aBuilder localVar:
+					CallAst functionBeingCompiled ___receiverParamName___ asSymbol] } env: 1
 
 ]
 
@@ -2914,9 +2927,16 @@ CallAst >> ___emitIRSuperZeroOn___: aBuilder [
 				guardName isNil
 					ifTrue: [aBuilder add: (self ___emitIRSuperProxyOn___: aBuilder)]
 					ifFalse: [
+						"The test reads argument 0 by its PYTHON name, as the no-class
+						arm above does: the builder registers the leaf under it and
+						only NAMES the leaf after the transport, so the transport
+						spelling raised ``no local named #___self___'' for a def whose
+						first parameter is ``self'' -- a generic method's def inside
+						its PEP 695 scope function in a class body (plan P3.5)."
 						aBuilder
 							if: (aBuilder
-								send: #== to: (aBuilder localVar: guardName asSymbol)
+								send: #== to: (aBuilder localVar:
+									CallAst functionBeingCompiled ___receiverParamName___ asSymbol)
 								with: { aBuilder nilLit } env: 0)
 							then: [aBuilder add: (aBuilder
 								send: #'___argZeroDeleted___' to: (aBuilder globalNamed: #Super)

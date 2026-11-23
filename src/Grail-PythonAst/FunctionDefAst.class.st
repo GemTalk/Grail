@@ -1088,7 +1088,7 @@ FunctionDefAst >> ___emitIRFreeVariableRead___: aName on: aBuilder [
 
 	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l |
 		"A carried capture of a method-local class helper: through its reader
-		block (ClassBuildIREmitter >> carriedLeaf:cell:)."
+		block (ClassBuildIREmitter >> carriedLeaf:cell:setter:)."
 		aBuilder classBuildEmitter ifNotNil: [:cbe |
 			(cbe readOfCarriedLeaf: l) ifNotNil: [:read | ^ read]].
 		^ aBuilder var: l].
@@ -4070,8 +4070,13 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 
 	| own bodyLocals nestedLocals seed |
 	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
-	(self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
-		ifFalse: [^ #'nestedDef:reclassed'].
+	"A def a method-local class body builds as a VALUE (plan P3.5,
+	ClassBuildIREmitter >> statementNode:) keeps the InstanceFunctionDefAst
+	marker the parser gives every plain def in a class body; the text's
+	closure form emits it as any def, and so does this one."
+	((self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
+		or: [self class == InstanceFunctionDefAst and: [CallAst classBodyValueDefNode == self]])
+			ifFalse: [^ #'nestedDef:reclassed'].
 	"A nested def whose NAME lands at module scope -- ``global f; def f(): ...''
 	-- no longer refuses outright (this cut).  The def STATEMENT stores the
 	closure to the module instance instead of to an enclosing temp, which is
