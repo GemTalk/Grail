@@ -1769,7 +1769,14 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 			guard, because that is what the text's ``[x]'' compiles to."
 			readers := carried collect: [:c |
 				aBuilder inBlockDo: [
-					aBuilder add: (aBuilder var: (aBuilder leafFor: c asSymbol))]].
+					| leaf |
+					leaf := aBuilder leafFor: c asSymbol.
+					"Built inside a method-local class helper -- in a def it
+					builds as a value (plan P3.5) -- a name the helper carries is
+					read through the helper's own reader block, not its copy."
+					aBuilder add: ((aBuilder classBuildEmitter notNil
+							ifTrue: [aBuilder classBuildEmitter readOfCarriedLeaf: leaf])
+						ifNil: [aBuilder var: leaf])]].
 			"``[:v | x := v]'' per carried name, the write half, over the SAME
 			leaf.  One per carried name rather than one per written name: the
 			write set is a side effect OF generating the class emit and so is
@@ -1778,9 +1785,16 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 			unused setter block costs one block object and nothing else."
 			setters := carried collect: [:c |
 				aBuilder blockWithArg: #'___cellSetVal___' do: [:vLeaf |
-					aBuilder add: (aBuilder
-						assign: (aBuilder leafFor: c asSymbol)
-						from: (aBuilder var: vLeaf))]].
+					| leaf outerSetter |
+					leaf := aBuilder leafFor: c asSymbol.
+					aBuilder add: (aBuilder assign: leaf from: (aBuilder var: vLeaf)).
+					"...and a write to a name the enclosing helper carries goes
+					out through that helper's own setter too."
+					outerSetter := aBuilder classBuildEmitter notNil
+						ifTrue: [aBuilder classBuildEmitter setterForCarriedLeaf: leaf].
+					outerSetter ifNotNil: [
+						aBuilder add: (aBuilder send: #'value:' to: (aBuilder var: outerSetter)
+							with: { aBuilder var: vLeaf } env: 0)]]].
 			{ aBuilder arrayOf: readers. aBuilder arrayOf: setters }].
 	preNodes isEmpty ifFalse: [args := args , { aBuilder arrayOf: preValues }].
 	aBuilder at: self beginPosition.
@@ -2126,7 +2140,7 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 	helper's captures unchanged; it is counted on a census row of its own,
 	so the method-local helper count stays what it was."
 
-	| hb e module moduleSrc begin end bindName firstLine restOffset |
+	| hb e module moduleSrc begin end bindName firstLine restOffset savedValueDefNode |
 	hb := PyMethodIRBuilder class: aBuilder targetClass selector: aSelector env: 1.
 	module := self module.
 	moduleSrc := module source.
@@ -2194,18 +2208,28 @@ ClassDefAst >> ___irBuildClassHelper___: aSelector carrying: carriedNames pre: p
 		ident := self ___enclosingScopeIdentifierFor___: c asSymbol.
 		(ident = bindName or: [ident = self ___stVarName___]) ifFalse: [
 			e carriedLeaf: (hb leafFor: ident asSymbol)
-				cell: (hb leafFor: ('___irCell_' , i printString , '___') asSymbol)]].
+				cell: (hb leafFor: ('___irCell_' , i printString , '___') asSymbol)
+				setter: (hb leafFor: ('___irSetter_' , i printString , '___') asSymbol)]].
 	restOffset ifNotNil: [e restAt: restOffset].
 	preNodes doWithIndex: [:n :k |
 		e pre: n at: (hb leafFor: ('___irPre_' , k printString , '___') asSymbol)].
 	importlib ___irCensusOn___ ifTrue: [
 		importlib ___irCensusNote___: (isNested ifTrue: [#'th:irNestedHelper'] ifFalse: [#'th:irHelper'])
 			module: importlib ___irCensusModuleName___ def: name asString count: 1].
-	isNested
+	"A class built inside a def a helper builds as a VALUE (plan P3.5: a class
+	in a generic method's body, ``class Host: def m[T](self): class Nested:
+	...'') is not part of that def's window: its body's reads are its own
+	class-body reads, which ___readsAsClassBodyValue___ stands down for while
+	classBodyValueDefNode is set.  The text reaches them by branches the IR
+	read does not have, so the window is closed for this build."
+	savedValueDefNode := CallAst classBodyValueDefNode.
+	CallAst classBodyValueDefNode: nil.
+	[isNested
 		ifTrue: [self printSmalltalkRuntimeWith: e]
 		ifFalse: [
 			self ___irHelperEmitContext___: carriedNames curPos: false do: [
-				self printSmalltalkRuntimeWith: e]].
+				self printSmalltalkRuntimeWith: e]]]
+		ensure: [CallAst classBodyValueDefNode: savedValueDefNode].
 	e assertDepth: 0.
 	hb add: (hb return: (hb localVar: bindName asSymbol)).
 	^ hb
@@ -2218,7 +2242,8 @@ ClassDefAst >> ___irCaptureBeyondClassNames___: localNames [
 	class's cell rather than read from a temp -- see ___irUncarriedCaptureNames___:."
 
 	^ (self ___irCarriedCaptureNames___: localNames) select: [:c |
-		[self ___enclosingFunctionLocalBeyondClass___: c asSymbol]
+		[(self ___enclosingFunctionLocalBeyondClass___: c asSymbol)
+			and: [(self ___irReachesThroughHelperCopy___: c asSymbol) not]]
 			on: Error do: [:ex | ex return: true]]
 
 ]
@@ -2311,12 +2336,30 @@ ClassDefAst >> ___irClassBodyIfBranchReason___: aStmt bound: boundNames [
 
 	(aStmt isKindOf: PassAst) ifTrue: [^ nil].
 	(aStmt isKindOf: IfAst) ifTrue: [^ self ___irClassBodyIfReason___: aStmt bound: boundNames].
-	"A PEP 695 class or alias in the body, which the parser rewrites into an
-	``if'' around its type-parameter scope (PythonParser >>
-	___rewriteTypeParamStatement___): P3.5's, with the PEP 695 class bodies."
-	((aStmt isKindOf: FunctionDefAst) and: [CallAst ___isTypeParamScope___: aStmt])
-		ifTrue: [^ 'typeParams'].
-	(aStmt isKindOf: FunctionDefAst) ifTrue: [^ 'if:def'].
+	"A def in a branch is built as a VALUE (emitClassBodyIfDef:on:,
+	ClassBuildIREmitter >> statementNode:, plan P3.5): the nested-def IR
+	emitter's closure, stored on the class.  So is the type-parameter scope
+	function the parser wraps in an ``if'' for a PEP 695 method, class or
+	alias in the body (PythonParser >> ___rewriteTypeParamStatement___),
+	whose reads of the class namespace go through the class variable (NameAst
+	>> ___emitIRAnnotationScopeClassRead___:on:).  Refused: a def the parser
+	re-classed (a @staticmethod / @classmethod in a branch), which the
+	nested-def emitter does not build, and one whose decorator reads its own
+	name (the pre-evaluated wrapper)."
+	(aStmt isKindOf: FunctionDefAst) ifTrue: [
+		| row |
+		row := (CallAst ___isTypeParamScope___: aStmt) ifTrue: ['typeParams'] ifFalse: ['if:def'].
+		"A plain def in a class body is an InstanceFunctionDefAst, a marker
+		subclass the closure form emits as any def."
+		(aStmt class == FunctionDefAst or: [aStmt class == AsyncFunctionDefAst
+			or: [aStmt class == InstanceFunctionDefAst]])
+				ifFalse: [^ row , ':reclassed'].
+		aStmt ___needsPreEvaluatedDecorators___ ifTrue: [^ row , ':decoratorReadsName'].
+		(aStmt decorator_list ifNil: [#()]) do: [:deco |
+			((deco isKindOf: Symbol) or: [deco isKindOf: ConstantAst]) ifFalse: [
+				(self ___irClassBodyValueReason___: deco bound: boundNames)
+					ifNotNil: [:r | ^ row , ':decorator:' , r]]].
+		^ nil].
 	(aStmt isKindOf: ClassDefAst) ifTrue: [^ 'if:class'].
 	((aStmt isKindOf: AssignAst)
 		and: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
@@ -2519,7 +2562,8 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 	allowed := { AttributeAst. BinOpAst. BoolOpAst. CallAst. CompareAst. ConstantAst.
 		DictAst. IfExpAst. ListAst. NameAst. NotAst. SetAst. SliceAst. StarredAst.
 		SubscriptAst. TupleAst. UnaryOpAst.
-		LambdaAst. ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst }.
+		LambdaAst. ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst.
+		TypeAliasValueAst }.
 	reason := nil.
 	nodes := OrderedCollection with: anExpr.
 	anExpr ___descendantsDo___: [:n | nodes add: n].
@@ -2647,7 +2691,7 @@ ClassDefAst >> ___irClassCapturedNames___: localNames [
 	the annotation, and the parser's set need not have it.  PEP 649 evaluates
 	it when __annotate__ runs, so it must reach the enclosing binding as it is
 	then -- through the carried reader block, which the IR helper's annotate
-	block reads (ClassBuildIREmitter >> carriedLeaf:cell:, plan P3.5)."
+	block reads (ClassBuildIREmitter >> carriedLeaf:cell:setter:, plan P3.5)."
 	(self ___irClassAnnotationLocalReads___: localNames) do: [:n |
 		n asString = recv ifFalse: [free add: n asString]].
 	^ free
@@ -2838,7 +2882,16 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 	cell instead, ___emitNonlocalClassCellWrite___:on:).  A name the helper
 	cannot reach refuses the whole def (classDef:outerBinding)."
 	((aStmt isKindOf: GlobalAst) or: [aStmt isKindOf: NonlocalAst]) ifTrue: [^ nil].
-	(aStmt isKindOf: TypeAliasAst) ifTrue: [^ #'irHelper:typeAlias'].
+	"A ``type X = V'' alias (plan P3.5): the walk builds it as the assignment
+	the parser gave it, under the class-body runtime class, so X is stored on
+	the class; V is a lazy thunk whose names read the class namespace through
+	the annotation-scope read (NameAst >> ___emitIRAnnotationScopeClassRead___:
+	on:)."
+	(aStmt isKindOf: TypeAliasAst) ifTrue: [
+		reason := self ___irClassBodyValueReason___:
+				(aStmt assign isNil ifTrue: [aStmt value] ifFalse: [aStmt assign value])
+			bound: boundNames.
+		^ reason isNil ifTrue: [#runtime] ifFalse: [('irHelper:typeAlias:' , reason) asSymbol]].
 	(aStmt isKindOf: MatchAst) ifTrue: [^ #'irHelper:match'].
 	((aStmt isKindOf: ImportAst) or: [aStmt isKindOf: ImportFromAst])
 		ifTrue: [^ #'irHelper:import'].
@@ -2924,13 +2977,20 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	And a NESTED CLASS, built by a helper of its own
 	(___irNestedClassReason___:bound:, ___emitIRNestedClassWith___:).
 
-	Still text: a ``global'' or ``nonlocal'' declaration, ``type'' aliases
-	and type parameters (P3.5); a def or class inside control flow, built as
-	a value in a block; an import or ``match''; an attribute store the walk
-	drops on every path; a ``__renamed__'' or ``__transient__'' value
-	(Grail's persistence declarations, left to P3.5) -- and any value or
-	annotation under a locals()/vars() probe (classBodyDynamicLocals), which
-	the shared class-body read does not describe.
+	P3.5 admits the ``global'' and ``nonlocal'' declarations, ``__class__''
+	and ``__classdict__'' read from a lambda in a value, a call of a sibling
+	def, a def in a class-body ``if'' (built as a value by the nested-def
+	emitter, ClassBuildIREmitter >> statementNode:) and so PEP 695 generic
+	methods, classes and aliases in the body (their type-parameter scope is
+	such a def), and ``type'' aliases.
+
+	Still text: a re-classed def (@staticmethod / @classmethod) or a class in a
+	class-body ``if'', a def in a loop, ``try'' or ``with''; an import or
+	``match''; an attribute store the walk drops on every path; a
+	``__renamed__'' or ``__transient__'' value (Grail's persistence
+	declarations) -- and any value or annotation under a locals()/vars() probe
+	(classBodyDynamicLocals), which the shared class-body read does not
+	describe (P3.6).
 
 	The class's decorators, bases and keywords are not class-body expressions:
 	the caller evaluates them in the enclosing frame (___irHeaderNodes___), so
@@ -3598,7 +3658,7 @@ ClassDefAst >> ___irMethodLocalClassReason___: localNames [
 	those through the block as well."
 	"...and a TEXT helper only (plan P3.5): the IR helper reads every carried
 	name through its reader block, from a lambda as from the class body
-	(ClassBuildIREmitter >> carriedLeaf:cell:), so it sees the enclosing
+	(ClassBuildIREmitter >> carriedLeaf:cell:setter:), so it sees the enclosing
 	binding at read time.  The text helper still reads the seeded temp."
 	((self ___irDeferredReadsOfNonlocalBelow___ isEmpty)
 		or: [(self ___irClassHelperTextReason___: localNames) isNil])
@@ -3696,6 +3756,41 @@ ClassDefAst >> ___irNonlocalNamesBelow___: aNode [
 	found := Set new.
 	self ___irCollectNonlocalNames___: aNode into: found.
 	^ found
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irReachesThroughHelperCopy___: aSymbol [
+	"Is aSymbol, a local of a function beyond an intervening class, one this
+	class statement reaches as a variable of the method-local class helper it
+	is built in (plan P3.5)?  That is the case for a class inside a def the
+	helper builds as a VALUE -- a PEP 695 generic class's scope function in a
+	class body (``class Outer: class Inner[C]: ...'') -- when the one class
+	crossed is the class that helper builds and the function beyond it binds
+	the name: the helper carries it, the value def's closure sees the
+	helper's variable, and the reader block this class is handed reads it
+	through the helper's own reader (ClassDefAst >> ___emitIRStatementOn___:,
+	ClassBuildIREmitter >> readOfCarriedLeaf:).  Answered only inside that
+	value def's build, so the text path's question is unchanged."
+
+	| valueDef node crossed insideValueDef |
+	valueDef := CallAst classBodyValueDefNode.
+	(valueDef isNil or: [CallAst inClassBodyValueEmit ~~ true]) ifTrue: [^ false].
+	crossed := nil.
+	insideValueDef := false.
+	node := parent.
+	[node notNil] whileTrue: [
+		node == valueDef ifTrue: [insideValueDef := true].
+		(node isKindOf: ClassDefAst) ifTrue: [
+			crossed notNil ifTrue: [^ false].
+			crossed := node].
+		(((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
+			and: [self ___functionBindsPythonLocal___: node named: aSymbol]) ifTrue: [
+				^ insideValueDef
+					and: [crossed notNil
+					and: [crossed name asSymbol == CallAst classBeingCompiled asSymbol]]].
+		node := node parent].
+	^ false
 
 ]
 
