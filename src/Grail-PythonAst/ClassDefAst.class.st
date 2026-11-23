@@ -1862,6 +1862,52 @@ ClassDefAst >> ___emitNonlocalClassCellWrite___: stmt on: e [
 
 ]
 
+{ #category : 'Grail-code generation' }
+ClassDefAst >> ___emitQualnameStoreOn___: e [
+	"``__qualname__'' when this class is nested: the dotted path CPython gives
+	it, read off the lexical scope stack -- ``Outer.Inner'', ``fn.<locals>.C'',
+	``Outer.meth.<locals>.C''.  object class >> __qualname__ looks for exactly
+	this holder entry and falls back to the bare name, so a top-level class needs
+	no store and gets none (the prefix is nil).
+
+	Stamped BEFORE THE BODY RUNS, where CPython's compiler puts its
+	``__qualname__ = ...'' store: at the top of the class body.  It used to go
+	out after the body, just ahead of the class decorators, and that was too
+	late for everything the body runs -- a METHOD decorator is applied at its
+	def, and the function it is handed (UnboundMethod >> __qualname__) builds
+	its name from this class's qualname.  Read before the stamp, that was the
+	bare ``C'', so ``def f(): class C: @d def m'' handed d a function named
+	``C.m'' where CPython's is ``f.<locals>.C.m'' (#2291) -- and the answer is
+	memoized per (class, selector), so ``C.m.__qualname__'' read afterwards
+	kept the short name too (``Inner.im'' for ``f.<locals>.C.Inner.im'', in
+	a class nested in that one).
+
+	This replaced a store the PARENT emitted after each nested class's emit,
+	built from the parent's own runtime ``__qualname__''.  Three things were
+	wrong with that and are right here: it ran BEFORE the parent's own qualname
+	was stamped, so a doubly-nested class read the short answer; it selected
+	direct ClassDefAst children only, so a class under a class-body ``if'' got
+	nothing; and it had to guard on the target still being a class, because it
+	ran after the nested DECORATORS and ``@member'' on a nested enum class
+	returns a marker with no holder.  Stamped here it precedes the class
+	decorators too, which is also where CPython stamps it -- a decorator that
+	returns something else never receives the qualname in CPython either.  A
+	``__qualname__ = ...'' in the body runs later and so still overrides it."
+	"A class whose name the enclosing function declares ``global'' binds at
+	module level and so has the BARE qualname -- CallAst ___qualnameFor___:name:
+	applies that rule for a def, and the prefix walk alone does not.
+	``def f(): global Bad; class Bad: ...'' reported ``f.<locals>.Bad'', so
+	pickle refused it as a local object (test_pickle's test_evil_* tests)."
+
+	((CallAst ___isGlobalDeclaredScope___: self)
+		ifTrue: [nil]
+		ifFalse: [CallAst ___qualnamePrefixBefore___: self]) ifNotNil: [:prefix |
+		e statement: [
+			e send: #'___classHolderAttrStore___:put:' env: 1 to: [e var: self ___stVarName___]
+				with: {[e symbol: '___qualname___']. [e string: prefix , '.' , name asString]}]]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___emitTable___: aSelector entries: entries category: aCategory emitter: e [
 	"Compile the class-side accessor aSelector answering a KeyValueDictionary
@@ -8086,6 +8132,7 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 							with: {[e plainSymbol: 'withAll:']. [e integer: 0]. [
 								e compactBraceArray: {[
 									e compactBraceArray: (attrs collect: [:nm | [e string: nm]])]}]}]]]}]] value.
+	self ___emitQualnameStoreOn___: e.
 	"__prepare__(name, bases, **kwds) is handed the header: the RESOLVED bases
 	when there are several (the list the storage-base choice saw), the sole base
 	as written (its substitution happens in ___subclass___, and the runtime
@@ -8644,33 +8691,8 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 	-- an unconditional overwrite here wiped it (Outer.A vanished)."
 	self ___emitHolderInitOn___: e.
 
-	"``__qualname__'' when this class is nested: the dotted path CPython gives
-	it, read off the lexical scope stack -- ``Outer.Inner'', ``fn.<locals>.C'',
-	``Outer.meth.<locals>.C''.  object class >> __qualname__ looks for exactly
-	this holder entry and falls back to the bare name, so a top-level class needs
-	no store and gets none (the prefix is nil).
-
-	This replaced a store the PARENT emitted after each nested class's emit,
-	built from the parent's own runtime ``__qualname__''.  Three things were
-	wrong with that and are right here: it ran BEFORE the parent's own qualname
-	was stamped, so a doubly-nested class read the short answer; it selected
-	direct ClassDefAst children only, so a class under a class-body ``if'' got
-	nothing; and it had to guard on the target still being a class, because it
-	ran after the nested DECORATORS and ``@member'' on a nested enum class
-	returns a marker with no holder.  Emitted here it precedes the decorator
-	loop, which is also where CPython stamps it -- a decorator that returns
-	something else never receives the qualname in CPython either."
-	"A class whose name the enclosing function declares ``global'' binds at
-	module level and so has the BARE qualname -- CallAst ___qualnameFor___:name:
-	applies that rule for a def, and the prefix walk alone does not.
-	``def f(): global Bad; class Bad: ...'' reported ``f.<locals>.Bad'', so
-	pickle refused it as a local object (test_pickle's test_evil_* tests)."
-	((CallAst ___isGlobalDeclaredScope___: self)
-		ifTrue: [nil]
-		ifFalse: [CallAst ___qualnamePrefixBefore___: self]) ifNotNil: [:prefix |
-		e statement: [
-			e send: #'___classHolderAttrStore___:put:' env: 1 to: clsVar
-				with: {[e symbol: '___qualname___']. [e string: prefix , '.' , name asString]}]].
+	"``__qualname__'' is stamped BEFORE THE BODY RUNS, beside __firstlineno__
+	-- see ___emitQualnameStoreOn___."
 	"A class made by exec() records the namespace it was made in: its methods'
 	__globals__ is that dict in CPython, and get_type_hints resolves a string
 	annotation there (test_typing test_default_globals).  Module-built classes
