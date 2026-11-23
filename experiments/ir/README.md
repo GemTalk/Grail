@@ -161,7 +161,7 @@ table is derived from it.
 Re-run it after each batch, from the project root, into a scratch directory:
 
 ```bash
-./install.sh                      # FIRST -- see the warning below
+./install.sh                      # after any Smalltalk change
 D=/tmp/census; mkdir -p $D
 source .setenv
 topaz -lq -C "$CFG" -S experiments/ir/census_stdlib.tpz   > $D/census_stdlib.out
@@ -178,12 +178,22 @@ still Smalltalk text -- module and class-body statements, text-helper class
 builds, install literals, and the bytes of generated Smalltalk compiled per
 kind -- under "What is still text".
 
-Three things about it are easy to get wrong, and each produces a plausible wrong
+**The census is cold, whatever the census user has deployed.** A module
+committed for that user (by `run_tests.sh`'s framework deploy,
+`run_cpython_suite.sh`, or the install's redeploy) is a cache hit that an import
+warm-binds rather than compiles, so a census that let it would count whatever
+that user happened to have deployed: on one commit, 2,350 stdlib compiles right
+after an install and 5,413 after `run_tests.sh`'s framework deploy, where a cold
+session makes 8,671 in both (#2312). So each script forgets the canonical registries in its own
+transaction before importing anything, exactly as the trace-diff driver does, and
+aborts at the end; nothing it does is committed. It prints `MODE|cold`, and
+`census_report.py` refuses an `.out` that does not say so. To see what a warm
+session compiles instead, run a script with `GRAIL_CENSUS_WARM=1` (it prints
+`MODE|warm`, and the report will not take it).
+
+Two things about it are easy to get wrong, and each produces a plausible wrong
 board rather than an error:
 
-* **`./install.sh` FIRST.** A `run_tests.sh` framework deploy commits the heavy
-  modules, and a committed module is a cache hit that the census never sees
-  compile — measured once as 603 stdlib defs where the true figure is over 1500.
 * **`census_report.py` WRITES `CENSUS.md`.** It takes the scratch directory as
   its argument and prints a summary to stdout; never redirect that stdout onto
   the board.

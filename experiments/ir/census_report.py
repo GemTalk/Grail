@@ -239,6 +239,21 @@ def biggest_bodies(bym,n=10):
     for b,cb,m in rows: out.append(f'| {m} | {mb(b)} | {mb(cb)} |')
     return '\n'.join(out)
 
+def assert_cold(files):
+    """Every input must say it was measured COLD (#2312).
+
+    A module the census user has deployed warm-binds and is never compiled, so
+    a warm session counts whatever that user happened to deploy: 2,350 or
+    5,413 stdlib compiles where cold gives 8,671.  The scripts forget the registries
+    in-session and print MODE|cold; an older .out has no MODE line at all, and
+    GRAIL_CENSUS_WARM=1 prints MODE|warm.  Neither may become the board."""
+    for f in files:
+        modes=[l.split('|')[1] for l in open(f) if l.startswith('MODE|')]
+        if modes!=['cold']:
+            raise SystemExit('%s was not measured cold (MODE %s) -- re-run it with '
+                             'the current experiments/ir/census_*.tpz and without '
+                             'GRAIL_CENSUS_WARM' % (f, modes[0] if modes else 'missing'))
+assert_cold([S+'/census_stdlib.out']+sorted(glob.glob(S+'/census_tests_0*.out')))
 std=load([S+'/census_stdlib.out'])
 tst=load(sorted(glob.glob(S+'/census_tests_0*.out')))
 assert_totals_match('stdlib corpus',std[0],std[4])
@@ -257,7 +272,7 @@ lines.append('# IR eligibility census\n')
 lines.append('How much real code the direct-to-IR path (`GRAIL_IR_CODEGEN`) actually compiles, and what blocks the rest, ranked by the number of defs each missing shape blocks. This is the progress metric for the migration and the source of the roadmap table in MIGRATION.md.\n')
 lines.append('## Method\n')
 lines.append('`FunctionDefAst>>___irIneligibilityReason___` answers the first refusing test of the eligibility predicate as a Symbol (`___irEligible___` is its `isNil`). With `importlib ___irCensusOn: true` the seam in `___buildModuleClassBody:name:` tallies one row per top-level def -- `compiled`, `fallback` (eligible but the IR build raised), or the reason -- plus every class-body method (`classMethod`, never routed through the seam) and every def or lambda nested in a top-level def (`nestedDef`). A body refusal names the first refusing node: `stmt:X` / `value:X` for a node class with no IR predicate at all, `X:detail` for a handled class refusing one particular form. `importlib ___irCensus___` holds `#counts`, `#examples` (five `module.def` names per reason) and `#byModule`.\n')
-lines.append('Run with the flag forced (`importlib ___irCodegenForce___: true`) in a fresh session so `compiled` means what it says; only modules actually compiled in that session are counted (bootstrap modules loaded at login are not). Scripts: `census_stdlib.tpz` imports every top-level module under `src/python/stdlib` (125, a few interactive ones skipped), and `census_tests_00..02.tpz` import every module of `scripts/cpython_suite_manifest.txt`, round-robin across three sessions because one session cannot hold the whole manifest. Each script reads its module list at run time, so adding a module to the manifest needs no edit here. The stdlib corpus takes about two minutes, each test shard several.\n')
+lines.append('Run with the flag forced (`importlib ___irCodegenForce___: true`) in a fresh session so `compiled` means what it says; only modules actually compiled in that session are counted (bootstrap modules loaded at login are not). **Every census is COLD, whatever the census user has deployed.** Each script first forgets the canonical registries in its own transaction (`importlib ___canonicalRegistryRestore___:` with a snapshot that keeps only `PythonModules`, as the trace-diff driver does) and aborts at the end, so nothing it does is committed and every module is compiled and counted. Without it a module already deployed for that user -- by `run_tests.sh`, `run_cpython_suite.sh` or the install\'s redeploy -- warm-binds and is never seen, and the stdlib census of one main commit counted 2,350 compiles right after an install and 5,413 after the framework deploy of `run_tests.sh`, where a cold session makes 8,671 in both (#2312). Each `.out` says `MODE|cold`, and this report refuses an input that does not; `GRAIL_CENSUS_WARM=1` skips the forget, for an ad-hoc look at what a warm session compiles. Scripts: `census_stdlib.tpz` imports every top-level module under `src/python/stdlib` (125, a few interactive ones skipped), and `census_tests_00..02.tpz` import every module of `scripts/cpython_suite_manifest.txt`, round-robin across three sessions because one session cannot hold the whole manifest. Each script reads its module list at run time, so adding a module to the manifest needs no edit here. The stdlib corpus takes about two minutes, each test shard several.\n')
 lines.append("""**They need the suite's gem configuration, not topaz's defaults.** Under a bare
 `topaz -l` the manifest shards die partway with `OutOfMemory old space overflow`
 / `VM temporary object memory is full` (error 4067) -- which looks like a census
