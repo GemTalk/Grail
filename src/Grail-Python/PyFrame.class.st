@@ -108,6 +108,59 @@ PyFrame class >> ___frameTempsWithoutTransports___: aFrameContents [
 ]
 
 { #category : 'Grail-Tracebacks' }
+PyFrame class >> ___homeTransportNamesIn___: aFrameContents [
+	"The names of the HOME method's transport arguments, as a Set, when this
+	frame is a function body's block; an empty Set for every other frame.
+
+	The text path compiles a def with defaults or ``*args'' to
+
+	    _f: positional kw: kwargs
+	        ^ [| ___curPos___ a b | ... ] @env0:value
+
+	and the body block reads ``positional'' and ``kwargs'' to unpack the call, so
+	the BLOCK's frame lists them too.  ___transportArgCountIn___ drops them from
+	the method's frame by position, but the block has no selector, so they came
+	through: ``sys._getframe().f_locals'' and ``locals()'' reported a
+	``positional'' the program never wrote, beside the parameters it unpacked
+	into (#2298, seen as builtins.locals() on the merge queue's text arm).  The IR
+	path spells the pair differently and never showed it.
+
+	BY NAME, BUT THE HOME'S OWN NAMES.  Taking them from the home method rather
+	than matching the literal ``positional'' is what keeps a program variable of
+	that name: codegen renames its pair to ``___pos___''/``___kw___'' whenever
+	the def uses either name (FunctionDefAst>>posMethodParam), and then this
+	drops only names the ___name___ rule already drops.
+
+	ONLY A ZERO-ARGUMENT BLOCK.  A nested def compiles to a two-argument block
+	(:___positional___ :___kwargs___) in the same home method, and its own
+	locals are temps of that block, so they are left alone.  Residual, accepted:
+	a nested def whose own local is spelled like the enclosing method's pair,
+	read inside a zero-argument block of the nested def, is not reported -- the
+	same trade ___transportNamesIn___ makes, a real variable unreported rather
+	than an invented one shown."
+
+	| meth home names out |
+	out := Set new.
+	aFrameContents isNil ifTrue: [^ out].
+	meth := aFrameContents atOrNil: 1.
+	meth isNil ifTrue: [^ out].
+	([meth selector] on: Error do: [:e |
+		(e isKindOf: AlmostOutOfStackError)
+			ifTrue: [e pass] ifFalse: [e return: #'']]) isNil
+		ifFalse: [^ out].
+	([meth numArgs] on: Error do: [:e | e return: -1]) = 0
+		ifFalse: [^ out].
+	home := [meth homeMethod] on: Error do: [:e | e return: nil].
+	(home isNil or: [home == meth]) ifTrue: [^ out].
+	(self ___transportArgCountOfMethod___: home) = 2 ifFalse: [^ out].
+	names := [home argsAndTemps] on: Error do: [:e | e return: nil].
+	(names isNil or: [names size < 2]) ifTrue: [^ out].
+	1 to: 2 do: [:i | out add: (names at: i) asString].
+	^ out
+
+]
+
+{ #category : 'Grail-Tracebacks' }
 PyFrame class >> ___innermostPythonFrameLocals___ [
 	"Name -> value for the locals of the innermost GRAIL-GENERATED frame on the
 	live stack, or nil if there is none.  Answers a Smalltalk Dictionary.
@@ -856,21 +909,28 @@ PyFrame class >> ___tempsFromFrameContents___: aFrameContents [
 	``___pos___''/``___kw___'' and the ___name___ rule already dropped it, which
 	is why this only ever surfaced on methods.  ___transportArgCountIn___ decides
 	how many leading names are that pair; see it for why position is exact where
-	the two spellings are not."
+	the two spellings are not.
 
-	| names dict nArgs |
+	That spelling holds for a module-level def's FAST-PATH method only.  On the
+	text path a def with defaults or ``*args'' takes ``_f: positional kw:
+	kwargs'' and runs its body in a block that reads the pair, so the block's
+	frame lists them as well; ___homeTransportNamesIn___ drops those."
+
+	| names dict nArgs homeDrop |
 	aFrameContents isNil ifTrue: [^ nil].
 	aFrameContents size < 10 ifTrue: [^ nil].
 	names := aFrameContents at: 9.
 	names isNil ifTrue: [^ nil].
 	dict := Dictionary new.
 	nArgs := self ___transportArgCountIn___: aFrameContents.
+	homeDrop := self ___homeTransportNamesIn___: aFrameContents.
 	1 to: names size do: [:i | | nm val |
 		nm := self ___pythonNameForTemp___: (names at: i).
 		val := aFrameContents atOrNil: 10 + i.
 		(nm isNil
 			or: [val isNil
-				or: [i <= nArgs]])
+				or: [i <= nArgs
+					or: [homeDrop includes: (names at: i) asString]]])
 			ifFalse: [dict at: nm put: val]].
 	^ dict
 
@@ -901,9 +961,19 @@ PyFrame class >> ___transportArgCountIn___: aFrameContents [
 	method that refuses to answer its selector must cost the frame a little
 	noise, not the whole f_locals."
 
-	| meth sel |
 	aFrameContents isNil ifTrue: [^ 0].
-	meth := aFrameContents atOrNil: 1.
+	^ self ___transportArgCountOfMethod___: (aFrameContents atOrNil: 1)
+
+]
+
+{ #category : 'Grail-Tracebacks' }
+PyFrame class >> ___transportArgCountOfMethod___: meth [
+	"___transportArgCountIn___ for the method itself rather than for a frame
+	running it: 2 when ``meth'' has the generated ``_<something>:kw:'' shape,
+	else 0.  Shared with ___homeTransportNamesIn___, which asks it of a block
+	frame's HOME method."
+
+	| sel |
 	meth isNil ifTrue: [^ 0].
 	sel := [meth selector] on: Error do: [:e |
 		(e isKindOf: AlmostOutOfStackError)

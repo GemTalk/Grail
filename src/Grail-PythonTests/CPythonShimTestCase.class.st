@@ -4447,6 +4447,63 @@ CPythonShimTestCase >> testReprString [
 
 ]
 
+{ #category : 'Grail-Tests - Object Protocol' }
+CPythonShimTestCase >> testReversedCallsAWheelClasssReversed [
+	"reversed(x) answers what x's C type's __reversed__ answers, as CPython's
+	does, when that __reversed__ is an ordinary method-table entry -- a PyO3
+	#[pymethods] one, as rpds-py's List has (#2300).  Grail built a generic
+	reversed object instead, whose iteration failed for want of a
+	__getitem__.  _shimtest's Counter answers a list from it, so the result
+	shows which happened.  The TYPE is not reversed through its instances'
+	method: reversed(Counter) does not answer such a list."
+
+	| shim obj typ fn |
+	shim := CPythonShim current.
+	shim loadModule: '_shimtest'.
+	obj := shim callModule: '_shimtest' method: 'test_make_counter'.
+	typ := shim callModule: '_shimtest' method: 'test_counter_type'.
+	fn := self eval: 'def f(c, T):
+    r = reversed(c)
+    try:
+        t = type(reversed(T)) is list
+    except TypeError:
+        t = False
+    return repr((r, type(r) is list, c.__reversed__(), t))
+f'.
+	self
+		assert: (fn @env1:___pyCallValue___: { obj . typ } kw: nil)
+		equals: '([2, 1, 0], True, [2, 1, 0], False)'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testReversedCallsTheReversedASubclassInheritsFromAWheelClass [
+	"An instance of a Python subclass of a wheel's type is reversed by the
+	__reversed__ it inherits from the C base (#2300), unless the subclass
+	defines its own or blocks it with None, as in CPython.  _grail_demo's
+	Cell answers ('reversed', value) from its method-table __reversed__."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+class Sub(d.Cell):
+    pass
+class Own(d.Cell):
+    def __reversed__(self):
+        return ''own''
+class Blocked(d.Cell):
+    __reversed__ = None
+def blocked():
+    try:
+        reversed(Blocked(1))
+    except TypeError as e:
+        return str(e)
+repr((reversed(d.Cell(5)), reversed(Sub(7)), reversed(Own(1)), blocked()))')
+		equals: '((''reversed'', 5), (''reversed'', 7), ''own'', "''Blocked'' object is not reversible")'
+
+]
+
 { #category : 'Grail-Tests - Rich Comparison' }
 CPythonShimTestCase >> testRichCompareFloatLt [
 	"1.5 < 2.5 is true."

@@ -1354,8 +1354,20 @@ test_iterate_counter(PyObject *module, PyObject *const *args, Py_ssize_t nargs) 
     return out;
 }
 
+/* Counter.__reversed__() -> [value + 2, value + 1, value], a list, so a test
+   can tell reversed(c) called it (CPython answers what __reversed__ answers)
+   from the generic reversed object.  An ordinary method-table entry, as a
+   PyO3 #[pymethods] __reversed__ is: rpds-py's List has one (#2300). */
+static PyObject *
+Counter_reversed(PyObject *self, PyObject *ignored) {
+    (void)ignored;
+    Py_ssize_t v = ((CounterObject *)self)->value;
+    return Py_BuildValue("[nnn]", v + 2, v + 1, v);
+}
+
 static PyMethodDef Counter_methods[] = {
     {"incr", (PyCFunction)Counter_incr, METH_NOARGS, "increment, return value"},
+    {"__reversed__", (PyCFunction)Counter_reversed, METH_NOARGS, "Return a reverse iterator."},
     {NULL, NULL, 0, NULL}
 };
 

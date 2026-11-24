@@ -415,8 +415,14 @@ AugAssignAst >> ___irLocalNameTarget___: localSet [
 	through the closure cells.  Refuse that; every other method-mode local is
 	the same simple-local send (cut 53 found Walker.pairs / Walker.take on
 	text for ``i += 1'' under a blanket method-mode refusal)."
+	"Not in a CLASS BODY's own statements (plan P3.5), where the text's guard
+	stands the cell branch down too (___irClassCellTargetName___): there a
+	``nonlocal x'' names the method-local class helper's copy of the carried
+	capture, a temp of the helper, which the simple-local send writes."
 	(CallAst classBeingCompiled notNil
-		and: [target ___enclosingFunctionLocalBeyondClass___: target id]) ifTrue: [^ nil].
+		and: [CallAst inClassBodyValueEmit ~~ true
+		and: [CallAst inBasesEmit ~~ true
+		and: [target ___enclosingFunctionLocalBeyondClass___: target id]]]) ifTrue: [^ nil].
 	^ target
 
 ]

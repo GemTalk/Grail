@@ -6,6 +6,15 @@ out := GsFile stdout.
 importlib ___irCodegenForce___: true.
 importlib ___irCensusReset___.
 importlib ___irCensusOn: true.
+"COLD, whatever this user has deployed (#2312): forget, in this session only,
+every module a committed deployment would let an import warm-bind, so each
+module is compiled and counted.  Never committed -- the session aborts at the
+end.  GRAIL_CENSUS_WARM=1 skips the forget and counts only what compiles."
+(System gemEnvironmentVariable: 'GRAIL_CENSUS_WARM') = '1' ifFalse: [
+  importlib ___canonicalRegistryRestore___: ((Array new: 8 withAll: IdentitySet new)
+    at: 5 put: PythonModules keys asIdentitySet; yourself)].
+out nextPutAll: 'MODE|' , (importlib ___canonicalModules___ isEmpty ifTrue: ['cold'] ifFalse: ['warm'])
+  , '|CANONICAL|' , importlib ___canonicalModules___ size printString; cr.
 ok := 0. fail := 0.
 names := #(
   '__future__'
@@ -150,6 +159,7 @@ counts keysAndValuesDo: [:k :v |
 (census at: #byModule) keysAndValuesDo: [:m :d |
   d keysAndValuesDo: [:k :v | out nextPutAll: 'MODULE|' , m , '|' , k asString , '|' , v printString; cr]].
 out nextPutAll: 'STATS|' , importlib ___irStats___ printString; cr.
+System abortTransaction.
 ^ 'done'
 %
 logout

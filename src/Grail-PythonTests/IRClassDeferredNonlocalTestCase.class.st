@@ -79,18 +79,18 @@ IRClassDeferredNonlocalTestCase >> testEveryCheckAgreesWithCPythonUnderIR [
 ]
 
 { #category : 'Grail-Tests - deferred reads of a class body nonlocal' }
-IRClassDeferredNonlocalTestCase >> testTheRefusalIsNarrow [
-	"The positive control.  A class that declares ``nonlocal'' and reads it only
-	eagerly has nothing to fear from the copy, and must stay on the IR path;
-	each shape that reads it late must not be on it."
+IRClassDeferredNonlocalTestCase >> testTheRefusalIsGoneForAnIRHelper [
+	"These shapes were refused (classDef:deferredReadOfNonlocal) while the
+	helper read a carried name from its copy.  An IR-built helper reads every
+	carried name through its reader block (plan P3.5), so each def is built
+	through IR and still gives CPython's answer; only a TEXT helper keeps the
+	refusal."
 
-	self assert: (self ___isIRBuilt___: #write_then_read)
-		description: 'write_then_read fell back to text: the refusal is too broad'.
-	self assert: (self ___got___: 'write_then_read') = (self ___want___: 'write_then_read')
-		description: 'write_then_read answered ' , (self ___got___: 'write_then_read').
-	#(#lambda_after_enclosing_changes #lambda_bound_only_after
+	#(#write_then_read #lambda_after_enclosing_changes #lambda_bound_only_after
 	  #genexp_after_enclosing_changes #annotation_forward_ref) do: [:sel |
-		self deny: (self ___isIRBuilt___: sel)
-			description: sel , ' was IR-built despite a late read of its nonlocal']
+		self assert: (self ___isIRBuilt___: sel)
+			description: sel , ' fell back to text'.
+		self assert: (self ___got___: sel asString) = (self ___want___: sel asString)
+			description: sel , ' answered ' , (self ___got___: sel asString)]
 
 ]

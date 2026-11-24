@@ -243,18 +243,18 @@ def f(p):
 	expect := {
 		'Runtime' -> nil.
 		'Branch' -> nil.
-		'CondDef' -> #'irHelper:if:def'.
+		'CondDef' -> nil.
 		'LoopDef' -> #'irHelper:controlFlow:runtime:def'.
 		'Chain' -> #'irHelper:controlFlow:runtime:chain'.
-		'Glob' -> #'irHelper:global'.
-		'NonLoc' -> #'irHelper:nonlocal'.
-		'Alias' -> #'irHelper:typeAlias'.
+		'Glob' -> nil.
+		'NonLoc' -> nil.
+		'Alias' -> nil.
 		'Imp' -> #'irHelper:import'.
 		'Locs' -> #'irHelper:assignTarget:runtime:frameCall'.
 		'Target' -> #'irHelper:assignTarget'.
 		'Outer' -> nil.
-		'OuterTp' -> #'irHelper:typeParams'.
-		'OuterBad' -> #'irHelper:nestedClass:nonlocal' }.
+		'OuterTp' -> nil.
+		'OuterBad' -> nil }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |
 		| got |

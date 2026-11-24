@@ -459,6 +459,19 @@ ClassBuildEmitter >> symbolPairArray: pairs [
 ]
 
 { #category : 'Grail-expressions' }
+ClassBuildEmitter >> tempVar: aName [
+	"A read of the helper temp spelled aName AS A TEMP, never redirected: what
+	a carried ``nonlocal'' write-back pushes out is the value the class body
+	just stored in its copy (ClassDefAst >> ___emitCarriedNonlocalWriteBack___:
+	on:).  The text has only the one spelling; the IR backend reads every
+	other mention of a carried capture through its cell (ClassBuildIREmitter
+	>> var:)."
+
+	^ self var: aName
+
+]
+
+{ #category : 'Grail-expressions' }
 ClassBuildEmitter >> terminatedBraceArray: elementBlocks [
 	"braceArray: in the spelling with every element terminated, ``{ a. b. }''."
 

@@ -1086,7 +1086,12 @@ FunctionDefAst >> ___emitIRFreeVariableRead___: aName on: aBuilder [
 	the raise was a quiet text fallback; without that seam it failed the
 	module load."
 
-	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l | ^ aBuilder var: l].
+	(aBuilder leafFor: aName asSymbol) ifNotNil: [:l |
+		"A carried capture of a method-local class helper: through its reader
+		block (ClassBuildIREmitter >> carriedLeaf:cell:setter:)."
+		aBuilder classBuildEmitter ifNotNil: [:cbe |
+			(cbe readOfCarriedLeaf: l) ifNotNil: [:read | ^ read]].
+		^ aBuilder var: l].
 	(self ___irMethodMode___ and: [CallAst isSelfReference: aName asSymbol])
 		ifTrue: [^ aBuilder selfNode].
 	^ self ___emitIRFreeVariableRead___: aName asSymbol
@@ -2926,6 +2931,14 @@ FunctionDefAst >> ___irCollectNonlocalsIn___: node into: aSet [
 	((node isKindOf: FunctionDefAst) and: [node ~~ self]) ifTrue: [
 		(node body notNil and: [node body nonlocalNames notNil])
 			ifTrue: [node body nonlocalNames do: [:n | aSet add: n asString]]].
+	"A CLASS BODY's ``nonlocal'' writes the enclosing binding too, through the
+	setter block a method-local class helper is handed (ClassDefAst >>
+	___emitCarriedNonlocalWriteBack___:on:), so a parameter it names needs a
+	writable temp as much as a nested def's does.  As a bare argument the
+	setter's store did not reach the method's reads: ``def f(x): class c:
+	nonlocal x; x += 1'' left f's x at its old value (plan P3.5)."
+	(node isKindOf: ClassDefAst) ifTrue: [
+		(node ___irNonlocalNamesBelow___: node body) do: [:n | aSet add: n asString]].
 	node class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			self ___irCollectNonlocalsIn___: (node instVarAt: i) into: aSet]].
@@ -4057,8 +4070,13 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 
 	| own bodyLocals nestedLocals seed |
 	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
-	(self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
-		ifFalse: [^ #'nestedDef:reclassed'].
+	"A def a method-local class body builds as a VALUE (plan P3.5,
+	ClassBuildIREmitter >> statementNode:) keeps the InstanceFunctionDefAst
+	marker the parser gives every plain def in a class body; the text's
+	closure form emits it as any def, and so does this one."
+	((self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
+		or: [self class == InstanceFunctionDefAst and: [CallAst classBodyValueDefNode == self]])
+			ifFalse: [^ #'nestedDef:reclassed'].
 	"A nested def whose NAME lands at module scope -- ``global f; def f(): ...''
 	-- no longer refuses outright (this cut).  The def STATEMENT stores the
 	closure to the module instance instead of to an enclosing temp, which is
