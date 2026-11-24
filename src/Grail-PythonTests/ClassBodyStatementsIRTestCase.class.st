@@ -250,7 +250,7 @@ def f(p):
 		'NonLoc' -> nil.
 		'Alias' -> nil.
 		'Imp' -> #'irHelper:import'.
-		'Locs' -> #'irHelper:assignTarget:runtime:frameCall'.
+		'Locs' -> nil.
 		'Target' -> #'irHelper:assignTarget'.
 		'Outer' -> nil.
 		'OuterTp' -> nil.

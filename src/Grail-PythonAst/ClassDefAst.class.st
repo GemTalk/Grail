@@ -2550,9 +2550,15 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 	    ___emitClassBodyClassCellWith___: (P3.3c), and a read of ``__class__''
 	    or ``__classdict__'' INSIDE one, the class's own cell, which both
 	    write through NameAst >> ___emitClassBodyOwnCellWith___: (P3.5) --
-	    nor a call of ``locals'', ``vars'',
-	    ``dir'', ``globals'', ``eval'' or ``exec'', which the text rewrites
-	    for the class body;
+	    nor a call of ``dir'', ``globals'', ``eval'' or ``exec'', which the
+	    text rewrites for the class body;
+	  * ``locals()'' and zero-argument ``vars()'' in the class body itself
+	    (plan P3.6), which both helpers write through CallAst >>
+	    ___emitClassBodyLocalsWith___:, while every class-body name read
+	    asks the class first for a name a write through it bound (NameAst >>
+	    ___emitClassBodyDynamicReadWith___:) -- but NOT inside a lambda or a
+	    comprehension of the body, whose own scope the text does not answer
+	    there; ``vars(obj)'' is the ordinary builtin call;
 	  * a call of a name the class body binds: a sibling def is called as an
 	    UnboundMethod of the class under construction, by the text and by the
 	    IR backend alike (CallAst >> ___readsAsClassBodySiblingCall___, plan
@@ -2591,8 +2597,12 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 							and: [(n ___boundInNestedFunction___: n id asSymbol) not]]]]]) not])
 						ifTrue: [reason := #classCell]].
 			(reason isNil and: [(n isKindOf: CallAst) and: [n function isKindOf: NameAst]]) ifTrue: [
-				(#(#'locals' #'vars' #'dir' #'globals' #'eval' #'exec')
-					includes: n function id asSymbol)
+				(#(#'dir' #'globals' #'eval' #'exec') includes: n function id asSymbol)
+					ifTrue: [reason := #frameCall].
+				((#(#'locals' #'vars') includes: n function id asSymbol)
+					and: [n arguments isEmpty
+					and: [n keywords isEmpty
+					and: [n function ___inNestedScopeWithinClassBody___]]])
 						ifTrue: [reason := #frameCall]]]].
 	^ reason
 
@@ -2745,38 +2755,32 @@ ClassDefAst >> ___irClassHelperBodyReason___ [
 	"___irClassHelperTextReason___:'s judgement of the class BODY, as a census
 	row, or nil when the IR backend builds it -- for a method-local class, and
 	for a class nested in its body (___irNestedClassReason___:bound:), whose
-	body is judged the same way."
+	body is judged the same way.
 
-	| stmts bound hasValues |
+	A body that calls locals() or vars() (classBodyDynamicLocals) needs nothing
+	of its own (plan P3.6): every class-body read it makes is the shared one,
+	which writes the probe (NameAst >> ___emitClassBodyDynamicReadWith___:)."
+
+	| stmts bound |
 	stmts := body isNil ifTrue: [#()] ifFalse: [body body].
 	(stmts isKindOf: SequenceableCollection) ifFalse: [^ #'irHelper:controlFlow'].
 	bound := self ___irClassBodyBoundNames___.
-	hasValues := false.
 	stmts do: [:s |
 		(s isKindOf: PassAst) ifFalse: [
 			"A statement CPython runs for its effect (P3.4): the walk emits it
 			through the statement's own emitter (statementNode:) or the
 			class-body ``if'' (emitClassBodyIf:on:)."
 			(self ___irClassHelperStatementReason___: s bound: bound) ifNotNil: [:r |
-				r == #runtime ifTrue: [hasValues := true] ifFalse: [^ r]].
+				r == #runtime ifFalse: [^ r]].
 			(s isKindOf: FunctionDefAst)
 				ifTrue: [
-					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r].
-					((s ___defaultedPositionalParams___ asArray , s ___defaultedKeywordOnlyParams___ asArray)
-						anySatisfy: [:pair | ((pair at: 2) isKindOf: ConstantAst) not])
-							ifTrue: [hasValues := true].
-					(s decorator_list notNil and: [s decorator_list notEmpty])
-						ifTrue: [hasValues := true]]
+					(self ___irClassHelperDefReason___: s bound: bound) ifNotNil: [:r | ^ r]]
 				ifFalse: [
 					(s isKindOf: ClassDefAst) ifTrue: [
-						(self ___irNestedClassReason___: s bound: bound) ifNotNil: [:r | ^ r].
-						hasValues := true].
+						(self ___irNestedClassReason___: s bound: bound) ifNotNil: [:r | ^ r]].
 					((s isKindOf: AnnAssignAst) and: [s target isKindOf: NameAst]) ifTrue: [
 						(self ___irClassHelperAnnotationReason___: s bound: bound)
-							ifNotNil: [:r | ^ r].
-						(s annotation isKindOf: ConstantAst) ifFalse: [hasValues := true].
-						(s value notNil and: [(s value isKindOf: ConstantAst) not])
-							ifTrue: [hasValues := true]].
+							ifNotNil: [:r | ^ r]].
 					((s isKindOf: AssignAst)
 						and: [s targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 						(s value isKindOf: ConstantAst) ifFalse: [
@@ -2784,10 +2788,7 @@ ClassDefAst >> ___irClassHelperBodyReason___ [
 								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
 									ifTrue: [^ #'irHelper:assign:specialName'].
 							(self ___irClassBodyValueReason___: s value bound: bound classCell: true)
-								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol].
-							hasValues := true]]]]].
-	(hasValues and: [self ___classBodyCanBindDynamically___])
-		ifTrue: [^ #'irHelper:dynamicLocals'].
+								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol]]]]]].
 	^ nil
 
 ]
@@ -2988,9 +2989,13 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	class-body ``if'', a def in a loop, ``try'' or ``with''; an import or
 	``match''; an attribute store the walk drops on every path; a
 	``__renamed__'' or ``__transient__'' value (Grail's persistence
-	declarations) -- and any value or annotation under a locals()/vars() probe
-	(classBodyDynamicLocals), which the shared class-body read does not
-	describe (P3.6).
+	declarations); and ``locals()'' / ``vars()'' inside a lambda or a
+	comprehension of the body.
+
+	P3.6 admits ``locals()'' and zero-argument ``vars()'' in the body itself:
+	both helpers write the call (CallAst >> ___emitClassBodyLocalsWith___:)
+	and, in a body that makes one, the probe every class-body read asks
+	first (NameAst >> ___emitClassBodyDynamicReadWith___:).
 
 	The class's decorators, bases and keywords are not class-body expressions:
 	the caller evaluates them in the enclosing frame (___irHeaderNodes___), so

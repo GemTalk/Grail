@@ -657,6 +657,12 @@ PyMethodIRBuilder >> atNode: aNode [
 
 	| start endPos lead stampAt |
 	aNode isNil ifTrue: [^ self].
+	"A node codegen SYNTHESISED has no source position -- the NameAst read of
+	each name in a class-body locals() snapshot (CallAst class >>
+	___freeVariableReadNode___:parent:, plan P3.6).  Like the text path, which
+	does not map such a node (___recordingPrintSmalltalkOn___:), leave the
+	enclosing position in place."
+	aNode beginPosition isNil ifTrue: [^ self].
 	"AN F-STRING REPLACEMENT FIELD IS PARSED BY A CHILD PARSER over ``(expr)''
 	 alone, so every node inside it claims line 1, column 1 -- see
 	 AbstractNode>>___markFragmentPositions___.  Such a node must neither be

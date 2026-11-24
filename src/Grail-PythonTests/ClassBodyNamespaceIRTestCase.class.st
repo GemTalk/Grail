@@ -183,6 +183,10 @@ def f(p):
         a = g()
     class Frame:
         a = locals()
+    class FrameLam:
+        a = lambda: locals()
+    class FrameDir:
+        a = dir()
     class Cell:
         a = __class__
     class CellLam:
@@ -224,7 +228,9 @@ def f(p):
 		'Comp' -> nil.
 		'Walrus' -> #'irHelper:assign:walrus'.
 		'Sibling' -> nil.
-		'Frame' -> #'irHelper:assign:frameCall'.
+		'Frame' -> nil.
+		'FrameLam' -> #'irHelper:assign:frameCall'.
+		'FrameDir' -> #'irHelper:assign:frameCall'.
 		'Cell' -> nil.
 		'CellLam' -> nil.
 		'Ann' -> nil.
