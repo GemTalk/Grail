@@ -1740,6 +1740,51 @@ ModuleAst >> ___emitModuleAnnotationsOn___: aStream [
 ]
 
 { #category : 'Grail-code generation' }
+ModuleAst >> ___emitSeamChunksOn___: aStream [
+	"Write the module body's STATEMENTS onto aStream exactly as
+	printSmalltalkOn: writes them -- the PEP 649 annotate store, then each
+	statement after its ``___curPos___'' store -- but without the method's
+	header (pragma, temps, the ``___pyFile___'' stamp), and answer where each
+	piece landed: an Array of { statementOrNil. startPosition. endPosition.
+	mapStart. mapEnd }, the first for the annotate store (nil), then one per
+	statement in order.  Positions are aStream's, the map bounds count the
+	SmallIntegers of its position map (PrettyWriteStream >> positionMapSize).
+
+	For the statement seam (ModuleBodySeam, P4.1), which compiles the body as
+	several methods.  The body is emitted ONCE and the methods are cut from it,
+	so a group that has to be split is re-cut, never re-emitted: codegen has
+	side effects (def ids registered, sequence numbers drawn) that must happen
+	once per statement.
+
+	The caller declares the temps: a statement here may use the module's codegen
+	helper temps (``___t_N'', allocated at parse time into ``body variables''),
+	and each method declares those its own slice mentions."
+
+	| savedFuture chunks |
+	chunks := OrderedCollection new.
+	CallAst moduleBodyBeingCompiled: true.
+	savedFuture := CallAst futureAnnotations.
+	CallAst futureAnnotations: self ___hasFutureAnnotations___.
+	[ | start mapStart |
+	start := aStream position.
+	mapStart := aStream positionMapSize.
+	self ___emitModuleAnnotationsOn___: aStream.
+	chunks add: { nil. start. aStream position. mapStart. aStream positionMapSize }.
+	body body do: [:each |
+		start := aStream position.
+		mapStart := aStream positionMapSize.
+		body ___emitCurPosBefore: each on: aStream.
+		each printSmalltalkOn: aStream.
+		aStream lf.
+		chunks add: { each. start. aStream position. mapStart. aStream positionMapSize }]]
+		ensure: [
+			CallAst moduleBodyBeingCompiled: false.
+			CallAst futureAnnotations: savedFuture].
+	^ chunks asArray
+
+]
+
+{ #category : 'Grail-code generation' }
 ModuleAst >> ___hasFutureAnnotations___ [
 	"True when the module begins with ``from __future__ import annotations'' --
 	a future statement is legal only among the module's first statements, after

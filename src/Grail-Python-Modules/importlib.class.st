@@ -512,7 +512,7 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 	recompiles the SAME class in place -- preserving the module instance's
 	identity.  Shared by loadModuleFromPath: and reload:."
 
-	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture previousMethods |
+	| moduleClass moduleClassName variables variableNames stream methodSource sl topLevelDefs functionNames lf savedFuture previousMethods seam |
 	"The module's classes are about to be made anew: release the builders the
 	previous build cached for them (___irBuilderCache___)."
 	self ___irBuilderCacheForgetModule___: moduleName.
@@ -928,61 +928,116 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 					last values select: [:stmt | stmt ___docString___ notNil]]
 				value: Dictionary new).
 
-		"Generate the module body as Smalltalk source for the initialize method.
-		Top-level defs emit BoundMethod assignments; calls emit self-sends."
-		stream := PrettyWriteStream on: Unicode7 new.
-		stream markStartOfMethod.
-		moduleAst printSmalltalkOn: stream.
+		"THE STATEMENT SEAM (P4.1), on the IR arm: ``initialize'' is built through
+		IR as a list of sends, one per statement helper (ModuleBodySeam).  The body
+		is emitted ONCE either way.  A seam that fails after the emit -- a helper
+		that will not compile, the dispatcher's build -- removes its helpers and
+		compiles the one text ``initialize'' cut from that same emit, as a counted
+		IR fallback (a raise in strict mode).  The text arm keeps the one text
+		method, unchanged: it is the oracle the seam's frames are held to."
+		seam := nil.
+		methodSource := nil.
+		(irEnabled and: [moduleAst useTempsForBlock ~~ true]) ifTrue: [
+			seam := ModuleBodySeam module: moduleAst class: moduleClass.
+			seam traceIR: traceDir notNil.
+			seam emit.
+			[seam installHelpers; installDispatcher]
+				on: Error do: [:ex |
+					(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+					seam removeHelpers.
+					methodSource := seam monolithicSource.
+					seam := nil.
+					self ___irNoteModuleSeamFallback___: moduleName error: ex.
+					ex return: nil]].
+		(seam isNil and: [methodSource isNil]) ifTrue: [
+			"Generate the module body as Smalltalk source for the initialize method.
+			Top-level defs emit BoundMethod assignments; calls emit self-sends."
+			stream := PrettyWriteStream on: Unicode7 new.
+			stream markStartOfMethod.
+			moduleAst printSmalltalkOn: stream.
+			"The map is CONCATENATED here rather than written onto the stream, and
+			the selector line stays outside it too.  A module body's stream holds
+			~900 KB by this point, and one more write can push its backing
+			collection over a growth boundary: measured on a zipfile.py import,
+			appending the map to the stream cost 4.00 MB of peak temp object space
+			against 2.02 MB for concatenating it -- the doubled buffer and the old
+			one are both live while the copy runs.  Small methods are written
+			in place (writeMapAsComment); only this one is big enough to care.
 
-		"Compile the body as an env-1 `initialize` method on the new class.
-		Resume CompileWarning the same way the per-def compilation above
-		does — module-level docstrings and other expression statements
-		that the Smalltalk compiler flags as `statement with no effect`
-		are valid Python (Python evaluates the expression and discards
-		the result)."
-		"The map is CONCATENATED here rather than written onto the stream, and
-		the selector line stays outside it too.  A module body's stream holds
-		~900 KB by this point, and one more write can push its backing
-		collection over a growth boundary: measured on a zipfile.py import,
-		appending the map to the stream cost 4.00 MB of peak temp object space
-		against 2.02 MB for concatenating it -- the doubled buffer and the old
-		one are both live while the copy runs.  Small methods are written
-		in place (writeMapAsComment); only this one is big enough to care.
-
-		``initialize'' and its newline PREFIX the recorded text, so every offset
-		in the body's map moves right by that much."
-		methodSource := 'initialize' , lf , stream contents
-			, (stream mapCommentShiftedBy: 'initialize' size + lf size).
+			``initialize'' and its newline PREFIX the recorded text, so every offset
+			in the body's map moves right by that much."
+			methodSource := 'initialize' , lf , stream contents
+				, (stream mapCommentShiftedBy: 'initialize' size + lf size)].
 		self ___irCensusOn___ ifTrue: [
 			self ___irCensusStatements: moduleAst body body prefix: 'ms:' def: '<module>'.
-			self ___irCensusText: methodSource kind: 'moduleBody'].
-		traceDir ifNotNil: [
-			debugStream
-				nextPutAll: 'category: ''Grail-Module Body'''; lf;
-				nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-			self ___writeMethodSource: methodSource on: debugStream.
-			debugStream nextPutAll: '%'; lf.
-			"Write as UTF-8 bytes so editors that don't auto-detect
-			UTF-16 (most of them) render the file correctly."
-			(self ___openServerFile___: tpzPath mode: 'wb')
-				nextPutAll: debugStream contents encodeAsUTF8;
-				close.
-		].
-		[moduleClass compileMethod: methodSource
-			dictionaries: sl
-			category: 'Grail-Module Body'
-			environmentId: 1.
-		] on: CompileWarning do: [:ex | ex resume].
+			seam notNil ifTrue: [
+				self ___irCensusNote___: #'mh:helper' module: self ___irCensusModuleName___
+					def: '<module>' count: seam helpers size.
+				self ___irCensusNote___: #'mh:split' module: self ___irCensusModuleName___
+					def: '<module>' count: seam splits.
+				self ___irCensusNote___: #'mh:overBudget' module: self ___irCensusModuleName___
+					def: '<module>' count: seam overBudget]].
+		seam notNil ifTrue: [
+			"The seam compiled (and censused) its helpers.  The trace dump gets each
+			helper, then the IR dispatcher's attached source, and the .ir file each
+			helper's compiled IR in turn."
+			traceDir ifNotNil: [
+				seam helpers do: [:h |
+					debugStream
+						nextPutAll: 'category: ''Grail-Module Body'''; lf;
+						nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+					self ___writeMethodSource: (h at: 2) on: debugStream.
+					debugStream nextPutAll: '%'; lf; lf].
+				debugStream
+					nextPutAll: '! initialize is built through IR (ModuleBodySeam); its attached source:'; lf;
+					nextPutAll: 'category: ''Grail-Module Body'''; lf;
+					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: seam dispatcherSource on: debugStream.
+				debugStream nextPutAll: '%'; lf.
+				(self ___openServerFile___: tpzPath mode: 'wb')
+					nextPutAll: debugStream contents encodeAsUTF8;
+					close.
+				[:f |
+					seam irSnapshots do: [:assoc |
+						f nextPutAll: '! '; nextPutAll: assoc key; nextPutAll: lf;
+							nextPutAll: assoc value; nextPutAll: lf].
+					f close] value: (self ___openServerFile___: irPath mode: 'w')]].
+		methodSource notNil ifTrue: [
+			"Compile the body as an env-1 `initialize` method on the new class.
+			Resume CompileWarning the same way the per-def compilation above
+			does — module-level docstrings and other expression statements
+			that the Smalltalk compiler flags as `statement with no effect`
+			are valid Python (Python evaluates the expression and discards
+			the result)."
+			self ___irCensusOn___ ifTrue: [
+				self ___irCensusText: methodSource kind: 'moduleBody'].
+			traceDir ifNotNil: [
+				debugStream
+					nextPutAll: 'category: ''Grail-Module Body'''; lf;
+					nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
+				self ___writeMethodSource: methodSource on: debugStream.
+				debugStream nextPutAll: '%'; lf.
+				"Write as UTF-8 bytes so editors that don't auto-detect
+				UTF-16 (most of them) render the file correctly."
+				(self ___openServerFile___: tpzPath mode: 'wb')
+					nextPutAll: debugStream contents encodeAsUTF8;
+					close.
+			].
+			[moduleClass compileMethod: methodSource
+				dictionaries: sl
+				category: 'Grail-Module Body'
+				environmentId: 1.
+			] on: CompileWarning do: [:ex | ex resume].
 
-		"Debug aid: capture the IR tree for the body's initialize method
-		(the last thing compiled here, before the accessor sweep below).
-		Snapshot now so subsequent compileMethod: calls don't overwrite
-		__sessionStateAt: 19.  One IR file per module under <traceDir>/."
-		traceDir ifNotNil: [
-			(self ___openServerFile___: irPath mode: 'w')
-				nextPutAll: (System __sessionStateAt: 19) printString;
-				close.
-		].
+			"Debug aid: capture the IR tree for the body's initialize method
+			(the last thing compiled here, before the accessor sweep below).
+			Snapshot now so subsequent compileMethod: calls don't overwrite
+			__sessionStateAt: 19.  One IR file per module under <traceDir>/."
+			traceDir ifNotNil: [
+				(self ___openServerFile___: irPath mode: 'w')
+					nextPutAll: (System __sessionStateAt: 19) printString;
+					close.
+			]].
 		"GRAIL_ATTR_ACCESSORS (stage 3), AFTER the IR-trace snapshot above (these compiles would
 		overwrite session-state slot 19 -- ImportlibTestCase>>testRunPathWritesDebugFiles):
 		a READ accessor on the module class for
@@ -6643,6 +6698,37 @@ importlib class >> ___irNoteFallback___: aFunctionDef error: anException file: a
 ]
 
 { #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irNoteModuleSeamFallback___: aModuleName error: anException [
+	"The module body's statement seam (ModuleBodySeam, P4.1) failed after its
+	emit, so the body compiles as the one text ``initialize'' instead.  Counted
+	and logged as an IR fallback, like a def's (___irNoteFallback___:error:file:),
+	and raised in strict mode: a seam that does not build is a Grail bug, and
+	the text body only hides it."
+
+	| temps log |
+	temps := SessionTemps current.
+	temps at: #'___grailIRFallbackCount___'
+		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
+	self ___irSessionCount___: #'___grailIRFallbackTotal___'.
+	temps at: #'___grailIRLastError___'
+		put: ('<module> ' , aModuleName asString , ': ' , (self ___irErrorText___: anException)).
+	log := temps at: #'___grailIRFallbackLog___' otherwise: nil.
+	log isNil ifTrue: [log := OrderedCollection new. temps at: #'___grailIRFallbackLog___' put: log].
+	log size < 500 ifTrue: [log add: (temps at: #'___grailIRLastError___')].
+	self ___irCensusOn___ ifTrue: [
+		self ___irCensusNote___: #'mh:fallback' module: self ___irCensusModuleName___
+			def: '<module>' count: 1].
+	self ___irStrict___ ifTrue: [
+		^ SystemError @env1:___signal___:
+			'Grail IR strict mode (GRAIL_IR_STRICT): the module body of '
+				, aModuleName asString , ' (' , (CallAst sourcePath ifNil: ['<unknown file>']) asString
+				, ') could not be built as statement helpers: '
+				, (self ___irErrorText___: anException)
+				, '. This is a Grail bug; without strict mode the body compiles as one text method instead.']
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
 importlib class >> ___irNoteRegenerateFallback___: aSelector on: aClass error: anException [
 	"A method-local class's memoized IR (cut 79) failed to generate for aClass,
 	so ___irInstallDef:on:or:category: compiles the method's text instead.
@@ -8652,7 +8738,8 @@ importlib class >> ___moduleEntryIsLive___: aModule [
 importlib class >> ___moduleGeneratedMethodsOf___: aModuleClass [
 	"Every method a module build generates from the source, as it stands now
 	-- a pair of selector -> GsNMethod maps, the instance side's
-	``Grail-Methods'' (the defs, each in one or more call shapes) and the
+	``Grail-Methods'' (the defs, each in one or more call shapes) plus the
+	module body's statement helpers (``___irModStmt_<offset>___'', P4.1), and the
 	class side's ``Grail-Python Metadata'' (the docstring and PEP 695 tables,
 	emitted only when the source has them).  Empty for a class just created.
 
@@ -8667,8 +8754,9 @@ importlib class >> ___moduleGeneratedMethodsOf___: aModuleClass [
 			pmd := b persistentMethodDictForEnv: 1.
 			pmd ifNotNil: [
 				pmd keysAndValuesDo: [:sel :meth |
-					(b categoryOfSelector: sel environmentId: 1) asString = pair value
-						ifTrue: [(out at: i) at: sel put: meth]]]].
+					((b categoryOfSelector: sel environmentId: 1) asString = pair value
+						or: [i = 1 and: [ModuleBodySeam isHelperSelector: sel]])
+							ifTrue: [(out at: i) at: sel put: meth]]]].
 	^ out
 
 ]
@@ -10289,7 +10377,10 @@ importlib class >> ___removeStaleModuleMethods___: previousMethods from: aModule
 
 	The class side's metadata is regenerated whole, so anything there the
 	build did not recompile -- a docstring or a type-parameter table the source
-	no longer has -- is gone."
+	no longer has -- is gone.  So is a module body's statement helper
+	(``___irModStmt_<offset>___'', ModuleBodySeam): its selector names the
+	statement's offset, so an edit above it renames it, and a rebuild on the
+	text arm compiles none -- either way the old helper belongs to no build."
 
 	| bound sides |
 	bound := IdentitySet new.
@@ -10305,9 +10396,9 @@ importlib class >> ___removeStaleModuleMethods___: previousMethods from: aModule
 		pmd := b persistentMethodDictForEnv: 1.
 		(previousMethods at: i) keysAndValuesDo: [:sel :meth |
 			((pmd ~~ nil and: [(pmd at: sel otherwise: nil) == meth])
-				and: [i = 2 or: [ | pyName |
+				and: [i = 2 or: [(ModuleBodySeam isHelperSelector: sel) or: [ | pyName |
 					pyName := self pythonNameOfSelector: sel.
-					pyName notNil and: [bound includes: pyName asSymbol]]])
+					pyName notNil and: [bound includes: pyName asSymbol]]]])
 						ifTrue: [b @env1:___removeSelector: sel environmentId: 1]]].
 	^ aModuleClass
 
