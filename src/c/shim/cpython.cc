@@ -2443,6 +2443,15 @@ typedef struct {
     Py_ssize_t    ob_size;
     PyObject    **ob_item;
     Py_ssize_t    allocated;
+    /* The shim's own, past the end of CPython's PyListObject, so no wheel
+       reads them: set when this list is real_layout_arg's copy of a Grail
+       list.  origin is that list's wrapper, held by a reference of its own;
+       snapshot is ob_item as it was when the copy was last in step with the
+       Grail list (list_origin_oop). */
+    PyObject     *origin;
+    PyObject    **snapshot;
+    OopType      *grail_snapshot;   /* the Grail list's items at that point */
+    Py_ssize_t    snapshot_size;
 } ShimListObject;
 
 /* Registry of real-layout object pointers: an open-addressing set, entries
@@ -2916,8 +2925,123 @@ static void release_block(PyObject *op, size_t size, int mode) {
     else free(op);
 }
 
+/* ====================================================================
+ * A list copy's origin (#2301)
+ *
+ * real_layout_arg hands C a COPY of a Grail list, in CPython's layout,
+ * because wheels read lists with the inline PyList_GET_ITEM.  The copy
+ * remembers the Grail list it was made from, so the copy coming back from
+ * C answers that same list: rpds-py's HashTrieMap.fromkeys(keys, [])
+ * stores the copy, and m[0] then answered a new Grail list each time,
+ * neither the caller's list nor one another.
+ *
+ * Both sides can change the list, and each sees the other's changes at a
+ * crossing.  The snapshots are the two lists' items as they were when they
+ * were last in step: the copy's pointers, and the Grail list's OOPs.  When
+ * the copy comes back to Grail, or C releases it, one C has not changed
+ * leaves the Grail list alone, so changes made in Python stand; one C has
+ * changed is written into the Grail list.
+ *
+ * What C does NOT see is a change Python makes while C holds the copy: C
+ * keeps reading its own items.  So when BOTH have changed, neither is
+ * written over the other: the copy lets go of the Grail list and comes back
+ * as a new one, as every copy did before.
+ * ==================================================================== */
+static void list_free_snapshots(ShimListObject *l) {
+    free(l->snapshot);
+    free(l->grail_snapshot);
+    l->snapshot = NULL;
+    l->grail_snapshot = NULL;
+    l->snapshot_size = -1;          /* reads as changed on both sides */
+}
+
+/* Record both lists as in step: they hold the same items now. */
+static void list_take_snapshot(ShimListObject *l, OopType glist) {
+    list_free_snapshots(l);
+    Py_ssize_t n = l->ob_size;
+    if (n > 0) {
+        l->snapshot = (PyObject **)malloc((size_t)n * sizeof(PyObject *));
+        l->grail_snapshot = (OopType *)malloc((size_t)n * sizeof(OopType));
+        if (l->snapshot == NULL || l->grail_snapshot == NULL
+                || GciFetchVaryingOops(glist, 1, l->grail_snapshot, (int)n) != (int)n) {
+            list_free_snapshots(l);
+            return;
+        }
+        memcpy(l->snapshot, l->ob_item, (size_t)n * sizeof(PyObject *));
+    }
+    l->snapshot_size = n;
+}
+
+static void list_note_origin(PyObject *copy, PyObject *grail_list) {
+    ShimListObject *l = (ShimListObject *)copy;
+    Py_INCREF(grail_list);
+    l->origin = grail_list;
+    list_take_snapshot(l, pyobj_oop(grail_list));
+}
+
+static int list_changed_by_c(ShimListObject *l) {
+    if (l->snapshot_size != l->ob_size) return 1;
+    return l->ob_size > 0
+        && memcmp(l->snapshot, l->ob_item, (size_t)l->ob_size * sizeof(PyObject *)) != 0;
+}
+
+static int list_changed_in_grail(ShimListObject *l, OopType glist) {
+    Py_ssize_t n = l->snapshot_size;
+    if (n < 0 || GciFetchVaryingSize_(glist) != (int64)n) return 1;
+    for (Py_ssize_t i = 0; i < n; i += 256) {
+        OopType chunk[256];
+        int want = (int)(n - i < 256 ? n - i : 256);
+        if (GciFetchVaryingOops(glist, (int64)i + 1, chunk, want) != want) return 1;
+        if (memcmp(chunk, l->grail_snapshot + i, (size_t)want * sizeof(OopType)) != 0) return 1;
+    }
+    return 0;
+}
+
+static void list_drop_origin(ShimListObject *l) {
+    PyObject *origin = l->origin;
+    l->origin = NULL;
+    list_free_snapshots(l);
+    Py_DECREF(origin);
+}
+
+static OopType real_obj_to_oop(PyObject *obj);   /* below */
+
+/* Bring the Grail list glist in step with the copy: give it the copy's
+   items when C has changed them and Python has not.  Answers 0 when both
+   have changed, leaving glist alone. */
+static int list_write_back(ShimListObject *l, OopType glist) {
+    if (!list_changed_by_c(l)) return 1;
+    if (list_changed_in_grail(l, glist)) return 0;
+    GciPerform(server, "___emptyList:", &glist, 1);
+    for (Py_ssize_t i = 0; i < l->ob_size; i++) {
+        PyObject *el = l->ob_item[i];
+        OopType args[2] = { glist, el ? pyobj_oop(el) : none_oop };
+        GciPerform(server, "PyList_Append:item:", args, 2);
+    }
+    list_take_snapshot(l, glist);
+    return 1;
+}
+
+/* The Grail list a copy was made from, in step with the copy -- or, when
+   both have changed, a new list, the copy no longer tied to the old. */
+static OopType list_origin_oop(ShimListObject *l) {
+    OopType glist = pyobj_oop(l->origin);
+    if (list_write_back(l, glist)) return glist;
+    list_drop_origin(l);
+    return real_obj_to_oop((PyObject *)l);
+}
+
+/* A copy being freed: its last changes reach the Grail list, and its hold
+   on that list's wrapper goes. */
+static void list_release_origin(ShimListObject *l) {
+    if (l->origin == NULL) return;
+    list_write_back(l, pyobj_oop(l->origin));
+    list_drop_origin(l);
+}
+
 static void real_dealloc(PyObject *op, int mode) {
     trace_release(op);
+    if (op->ob_type == &PyList_Type) list_release_origin((ShimListObject *)op);
     real_reg_remove(op);
     size_t size;
     if (op->ob_type == &PyTuple_Type) {
@@ -3010,7 +3134,12 @@ static PyObject *arg_ref(PyObject *o, int depth) {
 
 /* Release a copy real_layout_arg made of an argument, after the call. */
 static void release_arg_copy(PyObject *copy, PyObject *original) {
-    if (copy != NULL && copy != original) Py_DECREF(copy);
+    if (copy == NULL || copy == original) return;
+    /* A list C changed during the call changes the caller's list, as it
+       would in CPython, even when C keeps the copy (#2301). */
+    if (copy->ob_type == &PyList_Type && ((ShimListObject *)copy)->origin != NULL)
+        list_write_back((ShimListObject *)copy, pyobj_oop(((ShimListObject *)copy)->origin));
+    Py_DECREF(copy);
 }
 
 /* The Grail value of a new reference C answered, then the reference
@@ -3071,10 +3200,11 @@ static PyObject *to_real_tuple(PyObject *t) {
    PyList_GET_ITEM, PyTuple_GET_ITEM), which read a Grail wrapper's OOP and
    magic words as the size and the item array.  numpy's np.dtype([('a',
    'f8')]) -- _convert_from_array_descr -- died that way, inside the polyfit
-   that ``import numpy'' runs on macOS.  A COPY is exact for reading, which
-   is what an argument is for; a wheel that mutated an argument list in place
-   would change the copy, not the caller's list.  Tuples are immutable, so
-   for them nothing is lost. */
+   that ``import numpy'' runs on macOS.  A COPY is exact for reading.  A list's
+   copy also remembers the Grail list it came from, so it comes back from C
+   as that list, and changes C makes to it reach the caller's list
+   (list_origin_oop, #2301).  Tuples are immutable, so for them nothing is
+   lost. */
 static PyObject *real_layout_arg(PyObject *o, int depth) {
     if (o == NULL || depth > 8) return o;
     if (o == Py_None || o == Py_True || o == Py_False || o == Py_NotImplemented) return o;
@@ -3103,6 +3233,8 @@ static PyObject *real_layout_arg(PyObject *o, int depth) {
         for (Py_ssize_t i = 0; i < n; i++)
             ((ShimListObject *)l)->ob_item[i] =
                 real_layout_arg(Py_XNewRef(PyList_GetItem(o, i)), depth + 1);
+        /* It comes back from C as o's list, not a new one (#2301). */
+        list_note_origin(l, o);
         return l;
     }
     return o;
@@ -3140,6 +3272,8 @@ static OopType real_obj_to_oop(PyObject *obj) {
         return gtOop;
     }
     ShimListObject *op = (ShimListObject *)obj;
+    /* A copy of a Grail list is that list again (list_origin_oop). */
+    if (op->origin != NULL) return list_origin_oop(op);
     OopType zero = GciI64ToOop(0);
     PyObject *glist = addr_to_pyobj(GciPerform(server, "PyList_New:", &zero, 1));
     for (Py_ssize_t i = 0; i < op->ob_size; i++) {
@@ -6101,7 +6235,8 @@ extern "C" PyObject *PyObject_Call(PyObject *callable, PyObject *args,
        it inline, as numpy reads _commastring's list with PyList_GET_ITEM --
        from a Grail wrapper that read the wrapper's magic as an item pointer,
        and np.dtype("S10,S9") segfaulted.  A copy, as for mp_subscript's
-       answer: C mutating it does not reach the Grail list. */
+       answer; what C changes in it reaches the Grail list when the copy
+       crosses back or is released (list_origin_oop). */
     PyObject *p = addr_to_pyobj(result);
     PyObject *r = real_layout_arg(p, 0);
     return r == p ? c_new_ref(p) : r;
