@@ -100,6 +100,32 @@ StatementAst >> ___emitIRControlSignalGuard___: exLeaf on: aBuilder [
 
 ]
 
+{ #category : 'Grail-IR Codegen' }
+StatementAst >> ___emitIRImportStoreOf___: aName from: v on: aBuilder [
+	"The node that binds aName to v for an import, by printImportBindingOpenOn:
+	name:'s rule: a module-bound name is the module store every binding form
+	takes; an enclosing function's local reached past a method-local class is
+	its setter cell, ``(self ___classCellSetter___: #'___cellSetter_x___')
+	value: v'' (#2233; ``value:'' is env 0, the setter is a Smalltalk block);
+	anything else the local leaf.  Shared by ImportAst and ImportFromAst."
+
+	| sym |
+	sym := aName asSymbol.
+	(self ___nameStoreRoutesToModule___: sym)
+		ifTrue: [^ self ___emitIRModuleScopeStoreOf___: sym from: v on: aBuilder].
+	(self ___importBindsClassCell___: sym) ifTrue: [
+		CallAst addCapturedWriteName: sym.
+		^ aBuilder
+			send: #value:
+			to: (aBuilder
+				send: #'___classCellSetter___:' to: aBuilder selfNode
+				with: { aBuilder obj: ('___cellSetter_' , sym asString , '___') asSymbol }
+				env: 1)
+			with: { v } env: 0].
+	^ aBuilder assign: (aBuilder leafFor: sym) from: v
+
+]
+
 { #category : 'Grail-code generation' }
 StatementAst >> ___importBindsAtModuleScope___: aSymbol [
 	"True when a name bound by an IMPORT in this statement lands in the
@@ -132,6 +158,33 @@ StatementAst >> ___importBindsAtModuleScope___: aSymbol [
 	"A binding anywhere in an enclosing function SHADOWS the module global."
 	(self ___pythonLocalInEnclosingFunctions___: aSymbol) ifTrue: [^ false].
 	^ true
+
+]
+
+{ #category : 'Grail-code generation' }
+StatementAst >> ___importBindsClassCell___: aSymbol [
+	"True when a name bound by an IMPORT in this statement is an enclosing
+	function's local reached past a method-local class -- ``nonlocal x;
+	import os as x'' in a method of a class defined in a function.  The method
+	is compiled apart from that function, so ``x'' is no temp of it: the store
+	goes through the class's setter cell, as AssignAst's does
+	(___irClassCellTargetName___:).  The import wrote a bare ``x := ...'',
+	which did not compile (#2233).
+
+	Only for an import in a FUNCTION body.  One directly in a class body binds
+	a class attribute, whatever the enclosing function binds.  Shared by the
+	text and IR emits of ImportAst and ImportFromAst so they cannot drift."
+
+	| node |
+	CallAst classBeingCompiled isNil ifTrue: [^ false].
+	CallAst inClassBodyValueEmit == true ifTrue: [^ false].
+	CallAst inBasesEmit == true ifTrue: [^ false].
+	node := parent.
+	[node notNil and: [(node isKindOf: FunctionDefAst) not]] whileTrue: [
+		(node isKindOf: ClassDefAst) ifTrue: [^ false].
+		node := node parent].
+	node isNil ifTrue: [^ false].
+	^ self ___enclosingFunctionLocalBeyondClass___: aSymbol asSymbol
 
 ]
 
@@ -196,6 +249,15 @@ StatementAst >> printImportBindingOpenOn: aStream name: targetName [
 			nextPutAll: ' @env1:___classBodyDefinitionalStore___: #''';
 			nextPutAll: targetName;
 			nextPutAll: ''' put: ('.
+		^ true].
+	"An enclosing function's local reached past a method-local class: its
+	setter cell, AssignAst's ``nonlocal x; x = v'' branch (#2233)."
+	(self ___importBindsClassCell___: targetName) ifTrue: [
+		CallAst addCapturedWriteName: targetName.
+		aStream
+			nextPutAll: '(self @env1:___classCellSetter___: #''___cellSetter_';
+			nextPutAll: targetName;
+			nextPutAll: '___'') value: ('.
 		^ true].
 	aStream nextPutAll: targetName; nextPutAll: ' := '.
 	^ false

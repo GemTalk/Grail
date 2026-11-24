@@ -63,13 +63,9 @@ ImportAst >> ___emitIRStatementOn___: aBuilder [
 		"The binding target, by the same rule the assignment, the augmented
 		assignment and the unpack all use -- one copy of a four-way scope
 		question, never a second spelling of it."
-		(self ___nameStoreRoutesToModule___: (self ___irBoundNameFor___: alias) asSymbol)
-			ifTrue: [aBuilder add: (self
-				___emitIRModuleScopeStoreOf___: (self ___irBoundNameFor___: alias) asSymbol
-				from: v on: aBuilder)]
-			ifFalse: [aBuilder add: (aBuilder
-				assign: (aBuilder leafFor: (self ___irBoundNameFor___: alias) asSymbol)
-				from: v)]].
+		aBuilder add: (self
+			___emitIRImportStoreOf___: (self ___irBoundNameFor___: alias)
+			from: v on: aBuilder)].
 	^ self
 
 ]
@@ -115,9 +111,13 @@ ImportAst >> ___irEligibleStatementLocals___: localNames [
 	test_import_result is the counter-example, and it was this row."
 
 	names isEmpty ifTrue: [^ false].
+	"Nor need it be THIS def's: ``nonlocal x; import os as x'' in a method of a
+	method-local class writes the enclosing function's x through the class's
+	setter cell (#2233)."
 	^ self ___irBoundNames___ allSatisfy: [:n |
 		(localNames includes: n)
-			or: [self ___nameStoreRoutesToModule___: n asSymbol]]
+			or: [(self ___nameStoreRoutesToModule___: n asSymbol)
+			or: [self ___importBindsClassCell___: n asSymbol]]]
 
 ]
 

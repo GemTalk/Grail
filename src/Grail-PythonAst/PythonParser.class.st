@@ -6998,6 +6998,15 @@ PythonParser >> parseNonlocal [
 	names := names collect: [:n | self ___mangle___: n].
 	names do: [:n | self ___checkDeclarationLegal___: n kind: 'nonlocal' at: tok].
 	names do: [:n | nonlocalStack last add: n].
+	"A nonlocal name is FREE in this scope, and so in every scope out to its
+	binding (popScope's free-name propagation), whether or not a NameAst
+	mentions it.  An assignment target does, because it is parsed as a load
+	first; an import alias, a def or class name and an ``except ... as'' name
+	never do.  So ``nonlocal x; import os as x'' in a method of a
+	method-local class left x out of the class scope's reads, and the class
+	statement was refused IR as classDef:nonlocalNotCarried (#2233).
+	readStack only: ownReadStack is the ``used prior to declaration'' check."
+	names do: [:n | readStack last add: n].
 	^NonlocalAst new
 		names: names;
 		from: tok to: self lastToken ; yourself

@@ -91,15 +91,12 @@ ImportFromAst >> ___emitIRStatementOn___: aBuilder [
 		aBuilder atNode: self.
 		"Where the binding lands is ImportAst's rule, asked the same way: a
 		``global''-declared name binds the MODULE (``global _Unparser; from
-		_ast_unparse import Unparser as _Unparser'', ast.unparse), anything
-		else the local leaf."
-		(self ___nameStoreRoutesToModule___: (self boundNameFor: alias))
-			ifTrue: [aBuilder add: (self
-				___emitIRModuleScopeStoreOf___: (self boundNameFor: alias)
-				from: v on: aBuilder)]
-			ifFalse: [aBuilder add: (aBuilder
-				assign: (aBuilder leafFor: (self boundNameFor: alias) asSymbol)
-				from: v)]].
+		_ast_unparse import Unparser as _Unparser'', ast.unparse), an enclosing
+		function's local reached past a method-local class its setter cell
+		(#2233), anything else the local leaf."
+		aBuilder add: (self
+			___emitIRImportStoreOf___: (self boundNameFor: alias)
+			from: v on: aBuilder)].
 	^ self
 
 ]
@@ -156,7 +153,8 @@ ImportFromAst >> ___irEligibleStatementLocals___: localNames [
 	test_types SubinterpreterTests.setUpClass, all ``shape:ImportFromAst'')."
 	(self ___irBoundNames___ allSatisfy: [:n |
 		(localNames includes: n)
-			or: [self ___nameStoreRoutesToModule___: n asSymbol]])
+			or: [(self ___nameStoreRoutesToModule___: n asSymbol)
+			or: [self ___importBindsClassCell___: n asSymbol]]])
 		ifFalse: [^ false].
 	^ [self resolvedModuleName notNil] on: Error do: [:ex | false]
 
