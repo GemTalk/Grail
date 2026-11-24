@@ -155,19 +155,24 @@ if command -v "$PRODUCT/bin/gslist" >/dev/null 2>&1; then
 fi
 
 # --- pick a GemStone user ---------------------------------------------------
-# Every existing worktree's .topazini claims one; take the first one free.
+# Every existing checkout's .topazini claims one; take the first one free.
 WORKTREE_ROOT="$REPO_ROOT/.claude/worktrees"
 
 claimed_users() {
-    # Includes the main checkout, so its user is never handed to a worktree.
+    # The checkouts come from git, not from a scan of .claude/worktrees: a
+    # worktree sits at .claude/worktrees/<branch>, so its depth is however many
+    # slashes the branch has, and a depth-limited scan missed jmason/ir/<x> and
+    # handed its user out again (#2338).  git's list also holds the main
+    # checkout, so its user is never handed to a worktree.
     # Every branch must succeed: this runs under `set -e -o pipefail`, and a
-    # missing .topazini / not-yet-created worktree root is normal, not an error.
-    {
-        [ -f "$REPO_ROOT/.topazini" ] && cat "$REPO_ROOT/.topazini"
-        [ -d "$WORKTREE_ROOT" ] &&
-            find "$WORKTREE_ROOT" -maxdepth 3 -name .topazini -exec cat {} \; 2>/dev/null
-        true
-    } | sed -n 's/^[[:space:]]*set user \([^[:space:]]*\).*/\1/p'
+    # checkout with no .topazini is normal, not an error.
+    git -C "$REPO_ROOT" worktree list --porcelain |
+        sed -n 's/^worktree //p' |
+        while IFS= read -r checkout; do
+            [ -f "$checkout/.topazini" ] && cat "$checkout/.topazini"
+            true
+        done |
+        sed -n 's/^[[:space:]]*set user \([^[:space:]]*\).*/\1/p'
 }
 
 if [ -z "$USER_ID" ]; then
