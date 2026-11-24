@@ -11,6 +11,9 @@
 #
 # Needs no stone: it builds a scratch repository with a fake product directory
 # and reads the .setenv / .topazini the script writes.
+#
+# It also guards the user claims: every checkout's .topazini claims its user,
+# however deep its branch name puts it under .claude/worktrees (#2338).
 set -u
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 SCRATCH=$(cd "$(mktemp -d "${TMPDIR:-/tmp}/grail-new-worktree-test.XXXXXX")" && pwd -P)
@@ -100,6 +103,20 @@ new_worktree "$REPO" wt/seven --product "$SCRATCH/no-such-product" --user Claude
 check "a missing product directory is refused" \
   '[ "$STATUS" -ne 0 ] && grep -q "does not exist: $SCRATCH/no-such-product" "$SCRATCH/out"'
 check "before anything is created" '[ ! -e "$WORKTREES/wt/seven" ]'
+
+# --- 6. a branch with two slashes still claims its user (#2338) ---------------
+# Its .topazini sits one level deeper than a one-slash branch's; a scan limited
+# to three levels missed it and handed its user out again.  Claude0..3 are all
+# claimed by now; free Claude1, then let a two-slash branch take it.
+git -C "$REPO" worktree remove --force "$WORKTREES/wt/one"
+new_worktree "$REPO" jm/ir/deep
+check "a two-slash branch takes the user freed" '[ "$(user_of jm/ir/deep)" = Claude1 ]'
+new_worktree "$REPO" jm/after-deep-b --user Claude1; STATUS=$?
+check "its user then counts as claimed: --user for it is refused" \
+  '[ "$STATUS" -ne 0 ] && grep -q "already claimed by another checkout" "$SCRATCH/out"'
+new_worktree "$REPO" jm/after-deep; STATUS=$?
+check "and no user is left to hand out" \
+  '[ "$STATUS" -ne 0 ] && grep -q "already claimed by a checkout" "$SCRATCH/out"'
 
 if [ "$FAILED" = 0 ]; then
   echo "new-worktree: all checks passed"
