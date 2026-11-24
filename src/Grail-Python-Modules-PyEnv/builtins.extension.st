@@ -9186,6 +9186,36 @@ builtins >> len: anObject [
 
 ]
 
+{ #category : 'Grail-Built-in Functions' }
+builtins >> locals [
+	"locals() reached as a VALUE: ``builtins.locals()'', ``getattr(builtins,
+	'locals')()'' or a call through an alias.  pytest's assertion rewriting
+	emits ``@py_builtins.locals()'' to explain a failed assert, so without
+	this every failing assert reported an AttributeError instead (#2298).  A
+	direct ``locals()'' never comes here -- CallAst compiles it to the
+	scope's own namespace.
+
+	The counterpart of globals, and found the same way: CPython's locals()
+	answers the CALLING frame's, so this walks to the innermost Python frame
+	that is not its own.  A function frame's f_locals is a live view, and
+	CPython's locals() there answers a fresh dict snapshot (PEP 667), so the
+	view is copied; a module frame's f_locals is its globals mapping, which
+	is also what CPython's locals() answers at module scope."
+
+	| frame answer |
+
+	frame := BaseException @env0:___liveFrameChain___.
+	[(frame @env0:~~ nil) and: [(frame @env0:~~ None) and: [
+		((sys @env0:___instance___) @env1:___frameName___: frame) @env0:= 'locals']]]
+		whileTrue: [frame := frame @env0:dynamicInstVarAt: #'f_back'].
+	((frame @env0:== nil) or: [frame @env0:== None]) ifTrue: [
+		^ RuntimeError ___signal___: 'locals(): no current frame'].
+	answer := frame f_locals.
+	(answer @env0:isKindOf: PyFrameLocals) ifTrue: [^ answer ___snapshot___].
+	^ answer
+
+]
+
 { #category : 'Python-Built-in Functions' }
 builtins >> map: aFunction _: anIterable [
 	"Python builtin map(func, iter) — LAZY, as in CPython.  Eager
