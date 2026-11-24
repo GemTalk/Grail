@@ -40,6 +40,29 @@ ImportAst >> ___boundTargetNames___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ImportAst >> ___emitIRImportValueFor___: alias on: aBuilder [
+	"The value ONE alias binds, valueSourceFor:'s shape:
+	  ((Python @env0:at: #builtins) @env0:___instance___) ___import__: { 'a.b.c' } kw: nil
+	and, for ``import a.b.c as x'', the leaf reached by walking the dotted
+	segments after the import.  Shared by the statement emit and a class-body
+	import's attribute value (RawSmalltalkAst >> ___emitIRValueOn___:, plan
+	P3.7), as valueSourceFor: is shared by the text's two."
+
+	| v parts |
+	aBuilder atNode: self.
+	v := aBuilder
+		send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: { aBuilder obj: alias name asString }. aBuilder nilLit }
+		env: 1.
+	parts := $. split: alias name asString.
+	(alias asName notNil and: [parts size > 1]) ifTrue: [
+		2 to: parts size do: [:i |
+			v := aBuilder send: (parts at: i) asSymbol to: v with: { } env: 1]].
+	^ v
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ImportAst >> ___emitIRStatementOn___: aBuilder [
 	"printSmalltalkOn: + valueSourceFor:'s shape, one statement per alias:
 	  name := (((Python @env0:at: #builtins) @env0:___instance___) ___import__: { 'a.b.c' } kw: nil)
@@ -49,16 +72,8 @@ ImportAst >> ___emitIRStatementOn___: aBuilder [
 	being resolvable through the symbol list."
 
 	names do: [:alias |
-		| v parts |
-		aBuilder atNode: self.
-		v := aBuilder
-			send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
-			with: { aBuilder arrayOf: { aBuilder obj: alias name asString }. aBuilder nilLit }
-			env: 1.
-		parts := $. split: alias name asString.
-		(alias asName notNil and: [parts size > 1]) ifTrue: [
-			2 to: parts size do: [:i |
-				v := aBuilder send: (parts at: i) asSymbol to: v with: { } env: 1]].
+		| v |
+		v := self ___emitIRImportValueFor___: alias on: aBuilder.
 		aBuilder atNode: self.
 		"The binding target, by the same rule the assignment, the augmented
 		assignment and the unpack all use -- one copy of a four-way scope
@@ -114,10 +129,22 @@ ImportAst >> ___irEligibleStatementLocals___: localNames [
 	"Nor need it be THIS def's: ``nonlocal x; import os as x'' in a method of a
 	method-local class writes the enclosing function's x through the class's
 	setter cell (#2233)."
+	"...nor a local at all in a class-body ``if'' or ``try'' (plan P3.7): the
+	name is stored on the class (___emitIRImportStoreOf___:from:on:)."
 	^ self ___irBoundNames___ allSatisfy: [:n |
 		(localNames includes: n)
 			or: [(self ___nameStoreRoutesToModule___: n asSymbol)
-			or: [self ___importBindsClassCell___: n asSymbol]]]
+			or: [(self ___importBindsClassCell___: n asSymbol)
+			or: [self ___inClassBodyRuntimeScope___]]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ImportAst >> ___irImportValueEligibleFor___: anAlias [
+	"Can ___emitIRImportValueFor___:on: build anAlias's value?  Always: the
+	importer call names nothing of the enclosing scope."
+
+	^ true
 
 ]
 
@@ -158,7 +185,8 @@ ImportAst >> classBodyAttributePairs [
 	driven by name -> value-AST pairs, so wrap the importer call."
 
 	^ names collect: [:each |
-		(self boundNameFor: each) -> (RawSmalltalkAst source: (self valueSourceFor: each))]
+		(self boundNameFor: each)
+			-> (RawSmalltalkAst source: (self valueSourceFor: each) importer: self alias: each)]
 
 ]
 

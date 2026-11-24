@@ -924,6 +924,27 @@ FunctionDefAst >> ___emitIRArgCountChecksOn___: aBuilder pos: posLeaf kw: kwLeaf
 ]
 
 { #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRClassBodyRuntimeDefOn___: aBuilder [
+	"printSmalltalkClassBodyRuntimeDefOn:'s shape for a def a class-body loop,
+	``try'' or ``with'' binds, in a method-local class helper built through IR
+	(plan P3.7): the def is built as a VALUE into a block temp of its name and
+	stored on the class through the definitional store, with the wrapper a
+	re-classed def takes -- exactly what the class-body ``if'' does, so this
+	hands the def to that emit (ClassDefAst >> emitClassBodyIfDef:on:) through
+	the helper's class build emitter, with the runtime class cleared as the
+	text clears it around the def."
+
+	| saved |
+	saved := CallAst classBodyRuntimeClass.
+	CallAst classBodyRuntimeClass: nil.
+	[self ___enclosingClassDefForRuntimeDef___
+		emitClassBodyIfDef: self on: aBuilder classBuildEmitter]
+		ensure: [CallAst classBodyRuntimeClass: saved].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___emitIRClosureCellsOn___: aBuilder names: freeNames [
 	"emitClosureCellsOn:'s ``{ (PyCell reader: [x]) ... }'': one cell per free
 	variable, its reader a block over the def-site read of the name -- the
@@ -1061,6 +1082,19 @@ FunctionDefAst >> ___emitIRDecoratorValue___: deco on: aBuilder [
 	expression decorator is emitted as a value."
 
 	(deco isKindOf: Symbol) ifFalse: [^ deco ___emitIRValueOn___: aBuilder].
+	"A bare name the class body binds, decorating a def the class body builds
+	as a value (a def in a class-body ``if'', loop, ``try'' or ``with''): the
+	class attribute, read off the class being built -- the class-body
+	decorator scope's read (printDecoratorReceiverWith:deco:), plan P3.7."
+	(aBuilder classBuildEmitter notNil
+		and: [CallAst classBodyValueDefNode == self
+		and: [CallAst classBodyBoundNames notNil
+		and: [CallAst classBodyBoundNames includes: deco asSymbol]]]) ifTrue: [
+			^ aBuilder
+				send: #'___pyAttrLoad___:'
+				to: (aBuilder classBuildEmitter valueOf: [
+					aBuilder classBuildEmitter var: CallAst ___classBeingCompiledVar___])
+				with: { aBuilder obj: deco asSymbol } env: 1].
 	"A late-bound module name (___decoratorNameIsUnboundInModule___:) takes the
 	same module-instance load as a module variable: the text's
 	``(<Mod> ___instance___ ___moduleAttrLoad___: #d)'', NameError on a miss."
@@ -1808,25 +1842,13 @@ FunctionDefAst >> ___emitIRPositionalBindingOn___: aBuilder pos: posLeaf kw: kwL
 ]
 
 { #category : 'Grail-IR Codegen' }
-FunctionDefAst >> ___emitIRPreEvaluatedDecoratedStatementOn___: aBuilder [
-	"___printWithPreEvaluatedDecoratorsOn___:'s shape, for a nested def whose
-	decorator READS THE DEF'S OWN NAME (``@g.register def g'', ``@lambda f:
-	null(f) def f'' in test_grammar test_funcdef): every decorator expression
-	is evaluated FIRST, into the argument of a one-argument block, and only
-	then is the function made, bound and decorated --
+FunctionDefAst >> ___emitIRPreEvaluatedDecoratedOn___: aBuilder leaf: leaf [
+	"___emitIRPreEvaluatedDecoratedStatementOn___:'s emit, binding leaf: the
+	def's own local, or (plan P3.7) the value-block temp a class-body ``if'',
+	loop, ``try'' or ``with'' builds the def into
+	(ClassBuildIREmitter >> ___valueDef___:)."
 
-	    [:___grailPreDeco___ |
-	        g := <the function>.
-	        g := ((___grailPreDeco___ at: 1) value: { g } value: nil) ...
-	    ] value: { <decorator 1>. ... }
-
-	so ``g.register'' reads the binding as it stood before the def (an unbound
-	local raises, as CPython's UnboundLocalError) rather than the new plain
-	function.  The application chain is ___emitIRDecoratorApply___:'s, over the
-	block argument instead of an array built after the bind."
-
-	| leaf applicable blk vals |
-	leaf := aBuilder leafFor: self ___mangledName___ asSymbol.
+	| applicable blk vals |
 	applicable := self ___applicableLocalDecorators___.
 	aBuilder atNode: self.
 	blk := aBuilder blockWithArg: #'___grailPreDeco___' do: [:fl |
@@ -1844,6 +1866,29 @@ FunctionDefAst >> ___emitIRPreEvaluatedDecoratedStatementOn___: aBuilder [
 	aBuilder add: (aBuilder
 		send: #'value:' to: blk with: { aBuilder arrayOf: vals asArray } env: 0).
 	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRPreEvaluatedDecoratedStatementOn___: aBuilder [
+	"___printWithPreEvaluatedDecoratorsOn___:'s shape, for a nested def whose
+	decorator READS THE DEF'S OWN NAME (``@g.register def g'', ``@lambda f:
+	null(f) def f'' in test_grammar test_funcdef): every decorator expression
+	is evaluated FIRST, into the argument of a one-argument block, and only
+	then is the function made, bound and decorated --
+
+	    [:___grailPreDeco___ |
+	        g := <the function>.
+	        g := ((___grailPreDeco___ at: 1) value: { g } value: nil) ...
+	    ] value: { <decorator 1>. ... }
+
+	so ``g.register'' reads the binding as it stood before the def (an unbound
+	local raises, as CPython's UnboundLocalError) rather than the new plain
+	function.  The application chain is ___emitIRDecoratorApply___:'s, over the
+	block argument instead of an array built after the bind."
+
+	^ self ___emitIRPreEvaluatedDecoratedOn___: aBuilder
+		leaf: (aBuilder leafFor: self ___mangledName___ asSymbol)
 
 ]
 
@@ -1985,6 +2030,10 @@ FunctionDefAst >> ___emitIRStatementOn___: aBuilder [
 	the one-statement ordered form for a chain."
 
 	| leaf fn |
+	"A def a class-body loop, ``try'' or ``with'' binds (plan P3.7): built as
+	the class-body ``if'' builds one, and stored on the class."
+	self ___inClassBodyRuntimeScope___
+		ifTrue: [^ self ___emitIRClassBodyRuntimeDefOn___: aBuilder].
 	"A decorator that reads the def's own name is evaluated before the def
 	exists -- the text's pre-evaluated wrapper (nestedDef:decoratorReadsOwnName
 	is retired)."
@@ -2511,6 +2560,18 @@ FunctionDefAst >> ___emitUnboundMethodOf___: aClassBlock selector: aSelector on:
 
 ]
 
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___enclosingClassDefForRuntimeDef___ [
+	"The class whose body holds the loop, ``try'' or ``with'' this def is in
+	(___inClassBodyRuntimeScope___ answered true, so there is one)."
+
+	| node |
+	node := parent.
+	[node isKindOf: ClassDefAst] whileFalse: [node := node parent].
+	^ node
+
+]
+
 { #category : 'Grail-code generation' }
 FunctionDefAst >> ___enclosingDefDeclares___: funcAst named: aSymbol [
 	"True iff funcAst (a FunctionDef/Lambda) declares aSymbol as a
@@ -2941,6 +3002,29 @@ FunctionDefAst >> ___irChildLocals___: localSet [
 	nested scope (cut 64), as a comprehension's are against its own."
 
 	^ self ___irNestedLocals___: localSet
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___irClassBodyRuntimeDefReason___: localNames [
+	"___irNestedDefReason___: for a def a class-body loop, ``try'' or ``with''
+	binds: the value def ___emitIRClassBodyRuntimeDefOn___: builds, judged as
+	ClassBuildIREmitter >> ___valueDef___: judges it -- with the runtime class
+	cleared, as the value def's emit clears it, and the def's own name a local
+	(its value block's temp).  Asked only while a method-local class helper
+	is built through IR: the class walk sets the runtime class, and only the
+	IR helper asks IR eligibility inside it."
+
+	| saved savedNode locals |
+	locals := localNames copy.
+	locals add: self ___mangledName___ asString; add: name asString.
+	saved := CallAst classBodyRuntimeClass.
+	savedNode := CallAst classBodyValueDefNode.
+	CallAst classBodyRuntimeClass: nil.
+	CallAst classBodyValueDefNode: self.
+	^ [self ___irNestedDefReason___: locals] ensure: [
+		CallAst classBodyRuntimeClass: saved.
+		CallAst classBodyValueDefNode: savedNode]
 
 ]
 
@@ -4093,13 +4177,20 @@ FunctionDefAst >> ___irNestedDefReasonUnguarded___: localNames [
 	whose name lands at module scope, and a class-body runtime scope."
 
 	| own bodyLocals nestedLocals seed |
-	self ___inClassBodyRuntimeScope___ ifTrue: [^ #'nestedDef:classBodyRuntime'].
+	"A def a class-body loop, ``try'' or ``with'' binds is judged as the value
+	def it is built as (plan P3.7, ___emitIRClassBodyRuntimeDefOn___:)."
+	self ___inClassBodyRuntimeScope___
+		ifTrue: [^ self ___irClassBodyRuntimeDefReason___: localNames].
 	"A def a method-local class body builds as a VALUE (plan P3.5,
-	ClassBuildIREmitter >> statementNode:) keeps the InstanceFunctionDefAst
-	marker the parser gives every plain def in a class body; the text's
-	closure form emits it as any def, and so does this one."
+	ClassBuildIREmitter >> statementNode:) keeps the marker class the parser
+	gives a def in a class body -- InstanceFunctionDefAst, or, re-classed for
+	its decorator, StaticFunctionDefAst / ClassFunctionDefAst (plan P3.7),
+	whose wrapper the walk applies around the value; the text's closure form
+	emits it as any def, and so does this one."
 	((self class == FunctionDefAst or: [self class == AsyncFunctionDefAst])
-		or: [self class == InstanceFunctionDefAst and: [CallAst classBodyValueDefNode == self]])
+		or: [CallAst classBodyValueDefNode == self
+			and: [(self class == InstanceFunctionDefAst)
+			or: [(self class == StaticFunctionDefAst) or: [self class == ClassFunctionDefAst]]]])
 			ifFalse: [^ #'nestedDef:reclassed'].
 	"A nested def whose NAME lands at module scope -- ``global f; def f(): ...''
 	-- no longer refuses outright (this cut).  The def STATEMENT stores the
@@ -5482,6 +5573,27 @@ FunctionDefAst >> ___stmtEndsWithInlineReturn___: stmt [
 	orelse isEmpty ifTrue: [^ false].
 	lastStmt := orelse last.
 	^ self ___stmtEndsWithInlineReturn___: lastStmt
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___valueDefHeaderContains___: aNode [
+	"Is aNode in this def's decorators or parameter defaults -- the parts the
+	enclosing scope evaluates -- rather than its body or annotations?  Asked
+	of a def a class body builds as a value (CallAst classBodyValueDefNode),
+	whose header reads the class namespace (NameAst >> ___emitIRValueOn___:,
+	plan P3.7)."
+
+	| header node |
+	header := IdentitySet new.
+	(decorator_list ifNil: [#()]) do: [:d | (d isKindOf: AbstractNode) ifTrue: [header add: d]].
+	(self ___defaultedPositionalParams___ asArray , self ___defaultedKeywordOnlyParams___ asArray)
+		do: [:pair | (pair at: 2) ifNotNil: [:dflt | header add: dflt]].
+	node := aNode.
+	[node notNil and: [node ~~ self]] whileTrue: [
+		(header includes: node) ifTrue: [^ true].
+		node := node parent].
+	^ false
 
 ]
 
