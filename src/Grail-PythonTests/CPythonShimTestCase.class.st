@@ -4504,6 +4504,55 @@ repr((reversed(d.Cell(5)), reversed(Sub(7)), reversed(Own(1)), blocked()))')
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testReversedOfAWheelClassIsNotReversible [
+	"reversed() of a wheel's CLASS is refused as CPython refuses it: the class's
+	type, ``type'', has no sq_item, so it is ``not reversible'' (#2314).  Grail
+	asked the class's proxy for __getitem__, which it has, and reported the
+	length check's ``has no len()'' instead.  The expected strings are CPython
+	3.14's, from _grail_demo built against it."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def r(x):
+    try:
+        return list(reversed(x))
+    except TypeError as e:
+        return str(e)
+repr((r(d.Pmap), r(d.Row), r(d.Box)))')
+		equals: '("''type'' object is not reversible", "''type'' object is not reversible", "''type'' object is not reversible")'
+
+]
+
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testReversedRefusesAWheelObjectThatIsNotASequence [
+	"reversed() of a wheel's object with no __reversed__ takes it only when
+	CPython's PySequence_Check does: its type has sq_item and is not a dict
+	subclass (#2313).  Grail asked the proxy for __getitem__, which every proxy
+	has, and built a reversed object that failed only when iterated -- rpds-py's
+	HashTrieMap with a KeyError, its Queue with ``not subscriptable''.
+
+	Pmap is HashTrieMap's shape, a spec type whose subscript is mp_subscript;
+	Box has a mapping subscript too, and Plain none at all.  Row's sq_item makes
+	it a sequence, so it is reversed.  The expected strings are CPython 3.14's,
+	from _grail_demo built against it."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def r(x):
+    try:
+        return list(reversed(x))
+    except TypeError as e:
+        return str(e)
+repr((r(d.Pmap({''a'': 1})), r(d.make_plain()), r(d.make_box([1, 2])), r(d.Row([1, 2, 3]))))')
+		equals: '("''_grail_demo.Pmap'' object is not reversible", "''_grail_demo.Plain'' object is not reversible", "''_grail_demo.Box'' object is not reversible", [3, 2, 1])'
+
+]
+
 { #category : 'Grail-Tests - Rich Comparison' }
 CPythonShimTestCase >> testRichCompareFloatLt [
 	"1.5 < 2.5 is true."

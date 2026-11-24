@@ -49,7 +49,13 @@ reversed_iterator class >> ___reversing___: aSequence [
 	through its C body as its other base names are."
 	(aSequence @env0:isKindOf: ShimForeignObject) ifTrue: [
 		(aSequence ___foreignTypeAttr___: #'__reversed__') @env0:ifNotNil: [:method |
-			^ method ___pyCallValue___: { aSequence } kw: nil]].
+			^ method ___pyCallValue___: { aSequence } kw: nil].
+		"Without one, CPython's sequence test is PySequence_Check, which C has
+		to answer: the proxy has a __getitem__ for any subscript, a mapping's
+		too, or none (#2313), and a wheel CLASS is a proxy whose type has no
+		sq_item (#2314)."
+		aSequence ___foreignIsSequence___ @env0:== false
+			ifTrue: [^ namespace ___notReversible___: aSequence]].
 	(aSequence @env0:isKindOf: ShimForeignSubclass) ifTrue: [
 		(aSequence ___pyAttrForeignBaseLoad___: #'__reversed__') @env0:ifNotNil: [:found |
 			^ found @env0:value ___pyCallValue___: #() kw: nil]].

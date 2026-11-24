@@ -2000,6 +2000,50 @@ static PyType_Spec pmap_spec = {
     .slots = pmap_slots,
 };
 
+/* Row: a heap type from a spec that IS a sequence -- sq_length and sq_item,
+   as a PyO3 pyclass with __len__ and an integer __getitem__ gets when it is
+   declared #[pyclass(sequence)].  reversed() takes it, where it refuses
+   Pmap, whose subscript is a mapping's (#2313).  It wraps a tuple. */
+typedef struct {
+    PyObject_HEAD
+    PyObject *t;
+} RowObject;
+
+static PyObject *row_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    (void)kwds;
+    PyObject *src = NULL;
+    if (!PyArg_ParseTuple(args, "O", &src)) return NULL;
+    PyObject *t = PySequence_Tuple(src);
+    if (t == NULL) return NULL;
+    RowObject *self = (RowObject *)type->tp_alloc(type, 0);
+    if (self == NULL) { Py_DECREF(t); return NULL; }
+    self->t = t;
+    return (PyObject *)self;
+}
+static void row_dealloc(PyObject *self) {
+    PyTypeObject *tp = Py_TYPE(self);
+    Py_XDECREF(((RowObject *)self)->t);
+    tp->tp_free(self);
+    Py_DECREF(tp);
+}
+static Py_ssize_t row_length(PyObject *self) { return PyTuple_Size(((RowObject *)self)->t); }
+static PyObject *row_item(PyObject *self, Py_ssize_t i) {
+    return PySequence_GetItem(((RowObject *)self)->t, i);
+}
+static PyType_Slot row_slots[] = {
+    {Py_tp_new, (void *)row_new},
+    {Py_tp_dealloc, (void *)row_dealloc},
+    {Py_sq_length, (void *)row_length},
+    {Py_sq_item, (void *)row_item},
+    {0, NULL}
+};
+static PyType_Spec row_spec = {
+    .name = "_grail_demo.Row",
+    .basicsize = sizeof(RowObject),
+    .flags = Py_TPFLAGS_DEFAULT,
+    .slots = row_slots,
+};
+
 /* A list C keeps, as rpds-py's HashTrieMap.fromkeys keeps its value (#2301):
    keep(x) stores x, kept() answers it, append_to_kept(v) appends v to it in
    C, and append_to(lst, v) appends v to its argument in place. */
@@ -2168,6 +2212,7 @@ grail_demo_exec(PyObject *mod) {
         if (vec == NULL || PyModule_Add(mod, "Vec", vec) < 0) return -1;
     }
     if (PyModule_Add(mod, "Pmap", PyType_FromSpec(&pmap_spec)) < 0) return -1;
+    if (PyModule_Add(mod, "Row", PyType_FromSpec(&row_spec)) < 0) return -1;
     /* ``__all__'' as a PyO3 module builds it (pyo3_style_add above). */
     if (pyo3_style_add(mod, "Box", (PyObject *)&Box_Type) < 0
             || pyo3_style_add(mod, "Cell", (PyObject *)&Cell_Type) < 0

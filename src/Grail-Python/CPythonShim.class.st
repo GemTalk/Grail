@@ -2351,6 +2351,16 @@ CPythonShim >> foreignProxyForPointer: ptrInt typeName: nameStr ops: anInteger [
 ]
 
 { #category : 'Grail-Calling' }
+CPythonShim >> foreignSequenceCheck: cPtr [
+	"CPython's PySequence_Check of a wheel's own C object: false for a dict
+	subclass, else whether its type has sq_item.  nil when cPtr is not a
+	wheel's object.  See shimForeignSequenceCheck in cpython.cc."
+
+	^ self ___shimUserAction: #shimForeignSequenceCheck withArgs: { cPtr }
+
+]
+
+{ #category : 'Grail-Calling' }
 CPythonShim >> foreignSetAttr: cPtr name: aString value: aValue [
 	"Store an attribute on a wheel's own C object in C, as C's own
 	PyObject_SetAttrString would: a type's tp_dict, or an instance's data
