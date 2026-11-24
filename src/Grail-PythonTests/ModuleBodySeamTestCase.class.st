@@ -71,6 +71,25 @@ ModuleBodySeamTestCase >> ___reset___: someModuleNames [
 ]
 
 { #category : 'Grail-Private' }
+ModuleBodySeamTestCase >> ___sentHelpersOf___: aDispatcher [
+	"The helper selectors the seam's ``initialize'' sends, read from its source,
+	in source order."
+
+	| src out i |
+	src := aDispatcher sourceString.
+	out := OrderedCollection new.
+	i := 1.
+	[i := src indexOfSubCollection: 'self ' , ModuleBodySeam helperPrefix startingAt: i.
+	 i > 0] whileTrue: [
+		| j |
+		j := src indexOf: $. startingAt: i.
+		out add: (src copyFrom: i + 5 to: j - 1) asSymbol.
+		i := j].
+	^ (out asSortedCollection: [:a :b | (self ___offsetOf___: a) <= (self ___offsetOf___: b)]) asArray
+
+]
+
+{ #category : 'Grail-Private' }
 ModuleBodySeamTestCase >> ___write: aString to: aPath [
 	| f |
 	f := GsFile openWriteOnServer: aPath.
@@ -189,7 +208,9 @@ class K:
 d = K.x + 1
 e = d + 1
 '.
-	v2 := '# moved down by this line
+	"Eight characters move every statement's offset, so every helper is renamed
+	(v1's helpers start at 1, 17, 27 and 46; v2's at 9, 25, 35, 54 and 76)."
+	v2 := '# moved
 ' , v1 , 'f = e + 1
 '.
 	"Two statements per group, so the module has several helpers."
@@ -203,8 +224,10 @@ e = d + 1
 	self assert: first size >= 3 description: first printString.
 	self assert: (mod @env1:___pyAttrLoad___: #'e') equals: 5.
 
+	"Out of sys.modules only: the module stays registered, so the edited source
+	is rebuilt INTO the same class -- the case where an old helper could linger."
 	self ___write: v2 to: path.
-	self ___reset___: #('seam_reimport_probe').
+	(importlib @env1:modules) removeKey: #'seam_reimport_probe' ifAbsent: [].
 	mod := importlib loadModuleFromPath: path name: 'seam_reimport_probe'.
 	self assert: mod class == cls description: 'the rebuild made a new class'.
 	self assert: (mod @env1:___pyAttrLoad___: #'f') equals: 6.
@@ -212,14 +235,18 @@ e = d + 1
 	self assert: second size >= 3 description: second printString.
 	self assert: (second select: [:sel | first includes: sel]) isEmpty
 		description: 'stale helpers survived: ' , (second select: [:sel | first includes: sel]) printString.
+	"The class holds exactly the helpers its new ``initialize'' sends."
 	init := cls compiledMethodAt: #initialize environmentId: 1.
-	second do: [:sel |
-		self assert: (init sourceString includesString: sel asString)].
+	self assert: (self ___sentHelpersOf___: init) equals: second.
 
+	"...and once more on the text arm, edited again so it rebuilds: no helper."
 	importlib ___irCodegenForce___: false.
-	self ___reset___: #('seam_reimport_probe').
+	self ___write: v2 , 'g = f + 1
+' to: path.
+	(importlib @env1:modules) removeKey: #'seam_reimport_probe' ifAbsent: [].
 	mod := importlib loadModuleFromPath: path name: 'seam_reimport_probe'.
-	self assert: (mod @env1:___pyAttrLoad___: #'f') equals: 6.
+	self assert: mod class == cls description: 'the text rebuild made a new class'.
+	self assert: (mod @env1:___pyAttrLoad___: #'g') equals: 7.
 	self assert: (self ___helpersOf___: mod class) isEmpty
 		description: (self ___helpersOf___: mod class) printString.
 	self deny: (BaseException ___isModuleSeamDispatcher___:

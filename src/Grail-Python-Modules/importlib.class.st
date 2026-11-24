@@ -997,11 +997,16 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 				(self ___openServerFile___: tpzPath mode: 'wb')
 					nextPutAll: debugStream contents encodeAsUTF8;
 					close.
-				[:f |
+				"ONE write of one string, as the single-method path does: a
+				snapshot holding a wide character is a Unicode16 String, and
+				writing the pieces one by one mixed byte widths in one file."
+				[:irs |
 					seam irSnapshots do: [:assoc |
-						f nextPutAll: '! '; nextPutAll: assoc key; nextPutAll: lf;
+						irs nextPutAll: '! '; nextPutAll: assoc key; nextPutAll: lf;
 							nextPutAll: assoc value; nextPutAll: lf].
-					f close] value: (self ___openServerFile___: irPath mode: 'w')]].
+					(self ___openServerFile___: irPath mode: 'w')
+						nextPutAll: irs contents;
+						close] value: (PrettyWriteStream on: Unicode7 new)]].
 		methodSource notNil ifTrue: [
 			"Compile the body as an env-1 `initialize` method on the new class.
 			Resume CompileWarning the same way the per-def compilation above
