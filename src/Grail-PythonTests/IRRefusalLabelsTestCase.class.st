@@ -193,6 +193,28 @@ IRRefusalLabelsTestCase >> tearDown [
 ]
 
 { #category : 'Grail-Tests - fixture' }
+IRRefusalLabelsTestCase >> testClassAttributeDecoratorBuildsThroughIR [
+	"#2232: a nested def in a method, decorated with the bare name of a class
+	attribute, used to compile to an undeclared identifier -- a codegen-gap
+	stub on the text path, and the census row
+	`nestedDef:decorator-unresolvedName' on the IR one.  The decorator is now
+	the module's late lookup on both, so the fixture's methods build through
+	IR: the row is gone and nothing fell back."
+
+	| counts stats |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	counts := self ___censusCountsFor___: 'ir_refusal_labels'.
+	self assert: (counts at: #'cm:nestedDef:decorator-unresolvedName' otherwise: 0) = 0
+		description: 'a class-attribute decorator in a method still refuses IR: '
+			, counts printString.
+	self ___irModule___.
+	stats := importlib ___irStats___.
+	self assert: (stats at: #fallbacks) = 0
+		description: 'ir_refusal_labels fell back to text: ' , stats printString
+
+]
+
+{ #category : 'Grail-Tests - fixture' }
 IRRefusalLabelsTestCase >> testFixtureAgreesWithCPythonUnderIR [
 	| bad |
 	bad := self ___table___: #EXPECTED.
@@ -204,10 +226,11 @@ IRRefusalLabelsTestCase >> testFixtureAgreesWithCPythonUnderIR [
 
 { #category : 'Grail-Tests - fixture' }
 IRRefusalLabelsTestCase >> testFixtureXfailsKeepTheTextAnswer [
-	"The XFAIL shape still refuses IR, so its answer IS the text path's.  A
-	change of answer here means either a fix (update the fixture, as #2231 moved
-	lambda_async_genexp to EXPECTED) or a refusal that stopped refusing without
-	its emit being checked."
+	"An XFAIL shape refuses IR, so its answer IS the text path's.  A change of
+	answer here means either a fix (update the fixture, as #2231 and #2232
+	moved the last two shapes to EXPECTED) or a refusal that stopped refusing
+	without its emit being checked.  The table is empty now; the test keeps it
+	honest for the next shape recorded there."
 
 	| bad |
 	bad := self ___table___: #XFAIL.
@@ -277,16 +300,17 @@ IRRefusalLabelsTestCase >> testNoRetiredReasonIsALiteralAnyMore [
 
 { #category : 'Grail-Tests - fixture' }
 IRRefusalLabelsTestCase >> testRelabelledRowsAppearUnderTheirNewNames [
-	"The fixture's two still-refused shapes are named for their real causes:
-	an async generator expression in a lambda (was `LambdaAst:yield') and a
+	"The fixture's still-refused shapes are named for their real causes: an
+	async generator expression in a lambda (was `LambdaAst:yield') and a
 	nested def's bare-name decorator split by why it cannot be read (was one
-	`nestedDef:decorator')."
+	`nestedDef:decorator').  The class-attribute decorator that was the
+	`nestedDef:decorator-unresolvedName' row builds through IR since #2232
+	(testClassAttributeDecoratorBuildsThroughIR)."
 
 	| counts missing |
 	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
 	counts := self ___censusCountsFor___: 'ir_refusal_labels'.
-	missing := #(#'LambdaAst:awaitInGenexp' #'cm:nestedDef:decorator-classCell'
-		#'cm:nestedDef:decorator-unresolvedName') reject: [:row |
+	missing := #(#'LambdaAst:awaitInGenexp' #'cm:nestedDef:decorator-classCell') reject: [:row |
 			(counts at: row otherwise: 0) > 0].
 	self assert: missing isEmpty
 		description: 'relabelled rows missing from the census: ' , missing printString

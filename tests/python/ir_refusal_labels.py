@@ -83,10 +83,15 @@ def decorator_through_class_cell():
 
 
 # A class attribute named from inside a method is not in scope there, so
-# CPython raises NameError at the decoration (nestedDef:decorator-unresolvedName).
+# CPython raises NameError at the decoration.  Grail read the name as the
+# class attribute it is in the class body, emitted a bare identifier nothing
+# declares, and the whole method failed to compile (#2232; the census row was
+# nestedDef:decorator-unresolvedName).  It is now the module's late lookup:
+# globals, then builtins, then NameError.
 
 class Holder:
     deco = staticmethod(lambda fn: fn)
+    shared_deco = staticmethod(lambda fn: (lambda: 'class ' + fn()))
 
     def decorate_with_class_attribute(self):
         try:
@@ -96,6 +101,64 @@ class Holder:
         except NameError as e:
             return type(e).__name__, str(e)
         return g()
+
+    # The same name bound at module level too: the method reads the GLOBAL.
+    def decorate_with_shadowed_global(self):
+        @shared_deco
+        def g():
+            return 'g'
+        return g()
+
+    # Two defs down: the decorator still runs in a function scope.
+    def decorate_two_defs_down(self):
+        def inner():
+            try:
+                @deco
+                def g():
+                    return 'g'
+            except NameError as e:
+                return type(e).__name__, str(e)
+            return g()
+        return inner()
+
+
+def shared_deco(fn):
+    return lambda: 'global ' + fn()
+
+
+# The same shape in a method of a method-local class.
+
+def decorator_class_attribute_in_local_class():
+    class K:
+        deco = staticmethod(lambda fn: fn)
+        shared_deco = staticmethod(lambda fn: (lambda: 'class ' + fn()))
+
+        def m(self):
+            try:
+                @deco
+                def g():
+                    return 'g'
+            except NameError as e:
+                return type(e).__name__, str(e)
+            return g()
+
+        def n(self):
+            @shared_deco
+            def g():
+                return 'g'
+            return g()
+    return K().m(), K().n()
+
+
+# The class body itself DOES see its attributes: a class-body def decorated
+# by one is unaffected.
+
+class ClassBodyDecorated:
+    deco = staticmethod(lambda fn: (lambda self: 'class-body ' + fn(self)))
+
+    @deco
+    def m(self):
+        return 'm'
 
 
 # --- CallAst:super-shadowed (deleted) ------------------------------------------
@@ -145,6 +208,14 @@ record('lambda_generator_still_a_generator', lambda_generator_still_a_generator)
 record('decorator_through_class_cell', decorator_through_class_cell)
 record('decorator_class_attribute',
        lambda: Holder().decorate_with_class_attribute())
+record('decorator_class_attribute_shadowed_global',
+       lambda: Holder().decorate_with_shadowed_global())
+record('decorator_class_attribute_two_defs_down',
+       lambda: Holder().decorate_two_defs_down())
+record('decorator_class_attribute_in_local_class',
+       decorator_class_attribute_in_local_class)
+record('decorator_class_attribute_in_class_body',
+       lambda: ClassBodyDecorated().m())
 record('shadowed_super_call', shadowed_super_call)
 record('del_nonlocal_past_a_class', del_nonlocal_past_a_class)
 record('aug_assign_slice', aug_assign_slice)
@@ -155,18 +226,21 @@ EXPECTED = {
     'lambda_async_genexp_runs': '[1, 2]',
     'lambda_generator_still_a_generator': "('generator', [1], 'generator')",
     'decorator_through_class_cell': "'tagged g'",
+    'decorator_class_attribute': '(\'NameError\', "name \'deco\' is not defined")',
+    'decorator_class_attribute_shadowed_global': "'global g'",
+    'decorator_class_attribute_two_defs_down':
+        '(\'NameError\', "name \'deco\' is not defined")',
+    'decorator_class_attribute_in_local_class':
+        '((\'NameError\', "name \'deco\' is not defined"), \'global g\')',
+    'decorator_class_attribute_in_class_body': "'class-body m'",
     'shadowed_super_call': "'mine'",
     'del_nonlocal_past_a_class': "'UnboundLocalError'",
     'aug_assign_slice': '[1, 2, 3, 9, 4]',
 }
 
-# Grail's answer, recorded so a fix shows up as an XPASS here.  It is a TEXT
-# path answer: the def still refuses IR, so the text compiles it.
+# Grail's answers, recorded so a fix shows up as an XPASS here.  None is left:
+# #2231 and #2232 moved the last two shapes to EXPECTED.
 XFAIL = {
-    # CPython: ('NameError', "name 'deco' is not defined").
-    'decorator_class_attribute':
-        'NameError: Grail could not compile this method (codegen gap); '
-        'see install/import log',
 }
 
 
