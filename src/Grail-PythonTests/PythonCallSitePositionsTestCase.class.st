@@ -101,6 +101,16 @@ PythonCallSitePositionsTestCase >> ___fixtureSource___ [
 ]
 
 { #category : 'Grail-Private' }
+PythonCallSitePositionsTestCase >> ___helperOffsetOf___: aHelperSelector [
+	"The source offset a statement helper ``___irModStmt_<offset>___'' is named for."
+
+	| s |
+	s := aHelperSelector asString.
+	^ (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) asNumber
+
+]
+
+{ #category : 'Grail-Private' }
 PythonCallSitePositionsTestCase >> ___irMethod___ [
 	^ self ___irModule___ class compiledMethodAt: #answer environmentId: 1
 
@@ -146,19 +156,29 @@ PythonCallSitePositionsTestCase >> ___stmtFixtureLines___ [
 ]
 
 { #category : 'Grail-Private' }
-PythonCallSitePositionsTestCase >> ___stmtModuleInit___ [
-	"The module body of tests/python/frame_line_in_module_statement.py.  The
+PythonCallSitePositionsTestCase >> ___stmtModuleBodyMethods___ [
+	"The METHODS holding the module body of
+	tests/python/frame_line_in_module_statement.py, in the order they run.  The
 	module defines classes and functions, so its body embeds the source of each
 	method it compiles as a string literal, stores and all -- the shape issue
-	#1137 is about.  A module body is text-compiled on both codegen paths, so
-	the seam is left as the worker has it."
+	#1137 is about.  On the text arm that body is one ``initialize''; on the IR
+	arm ``initialize'' only sends to the statement helpers (ModuleBodySeam,
+	P4.1), and the body is those helpers, in source order: each is named for its
+	first statement's offset.  Every method answered is text-compiled module
+	body either way, so the seam is left as the worker has it."
 
+	| cls init |
 	stmtModule ifNil: [
 		stmtModule := importlib
 			loadModuleFromPath:
 				(importlib grailDir , '/tests/python/frame_line_in_module_statement.py')
 			name: 'callsite_pos_module'].
-	^ stmtModule class compiledMethodAt: #initialize environmentId: 1
+	cls := stmtModule class.
+	init := cls compiledMethodAt: #initialize environmentId: 1.
+	(BaseException ___isModuleSeamDispatcher___: init) ifFalse: [^ { init }].
+	^ (((cls selectorsForEnvironment: 1) select: [:sel | ModuleBodySeam isHelperSelector: sel])
+		asSortedCollection: [:a :b | (self ___helperOffsetOf___: a) <= (self ___helperOffsetOf___: b)])
+			asArray collect: [:sel | cls compiledMethodAt: sel environmentId: 1]
 
 ]
 
@@ -244,23 +264,31 @@ PythonCallSitePositionsTestCase >> test_a_module_body_answers_only_its_own_posit
 	SessionDict.items().
 
 	The positive control comes first: the stores really are embedded, or a
-	reader that never looked would pass too."
+	reader that never looked would pass too.  Summed over the body's methods:
+	one ``initialize'' on the text arm, the statement helpers on the IR arm."
 
-	| m src own pos bodies |
-	m := self ___stmtModuleInit___.
-	src := m sourceString.
-	own := BaseException ___ownCurPosStoresIn___: src.
-	self assert: own notEmpty description: 'the module body carries no stores'.
-	self assert: (self ___plainCountOf___: '___curPos___ := ' in: src) > own size
-		description: 'the module body embeds no stores, so this proves nothing'.
-	self assert: (BaseException pythonPositionKindForMethod: m) equals: #curPos.
-	pos := BaseException pythonPositionsForMethod: m.
-	self assert: pos size equals: own size.
+	| methods ownTotal embeddedTotal bodies |
+	methods := self ___stmtModuleBodyMethods___.
+	self assert: methods notEmpty description: 'the module body has no methods'.
+	ownTotal := 0.
+	embeddedTotal := 0.
 	bodies := self ___defBodyLinesIn___: self ___stmtFixtureLines___.
 	self assert: bodies notEmpty.
-	pos do: [:p |
-		self deny: (bodies includes: (p at: 1))
-			description: 'a module-body position is inside a def body: ' , p printString].
+	methods do: [:m |
+		| src own pos |
+		src := m sourceString.
+		own := BaseException ___ownCurPosStoresIn___: src.
+		ownTotal := ownTotal + own size.
+		embeddedTotal := embeddedTotal + (self ___plainCountOf___: '___curPos___ := ' in: src).
+		self assert: (BaseException pythonPositionKindForMethod: m) equals: #curPos.
+		pos := BaseException pythonPositionsForMethod: m.
+		self assert: pos size equals: own size.
+		pos do: [:p |
+			self deny: (bodies includes: (p at: 1))
+				description: 'a module-body position is inside a def body: ' , p printString]].
+	self assert: ownTotal > 0 description: 'the module body carries no stores'.
+	self assert: embeddedTotal > ownTotal
+		description: 'the module body embeds no stores, so this proves nothing'.
 
 ]
 
@@ -508,13 +536,12 @@ PythonCallSitePositionsTestCase >> test_one_python_call_is_one_span_not_one_node
 PythonCallSitePositionsTestCase >> test_send_sites_of_a_module_body_are_its_own [
 	"The sends come from the compiled method, so a send that appears only in an
 	embedded method's source is not one of the module body's.  Every site lands
-	on a module-level line, in source order, and the plain call on the module's
-	last statement is among them."
+	on a module-level line, in source order within its method, and the plain
+	call on the module's last statement is among them.  Over every method of
+	the body: one ``initialize'' on the text arm, the statement helpers on the
+	IR arm (ModuleBodySeam, P4.1)."
 
-	| m sites srcLines bodies prev controlLine sel only |
-	m := self ___stmtModuleInit___.
-	sites := BaseException pythonSendSitesIn: m selector: nil.
-	self assert: sites notEmpty description: 'the module body made no sends'.
+	| sites srcLines bodies controlLine sel only first |
 	srcLines := self ___stmtFixtureLines___.
 	controlLine := (1 to: srcLines size)
 		detect: [:i |
@@ -522,24 +549,32 @@ PythonCallSitePositionsTestCase >> test_send_sites_of_a_module_body_are_its_own 
 		ifNone: [nil].
 	self assert: controlLine notNil description: 'the fixture lost its control call'.
 	bodies := self ___defBodyLinesIn___: srcLines.
-	prev := 0.
-	sites do: [:s |
-		self assert: s size equals: 4.
-		self assert: (s at: 2) >= prev description: 'sites are not in source order'.
-		prev := s at: 2.
-		self assert: (s at: 3) notNil
-			description: 'a module-body send has no position: ' , s printString.
-		self deny: (bodies includes: ((s at: 3) at: 1))
-			description: 'a module-body send is placed in a def body: ' , s printString].
+	sites := OrderedCollection new.
+	first := nil.
+	self ___stmtModuleBodyMethods___ do: [:m |
+		| own prev |
+		own := BaseException pythonSendSitesIn: m selector: nil.
+		(first isNil and: [own notEmpty]) ifTrue: [first := m -> own].
+		prev := 0.
+		own do: [:s |
+			self assert: s size equals: 4.
+			self assert: (s at: 2) >= prev description: 'sites are not in source order'.
+			prev := s at: 2.
+			self assert: (s at: 3) notNil
+				description: 'a module-body send has no position: ' , s printString.
+			self deny: (bodies includes: ((s at: 3) at: 1))
+				description: 'a module-body send is placed in a def body: ' , s printString].
+		sites addAll: own].
+	self assert: sites notEmpty description: 'the module body made no sends'.
 	self assert: (sites detect: [:s | ((s at: 3) at: 1) = controlLine] ifNone: [nil]) notNil
 		description: 'no send on the control call''s line ' , controlLine printString.
 	"Filtering by selector answers exactly that selector's sites, and a String
 	names the same selector as a Symbol."
-	sel := (sites at: 1) at: 1.
-	only := BaseException pythonSendSitesIn: m selector: sel.
-	self assert: only size equals: (sites select: [:s | (s at: 1) == sel]) size.
+	sel := (first value at: 1) at: 1.
+	only := BaseException pythonSendSitesIn: first key selector: sel.
+	self assert: only size equals: (first value select: [:s | (s at: 1) == sel]) size.
 	only do: [:s | self assert: (s at: 1) == sel].
-	self assert: (BaseException pythonSendSitesIn: m selector: sel asString) size
+	self assert: (BaseException pythonSendSitesIn: first key selector: sel asString) size
 		equals: only size.
 
 ]
