@@ -573,6 +573,24 @@ AbstractNode >> ___builtinsAreOverridden___ [
 ]
 
 { #category : 'Grail-codegen helpers' }
+AbstractNode >> ___catchTargetUnbindsAClassBodyName___: aNameSymbol [
+	"Is ``except X as NAME'' (or ``except*'') bound on the CLASS being built
+	-- a class-body handler, whose store is the definitional store -- so that
+	PEP 3110's implicit ``del NAME'' must remove the class attribute (#2305)?
+	The third of the store routes, beside ___catchTargetUnbindsALocal___: and
+	___catchTargetUnbindsAModuleName___:, and decided in the same order as
+	the store: a module route wins.
+
+	Not by storing nil, which would leave a BOUND nil, but through
+	``___classBodyExceptTargetDelete___:'', CPython's ``NAME = None; del
+	NAME''."
+
+	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol) not
+		and: [self ___inClassBodyRuntimeScope___]
+
+]
+
+{ #category : 'Grail-codegen helpers' }
 AbstractNode >> ___catchTargetUnbindsALocal___: aNameSymbol [
 	"Is ``except X as NAME'' bound to a plain local temp, so that PEP 3110's
 	implicit ``del NAME'' can be emitted as ``NAME := nil''?
@@ -580,8 +598,9 @@ AbstractNode >> ___catchTargetUnbindsALocal___: aNameSymbol [
 	Only the LOCAL case is unbound that way.  A module-routed or class-body
 	target lives in a dynamic instVar / definitional store, where nil is a
 	BOUND nil rather than an absent name, so storing one would answer nil to a
-	later read instead of raising -- a worse answer than leaving the stale
-	binding.  Those keep the traceback-snapshot removal alone."
+	later read instead of raising.  Those are unbound by a real delete:
+	___catchTargetUnbindsAModuleName___: and
+	___catchTargetUnbindsAClassBodyName___:."
 
 	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol) not
 		and: [self ___inClassBodyRuntimeScope___ not]
@@ -593,8 +612,8 @@ AbstractNode >> ___catchTargetUnbindsAModuleName___: aNameSymbol [
 	"Is ``except X as NAME'' bound in the MODULE -- a ``global''-declared or
 	module-level name -- so that PEP 3110's implicit ``del NAME'' must remove
 	the module binding?  The twin of ___catchTargetUnbindsALocal___: for the
-	other store route; a class-body target is neither (its definitional store
-	keeps the binding, as before)."
+	other store route; a class-body target is
+	___catchTargetUnbindsAClassBodyName___:'s."
 
 	^ (self ___nameStoreRoutesToModule___: aNameSymbol asSymbol)
 		and: [self ___inClassBodyRuntimeScope___ not]
