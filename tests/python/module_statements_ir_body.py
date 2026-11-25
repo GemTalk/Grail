@@ -50,14 +50,14 @@ class Box:
 
 
 def count(cls):
-    made.append(cls.__name__)
+    made.append((cls.__name__, sys._getframe(1).f_lineno))
     return cls
 
 
 made = []
 
 
-@count
+@count  # @generic_deco
 class Generic[T]:
     pass
 

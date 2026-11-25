@@ -272,6 +272,29 @@ ModuleBodySeamTestCase >> testGroupsOverBudgetAreSplitAndKeepTheirFrames [
 ]
 
 { #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testHelpersSharingAnOffsetHaveDistinctSelectors [
+	"One statement per helper: the three statements the parser synthesises for
+	the fixture's decorated ``class Generic[T]'' share the class's offset, so
+	three helpers start there.  Each gets a selector of its own -- the later
+	ones ``___irModStmt_<offset>_<k>___'' -- the dispatcher sends each once,
+	and the class is built once, its decorator at the decorator's line."
+
+	| mod body helpers |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	ModuleBodySeam limitsForce: #(nil nil nil nil 1).
+	mod := self ___loadStatementsIR: true.
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (importlib ___irStats___ at: #fallbacks) equals: 0.
+	body := (mod @env1:___pyAttrLoad___: #'m') class.
+	helpers := self ___helpersOf___: body.
+	self assert: (helpers anySatisfy: [:sel | (sel asString occurrencesOf: $_) > 7])
+		description: 'no helper shares an offset: ' , helpers printString.
+	self assert: (self ___sentHelpersOf___: (body compiledMethodAt: #initialize environmentId: 1))
+		equals: helpers
+
+]
+
+{ #category : 'Grail-Tests' }
 ModuleBodySeamTestCase >> testIRGroupsOverBudgetAreSplit [
 	"With a budget of a few dozen step points the IR groups are over it too and
 	are split in half, rebuilt from the AST, on the generated method; every

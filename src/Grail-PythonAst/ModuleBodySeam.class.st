@@ -112,6 +112,8 @@ ModuleBodySeam class >> ___irRefusalInValue___: aValue [
 	    try, a with (``nested:<Kind>'');
 	  * a lambda or a comprehension, each a scope -- a frame and a code object
 	    -- of its own (``lambda'', ``comprehension'');
+	  * the statements the parser synthesises for a PEP 695 class or def
+	    (``typeParams'');
 	  * a call that reads the CALLING scope -- globals(), locals(), vars(),
 	    dir() with no argument, eval(), exec(), super() (``call:<name>'');
 	  * yield and await, which module scope rejects anyway (``yield'')."
@@ -127,6 +129,14 @@ ModuleBodySeam class >> ___irRefusalInValue___: aValue [
 	(aValue isKindOf: StatementAst) ifTrue: [
 		(self ___admitsStatement___: aValue nested: true) ifFalse: [
 			^ ('nested:' , (importlib ___irCensusKindOf___: aValue)) asSymbol]].
+	"A PEP 695 ``class C[T]'' or ``def f[T]'' is rewritten by the parser into a
+	scope def, ``C = deco(___generic_parameters_of_C___())'' and a del, the last
+	two at the class's offset; the text stamps the decorator's call with the
+	decorator's line (CPython's), the IR call node has only the class's.  They
+	are the class or def statement's own, and go with it (P4.3, P4.4)."
+	(cls == NameAst and: [(aValue id asString beginsWith: '___generic_parameters_of_')
+		and: [aValue id asString endsWith: '___']])
+			ifTrue: [^ #'typeParams'].
 	cls == LambdaAst ifTrue: [^ #'lambda'].
 	({ ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst } includes: cls)
 		ifTrue: [^ #'comprehension'].
