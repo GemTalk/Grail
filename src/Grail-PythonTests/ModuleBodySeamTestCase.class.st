@@ -14,12 +14,25 @@ about frames, and about the helpers themselves:
     SPLIT on the generated method;
   * a reimport after an edit leaves no stale ``___irModStmt_*___'' selector, and
     a rebuild on the text arm leaves none at all.
+
+P4.2 builds the simple statements -- expressions, assignments, imports, del,
+if / for / while -- through IR, as IR helpers beside the text ones, so:
+
+  * tests/python/module_statements_ir.py agrees with CPython 3.14 through IR
+    helpers, on the text arm, and with the statements kept on text
+    (GRAIL_IR_MODULE_STATEMENTS off): every statement's result, the frame's
+    line inside if / for / while bodies and in inspect.stack(), and an uncaught
+    error from five kinds of IR statement walked to the importer;
+  * IR groups over budget are split on the generated method, with 0 fallbacks;
+  * an IR group whose build fails is compiled as text, late, and still agrees
+    -- a counted fallback, and a raise in strict mode.
 "
 Class {
 	#name : 'ModuleBodySeamTestCase',
 	#superclass : 'PythonTestCase',
 	#instVars : [
-		'registrySnapshot'
+		'registrySnapshot',
+		'savedTotals'
 	],
 	#category : 'Grail-SUnit'
 }
@@ -50,6 +63,20 @@ ModuleBodySeamTestCase >> ___loadFixtureIR: irBoolean [
 	^ importlib
 		loadModuleFromPath: importlib grailDir , '/tests/python/module_body_frames_across_helpers.py'
 		name: 'module_body_frames_across_helpers'
+
+]
+
+{ #category : 'Grail-Private' }
+ModuleBodySeamTestCase >> ___loadStatementsIR: irBoolean [
+	"Load the statements fixture with the seam forced on or off, fresh, as
+	___loadFixtureIR: loads the frames one."
+
+	self ___reset___: #('module_statements_ir' 'module_statements_ir_body').
+	importlib ___irCodegenForce___: irBoolean.
+	importlib ___irStatsReset___.
+	^ importlib
+		loadModuleFromPath: importlib grailDir , '/tests/python/module_statements_ir.py'
+		name: 'module_statements_ir'
 
 ]
 
@@ -99,15 +126,63 @@ ModuleBodySeamTestCase >> ___write: aString to: aPath [
 ]
 
 { #category : 'Grail-Setup' }
+ModuleBodySeamTestCase >> setUp [
+	"testFailedIRBuildsCompileAsText provokes fallbacks on purpose: keep the
+	counts it adds out of the shard's, which run_tests.sh fails a strict run
+	on (as IRStrictModeTestCase does)."
+
+	| temps |
+	super setUp.
+	temps := SessionTemps current.
+	savedTotals := {
+		temps at: #'___grailIRFallbackTotal___' otherwise: nil.
+		temps at: #'___grailIRInvariantTotal___' otherwise: nil }
+
+]
+
+{ #category : 'Grail-Setup' }
 ModuleBodySeamTestCase >> tearDown [
+	| temps |
 	ModuleBodySeam limitsForce: nil.
+	ModuleBodySeam failIRBuildsForce: false.
+	importlib ___irStrictForce___: nil.
 	importlib ___irCodegenEnabledInvalidate___.
+	importlib ___irStatsReset___.
+	temps := SessionTemps current.
+	#(#'___grailIRFallbackTotal___' #'___grailIRInvariantTotal___') doWithIndex: [:k :i |
+		(savedTotals at: i)
+			ifNil: [temps removeKey: k ifAbsent: []]
+			ifNotNil: [:v | temps at: k put: v]].
 	self ___reset___: #('module_body_frames_across_helpers' 'module_body_frames_big'
-		'seam_reimport_probe').
+		'seam_reimport_probe' 'module_statements_ir' 'module_statements_ir_body').
 	registrySnapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
 		registrySnapshot := nil].
 	super tearDown
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testFailedIRBuildsCompileAsText [
+	"Every IR group build raises (ModuleBodySeam failIRBuildsForce:).  Without
+	strict mode each group's statements are written as text after the rest and
+	compiled as a text helper -- no IR helper is left, each failure is a counted
+	fallback, and every check still reads CPython's answer.  In strict mode the
+	same failure raises."
+
+	| mod body |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	ModuleBodySeam failIRBuildsForce: true.
+	importlib ___irStrictForce___: false.
+	mod := self ___loadStatementsIR: true.
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (importlib ___irStats___ at: #fallbacks) > 0.
+	body := (mod @env1:___pyAttrLoad___: #'m') class.
+	self assert: ((self ___helpersOf___: body) select: [:sel |
+			BaseException ___isIRPythonMethod___: (body compiledMethodAt: sel environmentId: 1)])
+		isEmpty.
+	importlib ___irStrictForce___: true.
+	self should: [self ___loadStatementsIR: true] raise: SystemError
 
 ]
 
@@ -179,13 +254,37 @@ ModuleBodySeamTestCase >> testGroupsOverBudgetAreSplitAndKeepTheirFrames [
 	self assert: (rows at: #'mh:split' ifAbsent: [0]) > 0 description: rows printString.
 	big := (mod @env1:___pyAttrLoad___: #'m') class.
 	helpers := self ___helpersOf___: big.
-	self assert: helpers size > 20 description: helpers size printString.
+	"Fewer than under P4.1: the filler assignments are IR now (P4.2), and an
+	IR method carries fewer step points than the text for the same statements."
+	self assert: helpers size > 10 description: helpers size printString.
 	"A helper still over budget is one statement, which cannot be split, and the
 	census counts exactly those."
 	over := helpers select: [:sel |
 		((ModuleBodySeam budgetOf: (big compiledMethodAt: sel environmentId: 1)) at: 2) > 60].
 	self assert: over size <= (rows at: #'mh:overBudget' ifAbsent: [0])
 		description: over printString , ' vs ' , rows printString
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testIRGroupsOverBudgetAreSplit [
+	"With a budget of a few dozen step points the IR groups are over it too and
+	are split in half, rebuilt from the AST, on the generated method; every
+	check still reads CPython's answer and nothing falls back."
+
+	| mod rows |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	ModuleBodySeam limitsForce: #(nil 40 nil nil nil).
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[mod := self ___loadStatementsIR: true]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (importlib ___irStats___ at: #fallbacks) equals: 0.
+	rows := (importlib ___irCensus___ at: #byModule)
+		at: 'module_statements_ir_body' ifAbsent: [KeyValueDictionary new].
+	self assert: (rows at: #'mh:split' ifAbsent: [0]) > 0 description: rows printString.
+	self assert: (rows at: #'mh:irHelper' ifAbsent: [0]) > 5 description: rows printString
 
 ]
 
@@ -251,5 +350,79 @@ e = d + 1
 		description: (self ___helpersOf___: mod class) printString.
 	self deny: (BaseException ___isModuleSeamDispatcher___:
 		(mod class compiledMethodAt: #initialize environmentId: 1))
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testSimpleStatementsAgreeWithCPythonOnTheTextArm [
+	"The oracle: one text ``initialize'', no helper, the same answers."
+
+	| mod |
+	mod := self ___loadStatementsIR: false.
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (self ___helpersOf___: (mod @env1:___pyAttrLoad___: #'m') class) isEmpty
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testSimpleStatementsAgreeWithCPythonThroughIR [
+	"The statements fixture's body alternates IR and text helpers, and every
+	check reads CPython's answer.  An IR helper is a ``<module>'' frame named by
+	its class's file -- its own source is Python, with no stamp -- and the
+	annotate store, which has to run before the first statement and is text,
+	has a helper of its own when that statement is IR: ``___irModStmt_0___''.
+	No fallback: every group built."
+
+	| mod body helpers ir text file |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[mod := self ___loadStatementsIR: true]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	"...and the call on a statement's second line reads that line, as
+	CPython's frame does (the text arm reads the statement's first)."
+	self assert: (mod @env1:___pyAttrLoad___: #'MULTILINE_AGREES') == true
+		description: ((mod @env1:___pyAttrLoad___: #'MULTILINE') @env1:__repr__) asString.
+	self assert: (importlib ___irStats___ at: #fallbacks) equals: 0.
+	body := (mod @env1:___pyAttrLoad___: #'m') class.
+	helpers := self ___helpersOf___: body.
+	ir := helpers select: [:sel |
+		BaseException ___isIRPythonMethod___: (body compiledMethodAt: sel environmentId: 1)].
+	text := helpers reject: [:sel | ir includes: sel].
+	self assert: ir size >= 2 description: helpers printString.
+	self assert: text size >= 2 description: helpers printString.
+	self assert: helpers first equals: #'___irModStmt_0___'.
+	self assert: (text includes: #'___irModStmt_0___').
+	file := importlib grailDir , '/tests/python/module_statements_ir_body.py'.
+	ir do: [:sel |
+		| meth |
+		meth := body compiledMethodAt: sel environmentId: 1.
+		self assert: (body categoryOfSelector: sel environmentId: 1) equals: #'Grail-Module Body'.
+		self assert: (BaseException ___pythonFrameNameForMethod___: meth) equals: '<module>'.
+		self assert: (BaseException ___pythonFilenameForMethod___: meth) isNil.
+		self assert: (BaseException ___pythonFileForClassOf___: meth) equals: file].
+	"The fixture imports the body six times (once, then once per uncaught
+	probe), and each import builds the same IR helpers."
+	self assert: (((importlib ___irCensus___ at: #byModule)
+			at: 'module_statements_ir_body') at: #'mh:irHelper') equals: 6 * ir size
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testSimpleStatementsAgreeWithCPythonWithTheStatementsOnText [
+	"GRAIL_IR_MODULE_STATEMENTS off, the A/B control: P4.1's seam, every helper
+	compiled from text, the same answers."
+
+	| mod body |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	importlib ___irModuleStatementsForce___: false.
+	mod := self ___loadStatementsIR: true.
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	body := (mod @env1:___pyAttrLoad___: #'m') class.
+	self assert: (self ___helpersOf___: body) notEmpty.
+	self assert: ((self ___helpersOf___: body) select: [:sel |
+			BaseException ___isIRPythonMethod___: (body compiledMethodAt: sel environmentId: 1)])
+		isEmpty
 
 ]
