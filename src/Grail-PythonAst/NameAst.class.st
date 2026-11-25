@@ -2540,7 +2540,13 @@ NameAst >> ___inNestedScopeWithinClassBody___ [
 	node := parent.
 	inClauseIter := false.
 	[node notNil] whileTrue: [
-		(node isKindOf: LambdaAst) ifTrue: [^ true].
+		"A lambda's BODY is a function scope.  Its DEFAULTS are not: CPython
+		evaluates them where the lambda is written, so in a class body
+		``lambda v=label: v'' reads the class's ``label'' (#2293).  Arriving
+		through the arguments node goes on outward, as a def's defaults do
+		below."
+		((node isKindOf: LambdaAst)
+			and: [self ___defScopesName___: node enteredFrom: child]) ifTrue: [^ true].
 		"Only a class BODY ends the walk.  A class's bases, keywords and
 		decorators are evaluated in the scope around the class statement, so a
 		read in one goes on outward: ``class D[T](make_base(T))'' in a class
