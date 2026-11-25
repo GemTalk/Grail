@@ -109,6 +109,38 @@ AnnAssignAst >> ___emitExecutionRecordWith___: e [
 ]
 
 { #category : 'Grail-IR Codegen' }
+AnnAssignAst >> ___emitIRModuleBodyOn___: aBuilder [
+	"printSmalltalkOn:'s module-scope Name branch, for a statement of the module
+	body built through IR (P4.2): the store to the module instance --
+	``(self ___finalIsBound___: #x) ifFalse: [...]'' around it for a
+	module-level Final, which tests before it evaluates the value -- then the
+	record that the annotation ran, through the IR backend of the emitter the
+	text writes it with.  With no value, the record alone."
+
+	| store |
+	value notNil ifTrue: [
+		store := [
+			| v |
+			v := value ___emitIRValueOn___: aBuilder.
+			aBuilder atNode: self.
+			aBuilder add: (self ___emitIRModuleStoreOf___: v to: target on: aBuilder)].
+		self ___isModuleLevelFinal___
+			ifTrue: [
+				aBuilder atNode: self.
+				aBuilder
+					unless: (aBuilder
+						send: #'___finalIsBound___:'
+						to: (self ___emitIRModuleReceiverOn___: aBuilder)
+						with: { aBuilder obj: target id asSymbol } env: 0)
+					then: store]
+			ifFalse: [store value]].
+	aBuilder atNode: self.
+	self ___emitExecutionRecordWith___: (ClassBuildIREmitter on: aBuilder).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___emitIRStatementOn___: aBuilder [
 	| v |
 	"A name a class-body loop, ``try'' or ``with'' annotates (plan P3.7): the
@@ -119,6 +151,9 @@ AnnAssignAst >> ___emitIRStatementOn___: aBuilder [
 		value notNil ifTrue: [self ___plainAssign___ ___emitIRStatementOn___: aBuilder].
 		self ___emitExecutionRecordWith___: aBuilder classBuildEmitter.
 		^ self].
+	"A module body's own annotated name (P4.2): see ___emitIRModuleBodyOn___:."
+	self ___irIsModuleBodyAnnotation___ ifTrue: [
+		^ self ___emitIRModuleBodyOn___: aBuilder].
 	value isNil ifTrue: [
 		self ___targetChecks___ do: [:check | check ___emitIRStatementOn___: aBuilder].
 		^ self].
@@ -143,10 +178,15 @@ AnnAssignAst >> ___irEligibleStatementLocals___: localNames [
 	(___plainAssign___).  A pure annotation (no value) emits nothing.  A
 	module-scope Name target (a global-declared name) stays on text.  With no
 	value an attribute or subscript target still evaluates its parts
-	(___targetChecks___)."
+	(___targetChecks___).
+
+	A module body's own annotated name, built through IR since P4.2, is its
+	module store (___emitIRModuleBodyOn___:)."
 
 	((target isKindOf: NameAst) and: [self ___inClassBodyRuntimeScope___]) ifTrue: [
 		^ value isNil or: [self ___plainAssign___ ___irEligibleStatementLocals___: localNames]].
+	self ___irIsModuleBodyAnnotation___ ifTrue: [
+		^ value isNil or: [value ___irEligibleValueLocals___: localNames]].
 	value isNil ifTrue: [
 		^ self ___targetChecks___ allSatisfy: [:check |
 			check ___irEligibleStatementLocals___: localNames]].
@@ -160,6 +200,23 @@ AnnAssignAst >> ___irEligibleStatementLocals___: localNames [
 		^ (target value ___irEligibleValueLocals___: localNames)
 			and: [target slice ___irEligibleValueLocals___: localNames]].
 	^ false
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+AnnAssignAst >> ___irIsModuleBodyAnnotation___ [
+	"Is this ``name: T [= v]'' a statement of a MODULE BODY being built through
+	IR (P4.2) -- a Name target bound on the module instance, emitted with no
+	def and no class being compiled?  Its store, its Final guard and its record
+	are printSmalltalkOn:'s module branch, which a def's IR emit does not have
+	(there a module-scope Name target is the parser's ``annotated name can't be
+	global'')."
+
+	^ (target isKindOf: NameAst)
+		and: [CallAst moduleBodyBeingCompiled
+		and: [CallAst functionBeingCompiled isNil
+		and: [CallAst classBeingCompiled isNil
+		and: [self isModuleScopeAnnTarget: target]]]]
 
 ]
 

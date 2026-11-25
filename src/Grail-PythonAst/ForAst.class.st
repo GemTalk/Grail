@@ -69,6 +69,13 @@ ForAst >> ___emitIRForUnpack___: aTarget source: aSourceBlock on: aBuilder [
 	rather than letting this emit quietly diverge from its oracle."
 
 	(aTarget isKindOf: NameAst) ifTrue: [
+		"A leaf the store routes to the MODULE -- a module body's own loop,
+		``for k, v in pairs:'' at module scope (P4.2), or a ``global''-declared
+		name -- is the module store every other module-bound binding form
+		makes, tested first as the text's four-way rule tests it."
+		(self ___nameStoreRoutesToModule___: aTarget id asSymbol) ifTrue: [
+			^ aBuilder add: (self ___emitIRModuleStoreOf___: aSourceBlock value
+				to: aTarget on: aBuilder)].
 		"A leaf bound in a class-body RUNTIME ``for'' (P3.4): the class's
 		definitional store, as emitForTargetStore:source:on: writes it."
 		(self ___irIsClassBodyRuntimeStore___: aTarget) ifTrue: [
@@ -536,9 +543,10 @@ ForAst >> ___irForTupleTargetEligible___: aTarget locals: localNames [
 	"A nest of Store-context local Names and subscript / attribute stores, with
 	AT MOST ONE star per level.
 
-	A Name leaf must be a LOCAL: ___emitIRForUnpack___:source:on: assigns its
-	leaf, and has no module-routed store (``global a; for a, b in ...'' stays
-	on text).  A subscript or attribute leaf takes the assignment unpack's leaf
+	A Name leaf is a LOCAL, whose leaf ___emitIRForUnpack___:source:on:
+	assigns, or a name the store routes to the module -- a module body's own
+	``for k, v in pairs:'' (P4.2), or ``global a; for a, b in ...'' -- which it
+	stores on the module instance.  A subscript or attribute leaf takes the assignment unpack's leaf
 	test and store, as the single-target form does (___irForTargetEligible___:).
 
 	The star used to refuse -- ``the text's star shape needs a Smalltalk
@@ -564,7 +572,8 @@ ForAst >> ___irForTupleTargetEligible___: aTarget locals: localNames [
 					ifFalse: [(t isKindOf: NameAst)
 						and: [((t ctx) isKindOf: StoreAst)
 						and: [(localNames includes: t id asString)
-							or: [self ___irIsClassBodyRuntimeStore___: t]]]]]]
+							or: [(self ___nameStoreRoutesToModule___: t id asSymbol)
+							or: [self ___irIsClassBodyRuntimeStore___: t]]]]]]]
 
 ]
 
