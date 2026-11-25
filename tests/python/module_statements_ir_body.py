@@ -49,6 +49,20 @@ class Box:
     pass
 
 
+def count(cls):
+    made.append(cls.__name__)
+    return cls
+
+
+made = []
+
+
+@count
+class Generic[T]:
+    pass
+
+
+R['generic_class_once'] = (made, Generic.__type_params__[0].__name__)
 box = Box()
 box.value = 7
 box.value **= 2

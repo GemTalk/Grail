@@ -82,9 +82,14 @@ ModuleBodySeamTestCase >> ___loadStatementsIR: irBoolean [
 
 { #category : 'Grail-Private' }
 ModuleBodySeamTestCase >> ___offsetOf___: aHelperSelector [
-	| s |
+	"The offset a helper is named for, then its statement index when two
+	helpers share an offset (``___irModStmt_<offset>_<k>___''), as one number
+	that sorts them in source order."
+
+	| s parts |
 	s := aHelperSelector asString.
-	^ (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) asNumber
+	parts := (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) subStrings: '_'.
+	^ (parts first asNumber * 100000) + (parts size > 1 ifTrue: [(parts at: 2) asNumber] ifFalse: [0])
 
 ]
 
@@ -393,6 +398,11 @@ ModuleBodySeamTestCase >> testSimpleStatementsAgreeWithCPythonThroughIR [
 	self assert: ir size >= 2 description: helpers printString.
 	self assert: text size >= 2 description: helpers printString.
 	self assert: helpers first equals: #'___irModStmt_0___'.
+	"...and the dispatcher sends each helper once: a decorated generic class's
+	synthesised statements share one offset, and their text and IR helpers
+	must not share a selector (the class would be built twice)."
+	self assert: (self ___sentHelpersOf___: (body compiledMethodAt: #initialize environmentId: 1))
+		equals: helpers.
 	self assert: (text includes: #'___irModStmt_0___').
 	file := importlib grailDir , '/tests/python/module_statements_ir_body.py'.
 	ir do: [:sel |

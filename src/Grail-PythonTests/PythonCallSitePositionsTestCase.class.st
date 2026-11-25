@@ -104,9 +104,11 @@ PythonCallSitePositionsTestCase >> ___fixtureSource___ [
 PythonCallSitePositionsTestCase >> ___helperOffsetOf___: aHelperSelector [
 	"The source offset a statement helper ``___irModStmt_<offset>___'' is named for."
 
-	| s |
+	| s parts |
 	s := aHelperSelector asString.
-	^ (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) asNumber
+	"``___irModStmt_<offset>_<k>___'' when two helpers share an offset."
+	parts := (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) subStrings: '_'.
+	^ (parts first asNumber * 100000) + (parts size > 1 ifTrue: [(parts at: 2) asNumber] ifFalse: [0])
 
 ]
 

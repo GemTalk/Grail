@@ -8,8 +8,9 @@ as their Python, as an IR def's is -- and keeps the rest (defs, classes, try,
 ...) in text helpers.  module_statements_ir_body.py is such a body.  What has
 to hold:
 
-  * every statement computes what CPython computes: the stores land in the
-    module, annotated names reach ``__annotations__'' (a conditional one only
+  * every statement computes what CPython computes, and runs once -- a
+    decorated generic class, whose statements the parser synthesises at one
+    offset, among them: the stores land in the module, annotated names reach ``__annotations__'' (a conditional one only
     when it ran), a module-level Final is bound, del unbinds;
   * the ``<module>'' frame reads the statement's own line inside an if, a for
     and a while body, and in ``inspect.stack()`` -- and, through IR, the line
@@ -89,6 +90,7 @@ r['main_frame'] = (sys._getframe(0).f_code.co_name,
 EXPECTED = {
     'plain': ('<module>', marker_line('plain'), True),
     'assignments': (3, 3, 3, 1, 2, [3, 4], 'a', ['b', 'c'], 28, [11, 20, 21], 49),
+    'generic_class_once': (['Generic'], 'T'),
     'annotations': (5, 9, 'once', 42, 1.5),
     'annotation_keys': ['FINAL_TYPED', 'FINAL_VALUE', 'annotated', 'bare_annotation', 'conditional'],
     'bare_annotation_unbound': True,

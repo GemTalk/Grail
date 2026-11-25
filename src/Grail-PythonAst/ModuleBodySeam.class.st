@@ -734,12 +734,22 @@ ModuleBodySeam >> selectorForStatement: k [
 	the annotate store's own helper, ``___irModStmt_0___'': no statement
 	starts before the first character."
 
-	| stmt pos |
+	| stmt pos sel |
 	k = 0 ifTrue: [^ self class helperPrefix , '0___'].
 	stmt := (chunks at: k + 1) at: 1.
 	pos := [stmt beginPosition] on: Error do: [:ex | ex return: nil].
 	pos isNil ifTrue: [pos := 'n' , k printString].
-	^ self class helperPrefix , pos asString , '___'
+	sel := self class helperPrefix , pos asString , '___'.
+	"Statements the parser SYNTHESISES share their statement's offset: a PEP 695
+	``class C[T]'' is a def, an assignment and a del, all at the class's.  When
+	two of them start helpers -- an IR one after a text one (P4.2), or the two
+	halves of a split group -- the later one is told apart by its index, or it
+	would replace the earlier helper and the dispatcher would run it twice.
+	The first half of a split is not yet a helper when the second is named, so
+	it keeps the plain selector it replaces."
+	(helpers anySatisfy: [:h | (h at: 1) = sel]) ifTrue: [
+		sel := self class helperPrefix , pos asString , '_' , k printString , '___'].
+	^ sel
 
 ]
 
