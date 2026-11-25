@@ -607,14 +607,16 @@ AbstractNode >> ___classBodyScope___ [
 	when a def's or lambda's body comes first.  A def's decorators and defaults
 	and a lambda's defaults belong to the scope around them (AbstractNode >>
 	___functionBodyHolds___:), so ``g = lambda v=(w := label): v'' in a class
-	body answers that class (#2345)."
+	body answers that class (#2345).  So do a class's own decorators, bases and
+	keywords: ``@d := deco'' on a class inside a method binds the method's
+	local, not anything of the class it decorates."
 
 	| node child |
 	child := self.
 	node := self parent.
 	[node notNil] whileTrue: [
 		(node ___functionBodyHolds___: child) ifTrue: [^ nil].
-		(node isKindOf: ClassDefAst) ifTrue: [^ node].
+		((node isKindOf: ClassDefAst) and: [child == node body]) ifTrue: [^ node].
 		child := node.
 		node := node parent].
 	^ nil
