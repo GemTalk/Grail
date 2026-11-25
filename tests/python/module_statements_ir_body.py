@@ -31,7 +31,22 @@ def caller_line():
     return sys._getframe(1).f_lineno
 
 
+def store_onto(v):
+    try:
+        setattr(v, 'zz', 1)
+        return 'stored'
+    except AttributeError:
+        return 'refused'
+
+
+def store_onto_own_literal():
+    return store_onto('ab')
+
+
 R['plain'] = where()  # @plain
+# A str literal is immutable whether it is a module statement's or a def's,
+# and stays so across calls: an IR literal used to take the attribute.
+R['literals_immutable'] = (store_onto('cd'), store_onto_own_literal(), store_onto_own_literal())
 a = b = c = 3
 x, (y, *zs) = 1, (2, 3, 4)
 first, *rest = 'abc'

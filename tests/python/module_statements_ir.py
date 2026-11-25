@@ -89,6 +89,7 @@ r['main_frame'] = (sys._getframe(0).f_code.co_name,
 
 EXPECTED = {
     'plain': ('<module>', marker_line('plain'), True),
+    'literals_immutable': ('refused', 'refused', 'refused'),
     'assignments': (3, 3, 3, 1, 2, [3, 4], 'a', ['b', 'c'], 28, [11, 20, 21], 49),
     'generic_class_once': ([('Generic', marker_line('generic_deco'))], 'T'),
     'annotations': (5, 9, 'once', 42, 1.5),
