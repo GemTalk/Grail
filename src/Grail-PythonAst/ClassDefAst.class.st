@@ -943,9 +943,12 @@ ClassDefAst >> ___classBodyOuterBindingUnreachableNames___: localNames [
 ClassDefAst >> ___classBodyWalrusNames___ [
 	"Every name a walrus binds directly in this class body, as an IdentitySet.
 
-	``Directly'' is the whole point: the walk stops at a nested def, lambda or
-	class, because a walrus inside one of those binds in THAT scope and has an
-	ordinary Smalltalk temp waiting for it.  A walrus inside a COMPREHENSION in
+	``Directly'' is the whole point: the walk stops at a nested def's or
+	lambda's body, or a nested class, because a walrus inside one of those binds
+	in THAT scope and has an ordinary Smalltalk temp waiting for it.  It goes on
+	into a def's decorators and defaults and a lambda's defaults, which the
+	class body evaluates: ``g = lambda v=(w := label): v'' binds ``w'' here
+	(#2345).  A walrus inside a COMPREHENSION in
 	a class body is a SyntaxError in CPython and NamedExprAst raises it, so
 	whether this collects the name is immaterial.
 
@@ -1067,14 +1070,17 @@ ClassDefAst >> ___collectClassBodyWalrusNamesIn___: aNode into: names [
 		((aNode isKindOf: Collection) and: [(aNode isKindOf: CharacterCollection) not])
 			ifTrue: [aNode do: [:each | self ___collectClassBodyWalrusNamesIn___: each into: names]].
 		^ self].
-	((aNode isKindOf: FunctionDefAst)
-		or: [(aNode isKindOf: LambdaAst) or: [aNode isKindOf: ClassDefAst]])
-			ifTrue: [^ self].
+	(aNode isKindOf: ClassDefAst) ifTrue: [^ self].
 	((aNode isKindOf: NamedExprAst) and: [aNode target isKindOf: NameAst])
 		ifTrue: [names add: aNode target id asSymbol].
+	"A def's or lambda's BODY is its own scope; the rest of it -- decorators,
+	defaults -- is evaluated here.  (A walrus in an annotation is a
+	SyntaxError.)"
 	aNode class allInstVarNames doWithIndex: [:ivarName :i |
-		ivarName == #'parent' ifFalse: [
-			self ___collectClassBodyWalrusNamesIn___: (aNode instVarAt: i) into: names]].
+		| v |
+		v := aNode instVarAt: i.
+		(ivarName == #'parent' or: [aNode ___functionBodyHolds___: v]) ifFalse: [
+			self ___collectClassBodyWalrusNamesIn___: v into: names]].
 
 ]
 

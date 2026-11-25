@@ -390,6 +390,15 @@ LambdaAst >> ___emitIRValueOn___: aBuilder [
 
 ]
 
+{ #category : 'Grail-scoping' }
+LambdaAst >> ___functionBodyHolds___: aNode [
+	"See AbstractNode >> ___functionBodyHolds___:.  A lambda's scope is its
+	body; its defaults, in the arguments node, are the enclosing scope's."
+
+	^ body == aNode
+
+]
+
 { #category : 'Grail-compile warnings' }
 LambdaAst >> ___inferredTypeName___ [
 	^ 'function'

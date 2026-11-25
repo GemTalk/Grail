@@ -46,12 +46,16 @@ NamedExprAst >> ___checkNotInClassBodyComprehension___ [
 	test_named_expression_invalid_in_class_body).
 
 	Walks OUT rather than scanning down, the idiom the rest of the AST uses: a
-	FunctionDefAst or LambdaAst between here and the class body ends the walk,
+	def's or lambda's BODY between here and the class body ends the walk,
 	because a walrus inside a comprehension inside a METHOD is ordinary and
-	legal -- the enclosing scope is then the function, not the class."
+	legal -- the enclosing scope is then the function, not the class.  Its
+	defaults do not: the class body evaluates them, so
+	``lambda v=[(w := x) for x in s]: v'' and ``[lambda v=(w := x): v for x in
+	s]'' in a class body are this SyntaxError in CPython too (#2345)."
 
-	| node inComp |
+	| node child inComp |
 	inComp := false.
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
 		((node isKindOf: ListCompAst)
@@ -59,11 +63,11 @@ NamedExprAst >> ___checkNotInClassBodyComprehension___ [
 			or: [(node isKindOf: DictCompAst)
 			or: [node isKindOf: GeneratorExpAst]]])
 				ifTrue: [inComp := true].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-			ifTrue: [^ self].
+		(node ___functionBodyHolds___: child) ifTrue: [^ self].
 		((node isKindOf: ClassDefAst) and: [inComp]) ifTrue: [
 			^ SyntaxError @env1:___signal___:
 				'assignment expression within a comprehension cannot be used in a class body'].
+		child := node.
 		node := node parent].
 
 ]
