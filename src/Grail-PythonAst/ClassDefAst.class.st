@@ -1640,6 +1640,31 @@ ClassDefAst >> ___emitImportlibOn___: e [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___emitIRClassBodyRuntimeClassOn___: aBuilder [
+	"A class a class-body loop, ``try'' or ``with'' binds, in a method-local
+	class helper built through IR (plan P3.7): built into a block temp of its
+	name by a helper of its own (___emitIRNestedClassWith___:, through the
+	helper's class build emitter) and stored on the enclosing class through
+	the definitional store -- emitClassBodyIfBranch:on:'s nested-class shape,
+	with the runtime class cleared as the text clears it."
+
+	| e outer saved |
+	e := aBuilder classBuildEmitter.
+	outer := self ___directlyEnclosingClassDef___.
+	saved := CallAst classBodyRuntimeClass.
+	CallAst classBodyRuntimeClass: nil.
+	[e openValueBlockLine: {self ___stVarName___}.
+	e statementNode: self.
+	e newline.
+	outer ___emitDefinitionalStore___: (self ___manglePrivate___: name) asString
+		with: [e var: self ___stVarName___] on: e.
+	e closeValueBlockLine]
+		ensure: [CallAst classBodyRuntimeClass: saved].
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___emitIRNestedClassWith___: e [
 	"Build this class -- nested DIRECTLY in the body of a class whose helper is
 	being built through IR, the emitter e (plan P3.4) -- through a helper of
@@ -1713,6 +1738,10 @@ ClassDefAst >> ___emitIRStatementOn___: aBuilder [
 	the whole method's text."
 
 	| sel src carried args routesToModule textReason preNodes preValues |
+	"A class a class-body loop, ``try'' or ``with'' binds (plan P3.7): built as
+	the class-body ``if'' builds one, and stored on the class."
+	self ___inClassBodyRuntimeScope___
+		ifTrue: [^ self ___emitIRClassBodyRuntimeClassOn___: aBuilder].
 	"ASK THE ROUTING QUESTION FIRST.  ___irHelperSourceWithSelector___:carrying:
 	below GENERATES THE CLASS BODY'S TEXT, which walks into the class's own
 	scope, and the answer differs on the two sides of that call: eligibility
@@ -2388,30 +2417,23 @@ ClassDefAst >> ___irClassBodyIfBranchReason___: aStmt bound: boundNames [
 	function the parser wraps in an ``if'' for a PEP 695 method, class or
 	alias in the body (PythonParser >> ___rewriteTypeParamStatement___),
 	whose reads of the class namespace go through the class variable (NameAst
-	>> ___emitIRAnnotationScopeClassRead___:on:).  Refused: a def the parser
-	re-classed (a @staticmethod / @classmethod in a branch), which the
-	nested-def emitter does not build, and one whose decorator reads its own
-	name (the pre-evaluated wrapper)."
+	>> ___emitIRAnnotationScopeClassRead___:on:).  A def the parser re-classed
+	(@staticmethod / @classmethod) and one whose decorator reads its own name
+	are built the same way (plan P3.7, ___irClassBodyValueDefReason___:bound:)."
 	(aStmt isKindOf: FunctionDefAst) ifTrue: [
-		| row |
-		row := (CallAst ___isTypeParamScope___: aStmt) ifTrue: ['typeParams'] ifFalse: ['if:def'].
-		"A plain def in a class body is an InstanceFunctionDefAst, a marker
-		subclass the closure form emits as any def."
-		(aStmt class == FunctionDefAst or: [aStmt class == AsyncFunctionDefAst
-			or: [aStmt class == InstanceFunctionDefAst]])
-				ifFalse: [^ row , ':reclassed'].
-		aStmt ___needsPreEvaluatedDecorators___ ifTrue: [^ row , ':decoratorReadsName'].
-		(aStmt decorator_list ifNil: [#()]) do: [:deco |
-			((deco isKindOf: Symbol) or: [deco isKindOf: ConstantAst]) ifFalse: [
-				(self ___irClassBodyValueReason___: deco bound: boundNames)
-					ifNotNil: [:r | ^ row , ':decorator:' , r]]].
-		^ nil].
-	(aStmt isKindOf: ClassDefAst) ifTrue: [^ 'if:class'].
+		^ (self ___irClassBodyValueDefReason___: aStmt bound: boundNames) ifNotNil: [:r |
+			((CallAst ___isTypeParamScope___: aStmt) ifTrue: ['typeParams:'] ifFalse: ['if:def:']) , r]].
+	"A class in a branch: emitClassBodyIfBranch:on: builds it with the nested
+	class's own helper inside a value block and stores it through the
+	definitional store (plan P3.7)."
+	(aStmt isKindOf: ClassDefAst) ifTrue: [
+		^ (self ___irNestedClassReason___: aStmt bound: boundNames) ifNotNil: [:r |
+			'if:class:' , (r asString copyFrom: 'irHelper:nestedClass:' size + 1 to: r size)]].
 	((aStmt isKindOf: AssignAst)
 		and: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
-			(aStmt targets anySatisfy: [:t |
-				#(#'__renamed__' #'__transient__' #'__slots__') includes: t id asSymbol])
-					ifTrue: [^ 'if:specialName'].
+			"``__slots__'' (and ``__renamed__'' / ``__transient__'') in a branch
+			is a definitional store like any other; what the walk reads of it
+			statically it reads through either emitter (plan P3.7)."
 			^ (self ___irClassBodyValueReason___: aStmt value bound: boundNames)
 				ifNotNil: [:r | 'if:assign:' , r]].
 	((aStmt isKindOf: AnnAssignAst) and: [aStmt target isKindOf: NameAst]) ifTrue: [
@@ -2421,8 +2443,14 @@ ClassDefAst >> ___irClassBodyIfBranchReason___: aStmt bound: boundNames [
 	((self ___isClassBodyRuntimeStatement___: aStmt)
 		or: [(aStmt isKindOf: AssignAst) or: [aStmt isKindOf: DeleteAst]])
 			ifTrue: [^ self ___irClassBodyRuntimeReason___: aStmt bound: boundNames].
-	"A constant expression is not evaluated; anything else in a branch -- an
-	import, a ``global'' -- is not the branch emit's."
+	"An ``import'' in a branch takes the runtime emit, its names stored on the
+	class (StatementAst >> ___emitIRImportStoreOf___:from:on:, plan P3.7)."
+	((aStmt isKindOf: ImportAst) or: [aStmt isKindOf: ImportFromAst])
+		ifTrue: [^ self ___irClassBodyRuntimeReason___: aStmt bound: boundNames].
+	"A ``global'' or ``nonlocal'' declaration emits nothing on either path."
+	((aStmt isKindOf: GlobalAst) or: [aStmt isKindOf: NonlocalAst]) ifTrue: [^ nil].
+	"A constant expression is not evaluated; anything else in a branch is not
+	the branch emit's."
 	((aStmt isKindOf: ExprAst) and: [aStmt value isKindOf: ConstantAst]) ifTrue: [^ nil].
 	^ 'if:' , aStmt class name asString
 
@@ -2465,58 +2493,94 @@ ClassDefAst >> ___irClassBodyRuntimeReason___: aStmt bound: boundNames [
 	builder: a name it READS is a class-body value read (NameAst >>
 	___emitClassBodyValueWith___:), and a bare name it BINDS -- an assignment,
 	a ``for'' target, an ``except ... as'' or ``with ... as'' name, an
-	augmented assignment, a ``del'' -- goes to the class's definitional store,
-	as the text's class-body branches send it
-	(AbstractNode >> ___emitIRClassBodyRuntimeStoreOf___:from:on:).
+	augmented assignment, a ``del'', an import, a ``match'' capture, an
+	annotated name -- goes to the class's definitional store, as the text's
+	class-body branches send it (AbstractNode >>
+	___emitIRClassBodyRuntimeStoreOf___:from:on:).
 
 	Admitted inside it: expression statements, assignments (one target: a
-	name, an attribute, a subscript or a nest of them), augmented
-	assignments, ``del'', ``if'', ``for'', ``while'', ``try'', ``with'',
-	``raise'', ``assert'', ``pass'', ``break'' and ``continue'', and an
-	annotation of an attribute or subscript.  Every expression in it is
-	admitted as a class-body value is (___irClassBodyValueReason___:bound:).
-	Refused, each under its own row: a def or a class (built as a value in a
-	block, P3.5), a chained assignment, an annotated NAME (whose record the
-	statement emit does not keep), an async statement, ``except*'', and the
-	scope declarations and imports."
+	name, an attribute, a subscript or a nest of them; or a chain of names),
+	augmented assignments, ``del'', ``if'', ``for'', ``while'', ``try'' (and
+	``except*''), ``with'', ``raise'', ``assert'', ``match'', imports,
+	``pass'', ``break'' and ``continue'', an annotation of a name, an
+	attribute or a subscript; and (plan P3.7) a def or a class, built as the
+	class-body ``if'' builds one -- a value def or a nested class's helper,
+	stored through the definitional store (FunctionDefAst >>
+	___emitIRClassBodyRuntimeDefOn___:, ClassDefAst >>
+	___emitIRClassBodyRuntimeClassOn___:), judged as that one is and not
+	walked into.  Every expression in it is admitted as a class-body value is
+	(___irClassBodyValueReason___:bound:).  Refused, each under its own row: a
+	chain with a target that is not a name, an async statement, and the
+	scope declarations."
 
-	| reason |
-	reason := nil.
-	aStmt ___descendantsDo___: [:n |
-		reason isNil ifTrue: [
-			(n isKindOf: StatementAst) ifTrue: [
-				reason := self ___irClassBodyRuntimeStatementShapeReason___: n].
-			(reason isNil and: [(n isKindOf: ExpressionAst)
-				and: [(n parent isKindOf: ExpressionAst) not]]) ifTrue: [
-					reason := (self ___irClassBodyValueReason___: n bound: boundNames)
-						ifNotNil: [:r | 'runtime:' , r]]]].
-	^ reason
+	^ self ___irClassBodyRuntimeReasonIn___: aStmt bound: boundNames
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyRuntimeReasonIn___: aNode bound: boundNames [
+	"___irClassBodyRuntimeReason___:bound:'s walk: aNode and its subtree, but
+	not into a def or class it builds as a value (judged whole) or an
+	expression (judged by ___irClassBodyValueReason___:bound:, which walks
+	it).  ``parent'' points up and is skipped."
+
+	| reason ivars |
+	(aNode isKindOf: FunctionDefAst) ifTrue: [
+		^ (self ___irClassBodyValueDefReason___: aNode bound: boundNames)
+			ifNotNil: [:r | 'runtime:def:' , r]].
+	(aNode isKindOf: ClassDefAst) ifTrue: [
+		^ (self ___irNestedClassReason___: aNode bound: boundNames) ifNotNil: [:r |
+			'runtime:class:' , (r asString copyFrom: 'irHelper:nestedClass:' size + 1 to: r size)]].
+	(aNode isKindOf: StatementAst) ifTrue: [
+		(self ___irClassBodyRuntimeStatementShapeReason___: aNode) ifNotNil: [:r | ^ r]].
+	((aNode isKindOf: ExpressionAst) and: [(aNode parent isKindOf: ExpressionAst) not]) ifTrue: [
+		^ (self ___irClassBodyValueReason___: aNode bound: boundNames)
+			ifNotNil: [:r | 'runtime:' , r]].
+	ivars := aNode class allInstVarNames.
+	1 to: ivars size do: [:i |
+		| v |
+		(ivars at: i) == #'parent' ifFalse: [
+			v := aNode instVarAt: i.
+			(v isKindOf: AbstractNode)
+				ifTrue: [
+					reason := self ___irClassBodyRuntimeReasonIn___: v bound: boundNames.
+					reason ifNotNil: [^ reason]]
+				ifFalse: [
+					((v isKindOf: Collection) and: [(v isKindOf: CharacterCollection) not]) ifTrue: [
+						v do: [:e |
+							(e isKindOf: AbstractNode) ifTrue: [
+								reason := self ___irClassBodyRuntimeReasonIn___: e bound: boundNames.
+								reason ifNotNil: [^ reason]]]]]]].
+	^ nil
 
 ]
 
 { #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassBodyRuntimeStatementShapeReason___: aStmt [
 	"___irClassBodyRuntimeReason___:bound:'s test of one statement's KIND (its
-	expressions are tested apart), or nil."
+	expressions are tested apart, a def or class is judged whole), or nil."
 
-	(aStmt isKindOf: FunctionDefAst) ifTrue: [^ 'runtime:def'].
-	(aStmt isKindOf: ClassDefAst) ifTrue: [^ 'runtime:class'].
 	(((aStmt isKindOf: AsyncForAst) or: [aStmt isKindOf: AsyncWithAst]))
 		ifTrue: [^ 'runtime:async'].
+	"A chain of names stores each through the definitional store
+	(AssignAst >> ___emitIRChainOn___:, plan P3.7)."
 	(aStmt isKindOf: AssignAst) ifTrue: [
-		^ aStmt targets size = 1 ifTrue: [nil] ifFalse: ['runtime:chain']].
-	(aStmt isKindOf: AnnAssignAst) ifTrue: [
-		^ (aStmt target isKindOf: NameAst) ifTrue: ['runtime:annotation'] ifFalse: [nil]].
-	((aStmt isKindOf: TryAst)
-		and: [(aStmt handlers ifNil: [#()]) anySatisfy: [:h | h isStar == true]])
-			ifTrue: [^ 'runtime:exceptStar'].
+		^ (aStmt targets size = 1 or: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]])
+			ifTrue: [nil] ifFalse: ['runtime:chain']].
+	"An annotated name stores its value through the definitional store and
+	records that it ran, through the class build emitter (AnnAssignAst >>
+	___emitIRStatementOn___:, plan P3.7)."
+	(aStmt isKindOf: AnnAssignAst) ifTrue: [^ nil].
+	((aStmt isKindOf: ImportFromAst) and: [aStmt wasStarImport]) ifTrue: [^ 'runtime:importStar'].
 	((aStmt isKindOf: ExprAst) or: [(aStmt isKindOf: AugAssignAst)
 		or: [(aStmt isKindOf: DeleteAst) or: [(aStmt isKindOf: IfAst)
 		or: [(aStmt isKindOf: ForAst) or: [(aStmt isKindOf: WhileAst)
 		or: [(aStmt isKindOf: TryAst) or: [(aStmt isKindOf: WithAst)
 		or: [(aStmt isKindOf: RaiseAst) or: [(aStmt isKindOf: AssertAst)
 		or: [(aStmt isKindOf: PassAst) or: [(aStmt isKindOf: BreakAst)
-		or: [aStmt isKindOf: ContinueAst]]]]]]]]]]]]) ifTrue: [^ nil].
+		or: [(aStmt isKindOf: ContinueAst) or: [(aStmt isKindOf: MatchAst)
+		or: [(aStmt isKindOf: ImportAst)
+		or: [aStmt isKindOf: ImportFromAst]]]]]]]]]]]]]]]) ifTrue: [^ nil].
 	^ 'runtime:' , aStmt class name asString
 
 ]
@@ -2553,6 +2617,30 @@ ClassDefAst >> ___irClassBodyStatementsAreSimple___ [
 			or: [(s isKindOf: ExprAst)
 			or: [(s isKindOf: AssignAst)
 			or: [s isKindOf: AnnAssignAst]]]]]]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyValueDefReason___: aDef bound: boundNames [
+	"Why a def the class build makes as a VALUE -- one in a class-body ``if''
+	(emitClassBodyIfDef:on:) or in a loop, ``try'' or ``with''
+	(FunctionDefAst >> ___emitIRClassBodyRuntimeDefOn___:) -- keeps the class
+	on the TEXT helper, as the tail of a census row, or nil when the IR
+	backend builds it (ClassBuildIREmitter >> ___valueDef___:).
+
+	Its decorators are class-body values.  A def the parser re-classed
+	(@staticmethod / @classmethod) is built as any def, and the walk applies
+	the wrapper the parser took the decorator into
+	(FunctionDefAst >> ___classBodyValueWrapper___); one whose decorator reads
+	its own name (``@x.setter def x'') evaluates its decorators first
+	(FunctionDefAst >> ___emitIRPreEvaluatedDecoratedOn___:leaf:), both plan
+	P3.7."
+
+	(aDef decorator_list ifNil: [#()]) do: [:deco |
+		((deco isKindOf: Symbol) or: [deco isKindOf: ConstantAst]) ifFalse: [
+			(self ___irClassBodyValueReason___: deco bound: boundNames)
+				ifNotNil: [:r | ^ 'decorator:' , r]]].
+	^ nil
 
 ]
 
@@ -2780,12 +2868,10 @@ ClassDefAst >> ___irClassHelperAnnotationReason___: anAnnAssign bound: boundName
 
 	| target |
 	target := anAnnAssign target.
-	((target isKindOf: NameAst) and: [anAnnAssign ___isSimpleAnnotation___])
-		ifFalse: [^ #'irHelper:annotation:target'].
-	(anAnnAssign value notNil
-		and: [(anAnnAssign value isKindOf: ConstantAst) not
-		and: [#(#'__renamed__' #'__transient__') includes: target id asSymbol]])
-			ifTrue: [^ #'irHelper:annotation:specialName'].
+	"A parenthesised name, ``(x): T = v'', binds x and records no annotation;
+	the walk does that through either emitter (plan P3.7), as it does a
+	``__renamed__'' or ``__transient__'' value."
+	(target isKindOf: NameAst) ifFalse: [^ #'irHelper:annotation:target'].
 	(anAnnAssign annotation isKindOf: ConstantAst) ifFalse: [
 		(self ___irClassBodyValueReason___: anAnnAssign annotation bound: boundNames)
 			ifNotNil: [:r | ^ ('irHelper:annotation:' , r) asSymbol]].
@@ -2830,9 +2916,10 @@ ClassDefAst >> ___irClassHelperBodyReason___ [
 					((s isKindOf: AssignAst)
 						and: [s targets allSatisfy: [:t | t isKindOf: NameAst]]) ifTrue: [
 						(s value isKindOf: ConstantAst) ifFalse: [
-							(s targets anySatisfy: [:t |
-								#(#'__renamed__' #'__transient__') includes: t id asSymbol])
-									ifTrue: [^ #'irHelper:assign:specialName'].
+							"A ``__renamed__'' or ``__transient__'' value is an
+							ordinary class-body value: the walk reads the
+							declaration statically (renamedNamePairs,
+							transientValueAst) through either emitter (plan P3.7)."
 							(self ___irClassBodyValueReason___: s value bound: bound classCell: true)
 								ifNotNil: [:r | ^ ('irHelper:assign:' , r) asSymbol]]]]]].
 	^ nil
@@ -2939,9 +3026,13 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 				(aStmt assign isNil ifTrue: [aStmt value] ifFalse: [aStmt assign value])
 			bound: boundNames.
 		^ reason isNil ifTrue: [#runtime] ifFalse: [('irHelper:typeAlias:' , reason) asSymbol]].
-	(aStmt isKindOf: MatchAst) ifTrue: [^ #'irHelper:match'].
-	((aStmt isKindOf: ImportAst) or: [aStmt isKindOf: ImportFromAst])
-		ifTrue: [^ #'irHelper:import'].
+	"An ``import'' binds through its attribute pairs, whose values the import
+	statement builds through IR too (RawSmalltalkAst >> ___emitIRValueOn___:,
+	plan P3.7).  A star import cannot stand in a class body."
+	((aStmt isKindOf: ImportAst) or: [aStmt isKindOf: ImportFromAst]) ifTrue: [
+		^ ((aStmt isKindOf: ImportFromAst) and: [aStmt wasStarImport])
+			ifTrue: [#'irHelper:import:star']
+			ifFalse: [nil]].
 	(aStmt isKindOf: IfAst) ifTrue: [
 		reason := self ___irClassBodyIfReason___: aStmt bound: boundNames.
 		^ reason isNil ifTrue: [#runtime] ifFalse: [('irHelper:' , reason) asSymbol]].
@@ -2964,8 +3055,23 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 				ifFalse: [(aStmt isKindOf: AssignAst)
 					ifTrue: ['irHelper:assignTarget:' , reason]
 					ifFalse: ['irHelper:controlFlow:' , reason]]) asSymbol].
+	"A plain unpack, ``a, b = v'' (plan P3.7): its attribute pairs are the
+	synthetic ``v[i]'' subscripts AssignAst >> classBodyAttributePairs makes,
+	class-body values like any other.  A starred, attribute or subscript leaf,
+	or a chain with a target that is not a name, is dropped on every path
+	and stays text so the IR helper does not drop it too."
+	((aStmt isKindOf: AssignAst)
+		and: [aStmt targets size = 1
+		and: [((aStmt targets first isKindOf: TupleAst) or: [aStmt targets first isKindOf: ListAst])
+		and: [aStmt ___unpacksToNamesOnly___: aStmt targets first]]]) ifTrue: [
+			reason := self ___irClassBodyValueReason___: aStmt value bound: boundNames.
+			^ reason isNil ifTrue: [nil] ifFalse: [('irHelper:assign:' , reason) asSymbol]].
 	(aStmt isKindOf: AssignAst) ifTrue: [^ #'irHelper:assignTarget'].
-	(aStmt isKindOf: DeleteAst) ifTrue: [^ #'irHelper:delete'].
+	"A ``del'' of a name the body binds with a def or a nested class: the walk
+	emits nothing for it on either path (___isClassBodyDeleteStatement___:,
+	the Flask NullSession decision), so the IR helper builds it as the same
+	no-op (plan P3.7)."
+	(aStmt isKindOf: DeleteAst) ifTrue: [^ nil].
 	^ ('irHelper:controlFlow:' , aStmt class name asString) asSymbol
 
 ]
@@ -3031,12 +3137,23 @@ ClassDefAst >> ___irClassHelperTextReason___: localNames [
 	methods, classes and aliases in the body (their type-parameter scope is
 	such a def), and ``type'' aliases.
 
-	Still text: a re-classed def (@staticmethod / @classmethod) or a class in a
-	class-body ``if'', a def in a loop, ``try'' or ``with''; an import or
-	``match''; an attribute store the walk drops on every path; a
-	``__renamed__'' or ``__transient__'' value (Grail's persistence
-	declarations); and ``locals()'' / ``vars()'' inside a lambda or a
-	comprehension of the body.
+	P3.7a admits the class-body statements that bind names the text helper
+	already built: an ``import'' (in the body, whose attribute value the
+	import statement builds through IR, or in an ``if'' or ``try''), ``match'',
+	``except*'', a plain unpack, a chain of names and an annotated name in a
+	loop or ``try'', a parenthesised annotation target, ``__renamed__'' /
+	``__transient__'' / ``__slots__'' values (in a branch too), a re-classed
+	or setter def and a class in a class-body ``if'', and a def or class in a
+	loop, ``try'' or ``with'' (built as the ``if'' builds one), and a ``del''
+	of a def name, which the walk drops on both paths.
+
+	Still text (each a bug on every path or a step of its own): a store the
+	walk drops on every path (a chain with a subscript target, a starred
+	unpack, an attribute store, an augmented store through an attribute or
+	subscript); ``eval'' / ``exec'' / ``dir'' / ``globals'' in the body, and
+	``locals()'' / ``vars()'' inside a lambda or a comprehension of it; and the
+	value shapes P3.7b takes (a walrus or ``yield'' in a lambda, ``super'' as
+	a value).
 
 	P3.6 admits ``locals()'' and zero-argument ``vars()'' in the body itself:
 	both helpers write the call (CallAst >> ___emitClassBodyLocalsWith___:)
@@ -3264,6 +3381,12 @@ ClassDefAst >> ___irEligibleStatementLocals___: localNames [
 	Refused shapes are named for the census (``classDef:...''); see
 	___irMethodLocalClassReason___:."
 
+	"A class a class-body loop, ``try'' or ``with'' binds is judged as the
+	nested class it is built as (plan P3.7, ___emitIRClassBodyRuntimeClassOn___:)."
+	self ___inClassBodyRuntimeScope___ ifTrue: [
+		^ (self ___directlyEnclosingClassDef___
+			___irNestedClassReason___: self
+			bound: self ___directlyEnclosingClassDef___ ___irClassBodyBoundNames___) isNil].
 	^ (self ___irMethodLocalClassReason___: localNames) isNil
 
 ]

@@ -241,7 +241,7 @@ def f(p):
 		'DecoCell' -> #'irHelper:methodDecorator:classCell'.
 		'Expr' -> nil.
 		'Target' -> #'irHelper:assignTarget'.
-		'Renamed' -> #'irHelper:assign:specialName'.
+		'Renamed' -> nil.
 		'Default' -> nil }.
 	bad := OrderedCollection new.
 	expect do: [:assoc |

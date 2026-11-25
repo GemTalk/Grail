@@ -290,8 +290,12 @@ ClassBuildIREmitter >> ___valueDef___: aDef [
 			on: Error do: [:ex | ex return: '?'].
 		^ self error: 'ClassBuildIREmitter: a def built as a value in the class body is not IR-eligible: '
 			, r printString , ' (' , detail , ')'].
+	"A decorator that reads the def's own name (``@x.setter def x'' in a
+	class-body ``if'') is evaluated before the def is made, as for a nested
+	def (plan P3.7)."
 	aDef ___needsPreEvaluatedDecorators___ ifTrue: [
-		^ self error: 'ClassBuildIREmitter: a def built as a value whose decorator reads its own name'].
+		aDef ___emitIRPreEvaluatedDecoratedOn___: builder leaf: leaf.
+		^ self ___rest___].
 	fn := aDef ___emitIRNestedFunctionValueOn___: builder.
 	builder atNode: aDef.
 	builder add: (builder assign: leaf from: fn).

@@ -244,12 +244,12 @@ def f(p):
 		'Runtime' -> nil.
 		'Branch' -> nil.
 		'CondDef' -> nil.
-		'LoopDef' -> #'irHelper:controlFlow:runtime:def'.
-		'Chain' -> #'irHelper:controlFlow:runtime:chain'.
+		'LoopDef' -> nil.
+		'Chain' -> nil.
 		'Glob' -> nil.
 		'NonLoc' -> nil.
 		'Alias' -> nil.
-		'Imp' -> #'irHelper:import'.
+		'Imp' -> nil.
 		'Locs' -> nil.
 		'Target' -> #'irHelper:assignTarget'.
 		'Outer' -> nil.

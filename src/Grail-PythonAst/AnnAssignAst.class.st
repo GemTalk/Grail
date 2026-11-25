@@ -111,6 +111,14 @@ AnnAssignAst >> ___emitExecutionRecordWith___: e [
 { #category : 'Grail-IR Codegen' }
 AnnAssignAst >> ___emitIRStatementOn___: aBuilder [
 	| v |
+	"A name a class-body loop, ``try'' or ``with'' annotates (plan P3.7): the
+	value stored on the class, as AssignAst stores it there, and then the
+	record that the annotation ran, written through the helper's class build
+	emitter -- printSmalltalkOn:'s class-body branch."
+	((target isKindOf: NameAst) and: [self ___inClassBodyRuntimeScope___]) ifTrue: [
+		value notNil ifTrue: [self ___plainAssign___ ___emitIRStatementOn___: aBuilder].
+		self ___emitExecutionRecordWith___: aBuilder classBuildEmitter.
+		^ self].
 	value isNil ifTrue: [
 		self ___targetChecks___ do: [:check | check ___emitIRStatementOn___: aBuilder].
 		^ self].
@@ -137,6 +145,8 @@ AnnAssignAst >> ___irEligibleStatementLocals___: localNames [
 	value an attribute or subscript target still evaluates its parts
 	(___targetChecks___)."
 
+	((target isKindOf: NameAst) and: [self ___inClassBodyRuntimeScope___]) ifTrue: [
+		^ value isNil or: [self ___plainAssign___ ___irEligibleStatementLocals___: localNames]].
 	value isNil ifTrue: [
 		^ self ___targetChecks___ allSatisfy: [:check |
 			check ___irEligibleStatementLocals___: localNames]].

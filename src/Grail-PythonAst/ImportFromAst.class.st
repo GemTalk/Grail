@@ -51,6 +51,46 @@ ImportFromAst >> ___boundTargetNames___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ImportFromAst >> ___emitIRImportValueFor___: alias on: aBuilder [
+	"The value ONE alias binds, valueSourceFor:'s two shapes.  The imported
+	name is the one-element fromlist so the importer answers the LEAF module:
+	  ((builtins instance) ___import__: { 'abs.name'. nil. nil. { 'attr' }. 0 } kw: nil)
+	      @env1:___importFrom___: #attr
+	or, when the module class is known at compile time and ``attr'' is one of
+	its env-1 fast-path methods (a callable on a converted module), the
+	BoundMethod wrap the text emits instead of the attribute load.  Shared by
+	the statement emit and a class-body import's attribute value
+	(RawSmalltalkAst >> ___emitIRValueOn___:, plan P3.7)."
+
+	| absoluteName moduleClass attrName imported |
+	absoluteName := self resolvedModuleName.
+	moduleClass := module isNil
+		ifTrue: [nil]
+		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
+	attrName := alias name asString.
+	aBuilder atNode: self.
+	imported := aBuilder
+		send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: {
+				aBuilder obj: absoluteName asString.
+				aBuilder nilLit.
+				aBuilder nilLit.
+				aBuilder arrayOf: { aBuilder obj: attrName }.
+				aBuilder obj: 0 }.
+			aBuilder nilLit }
+		env: 1.
+	^ (moduleClass notNil
+		and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass])
+			ifTrue: [aBuilder
+				send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
+				with: { imported. aBuilder obj: attrName asSymbol } env: 1]
+			ifFalse: [aBuilder
+				send: #'___importFrom___:' to: imported
+				with: { aBuilder obj: attrName asSymbol } env: 1]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ImportFromAst >> ___emitIRStatementOn___: aBuilder [
 	"valueSourceFor:'s two shapes, one statement per alias.  The imported name
 	is the one-element fromlist so the importer answers the LEAF module:
@@ -61,33 +101,9 @@ ImportFromAst >> ___emitIRStatementOn___: aBuilder [
 	BoundMethod wrap the text emits instead of the attribute load:
 	  name := BoundMethod receiver: (<the import>) selector: #attr"
 
-	| absoluteName moduleClass |
-	absoluteName := self resolvedModuleName.
-	moduleClass := module isNil
-		ifTrue: [nil]
-		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
 	names do: [:alias |
-		| attrName imported v |
-		attrName := alias name asString.
-		aBuilder atNode: self.
-		imported := aBuilder
-			send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
-			with: { aBuilder arrayOf: {
-					aBuilder obj: absoluteName asString.
-					aBuilder nilLit.
-					aBuilder nilLit.
-					aBuilder arrayOf: { aBuilder obj: attrName }.
-					aBuilder obj: 0 }.
-				aBuilder nilLit }
-			env: 1.
-		v := (moduleClass notNil
-			and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass])
-				ifTrue: [aBuilder
-					send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
-					with: { imported. aBuilder obj: attrName asSymbol } env: 1]
-				ifFalse: [aBuilder
-					send: #'___importFrom___:' to: imported
-					with: { aBuilder obj: attrName asSymbol } env: 1].
+		| v |
+		v := self ___emitIRImportValueFor___: alias on: aBuilder.
 		aBuilder atNode: self.
 		"Where the binding lands is ImportAst's rule, asked the same way: a
 		``global''-declared name binds the MODULE (``global _Unparser; from
@@ -154,8 +170,22 @@ ImportFromAst >> ___irEligibleStatementLocals___: localNames [
 	(self ___irBoundNames___ allSatisfy: [:n |
 		(localNames includes: n)
 			or: [(self ___nameStoreRoutesToModule___: n asSymbol)
-			or: [self ___importBindsClassCell___: n asSymbol]]])
+			or: [(self ___importBindsClassCell___: n asSymbol)
+			or: [self ___inClassBodyRuntimeScope___]]]])
 		ifFalse: [^ false].
+	^ self ___irImportValueEligibleFor___: nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ImportFromAst >> ___irImportValueEligibleFor___: anAlias [
+	"Can ___emitIRImportValueFor___:on: build an alias's value?  Not for a star
+	import (a class body cannot hold one) or a relative import in a doit, and
+	only once the absolute module name resolves -- guarded, since eligibility
+	must never raise."
+
+	self wasStarImport ifTrue: [^ false].
+	self ___isRelativeInDoit___ ifTrue: [^ false].
 	^ [self resolvedModuleName notNil] on: Error do: [:ex | false]
 
 ]
@@ -251,7 +281,8 @@ ImportFromAst >> classBodyAttributePairs [
 
 	self wasStarImport ifTrue: [^ #()].
 	^ names collect: [:each |
-		(self boundNameFor: each) -> (RawSmalltalkAst source: (self valueSourceFor: each))]
+		(self boundNameFor: each)
+			-> (RawSmalltalkAst source: (self valueSourceFor: each) importer: self alias: each)]
 
 ]
 

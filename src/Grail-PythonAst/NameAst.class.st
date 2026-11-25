@@ -892,6 +892,22 @@ NameAst >> ___emitIRValueOn___: aBuilder [
 
 	| kind |
 	aBuilder atNode: self.
+	"A read in the DECORATORS or DEFAULTS of a def a method-local class helper
+	builds as a value (a def in a class-body ``if'', loop, ``try'' or
+	``with''): evaluated in the class body, where CPython evaluates them, so a
+	class-body value read -- asked with the value-def window closed, which
+	otherwise marks every read under the def as the def's own (plan P3.7).
+	The text reads these through ___emitSmalltalkOn___:'s class-body branches."
+	(aBuilder classBuildEmitter notNil
+		and: [CallAst classBodyValueDefNode notNil
+		and: [CallAst classBodyValueDefNode ___valueDefHeaderContains___: self]]) ifTrue: [
+			| savedValueDef |
+			savedValueDef := CallAst classBodyValueDefNode.
+			CallAst classBodyValueDefNode: nil.
+			[self ___readsAsClassBodyValue___ ifTrue: [
+				^ aBuilder classBuildEmitter valueOf: [
+					self ___emitClassBodyValueWith___: aBuilder classBuildEmitter]]]
+				ensure: [CallAst classBodyValueDefNode: savedValueDef]].
 	"A CLASS-BODY VALUE READ in a method-local class helper built through IR
 	(plan P3.3): the class-body read the text writes, through the helper's
 	ClassBuildIREmitter -- one description, two outputs."

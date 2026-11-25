@@ -114,8 +114,16 @@ AssignAst >> ___emitIRChainOn___: aBuilder [
 			(self isModuleScopeStoreTarget: t)
 				ifTrue: [aBuilder add: (self
 					___emitIRModuleStoreOf___: (aBuilder var: chainLeaf) to: t on: aBuilder)]
-				ifFalse: [aBuilder add: (aBuilder
-					assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))]].
+				ifFalse: [(self isClassBodyRuntimeStoreTarget: t)
+					ifTrue: [
+						"A name a class-body loop, ``try'' or ``with'' binds (plan
+						P3.7): the class's definitional store, the chained
+						branch's printSmalltalkClassBodyRuntimeStoreOn:target:."
+						aBuilder add: (self
+							___emitIRClassBodyRuntimeStoreOf___: t id
+							from: (aBuilder var: chainLeaf) on: aBuilder)]
+					ifFalse: [aBuilder add: (aBuilder
+						assign: (aBuilder leafFor: t id asSymbol) from: (aBuilder var: chainLeaf))]]].
 		(t isKindOf: AttributeAst) ifTrue: [
 			t ___irIsClassChangeTarget___
 				ifTrue: [
@@ -454,7 +462,7 @@ AssignAst >> ___irChainTargetKind___: aTarget locals: localNames [
 		(self isModuleScopeStoreTarget: aTarget) ifTrue: [^ #moduleStore].
 		"A class-body runtime store is a THIRD spelling the chain emit does not
 		have; it keeps refusing rather than silently taking the local branch."
-		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ nil].
+		(self isClassBodyRuntimeStoreTarget: aTarget) ifTrue: [^ #classBodyRuntime].
 		(localNames includes: aTarget id asString) ifFalse: [^ nil].
 		^ #local].
 	(aTarget isKindOf: AttributeAst) ifTrue: [

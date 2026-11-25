@@ -104,7 +104,8 @@ StatementAst >> ___emitIRControlSignalGuard___: exLeaf on: aBuilder [
 StatementAst >> ___emitIRImportStoreOf___: aName from: v on: aBuilder [
 	"The node that binds aName to v for an import, by printImportBindingOpenOn:
 	name:'s rule: a module-bound name is the module store every binding form
-	takes; an enclosing function's local reached past a method-local class is
+	takes; one a class-body ``if'' or ``try'' binds, the class's definitional
+	store; an enclosing function's local reached past a method-local class is
 	its setter cell, ``(self ___classCellSetter___: #'___cellSetter_x___')
 	value: v'' (#2233; ``value:'' is env 0, the setter is a Smalltalk block);
 	anything else the local leaf.  Shared by ImportAst and ImportFromAst."
@@ -113,6 +114,10 @@ StatementAst >> ___emitIRImportStoreOf___: aName from: v on: aBuilder [
 	sym := aName asSymbol.
 	(self ___nameStoreRoutesToModule___: sym)
 		ifTrue: [^ self ___emitIRModuleScopeStoreOf___: sym from: v on: aBuilder].
+	"An import a class-body ``if'' or ``try'' runs (plan P3.7): the class's
+	definitional store, printImportBindingOpenOn:name:'s second branch."
+	self ___inClassBodyRuntimeScope___
+		ifTrue: [^ self ___emitIRClassBodyRuntimeStoreOf___: sym from: v on: aBuilder].
 	(self ___importBindsClassCell___: sym) ifTrue: [
 		CallAst addCapturedWriteName: sym.
 		^ aBuilder
