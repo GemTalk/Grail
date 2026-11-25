@@ -2070,6 +2070,70 @@ BaseException class >> ___isIRPythonMethod___: aMethod [
 ]
 
 { #category : 'Grail-Traceback Building' }
+BaseException class >> ___isModuleSeamDispatcher___: aMethod [
+	"Is aMethod a module's ``initialize'' built by the statement seam
+	(ModuleBodySeam, P4.1) -- a list of sends to the statement helpers, with no
+	statement of its own?
+
+	It is NOT a Python frame.  CPython has one ``<module>'' frame, and under the
+	seam that frame is the HELPER running the statement, which knows the line and
+	the file; the dispatcher only called it.  Every frame walk skips it, so a
+	module body still counts as exactly one frame for sys._getframe depth,
+	inspect.stack() and a traceback.
+
+	Told by its marker temp, ``___grailModuleSeam___'', which the seam declares
+	and stores so the generator keeps it: read from in-memory debugInfo, and no
+	text ``initialize'' -- a module on the text arm, a doit -- ever declares it."
+
+	aMethod isNil ifTrue: [^ false].
+	aMethod @env0:selector == #'initialize' ifFalse: [^ false].
+	^ [(aMethod @env0:argsAndTemps @env0:ifNil: [#()]) @env0:includes: #'___grailModuleSeam___']
+		@env0:on: Error do: [:ex |
+			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+			ex @env0:return: false]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___isModuleStatementHelper___: aMethod [
+	"Is aMethod one of a module body's statement helpers,
+	``___irModStmt_<offset>___'' in category 'Grail-Module Body' (ModuleBodySeam,
+	P4.1)?  Such a method IS the module's ``<module>'' frame while it runs.
+
+	The selector is tested first and cheaply; the category settles it, so a
+	Python ``def'' that happened to be spelled like a helper -- it compiles into
+	'Grail-Methods' -- keeps its own name."
+
+	| s cls |
+	aMethod isNil ifTrue: [^ false].
+	s := aMethod @env0:selector.
+	s isNil ifTrue: [^ false].
+	(self ___isModuleStatementHelperSelector___: s) ifFalse: [^ false].
+	cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex |
+		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+		ex @env0:return: nil].
+	cls isNil ifTrue: [^ false].
+	^ ([cls @env0:categoryOfSelector: s environmentId: 1] @env0:on: Error do: [:ex |
+		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
+		ex @env0:return: nil]) == #'Grail-Module Body'
+
+]
+
+{ #category : 'Grail-Traceback Building' }
+BaseException class >> ___isModuleStatementHelperSelector___: aSelector [
+	"The selector half of ___isModuleStatementHelper___:.  Spelled out here
+	rather than asked of ModuleBodySeam: this class files before the PythonAst
+	classes are on its symbol list."
+
+	| s |
+	aSelector isNil ifTrue: [^ false].
+	s := aSelector @env0:asString.
+	^ (s @env0:size @env0:> 16)
+		and: [(s @env0:beginsWith: '___irModStmt_') and: [s @env0:endsWith: '___']]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
 BaseException class >> ___lineNumberAfterStore___: aString from: anIndex [
 	"The Python line a ``___curPos___ :='' store records.  Codegen emits BOTH
 	shapes -- the bare SmallInteger of an ordinary statement and the 5-element
@@ -2934,16 +2998,22 @@ BaseException class >> ___liveFramePairsFrom___: st generatorBody: isGeneratorBo
 							a decorator reading sys._getframe(1).f_lineno saw 0.  0 remains
 							the answer only when nothing is derivable, since CPython's
 							walkers need an int."
-							((meth @env0:selector == #'initialize')
+							"Under the statement seam (P4.1) the body is a HELPER running
+							the statement, named for its offset, and the ``initialize''
+							that called it is a list of sends that is no frame at all --
+							skipped here, or sys._getframe would count the body twice."
+							(((meth @env0:selector == #'initialize')
+								or: [self ___isModuleStatementHelper___: meth])
 								and: [(st @env0:at: i @env0:+ 2) @env0:isKindOf: module])
 								ifTrue: [
+									(self ___isModuleSeamDispatcher___: meth) ifFalse: [
 									pairs @env0:add: { meth. ip. '<module>'.
 										(frameLine ifNil: [
 											(self ___pythonLineForMethod___: meth ip: ip) ifNil: [0]]).
 										(self ___liveFrameContentsList___: contents
 											pending: pendingContents
 											forHome: home
-											pendingHome: pendingHome). outerLvl. meth }]
+											pendingHome: pendingHome). outerLvl. meth }]]
 								ifFalse: [
 							"A METHOD-LOCAL CLASS'S HELPER BUILT THROUGH IR (P3.2) carries the
 							IR marker, so the generated-Python test below admits it at EVERY
@@ -4323,7 +4393,12 @@ BaseException class >> ___pythonFrameNameForMethod___: aMethod [
 	body at all, and the innermost entry was the enclosing method suspended at
 	its ``class C:'' statement."
 	(self ___classBodyHelperClassNameFor___: sel) ifNotNil: [:nm | ^ nm].
+	"A MODULE BODY'S STATEMENT HELPER (ModuleBodySeam, P4.1) is the module's
+	``<module>'' frame, and the seam's ``initialize'' that called it is no frame
+	at all: nil is what skips it, so the body still counts once."
+	(self ___isModuleStatementHelper___: aMethod) ifTrue: [^ '<module>'].
 	sel == #'initialize' ifTrue: [
+		(self ___isModuleSeamDispatcher___: aMethod) ifTrue: [^ nil].
 		cls := [aMethod @env0:inClass] @env0:on: Error do: [:ex |
 			(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 			ex @env0:return: nil].

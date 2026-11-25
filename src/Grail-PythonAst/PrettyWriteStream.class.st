@@ -49,6 +49,37 @@ PrettyWriteStream >> increaseIndent [
 ]
 
 { #category : 'Grail-position map' }
+PrettyWriteStream >> mapCommentFrom: firstIndex to: lastIndex shiftedBy: anInteger [
+	"The trailing map COMMENT for the entries recorded so far whose SmallIntegers
+	run from firstIndex to lastIndex of the flat map (both multiples of six
+	apart, 1-based), with every Smalltalk offset moved by anInteger -- and,
+	unlike mapCommentShiftedBy:, the map is KEPT.  Answers an empty String when
+	the range holds no entry.
+
+	For a caller that compiles SLICES of one emit as separate methods: a module
+	body's statements are written once into one stream and then grouped into
+	several methods (ModuleBodySeam, P4.1), so each method takes the entries of
+	its own statements and shifts them from the stream's origin to its own."
+
+	| out |
+	(positionMap isNil or: [lastIndex < firstIndex]) ifTrue: [^ ''].
+	out := WriteStream on: String new.
+	out nextPut: Character lf.
+	out nextPutAll: '"___GRAILPOS___'.
+	firstIndex to: lastIndex by: 6 do: [:i |
+		out nextPut: $ .
+		out nextPutAll: ((positionMap at: i) + anInteger) printString.
+		out nextPut: $ .
+		out nextPutAll: ((positionMap at: i + 1) + anInteger) printString.
+		2 to: 5 do: [:k |
+			out nextPut: $ .
+			out nextPutAll: (positionMap at: i + k) printString]].
+	out nextPutAll: ' "'.
+	^ out contents
+
+]
+
+{ #category : 'Grail-position map' }
 PrettyWriteStream >> mapCommentShiftedBy: anInteger [
 	"The map for the method that ends here, as the trailing Smalltalk COMMENT
 	that carries it into the compiled method -- and forget it.  Answers an empty
@@ -69,24 +100,10 @@ PrettyWriteStream >> mapCommentShiftedBy: anInteger [
 	finished with it: a property deleter has its leading selector rewritten to a
 	longer one, which moves every offset the map describes."
 
-	| map out |
-	map := positionMap.
+	| comment |
+	comment := self mapCommentFrom: 1 to: self positionMapSize shiftedBy: anInteger.
 	positionMap := nil.
-	map isNil ifTrue: [^ ''].
-	map isEmpty ifTrue: [^ ''].
-	out := WriteStream on: String new.
-	out nextPut: Character lf.
-	out nextPutAll: '"___GRAILPOS___'.
-	1 to: map size by: 6 do: [:i |
-		out nextPut: $ .
-		out nextPutAll: ((map at: i) + anInteger) printString.
-		out nextPut: $ .
-		out nextPutAll: ((map at: i + 1) + anInteger) printString.
-		2 to: 5 do: [:k |
-			out nextPut: $ .
-			out nextPutAll: (map at: i + k) printString]].
-	out nextPutAll: ' "'.
-	^ out contents
+	^ comment
 
 ]
 
@@ -178,6 +195,16 @@ PrettyWriteStream >> on: aCollection [
 	nobody asks for is simply dropped with the stream.  NamedExprAst builds a
 	throwaway stream for its right-hand side and never compiles it."
 	methodStart := 0.
+
+]
+
+{ #category : 'Grail-position map' }
+PrettyWriteStream >> positionMapSize [
+	"How many SmallIntegers the map holds so far -- six per entry.  A caller
+	that slices one emit into several methods records this before and after
+	each piece (see mapCommentFrom:to:shiftedBy:)."
+
+	^ positionMap isNil ifTrue: [0] ifFalse: [positionMap size]
 
 ]
 

@@ -3785,8 +3785,11 @@ builtins >> ___grailIsModuleBodyFrameMethod___: aMethod [
 	| home cls |
 	aMethod @env0:isNil ifTrue: [^ false].
 	home := aMethod @env0:homeMethod.
-	(home @env0:isNil or: [home @env0:selector ~~ #'initialize'])
-		ifTrue: [^ false].
+	home @env0:isNil ifTrue: [^ false].
+	"A module body's statement HELPER (ModuleBodySeam, P4.1) runs its
+	statements, so a frame in one is at module scope too."
+	(BaseException @env0:___isModuleStatementHelper___: home) ifTrue: [^ true].
+	home @env0:selector ~~ #'initialize' ifTrue: [^ false].
 	cls := home @env0:inClass.
 	cls @env0:isNil ifTrue: [^ false].
 	^ ([cls @env0:categoryOfSelector: #'initialize' environmentId: 1]

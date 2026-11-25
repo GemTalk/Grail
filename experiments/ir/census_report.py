@@ -3,7 +3,7 @@ S=sys.argv[1]
 STRUCT=('classMethod','nestedDef')
 # What is still TEXT (P0.2): rows importlib records beside the def reasons.
 # None of them is a top-level def, so every def total below leaves them out.
-TEXT_PREFIXES=('ms:','cs:','th:','in:','lit:','by:','tx:','cp:','cpb:','cpms:')
+TEXT_PREFIXES=('ms:','cs:','th:','in:','lit:','by:','tx:','cp:','cpb:','cpms:','mh:')
 def is_text_row(k): return k.startswith(TEXT_PREFIXES)
 def is_cm(k): return k=='classMethod' or k.startswith('cm:')
 def load(files):
@@ -191,6 +191,11 @@ def text_board(c,label):
     out.append(f'### Module statements ({label})\n')
     out.append('Every top-level statement of every module compiled, by kind. **All of them are text today**: the module body is one text `initialize` (P4). A top-level `def` is a statement here too -- it binds the name in `initialize` -- while its own method is IR.\n')
     out.append(kind_table(c,'ms:','statement')+'\n')
+    if c.get('mh:helper',0) or c.get('mh:fallback',0):
+        out.append(f'The statement seam (P4.1) compiled them as **{c.get("mh:helper",0)}** text helper methods '
+                   f'(`mh:helper`; {c.get("tx:moduleBody",0)} module-body compiles in all), splitting '
+                   f'{c.get("mh:split",0)} groups over budget (`mh:split`); {c.get("mh:overBudget",0)} single statements '
+                   f'stay over budget (`mh:overBudget`) and {c.get("mh:fallback",0)} bodies fell back to one text method (`mh:fallback`).\n')
     out.append(f'### Class-body statements ({label})\n')
     out.append('Every statement directly in a class body, by kind, wherever the class is. **All are emitted as text** (P3): a def\'s method is built through IR, but the statement that installs it is text in the class build.\n')
     out.append(kind_table(c,'cs:','statement')+'\n')
