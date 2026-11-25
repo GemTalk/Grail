@@ -1,13 +1,23 @@
-"The module body as several methods: the STATEMENT SEAM, step P4.1 of the
-IR-only codegen plan.
+"The module body as several methods: the STATEMENT SEAM, steps P4.1 and P4.2
+of the IR-only codegen plan.
 
 A module's env-1 ``initialize'' used to be one text method holding every
 module statement.  Under the seam it is built through PyMethodIRBuilder and
 is nothing but a list of sends, ``self ___irModStmt_<offset>___'', one per
 HELPER; each helper holds a run of consecutive statements, and each class
 statement has a helper of its own.  A method cannot mix IR and text, but a
-module can mix methods, so a helper whose statements IR cannot build yet is a
-text helper -- which in P4.1 is every helper; P4.2/P4.3 build them through IR.
+module can mix methods.
+
+IR HELPERS AND TEXT HELPERS (P4.2).  A statement the IR path can build at
+module scope -- an expression, a plain, augmented or annotated assignment, an
+import, a del, an if / for / while over such statements, pass, raise, assert,
+global (irRefusalOf:) -- is built through IR, and a run of them is an IR
+helper: its statements' own IR emitters (___emitIRStatementOn___:) on one
+PyMethodIRBuilder, with the module source of the run attached as its Python,
+exactly as a def's IR method is built.  Every other statement -- a def, a
+class, a try, a with, a statement holding a lambda or a comprehension (P4.3,
+P4.4) -- is text, and a run of those is a text helper, cut from the text
+emit as in P4.1.  A run is ONE KIND: the two alternate in source order.
 
 WHY SEVERAL METHODS, AND WHY FOR GOOD.  P0.7 measured two limits that are per
 METHOD: past about 12k words of code a method loses its traceback frame (the
@@ -16,25 +26,35 @@ string-literal slots.  The largest module bodies are 13k-46k words.  So the
 split is the end state, and every group is checked against a BUDGET on the
 method actually generated -- words (basicSize), step points
 (_numSourceOffsets) and string literals in its literal frame, which in 4.0 its
-blocks share -- and split in half when it is over.  One statement over budget
-cannot be split here; it is kept (it was in the one big method before) and
-counted, ``mh:overBudget''.
+blocks share -- and split in half when it is over, an IR group as much as a
+text one.  One statement over budget cannot be split here; it is kept (it was
+in the one big method before) and counted, ``mh:overBudget''.
 
-EMITTED ONCE, CUT MANY TIMES.  The statements are written into one stream by
-ModuleAst >> ___emitSeamChunksOn___:, which records each one's text range and
-position-map range; a helper is a slice of that text under its own header, with
-its own slice of the map shifted to its own offsets.  Splitting a group re-cuts
-the slices and never re-runs codegen, whose side effects (def ids, sequence
-numbers) must happen once.
+EMITTED ONCE.  A statement is emitted by ONE backend.  The text statements are
+written into one stream by ModuleAst >> ___emitSeamChunksOn___:skipping:,
+which records each one's text range and position-map range, and leaves the IR
+statements' chunks empty; a text helper is a slice of that text under its own
+header, with its own slice of the map, so splitting a text group re-cuts and
+never re-runs the text codegen, whose side effects (def ids, sequence numbers)
+must happen once.  An IR group is built from the AST, and a split builds each
+half again: the statements it admits are the ones whose IR build registers
+nothing (no def, class, lambda or comprehension), which is what makes that
+safe.  An IR group whose build FAILS is written as text then, at the end of
+the stream (___emitTextFrom:to:), and compiled as a text helper -- a counted
+fallback, and a raise in strict mode.  A method may therefore take its text
+from pieces of the stream that are not adjacent (sourceFor:chunks:).
 
 THE FRAMES.  CPython has one ``<module>'' frame.  The helper running a
-statement knows its line (its ``___curPos___'' stores) and its file (the
-``___pyFile___'' stamp), so a helper is the ``<module>'' frame, and the
-dispatcher is not a frame at all: BaseException names a helper ``<module>''
-and skips the dispatcher (___isModuleSeamDispatcher___:), in the traceback
-walk and the live one alike.  The dispatcher still carries a real
-``___pyFile___'' store, in code and in its attached source, because
-___pythonFileForClassOf___: reads every def's filename from ``initialize''."
+statement knows its line -- a text helper from its ``___curPos___'' stores, an
+IR helper from its step points and position map, as an IR def does -- so a
+helper is the ``<module>'' frame, and the dispatcher is not a frame at all:
+BaseException names a helper ``<module>'' and skips the dispatcher
+(___isModuleSeamDispatcher___:), in the traceback walk and the live one
+alike.  A text helper names its file by its ``___pyFile___'' stamp; an IR
+helper's source is Python, which has none, so it is named by the module class,
+as every def of the module is: the dispatcher carries a real ``___pyFile___''
+store, in code and in its attached source, which
+___pythonFileForClassOf___: reads."
 Class {
 	#name : 'ModuleBodySeam',
 	#superclass : 'Object',
@@ -50,10 +70,82 @@ Class {
 		'overBudget',
 		'traceIR',
 		'irSnapshots',
-		'dispatcherSource'
+		'dispatcherSource',
+		'irStatements',
+		'refusals',
+		'annotateAlone',
+		'irFallbacks'
 	],
 	#category : 'Grail-Parser'
 }
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> ___admitsStatement___: aStatement nested: aBoolean [
+	"Is aStatement of a kind P4.2 builds through IR at module scope?  break and
+	continue only inside a loop it builds (aBoolean), where they can be."
+
+	(self irStatementClasses includes: aStatement class) ifTrue: [^ true].
+	^ aBoolean and: [{ BreakAst. ContinueAst } includes: aStatement class]
+
+]
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> ___irRefusalBelow___: aNode [
+	"The first construct beneath aNode that keeps its statement on text at
+	module scope, or nil.  Depth-first over aNode's instVars, skipping the
+	parent back-pointer, as FunctionDefAst >> ___irFirstRefusedChildOf___:locals:
+	walks."
+
+	aNode class allInstVarNames doWithIndex: [:nameSym :i |
+		nameSym == #parent ifFalse: [
+			(self ___irRefusalInValue___: (aNode instVarAt: i)) ifNotNil: [:r | ^ r]]].
+	^ nil
+
+]
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> ___irRefusalInValue___: aValue [
+	"___irRefusalBelow___:'s step.  What keeps a module statement on text,
+	beyond its own predicate, is what P4.3 and P4.4 own:
+
+	  * a nested statement of another kind -- a def or class in an ``if'', a
+	    try, a with (``nested:<Kind>'');
+	  * a lambda or a comprehension, each a scope -- a frame and a code object
+	    -- of its own (``lambda'', ``comprehension'');
+	  * a call that reads the CALLING scope -- globals(), locals(), vars(),
+	    dir() with no argument, eval(), exec(), super() (``call:<name>'');
+	  * a star import (``starImport'');
+	  * yield and await, which module scope rejects anyway (``yield'')."
+
+	| cls fn |
+	aValue isNil ifTrue: [^ nil].
+	aValue isString ifTrue: [^ nil].
+	(aValue isKindOf: SequenceableCollection) ifTrue: [
+		aValue do: [:each | (self ___irRefusalInValue___: each) ifNotNil: [:r | ^ r]].
+		^ nil].
+	(aValue isKindOf: AbstractNode) ifFalse: [^ nil].
+	cls := aValue class.
+	(aValue isKindOf: StatementAst) ifTrue: [
+		(self ___admitsStatement___: aValue nested: true) ifFalse: [
+			^ ('nested:' , (importlib ___irCensusKindOf___: aValue)) asSymbol].
+		((aValue isKindOf: ImportFromAst) and: [aValue wasStarImport])
+			ifTrue: [^ #'starImport']].
+	cls == LambdaAst ifTrue: [^ #'lambda'].
+	({ ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst } includes: cls)
+		ifTrue: [^ #'comprehension'].
+	({ YieldAst. YieldFromAst. AwaitAst } includes: cls) ifTrue: [^ #'yield'].
+	cls == CallAst ifTrue: [
+		fn := aValue function.
+		(fn isKindOf: NameAst) ifTrue: [
+			(#('eval' 'exec' 'super') includes: fn id asString) ifTrue: [
+				^ ('call:' , fn id asString) asSymbol].
+			((#('globals' 'locals' 'vars' 'dir') includes: fn id asString)
+				and: [(aValue arguments ifNil: [#()]) isEmpty
+				and: [(aValue keywords ifNil: [#()]) isEmpty]])
+					ifTrue: [^ ('call:' , fn id asString) asSymbol]]].
+	^ self ___irRefusalBelow___: aValue
+
+]
 
 { #category : 'budget' }
 ModuleBodySeam class >> ___limit: anIndex default: anInteger [
@@ -83,9 +175,72 @@ ModuleBodySeam class >> budgetOf: aMethod [
 
 ]
 
+{ #category : 'testing' }
+ModuleBodySeam class >> failIRBuildsForce: aBoolean [
+	"A TEST SEAM: true makes every IR group build of this session raise, so a
+	test can watch the group fall back to a text helper written late
+	(ModuleBodySeam >> ___installIR:to:); false forgets it."
+
+	aBoolean == true
+		ifTrue: [SessionTemps current at: #'GrailModuleSeamFailIR' put: true]
+		ifFalse: [SessionTemps current removeKey: #'GrailModuleSeamFailIR' ifAbsent: []]
+
+]
+
 { #category : 'naming' }
 ModuleBodySeam class >> helperPrefix [
 	^ '___irModStmt_'
+
+]
+
+{ #category : 'budget' }
+ModuleBodySeam class >> irPackFactor [
+	"How many characters of generated text one character of a statement's
+	Python is counted as, when an IR group is PACKED (plan).  A first guess
+	only, as packChars is: the budget check on the generated method holds the
+	limit, and a group over it is split."
+
+	^ self ___limit: 6 default: 8
+
+]
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> irRefusalOf: aStatement [
+	"nil when aStatement, a statement directly in a module body, is built
+	through IR (P4.2); else WHY it is text, as a Symbol: #text for a kind P4.2
+	does not build at all (a def, a class, a try...), otherwise the reason a
+	statement of a P4.2 kind stays on text -- ___irRefusalInValue___:'s rows,
+	then the statement's own IR predicate judged at module scope, with no
+	locals, named by the census walk the defs use (FunctionDefAst >>
+	___irRefusalIn___:locals:, which reads no state of its receiver).
+
+	Asked in the module body's emit context (ModuleAst >> ___withSeamContextDo:),
+	where functionBeingCompiled and classBeingCompiled are nil, so every
+	predicate answers for module scope.  Guarded: eligibility never raises."
+
+	(self ___admitsStatement___: aStatement nested: false) ifFalse: [^ #text].
+	(aStatement beginPosition isNil
+		or: [aStatement endPosition isNil
+		or: [aStatement beginLine isNil]]) ifTrue: [^ #'noPosition'].
+	((aStatement isKindOf: ImportFromAst) and: [aStatement wasStarImport])
+		ifTrue: [^ #'starImport'].
+	^ [(self ___irRefusalBelow___: aStatement) ifNil: [
+		(aStatement ___irEligibleStatementLocals___: Set new)
+			ifTrue: [nil]
+			ifFalse: [(FunctionDefAst new ___irRefusalIn___: aStatement locals: Set new)
+				ifNil: [('shape:' , aStatement class name asString) asSymbol]]]]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: #'invariant:predicateRaised']
+
+]
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> irStatementClasses [
+	"The statement kinds P4.2 builds through IR at module scope."
+
+	^ { AnnAssignAst. AssertAst. AssignAst. AugAssignAst. DeleteAst. ExprAst.
+		ForAst. GlobalAst. IfAst. ImportAst. ImportFromAst. PassAst. RaiseAst. WhileAst }
 
 ]
 
@@ -103,13 +258,17 @@ ModuleBodySeam class >> isHelperSelector: aSelectorOrNil [
 
 { #category : 'budget' }
 ModuleBodySeam class >> limitsForce: anArrayOrNil [
-	"A TEST SEAM: { maxWords. maxSteps. maxStrings. packChars. packStatements }
-	for this session, each nil for its default; nil forgets them.  A test sets
-	small limits to make an ordinary fixture split over budget."
+	"A TEST SEAM: { maxWords. maxSteps. maxStrings. packChars. packStatements.
+	irPackFactor } for this session, each nil for its default (a shorter Array
+	leaves the rest at theirs); nil forgets them.  A test sets small limits to
+	make an ordinary fixture split over budget."
 
-	anArrayOrNil isNil
-		ifTrue: [SessionTemps current removeKey: #'GrailModuleSeamLimits' ifAbsent: []]
-		ifFalse: [SessionTemps current at: #'GrailModuleSeamLimits' put: anArrayOrNil]
+	| limits |
+	anArrayOrNil isNil ifTrue: [
+		^ SessionTemps current removeKey: #'GrailModuleSeamLimits' ifAbsent: []].
+	limits := Array new: 6.
+	anArrayOrNil doWithIndex: [:each :i | limits at: i put: each].
+	SessionTemps current at: #'GrailModuleSeamLimits' put: limits
 
 ]
 
@@ -171,19 +330,65 @@ ModuleBodySeam class >> withinBudget: aMethod [
 ]
 
 { #category : 'private' }
-ModuleBodySeam >> ___chunkRangeFrom: firstStmt to: lastStmt [
-	"Chunk indices for statements firstStmt..lastStmt (1-based).  Chunk 1 is the
-	annotate store, which rides with the FIRST statement: it has to run before
-	the body, as it did at the head of the one big method."
+ModuleBodySeam >> ___buildIR: aSelector from: firstStmt to: lastStmt [
+	"Build statements firstStmt..lastStmt as ONE IR method, install it under
+	aSelector in category 'Grail-Module Body', and answer it.
 
-	^ { firstStmt = 1 ifTrue: [1] ifFalse: [firstStmt + 1]. lastStmt + 1 }
+	The method is built as an IR def is (FunctionDefAst >>
+	___irMethodBodyCoreOn___:install:): the module source from the first
+	statement's first character to the last one's last, verbatim, with the
+	``# line <n> file <path>'' trailer the readers of an IR method's slice
+	expect, rebased at the first statement's offset, so the position map
+	records each node's absolute line and a traceback or f_lineno reads it as
+	it reads a def's.  The statements' own emitters do the rest: at module
+	scope a name is no local of the builder's, so every load and store goes to
+	the module instance, as the text's do."
+
+	| b stmts src begin end slice path meth |
+	(SessionTemps current at: #'GrailModuleSeamFailIR' otherwise: false) == true
+		ifTrue: [Error signal: 'ModuleBodySeam failIRBuildsForce: a forced IR build failure'].
+	stmts := (firstStmt to: lastStmt) collect: [:k | (chunks at: k + 1) at: 1].
+	src := moduleAst source.
+	begin := stmts first beginPosition.
+	end := (stmts last endPosition ifNil: [src size]) min: src size.
+	b := PyMethodIRBuilder class: moduleClass selector: aSelector asSymbol env: 1.
+	slice := src copyFrom: begin to: end.
+	slice last == Character lf ifFalse: [slice lf].
+	path := moduleAst path ifNil: [AbstractNode ___sourceFilename___].
+	slice add: '# line '; add: stmts first beginLine asString; add: ' file '; add: path asString; lf.
+	b sourceString: slice fileName: AbstractNode ___sourceFilename___ line: stmts first beginLine.
+	b sourceBase: begin.
+	moduleAst ___withSeamContextDo: [
+		stmts do: [:each | each ___emitIRStatementOn___: b]].
+	b add: (b return: b selfNode).
+	meth := b install.
+	[moduleClass addCategory: 'Grail-Module Body' environmentId: 1]
+		on: Error do: [:ex | ex return: nil].
+	moduleClass moveMethod: aSelector asSymbol toCategory: 'Grail-Module Body' environmentId: 1.
+	traceIR == true ifTrue: [
+		irSnapshots add: aSelector -> ('built through IR from ' , slice)].
+	^ meth
+
+]
+
+{ #category : 'private' }
+ModuleBodySeam >> ___chunkIndicesFrom: firstStmt to: lastStmt [
+	"Chunk indices for statements firstStmt..lastStmt (1-based); 0..0 is the
+	annotate store alone.  Chunk 1, the annotate store, rides with the FIRST
+	statement when that is text: it has to run before the body, as it did at
+	the head of the one big method.  When the first statement is built through
+	IR the store has a text helper of its own, first (plan)."
+
+	firstStmt = 0 ifTrue: [^ #(1)].
+	^ ((firstStmt = 1 and: [annotateAlone ~~ true]) ifTrue: [1] ifFalse: [firstStmt + 1])
+		to: lastStmt + 1
 
 ]
 
 { #category : 'private' }
 ModuleBodySeam >> ___compile: aSelector from: firstStmt to: lastStmt [
-	"Compile the helper for statements firstStmt..lastStmt under aSelector and
-	answer { source. method }."
+	"Compile the TEXT helper for statements firstStmt..lastStmt under aSelector
+	and answer { source. method }."
 
 	| src meth |
 	src := self sourceFor: aSelector from: firstStmt to: lastStmt.
@@ -204,12 +409,42 @@ ModuleBodySeam >> ___compile: aSelector from: firstStmt to: lastStmt [
 ]
 
 { #category : 'private' }
+ModuleBodySeam >> ___emitTextFrom: firstStmt to: lastStmt [
+	"Write statements firstStmt..lastStmt, which were left to IR, as text at
+	the end of the stream, in order, and make them text statements: an IR
+	build that failed, or the one text method a failed seam falls back to."
+
+	| base late |
+	base := text size.
+	moduleAst ___withSeamContextDo: [
+		firstStmt to: lastStmt do: [:k |
+			| stmt c |
+			stmt := (chunks at: k + 1) at: 1.
+			(irStatements includes: stmt) ifTrue: [
+				c := moduleAst ___emitSeamStatement___: stmt on: stream.
+				chunks at: k + 1 put: { c at: 1. (c at: 2) + base. (c at: 3) + base.
+					c at: 4. c at: 5. base }.
+				irStatements remove: stmt]]].
+	"AppendStream >> contents answers the collection WITHOUT copying and starts
+	the stream on a new, empty one, so what this wrote begins at position 0 of
+	it -- text and map offsets alike.  The text is appended to what the first
+	emit answered, and each chunk carries the BIAS its map entries need
+	(sourceFor:chunks:)."
+	late := stream contents.
+	late isEmpty ifFalse: [text := text , late]
+
+]
+
+{ #category : 'private' }
 ModuleBodySeam >> ___install: firstStmt to: lastStmt [
 	"Compile one group, and split it in half while the method it compiles to is
 	over budget.  The first half reuses the group's selector, so the over-budget
-	method is replaced rather than left behind."
+	method is replaced rather than left behind.  A group of IR statements is
+	built through IR (___installIR:to:)."
 
 	| sel pair mid |
+	(firstStmt > 0 and: [self ___isIR: firstStmt]) ifTrue: [
+		^ self ___installIR: firstStmt to: lastStmt].
 	sel := self selectorForStatement: firstStmt.
 	pair := self ___compile: sel from: firstStmt to: lastStmt.
 	(self class withinBudget: (pair at: 2)) ifFalse: [
@@ -219,22 +454,47 @@ ModuleBodySeam >> ___install: firstStmt to: lastStmt [
 			self ___install: firstStmt to: mid.
 			^ self ___install: mid + 1 to: lastStmt].
 		overBudget := overBudget + 1].
-	helpers add: { sel. pair at: 1. pair at: 2. firstStmt. lastStmt }
+	helpers add: { sel. pair at: 1. pair at: 2. firstStmt. lastStmt. #text }
 
 ]
 
 { #category : 'private' }
-ModuleBodySeam >> ___sliceFrom: firstStmt to: lastStmt [
-	"{ text. startPosition. mapStart. mapEnd } for statements firstStmt..lastStmt."
+ModuleBodySeam >> ___installIR: firstStmt to: lastStmt [
+	"___install:to: for a group of IR statements: build it, and split it in
+	half while the generated method is over budget.  A build that raises is a
+	FALLBACK for the group alone: its statements are written as text and
+	compiled as a text helper, counted (importlib >>
+	___irNoteModuleStatementsFallback___:error:), and in strict mode the error
+	goes on to the seam's own handler, which raises."
 
-	| range first last |
-	range := self ___chunkRangeFrom: firstStmt to: lastStmt.
-	first := chunks at: (range at: 1).
-	last := chunks at: (range at: 2).
-	^ { text copyFrom: (first at: 2) + 1 to: (last at: 3).
-		first at: 2.
-		first at: 4.
-		last at: 5 }
+	| sel meth mid |
+	sel := self selectorForStatement: firstStmt.
+	meth := [self ___buildIR: sel from: firstStmt to: lastStmt]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			importlib ___irStrict___ ifTrue: [ex pass].
+			irFallbacks := irFallbacks + 1.
+			importlib ___irNoteModuleStatementsFallback___: moduleClass name error: ex.
+			ex return: nil].
+	meth isNil ifTrue: [
+		self ___emitTextFrom: firstStmt to: lastStmt.
+		^ self ___install: firstStmt to: lastStmt].
+	(self class withinBudget: meth) ifFalse: [
+		firstStmt < lastStmt ifTrue: [
+			splits := splits + 1.
+			mid := firstStmt + ((lastStmt - firstStmt + 1) // 2) - 1.
+			self ___installIR: firstStmt to: mid.
+			^ self ___installIR: mid + 1 to: lastStmt].
+		overBudget := overBudget + 1].
+	helpers add: { sel. nil. meth. firstStmt. lastStmt. #ir }
+
+]
+
+{ #category : 'private' }
+ModuleBodySeam >> ___isIR: k [
+	"Is statement k (1-based) built through IR?"
+
+	^ irStatements includes: ((chunks at: k + 1) at: 1)
 
 ]
 
@@ -267,11 +527,24 @@ ModuleBodySeam >> dispatcherSource [
 
 { #category : 'building' }
 ModuleBodySeam >> emit [
-	"Write every statement once (ModuleAst >> ___emitSeamChunksOn___:)."
+	"Judge every statement (irRefusalOf:), then write the TEXT ones once
+	(ModuleAst >> ___emitSeamChunksOn___:skipping:).  The IR ones are built
+	when their group is installed."
 
+	| stmts |
+	stmts := moduleAst body body.
+	refusals := Array new: stmts size.
+	irStatements := IdentitySet new.
+	importlib ___irModuleStatementsEnabled___ ifTrue: [
+		moduleAst ___withSeamContextDo: [
+			stmts doWithIndex: [:each :k |
+				| r |
+				r := self class irRefusalOf: each.
+				refusals at: k put: r.
+				r isNil ifTrue: [irStatements add: each]]]].
 	stream := PrettyWriteStream on: Unicode7 new.
 	stream markStartOfMethod.
-	chunks := moduleAst ___emitSeamChunksOn___: stream.
+	chunks := moduleAst ___emitSeamChunksOn___: stream skipping: irStatements.
 	text := stream contents.
 	moduleTemps := (moduleAst body variables ifNil: [#()])
 		select: [:each | each beginsWith: '___t_'].
@@ -282,8 +555,9 @@ ModuleBodySeam >> emit [
 
 { #category : 'accessing' }
 ModuleBodySeam >> helpers [
-	"{ selector. source. method. firstStatement. lastStatement } per helper, in
-	the order ``initialize'' sends them."
+	"{ selector. source. method. firstStatement. lastStatement. kind } per
+	helper, in the order ``initialize'' sends them.  kind is #text or #ir; an
+	IR helper's source is nil (its method's attached source is its Python)."
 
 	^ helpers
 
@@ -328,10 +602,19 @@ ModuleBodySeam >> installDispatcher [
 
 { #category : 'building' }
 ModuleBodySeam >> installHelpers [
-	"Pack the statements into groups, then compile each under the budget."
+	"Pack the statements into groups, then compile or build each under the
+	budget."
 
 	self plan do: [:range | self ___install: (range at: 1) to: (range at: 2)].
 	^ self
+
+]
+
+{ #category : 'accessing' }
+ModuleBodySeam >> irFallbacks [
+	"How many IR groups failed to build and were compiled as text instead."
+
+	^ irFallbacks
 
 ]
 
@@ -343,14 +626,24 @@ ModuleBodySeam >> irSnapshots [
 
 ]
 
+{ #category : 'accessing' }
+ModuleBodySeam >> moduleStatements [
+	"The module body's statements, in order: statement k is chunk k + 1."
+
+	^ moduleAst body body
+
+]
+
 { #category : 'building' }
 ModuleBodySeam >> monolithicSource [
-	"The whole body as ONE text ``initialize'', cut from the same emit -- what a
-	failed seam falls back to, so the body is never emitted twice."
+	"The whole body as ONE text ``initialize'', from the same emit -- what a
+	failed seam falls back to, so a text statement is never emitted twice.  The
+	statements left to IR are written as text first, at the end of the stream,
+	and the method takes every statement's text in source order."
 
-	^ chunks size <= 1
-		ifTrue: [self sourceFor: 'initialize' from: 1 to: 0]
-		ifFalse: [self sourceFor: 'initialize' from: 1 to: chunks size - 1]
+	chunks size <= 1 ifTrue: [^ self sourceFor: 'initialize' chunks: (1 to: chunks size)].
+	self ___emitTextFrom: 1 to: chunks size - 1.
+	^ self sourceFor: 'initialize' chunks: (1 to: chunks size)
 
 ]
 
@@ -363,37 +656,64 @@ ModuleBodySeam >> overBudget [
 { #category : 'building' }
 ModuleBodySeam >> plan [
 	"The first grouping, as { firstStatement. lastStatement } pairs: every class
-	statement alone, the other statements packed in runs under packChars of
-	generated text and packStatements statements.  The budget check in
-	___install:to: is what holds the limit; this only keeps the number of
-	recompiles low."
+	statement alone; the other statements in runs of ONE kind -- built through
+	IR, or text -- packed under packChars of generated text and packStatements
+	statements (an IR statement counted as irPackFactor characters per
+	character of its Python).  The budget check in ___install:to: is what holds
+	the limit; this only keeps the number of rebuilds low.
 
-	| groups n start size count flush |
+	When the first statement is built through IR and the module stores an
+	annotate function or an annotations dict before its body (chunk 1), that
+	store is a text helper of its own, first: { 0. 0 }."
+
+	| groups n start size count kind flush anno |
 	groups := OrderedCollection new.
 	n := chunks size - 1.
+	anno := chunks at: 1.
+	annotateAlone := n >= 1 and: [(self ___isIR: 1) and: [(anno at: 3) > (anno at: 2)]].
+	annotateAlone ifTrue: [groups add: #(0 0)].
 	start := nil.
 	size := 0.
 	count := 0.
+	kind := nil.
 	flush := [:last |
 		start notNil ifTrue: [groups add: { start. last }].
-		start := nil. size := 0. count := 0].
+		start := nil. size := 0. count := 0. kind := nil].
 	1 to: n do: [:k |
-		| chunk len |
+		| chunk stmt len thisKind |
 		chunk := chunks at: k + 1.
-		len := (chunk at: 3) - (chunk at: 2).
-		((chunk at: 1) isKindOf: ClassDefAst)
+		stmt := chunk at: 1.
+		(self ___isIR: k)
+			ifTrue: [
+				thisKind := #ir.
+				len := (stmt endPosition - stmt beginPosition + 1) * self class irPackFactor]
+			ifFalse: [
+				thisKind := #text.
+				len := (chunk at: 3) - (chunk at: 2)].
+		(stmt isKindOf: ClassDefAst)
 			ifTrue: [
 				flush value: k - 1.
 				groups add: { k. k }]
 			ifFalse: [
-				(start notNil and: [size + len > self class packChars
-					or: [count >= self class packStatements]])
+				(start notNil and: [thisKind ~~ kind
+					or: [size + len > self class packChars
+					or: [count >= self class packStatements]]])
 						ifTrue: [flush value: k - 1].
-				start isNil ifTrue: [start := k].
+				start isNil ifTrue: [start := k. kind := thisKind].
 				size := size + len.
 				count := count + 1]].
 	flush value: n.
 	^ groups
+
+]
+
+{ #category : 'accessing' }
+ModuleBodySeam >> refusals [
+	"Per statement, in order: nil when it was judged buildable through IR, else
+	why not (ModuleBodySeam class >> irRefusalOf:).  nil throughout when the
+	module statements are not built through IR at all."
+
+	^ refusals
 
 ]
 
@@ -415,9 +735,12 @@ ModuleBodySeam >> removeHelpers [
 ModuleBodySeam >> selectorForStatement: k [
 	"``___irModStmt_<offset>___'', the offset being statement k's position in the
 	module source -- unique within the module, and stable for a statement no
-	edit moved, so an unchanged module rebuilds the same selectors."
+	edit moved, so an unchanged module rebuilds the same selectors.  k = 0 is
+	the annotate store's own helper, ``___irModStmt_0___'': no statement
+	starts before the first character."
 
 	| stmt pos |
+	k = 0 ifTrue: [^ self class helperPrefix , '0___'].
 	stmt := (chunks at: k + 1) at: 1.
 	pos := [stmt beginPosition] on: Error do: [:ex | ex return: nil].
 	pos isNil ifTrue: [pos := 'n' , k printString].
@@ -432,25 +755,45 @@ ModuleBodySeam >> setModule: aModuleAst class: aModuleClass [
 	helpers := OrderedCollection new.
 	splits := 0.
 	overBudget := 0.
+	irFallbacks := 0.
 	irSnapshots := OrderedCollection new.
+	irStatements := IdentitySet new.
 	^ self
 
 ]
 
 { #category : 'building' }
-ModuleBodySeam >> sourceFor: aSelector from: firstStmt to: lastStmt [
-	"The text method for statements firstStmt..lastStmt: the header the one big
-	``initialize'' had -- selector, ``<grailPython>'', the temps, the
-	``___pyFile___'' stamp -- then the slice, then the slice's position map moved
-	to this method's offsets.  The temps are ``___curPos___'', ``___pyFile___''
-	and the module's helper temps (``___t_N'') this slice mentions."
+ModuleBodySeam >> sourceFor: aSelector chunks: someIndices [
+	"The text method for the chunks at someIndices, in that order: the header
+	the one big ``initialize'' had -- selector, ``<grailPython>'', the temps,
+	the ``___pyFile___'' stamp -- then the chunks' text, then their position map
+	moved to this method's offsets.  The temps are ``___curPos___'',
+	``___pyFile___'' and the module's helper temps (``___t_N'') the text
+	mentions.
 
-	| slice hdr lf temps |
-	slice := lastStmt < firstStmt
-		ifTrue: [{ ''. 0. 0. 0 }]
-		ifFalse: [self ___sliceFrom: firstStmt to: lastStmt].
+	Chunks next to each other in the stream are one piece, so a group whose
+	statements were all written in the first emit is ONE slice and one map
+	range, as in P4.1; a statement written later (___emitTextFrom:to:) is a
+	piece of its own, with its own shift: its chunk's sixth element is the bias
+	its map entries need, since they count from where the later write began."
+
+	| runs body hdr lf temps segments acc |
+	runs := OrderedCollection new.
+	someIndices do: [:i |
+		| c bias |
+		c := chunks at: i.
+		bias := c size >= 6 ifTrue: [c at: 6] ifFalse: [0].
+		(runs notEmpty and: [(runs last at: 2) = (c at: 2) and: [(runs last at: 5) = bias]])
+			ifTrue: [runs last at: 2 put: (c at: 3); at: 4 put: (c at: 5)]
+			ifFalse: [runs add: { c at: 2. c at: 3. c at: 4. c at: 5. bias }]].
+	body := nil.
+	runs do: [:r |
+		| piece |
+		piece := text copyFrom: (r at: 1) + 1 to: (r at: 2).
+		body := body isNil ifTrue: [piece] ifFalse: [body , piece]].
+	body isNil ifTrue: [body := ''].
 	lf := Character lf.
-	temps := (moduleTemps select: [:t | self ___temps: (slice at: 1) mentions: t]) asOrderedCollection.
+	temps := (moduleTemps select: [:t | self ___temps: body mentions: t]) asOrderedCollection.
 	temps add: '___curPos___'; add: '___pyFile___'.
 	hdr := PrettyWriteStream on: Unicode7 new.
 	hdr nextPutAll: aSelector asString; nextPut: lf.
@@ -462,9 +805,20 @@ ModuleBodySeam >> sourceFor: aSelector from: firstStmt to: lastStmt [
 	AbstractNode emitSourceFilenameLiteralOn: hdr.
 	hdr nextPutAll: '.'; nextPut: lf.
 	hdr := hdr contents.
-	^ hdr , (slice at: 1)
-		, (stream mapCommentFrom: (slice at: 3) + 1 to: (slice at: 4)
-			shiftedBy: hdr size - (slice at: 2))
+	segments := OrderedCollection new.
+	acc := hdr size.
+	runs do: [:r |
+		segments add: { (r at: 3) + 1. r at: 4. acc - (r at: 1) + (r at: 5) }.
+		acc := acc + ((r at: 2) - (r at: 1))].
+	^ hdr , body , (stream mapCommentSegments: segments)
+
+]
+
+{ #category : 'building' }
+ModuleBodySeam >> sourceFor: aSelector from: firstStmt to: lastStmt [
+	"The text method for statements firstStmt..lastStmt (sourceFor:chunks:)."
+
+	^ self sourceFor: aSelector chunks: (self ___chunkIndicesFrom: firstStmt to: lastStmt)
 
 ]
 

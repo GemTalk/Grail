@@ -1760,27 +1760,49 @@ ModuleAst >> ___emitSeamChunksOn___: aStream [
 	helper temps (``___t_N'', allocated at parse time into ``body variables''),
 	and each method declares those its own slice mentions."
 
-	| savedFuture chunks |
+	^ self ___emitSeamChunksOn___: aStream skipping: IdentitySet new
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___emitSeamChunksOn___: aStream skipping: someStatements [
+	"___emitSeamChunksOn___:, except that a statement in someStatements (an
+	IdentitySet) is NOT written: P4.2 builds it through IR instead
+	(ModuleBodySeam), and a statement is emitted once, by one backend.  Its
+	chunk is EMPTY -- start = end, mapStart = mapEnd, at the stream's position
+	when its turn came -- so the chunks keep one entry per statement, in order.
+	If its IR build fails, ___emitSeamStatement___:on: writes it later."
+
+	| chunks |
 	chunks := OrderedCollection new.
-	CallAst moduleBodyBeingCompiled: true.
-	savedFuture := CallAst futureAnnotations.
-	CallAst futureAnnotations: self ___hasFutureAnnotations___.
-	[ | start mapStart |
-	start := aStream position.
-	mapStart := aStream positionMapSize.
-	self ___emitModuleAnnotationsOn___: aStream.
-	chunks add: { nil. start. aStream position. mapStart. aStream positionMapSize }.
-	body body do: [:each |
+	self ___withSeamContextDo: [ | start mapStart |
 		start := aStream position.
 		mapStart := aStream positionMapSize.
-		body ___emitCurPosBefore: each on: aStream.
-		each printSmalltalkOn: aStream.
-		aStream lf.
-		chunks add: { each. start. aStream position. mapStart. aStream positionMapSize }]]
-		ensure: [
-			CallAst moduleBodyBeingCompiled: false.
-			CallAst futureAnnotations: savedFuture].
+		self ___emitModuleAnnotationsOn___: aStream.
+		chunks add: { nil. start. aStream position. mapStart. aStream positionMapSize }.
+		body body do: [:each |
+			(someStatements includes: each)
+				ifTrue: [chunks add: { each. aStream position. aStream position.
+					aStream positionMapSize. aStream positionMapSize }]
+				ifFalse: [chunks add: (self ___emitSeamStatement___: each on: aStream)]]].
 	^ chunks asArray
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___emitSeamStatement___: aStatement on: aStream [
+	"Write one module statement as text onto aStream -- its ``___curPos___''
+	store, the statement, a newline -- and answer its chunk, { statement.
+	startPosition. endPosition. mapStart. mapEnd }.  The caller provides the
+	module body's emit context (___withSeamContextDo:)."
+
+	| start mapStart |
+	start := aStream position.
+	mapStart := aStream positionMapSize.
+	body ___emitCurPosBefore: aStatement on: aStream.
+	aStatement printSmalltalkOn: aStream.
+	aStream lf.
+	^ { aStatement. start. aStream position. mapStart. aStream positionMapSize }
 
 ]
 
@@ -1918,6 +1940,25 @@ ModuleAst >> ___scopeAnnotations___ [
 	annotations := OrderedCollection new.
 	body ___addScopeAnnotationsTo___: annotations.
 	^ annotations
+
+]
+
+{ #category : 'Grail-code generation' }
+ModuleAst >> ___withSeamContextDo: aBlock [
+	"Evaluate aBlock in the module body's emit context, as printSmalltalkOn:
+	sets it: moduleBodyBeingCompiled, and the module's ``from __future__ import
+	annotations'' flag.  The statement seam (ModuleBodySeam) judges, emits and
+	builds statements in it -- as text or through IR, early or late -- so every
+	statement sees the context the one big method gave it."
+
+	| savedBody savedFuture |
+	savedBody := CallAst moduleBodyBeingCompiled.
+	savedFuture := CallAst futureAnnotations.
+	CallAst moduleBodyBeingCompiled: true.
+	CallAst futureAnnotations: self ___hasFutureAnnotations___.
+	^ aBlock ensure: [
+		CallAst moduleBodyBeingCompiled: savedBody.
+		CallAst futureAnnotations: savedFuture]
 
 ]
 
