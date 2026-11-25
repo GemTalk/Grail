@@ -9204,6 +9204,28 @@ static OopType shimForeignTypeCheck(OopType objOop, OopType typeOop, OopType wan
     return PyType_IsSubtype(sub, (PyTypeObject *)t) ? OOP_TRUE : OOP_FALSE;
 }
 
+/* shimForeignSequenceCheck: CPython's PySequence_Check for a wheel's own
+   object -- false for a dict subclass, else whether its type has sq_item
+   (Objects/abstract.c) -- or nil when the pointer is not a wheel's object.
+
+   reversed() needs it (reversed_iterator class >> ___reversing___:):
+   CPython refuses an object PySequence_Check rejects as "not reversible",
+   before it asks for a length.  Grail cannot see the slot from its side,
+   because a proxy compiles every operator dunder, __getitem__ and __len__
+   included, so reversed() built a reversed object over rpds-py's
+   HashTrieMap, which failed only when iterated (#2313), and over a wheel
+   class, whose type has no sq_item either (#2314). */
+static OopType shimForeignSequenceCheck(OopType objOop)
+{
+    PyObject *o = (PyObject *)(intptr_t)GciOopToI64(objOop);
+    if (!plausible_pyobj(o) || !plausible_pyobj(o->ob_type) || !is_foreign(o))
+        return OOP_NIL;
+    PyTypeObject *t = o->ob_type;
+    if (t->tp_flags & Py_TPFLAGS_DICT_SUBCLASS) return OOP_FALSE;
+    return (t->tp_as_sequence != NULL && t->tp_as_sequence->sq_item != NULL)
+        ? OOP_TRUE : OOP_FALSE;
+}
+
 /* numpy's public functions are _ArrayFunctionDispatcher objects, and calling
    one from Grail cost two user-action re-entries: C calls the Python
    dispatcher back for the relevant arguments, then the Python implementation.
@@ -11575,6 +11597,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimForeignStr", shimForeignStr, 2);
     GCI_DECLARE_ACTION("shimForeignStrValue", shimForeignStrValue, 1);
     GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
+    GCI_DECLARE_ACTION("shimForeignSequenceCheck", shimForeignSequenceCheck, 1);
     GCI_DECLARE_ACTION("shimArrayDispatcherParts", shimArrayDispatcherParts, 1);
     GCI_DECLARE_ACTION("shimArrayFunctionKind", shimArrayFunctionKind, 1);
 }

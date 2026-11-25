@@ -50,6 +50,19 @@ ShimForeignObject >> ___callArrayDispatch: parts args: args kwargs: kwargs [
 
 ]
 
+{ #category : 'Grail-Python Protocol' }
+ShimForeignObject >> ___foreignIsSequence___ [
+	"Whether this wheel object passes CPython's PySequence_Check: its type has
+	sq_item and is not a dict subclass.  nil when C cannot say.
+
+	Grail cannot answer it from the proxy, which compiles every operator
+	dunder, __getitem__ included, whether the type's subscript is a
+	sequence's or a mapping's or absent.  reversed() asks it (#2313)."
+
+	^ (CPythonShim @env0:current) @env0:foreignSequenceCheck: cPtr
+
+]
+
 { #category : 'Grail-Python Operators' }
 ShimForeignObject >> ___foreignOp: aDunder with: a with: b [
 	"Python's operators on a wheel's own object are its C slots
@@ -213,6 +226,25 @@ ShimForeignObject >> ___pyMetaclass___ [
 
 	^ [self ___pyAttrLoad___: #'__class__']
 		@env0:on: AbstractException do: [:ex | ex @env0:return: super ___pyMetaclass___]
+
+]
+
+{ #category : 'Grail-Error Messages' }
+ShimForeignObject >> ___pyTypeNameForError___ [
+	"The name ``'X' object is ...'' errors print: CPython's
+	Py_TYPE(o)->tp_name.  That is the C type's for a wheel's object --
+	``'rpds.HashTrieMap' object is not reversible'' -- and its metatype's for
+	a wheel's class, ``type'' or one such as numpy's _DTypeMeta.  Object's
+	answer named the Smalltalk class, ``'ShimForeignObject' object ...''
+	(#2313).  A type's proxy carries its own tp_name, so the name is the
+	type(self) proxy's; a Grail class there, ``type'', names itself."
+
+	| type |
+	type := self ___pyMetaclass___.
+	(type @env0:isKindOf: ShimForeignObject) ifTrue: [^ type @env0:typeName].
+	((type @env0:isKindOf: Behavior) and: [type @env0:~~ ShimForeignObject])
+		ifTrue: [^ type ___pyTpName___].
+	^ super ___pyTypeNameForError___
 
 ]
 
