@@ -51,6 +51,24 @@ ImportFromAst >> ___boundTargetNames___ [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ImportFromAst >> ___emitIRImportOf___: aFromlistString on: aBuilder [
+	"``(builtins instance) ___import__: { 'abs.name'. nil. nil. { aFromlistString }.
+	0 } kw: nil'', the send every from-import binding starts from."
+
+	^ aBuilder
+		send: #'___import__:kw:' to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: {
+				aBuilder obj: self resolvedModuleName asString.
+				aBuilder nilLit.
+				aBuilder nilLit.
+				aBuilder arrayOf: { aBuilder obj: aFromlistString }.
+				aBuilder obj: 0 }.
+			aBuilder nilLit }
+		env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ImportFromAst >> ___emitIRImportValueFor___: alias on: aBuilder [
 	"The value ONE alias binds, valueSourceFor:'s two shapes.  The imported
 	name is the one-element fromlist so the importer answers the LEAF module:
@@ -91,6 +109,61 @@ ImportFromAst >> ___emitIRImportValueFor___: alias on: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ImportFromAst >> ___emitIRStarImportOn___: aBuilder [
+	"printSmalltalkOn:'s STAR IMPORT at module scope (P4.2), send for send.
+	Each name the parser expanded it to is bound from M's namespace --
+	``___pyAttrLoad___:'' for a name M's __all__ lists, ``___importFromStar___:''
+	for a GUESSED one, which answers a marker rather than raising when M lacks
+	it, and the binding is then skipped (#1416) -- or the BoundMethod of a
+	converted module's fast-path callable, as valueSourceFor: spells all three.
+	Then the runtime merge copies whatever the expansion missed:
+	``self ___mergePublicAttrsFrom___: (<import with fromlist ('*',)>)''."
+
+	| moduleClass guessed |
+	moduleClass := module isNil
+		ifTrue: [nil]
+		ifFalse: [CallAst resolveModuleClassForName: module asSymbol].
+	guessed := self ___starNameMayBeAbsent___.
+	names do: [:alias |
+		| attrName imported v |
+		attrName := alias name asString.
+		aBuilder atNode: self.
+		imported := self ___emitIRImportOf___: attrName on: aBuilder.
+		(moduleClass notNil
+			and: [NameAst isFastPathBuiltinName: attrName asSymbol on: moduleClass])
+				ifTrue: [v := aBuilder
+					send: #receiver:selector: to: (aBuilder globalNamed: #BoundMethod)
+					with: { imported. aBuilder obj: attrName asSymbol } env: 1]
+				ifFalse: [v := aBuilder
+					send: (guessed ifTrue: [#'___importFromStar___:'] ifFalse: [#'___pyAttrLoad___:'])
+					to: imported with: { aBuilder obj: attrName asSymbol } env: 1].
+		guessed
+			ifTrue: [
+				| leaf |
+				leaf := (aBuilder leafFor: #'___starValue___')
+					ifNil: [aBuilder tempNamed: #'___starValue___'].
+				aBuilder add: (aBuilder assign: leaf from: v).
+				aBuilder atNode: self.
+				aBuilder
+					unless: (aBuilder send: #== to: (aBuilder var: leaf)
+						with: { aBuilder obj: #'___starNameMissing___' } env: 0)
+					then: [
+						aBuilder add: (self
+							___emitIRImportStoreOf___: (self boundNameFor: alias)
+							from: (aBuilder var: leaf) on: aBuilder)]]
+			ifFalse: [
+				aBuilder atNode: self.
+				aBuilder add: (self
+					___emitIRImportStoreOf___: (self boundNameFor: alias) from: v on: aBuilder)]].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder
+		send: #'___mergePublicAttrsFrom___:' to: aBuilder selfNode
+		with: { self ___emitIRImportOf___: '*' on: aBuilder } env: 1).
+	^ self
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ImportFromAst >> ___emitIRStatementOn___: aBuilder [
 	"valueSourceFor:'s two shapes, one statement per alias.  The imported name
 	is the one-element fromlist so the importer answers the LEAF module:
@@ -101,6 +174,8 @@ ImportFromAst >> ___emitIRStatementOn___: aBuilder [
 	BoundMethod wrap the text emits instead of the attribute load:
 	  name := BoundMethod receiver: (<the import>) selector: #attr"
 
+	"A module body's star import (P4.2): see ___emitIRStarImportOn___:."
+	self wasStarImport ifTrue: [^ self ___emitIRStarImportOn___: aBuilder].
 	names do: [:alias |
 		| v |
 		v := self ___emitIRImportValueFor___: alias on: aBuilder.
@@ -157,7 +232,7 @@ ImportFromAst >> ___irEligibleStatementLocals___: localNames [
 	in a def) and is refused anyway.  resolvedModuleName walks to the ModuleAst
 	for a relative import; guarded, since eligibility must never raise."
 
-	self wasStarImport ifTrue: [^ false].
+	self wasStarImport ifTrue: [^ self ___irIsModuleBodyStarImport___].
 	"A relative import in exec'd source resolves at run time -- see
 	___importArgsSourceFor___: -- which only the text emit does."
 	self ___isRelativeInDoit___ ifTrue: [^ false].
@@ -187,6 +262,24 @@ ImportFromAst >> ___irImportValueEligibleFor___: anAlias [
 	self wasStarImport ifTrue: [^ false].
 	self ___isRelativeInDoit___ ifTrue: [^ false].
 	^ [self resolvedModuleName notNil] on: Error do: [:ex | false]
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+ImportFromAst >> ___irIsModuleBodyStarImport___ [
+	"Can this star import be built through IR (___emitIRStarImportOn___:)?
+	Only in a module body being compiled -- a star import is a SyntaxError in
+	a def, and a doit's is the runtime merge into its scope dict, which only
+	the text emits -- with the ordinary import selector, and a module name
+	that resolves.  Guarded: eligibility never raises."
+
+	^ [CallAst moduleBodyBeingCompiled
+		and: [CallAst functionBeingCompiled isNil
+		and: [CallAst classBeingCompiled isNil
+		and: [ModuleAst compilingDoitScope isNil
+		and: [self ___builtinsAreOverridden___ not
+		and: [self resolvedModuleName notNil]]]]]]
+			on: Error do: [:ex | ex return: false]
 
 ]
 

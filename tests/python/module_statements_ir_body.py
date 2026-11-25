@@ -1,7 +1,7 @@
 """Helper for module_statements_ir.py: a module body made of the statements
 Grail's statement seam builds through IR (P4.2, ModuleBodySeam) -- expression
 statements, plain / chained / unpacking / augmented / annotated assignments,
-import and from-import, del, if, for and while with break, continue and else,
+import, from-import and a star import, del, if, for and while with break, continue and else,
 pass, assert and raise -- with a def between runs of them, so the body
 alternates IR and text helpers.  Each probe records into R what CPython
 reports; the importing fixture compares R against CPython 3.14, reading every
@@ -70,6 +70,11 @@ R['bare_annotation_unbound'] = 'bare_annotation' not in vars(sys.modules[__name_
 
 R['imports'] = (os.path.basename('/a/b.txt'), osp.join('p', 'q'),
                 list(OD(z=1)), namedtuple('P', 'u v')(1, 2).v)
+
+from module_statements_ir_star import *
+from module_statements_ir_star_all import *
+R['star'] = (public, dynamic, listed,
+             [n for n in ('maybe', '_private', 'unlisted') if n in vars(sys.modules[__name__])])
 
 tmp = 1
 del tmp

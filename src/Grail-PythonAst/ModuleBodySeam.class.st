@@ -10,8 +10,8 @@ module can mix methods.
 
 IR HELPERS AND TEXT HELPERS (P4.2).  A statement the IR path can build at
 module scope -- an expression, a plain, augmented or annotated assignment, an
-import, a del, an if / for / while over such statements, pass, raise, assert,
-global (irRefusalOf:) -- is built through IR, and a run of them is an IR
+import (a star import too), a del, an if / for / while over such statements,
+pass, raise, assert, global (irRefusalOf:) -- is built through IR, and a run of them is an IR
 helper: its statements' own IR emitters (___emitIRStatementOn___:) on one
 PyMethodIRBuilder, with the module source of the run attached as its Python,
 exactly as a def's IR method is built.  Every other statement -- a def, a
@@ -114,7 +114,6 @@ ModuleBodySeam class >> ___irRefusalInValue___: aValue [
 	    -- of its own (``lambda'', ``comprehension'');
 	  * a call that reads the CALLING scope -- globals(), locals(), vars(),
 	    dir() with no argument, eval(), exec(), super() (``call:<name>'');
-	  * a star import (``starImport'');
 	  * yield and await, which module scope rejects anyway (``yield'')."
 
 	| cls fn |
@@ -127,9 +126,7 @@ ModuleBodySeam class >> ___irRefusalInValue___: aValue [
 	cls := aValue class.
 	(aValue isKindOf: StatementAst) ifTrue: [
 		(self ___admitsStatement___: aValue nested: true) ifFalse: [
-			^ ('nested:' , (importlib ___irCensusKindOf___: aValue)) asSymbol].
-		((aValue isKindOf: ImportFromAst) and: [aValue wasStarImport])
-			ifTrue: [^ #'starImport']].
+			^ ('nested:' , (importlib ___irCensusKindOf___: aValue)) asSymbol]].
 	cls == LambdaAst ifTrue: [^ #'lambda'].
 	({ ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst } includes: cls)
 		ifTrue: [^ #'comprehension'].
@@ -222,8 +219,6 @@ ModuleBodySeam class >> irRefusalOf: aStatement [
 	(aStatement beginPosition isNil
 		or: [aStatement endPosition isNil
 		or: [aStatement beginLine isNil]]) ifTrue: [^ #'noPosition'].
-	((aStatement isKindOf: ImportFromAst) and: [aStatement wasStarImport])
-		ifTrue: [^ #'starImport'].
 	^ [(self ___irRefusalBelow___: aStatement) ifNil: [
 		(aStatement ___irEligibleStatementLocals___: Set new)
 			ifTrue: [nil]

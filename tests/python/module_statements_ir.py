@@ -93,6 +93,7 @@ EXPECTED = {
     'annotation_keys': ['FINAL_TYPED', 'FINAL_VALUE', 'annotated', 'bare_annotation', 'conditional'],
     'bare_annotation_unbound': True,
     'imports': ('b.txt', os.path.join('p', 'q'), ['z'], 2),
+    'star': (1, 4, 5, []),
     'deleted': True,
     'elif_frame': ('<module>', marker_line('elif_frame'), True),
     'branch': 'medium',
