@@ -26,6 +26,11 @@ if / for / while -- through IR, as IR helpers beside the text ones, so:
   * IR groups over budget are split on the generated method, with 0 fallbacks;
   * an IR group whose build fails is compiled as text, late, and still agrees
     -- a counted fallback, and a raise in strict mode.
+
+P4.3a builds the def statements through IR -- a top-level def's records and
+decorators, and a def in an if or a loop: tests/python/module_defs_ir.py agrees
+with CPython 3.14 through IR in strict mode, split over budget, and on the
+text arm.
 "
 Class {
 	#name : 'ModuleBodySeamTestCase',
@@ -49,6 +54,20 @@ ModuleBodySeamTestCase >> ___helpersOf___: aClass [
 
 	^ (((aClass selectorsForEnvironment: 1) select: [:sel | ModuleBodySeam isHelperSelector: sel])
 		asSortedCollection: [:a :b | (self ___offsetOf___: a) <= (self ___offsetOf___: b)]) asArray
+
+]
+
+{ #category : 'Grail-Private' }
+ModuleBodySeamTestCase >> ___loadDefsIR: irBoolean [
+	"Load the def statements fixture with the seam forced on or off, fresh, as
+	___loadFixtureIR: loads the frames one."
+
+	self ___reset___: #('module_defs_ir' 'module_defs_ir_body').
+	importlib ___irCodegenForce___: irBoolean.
+	importlib ___irStatsReset___.
+	^ importlib
+		loadModuleFromPath: importlib grailDir , '/tests/python/module_defs_ir.py'
+		name: 'module_defs_ir'
 
 ]
 
@@ -159,11 +178,96 @@ ModuleBodySeamTestCase >> tearDown [
 			ifNil: [temps removeKey: k ifAbsent: []]
 			ifNotNil: [:v | temps at: k put: v]].
 	self ___reset___: #('module_body_frames_across_helpers' 'module_body_frames_big'
-		'seam_reimport_probe' 'module_statements_ir' 'module_statements_ir_body').
+		'seam_reimport_probe' 'module_statements_ir' 'module_statements_ir_body'
+		'module_defs_ir' 'module_defs_ir_body').
 	registrySnapshot ifNotNil: [:snap |
 		importlib ___canonicalRegistryRestore___: snap.
 		registrySnapshot := nil].
 	super tearDown
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testDefStatementsAgreeWithCPythonOnTheTextArm [
+	"The oracle: one text ``initialize'', no helper, the same answers."
+
+	| mod |
+	mod := self ___loadDefsIR: false.
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (self ___helpersOf___: (mod @env1:___pyAttrLoad___: #'m') class) isEmpty
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testDefStatementsAgreeWithCPythonThroughIR [
+	"P4.3a: every def statement of the defs fixture's body -- plain, annotated,
+	defaulted, keyword-only, decorated, async, the PEP 695 scope def, and the
+	defs in an if and a for -- is built through IR, in strict mode, so a build
+	that fails raises rather than falling back.  Every check reads CPython's
+	answer, the census counts every def statement as IR (``msi:'' equal to
+	``ms:'', no ``msr:'' row for a def) -- the generic defs' synthesised
+	assignments and dels among them -- and the one text helper left holds the
+	statement P4.3a does not build, ``class Later''."
+
+	| mod body helpers rows text |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	importlib ___irStrictForce___: true.
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[mod := self ___loadDefsIR: true]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (importlib ___irStats___ at: #fallbacks) equals: 0.
+	rows := (importlib ___irCensus___ at: #byModule) at: 'module_defs_ir_body'.
+	self assert: (rows at: #'msi:FunctionDef' ifAbsent: [0])
+		equals: (rows at: #'ms:FunctionDef') description: rows printString.
+	self assert: (rows at: #'msi:AsyncFunctionDef' ifAbsent: [0])
+		equals: (rows at: #'ms:AsyncFunctionDef') description: rows printString.
+	self assert: (rows keys select: [:k | (k beginsWith: 'msr:nested:') or: [k beginsWith: 'msr:moduleDef']])
+		isEmpty description: rows printString.
+	body := (mod @env1:___pyAttrLoad___: #'m') class.
+	helpers := self ___helpersOf___: body.
+	text := helpers reject: [:sel |
+		BaseException ___isIRPythonMethod___: (body compiledMethodAt: sel environmentId: 1)].
+	self assert: text size equals: 1 description: helpers printString.
+	self assert: (rows at: #'msr:typeParams' ifAbsent: [0]) equals: 0 description: rows printString.
+	"A top-level def's body is its method's: no IR helper carries it, so none
+	answers its lines as positions (#1137).  The plain def's docstring and
+	return line are in no helper; the def line is."
+	(helpers reject: [:sel | text includes: sel]) do: [:sel |
+		| src |
+		src := (body compiledMethodAt: sel environmentId: 1) sourceString.
+		self deny: (src indexOfSubCollection: 'A docstring.') > 0 description: sel.
+		self deny: (src indexOfSubCollection: 'return (a, b, args, c, d is SENTINEL, e, kw)') > 0
+			description: sel].
+	self assert: ((helpers reject: [:sel | text includes: sel]) anySatisfy: [:sel |
+		((body compiledMethodAt: sel environmentId: 1) sourceString
+			indexOfSubCollection: 'def plain(a, b=2') > 0]).
+	self assert: (self ___sentHelpersOf___: (body compiledMethodAt: #initialize environmentId: 1))
+		equals: helpers
+
+]
+
+{ #category : 'Grail-Tests' }
+ModuleBodySeamTestCase >> testDefStatementsOverBudgetAreSplit [
+	"With a budget of a few dozen step points the groups holding def statements
+	are split in half and rebuilt from the AST, a def in an if or a loop -- a
+	closure -- among them, and every check still reads CPython's answer: a
+	def statement's build registers nothing that a second build would
+	duplicate."
+
+	| mod rows |
+	importlib ___irCodegenSupported___ ifFalse: [^ self assert: true].
+	importlib ___irStrictForce___: true.
+	ModuleBodySeam limitsForce: #(nil 40 nil nil nil).
+	importlib ___irCensusReset___.
+	importlib ___irCensusOn: true.
+	[mod := self ___loadDefsIR: true]
+		ensure: [importlib ___irCensusOn: false].
+	self assert: (self ___disagreementsIn___: mod) equals: '[]'.
+	self assert: (importlib ___irStats___ at: #fallbacks) equals: 0.
+	rows := (importlib ___irCensus___ at: #byModule) at: 'module_defs_ir_body'.
+	self assert: (rows at: #'mh:split' ifAbsent: [0]) > 0 description: rows printString
 
 ]
 
