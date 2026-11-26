@@ -2009,6 +2009,36 @@ AbstractNode >> ___foldedLiteral___ [
 
 ]
 
+{ #category : 'Grail-scoping' }
+AbstractNode >> ___frameScope___ [
+	"The scope this node runs in, read off the parent chain: the LambdaAst or
+	FunctionDefAst whose BODY holds it, the ClassDefAst whose body does, or
+	nil at module scope.  It is what a frame call asks -- locals(), vars(),
+	dir(), a bare eval() or exec(), a zero-argument super() (CallAst).
+
+	Only a BODY ends the walk (___functionBodyHolds___:, #2357): a lambda's
+	defaults, and a def's decorators, defaults and annotations, are evaluated
+	by the scope around them.  A comprehension is passed through: CPython
+	inlines one into a function (PEP 709), and the callers that need its
+	targets ask ___enclosingComprehensionTargetNames___ for them.
+
+	Read off the tree rather than the compile context because
+	``CallAst functionBeingCompiled'' is the ENCLOSING def inside a lambda, and
+	inside a method-local class body too: the frame calls asked it, and so
+	answered with the enclosing function's names in both (#2326, #2341)."
+
+	| child node |
+	child := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		(node ___functionBodyHolds___: child) ifTrue: [^ node].
+		((node isKindOf: ClassDefAst) and: [child == node body]) ifTrue: [^ node].
+		child := node.
+		node := node parent].
+	^ nil
+
+]
+
 { #category : 'Grail-codegen helpers' }
 AbstractNode >> ___functionBindsParameter___: funcAst named: aSymbol [
 	"True iff aSymbol is a PARAMETER of funcAst -- positional-only,

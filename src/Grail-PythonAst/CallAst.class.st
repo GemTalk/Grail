@@ -1979,6 +1979,82 @@ CallAst >> ___arityMismatchMessageFor___: aSymbol [
 
 ]
 
+{ #category : 'Grail-scoping' }
+CallAst >> ___classBodyEvalExecCall___ [
+	"The call a bare ``eval(src)'' / ``exec(src)'' written directly in a class
+	body stands for: ``eval(src, globals(), locals())''.
+
+	CPython runs a class body as a namespace and its bare eval() and exec() take
+	that namespace as their locals and the module's as their globals, so
+	``b = eval('a + 1')'' reads the class attribute ``a'' and ``exec('c = 3')''
+	binds a class attribute (#2341).  Grail's class body is no mapping, so the
+	two arguments are the ones the class body's own ``globals()'' and
+	``locals()'' already answer: the live module view, and the class-body
+	mapping of the names bound so far whose writes bind the class
+	(printClassBodyLocalsOn:, plan P3.6).  Built as a CALL rather than printed,
+	so the text and the IR-built method-local class helper each emit it with
+	the rewrites they already have for those two calls.
+
+	Before, the rewrite for a FUNCTION body took this call too -- inside a
+	method-local class the function being compiled is the enclosing def -- and
+	injected that def's locals: an eval read the enclosing function's variables
+	(which CPython's class body cannot see without a cell), and a name the
+	class helper did not carry stopped the whole module compiling with
+	``undefined symbol''.
+
+	The source argument is shared, not copied: it stays this call's child, and
+	is emitted once, by the new call.  The new nodes hang off this call's
+	parent, so every scope walk from them says what it says from here."
+
+	| call fn |
+	fn := NameAst new id: function id asSymbol; ctx: LoadAst basicNew; yourself.
+	call := CallAst new
+		function: fn;
+		arguments: {
+			arguments at: 1.
+			self ___syntheticFrameCallOf___: #'globals'.
+			self ___syntheticFrameCallOf___: #'locals' };
+		keywords: Array new;
+		yourself.
+	fn setParent: call.
+	fn setPositionFrom: function.
+	(call arguments at: 2) setParent: call.
+	(call arguments at: 3) setParent: call.
+	call setParent: parent.
+	call setPositionFrom: self.
+	^ call
+
+]
+
+{ #category : 'Grail-super' }
+CallAst >> ___classBodyLambdaOfSuper___ [
+	"The lambda whose first parameter a zero-argument ``super()'' here binds,
+	when the call sits in a LAMBDA written in a class body -- or nil.
+
+	CPython gives such a lambda the class's ``__class__'' cell, as it gives one
+	to a method, and super() reads its two implicit arguments off the lambda's
+	own frame: that cell, and the lambda's first positional argument (#2342).
+	Grail had no branch for it.  At module level the call fell to the method
+	rewrite and bound ``obj: self'' -- the module instance, not the lambda's
+	argument -- and in a method-local class it read the class through a cell
+	the module instance does not hold and raised ``super(): no arguments''.
+
+	THE INNERMOST FUNCTION SCOPE MUST BE A LAMBDA (___frameScope___) and the
+	scopes from it out to the class body lambdas too, or comprehensions, or the
+	header of a def the body evaluates (a lambda default).  A def BODY between
+	makes it a method's super(), which keeps its own rewrite.  Only while the
+	class body itself is emitted -- the class is then in the variable the body
+	builds it in, which the lambda's block closes over -- and not in a def the
+	body builds as a value, whose own frame the method rewrite already
+	describes."
+
+	(CallAst inClassBodyValueEmit == true
+		and: [CallAst classBodyValueDefNode isNil
+		and: [CallAst classBeingCompiled notNil]]) ifFalse: [^ nil].
+	^ self ___superLambdaInClassBody___
+
+]
+
 { #category : 'Grail-Direct Calls' }
 CallAst >> ___collectRebindableNamesIn___: aValue into: aSet nested: isNested [
 	"Helper of ___namesTheLookupCanRebindIn___."
@@ -2149,6 +2225,40 @@ CallAst >> ___directCallSelector___ [
 	argument's evaluation can be observed or changed by the lookup."
 	self ___argumentsAreUnobservable___ ifFalse: [^ nil].
 	^ self class fastPathSelectorForAttr: attrSym arity: arguments size
+
+]
+
+{ #category : 'Grail-super' }
+CallAst >> ___emitClassBodyLambdaSuperProxyWith___: e lambda: aLambda [
+	"The arm of a class-body lambda's ``super()'' inside the shadow probe,
+	through a ClassBuildEmitter so the text and the IR-built method-local class
+	helper share it:
+
+	    (Super @env1:checkedCls: (<cls> @env1:___grailOwnClassCellValueForSuper___)
+	        obj: <the lambda's first argument>)
+
+	or, for a lambda with no positional parameter, CPython's precondition 1,
+	``Super @env1:___noArguments___''.  The class is the class's OWN cell, read
+	off the variable the body builds it in (as ``__class__'' in a lambda is,
+	NameAst >> ___emitClassBodyOwnCellWith___:), so a lambda that runs on a
+	subclass instance still names its defining class.  ``checkedCls:'' is
+	CPython's supercheck, which a zero-argument super() applies when it is
+	constructed.  The argument is read as a name read at this call, which is
+	the lambda's parameter (its transport temp when the name is reserved)."
+
+	| first |
+	first := aLambda ___superArgumentName___.
+	first isNil ifTrue: [
+		^ e paren: [e send: #'___noArguments___' env: 1 to: [e var: 'Super']]].
+	"CPython creates the cell for this read, so the class must bind one."
+	CallAst classNeedsClassCell: true.
+	^ e paren: [
+		e send: #'checkedCls:obj:' env: 1 to: [e var: 'Super'] with: {
+			[e paren: [
+				e send: #'___grailOwnClassCellValueForSuper___' env: 1
+					to: [e var: CallAst ___classBeingCompiledVar___]]].
+			[e expressionNode: ((CallAst ___freeVariableReadNode___: first parent: self)
+				setPositionFrom: self; yourself)]}]
 
 ]
 
@@ -2377,6 +2487,35 @@ CallAst >> ___emitIRCallKeywords___: aKeywordsValue on: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRClassBodyLambdaSuperOn___: aBuilder [
+	"The #classBodyLambdaSuper shape: printClassBodyLambdaSuperOn:'s probe and
+	arm.  The probe is built as ___emitIRSuperZeroOn___: builds it; the arm is
+	the shared description, through the helper's class build emitter, which
+	is the only place the class's build variable is in reach."
+
+	| lam probeBlk probeVal |
+	aBuilder classBuildEmitter isNil ifTrue: [
+		^ self error: 'CallAst: a class-body lambda super() outside a class helper built through IR'].
+	lam := self ___classBodyLambdaOfSuper___.
+	aBuilder atNode: self.
+	probeBlk := aBuilder blockWithArg: #'___sup___' do: [:supLeaf |
+		| cond |
+		cond := aBuilder send: #== to: (aBuilder var: supLeaf) with: { aBuilder nilLit } env: 0.
+		aBuilder
+			if: cond
+			then: [aBuilder add: (aBuilder classBuildEmitter valueOf: [
+				self ___emitClassBodyLambdaSuperProxyWith___: aBuilder classBuildEmitter lambda: lam])]
+			else: [aBuilder add: (aBuilder
+				send: #value:value: to: (aBuilder var: supLeaf)
+				with: { aBuilder arrayOf: #(). aBuilder nilLit } env: 1)]].
+	probeVal := aBuilder
+		send: #'___grailShadowedSuper___'
+		to: (self ___irModuleInstanceOn___: aBuilder) with: { } env: 1.
+	^ aBuilder send: #value: to: probeBlk with: { probeVal } env: 0
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRClassBodyLocalsOn___: aBuilder [
 	"The #classBodyLocals shape: the class-body locals() / vars() the text
 	writes (___emitClassBodyLocalsWith___:), through the helper's class build
@@ -2592,6 +2731,27 @@ CallAst >> ___emitIRKwargsSplat___: anExpr on: aBuilder [
 ]
 
 { #category : 'Grail-IR Codegen' }
+CallAst >> ___emitIRLambdaLocalsSnapshotOn___: aBuilder lambda: aLambda [
+	"printLambdaLocalsSnapshotOn:lambda:, through IR: the same names in the same
+	order, each read as a name read at this call."
+
+	| pairs |
+	pairs := (aLambda ___snapshotLocalNamesAt___: self) collect: [:each |
+		aBuilder arrayOf: {
+			aBuilder obj: each asString.
+			(aLambda ___bindsByWalrusOnly___: each)
+				ifTrue: [aBuilder localVar: each]
+				ifFalse: [self ___emitIRFreeVariableRead___: each parent: self on: aBuilder] }].
+	aBuilder atNode: self.
+	^ aBuilder
+		send: #'___buildLocals___:'
+		to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+		with: { aBuilder arrayOf: pairs asArray }
+		env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRLocalsSnapshotOn___: aBuilder [
 	"``(builtins instance) ___buildLocals___: { {'name'. <read>}. ... }'' -- the
 	IR twin of printFunctionLocalsSnapshotOn:, in the same ORDER, which is
@@ -2612,7 +2772,23 @@ CallAst >> ___emitIRLocalsSnapshotOn___: aBuilder [
 	has no leaf for it the two paths would disagree about what the dict holds.
 	Better to fall back than to answer a different dict."
 
-	| fn names paramNames pairs reserved |
+	| fn names paramNames pairs reserved scope |
+	"A lambda's own frame (#2326), not the def it is written in."
+	scope := self ___frameScope___.
+	(scope isKindOf: LambdaAst) ifTrue: [
+		^ self ___emitIRLambdaLocalsSnapshotOn___: aBuilder lambda: scope].
+	"A comprehension in a CLASS body: its own targets, as printBareEvalExecOn:
+	writes them there (___printCompTargetLocalsOn___:names:), never the def
+	the class is written in."
+	(scope isKindOf: ClassDefAst) ifTrue: [
+		pairs := self ___enclosingComprehensionTargetNames___ collect: [:each |
+			aBuilder arrayOf: { aBuilder obj: each asString. aBuilder localVar: each asSymbol }].
+		aBuilder atNode: self.
+		^ aBuilder
+			send: #'___buildLocals___:'
+			to: (self ___emitIRBuiltinsInstanceOn___: aBuilder)
+			with: { aBuilder arrayOf: pairs asArray }
+			env: 1].
 	fn := CallAst functionBeingCompiled.
 	names := fn body variables asSortedCollection: [:a :b | a asString <= b asString].
 	paramNames := fn allParameterNames.
@@ -2779,15 +2955,16 @@ CallAst >> ___emitIRModuleStoreReceiverOn___: aBuilder [
 { #category : 'Grail-IR Codegen' }
 CallAst >> ___emitIRScopeNamespaceOn___: aBuilder [
 	"The namespace printLocalsCallOn: would print HERE, as an IR node: the
-	function's locals snapshot in function scope, the live module view at
-	module scope.  Those are the only two of its five cases the IR path
+	function's locals snapshot in function scope -- a lambda's own when the
+	call is in one (#2326) -- the live module view at module scope.  Those are the only two of its five cases the IR path
 	spells; the shape tests that reach this (#localsSnapshot, #globalsView,
 	#dirOfScope) each exclude a class body and a MODULE-scope comprehension
 	already, so this method needs no test for them -- it must not be called
 	from a shape that admits one.  A comprehension inside a FUNCTION is the
 	snapshot arm, which appends its targets."
 
-	^ CallAst functionBeingCompiled notNil
+	^ (CallAst functionBeingCompiled notNil
+			or: [self ___frameScope___ isKindOf: LambdaAst])
 		ifTrue: [self ___emitIRLocalsSnapshotOn___: aBuilder]
 		ifFalse: [self ___emitIRGlobalsViewOn___: aBuilder]
 
@@ -3104,6 +3281,8 @@ CallAst >> ___emitIRValueOn___: aBuilder [
 		^ aBuilder send: self ___directCallSelector___ to: recv with: argVals env: 1].
 	shape == #classBodySiblingCall ifTrue: [^ self ___emitIRClassBodySiblingCallOn___: aBuilder].
 	shape == #classBodyLocals ifTrue: [^ self ___emitIRClassBodyLocalsOn___: aBuilder].
+	shape == #classBodyEvalExec ifTrue: [^ self ___classBodyEvalExecCall___ ___emitIRValueOn___: aBuilder].
+	shape == #classBodyLambdaSuper ifTrue: [^ self ___emitIRClassBodyLambdaSuperOn___: aBuilder].
 	"#attrLegacy and #general: load THEN call through the unified protocol --
 	the loaded value might be a BoundMethod, a class, or any callable."
 	^ self ___emitIRGeneralCallOn___: aBuilder
@@ -3238,11 +3417,19 @@ CallAst >> ___emitSmalltalkOn___: aStream [
 	module global (vs a local) from a bare in-function eval is an accepted
 	gap; injecting the live module view here is unsafe when eval runs outside
 	a real module instance (the eval()/exec() harness passes a nil receiver)."
+	"In a CLASS BODY the namespace is the class's (#2341): the bare call stands
+	for ``eval(src, globals(), locals())'' there, and each of those has its
+	class-body rewrite already (___classBodyEvalExecCall___)."
+	self ___isClassBodyBareEvalExec___ ifTrue: [
+		^ self ___classBodyEvalExecCall___ printSmalltalkOn: aStream].
 	((function isKindOf: NameAst)
 		and: [(function id = #'eval' or: [function id = #'exec'])
 			and: [arguments size = 1
 				and: [keywords isEmpty
-					and: [CallAst functionBeingCompiled notNil
+					and: [(CallAst functionBeingCompiled notNil
+						or: ["INSIDE A LAMBDA at module level, which has a frame
+						of its own to inject (printLambdaLocalsSnapshotOn:lambda:)."
+						self ___frameScope___ isKindOf: LambdaAst])
 						or: ["INSIDE A COMPREHENSION AT MODULE SCOPE the rewrite is
 						needed for the same reason: the comprehension's target is a
 						block temp, so the empty-scope form cannot resolve it and
@@ -3253,6 +3440,13 @@ CallAst >> ___emitSmalltalkOn___: aStream [
 						already resolved module names."
 						self ___enclosingComprehensionTargetNames___ notEmpty]]]]])
 				ifTrue: [^ self printBareEvalExecOn: aStream].
+
+	"A zero-argument ``super()'' in a LAMBDA written in a class body takes its
+	two arguments off the lambda's frame: the class's own cell and the lambda's
+	first parameter (#2342).  Ahead of the method rewrites below, which would
+	bind the Smalltalk receiver instead."
+	self ___classBodyLambdaOfSuper___ ifNotNil: [:lam |
+		^ self printClassBodyLambdaSuperOn: aStream lambda: lam].
 
 	"CPYTHON'S PRECONDITIONS, ahead of the rewrite that assumes they hold.
 	``super()'' with no arguments does not guess -- it inspects the running
@@ -3865,6 +4059,15 @@ CallAst >> ___irCallShapeUnguarded___ [
 	(function isKindOf: NameAst) ifTrue: [
 		"``super()'' / ``super(C, obj)'': the text's two Super-proxy rewrites."
 		(self ___irSuperShape___) ifNotNil: [:sup | ^ sup].
+		"A frame call in a LAMBDA, wherever the lambda is written: the lambda's
+		own snapshot (printLambdaLocalsSnapshotOn:lambda:, #2326), which
+		___emitIRLocalsSnapshotOn___: and ___emitIRScopeNamespaceOn___: build
+		for it.  Ahead of the scope cases below, none of which is a lambda's."
+		((#(#'locals' #'vars' #'dir') includes: function id)
+			and: [arguments isEmpty
+			and: [keywords isEmpty
+			and: [self ___frameScope___ isKindOf: LambdaAst]]])
+				ifTrue: [^ function id = #'dir' ifTrue: [#dirOfScope] ifFalse: [#localsSnapshot]].
 		"``globals()'' (cut 83): the text's step-0 COMPILE-TIME rewrite to a live
 		PyModuleDict view.  Despite the census row's name this is not
 		frame-sensitive at all -- the receiver is chosen at compile time by
@@ -4044,6 +4247,13 @@ CallAst >> ___irCallShapeUnguarded___ [
 		see ___irEvalExecRefusalReason___, and see the ``eval'' half of the note
 		there for why a compile-context read would not do."
 		(#(#'eval' #'exec') includes: function id) ifTrue: [
+			"A bare eval()/exec() directly in a class body: the call it stands
+			for, ``eval(src, globals(), locals())'' (#2341)."
+			self ___isClassBodyBareEvalExec___ ifTrue: [^ #classBodyEvalExec].
+			"...and in a COMPREHENSION of a class body: the comprehension's
+			own scope, step 0c's comprehension arm (the targets over the
+			module's globals)."
+			self ___isClassBodyComprehensionBareEvalExec___ ifTrue: [^ #bareEvalExec].
 			self ___irEvalExecRefusalReason___ notNil ifTrue: [^ nil].
 			"Step 0c's rewrite, in the two scopes the IR path can spell it
 			(cut: the bare rewrite).  Anything else eval/exec reaches here as
@@ -4499,9 +4709,10 @@ CallAst >> ___irSnapshotScopeIsAFunction___ [
 	___globalsViewReceiverExpr___, and a CLASS BODY, which is not a namespace
 	the snapshot models (bucket P3).
 
-	A LAMBDA cannot reach this at all -- it holds an expression, and step 0c's
-	rewrite is a statement-level one -- but it is admitted by the same rule it
-	would take if it could, since a lambda's own scope is a def's."
+	A LAMBDA is admitted by the same rule, since a lambda's own scope is a
+	def's: step 0c does rewrite a bare eval() in one, and both paths hand it
+	the LAMBDA's own snapshot (CallAst >> printLambdaLocalsSnapshotOn:lambda:,
+	#2326), not the def it is written in."
 
 	| kinds |
 	"Comprehensions are skipped: they are inlined into whatever encloses them,
@@ -4558,6 +4769,9 @@ CallAst >> ___irSuperShape___ [
 	((function isKindOf: NameAst) and: [function id = #'super']) ifFalse: [^ nil].
 	keywords isEmpty ifFalse: [^ nil].
 	self ___superNameIsShadowed___ ifTrue: [^ nil].
+	"In a lambda written in a class body (#2342): printSmalltalkOn: takes it
+	before any of the shapes below."
+	self ___classBodyLambdaOfSuper___ ifNotNil: [:lam | ^ #classBodyLambdaSuper].
 	CallAst moduleClassBeingCompiled isNil ifTrue: [^ nil].
 	"A ZERO-ARGUMENT super() WITH NO CLASS -- ``def h(x): return super()'' at
 	module scope.  CPython compiles it and raises at the call; the text's two
@@ -4643,6 +4857,45 @@ CallAst >> ___irSuperStaysOnText___ [
 	accessor or the plain argument emit -- which is exactly what the text
 	does, so there is no longer a spelling here without a twin."
 	^ false
+
+]
+
+{ #category : 'Grail-scoping' }
+CallAst >> ___isClassBodyBareEvalExec___ [
+	"Is this a bare ``eval(src)'' / ``exec(src)'' -- one positional, no keywords
+	-- written directly in a class body, outside any lambda or comprehension of
+	it, while that body is emitted?  It stands for ___classBodyEvalExecCall___.
+
+	Inside a comprehension of the body the scope is the comprehension's own
+	(PEP 709 does not inline one in a class body), so step 0c's comprehension
+	arm takes the call there, as it does at module scope."
+
+	^ (function isKindOf: NameAst)
+		and: [(function id = #'eval' or: [function id = #'exec'])
+		and: [arguments size = 1
+		and: [keywords isEmpty
+		and: [CallAst inClassBodyValueEmit == true
+		and: [(self ___frameScope___ isKindOf: ClassDefAst)
+		and: [self ___enclosingComprehensionTargetNames___ isEmpty]]]]]]
+
+]
+
+{ #category : 'Grail-scoping' }
+CallAst >> ___isClassBodyComprehensionBareEvalExec___ [
+	"Is this a bare ``eval(src)'' / ``exec(src)'' in a COMPREHENSION of a class
+	body, outside any lambda?  The comprehension is a scope of its own there,
+	so step 0c gives the call its targets over the module's globals
+	(printBareEvalExecOn:), and ___emitIRLocalsSnapshotOn___: builds the same
+	targets.  Read off the tree, so the IR class helper's refusal walk can ask
+	it too."
+
+	^ (function isKindOf: NameAst)
+		and: [(function id = #'eval' or: [function id = #'exec'])
+		and: [arguments size = 1
+		and: [keywords isEmpty
+		and: [ModuleAst compilingDoitScope isNil
+		and: [(self ___frameScope___ isKindOf: ClassDefAst)
+		and: [self ___enclosingComprehensionTargetNames___ notEmpty]]]]]]
 
 ]
 
@@ -4972,6 +5225,32 @@ CallAst >> ___superArgZeroGuardName___ [
 
 ]
 
+{ #category : 'Grail-super' }
+CallAst >> ___superLambdaInClassBody___ [
+	"___classBodyLambdaOfSuper___'s answer read off the tree alone, so the IR
+	class helper's refusal walk (ClassDefAst >>
+	___irClassBodyValueReason___:bound:classCell:) can ask it outside the
+	class body's emit window."
+
+	| lam scope |
+	((function isKindOf: NameAst)
+		and: [function id = #'super'
+		and: [arguments isEmpty
+		and: [keywords isEmpty]]]) ifFalse: [^ nil].
+	self ___superNameIsShadowed___ ifTrue: [^ nil].
+	lam := self ___frameScope___.
+	(lam isKindOf: LambdaAst) ifFalse: [^ nil].
+	"Out through enclosing lambdas, which pass the cell down, to the class
+	body (#2357's ___classBodyScope___, which stops at any function BODY); a
+	def body on the way makes it a method's."
+	scope := lam.
+	[scope isKindOf: LambdaAst] whileTrue: [
+		scope ___classBodyScope___ ifNotNil: [:cls | ^ lam].
+		scope := scope ___frameScope___].
+	^ nil
+
+]
+
 { #category : 'Grail-other' }
 CallAst >> ___superNameIsShadowed___ [
 	"True when the name in this call's function position is ``super'' AND the
@@ -5049,6 +5328,21 @@ CallAst >> ___superObjTempName___ [
 			and: [compiledDef notNil and: [valueDef ___bodyHolds___: compiledDef parent]]])
 				ifFalse: [^ nil].
 	^ self ___superArgZeroGuardName___
+
+]
+
+{ #category : 'Grail-scoping' }
+CallAst >> ___syntheticFrameCallOf___: aSymbol [
+	"A zero-argument call of the builtin aSymbol (``globals'' / ``locals''),
+	positioned at this call, for ___classBodyEvalExecCall___ to parent."
+
+	| fn call |
+	fn := NameAst new id: aSymbol; ctx: LoadAst basicNew; yourself.
+	call := CallAst new function: fn; arguments: Array new; keywords: Array new; yourself.
+	fn setParent: call.
+	fn setPositionFrom: self.
+	call setPositionFrom: self.
+	^ call
 
 ]
 
@@ -5880,7 +6174,7 @@ CallAst >> printBareEvalExecOn: aStream [
 	module view, and tolerates a nil/non-module receiver, which is what
 	made injecting globals here unsafe before."
 
-	| fn |
+	| fn scope |
 	fn := CallAst functionBeingCompiled.
 	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) _'.
 	aStream nextPutAll: function id asString.
@@ -5903,7 +6197,16 @@ CallAst >> printBareEvalExecOn: aStream [
 	could not see the exec's globals."
 	aStream nextPutAll: self ___globalsViewReceiverExpr___.
 	aStream nextPutAll: ' locals: '.
-	fn isNil
+	"A LAMBDA's own frame, not the def it is written in (#2326's eval
+	sibling); a comprehension in a CLASS body is a scope of its own, whose
+	locals are its targets, not the enclosing def's names (#2341)."
+	scope := self ___frameScope___.
+	(scope isKindOf: LambdaAst) ifTrue: [
+		self printLambdaLocalsSnapshotOn: aStream lambda: scope.
+		aStream nextPutAll: ')'.
+		aStream nextPutAll: '. } kw: nil)'.
+		^ self].
+	(fn isNil or: [scope isKindOf: ClassDefAst])
 		ifTrue: [
 			self ___printCompTargetLocalsOn___: aStream
 				names: self ___enclosingComprehensionTargetNames___]
@@ -5923,6 +6226,20 @@ CallAst >> printCalleeOrNilOn: aStream [
 
 	(function isKindOf: NameAst) ifFalse: [^ aStream nextPutAll: 'nil'].
 	function printSmalltalkWithParenthesisOn: aStream
+
+]
+
+{ #category : 'Grail-super' }
+CallAst >> printClassBodyLambdaSuperOn: aStream lambda: aLambda [
+	"A zero-argument ``super()'' in a lambda written in a class body
+	(___classBodyLambdaOfSuper___), inside the run-time shadow probe every
+	zero-argument super() gets (___printShadowableSuperOn___:arm:).  The arm is
+	___emitClassBodyLambdaSuperProxyWith___:lambda:, which the IR-built
+	method-local class helper writes too."
+
+	self ___printShadowableSuperOn___: aStream arm: [
+		self ___emitClassBodyLambdaSuperProxyWith___: (ClassBuildTextEmitter on: aStream)
+			lambda: aLambda]
 
 ]
 
@@ -6280,6 +6597,44 @@ CallAst >> printKwargsSplatCheckOn: aStream [
 ]
 
 { #category : 'Grail-other' }
+CallAst >> printLambdaLocalsSnapshotOn: aStream lambda: aLambda [
+	"``((builtins instance) ___buildLocals___: { {'q'. q}. ... })'' -- the
+	locals of the LAMBDA this call sits in: what locals(), vars(), dir() and a
+	bare eval() or exec() see there (#2326).
+
+	A lambda is a function scope of its own, and CPython's locals() in one is
+	its parameters, any walrus target in its body, the free variables it
+	reads, and the targets of a comprehension between it and the call -- never
+	the names of the scope around it.  Grail used the enclosing FUNCTION's
+	snapshot (printFunctionLocalsSnapshotOn:, which asks
+	``CallAst functionBeingCompiled'' and so names the def the lambda is
+	written in), and at module level and in a class body the module's or the
+	class body's names, where a lambda's names stand down to the module and
+	raised NameError.
+
+	Each value is a name read at this call (CallAst class >>
+	___emitFreeVariableRead___:parent:on:), so a parameter is the block's
+	temp, a reserved name its transport temp, and a free variable whatever an
+	ordinary read of it in the lambda compiles to -- except a walrus target,
+	which is the block's bare temp: a read of one not yet bound raises
+	UnboundLocalError, and CPython's locals() leaves it out instead.
+	___buildLocals___: drops the names still unbound (nil)."
+
+	aStream nextPutAll: '(((Python @env0:at: #builtins) @env0:___instance___) ___buildLocals___: { '.
+	(aLambda ___snapshotLocalNamesAt___: self) do: [:each |
+		aStream
+			nextPutAll: '{ ''';
+			nextPutAll: each asString;
+			nextPutAll: '''. '.
+		(aLambda ___bindsByWalrusOnly___: each)
+			ifTrue: [aStream nextPutAll: (NameAst ___transportIdentifierFor___: each)]
+			ifFalse: [CallAst ___emitFreeVariableRead___: each parent: self on: aStream].
+		aStream nextPutAll: ' }. '].
+	aStream nextPutAll: '})'
+
+]
+
+{ #category : 'Grail-other' }
 CallAst >> printLocalsCallOn: aStream [
 	"Emit the compile-time rewrite of a bare 0-arg ``locals()`` call.
 
@@ -6300,7 +6655,13 @@ CallAst >> printLocalsCallOn: aStream [
 	what CPython's class-body locals() reports -- see
 	printClassBodyLocalsOn:."
 
-	| fn |
+	| fn scope |
+	"A LAMBDA before anything else: it is a function scope of its own wherever
+	it is written -- in a def, in a class body, at module level -- and none of
+	the cases below describes it (printLambdaLocalsSnapshotOn:lambda:, #2326)."
+	scope := self ___frameScope___.
+	(scope isKindOf: LambdaAst) ifTrue: [
+		^ self printLambdaLocalsSnapshotOn: aStream lambda: scope].
 	"Class body FIRST: inside one, functionBeingCompiled is still the
 	ENCLOSING function (the classdef is emitted in its scope), so without
 	this test a class-body locals() answered that function's locals -- names

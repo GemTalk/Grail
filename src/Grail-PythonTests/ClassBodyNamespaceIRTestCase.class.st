@@ -229,7 +229,7 @@ def f(p):
 		'Walrus' -> #'irHelper:assign:walrus'.
 		'Sibling' -> nil.
 		'Frame' -> nil.
-		'FrameLam' -> #'irHelper:assign:frameCall'.
+		'FrameLam' -> nil.
 		'FrameDir' -> #'irHelper:assign:frameCall'.
 		'Cell' -> nil.
 		'CellLam' -> nil.

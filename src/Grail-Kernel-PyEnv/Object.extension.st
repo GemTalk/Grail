@@ -3750,6 +3750,32 @@ Object class >> ___grailOwnClassCellValue___ [
 
 ]
 
+{ #category : 'Grail-Class Namespace' }
+Object class >> ___grailOwnClassCellValueForSuper___ [
+	"The class a zero-argument ``super()'' in a lambda written directly in this
+	class's body names (CallAst >> ___emitClassBodyLambdaSuperProxyWith___:lambda:,
+	#2342): the receiver's OWN ``__class__'' cell, as ___grailOwnClassCellValue___
+	reads it for a bare ``__class__'' there.
+
+	Only the EMPTY case differs, as ___grailClassCellValueForSuper___ differs
+	from ___grailClassCellValue___: CPython's super() reports ``super(): empty
+	__class__ cell'' as a RuntimeError -- a lambda called while its class body
+	still runs -- where the bare read raises NameError."
+
+	| holder cell v raised |
+	holder := self @env0:perform: #___dynInstVars___ env: 1.
+	cell := holder == nil
+		ifTrue: [nil]
+		ifFalse: [holder @env0:dynamicInstVarAt: #'___grailClassCell___'].
+	raised := cell == nil.
+	raised ifFalse: [
+		v := [cell @env1:cell_contents]
+			@env0:on: AbstractException do: [:ex | raised := true. ex @env0:return: nil]].
+	(raised @env0:or: [v == nil]) ifTrue: [^ Super @env1:___emptyClassCell___].
+	^ v
+
+]
+
 { #category : 'Grail-Class Attrs' }
 Object class >> ___grailOwnPropertyNames___ [
 	"No @property declared here.  ClassDefAst compiles a class-side override
