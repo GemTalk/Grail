@@ -620,6 +620,28 @@ AbstractNode >> ___catchTargetUnbindsAModuleName___: aNameSymbol [
 
 ]
 
+{ #category : 'Grail-Class Body' }
+AbstractNode >> ___classBodyScope___ [
+	"The ClassDefAst whose BODY is the scope this node is evaluated in, or nil
+	when a def's or lambda's body comes first.  A def's decorators and defaults
+	and a lambda's defaults belong to the scope around them (AbstractNode >>
+	___functionBodyHolds___:), so ``g = lambda v=(w := label): v'' in a class
+	body answers that class (#2345).  So do a class's own decorators, bases and
+	keywords: ``@d := deco'' on a class inside a method binds the method's
+	local, not anything of the class it decorates."
+
+	| node child |
+	child := self.
+	node := self parent.
+	[node notNil] whileTrue: [
+		(node ___functionBodyHolds___: child) ifTrue: [^ nil].
+		((node isKindOf: ClassDefAst) and: [child == node body]) ifTrue: [^ node].
+		child := node.
+		node := node parent].
+	^ nil
+
+]
+
 { #category : 'Grail-annotations' }
 AbstractNode >> ___cmpOpGlyph___: anOp [
 	(anOp isKindOf: EqAst) ifTrue: [^ '=='].
@@ -2070,6 +2092,23 @@ AbstractNode >> ___functionBindsPythonLocal___: funcAst named: aSymbol [
 
 ]
 
+{ #category : 'Grail-scoping' }
+AbstractNode >> ___functionBodyHolds___: aNode [
+	"Whether a parent walk arriving here from aNode is leaving a FUNCTION
+	scope -- a def's or a lambda's body -- rather than coming up through the
+	parts the enclosing scope evaluates: a def's decorators, defaults and
+	annotations, a lambda's defaults.  False for every node that is not a def
+	or a lambda; FunctionDefAst and LambdaAst answer for their bodies.
+
+	The class-body walks ask this instead of stopping at any def or lambda.
+	A walrus in ``lambda v=(w := label): v'' in a class body binds a class
+	attribute in CPython (#2345): the default is evaluated where the lambda
+	is written, and only the body skips the class."
+
+	^ false
+
+]
+
 { #category : 'Grail-codegen helpers' }
 AbstractNode >> ___functionDeclaresGlobal___: aFunctionNode named: aSymbol [
 	"Does aFunctionNode's own scope declare ``global aSymbol''?  The
@@ -2551,18 +2590,15 @@ AbstractNode >> ___inClassBodyAttributeValueScope___ [
 	emit, and it is this walk that keeps class-attribute routing off that def's
 	genuine locals.
 
-	LambdaAst ends the walk as well as FunctionDefAst: a walrus in a class-body
-	lambda (``f = lambda: (n := 1)'') binds inside the lambda, which does have a
-	Smalltalk temp for it."
+	A lambda's BODY ends the walk as a def's body does: a walrus in a
+	class-body lambda (``f = lambda: (n := 1)'') binds inside the lambda, which
+	does have a Smalltalk temp for it.  Their DEFAULTS do not, nor a def's
+	decorators: the class body evaluates those, so ``lambda v=(w := label): v''
+	binds the class attribute ``w'' (#2345).  Ending the walk at any lambda
+	emitted a bare ``w := label'' into the class build, an undeclared temp, and
+	the whole module failed to compile."
 
-	| node |
-	node := self parent.
-	[node notNil] whileTrue: [
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: LambdaAst])
-			ifTrue: [^ false].
-		(node isKindOf: ClassDefAst) ifTrue: [^ true].
-		node := node parent].
-	^ false
+	^ self ___classBodyScope___ notNil
 
 ]
 
@@ -2575,17 +2611,18 @@ AbstractNode >> ___inClassBodyRuntimeScope___ [
 
 	The flag stays set for the whole statement emit, INCLUDING any nested def
 	or class, so this scope test is what keeps the class-attribute routing off
-	genuine locals: walking out, the first FunctionDefAst-or-ClassDefAst
-	reached must be the ClassDefAst."
+	genuine locals: walking out, the first function body or ClassDefAst reached
+	must be the ClassDefAst.
 
-	| node |
+	A function body is a def's OR a lambda's (AbstractNode >>
+	___functionBodyHolds___:).  Only a def's used to count, so a walrus in a
+	lambda's body in a class-body ``for'' or ``with'' -- ``g = lambda: (w :=
+	1)'' -- stored a class attribute ``w'' instead of the lambda's own temp.
+	And only a BODY counts: a def's or lambda's defaults are the class body's
+	to evaluate, so a walrus there binds the class attribute (#2345)."
+
 	CallAst classBodyRuntimeClass ifNil: [^ false].
-	node := self parent.
-	[node notNil] whileTrue: [
-		(node isKindOf: FunctionDefAst) ifTrue: [^ false].
-		(node isKindOf: ClassDefAst) ifTrue: [^ true].
-		node := node parent].
-	^ false
+	^ self ___classBodyScope___ notNil
 
 ]
 
@@ -3238,14 +3275,27 @@ AbstractNode >> ___nearestEnclosingScopeDeclaresGlobal___: aSymbol [
 	        x = 13        # rebinds the MODULE x; Global gets no ''x'' attribute
 
 	Grail read the declaration for neither part: it bound x as a class
-	attribute and left the module binding at 12."
+	attribute and left the module binding at 12.
 
-	| node |
+	A def or lambda is the nearest scope only when the walk leaves its BODY.
+	Its defaults are evaluated in the scope around it, so in
+
+	    class C:
+	        global w
+	        g = lambda v=(w := 1): v
+
+	the walrus rebinds the module's ``w'' (#2345); stopping at the lambda
+	answered false, and the store became the class attribute."
+
+	| node child |
+	child := self.
 	node := parent.
 	[node notNil] whileTrue: [
-		(node isKindOf: LambdaAst) ifTrue: [^ false].
-		((node isKindOf: FunctionDefAst) or: [node isKindOf: ClassDefAst])
-			ifTrue: [^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		((node isKindOf: LambdaAst) and: [node ___functionBodyHolds___: child])
+			ifTrue: [^ false].
+		(((node isKindOf: FunctionDefAst) and: [node ___functionBodyHolds___: child])
+			or: [node isKindOf: ClassDefAst])
+				ifTrue: [^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
 		"THE MODULE BODY IS A SCOPE TOO, and it is the one that answers for a
 		declaration written at top level.  Reaching the top used to answer
 		false, which is wrong wherever the module body can carry a ``global''
@@ -3267,6 +3317,7 @@ AbstractNode >> ___nearestEnclosingScopeDeclaresGlobal___: aSymbol [
 		the module, which is where a module-level name already goes."
 		(node isKindOf: ModuleAst) ifTrue: [
 			^ self ___scopeNodeDeclaresGlobal___: node named: aSymbol].
+		child := node.
 		node := node parent.
 	].
 	^ false
@@ -4093,6 +4144,31 @@ AbstractNode >> emitNameStoreOn: aStream target: aNameAst rhs: rhsSource [
 				nextPutAll: rhsSource;
 				nextPutAll: ')'.
 			^ self].
+	"A walrus in a class body whose name the body declared ``global'' or
+	``nonlocal'' is not a class attribute either (#2345).  ``global'' in a DOIT
+	is not a module store above, so it goes where AssignAst's doit branch
+	sends ``global w; w = v'', the exec's scope and globals.  ``nonlocal'' is the
+	enclosing function's temp, which the class body is printed inside, so the
+	bare store at the end is the binding.  Only while the class build itself is
+	emitted: a method's default miss arm is the value-only branch below."
+	((self isKindOf: NamedExprAst)
+		and: [(CallAst inClassBodyValueEmit == true or: [CallAst classBodyRuntimeClass notNil])
+		and: [self ___classBodyScope___ notNil]]) ifTrue: [
+		(ModuleAst compilingDoitScope notNil
+			and: [aNameAst ___nearestEnclosingScopeDeclaresGlobal___: aNameAst id])
+				ifTrue: [
+					aStream
+						nextPutAll: '(NameError @env0:___storeDoitGlobal___: ''';
+						nextPutAll: aNameAst id asString;
+						nextPutAll: ''' value: (';
+						nextPutAll: rhsSource;
+						nextPutAll: ') scope: ___pyGlobals___)'.
+					^ self].
+		(self ___classBodyScope___ ___classBodyDeclaresNonlocal___: aNameAst id asSymbol)
+			ifTrue: [
+				aNameAst printSmalltalkOn: aStream.
+				aStream nextPutAll: ' := '; nextPutAll: rhsSource.
+				^ self]].
 	"A CLASS BODY has no temp to bind either -- ClassDefAst emits the statement
 	straight into the class-build code -- so the same reasoning as the module
 	branch applies one scope in, and ___emitModuleScopeStoreOf___: already had
@@ -4132,6 +4208,18 @@ AbstractNode >> emitNameStoreOn: aStream target: aNameAst rhs: rhsSource [
 			nextPutAll: rhsSource;
 			nextPutAll: '))'.
 		^ self].
+	"A walrus whose scope is a class body, emitted OUTSIDE the class build.  A
+	class-body method's default is the one such place: the method carries the
+	expression again as the miss arm of its class-side default table
+	(FunctionDefAst >> emitDefTimeDefaultFor:node:on:), and there no class
+	namespace is in reach.  A bare ``w := v'' named an undeclared temp, or
+	worse an enclosing def's same-named one (#2345).  The class body has
+	already bound the name when it evaluated the default, so the arm answers
+	the value."
+	((self isKindOf: NamedExprAst) and: [self ___inClassBodyAttributeValueScope___])
+		ifTrue: [
+			aStream nextPut: $(; nextPutAll: rhsSource; nextPut: $).
+			^ self].
 	aNameAst printSmalltalkOn: aStream.
 	aStream nextPutAll: ' := '; nextPutAll: rhsSource
 

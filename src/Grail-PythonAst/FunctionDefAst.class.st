@@ -2616,6 +2616,15 @@ FunctionDefAst >> ___enclosingFunctionBinds___: aSymbol [
 
 ]
 
+{ #category : 'Grail-scoping' }
+FunctionDefAst >> ___functionBodyHolds___: aNode [
+	"See AbstractNode >> ___functionBodyHolds___:.  A def's scope is its
+	body; its decorators, defaults and annotations are the enclosing scope's."
+
+	^ self ___bodyHolds___: aNode
+
+]
+
 { #category : 'Grail-code generation' }
 FunctionDefAst >> ___grailBodySourceText___ [
 	"This def's body as source text, DEDENTED to column zero and with its
