@@ -976,17 +976,25 @@ importlib class >> ___buildModuleClassBody: moduleAst name: moduleName [
 				self ___irCensusNote___: #'mh:split' module: self ___irCensusModuleName___
 					def: '<module>' count: seam splits.
 				self ___irCensusNote___: #'mh:overBudget' module: self ___irCensusModuleName___
-					def: '<module>' count: seam overBudget]].
+					def: '<module>' count: seam overBudget.
+				self ___irCensusModuleStatements___: seam]].
 		seam notNil ifTrue: [
 			"The seam compiled (and censused) its helpers.  The trace dump gets each
 			helper, then the IR dispatcher's attached source, and the .ir file each
 			helper's compiled IR in turn."
 			traceDir ifNotNil: [
 				seam helpers do: [:h |
+					(h at: 6) == #ir ifTrue: [
+						debugStream
+							nextPutAll: '! '; nextPutAll: (h at: 1);
+							nextPutAll: ' is built through IR (ModuleBodySeam); its attached source:'; lf].
 					debugStream
 						nextPutAll: 'category: ''Grail-Module Body'''; lf;
 						nextPutAll: 'method: '; nextPutAll: debugClassName; lf.
-					self ___writeMethodSource: (h at: 2) on: debugStream.
+					self ___writeMethodSource: ((h at: 6) == #ir
+							ifTrue: [(h at: 3) sourceString]
+							ifFalse: [h at: 2])
+						on: debugStream.
 					debugStream nextPutAll: '%'; lf; lf].
 				debugStream
 					nextPutAll: '! initialize is built through IR (ModuleBodySeam); its attached source:'; lf;
@@ -5827,6 +5835,40 @@ importlib class >> ___irCensusModuleName___ [
 ]
 
 { #category : 'Grail-Class Compilation' }
+importlib class >> ___irCensusModuleStatements___: aSeam [
+	"The statement seam's IR rows for one module body (P4.2).  ``ms:<kind>''
+	counts every statement (___irCensusStatements:prefix:def:); beside it
+	``msi:<kind>'' counts those BUILT THROUGH IR, so ms - msi is what is still
+	text, and ``msr:<reason>'' says why a statement of a kind P4.2 builds is not
+	(ModuleBodySeam class >> irRefusalOf:).  ``mh:irHelper'' counts the IR
+	helpers among ``mh:helper'', and ``mh:irFallback'' the IR groups that failed
+	to build and compiled as text."
+
+	| m stmts ir |
+	m := self ___irCensusModuleName___.
+	ir := IdentitySet new.
+	aSeam helpers do: [:h |
+		(h at: 6) == #ir ifTrue: [
+			self ___irCensusNote___: #'mh:irHelper' module: m def: '<module>' count: 1.
+			(h at: 4) to: (h at: 5) do: [:k | ir add: k]]].
+	aSeam irFallbacks > 0 ifTrue: [
+		self ___irCensusNote___: #'mh:irFallback' module: m def: '<module>' count: aSeam irFallbacks].
+	stmts := aSeam moduleStatements.
+	stmts doWithIndex: [:stmt :k |
+		| r |
+		(ir includes: k)
+			ifTrue: [
+				self ___irCensusNote___: ('msi:' , (self ___irCensusKindOf___: stmt)) asSymbol
+					module: m def: '<module>' count: 1]
+			ifFalse: [
+				r := aSeam refusals isNil ifTrue: [nil] ifFalse: [aSeam refusals at: k].
+				(r notNil and: [r ~~ #text]) ifTrue: [
+					self ___irCensusNote___: ('msr:' , r asString) asSymbol
+						module: m def: '<module>' count: 1]]]
+
+]
+
+{ #category : 'Grail-Class Compilation' }
 importlib class >> ___irCensusNote___: aReason module: aModuleName def: aDefName count: n [
 	| census counts examples list byModule perModule |
 	census := self ___irCensus___.
@@ -6065,6 +6107,8 @@ importlib class >> ___irCodegenEnabledInvalidate___ [
 	temps removeKey: #'___grailIRCodegenChecked___' ifAbsent: [].
 	temps removeKey: #'___grailIRClassHelperEnabled___' ifAbsent: [].
 	temps removeKey: #'___grailIRClassHelperChecked___' ifAbsent: [].
+	temps removeKey: #'___grailIRModuleStatementsEnabled___' ifAbsent: [].
+	temps removeKey: #'___grailIRModuleStatementsChecked___' ifAbsent: [].
 
 ]
 
@@ -6615,6 +6659,40 @@ importlib class >> ___irModuleNameOf___: aMethod [
 
 ]
 
+{ #category : 'Grail-IR Codegen' }
+importlib class >> ___irModuleStatementsEnabled___ [
+	"Whether the statement seam builds the simple module statements through IR
+	(P4.2, ModuleBodySeam class >> irRefusalOf:) rather than keeping every
+	statement in text helpers, as P4.1 did.  Asked only on the IR arm: the text
+	arm has no seam at all.
+
+	On by default, read once per session from GRAIL_IR_MODULE_STATEMENTS with
+	the rule GRAIL_IR_CODEGEN uses (___irCodegenFlagFor___:).  Off is the A/B
+	control.  ___irModuleStatementsForce___: seeds it for a test;
+	___irCodegenEnabledInvalidate___ resets it."
+
+	| temps on |
+	temps := SessionTemps current.
+	(temps includesKey: #'___grailIRModuleStatementsChecked___')
+		ifTrue: [^ temps at: #'___grailIRModuleStatementsEnabled___' ifAbsent: [true]].
+	on := self ___irCodegenFlagFor___: (System gemEnvironmentVariable: 'GRAIL_IR_MODULE_STATEMENTS').
+	temps at: #'___grailIRModuleStatementsEnabled___' put: on.
+	temps at: #'___grailIRModuleStatementsChecked___' put: true.
+	^ on
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+importlib class >> ___irModuleStatementsForce___: aBoolean [
+	"Seed ___irModuleStatementsEnabled___ for a test, bypassing the env var."
+
+	| temps |
+	temps := SessionTemps current.
+	temps at: #'___grailIRModuleStatementsEnabled___' put: aBoolean.
+	temps at: #'___grailIRModuleStatementsChecked___' put: true
+
+]
+
 { #category : 'Grail-IR Regeneration' }
 importlib class >> ___irNoBuilderCauseOf___: aMethod for: aClass [
 	"Why no copy of aMethod could be generated for aClass, as a phrase for
@@ -6730,6 +6808,27 @@ importlib class >> ___irNoteModuleSeamFallback___: aModuleName error: anExceptio
 				, ') could not be built as statement helpers: '
 				, (self ___irErrorText___: anException)
 				, '. This is a Grail bug; without strict mode the body compiles as one text method instead.']
+
+]
+
+{ #category : 'Grail-IR Strict Mode' }
+importlib class >> ___irNoteModuleStatementsFallback___: aModuleName error: anException [
+	"A group of module statements the statement seam admitted for IR (P4.2)
+	raised while it was built, so it compiles as a text helper instead.
+	Counted and logged as an IR fallback, like a def's.  Never reached in
+	strict mode: there the seam lets the error through to its own handler,
+	which raises (___irNoteModuleSeamFallback___:error:)."
+
+	| temps log |
+	temps := SessionTemps current.
+	temps at: #'___grailIRFallbackCount___'
+		put: (temps at: #'___grailIRFallbackCount___' otherwise: 0) + 1.
+	self ___irSessionCount___: #'___grailIRFallbackTotal___'.
+	temps at: #'___grailIRLastError___'
+		put: ('<module statements> ' , aModuleName asString , ': ' , (self ___irErrorText___: anException)).
+	log := temps at: #'___grailIRFallbackLog___' otherwise: nil.
+	log isNil ifTrue: [log := OrderedCollection new. temps at: #'___grailIRFallbackLog___' put: log].
+	log size < 500 ifTrue: [log add: (temps at: #'___grailIRLastError___')]
 
 ]
 

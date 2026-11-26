@@ -1274,18 +1274,31 @@ AbstractNode >> ___emitIRElementsArrayOn___: aBuilder elts: aCollection starRuns
 	aStarRunBlock -- a call's arguments check their splats as a call's
 	(CallAst >> ___emitIRArgumentsArrayOn___:)."
 
-	| acc |
+	| acc plain flush |
 	(aCollection anySatisfy: [:e | e isKindOf: StarredAst]) ifFalse: [
 		^ self ___emitIRChunkedArrayOf___:
 			(aCollection collect: [:e | e ___emitIRValueOn___: aBuilder])
 			on: aBuilder].
+	"A RUN of plain elements between splats is ONE array, chunked as a brace
+	is, as printArgumentsArrayOn: writes it: one ``,'' link per element nested
+	the chain as deep as the call is wide, and a module-level call of 2,500
+	arguments around two splats was ``CompileError 1001, expression nesting
+	too deep'' (tests/python/large_call_arity.py, #1540), which the text had
+	already fixed.  The values are built in source order either way."
 	acc := aBuilder arrayOf: #().
+	plain := OrderedCollection new.
+	flush := [
+		plain isEmpty ifFalse: [
+			acc := aBuilder send: #, to: acc
+				with: { self ___emitIRChunkedArrayOf___: plain asArray on: aBuilder } env: 0.
+			plain := OrderedCollection new]].
 	aCollection do: [:e |
-		| run |
-		run := (e isKindOf: StarredAst)
-			ifTrue: [aStarRunBlock value: e]
-			ifFalse: [aBuilder arrayOf: { e ___emitIRValueOn___: aBuilder }].
-		acc := aBuilder send: #, to: acc with: { run } env: 0].
+		(e isKindOf: StarredAst)
+			ifTrue: [
+				flush value.
+				acc := aBuilder send: #, to: acc with: { aStarRunBlock value: e } env: 0]
+			ifFalse: [plain add: (e ___emitIRValueOn___: aBuilder)]].
+	flush value.
 	^ acc
 
 ]

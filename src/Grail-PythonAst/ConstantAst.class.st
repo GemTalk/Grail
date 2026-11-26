@@ -131,7 +131,16 @@ ConstantAst >> ___emitIRValueOn___: aBuilder [
 			to: (aBuilder globalNamed: #complex)
 			with: { re. im }
 			env: 1].
-	^ aBuilder obj: value
+	"A str, bytes or float literal is INVARIANT, as the Smalltalk compiler
+	makes every literal of a text method.  The literal node holds the very
+	object it is handed, and the parser's is an ordinary mutable one, so an IR
+	method's ``'ab''' accepted ``setattr('ab', 'zz', 1)'' -- a dynamic instVar
+	stored onto the method's own literal, readable by its next call -- where
+	CPython and the text arm raise AttributeError ('str' object has no
+	attribute 'zz' and no __dict__ ...).  A copy, so the AST's own object is
+	left as the text emit reads it."
+	(value isSpecial or: [value isInvariant]) ifTrue: [^ aBuilder obj: value].
+	^ aBuilder obj: (value copy immediateInvariant; yourself)
 
 ]
 

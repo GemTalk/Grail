@@ -3,7 +3,7 @@ S=sys.argv[1]
 STRUCT=('classMethod','nestedDef')
 # What is still TEXT (P0.2): rows importlib records beside the def reasons.
 # None of them is a top-level def, so every def total below leaves them out.
-TEXT_PREFIXES=('ms:','cs:','th:','in:','lit:','by:','tx:','cp:','cpb:','cpms:','mh:')
+TEXT_PREFIXES=('ms:','msi:','msr:','cs:','th:','in:','lit:','by:','tx:','cp:','cpb:','cpms:','mh:')
 def is_text_row(k): return k.startswith(TEXT_PREFIXES)
 def is_cm(k): return k=='classMethod' or k.startswith('cm:')
 def load(files):
@@ -176,6 +176,15 @@ def kind_table(c,prefix,head):
     for n,k in rows: out.append(f'| `{k}` | {n} | {100*n/tot:.1f}% |')
     out.append(f'| **total** | **{tot}** | |')
     return '\n'.join(out)
+def statement_table(c):
+    rows=sorted(((n,k[len('ms:'):]) for k,n in c.items() if k.startswith('ms:')),key=lambda r:(-r[0],r[1]))
+    tot=sum(n for n,_ in rows); tir=sum(c.get('msi:'+k,0) for _,k in rows)
+    out=['| statement | count | share | through IR | IR share |','| --- | ---: | ---: | ---: | ---: |']
+    for n,k in rows:
+        i=c.get('msi:'+k,0)
+        out.append(f'| `{k}` | {n} | {100*n/tot:.1f}% | {i} | {100*i/n:.1f}% |')
+    out.append(f'| **total** | **{tot}** | | **{tir}** | **{(100*tir/tot) if tot else 0:.1f}%** |')
+    return '\n'.join(out)
 def install_table(c):
     ir=c.get('in:IR+literal',0); txt=c.get('in:Grail-Class Methods',0)
     sup=sum(n for k,n in c.items() if k.startswith('in:') and k not in ('in:IR+literal','in:Grail-Class Methods'))
@@ -189,13 +198,20 @@ def install_table(c):
 def text_board(c,label):
     out=[text_section(c,label)]
     out.append(f'### Module statements ({label})\n')
-    out.append('Every top-level statement of every module compiled, by kind. **All of them are text today**: the module body is one text `initialize` (P4). A top-level `def` is a statement here too -- it binds the name in `initialize` -- while its own method is IR.\n')
-    out.append(kind_table(c,'ms:','statement')+'\n')
+    out.append('Every top-level statement of every module compiled, by kind (`ms:`), and how many of them are BUILT THROUGH IR (`msi:`, P4.2). The rest are text: a statement of a kind P4.2 does not build (a def, a class, a try, ...) and one P4.2 refuses, for the reasons in the next table. A top-level `def` is a statement here too -- it binds the name in the module body -- while its own method is IR.\n')
+    out.append(statement_table(c)+'\n')
+    refused=sorted(((n,k[len('msr:'):]) for k,n in c.items() if k.startswith('msr:')),key=lambda r:(-r[0],r[1]))
+    if refused:
+        out.append('Why a statement of a kind P4.2 builds stayed text (`msr:<reason>`, `ModuleBodySeam class >> irRefusalOf:`):\n')
+        out.append('\n'.join(['| statements | reason |','| ---: | --- |']+[f'| {n} | `{r}` |' for n,r in refused])+'\n')
     if c.get('mh:helper',0) or c.get('mh:fallback',0):
-        out.append(f'The statement seam (P4.1) compiled them as **{c.get("mh:helper",0)}** text helper methods '
-                   f'(`mh:helper`; {c.get("tx:moduleBody",0)} module-body compiles in all), splitting '
+        irh=c.get('mh:irHelper',0)
+        out.append(f'The statement seam (P4.1) compiled them as **{c.get("mh:helper",0)}** helper methods '
+                   f'(`mh:helper`), **{irh}** built through IR (`mh:irHelper`) and {c.get("mh:helper",0)-irh} compiled from text '
+                   f'({c.get("tx:moduleBody",0)} module-body text compiles in all), splitting '
                    f'{c.get("mh:split",0)} groups over budget (`mh:split`); {c.get("mh:overBudget",0)} single statements '
-                   f'stay over budget (`mh:overBudget`) and {c.get("mh:fallback",0)} bodies fell back to one text method (`mh:fallback`).\n')
+                   f'stay over budget (`mh:overBudget`), {c.get("mh:irFallback",0)} IR groups fell back to text (`mh:irFallback`) and '
+                   f'{c.get("mh:fallback",0)} bodies fell back to one text method (`mh:fallback`).\n')
     out.append(f'### Class-body statements ({label})\n')
     out.append('Every statement directly in a class body, by kind, wherever the class is. **All are emitted as text** (P3): a def\'s method is built through IR, but the statement that installs it is text in the class build.\n')
     out.append(kind_table(c,'cs:','statement')+'\n')

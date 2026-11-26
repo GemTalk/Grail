@@ -189,7 +189,7 @@ AugAssignAst >> ___emitIRModuleScopeAugOn___: aBuilder [
 	because a top-level def's ``self'' IS the module while a class method's is
 	not, and spelling it twice is how the two would drift."
 
-	| pair nameSym recv readSend augSend |
+	| pair nameSym recv readSend augSend v |
 	pair := self ___irSelectorPair___.
 	nameSym := target id asSymbol.
 	recv := self ___emitIRModuleReceiverOn___: aBuilder.
@@ -204,11 +204,18 @@ AugAssignAst >> ___emitIRModuleScopeAugOn___: aBuilder [
 					to: (aBuilder globalNamed: #NameError)
 					with: { aBuilder obj: 'name ''' , nameSym asString , ''' is not defined' })] }
 		env: 0.
+	"The value's nodes first, then the operation stamped at the STATEMENT, as
+	the text's ___curPos___ store names it and CPython reports it: built
+	inside the send, the operation took the position the value's emit left
+	behind, so ``x += 'a''' at module scope underlined the 'a'.  Building a
+	node does not order its evaluation -- the read is still the receiver, and
+	runs first."
+	v := value ___emitIRValueOn___: aBuilder.
+	aBuilder atNode: self.
 	augSend := aBuilder
 		send: #'___augmentedOp___:inplace:binary:'
 		to: readSend
-		with: { value ___emitIRValueOn___: aBuilder.
-			aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }.
+		with: { v. aBuilder obj: (pair at: 1). aBuilder obj: (pair at: 2) }.
 	aBuilder atNode: self.
 	aBuilder add: (aBuilder
 		send: #'dynamicInstVarAt:put:'

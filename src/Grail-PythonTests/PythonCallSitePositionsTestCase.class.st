@@ -104,9 +104,11 @@ PythonCallSitePositionsTestCase >> ___fixtureSource___ [
 PythonCallSitePositionsTestCase >> ___helperOffsetOf___: aHelperSelector [
 	"The source offset a statement helper ``___irModStmt_<offset>___'' is named for."
 
-	| s |
+	| s parts |
 	s := aHelperSelector asString.
-	^ (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) asNumber
+	"``___irModStmt_<offset>_<k>___'' when two helpers share an offset."
+	parts := (s copyFrom: ModuleBodySeam helperPrefix size + 1 to: s size - 3) subStrings: '_'.
+	^ (parts first asNumber * 100000) + (parts size > 1 ifTrue: [(parts at: 2) asNumber] ifFalse: [0])
 
 ]
 
@@ -265,7 +267,8 @@ PythonCallSitePositionsTestCase >> test_a_module_body_answers_only_its_own_posit
 
 	The positive control comes first: the stores really are embedded, or a
 	reader that never looked would pass too.  Summed over the body's methods:
-	one ``initialize'' on the text arm, the statement helpers on the IR arm."
+	one ``initialize'' on the text arm, the statement helpers on the IR arm --
+	the text ones for the stores, all of them for the positions."
 
 	| methods ownTotal embeddedTotal bodies |
 	methods := self ___stmtModuleBodyMethods___.
@@ -277,12 +280,17 @@ PythonCallSitePositionsTestCase >> test_a_module_body_answers_only_its_own_posit
 	methods do: [:m |
 		| src own pos |
 		src := m sourceString.
-		own := BaseException ___ownCurPosStoresIn___: src.
-		ownTotal := ownTotal + own size.
-		embeddedTotal := embeddedTotal + (self ___plainCountOf___: '___curPos___ := ' in: src).
-		self assert: (BaseException pythonPositionKindForMethod: m) equals: #curPos.
 		pos := BaseException pythonPositionsForMethod: m.
-		self assert: pos size equals: own size.
+		"A helper built through IR (P4.2) carries no stores: its source is the
+		Python of its own statements, and its positions are that source's
+		lines -- module-level lines too, which is what this test is about."
+		(BaseException pythonPositionKindForMethod: m) == #irSource
+			ifFalse: [
+				own := BaseException ___ownCurPosStoresIn___: src.
+				ownTotal := ownTotal + own size.
+				embeddedTotal := embeddedTotal + (self ___plainCountOf___: '___curPos___ := ' in: src).
+				self assert: (BaseException pythonPositionKindForMethod: m) equals: #curPos.
+				self assert: pos size equals: own size].
 		pos do: [:p |
 			self deny: (bodies includes: (p at: 1))
 				description: 'a module-body position is inside a def body: ' , p printString]].

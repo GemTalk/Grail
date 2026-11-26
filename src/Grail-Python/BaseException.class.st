@@ -4302,6 +4302,14 @@ BaseException class >> ___pythonFilenameForMethod___: aMethod [
 	reads the METHOD's source rather than a per-ip report."
 
 	| src p out k done |
+	"An IR-built method's attached source is its PYTHON, which carries no
+	stamp: a module body's IR statement helper (ModuleBodySeam, P4.2) is named
+	by its class, as every def of the module is (___pythonFileForClassOf___:).
+	Scanning it could only find the pattern in the user's own text.  The seam's
+	dispatcher is IR too, and its attached source is the Smalltalk that holds
+	the stamp the class answer is read from."
+	((self ___isIRPythonMethod___: aMethod)
+		and: [(self ___isModuleSeamDispatcher___: aMethod) not]) ifTrue: [^ nil].
 	src := [aMethod @env0:sourceString] @env0:on: Error do: [:ex |
 		(ex @env0:isKindOf: AlmostOutOfStackError) ifTrue: [ex @env0:pass].
 		ex @env0:return: nil].

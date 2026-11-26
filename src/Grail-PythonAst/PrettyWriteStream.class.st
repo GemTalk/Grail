@@ -61,19 +61,39 @@ PrettyWriteStream >> mapCommentFrom: firstIndex to: lastIndex shiftedBy: anInteg
 	several methods (ModuleBodySeam, P4.1), so each method takes the entries of
 	its own statements and shifts them from the stream's origin to its own."
 
-	| out |
-	(positionMap isNil or: [lastIndex < firstIndex]) ifTrue: [^ ''].
+	^ self mapCommentSegments: { { firstIndex. lastIndex. anInteger } }
+
+]
+
+{ #category : 'Grail-position map' }
+PrettyWriteStream >> mapCommentSegments: someSegments [
+	"mapCommentFrom:to:shiftedBy: over SEVERAL ranges of the map, in order, each
+	{ firstIndex. lastIndex. shift } with a shift of its own, written as ONE
+	comment.  For a method assembled from pieces of the stream that were not
+	written next to each other: P4.2 writes a statement whose IR build failed
+	after the rest (ModuleBodySeam), so the method that holds it in source order
+	takes its text and its entries from two places.  Answers an empty String
+	when no range holds an entry."
+
+	| out any |
+	positionMap isNil ifTrue: [^ ''].
 	out := WriteStream on: String new.
 	out nextPut: Character lf.
 	out nextPutAll: '"___GRAILPOS___'.
-	firstIndex to: lastIndex by: 6 do: [:i |
-		out nextPut: $ .
-		out nextPutAll: ((positionMap at: i) + anInteger) printString.
-		out nextPut: $ .
-		out nextPutAll: ((positionMap at: i + 1) + anInteger) printString.
-		2 to: 5 do: [:k |
+	any := false.
+	someSegments do: [:seg |
+		| shift |
+		shift := seg at: 3.
+		(seg at: 1) to: (seg at: 2) by: 6 do: [:i |
+			any := true.
 			out nextPut: $ .
-			out nextPutAll: (positionMap at: i + k) printString]].
+			out nextPutAll: ((positionMap at: i) + shift) printString.
+			out nextPut: $ .
+			out nextPutAll: ((positionMap at: i + 1) + shift) printString.
+			2 to: 5 do: [:k |
+				out nextPut: $ .
+				out nextPutAll: (positionMap at: i + k) printString]]].
+	any ifFalse: [^ ''].
 	out nextPutAll: ' "'.
 	^ out contents
 
