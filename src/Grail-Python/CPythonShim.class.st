@@ -2288,6 +2288,16 @@ CPythonShim >> foreignGetAttr: cPtr name: aString [
 ]
 
 { #category : 'Grail-Calling' }
+CPythonShim >> foreignIsBaseType: cPtr [
+	"Whether a wheel's TYPE has Py_TPFLAGS_BASETYPE, i.e. lets a class derive
+	from it.  nil when cPtr is not a wheel's type.  See shimForeignIsBaseType
+	in cpython.cc."
+
+	^ self ___shimUserAction: #shimForeignIsBaseType withArgs: { cPtr }
+
+]
+
+{ #category : 'Grail-Calling' }
 CPythonShim >> foreignOp: cPtr name: aDunder with: a with: b [
 	"``self <op> a'' on a wheel's own object, by its C slot: aDunder names the
 	operator (``__add__'', ``__radd__'', ``__getitem__'', ...), a and b are the

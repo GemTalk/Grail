@@ -5241,6 +5241,36 @@ CPythonShimTestCase >> testStrString [
 
 ]
 
+{ #category : 'Grail-Tests - NumPy Stage 3' }
+CPythonShimTestCase >> testSubclassingAWheelTypeWithoutBaseTypeIsRefused [
+	"A class statement or a type() call whose bases include a wheel's type
+	without Py_TPFLAGS_BASETYPE raises CPython's best_base TypeError, naming
+	the type's tp_name, wherever it stands among the bases.  A PyO3
+	#[pyclass] has the flag only when declared with `subclass', so rpds-py's
+	List is refused; Grail built a ShimForeignSubclass over it (#2315).  Box
+	has the flag and is still a base.  The expected strings are CPython
+	3.14's, from _grail_demo built against it."
+
+	| soPath |
+	soPath := importlib grailDir , '/lib/_grail_demo.so'.
+	(GsFile existsOnServer: soPath) ifFalse: [^ self skip: 'lib/_grail_demo.so not built'].
+	self assert: (self eval: 'import _grail_demo as d
+def sub(*bases):
+    try:
+        class S(*bases): pass
+        return S.__name__
+    except TypeError as e:
+        return str(e)
+def typ(*bases):
+    try:
+        return type(''T'', bases, {}).__name__
+    except TypeError as e:
+        return str(e)
+repr((sub(d.Row), sub(d.Pmap), sub(type(d.make_plain())), sub(object, d.Row), sub(d.Box), typ(d.Row), typ(d.Box)))')
+		equals: '("type ''_grail_demo.Row'' is not an acceptable base type", "type ''_grail_demo.Pmap'' is not an acceptable base type", "type ''_grail_demo.Plain'' is not an acceptable base type", "type ''_grail_demo.Row'' is not an acceptable base type", ''S'', "type ''_grail_demo.Row'' is not an acceptable base type", ''T'')'
+
+]
+
 { #category : 'Grail-Tests - Wrapper lifetime' }
 CPythonShimTestCase >> testSweepDeferredWhileCallInFlight [
 	"While a shim call is in flight (___duringCallDo:), crossing the
