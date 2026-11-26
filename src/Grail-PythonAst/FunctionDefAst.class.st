@@ -1342,6 +1342,138 @@ FunctionDefAst >> ___emitIRMissingPositionalCheckOn___: aBuilder pos: posLeaf kw
 ]
 
 { #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRModuleDecoratorChain___: decoList index: i on: aBuilder [
+	"printDecoratorChainOn:decorators:index:, send for send: ``(deco
+	___pyCallValue___: { <inner> } kw: nil)'' for the i-th decorator, nearest
+	the def innermost, and at the base the function the def compiled to, read
+	as a BoundMethod from the module instance.  Each decorator expression is
+	evaluated before the ones under it, as the send's receiver is, and each
+	call is stamped at its OWN decorator's node (#1406), after its receiver
+	and argument have been built, since their emits stamp the builder too."
+
+	| node recv inner |
+	i > decoList size ifTrue: [
+		^ aBuilder
+			send: #'___moduleAttrLoad___:'
+			to: (aBuilder
+				send: #'___instance___'
+				to: (aBuilder globalNamed: CallAst moduleClassBeingCompiled name asSymbol)
+				with: { } env: 0)
+			with: { aBuilder obj: name asSymbol } env: 1].
+	node := (self ___decoratorNodeFor___: decoList index: i) ifNil: [self].
+	aBuilder atNode: node.
+	recv := self ___emitIRDecoratorValue___: (decoList at: i) on: aBuilder.
+	inner := self ___emitIRModuleDecoratorChain___: decoList index: i + 1 on: aBuilder.
+	aBuilder atNode: node.
+	^ aBuilder
+		send: #'___pyCallValue___:kw:'
+		to: recv
+		with: { aBuilder arrayOf: { inner }. aBuilder nilLit }
+		env: 1
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRModuleDefaultsOn___: aBuilder [
+	"___emitModuleDefaultsBlockOn___:, send for send:
+
+	    self ___setFunctionDefaults___: 'f' keys: #( #( posKey ... ) #( 'k' kwKey ... ) )
+	        block: [{ { posDefault ... } . { 'k'. kwDefault ... } }]
+
+	each default the module-keyed memo read (___irDefTimeDefault___:node:on:,
+	the IR method's own binding of it), keyed by the transport name for a
+	positional parameter and the Python name for a keyword-only one, as the
+	text keys them.  The keys go in as ONE invariant literal, as the text's
+	literal array is."
+
+	| pos kw keys blk |
+	pos := self ___defaultedPositionalParams___.
+	kw := self ___defaultedKeywordOnlyParams___.
+	(pos isEmpty and: [kw isEmpty]) ifTrue: [^ self].
+	keys := {
+		(pos collect: [:pair |
+			(self ___moduleDefaultKeyFor___: (self transportParamName: (pair at: 1))) asSymbol])
+				asArray immediateInvariant.
+		(kw inject: OrderedCollection new into: [:acc :pair |
+			acc add: (pair at: 1) asString copy immediateInvariant;
+				add: (self ___moduleDefaultKeyFor___: (pair at: 1)) asSymbol.
+			acc]) asArray immediateInvariant } immediateInvariant.
+	blk := aBuilder inBlockDo: [
+		| posVals kwVals |
+		posVals := pos collect: [:pair |
+			self ___irDefTimeDefault___: (self transportParamName: (pair at: 1))
+				node: (pair at: 2) on: aBuilder].
+		kwVals := OrderedCollection new.
+		kw do: [:pair |
+			kwVals add: (aBuilder obj: (pair at: 1) asString).
+			kwVals add: (self ___irDefTimeDefault___: (pair at: 1) node: (pair at: 2) on: aBuilder)].
+		aBuilder add: (aBuilder arrayOf: {
+			aBuilder arrayOf: posVals asArray.
+			aBuilder arrayOf: kwVals asArray })].
+	aBuilder atNode: self.
+	aBuilder add: (aBuilder
+		send: #'___setFunctionDefaults___:keys:block:'
+		to: aBuilder selfNode
+		with: { aBuilder obj: name asString. aBuilder obj: keys. blk }
+		env: 0)
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___emitIRModuleDefStatementOn___: aBuilder [
+	"A top-level def's STATEMENT, built through IR at module scope (plan P4.3a):
+	printSmalltalkOn:'s module-level branch, send for send.  The function itself
+	is the module class's method, compiled before the body runs (importlib's
+	topLevelDefs pass); what the statement does is record what that method
+	cannot carry -- the PEP 649 annotate function, the inspect.signature spec,
+	the default values -- clear a slot an earlier statement stored over the
+	name, and apply the decorators, storing their result in the slot.
+
+	The BINDING is unchanged: an undecorated def stores nothing, so the name is
+	the method from the start of the body, as on the text arm (#2166 is its own
+	change)."
+
+	| decos |
+	self hasAnnotations ifTrue: [
+		| blk |
+		blk := self ___emitIRAnnotateBlockOn___: aBuilder.
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: #'___setFunctionAnnotations___:annotate:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: name asString. blk }
+			env: 0)].
+	self hasSignatureSpec ifTrue: [
+		| spec |
+		spec := self ___emitIRSignatureSpecOn___: aBuilder.
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: #'___setFunctionSignature___:spec:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: name asString. spec }
+			env: 0)].
+	self ___emitIRModuleDefaultsOn___: aBuilder.
+	decos := self applicableModuleDecorators.
+	(decos notEmpty or: [self ___rebindsAnEarlierModuleBinding___]) ifTrue: [
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: #'removeDynamicInstVar:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: name asSymbol }
+			env: 0)].
+	decos isEmpty ifTrue: [^ self].
+	[:chain |
+		aBuilder atNode: self.
+		aBuilder add: (aBuilder
+			send: #'dynamicInstVarAt:put:'
+			to: aBuilder selfNode
+			with: { aBuilder obj: name asSymbol. chain }
+			env: 0)]
+		value: (self ___emitIRModuleDecoratorChain___: decos index: 1 on: aBuilder)
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 FunctionDefAst >> ___emitIRNestedBlockOn___: aBuilder [
 	"The closure block itself: ``[:___positional___ :___kwargs___ | | params
 	locals | prologue. body]''.  Every parameter and body local is a block temp
@@ -2034,6 +2166,11 @@ FunctionDefAst >> ___emitIRStatementOn___: aBuilder [
 	the class-body ``if'' builds one, and stored on the class."
 	self ___inClassBodyRuntimeScope___
 		ifTrue: [^ self ___emitIRClassBodyRuntimeDefOn___: aBuilder].
+	"A TOP-LEVEL def, as a statement of the module body's IR helper (plan
+	P4.3a): its function is the module class's method, and the statement
+	records the rest -- printSmalltalkOn:'s module-level branch."
+	(CallAst moduleClassBeingCompiled notNil and: [self isModuleLevelDef])
+		ifTrue: [^ self ___emitIRModuleDefStatementOn___: aBuilder].
 	"A decorator that reads the def's own name is evaluated before the def
 	exists -- the text's pre-evaluated wrapper (nestedDef:decoratorReadsOwnName
 	is retired)."
@@ -4029,6 +4166,33 @@ FunctionDefAst >> ___irMethodModeTailReason___ [
 	untouched).  Every read and write of the local resolves to the temp, which
 	is exactly the text's block-temp semantics."
 	^ nil
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+FunctionDefAst >> ___irModuleDefStatementReason___ [
+	"Why this TOP-LEVEL def's statement cannot be built through IR at module
+	scope (___emitIRModuleDefStatementOn___:), as a census Symbol, or nil when
+	it can.  The statement evaluates only the def's HEADER -- its decorators,
+	and the annotation and default expressions it wraps in blocks -- in the
+	module's scope, which has no locals; its body is the module class's
+	method, judged by its own seam.  Asked in the module body's emit context
+	(ModuleBodySeam class >> irRefusalOf:).  Guarded: eligibility never
+	raises."
+
+	^ [
+		(decorator_list ifNil: [#()]) do: [:d |
+			(self ___irNestedDecoratorRefusal___: d locals: Set new)
+				ifNotNil: [:r | ^ ('moduleDef:' , (r asString copyReplaceAll: 'nestedDef:' with: '')) asSymbol]].
+		(self ___defaultedPositionalParams___ , self ___defaultedKeywordOnlyParams___) do: [:pair |
+			((pair at: 2) ___irEligibleValueLocals___: Set new)
+				ifFalse: [^ #'moduleDef:defaultExpr']].
+		(self hasAnnotations and: [(self ___irAnnotationsEligible___: Set new) not])
+			ifTrue: [^ #'moduleDef:annotationExpr'].
+		nil]
+		on: Error do: [:ex |
+			(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+			ex return: #'invariant:moduleDef-probeRaised']
 
 ]
 

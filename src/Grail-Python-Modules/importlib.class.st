@@ -5841,8 +5841,10 @@ importlib class >> ___irCensusModuleStatements___: aSeam [
 	``msi:<kind>'' counts those BUILT THROUGH IR, so ms - msi is what is still
 	text, and ``msr:<reason>'' says why a statement of a kind P4.2 builds is not
 	(ModuleBodySeam class >> irRefusalOf:).  ``mh:irHelper'' counts the IR
-	helpers among ``mh:helper'', and ``mh:irFallback'' the IR groups that failed
-	to build and compiled as text."
+	helpers among ``mh:helper'', ``mh:irSourceChars'' the characters of Python
+	source they carry (P4.3a: a def statement's helper attaches the def's body
+	too), and ``mh:irFallback'' the IR groups that failed to build and compiled
+	as text."
 
 	| m stmts ir |
 	m := self ___irCensusModuleName___.
@@ -5850,6 +5852,8 @@ importlib class >> ___irCensusModuleStatements___: aSeam [
 	aSeam helpers do: [:h |
 		(h at: 6) == #ir ifTrue: [
 			self ___irCensusNote___: #'mh:irHelper' module: m def: '<module>' count: 1.
+			self ___irCensusNote___: #'mh:irSourceChars' module: m def: '<module>'
+				count: (h at: 3) sourceString size.
 			(h at: 4) to: (h at: 5) do: [:k | ir add: k]]].
 	aSeam irFallbacks > 0 ifTrue: [
 		self ___irCensusNote___: #'mh:irFallback' module: m def: '<module>' count: aSeam irFallbacks].

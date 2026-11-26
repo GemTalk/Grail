@@ -11,13 +11,20 @@ module can mix methods.
 IR HELPERS AND TEXT HELPERS (P4.2).  A statement the IR path can build at
 module scope -- an expression, a plain, augmented or annotated assignment, an
 import (a star import too), a del, an if / for / while over such statements,
-pass, raise, assert, global (irRefusalOf:) -- is built through IR, and a run of them is an IR
+pass, raise, assert, global, and (P4.3a) a def or async def, top level or in
+an if or a loop (irRefusalOf:) -- is built through IR, and a run of them is an IR
 helper: its statements' own IR emitters (___emitIRStatementOn___:) on one
 PyMethodIRBuilder, with the module source of the run attached as its Python,
-exactly as a def's IR method is built.  Every other statement -- a def, a
-class, a try, a with, a statement holding a lambda or a comprehension (P4.3,
+exactly as a def's IR method is built.  Every other statement -- a class, a
+try, a with, a statement holding a lambda or a comprehension (P4.3b, P4.3c,
 P4.4) -- is text, and a run of those is a text helper, cut from the text
 emit as in P4.1.  A run is ONE KIND: the two alternate in source order.
+
+A top-level def's STATEMENT is not its function: the function is the module
+class's method, compiled before the body runs, and the statement records what
+the method cannot carry (annotate function, signature, defaults) and applies
+the decorators (FunctionDefAst >> ___emitIRModuleDefStatementOn___:).  Only the
+statement's header is judged at module scope (___irRefusalInDefHeader___:).
 
 WHY SEVERAL METHODS, AND WHY FOR GOOD.  P0.7 measured two limits that are per
 METHOD: past about 12k words of code a method loses its traceback frame (the
@@ -38,9 +45,11 @@ header, with its own slice of the map, so splitting a text group re-cuts and
 never re-runs the text codegen, whose side effects (def ids, sequence numbers)
 must happen once.  An IR group is built from the AST, and a split builds each
 half again: the statements it admits are the ones whose IR build registers
-nothing (no def, class, lambda or comprehension), which is what makes that
-safe.  An IR group whose build FAILS is written as text then, at the end of
-the stream (___emitTextFrom:to:), and compiled as a text helper -- a counted
+nothing (no class, lambda or comprehension), which is what makes that safe.
+A def statement registers nothing either: a top-level def's records are sends
+made when the statement RUNS, and a def in an if or a loop builds its
+closure's IR again for each half.  An IR group whose build FAILS is written
+as text then, at the end of the stream (___emitTextFrom:to:), and compiled as a text helper -- a counted
 fallback, and a raise in strict mode.  A method may therefore take its text
 from pieces of the stream that are not adjacent (sourceFor:chunks:).
 
@@ -89,6 +98,35 @@ ModuleBodySeam class >> ___admitsStatement___: aStatement nested: aBoolean [
 
 ]
 
+{ #category : 'private' }
+ModuleBodySeam class >> ___earliestNodeIn: aStatement [
+	"The node of aStatement that starts EARLIEST in the module source, when that
+	is before the statement itself, or nil.  Only a PEP 695 generic def's
+	synthesised assignment has one -- the decorator it calls precedes the def
+	it is placed at -- so only an assignment is walked."
+
+	| best walk |
+	(aStatement isKindOf: AssignAst) ifFalse: [^ nil].
+	aStatement beginPosition isNil ifTrue: [^ nil].
+	best := nil.
+	walk := nil.
+	walk := [:v |
+		(v isKindOf: SequenceableCollection)
+			ifTrue: [v isString ifFalse: [v do: [:e | walk value: e]]]
+			ifFalse: [
+				(v isKindOf: AbstractNode) ifTrue: [
+					((v respondsTo: #beginPosition) and: [v beginPosition notNil
+						and: [v beginPosition < aStatement beginPosition
+						and: [best isNil or: [v beginPosition < best beginPosition]]]])
+							ifTrue: [best := v].
+					v class allInstVarNames doWithIndex: [:nm :i |
+						nm == #parent ifFalse: [walk value: (v instVarAt: i)]]]]].
+	walk value: aStatement value.
+	(best notNil and: [best beginLine isNil]) ifTrue: [^ nil].
+	^ best
+
+]
+
 { #category : 'eligibility' }
 ModuleBodySeam class >> ___irRefusalBelow___: aNode [
 	"The first construct beneath aNode that keeps its statement on text at
@@ -99,6 +137,22 @@ ModuleBodySeam class >> ___irRefusalBelow___: aNode [
 	aNode class allInstVarNames doWithIndex: [:nameSym :i |
 		nameSym == #parent ifFalse: [
 			(self ___irRefusalInValue___: (aNode instVarAt: i)) ifNotNil: [:r | ^ r]]].
+	^ nil
+
+]
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> ___irRefusalInDefHeader___: aDef [
+	"___irRefusalBelow___: for a def STATEMENT: only the parts its statement
+	evaluates in the module's scope -- the decorators, and the parameter
+	list's defaults and annotations, and the return annotation (plan P4.3a).
+	The BODY is not a module-scope construct: a top-level def's body is the
+	module class's method, a def nested in an if or a loop is a closure, and
+	each is judged by its own predicate.  A lambda or a comprehension in it is
+	in a function's scope, not the module's."
+
+	{ aDef decorator_list. aDef args. aDef returns } do: [:each |
+		(self ___irRefusalInValue___: each) ifNotNil: [:r | ^ r]].
 	^ nil
 
 ]
@@ -128,14 +182,18 @@ ModuleBodySeam class >> ___irRefusalInValue___: aValue [
 	cls := aValue class.
 	(aValue isKindOf: StatementAst) ifTrue: [
 		(self ___admitsStatement___: aValue nested: true) ifFalse: [
-			^ ('nested:' , (importlib ___irCensusKindOf___: aValue)) asSymbol]].
+			^ ('nested:' , (importlib ___irCensusKindOf___: aValue)) asSymbol].
+		(aValue isKindOf: FunctionDefAst) ifTrue: [
+			^ self ___irRefusalInDefHeader___: aValue]].
 	"A PEP 695 ``class C[T]'' or ``def f[T]'' is rewritten by the parser into a
 	scope def, ``C = deco(___generic_parameters_of_C___())'' and a del, the last
 	two at the class's offset; the text stamps the decorator's call with the
 	decorator's line (CPython's), the IR call node has only the class's.  They
-	are the class or def statement's own, and go with it (P4.3, P4.4)."
+	are the class statement's own, and go with it (P4.4).  A generic DEF's
+	(P4.3a) are built through IR: its call node is at the decorator's line."
 	(cls == NameAst and: [(aValue id asString beginsWith: '___generic_parameters_of_')
-		and: [aValue id asString endsWith: '___']])
+		and: [(aValue id asString endsWith: '___')
+		and: [(self ___typeParamScopeBuildsADef___: aValue) not]]])
 			ifTrue: [^ #'typeParams'].
 	cls == LambdaAst ifTrue: [^ #'lambda'].
 	({ ListCompAst. SetCompAst. DictCompAst. GeneratorExpAst } includes: cls)
@@ -163,6 +221,32 @@ ModuleBodySeam class >> ___limit: anIndex default: anInteger [
 	forced := SessionTemps current at: #'GrailModuleSeamLimits' otherwise: nil.
 	forced isNil ifTrue: [^ anInteger].
 	^ (forced at: anIndex) ifNil: [anInteger]
+
+]
+
+{ #category : 'eligibility' }
+ModuleBodySeam class >> ___typeParamScopeBuildsADef___: aNameAst [
+	"Is aNameAst, a read of a PEP 695 scope function
+	``___generic_parameters_of_<name>___'' in a module statement, the read of
+	a generic DEF's scope -- one whose body defines the function of that name,
+	not a class?  Found among the module's statements: the scope def is a
+	sibling of the statement holding the read."
+
+	| stmt block scope id generic |
+	stmt := aNameAst.
+	[stmt notNil and: [((stmt parent isKindOf: BlockAst)
+		and: [stmt parent parent isKindOf: ModuleAst]) not]]
+		whileTrue: [stmt := stmt parent].
+	stmt isNil ifTrue: [^ false].
+	block := stmt parent.
+	scope := (block body ifNil: [#()]) detect: [:each |
+		(each isKindOf: FunctionDefAst) and: [each name asString = aNameAst id asString]]
+		ifNone: [nil].
+	scope isNil ifTrue: [^ false].
+	id := aNameAst id asString.
+	generic := id copyFrom: '___generic_parameters_of_' size + 1 to: id size - 3.
+	^ (scope body body ifNil: [#()]) anySatisfy: [:each |
+		(each isKindOf: FunctionDefAst) and: [each name asString = generic]]
 
 ]
 
@@ -229,6 +313,13 @@ ModuleBodySeam class >> irRefusalOf: aStatement [
 	(aStatement beginPosition isNil
 		or: [aStatement endPosition isNil
 		or: [aStatement beginLine isNil]]) ifTrue: [^ #'noPosition'].
+	"A top-level def: its header, then its own predicate (plan P4.3a)."
+	(aStatement isKindOf: FunctionDefAst) ifTrue: [
+		^ [(self ___irRefusalInDefHeader___: aStatement)
+			ifNil: [aStatement ___irModuleDefStatementReason___]]
+			on: Error do: [:ex |
+				(ex isKindOf: AlmostOutOfStackError) ifTrue: [ex pass].
+				ex return: #'invariant:predicateRaised']].
 	^ [(self ___irRefusalBelow___: aStatement) ifNil: [
 		(aStatement ___irEligibleStatementLocals___: Set new)
 			ifTrue: [nil]
@@ -242,10 +333,12 @@ ModuleBodySeam class >> irRefusalOf: aStatement [
 
 { #category : 'eligibility' }
 ModuleBodySeam class >> irStatementClasses [
-	"The statement kinds P4.2 builds through IR at module scope."
+	"The statement kinds built through IR at module scope: P4.2's, and the
+	def statement (P4.3a), top level or in an if or a loop."
 
-	^ { AnnAssignAst. AssertAst. AssignAst. AugAssignAst. DeleteAst. ExprAst.
-		ForAst. GlobalAst. IfAst. ImportAst. ImportFromAst. PassAst. RaiseAst. WhileAst }
+	^ { AnnAssignAst. AssertAst. AssignAst. AsyncFunctionDefAst. AugAssignAst.
+		DeleteAst. ExprAst. ForAst. FunctionDefAst. GlobalAst. IfAst. ImportAst.
+		ImportFromAst. PassAst. RaiseAst. WhileAst }
 
 ]
 
@@ -335,6 +428,46 @@ ModuleBodySeam class >> withinBudget: aMethod [
 ]
 
 { #category : 'private' }
+ModuleBodySeam >> ___blankBodyOf: aStatement in: aSlice from: aBegin [
+	"aSlice is the module source from offset aBegin on.  When aStatement is a
+	top-level def whose body lies in aSlice, overwrite that body's characters
+	with spaces, keeping its line breaks: the offsets and line numbers of
+	everything after it are unchanged, and the body's lines are blank."
+
+	| first last |
+	first := self ___bodyStartOf: aStatement.
+	first isNil ifTrue: [^ self].
+	last := (aStatement endPosition ifNil: [^ self]) - aBegin + 1 min: aSlice size.
+	(first - aBegin + 1) to: last do: [:i |
+		| c |
+		c := aSlice at: i.
+		(c == Character lf or: [c == Character cr]) ifFalse: [aSlice at: i put: Character space]]
+
+]
+
+{ #category : 'private' }
+ModuleBodySeam >> ___bodyStartOf: aStatement [
+	"The module offset where a TOP-LEVEL def's body begins, or nil for any other
+	statement (a def nested in an if or a loop is a closure this helper builds,
+	whose body is its own code)."
+
+	| stmts |
+	(aStatement isKindOf: FunctionDefAst) ifFalse: [^ nil].
+	aStatement isModuleLevelDef ifFalse: [^ nil].
+	aStatement body isNil ifTrue: [^ nil].
+	stmts := aStatement body body ifNil: [#()].
+	stmts isEmpty ifTrue: [^ nil].
+	"A def the parser SYNTHESISED -- a PEP 695 scope function -- has its body
+	at its own offset (every token of it is placed at the class or def it
+	stands for), so there is no body text to leave out."
+	(stmts first beginPosition isNil
+		or: [aStatement beginPosition isNil
+		or: [stmts first beginPosition <= aStatement beginPosition]]) ifTrue: [^ nil].
+	^ stmts first beginPosition
+
+]
+
+{ #category : 'private' }
 ModuleBodySeam >> ___buildIR: aSelector from: firstStmt to: lastStmt [
 	"Build statements firstStmt..lastStmt as ONE IR method, install it under
 	aSelector in category 'Grail-Module Body', and answer it.
@@ -349,19 +482,38 @@ ModuleBodySeam >> ___buildIR: aSelector from: firstStmt to: lastStmt [
 	scope a name is no local of the builder's, so every load and store goes to
 	the module instance, as the text's do."
 
-	| b stmts src begin end slice path meth |
+	| b stmts src begin end slice path meth line |
 	(SessionTemps current at: #'GrailModuleSeamFailIR' otherwise: false) == true
 		ifTrue: [Error signal: 'ModuleBodySeam failIRBuildsForce: a forced IR build failure'].
 	stmts := (firstStmt to: lastStmt) collect: [:k | (chunks at: k + 1) at: 1].
 	src := moduleAst source.
 	begin := stmts first beginPosition.
 	end := (stmts last endPosition ifNil: [src size]) min: src size.
+	"A TOP-LEVEL DEF'S BODY IS NOT THIS METHOD'S (P4.3a): it is the module
+	class's method, which carries it already.  Attached here, its lines would
+	be this helper's positions (BaseException class >> pythonPositionsForMethod:
+	answers every non-blank line of an IR method's slice) -- the module body
+	answering positions that belong to its functions, which #1137 removed --
+	and every module would carry its functions' source twice.  So a group
+	ENDING in a def stops before the body, and a def inside the group keeps
+	its body's offsets and line breaks but no text (___blankBodyOf:in:from:)."
+	(self ___bodyStartOf: stmts last) ifNotNil: [:p | end := (p - 1) min: end].
+	"A generic def's synthesised ``f = deco(___generic_parameters_of_f___())''
+	starts at the def, and its decorator, which it calls, BEFORE it: the slice
+	has to reach back to the decorator, or the call's offset falls outside it
+	and its frame reads the wrong line.  Only a group that starts with such a
+	statement needs it -- a split can make one."
+	line := stmts first beginLine.
+	stmts do: [:each |
+		(self class ___earliestNodeIn: each) ifNotNil: [:n |
+			n beginPosition < begin ifTrue: [begin := n beginPosition. line := n beginLine]]].
 	b := PyMethodIRBuilder class: moduleClass selector: aSelector asSymbol env: 1.
 	slice := src copyFrom: begin to: end.
+	stmts do: [:each | self ___blankBodyOf: each in: slice from: begin].
 	slice last == Character lf ifFalse: [slice lf].
 	path := moduleAst path ifNil: [AbstractNode ___sourceFilename___].
-	slice add: '# line '; add: stmts first beginLine asString; add: ' file '; add: path asString; lf.
-	b sourceString: slice fileName: AbstractNode ___sourceFilename___ line: stmts first beginLine.
+	slice add: '# line '; add: line asString; add: ' file '; add: path asString; lf.
+	b sourceString: slice fileName: AbstractNode ___sourceFilename___ line: line.
 	b sourceBase: begin.
 	moduleAst ___withSeamContextDo: [
 		stmts do: [:each | each ___emitIRStatementOn___: b]].
