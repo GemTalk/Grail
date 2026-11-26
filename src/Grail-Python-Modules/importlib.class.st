@@ -9932,12 +9932,22 @@ importlib class >> ___refuseUnacceptableBases___: bases [
 	test_unsubclassable_types, test_errors).
 
 	A class statement hands over a sole base as written, so a Behavior is
-	asked as one base."
+	asked as one base.
+
+	A wheel's type is asked in C, for Py_TPFLAGS_BASETYPE, and named by its
+	tp_name, as CPython's message does: ``type 'rpds.List' is not an
+	acceptable base type'' (#2315).  A PyO3 #[pyclass] lacks the flag unless
+	declared with `subclass`."
 
 	((bases isKindOf: Behavior) ifTrue: [{ bases }] ifFalse: [bases]) do: [:base |
 		(self ___isFinalType___: base) ifTrue: [
 			^ TypeError @env1:___signal___: (self ___notAnAcceptableBaseMessageFor:
-				(base @env1:___pyAttrLoad___: #'__name__'))]]
+				(base @env1:___pyAttrLoad___: #'__name__'))].
+		((base isKindOf: ShimForeignObject)
+			and: [(CPythonShim current foreignIsBaseType: base cPtr) == false])
+				ifTrue: [
+					^ TypeError @env1:___signal___:
+						(self ___notAnAcceptableBaseMessageFor: base typeName)]]
 
 ]
 

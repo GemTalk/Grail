@@ -9226,6 +9226,22 @@ static OopType shimForeignSequenceCheck(OopType objOop)
         ? OOP_TRUE : OOP_FALSE;
 }
 
+/* shimForeignIsBaseType: whether a wheel's TYPE lets a class derive from it,
+   i.e. has Py_TPFLAGS_BASETYPE -- or nil when the pointer is not a wheel's
+   type.  CPython's best_base (Objects/typeobject.c) refuses a base without
+   the flag, "type '%.100s' is not an acceptable base type", and a PyO3
+   #[pyclass] has it only when declared with `subclass`.  Grail built a
+   ShimForeignSubclass over any wheel type, so `class L(rpds.List)` worked
+   under Grail and failed under CPython (#2315); asked by
+   importlib class >> ___refuseUnacceptableBases___:. */
+static OopType shimForeignIsBaseType(OopType typeOop)
+{
+    PyObject *t = (PyObject *)(intptr_t)GciOopToI64(typeOop);
+    if (!plausible_pyobj(t) || !plausible_pyobj(t->ob_type) || !is_foreign_type(t))
+        return OOP_NIL;
+    return (((PyTypeObject *)t)->tp_flags & Py_TPFLAGS_BASETYPE) ? OOP_TRUE : OOP_FALSE;
+}
+
 /* numpy's public functions are _ArrayFunctionDispatcher objects, and calling
    one from Grail cost two user-action re-entries: C calls the Python
    dispatcher back for the relevant arguments, then the Python implementation.
@@ -11598,6 +11614,7 @@ extern "C" void GciUserActionInit(void) {
     GCI_DECLARE_ACTION("shimForeignStrValue", shimForeignStrValue, 1);
     GCI_DECLARE_ACTION("shimForeignTypeCheck", shimForeignTypeCheck, 3);
     GCI_DECLARE_ACTION("shimForeignSequenceCheck", shimForeignSequenceCheck, 1);
+    GCI_DECLARE_ACTION("shimForeignIsBaseType", shimForeignIsBaseType, 1);
     GCI_DECLARE_ACTION("shimArrayDispatcherParts", shimArrayDispatcherParts, 1);
     GCI_DECLARE_ACTION("shimArrayFunctionKind", shimArrayFunctionKind, 1);
 }
