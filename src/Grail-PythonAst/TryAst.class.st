@@ -47,6 +47,81 @@ TryAst >> ___addScopeAnnotationsTo___: aCollection [
 
 ]
 
+{ #category : 'Grail-codegen helpers' }
+TryAst >> ___emitCatchTargetDeleteOf___: aName on: aStream [
+	"PEP 3110's implicit ``del NAME'' at the end of an ``except E as NAME'' or
+	``except* E as NAME'' handler, for whichever of the three homes the
+	handler's store (___emitModuleScopeStoreOf___:from:on:) bound NAME in.
+	Emitted into the handler's ensure block, so a return, a ``break'' or
+	``continue'', or a re-raise out of the handler unbinds too, exactly as
+	CPython's does.  The IR twin is ___emitIRCatchTargetDeleteOf___:on:.
+
+	A LOCAL.  The ordinary handler's ``___unbindCatchingTarget___:'' scrubs
+	the f_locals SNAPSHOT of the exception it caught, which is the only frame
+	it can reach.  But the target is a Smalltalk temp that still holds the
+	exception, so every LATER capture of this frame -- a second exception
+	raised after the handler, which is exactly what ``raise
+	ExceptionGroup(...)'' after an ``except ... as'' does -- re-derives
+	f_locals live off the temps and reports the name again.  Assigning nil is
+	the real ``del'': an unassigned temp reads as Smalltalk nil and PyFrame
+	omits it, and Python's None is never Smalltalk nil, so a local explicitly
+	set to None still reports.  A read after the handler already raises
+	UnboundLocalError through the ifNil: guard NameAst emits, which is what
+	CPython does too.
+
+	A ``global''-declared or module-level target is a MODULE binding, and
+	PEP 3110's ``del'' removes it from the module, exactly as an explicit
+	``del e'' of a global does (DeleteAst's removeDynamicInstVar:).  It was
+	left bound, so ``'e' in globals()'' after the handler answered True where
+	CPython answers False.
+
+	A CLASS-BODY target is a class attribute, and CPython's cleanup (``NAME =
+	None; del NAME'' on the class namespace) removes it from the class:
+	``___classBodyExceptTargetDelete___:''.  It was left bound, so
+	``hasattr(C, 'e')'' answered True (#2305).  The name is the one the store
+	wrote."
+
+	(self ___catchTargetUnbindsALocal___: aName asSymbol) ifTrue: [
+		aStream nextPutAll: (NameAst ___transportIdentifierFor___: aName); nextPutAll: ' := nil. '].
+	(self ___catchTargetUnbindsAModuleName___: aName asSymbol) ifTrue: [
+		aStream
+			nextPutAll: self ___moduleStoreReceiverExpr___;
+			nextPutAll: ' @env0:removeDynamicInstVar: #''';
+			nextPutAll: aName asString;
+			nextPutAll: '''. '].
+	(self ___catchTargetUnbindsAClassBodyName___: aName asSymbol) ifTrue: [
+		aStream
+			nextPutAll: CallAst classBodyRuntimeClass;
+			nextPutAll: ' @env1:___classBodyExceptTargetDelete___: #''';
+			nextPutAll: aName asString;
+			nextPutAll: '''. ']
+
+]
+
+{ #category : 'Grail-IR Codegen' }
+TryAst >> ___emitIRCatchTargetDeleteOf___: aName on: aBuilder [
+	"The IR twin of ___emitCatchTargetDeleteOf___:on: (see it for each arm):
+	PEP 3110's implicit ``del NAME'', added to the CURRENT builder context --
+	a handler's ensure block -- for whichever home the handler's store
+	(___emitIRModuleScopeStoreOf___:from:on:) bound NAME in."
+
+	(self ___catchTargetUnbindsALocal___: aName asSymbol) ifTrue: [
+		aBuilder add: (aBuilder
+			assign: (aBuilder leafFor: aName asSymbol)
+			from: aBuilder nilLit)].
+	(self ___catchTargetUnbindsAModuleName___: aName asSymbol) ifTrue: [
+		aBuilder add: (aBuilder
+			send: #removeDynamicInstVar:
+			to: (self ___emitIRModuleReceiverOn___: aBuilder)
+			with: { aBuilder obj: aName asSymbol } env: 0)].
+	(self ___catchTargetUnbindsAClassBodyName___: aName asSymbol) ifTrue: [
+		aBuilder add: (aBuilder
+			send: #'___classBodyExceptTargetDelete___:'
+			to: (self ___emitIRClassBodyRuntimeClassOn___: aBuilder)
+			with: { aBuilder obj: aName asSymbol } env: 1)]
+
+]
+
 { #category : 'Grail-IR Codegen' }
 TryAst >> ___emitIRExceptElement___: aNode on: aBuilder [
 	"One class of an ``except (A, B)'' tuple, validated before it joins the
@@ -86,19 +161,32 @@ TryAst >> ___emitIRExceptStarBodyOn___: aBuilder ex: exLeaf rest: restLeaf norm:
 		star emit, because this clause is not an on:do: selector."
 		typeVal := h type ___emitIRValueOn___: aBuilder.
 		clauseBlk := aBuilder blockWithArg: #'___estar_g___' do: [:gLeaf |
-			h name ifNotNil: [:n |
-				"The SAME module-scope-aware store the ordinary handler uses: a
-				``global''-declared as-name binds the MODULE variable, not a
-				method local that globals() cannot see."
-				aBuilder add: (self
-					___emitIRModuleScopeStoreOf___: n
-					from: (aBuilder var: gLeaf)
-					on: aBuilder)].
-			"A bare ``raise'' in the clause body names this ___ex, which is why
-			the text insists on that spelling for the outer argument."
-			aBuilder pushHandlerEx: exLeaf.
-			[h body ___emitIRStatementsOn___: aBuilder]
-				ensure: [aBuilder popHandlerEx]].
+			| clauseBody |
+			clauseBody := [
+				h name ifNotNil: [:n |
+					"The SAME module-scope-aware store the ordinary handler uses: a
+					``global''-declared as-name binds the MODULE variable, not a
+					method local that globals() cannot see."
+					aBuilder add: (self
+						___emitIRModuleScopeStoreOf___: n
+						from: (aBuilder var: gLeaf)
+						on: aBuilder)].
+				"A bare ``raise'' in the clause body names this ___ex, which is why
+				the text insists on that spelling for the outer argument."
+				aBuilder pushHandlerEx: exLeaf.
+				[h body ___emitIRStatementsOn___: aBuilder]
+					ensure: [aBuilder popHandlerEx]].
+			"With a name, PEP 3110's cleanup: the clause runs in a block whose
+			ensure deletes the name -- the text's shape (printExceptStarOn:)."
+			h name isNil
+				ifTrue: [clauseBody value]
+				ifFalse: [
+					aBuilder add: (aBuilder
+						send: #ensure:
+						to: (aBuilder inBlockDo: clauseBody)
+						with: { aBuilder inBlockDo: [
+							self ___emitIRCatchTargetDeleteOf___: h name on: aBuilder] }
+						env: 0)]].
 		aBuilder at: self ___irTryStampPosition___.
 		aBuilder add: (aBuilder assign: restLeaf from: (aBuilder
 			send: #'___exceptStarClause___:type:reraised:do:' to: beg
@@ -335,19 +423,8 @@ TryAst >> ___emitIRHandlerBlockFor___: h token: aTokenOrNil answersFalse: answer
 					aBuilder add: (aBuilder
 						send: #'___unbindCatchingTarget___:' to: payload value
 						with: { aBuilder obj: n asString } env: 0).
-					"And the local itself -- see the text emit for why the
-					 snapshot removal alone is not enough."
-					(self ___catchTargetUnbindsALocal___: n asSymbol) ifTrue: [
-						aBuilder add: (aBuilder
-							assign: (aBuilder leafFor: n asSymbol)
-							from: aBuilder nilLit)].
-					"A MODULE-bound target is unbound the way ``del'' unbinds a
-					 module name -- see the text emit."
-					(self ___catchTargetUnbindsAModuleName___: n asSymbol) ifTrue: [
-						aBuilder add: (aBuilder
-							send: #removeDynamicInstVar:
-							to: (self ___emitIRModuleReceiverOn___: aBuilder)
-							with: { aBuilder obj: n asSymbol } env: 0)]].
+					"And the binding itself: PEP 3110's implicit ``del NAME''."
+					self ___emitIRCatchTargetDeleteOf___: n on: aBuilder].
 				aBuilder add: (aBuilder
 					send: #'___exitHandler___' to: base with: { } env: 0).
 				aBuilder add: (aBuilder
@@ -1173,9 +1250,19 @@ TryAst >> printExceptStarOn: aStream [
 			did: a ``global''-declared name has no Smalltalk temp, so the
 			assignment names an undefined symbol.  test_global's
 			test_caught_exception_group is precisely that case."
+			"PEP 3110's cleanup applies to ``except*'' too: the clause's body
+			runs in a block whose ensure deletes the name however the clause
+			ends -- the ordinary handler's ensure, minus the f_locals snapshot
+			removal (nothing pushed a target for it).  Only with a name, so a
+			clause without one is what it was."
+			aStream nextPut: $[; lf.
 			self ___emitModuleScopeStoreOf___: n from: '___estar_g___' on: aStream.
 			aStream lf].
 		each body printSmalltalkOn: aStream.
+		each name ifNotNil: [:n |
+			aStream lf; nextPutAll: '] @env0:ensure: ['.
+			self ___emitCatchTargetDeleteOf___: n on: aStream.
+			aStream nextPut: $]].
 		aStream decreaseIndent; nextPutAll: '].'; lf.
 	].
 	"TWO calls, one for each way the statement can end, so that a ___curPos___
@@ -1458,31 +1545,8 @@ TryAst >> printSmalltalkOn: aStream [
 				nextPutAll: '(BaseException @env0:___payloadOf___: ___ex) @env0:___unbindCatchingTarget___: ''';
 				nextPutAll: n asString;
 				nextPutAll: '''. '.
-			"AND UNBIND THE LOCAL ITSELF.  The removal above scrubs the f_locals
-			 SNAPSHOT of the exception this handler caught, which is the only
-			 frame it can reach.  But the target is a Smalltalk temp that still
-			 holds the exception, so every LATER capture of this frame -- a
-			 second exception raised after the handler, which is exactly what
-			 ``raise ExceptionGroup(...)'' after an ``except ... as'' does --
-			 re-derives f_locals live off the temps and reports the name again.
-			 Assigning nil is the real ``del'': an unassigned temp reads as
-			 Smalltalk nil and PyFrame omits it, and Python's None is never
-			 Smalltalk nil, so a local explicitly set to None still reports.
-			 A read after the handler already raises UnboundLocalError through
-			 the ifNil: guard NameAst emits, which is what CPython does too."
-			(self ___catchTargetUnbindsALocal___: n asSymbol) ifTrue: [
-				aStream nextPutAll: (NameAst ___transportIdentifierFor___: n); nextPutAll: ' := nil. '].
-			"A ``global''-declared target is a MODULE binding, and PEP 3110's
-			 ``del'' removes it from the module, exactly as an explicit ``del
-			 e'' of a global does (DeleteAst's removeDynamicInstVar:).  It was
-			 left bound, so ``'e' in globals()'' after the handler answered
-			 True where CPython answers False."
-			(self ___catchTargetUnbindsAModuleName___: n asSymbol) ifTrue: [
-				aStream
-					nextPutAll: self ___moduleStoreReceiverExpr___;
-					nextPutAll: ' @env0:removeDynamicInstVar: #''';
-					nextPutAll: n asString;
-					nextPutAll: '''. ']].
+			"And the binding itself: PEP 3110's implicit ``del NAME''."
+			self ___emitCatchTargetDeleteOf___: n on: aStream].
 		aStream nextPutAll: 'BaseException @env0:___exitHandler___. BaseException @env0:___setCurrentException___: ___savedExc]'.
 		"Answer ``false'' so a handler that RAN can never be mistaken for a body
 		that fell through -- otherwise the else would fire off whatever the

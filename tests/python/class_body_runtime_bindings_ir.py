@@ -18,7 +18,8 @@ helper, the text helper (``GRAIL_IR_CLASS_HELPER=0``) and the text arm
 * ``match_capture``: ``match`` binds its captures on the class; a guard reads
   a class-body name.
 * ``except_star``: ``except*`` in the body, its ``as`` name read in the
-  handler.  (Whether it stays bound afterwards is #2305, not checked here.)
+  handler.  (That it is unbound afterwards, #2305, is
+  class_body_except_as_unbind.py's check.)
 * ``loop_chain``: a chained assignment inside a ``for``.
 * ``unpack``: plain and nested unpacking, and an unpack reading a class-body
   name.

@@ -8258,6 +8258,30 @@ Object >> ___classBodyDynamicRead___: aSym [
 
 ]
 
+{ #category : 'Grail-Class Attr Overlay' }
+Object >> ___classBodyExceptTargetDelete___: aName [
+	"PEP 3110's implicit ``del NAME'' at the end of a CLASS-BODY ``except E as
+	NAME'' / ``except* E as NAME'' handler, on the receiver class (#2305).
+
+	CPython compiles that cleanup as ``NAME = None; del NAME'' -- STORE_NAME
+	then DELETE_NAME on the class namespace -- in the handler's finally, so it
+	runs however the handler ends.  Both halves are reproduced, in order:
+
+	* the STORE first is what keeps a handler that already did ``del NAME''
+	  (or rebound it) from raising NameError at its end: the delete always
+	  finds the None it just stored;
+	* and a metaclass's __prepare__ namespace sees exactly CPython's
+	  ``__setitem__(NAME, None)'' then ``__delitem__(NAME)'' -- both stores go
+	  through it, as every class-body binding does.
+
+	A name bound BEFORE the ``try'' goes too, as in CPython: the class ends up
+	without it."
+
+	self ___classBodyDefinitionalStore___: aName put: None.
+	^ self ___classBodyDefinitionalDelete___: aName
+
+]
+
 { #category : 'Grail-Convenience Methods - Attribute' }
 Object >> ___classCell___: aSym [
 	"Closure-cell read for class-method bodies.  The cell is a zero-arg block
