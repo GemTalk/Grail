@@ -240,7 +240,7 @@ def f(p):
 		'DecoLam' -> nil.
 		'DecoCell' -> #'irHelper:methodDecorator:classCell'.
 		'Expr' -> nil.
-		'Target' -> #'irHelper:assignTarget'.
+		'Target' -> nil.
 		'Renamed' -> nil.
 		'Default' -> nil }.
 	bad := OrderedCollection new.

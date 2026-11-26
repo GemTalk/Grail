@@ -251,7 +251,7 @@ def f(p):
 		'Alias' -> nil.
 		'Imp' -> nil.
 		'Locs' -> nil.
-		'Target' -> #'irHelper:assignTarget'.
+		'Target' -> nil.
 		'Outer' -> nil.
 		'OuterTp' -> nil.
 		'OuterBad' -> nil }.
