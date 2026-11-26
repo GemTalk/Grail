@@ -91,6 +91,7 @@ BareEvalExecScopeTestCase >> ___keys___ [
 	    'a_module_global_from_a_method'
 	    'builtins_still_resolve_in_a_method'
 	    'a_nested_def_sees_its_own_local'
+	    'a_lambda_parameter_is_in_the_snapshot'
 	    'a_comprehension_target_is_visible'
 	    'at_module_scope_is_not_the_rewrite')
 
