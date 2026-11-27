@@ -120,13 +120,11 @@ def a_nested_def_sees_its_own_local():
     return inner()
 
 
-# A GRAIL GAP, NOT A CHECK.  ``(lambda z: eval('z + 1'))(41)'' answers 42 in
-# CPython and raises ``NameError: name 'z' is not defined'' in Grail on BOTH
-# codegen paths -- step 0c's rewrite injects the snapshot of the enclosing
-# FUNCTION, and a lambda's parameter is not in it.  Found by this fixture and
-# left out of the checks rather than asserted, because asserting a gap makes a
-# red test that says nothing about the cut this file is here for.  It is the
-# same family as the nested-def divergence the `-nested' census row names.
+def a_lambda_parameter_is_in_the_snapshot():
+    # A lambda is a frame of its own: step 0c hands it the LAMBDA's snapshot,
+    # not the enclosing function's, which has no ``z'' (#2326).  This was a
+    # Grail gap on both codegen paths, NameError, recorded here until then.
+    return (lambda z: eval('z + 1'))(41)
 
 
 def a_comprehension_target_is_visible():
@@ -156,6 +154,7 @@ r = {
     'a_module_global_from_a_method': a_module_global_from_a_method(),
     'builtins_still_resolve_in_a_method': builtins_still_resolve_in_a_method(),
     'a_nested_def_sees_its_own_local': a_nested_def_sees_its_own_local(),
+    'a_lambda_parameter_is_in_the_snapshot': a_lambda_parameter_is_in_the_snapshot(),
     'a_comprehension_target_is_visible': a_comprehension_target_is_visible(),
     'at_module_scope_is_not_the_rewrite': at_module_scope_is_not_the_rewrite(),
 }
@@ -174,6 +173,7 @@ EXPECTED = {
     'a_module_global_from_a_method': 'module-level',
     'builtins_still_resolve_in_a_method': 4,
     'a_nested_def_sees_its_own_local': 'inner',
+    'a_lambda_parameter_is_in_the_snapshot': 42,
     'a_comprehension_target_is_visible': [1, 2, 3],
     'at_module_scope_is_not_the_rewrite': 'module-level',
 }

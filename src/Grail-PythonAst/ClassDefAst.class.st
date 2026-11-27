@@ -372,7 +372,10 @@ ClassDefAst >> ___classBodyBindsHashConditionally___ [
 ClassDefAst >> ___classBodyCanBindDynamically___ [
 	"True when this class body can bind a name that NO statement in it names --
 	that is, when it calls locals() or vars(), whose answer is a live
-	ClassBodyLocals that ``locals()['x'] = 43'' writes through.
+	ClassBodyLocals that ``locals()['x'] = 43'' writes through, or a bare
+	eval() or exec() directly in the body, which runs with that same mapping as
+	its locals (CallAst >> ___classBodyEvalExecCall___, #2341), so
+	``exec('c = 3')'' followed by ``d = c + 1'' reads 3.
 
 	It is what CallAst classBodyDynamicLocals carries, and through that what
 	decides whether a class-body name read pays for a runtime probe of the
@@ -380,17 +383,31 @@ ClassDefAst >> ___classBodyCanBindDynamically___ [
 	static resolution is exact for a body whose bindings are all statements, so
 	the probe would be pure cost everywhere else.
 
-	The evidence is the scope's MENTION set rather than a walk for the call, so
-	it over-approximates: a nested method's own locals() call is accumulated
-	outward into the class body's reads and trips this too.  That direction is
-	deliberate.  Over-triggering costs one nil probe per class-body read and
-	changes no answer; under-triggering would silently lose a binding."
+	The evidence for locals() and vars() is the scope's MENTION set rather than
+	a walk for the call, so it over-approximates: a nested method's own
+	locals() call is accumulated outward into the class body's reads and trips
+	this too.  That direction is deliberate.  Over-triggering costs one nil
+	probe per class-body read and changes no answer; under-triggering would
+	silently lose a binding.  eval and exec are far commoner in methods than
+	locals() is, so for them the mention only gates a walk for a bare call
+	whose scope is this body."
 
 	| reads |
 	body ifNil: [^ false].
 	reads := body reads.
 	reads ifNil: [^ false].
-	^ (reads includes: #'locals') or: [reads includes: #'vars']
+	((reads includes: #'locals') or: [reads includes: #'vars']) ifTrue: [^ true].
+	((reads includes: #'eval') or: [reads includes: #'exec']) ifFalse: [^ false].
+	body ___descendantsDo___: [:n |
+		((n isKindOf: CallAst)
+			and: [(n function isKindOf: NameAst)
+			and: [(#(#'eval' #'exec') includes: n function id asSymbol)
+			and: [n arguments size = 1
+			and: [n keywords isEmpty
+			and: [n ___frameScope___ == self
+			and: [n ___enclosingComprehensionTargetNames___ isEmpty]]]]]])
+				ifTrue: [^ true]].
+	^ false
 
 ]
 
@@ -2413,6 +2430,47 @@ ClassDefAst >> ___irClassBodyDeclaresNonlocalBelow___: aNode [
 ]
 
 { #category : 'Grail-IR Codegen' }
+ClassDefAst >> ___irClassBodyFrameCallReason___: aCall [
+	"#frameCall when aCall, a call of a NAME in this class body's value, is a
+	frame call the IR-built method-local class helper does not write, else nil.
+
+	  * In a LAMBDA of the body every frame call reads the lambda's own frame
+	    (CallAst >> printLambdaLocalsSnapshotOn:lambda:, #2326), which the IR
+	    backend builds as it does in a def.
+	  * A bare ``eval(src)'' / ``exec(src)'' directly in the body stands for
+	    ``eval(src, globals(), locals())'' (CallAst >>
+	    ___classBodyEvalExecCall___, #2341), built from calls the backend
+	    writes; with explicit namespaces either one is an ordinary call.
+	    A bare one in a comprehension of the body takes the comprehension's
+	    targets (CallAst >> ___isClassBodyComprehensionBareEvalExec___).
+	  * ``locals()'' / ``vars()'' in the body itself are P3.6's
+	    #classBodyLocals; in a comprehension of the body they, and ``dir()''
+	    or ``globals()'' anywhere outside a lambda, still refuse -- the text
+	    helper answers them (plan P3.7b)."
+
+	| id scope |
+	id := aCall function id asSymbol.
+	(#(#'dir' #'globals' #'eval' #'exec' #'locals' #'vars') includes: id) ifFalse: [^ nil].
+	scope := aCall ___frameScope___.
+	(scope isKindOf: LambdaAst) ifTrue: [^ nil].
+	(#(#'eval' #'exec') includes: id) ifTrue: [
+		(aCall arguments size = 1 and: [aCall keywords isEmpty]) ifFalse: [^ nil].
+		"Directly in the body, or in a comprehension of it, whose own targets
+		are its namespace (CallAst >> ___isClassBodyComprehensionBareEvalExec___)."
+		^ (scope isKindOf: ClassDefAst)
+				ifTrue: [nil]
+				ifFalse: [#frameCall]].
+	(#(#'locals' #'vars') includes: id) ifTrue: [
+		^ (aCall arguments isEmpty
+			and: [aCall keywords isEmpty
+			and: [aCall function ___inNestedScopeWithinClassBody___]])
+				ifTrue: [#frameCall]
+				ifFalse: [nil]].
+	^ #frameCall
+
+]
+
+{ #category : 'Grail-IR Codegen' }
 ClassDefAst >> ___irClassBodyIfBranchReason___: aStmt bound: boundNames [
 	"___irClassBodyIfReason___:bound: for one statement of a branch."
 
@@ -2690,9 +2748,13 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 	    or generator expression, which both helpers write through NameAst >>
 	    ___emitClassBodyClassCellWith___: (P3.3c), and a read of ``__class__''
 	    or ``__classdict__'' INSIDE one, the class's own cell, which both
-	    write through NameAst >> ___emitClassBodyOwnCellWith___: (P3.5) --
-	    nor a call of ``dir'', ``globals'', ``eval'' or ``exec'', which the
-	    text rewrites for the class body;
+	    write through NameAst >> ___emitClassBodyOwnCellWith___: (P3.5), or a
+	    zero-argument ``super()'' in a lambda, which both write through CallAst
+	    >> ___emitClassBodyLambdaSuperProxyWith___:lambda: (#2342);
+	  * a frame call only where ___irClassBodyFrameCallReason___: admits it:
+	    any in a lambda (the lambda's own frame, #2326), a bare ``eval'' or
+	    ``exec'' in the body or a comprehension of it (#2341), not ``dir'' or
+	    ``globals'' outside a lambda;
 	  * ``locals()'' and zero-argument ``vars()'' in the class body itself
 	    (plan P3.6), which both helpers write through CallAst >>
 	    ___emitClassBodyLocalsWith___:, while every class-body name read
@@ -2736,15 +2798,17 @@ ClassDefAst >> ___irClassBodyValueReason___: anExpr bound: boundNames classCell:
 							and: [n ___inFunctionScopeOfClassBody___
 							and: [(n ___declaredInEnclosingFunction___: n id asSymbol) not
 							and: [(n ___boundInNestedFunction___: n id asSymbol) not]]]]]) not])
-						ifTrue: [reason := #classCell]].
+						ifTrue: [
+							"...except a zero-argument ``super()'' in a lambda of the
+							body, which both helpers write through CallAst >>
+							___emitClassBodyLambdaSuperProxyWith___:lambda: (#2342)."
+							((n id asSymbol == #'super'
+								and: [(n parent isKindOf: CallAst)
+								and: [n parent function == n
+								and: [n parent ___superLambdaInClassBody___ notNil]]])) ifFalse: [
+									reason := #classCell]]].
 			(reason isNil and: [(n isKindOf: CallAst) and: [n function isKindOf: NameAst]]) ifTrue: [
-				(#(#'dir' #'globals' #'eval' #'exec') includes: n function id asSymbol)
-					ifTrue: [reason := #frameCall].
-				((#(#'locals' #'vars') includes: n function id asSymbol)
-					and: [n arguments isEmpty
-					and: [n keywords isEmpty
-					and: [n function ___inNestedScopeWithinClassBody___]]])
-						ifTrue: [reason := #frameCall]]]].
+				reason := self ___irClassBodyFrameCallReason___: n]]].
 	^ reason
 
 ]

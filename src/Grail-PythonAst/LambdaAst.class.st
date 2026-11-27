@@ -58,6 +58,18 @@ LambdaAst >> ___argCountCheckDef___ [
 
 ]
 
+{ #category : 'Grail-scoping' }
+LambdaAst >> ___bindsByWalrusOnly___: aSymbol [
+	"Is aSymbol a walrus target of this lambda's body and not a parameter?
+	Its temp is declared bare in the lambda's block (printSmalltalkOn:'s
+	``bodyLocals''), and it may still be unbound when a locals() snapshot is
+	taken, so the snapshot reads the temp itself rather than a guarded load."
+
+	(self ___coVarnames___ anySatisfy: [:n | n asSymbol == aSymbol asSymbol]) ifTrue: [^ false].
+	^ (writes ifNil: [#()]) anySatisfy: [:n | n asSymbol == aSymbol asSymbol]
+
+]
+
 { #category : 'Grail-other' }
 LambdaAst >> ___bodyHasAFullSpan___ [
 	"Does the body carry all four position numbers?
@@ -96,6 +108,15 @@ LambdaAst >> ___coFlagsFor___: aQualname [
 	((aQualname asString findString: '<locals>' startingAt: 1) > 0)
 		ifTrue: [flags := flags + 16].
 	^ flags
+
+]
+
+{ #category : 'Grail-scoping' }
+LambdaAst >> ___compTargetNamesOf___: aComp into: aSet [
+	"Add every target name aComp's clauses bind to aSet."
+
+	(self ___nodeInstVar___: aComp named: #generators) ifNotNil: [:gens |
+		gens do: [:g | self ___addCompTargetLeafNames___: g target into: aSet]]
 
 ]
 
@@ -654,6 +675,130 @@ LambdaAst >> ___irWalrusLocalNames___ [
 	args kwarg ifNotNil: [:k | params add: k name asString].
 	^ ((writes ifNil: [#()]) collect: [:w | w asString])
 		reject: [:w | params includes: w]
+
+]
+
+{ #category : 'Grail-scoping' }
+LambdaAst >> ___nameIsBoundBetween___: aNameAst [
+	"Does a scope nested in this lambda, between it and aNameAst, bind the
+	name aNameAst reads -- a nested lambda's parameter or walrus target, or a
+	comprehension's target?  Then the read is that scope's, not a free
+	variable of this lambda."
+
+	| child node sym t |
+	sym := aNameAst id asSymbol.
+	child := aNameAst.
+	node := aNameAst parent.
+	[node notNil and: [node ~~ self]] whileTrue: [
+		((node isKindOf: LambdaAst) and: [node body == child]) ifTrue: [
+			((node ___coVarnames___ anySatisfy: [:n | n asSymbol == sym])
+				or: [(node writes ifNil: [#()]) anySatisfy: [:n | n asSymbol == sym]])
+					ifTrue: [^ true]].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [
+				t := IdentitySet new.
+				self ___compTargetNamesOf___: node into: t.
+				(t anySatisfy: [:n | n asSymbol == sym]) ifTrue: [^ true]].
+		child := node.
+		node := node parent].
+	^ false
+
+]
+
+{ #category : 'Grail-scoping' }
+LambdaAst >> ___snapshotFreeVariableNames___ [
+	"The FREE VARIABLES of this lambda, sorted: names its body reads -- at any
+	depth, so a name only a nested lambda reads is carried through here, as
+	CPython carries it -- that neither it nor a scope nested in it binds, and
+	that an enclosing function scope does bind.  See ___snapshotLocalNamesAt___:."
+
+	| own mentioned bound child node |
+	own := IdentitySet new.
+	self ___coVarnames___ do: [:n | own add: n asSymbol].
+	(writes ifNil: [#()]) do: [:n | own add: n asSymbol].
+	mentioned := IdentitySet new.
+	body ___descendantsDo___: [:n |
+		((n isKindOf: NameAst)
+			and: [(own includes: n id asSymbol) not
+			and: [(self ___nameIsBoundBetween___: n) not]])
+				ifTrue: [mentioned add: n id asSymbol]].
+	mentioned isEmpty ifTrue: [^ #()].
+	bound := IdentitySet new.
+	child := self.
+	node := parent.
+	[node notNil] whileTrue: [
+		((node isKindOf: LambdaAst) and: [node body == child]) ifTrue: [
+			node ___coVarnames___ do: [:n | bound add: n asSymbol].
+			(node writes ifNil: [#()]) do: [:n | bound add: n asSymbol]].
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [
+				self ___compTargetNamesOf___: node into: bound].
+		((node isKindOf: FunctionDefAst) and: [node ___bodyHolds___: child]) ifTrue: [
+			node body ifNotNil: [:b |
+				(b respondsTo: #variables) ifTrue: [
+					(b variables ifNil: [#()]) do: [:v | bound add: v asSymbol]]].
+			node allParameterNames do: [:p | bound add: p asSymbol]].
+		child := node.
+		node := node parent].
+	^ (mentioned select: [:n | bound includes: n])
+		asSortedCollection: [:a :b | a asString <= b asString]
+
+]
+
+{ #category : 'Grail-scoping' }
+LambdaAst >> ___snapshotLocalNamesAt___: aNode [
+	"The names a locals() snapshot taken at aNode, inside this lambda's body,
+	reports, as Symbols in CPython's order: the parameters (co_varnames), the
+	walrus targets the body binds, the free variables the body reads, and last
+	the targets of every comprehension between aNode and this lambda, which
+	CPython inlines into the lambda's frame (PEP 709).
+
+	A free variable is a name the body mentions and does not bind that an
+	enclosing FUNCTION scope binds -- a def's body, an enclosing lambda, an
+	enclosing comprehension.  A class body is skipped, as CPython skips it
+	resolving a free name, and a module-level name is a global, not a local."
+
+	| names own comps child node |
+	names := OrderedCollection new.
+	self ___coVarnames___ do: [:n | names add: n asSymbol].
+	(writes ifNil: [#()]) do: [:n | (names includes: n asSymbol) ifFalse: [names add: n asSymbol]].
+	own := names copy.
+	(self ___snapshotFreeVariableNames___ reject: [:n | own includes: n])
+		do: [:n | names add: n].
+	comps := OrderedCollection new.
+	child := aNode.
+	node := aNode parent.
+	[node notNil and: [node ~~ self]] whileTrue: [
+		((node isKindOf: ListCompAst)
+			or: [(node isKindOf: DictCompAst)
+			or: [(node isKindOf: SetCompAst)
+			or: [node isKindOf: GeneratorExpAst]]]) ifTrue: [
+				| t |
+				t := OrderedCollection new.
+				self ___compTargetNamesOf___: node into: t.
+				comps addAllFirst: t].
+		child := node.
+		node := node parent].
+	comps do: [:n | (names includes: n asSymbol) ifFalse: [names add: n asSymbol]].
+	^ names
+
+]
+
+{ #category : 'Grail-super' }
+LambdaAst >> ___superArgumentName___ [
+	"The parameter a zero-argument ``super()'' in this lambda binds as its
+	object -- the first POSITIONAL one, as CPython takes localsplus[0] of a
+	frame whose co_argcount is not zero -- or nil when there is none, which
+	is CPython's ``super(): no arguments''.  ``lambda *a: super()'' has none."
+
+	args isNil ifTrue: [^ nil].
+	(args posonlyargs ifNil: [#()]) notEmpty ifTrue: [^ args posonlyargs first name asSymbol].
+	(args args ifNil: [#()]) notEmpty ifTrue: [^ args args first name asSymbol].
+	^ nil
 
 ]
 
