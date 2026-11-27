@@ -6721,9 +6721,7 @@ importlib class >> ___irNoBuilderCauseOf___: aMethod for: aClass [
 	path := path asString.
 	(GsFile existsOnServer: path) == true ifFalse: [
 		^ 'its source file ' , path , ' is gone'].
-	((self ___isTrackedModule___: modName)
-		and: [(self ___sourceHashNowOf___: modName)
-			~= (self ___canonicalModuleHashes___ at: modName otherwise: nil)]) ifTrue: [
+	(self ___sourceIsAsBuiltOf___: modName) ifFalse: [
 		^ 'its source file ' , path , ' has changed since the class was built'].
 	^ 'it could not be rebuilt from ' , path
 		, ' (the def there no longer matches it, or did not generate for '''
@@ -6929,9 +6927,7 @@ importlib class >> ___irRebuildBuilderFor___: aMethod [
 		path isNil ifTrue: [^ nil].
 		path := path asString.
 		(GsFile existsOnServer: path) == true ifFalse: [^ nil].
-		(self ___isTrackedModule___: modName) ifTrue: [
-			(self ___sourceHashNowOf___: modName) = (self ___canonicalModuleHashes___ at: modName otherwise: nil)
-				ifFalse: [^ nil]].
+		(self ___sourceIsAsBuiltOf___: modName) ifFalse: [^ nil].
 		"A rebuild of this def from this file that was refused once in this
 		session is refused again without parsing the module (P2.3b): see
 		___irRebuildRefusals___."
@@ -11339,6 +11335,26 @@ importlib class >> ___sourceHashNowOf___: aName [
 			ifFalse: [nil].
 		memo at: path put: h.
 		h]
+
+]
+
+{ #category : 'Grail-Canonical Classes' }
+importlib class >> ___sourceIsAsBuiltOf___: aName [
+	"Whether aName's source on disk is the source its classes were built from:
+	true for a module whose staleness cannot be judged (___isTrackedModule___:),
+	else whether the file's hash now is the recorded one.
+
+	Every part is read in aName's own namespace.  A stdlib module's hash is in
+	the shared base even while an app is current, and the app's registry has
+	none: comparing the shared hash now against the app's record refused every
+	rebuild of a stdlib method from inside an app, so no app class could take
+	typing.Generic as a secondary base (#2371)."
+
+	(self ___grailNeedsNamespaceOf___: aName) ifTrue: [
+		^ self ___grailInNamespaceOf___: aName do: [self ___sourceIsAsBuiltOf___: aName]].
+	(self ___isTrackedModule___: aName) ifFalse: [^ true].
+	^ (self ___sourceHashNowOf___: aName)
+		= (self ___canonicalModuleHashes___ at: aName asString otherwise: nil)
 
 ]
 
