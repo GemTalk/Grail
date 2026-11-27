@@ -271,6 +271,39 @@ IRRegenerateTestCase >> testAnUninstalledMethodMustReachItsClassHelper [
 ]
 
 { #category : 'Grail-Tests' }
+IRRegenerateTestCase >> testARebuildInAnAppReadsTheSharedBasesHash [
+	"A module loaded with no app current records its source hash in the shared
+	base, as every stdlib module does.  Rebuilding one of its methods while an
+	app is current -- what the MI merge does when an app's class has
+	typing.Generic as a secondary base -- must compare the file against THAT
+	hash.  It compared it against the app's registry, which has none, so every
+	such rebuild was refused and blamed on the file changing (#2371)."
+
+	| mod meth appName hadApps |
+	mod := self ___load___: self ___fixturePath___ as: 'ir_regen_fixture'.
+	meth := (self ___class___: 'Base' of: mod) compiledMethodAt: #'plain:' environmentId: 1.
+	appName := 'grail_test_app_' , System myUserProfile userId asString.
+	hadApps := (UserGlobals at: #'GrailApps' otherwise: nil) notNil.
+	importlib ___irBuilderCacheReset___.
+	importlib ___grailUseApp___: appName.
+	[self deny: importlib ___grailNamespace___ == UserGlobals
+		description: 'no app is current, so this proves nothing'.
+	self deny: ((importlib ___irNoBuilderCauseOf___: meth for: (self ___class___: 'Target' of: mod))
+			includesString: 'has changed')
+		description: 'the unchanged file is reported as changed'.
+	self assert: (importlib ___irRebuildBuilderFor___: meth) notNil
+		description: 'the unchanged file did not rebuild inside an app']
+		ensure: [ | apps |
+			importlib ___grailUseApp___: nil.
+			apps := UserGlobals at: #'GrailApps' otherwise: nil.
+			apps ifNotNil: [
+				apps removeKey: appName ifAbsent: [].
+				(hadApps not and: [apps isEmpty])
+					ifTrue: [UserGlobals removeKey: #'GrailApps' ifAbsent: []]]]
+
+]
+
+{ #category : 'Grail-Tests' }
 IRRegenerateTestCase >> testARebuildRefusesASourceThatChanged [
 	"A def id names offsets into the module's source.  Once the file has
 	changed under a loaded module, those offsets name something else, and the
