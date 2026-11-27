@@ -955,6 +955,17 @@ BaseException class >> ___exitHandler___ [
 ]
 
 { #category : 'Grail-Traceback Building' }
+BaseException class >> ___firstLineForFrameNamed___: aName [
+	"co_firstlineno for a code object built for a frame that has no PyCode of
+	its own: 1 for a module body, whose code object starts at the first line of
+	the file in CPython (compile() of a module answers 1 too), and 0 -- position
+	unknown -- for anything else (#2358)."
+
+	^ aName @env0:= '<module>' ifTrue: [1] ifFalse: [0]
+
+]
+
+{ #category : 'Grail-Traceback Building' }
 BaseException class >> ___firstlinenoAfter___: aString from: anIndex [
 	"The ``firstlineno:'' of the PyCode literal starting at anIndex, or nil."
 
@@ -2284,7 +2295,7 @@ BaseException class >> ___liveFrameChainFromPairs___: pairs [
 				self ___codeForBlockMethod___: (pair @env0:at: 7) name: name]) ifNil: [
 					PyCode @env0:name: name
 						filename: (self ___liveFrameFilenameFor___: meth)
-						firstlineno: 0]].
+						firstlineno: (self ___firstLineForFrameNamed___: name)]].
 		"f_globals for a frame the FILENAME cannot identify.  PyFrame
 		derives globals from co_filename by finding the module whose
 		__file__ matches, and a doit has no file -- so a function built by
@@ -6656,7 +6667,8 @@ BaseException >> ___codeForMethod___: aMethod name: aName ip: anIp aCode: catchC
 	(BaseException ___realCodeForMethod___: aMethod name: aName) ifNotNil: [:real |
 		((real @env0:dynamicInstVarAt: #'co_filename') @env0:= filename)
 			ifTrue: [^ real]].
-	^ PyCode @env0:name: aName filename: filename firstlineno: 0
+	^ PyCode @env0:name: aName filename: filename
+		firstlineno: (BaseException ___firstLineForFrameNamed___: aName)
 
 ]
 
