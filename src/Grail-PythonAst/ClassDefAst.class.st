@@ -848,7 +848,11 @@ ClassDefAst >> ___classBodyOrderedRuntimeStatements___ [
 	    test_listcomps' test_explicit_global once already)
 	  * an assignment through a SUBSCRIPT (``locals()['x'] = 43; y = x'', and
 	    ``d = {}; d['a'] = 1; k = d['a']'' -- both statements Grail dropped
-	    entirely, leaving the write undone and no error anywhere)
+	    entirely, leaving the write undone and no error anywhere), and every
+	    other assignment the attribute pairs cannot express: through an
+	    attribute, a chain with a target that is not a name, a starred or
+	    mixed unpack, an augmented store through an attribute or subscript
+	    (___isClassBodyRuntimeStatement___:, #2304, #2340)
 	  * ``del x'', which unbinds a name a later attribute may read
 	  * an assignment to a name the body declared ``nonlocal''.  It writes the
 	    ENCLOSING function's binding, and a later attribute may read it:
@@ -880,27 +884,27 @@ ClassDefAst >> ___classBodyOrderedRuntimeStatements___ [
 	  * ``f.attr = value'' on a sibling def (___methodAttributeAssigns___),
 	    which a later statement reads back off the function: ``f.mark = 1;
 	    seen = f.mark'' raised AttributeError while the store waited for the
-	    body to finish (emitMethodAttributeAssign:on:).
+	    body to finish (emitMethodAttributeAssign:on:).  It is a runtime
+	    statement like any other attribute store; only its emit differs.
+	  * ``Inner.x = 1'' on a nested class.  That one ran in a pass of its own
+	    after the body, once the nested classes it mutates were built, so a
+	    later ``seen = Inner.x'' read nothing.  A nested class is built at its
+	    own position now (___isClassBodyNamespaceBinding___:), so the store
+	    joins the others.
 
 	CPython executes a class body top to bottom, once, so source order is not a
-	refinement here but the algorithm.  The remaining pass that does NOT join
-	this one is ___isClassBodyAttributeAssign___:, which requires an ATTRIBUTE
-	target (``Inner.x = 1'') and must keep running after the nested classes it
-	mutates are built."
+	refinement here but the algorithm."
 
-	| result methodAttributeAssigns |
+	| result |
 	result := OrderedCollection new.
 	body ifNil: [^ result].
-	methodAttributeAssigns := self ___methodAttributeAssigns___.
 	body body doWithIndex: [:stmt :pos |
 		((self ___classBodyGlobalTargetNames___: stmt) isEmpty not
 			or: [(self ___classBodyNonlocalTargetNames___: stmt) isEmpty not
-			or: [(self ___isClassBodySubscriptAssign___: stmt)
 			or: [(self ___isClassBodyDeleteStatement___: stmt)
 			or: [(stmt isKindOf: IfAst)
 			or: [(self ___isClassBodyNamespaceBinding___: stmt)
-			or: [(self ___isClassBodyRuntimeStatement___: stmt)
-			or: [methodAttributeAssigns includesIdentical: stmt]]]]]]])
+			or: [self ___isClassBodyRuntimeStatement___: stmt]]]]])
 				ifTrue: [result add: pos -> stmt]].
 	^ result
 
@@ -2506,7 +2510,7 @@ ClassDefAst >> ___irClassBodyRuntimeReason___: aStmt bound: boundNames [
 	___emitIRClassBodyRuntimeStoreOf___:from:on:).
 
 	Admitted inside it: expression statements, assignments (one target: a
-	name, an attribute, a subscript or a nest of them; or a chain of names),
+	name, an attribute, a subscript or a nest of them; or a chain of them),
 	augmented assignments, ``del'', ``if'', ``for'', ``while'', ``try'' (and
 	``except*''), ``with'', ``raise'', ``assert'', ``match'', imports,
 	``pass'', ``break'' and ``continue'', an annotation of a name, an
@@ -2516,9 +2520,8 @@ ClassDefAst >> ___irClassBodyRuntimeReason___: aStmt bound: boundNames [
 	___emitIRClassBodyRuntimeDefOn___:, ClassDefAst >>
 	___emitIRClassBodyRuntimeClassOn___:), judged as that one is and not
 	walked into.  Every expression in it is admitted as a class-body value is
-	(___irClassBodyValueReason___:bound:).  Refused, each under its own row: a
-	chain with a target that is not a name, an async statement, and the
-	scope declarations."
+	(___irClassBodyValueReason___:bound:).  Refused, each under its own row: an
+	async statement and the scope declarations."
 
 	^ self ___irClassBodyRuntimeReasonIn___: aStmt bound: boundNames
 
@@ -2569,11 +2572,11 @@ ClassDefAst >> ___irClassBodyRuntimeStatementShapeReason___: aStmt [
 
 	(((aStmt isKindOf: AsyncForAst) or: [aStmt isKindOf: AsyncWithAst]))
 		ifTrue: [^ 'runtime:async'].
-	"A chain of names stores each through the definitional store
-	(AssignAst >> ___emitIRChainOn___:, plan P3.7)."
-	(aStmt isKindOf: AssignAst) ifTrue: [
-		^ (aStmt targets size = 1 or: [aStmt targets allSatisfy: [:t | t isKindOf: NameAst]])
-			ifTrue: [nil] ifFalse: ['runtime:chain']].
+	"A chain stores each target from one evaluation (AssignAst >>
+	___emitIRChainOn___:): a name through the definitional store (plan P3.7),
+	an attribute, a subscript or an unpack through its own store, as in a def
+	(#2340)."
+	(aStmt isKindOf: AssignAst) ifTrue: [^ nil].
 	"An annotated name stores its value through the definitional store and
 	records that it ran, through the class build emitter (AnnAssignAst >>
 	___emitIRStatementOn___:, plan P3.7)."
@@ -2976,16 +2979,15 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 	its effect that the IR backend builds; otherwise the census row that keeps
 	the class on the text helper.
 
-	The walk emits a runtime statement in one of four ways, each through the
+	The walk emits a runtime statement in one of three ways, each through the
 	emitter: a class-body ``if'' (emitClassBodyIf:on:), a ``f.attr = v'' on a
-	sibling def (emitMethodAttributeAssign:on:), a store through an attribute
-	of a nested class, after the body (___isClassBodyAttributeAssign___:),
-	and every other one through the statement's own emitter
-	(ClassBuildIREmitter >> statementNode:), under the class-body runtime
-	class when it can bind a name.  What it does not emit at all -- an
-	attribute store on anything else, an augmented store through an attribute
-	or subscript -- is dropped on every path, and stays text so the IR helper
-	does not start dropping it too."
+	sibling def (emitMethodAttributeAssign:on:), and every other one through
+	the statement's own emitter (ClassBuildIREmitter >> statementNode:), under
+	the class-body runtime class when it can bind a name.  That covers every
+	assignment the attribute pairs cannot express -- through an attribute or
+	a subscript, a mixed chain, a starred or mixed unpack, an augmented store
+	through an attribute or subscript (#2304, #2340) -- which the walk used
+	to drop, and which stayed text then so the IR helper did not drop it too."
 
 	| reason |
 	((aStmt isKindOf: FunctionDefAst) or: [aStmt isKindOf: ClassDefAst]) ifTrue: [^ nil].
@@ -3051,10 +3053,8 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 		(self ___irClassBodyValueReason___: aStmt value bound: boundNames)
 			ifNotNil: [:r | ^ ('irHelper:expression:' , r) asSymbol].
 		^ #runtime].
-	((self ___isClassBodySubscriptAssign___: aStmt)
-		or: [(self ___isClassBodyAttributeAssign___: aStmt)
-		or: [(self ___isClassBodyDeleteStatement___: aStmt)
-		or: [self ___isClassBodyRuntimeStatement___: aStmt]]]) ifTrue: [
+	((self ___isClassBodyDeleteStatement___: aStmt)
+		or: [self ___isClassBodyRuntimeStatement___: aStmt]) ifTrue: [
 			reason := self ___irClassBodyRuntimeReason___: aStmt bound: boundNames.
 			reason isNil ifTrue: [^ #runtime].
 			^ ((aStmt isKindOf: AnnAssignAst)
@@ -3064,16 +3064,11 @@ ClassDefAst >> ___irClassHelperStatementReason___: aStmt bound: boundNames [
 					ifFalse: ['irHelper:controlFlow:' , reason]]) asSymbol].
 	"A plain unpack, ``a, b = v'' (plan P3.7): its attribute pairs are the
 	synthetic ``v[i]'' subscripts AssignAst >> classBodyAttributePairs makes,
-	class-body values like any other.  A starred, attribute or subscript leaf,
-	or a chain with a target that is not a name, is dropped on every path
-	and stays text so the IR helper does not drop it too."
-	((aStmt isKindOf: AssignAst)
-		and: [aStmt targets size = 1
-		and: [((aStmt targets first isKindOf: TupleAst) or: [aStmt targets first isKindOf: ListAst])
-		and: [aStmt ___unpacksToNamesOnly___: aStmt targets first]]]) ifTrue: [
-			reason := self ___irClassBodyValueReason___: aStmt value bound: boundNames.
-			^ reason isNil ifTrue: [nil] ifFalse: [('irHelper:assign:' , reason) asSymbol]].
-	(aStmt isKindOf: AssignAst) ifTrue: [^ #'irHelper:assignTarget'].
+	class-body values like any other.  Every other assignment is a runtime
+	statement, above."
+	(aStmt isKindOf: AssignAst) ifTrue: [
+		reason := self ___irClassBodyValueReason___: aStmt value bound: boundNames.
+		^ reason isNil ifTrue: [nil] ifFalse: [('irHelper:assign:' , reason) asSymbol]].
 	"A ``del'' of a name the body binds with a def or a nested class: the walk
 	emits nothing for it on either path (___isClassBodyDeleteStatement___:,
 	the Flask NullSession decision), so the IR helper builds it as the same
@@ -4127,30 +4122,6 @@ ClassDefAst >> ___irWriteLocalNamesInto___: aSet locals: localSet [
 ]
 
 { #category : 'Grail-Class Compilation' }
-ClassDefAst >> ___isClassBodyAttributeAssign___: stmt [
-	"True for a class-body assignment ``<NestedClass>.attr = value'' -- a runtime
-	mutation of a NESTED CLASS that CPython performs at class-definition time and
-	Grail otherwise drops (test_property's PropertyUnreachableAttributeNoName does
-	``cls.foo = property()'').
-
-	Deliberately NARROW: only when the mutated object is a class defined in THIS
-	class body.  A method-name target (``acreate_user.alters_data = True'',
-	Django) is NOT a class-body value -- emitting it would resolve the method name
-	to nothing and NameError -- so it stays dropped, as before.  Restricted to a
-	single attribute target for the same reason (a plain, resolvable statement)."
-
-	| tgt |
-	(stmt isKindOf: AssignAst) ifFalse: [^ false].
-	stmt targets size = 1 ifFalse: [^ false].
-	tgt := stmt targets first.
-	(tgt isKindOf: AttributeAst) ifFalse: [^ false].
-	(tgt value isKindOf: NameAst) ifFalse: [^ false].
-	^ self body body anySatisfy: [:s |
-		(s isKindOf: ClassDefAst) and: [s name asString = tgt value id asString]]
-
-]
-
-{ #category : 'Grail-Class Compilation' }
 ClassDefAst >> ___isClassBodyDeleteStatement___: stmt [
 	"True for a class-body ``del'' this emit can honour.
 
@@ -4233,10 +4204,32 @@ ClassDefAst >> ___isClassBodyRuntimeStatement___: aStatement [
 	ENCLOSING function's variable, not a class attribute, and has its own
 	enclosing-scope emit (___classBodyNonlocalTargetNames___:).  Without the
 	exclusion it would be emitted twice, once per pass, and the increment would
-	be applied to both the class and the outer binding."
-	((aStatement isKindOf: AugAssignAst)
-		and: [aStatement target isKindOf: NameAst]) ifTrue: [
-			^ (self ___classBodyNonlocalTargetNames___: aStatement) isEmpty].
+	be applied to both the class and the outer binding.
+
+	An augmented store through an ATTRIBUTE or a SUBSCRIPT -- ``ns.n += 1'',
+	``d['k'] += 1'' -- binds no class attribute, and CPython runs it all the
+	same: it was dropped whole, on every path (#2304, #2340)."
+	(aStatement isKindOf: AugAssignAst) ifTrue: [
+		^ (aStatement target isKindOf: NameAst) not
+			or: [(self ___classBodyNonlocalTargetNames___: aStatement) isEmpty]].
+	"An ASSIGNMENT the structural compile has no attribute pair for: any
+	target that is not a name or a plain unpack of names -- ``ns.a = 1'',
+	``d['k'] = 1'', ``a = d['k'] = 1'', ``x, *y = v'', ``u, ns.b = v''.  It
+	binds no class attribute the pairs can express, so the compile had
+	nothing to emit for it and dropped the statement whole, silently: the
+	attribute store never happened, nor did any name the statement binds
+	(#2304, #2340).  Emitted verbatim, like the statements below, so it
+	reaches AssignAst's own chain, unpack, attribute and subscript stores,
+	and a name it binds goes to the class's definitional store.
+
+	A single attribute target whose receiver is a def the body defined
+	earlier is one of these too; the walk stores it on the method
+	(emitMethodAttributeAssign:on:) rather than through its own emitter.  A
+	target the body declared ``nonlocal'' is excluded, as for the augmented
+	store above."
+	(aStatement isKindOf: AssignAst) ifTrue: [
+		^ aStatement classBodyAttributePairs isEmpty
+			and: [(self ___classBodyNonlocalTargetNames___: aStatement) isEmpty]].
 	"A bare EXPRESSION statement joins them for the same reason.  CPython
 	executes one at class-definition time -- it is how a class body calls
 	``vars().update({...})'' to define members computed at runtime (test_enum's
@@ -4274,22 +4267,6 @@ ClassDefAst >> ___isClassBodyRuntimeStatement___: aStatement [
 		or: [(aStatement isKindOf: AssertAst)
 		or: [(aStatement isKindOf: MatchAst)
 		or: [aStatement isKindOf: TypeAliasAst]]]]]]]
-
-]
-
-{ #category : 'Grail-Class Compilation' }
-ClassDefAst >> ___isClassBodySubscriptAssign___: stmt [
-	"True for a class-body assignment whose target is a SUBSCRIPT --
-	``locals()['x'] = 43'', ``Period['month_0'] = i * 30''.
-
-	Not a bare name, so it yields no classBodyAttributePairs, so the structural
-	compile had nothing to emit and DROPPED the statement whole: even
-	``class C: d = {}; d['a'] = 1'' left d empty, and the failure was silent.
-	CPython runs it at class-definition time like any other body statement."
-
-	(stmt isKindOf: AssignAst) ifFalse: [^ false].
-	stmt targets size = 1 ifFalse: [^ false].
-	^ stmt targets first isKindOf: SubscriptAst
 
 ]
 
@@ -5220,9 +5197,12 @@ ClassDefAst >> emitClassBodyIfBranch: aSuite on: e [
 		assigned two lines up.  Emitted verbatim under the class-body runtime
 		class, exactly as a for / while / try / with in the same branch is, so
 		it reaches AssignAst's own unpacking emit and each name is stored where
-		NameAst reads it from."
+		NameAst reads it from.  Most of them are runtime statements, emitted
+		above; what is left here is the plain unpack of names, which at the top
+		of the body has attribute pairs instead."
 		((stmt isKindOf: AssignAst)
-			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) not]) ifTrue: [
+			and: [(stmt targets allSatisfy: [:t | t isKindOf: NameAst]) not
+			and: [(self ___isClassBodyRuntimeStatement___: stmt) not]]) ifTrue: [
 			| savedRuntimeClass |
 			savedRuntimeClass := CallAst classBodyRuntimeClass.
 			CallAst classBodyRuntimeClass: self ___stVarName___.
@@ -5672,7 +5652,7 @@ ClassDefAst >> emitMethodAnnotationsTableOn: e className: aClassName [
 ClassDefAst >> emitMethodAttributeAssign: anAssign on: e [
 	"``f.attr = value'' on a sibling DEF in the class body -- an attribute of the
 	FUNCTION, which CPython sets while the body runs.  Such statements were
-	dropped (see ___isClassBodyAttributeAssign___), so ``C.f.attr'' was
+	dropped, so ``C.f.attr'' was
 	missing.  pydantic marks its own initializer that way --
 	``__init__.__pydantic_base_init__ = True'' in BaseModel's body -- and,
 	finding no mark, took EVERY model for one with a custom __init__, so a
@@ -8567,22 +8547,6 @@ ClassDefAst >> printSmalltalkRuntimeWith: e [
 		through their OWN printSmalltalkOn:, so try/except/finally and loop
 		codegen is not re-derived here."
 		flushPendingBefore value: body body size + 1.
-		"A class-body statement whose target is an ATTRIBUTE or SUBSCRIPT
-		(``cls.foo = property()'', ``Inner.x = 1'') -- not a bare NAME, so it is
-		not a class attribute and was previously DROPPED.  CPython runs it at
-		class-definition time, mutating a nested class or other object; emit it as
-		a runtime statement here (after nested classes are built, so the target
-		name resolves).  test_propertys PropertyUnreachableAttributeNoName does
-		``cls.foo = property()`` at class-body level."
-		body body doWithIndex: [:stmt :pos |
-			(self ___isClassBodyAttributeAssign___: stmt) ifTrue: [
-				| bound |
-				bound := IdentitySet new.
-				firstBinding keysAndValuesDo: [:nm :p |
-					p < pos ifTrue: [bound add: nm]].
-				CallAst classBodyBoundNames: bound.
-				e statementNode: stmt.
-				e newline]].
 		"The nonlocal writes used to be a THIRD pass here, after every class
 		attribute was initialised.  They are now flushed at their own source
 		position by flushPendingBefore, with the global writes and the other
