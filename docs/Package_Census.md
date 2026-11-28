@@ -160,7 +160,7 @@ more than once`). So the rerun used a new namespace, through the runner's new
 `--namespace` option. The stale `pypi_package_tests` namespace is still on
 the stone.
 
-### Re-measured since: the jsonschema family (2026-11-20)
+### Re-measured since: the jsonschema family (2026-11-20, 2026-11-27)
 
 A teammate reported that rpds-py's native module created all five of its
 classes, but its `__all__` was `[]`. So its package's `from .rpds import *`
@@ -173,12 +173,15 @@ Setup:
   versions, with pytest 9.1.1 as before.
 - `--only attrs,referencing,rpds-py,jsonschema,jsonschema-specifications`, for
   `--submodules` and for the tests runner.
+- Re-measured on 2026-11-27, in the same venv, once every gap below was
+  fixed: Grail `main` at `ad6b3b369` plus #2372. The tests runner needs #2372:
+  without it, no pytest imports under `--namespace` (#2371).
 
 | Project | 2026-10-15 | **2026-11-20** | Submodules | Tests |
 | --- | --- | --- | ---: | ---: |
 | attrs | FAILS, #1418 | **IMPORTS** | 18 / 18 | CPython 0 |
-| rpds-py | FAILS, C extension | **IMPORTS** | — | **130 / 132** (was 0) |
-| jsonschema | FAILS, #1418 | **IMPORTS** | 13 / 14 | no tests |
+| rpds-py | FAILS, C extension | **IMPORTS** | — | **132 / 132** (130 on 2026-11-20, 0 before) |
+| jsonschema | FAILS, #1418 | **IMPORTS** | **14 / 14** (13 on 2026-11-20) | no tests |
 | referencing | FAILS, #1418 | **IMPORTS** | 6 / 6 | no tests |
 | jsonschema-specifications | FAILS, #1418 | **IMPORTS** | 1 / 1 | no tests |
 
@@ -192,21 +195,28 @@ jsonschema validates and rejects instances as it does under CPython. The fixes:
   and hashes, and `HashTrieSet` supports `|`. `PyIter_Next` also answers tuples
   in CPython's layout, so `HashTrieMap(d.items())` works.
 
-What still fails:
-- **`jsonschema.cli`:** Grail's own `pkgutil` (`src/python/stdlib/pkgutil.py`)
-  has no `resolve_name` (#2297). jsonschema's eight `benchmarks` modules need `pyperf`,
-  which CPython lacks in this venv too, so they are not counted.
-- **rpds-py's `test_fromkeys_explicit_value_not_copied`:** a list passed into C
-  is a copy, so `HashTrieMap.fromkeys(keys, [])` stores a list that the
-  caller's `append` does not reach (#2301).
-- **rpds-py's `test_reverse`:** `reversed()` does not call a wheel class's
-  `__reversed__`, so `reversed(rpds.List(...))` answers "not subscriptable"
-  (#2300).
-- **pytest's assertion rewriting:** both failures above report
-  `module 'builtins' has no attribute 'locals'` instead of the comparison,
-  because Grail's `builtins` has no `locals` (#2298).
-- **pytest 9.2.0** cannot run any suite: it calls `importlib.util.source_hash`,
-  which Grail lacks (#2299). That is why this run pins 9.1.1.
+Nothing fails now. Every gap the 2026-11-20 run found is fixed. The
+2026-11-27 run measured the first three, and on 2026-11-26 a probe of `main`
+(`ad6b3b369`) found the two pytest ones behaving as they do in CPython:
+- **`jsonschema.cli`** imports: Grail's `pkgutil` has `resolve_name` (#2297,
+  PR #2303). jsonschema's eight `benchmarks` modules need `pyperf`, which
+  CPython lacks in this venv too, so they are not counted.
+- **rpds-py's `test_fromkeys_explicit_value_not_copied`** passes: a list
+  passed into C comes back as the caller's own list, so the caller's `append`
+  reaches the list `HashTrieMap.fromkeys(keys, [])` stores (#2301, PR #2337).
+- **rpds-py's `test_reverse`** passes: `reversed()` calls a wheel class's
+  `__reversed__` (#2300, PR #2316).
+- **pytest's assertion rewriting** explains a failed comparison: Grail's
+  `builtins` has `locals` (#2298, PR #2308).
+- **pytest 9.2.0's** `importlib.util.source_hash` exists (#2299, PR #2309).
+  The runs here still pin 9.1.1, to compare with 2026-11-20, so 9.2.0 itself
+  is not measured.
+
+Three more differences from CPython were found and fixed along the way. They
+match CPython 3.14 now, but rpds-py's tests do not reach them: `reversed()` of a
+wheel object that is not a sequence (#2313), `reversed()` of a wheel class
+(#2314), and subclassing a wheel type that is not an acceptable base type
+(#2315). PR #2344 fixed the first two and PR #2360 the third.
 
 ### Every row
 
@@ -214,7 +224,7 @@ What still fails:
 imports; `—` means a single-module wheel. `First blocker` is what stops the
 top-level import. `Tests` is the project's own tests that pass under Grail over those
 that pass under CPython (see above); "(budget)" means the run stopped at 45 minutes. A **bold** verdict changed since 2026-10-11.
-The five rows marked "re-measured 2026-11-20" come from the section above;
+The five rows marked "re-measured" come from the section above, each on the date it names;
 the rest are 2026-10-15's.
 
 | # | Project | Version | Scope | Verdict | Submodules | Tests | First blocker |
@@ -266,8 +276,8 @@ the rest are 2026-10-15's.
 | 45 | starlette | 1.7.0 | pure | IMPORTS | 33 / 34 | CPython 0 |  |
 | 46 | uvicorn | 0.54.0 | pure | FAILS |  | CPython 0 | #1429 |
 | 47 | multidict | 6.9.1 | ext | IMPORTS | 3 / 3 | CPython 0 |  |
-| 48 | jsonschema | 4.26.0 | ext-dep | **IMPORTS** | 13 / 14 | no tests | re-measured 2026-11-20 |
-| 49 | rpds-py | 2026.9.1 | ext | **IMPORTS** | — | 130 / 132 | re-measured 2026-11-20 |
+| 48 | jsonschema | 4.26.0 | ext-dep | **IMPORTS** | 14 / 14 | no tests | re-measured 2026-11-27 |
+| 49 | rpds-py | 2026.9.1 | ext | **IMPORTS** | — | 132 / 132 | re-measured 2026-11-27 |
 | 50 | yarl | 1.25.1 | ext | IMPORTS | 7 / 7 | CPython 0 |  |
 | 51 | aiohttp | 3.14.5 | ext | FAILS |  | CPython 0 | #1418 (attrs) |
 | 52 | rich | 15.0.0 | pure | IMPORTS | 68 / 75 | no tests |  |
